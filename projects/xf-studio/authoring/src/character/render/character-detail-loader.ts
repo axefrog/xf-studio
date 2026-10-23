@@ -14,7 +14,7 @@ import { prepareEyeballGeometry, type EyeballHandle, type EyeShellHandle } from 
 import type { FaceDecalHandle } from "../../materials/render/face-decal-material";
 import type { LayeredHandle } from "../../materials/render/layered-material";
 import { transferDeltas, VertexGrid } from "../../materials/render/decal-underlay";
-import { contextGeneration } from "../../platform/scene/context-generation";
+import { contextGeneration, inGeneration } from "../../platform/scene/context-generation";
 
 /**
  * Renderer device port for the resolved character details (head skin, face details, brows, lashes, hair, eyes, piercings): it reads the host's
@@ -422,7 +422,7 @@ export const uploadUnfinished = (texture: THREE.Texture) => { const pending = ba
  */
 function bandsHold(texture: THREE.Texture, pending: Banded, renderer: THREE.WebGLRenderer) {
   const stored = renderer.properties ? (renderer.properties.get(texture) as { __version?: number }).__version : texture.version;
-  return !pending.generation.aborted && stored === texture.version && pending.bitmap.width > 0 && pending.bitmap.height > 0;
+  return inGeneration(renderer, pending.generation) && stored === texture.version && pending.bitmap.width > 0 && pending.bitmap.height > 0;
 }
 /**
  * One step of `texture`'s first upload (profiles phase 4a-v-b), with `renderer`: the whole map at once (`uploadTexture`), or, for a large

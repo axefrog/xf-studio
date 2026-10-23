@@ -25,7 +25,8 @@
  *    from its bitmap and every texel is the bitmap's, with no GL error); a V's details waiting for a link slot (the wait ends with the
  *    context's generation, before the restore, and the V is shown); a lighting change prepared on the shown V (restarted after the restore,
  *    it takes over with nothing to link). Then a setup prepared before the loss, asked again, is staged and prepared again (Three dropped its
- *    programs with the context), never drawn at once.
+ *    programs with the context), never drawn at once; and a setup prepared since, asked in the very task the context is lost in (its
+ *    event still queued), is staged too.
  * The cold V's warm-up (2) and the setup's (5) are drawn in pieces, with frames presented between them (`warmUpFrames`).
  * Results land in `window.probe` as plain data.
  */
@@ -75,7 +76,9 @@ export type ScenePreparationProbe = {
     admission: { trigger: string; viaAdmit: boolean; stopMs: number; restoredAfterStop: boolean; outcome: string; frames: number };
     /** A lighting change on the shown V lost while prepared; then a setup prepared before the loss, asked again. */
     staged: { stage: string; restarts: number; tookOver: boolean; prepared: boolean; firstFrame: { links: number; programs: number };
-      before: { staged: boolean; tookOver: boolean; firstFrame: { links: number; programs: number } } };
+      before: { staged: boolean; tookOver: boolean; firstFrame: { links: number; programs: number } };
+      /** A setup prepared in this generation, asked in the task the context was lost in (its event still queued). */
+      queued: { staged: boolean; tookOver: boolean; firstFrame: { links: number; programs: number } } };
   };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
   /** Diagnostics: GL calls that blocked the page for 20 ms or more, with where they came from, and each link with the stage it ran in. */
@@ -624,7 +627,7 @@ try {
         ...studio.lights[1]!, id: `late${n}-${i}`, name: `Late ${i}`, type: "spot" as const, position: [0.6 - i * 0.3, 1.7, -0.9] as [number, number, number],
         intensity: 1.2, angle: 0.45, penumbra: 0.3, decay: 2, distance: 0, shadows: i === 0 }))] } });
       /** Ask `source` of the shown V; resolves once it is drawn, with the links and programs made in its first frame under it. */
-      const takeOver = async (shown: SceneRuntime, source: LightingSource, during?: () => Promise<void>) => {
+      const takeOver = async (shown: SceneRuntime, source: LightingSource, during?: () => Promise<void>, first?: () => void) => {
         let adopted: { links: number; programs: number; frames: number } | null = null;
         const setSource = shown.lighting.setSource.bind(shown.lighting);
         shown.lighting.setSource = next => {
@@ -632,6 +635,7 @@ try {
           setSource(next);
         };
         try {
+          first?.();
           shown.setLighting(source);
           const staged = shown.lightingEvidence().staged;
           await during?.();
@@ -644,7 +648,8 @@ try {
         } finally { shown.lighting.setSource = setSource; }
       };
       const none = { links: -1, programs: -1 };
-      probe.recovery.staged = { stage: "none", restarts: 0, tookOver: false, prepared: false, firstFrame: none, before: { staged: false, tookOver: false, firstFrame: none } };
+      probe.recovery.staged = { stage: "none", restarts: 0, tookOver: false, prepared: false, firstFrame: none, before: { staged: false, tookOver: false, firstFrame: none },
+        queued: { staged: false, tookOver: false, firstFrame: none } };
       if (runtime) {
         const drawnBefore = runtime.lighting.source;
         // Prepared and drawn in this generation: the game's creator rig.
@@ -662,6 +667,15 @@ try {
         // The setup drawn before the loss: its programs went with the context, so it is staged and prepared again.
         const again = await takeOver(runtime, drawnBefore);
         probe.recovery.staged.before = { staged: again.staged, tookOver: again.tookOver, firstFrame: again.firstFrame };
+        await settle();
+        // Lost, its event still queued, and in the same task a setup prepared in this generation asked: the context's loss is read there
+        // and then, so it is staged, not drawn at once; it takes over after the restore with nothing to link.
+        const lostBefore = count("lost"), restoredBefore = count("restored");
+        const queued = await takeOver(runtime, spots(3), async () => {
+          await waitFor("lost", lostBefore + 1); await sleep(200);
+          lose.restoreContext(); await waitFor("restored", restoredBefore + 1);
+        }, () => lose.loseContext());
+        probe.recovery.staged.queued = { staged: queued.staged, tookOver: queued.tookOver, firstFrame: queued.firstFrame };
         await settle();
       }
     }

@@ -717,11 +717,17 @@ Pieces cut the freeze from the whole warm-up to the longest single build. G2 sti
 
 ### 4a-v-b review fixes: GPU state lives as long as its context (built)
 
-The 4a-v-b review (Sol, 23 October) found seven problems. Most shared one cause: state on the GPU, or a record that the GPU held something ready, outlived a lost context. After the restore that state pointed at nothing, and a wait on it never ended.
+The 4a-v-b review (Sol, 23 October) found seven problems, and its confirmation pass two more of the same kind. Most shared one cause: state on the GPU, or a record that the GPU held something ready, outlived a lost context. After the restore that state pointed at nothing, and a wait on it never ended.
 
-**The context-generation rule** (`platform/scene/context-generation.ts`). A generation is the life of one WebGL context. It ends when the context is lost and the next begins when it is restored. The renderer device drives it from its canvas's context events, and a context found lost before its event arrives ends its generation at once. `contextGeneration(renderer)` gives the generation's signal (also the device's `contextSignal`). Anything that holds GL objects across frames, or records GPU readiness, keeps that signal with the state:
+**The context-generation rule** (`platform/scene/context-generation.ts`). A generation is the life of one WebGL context. It ends when the context is lost and the next begins when it is restored. The renderer device drives it from its canvas's context events. `contextGeneration(renderer)` gives the generation's signal (also the device's `contextSignal`), and every read of it checks the context too, so loss is found in one place whoever asks:
 
-- it treats the state as gone once the signal has aborted, and never deletes a lost context's objects (they went with it);
+- a context found lost before its event arrives (the browser queues it) ends its generation there and then;
+- a generation found ended while the context is usable again (restored, its event not told yet) gives way to the next, which the event then keeps.
+
+Anything that holds GL objects across frames, or records GPU readiness, keeps the signal with the state:
+
+- before it reads or reuses the state, it checks the signal against the generation read again (`inGeneration`, or the device's `contextSignal` in the scene host), never against the kept signal alone: a kept signal stays live until someone reads the generation after the loss;
+- it treats the state as gone once that check fails, and never deletes a lost context's objects (they went with it);
 - any wait on the state runs under the signal, so it ends with the generation (by abort, or a restart after the restore) instead of waiting for good.
 
 Owners keep the signal themselves rather than registering with a central scope: each one checks it where it reads its state, and nothing has to be told.
@@ -735,6 +741,8 @@ Owners keep the signal themselves rather than registering with a central scope: 
 | 5 (Medium). `preparedFor.lighting` survived a restore though Three drops its programs, so a setup prepared before the loss was drawn at once and linked in its first frame | The record keeps its generation (`scene-host.ts`), and one from an ended generation readies nothing. Such a setup is staged and prepared again. |
 | 6 (Medium). Band sizes ignored Three's texture-size clamp; an 8192² map on a 4096 renderer copied 8192-wide bands into 4096² storage and was still marked complete | A map larger than `capabilities.maxTextureSize` goes whole through Three's upload (which makes it smaller). A band whose storage no longer holds starts the upload again and is never counted done. |
 | 7 (Low). The gate's last fence was never deleted | The gate has `dispose`. The runtime's preparation calls it in `finally`, the character renderer on disposal, and fence drains (`gpuDrained`) delete their own fence however they end. |
+| Confirmation 1 (Medium). An incoming part's layered bake had no generation: restored while its preparation waited for a frame, it heard no `contextRestored` (neither shown nor kept), and placement reused its old, empty target with no re-bake | The layered handle (`materials/render/layered-material.ts`) keeps the generation its maps were baked in, and checks it before any read of its state or target, any bake and its disposal. Maps of an ended generation are dropped, the part is pending and hidden, and its next bake draws again. The renderer's shared bakes are kept per generation too, so a twin never reuses a dead target. A bake the loss cut short is tried again once the context is back. The bake's own loss check reads the generation. |
+| Confirmation 2 (Medium). Before the queued lost event arrived, `isContextLost()` could be true while the kept signal was still live, so a setup prepared earlier was drawn at once | The scene host reads `device.contextSignal()` again before trusting `preparedFor`, and requires it to be the same generation and live. Reading the generation ends it when the context is lost, so the same check holds everywhere the rule applies (the gate's fences and band state use `inGeneration`). |
 
 The staged lighting rig's shadow-map fingerprint is a GPU record too. The lighting stage's `restore` now drops it with the drawn rig's, so a staged setup adopted after a restore draws its (empty) maps again. The character renderer reads Three's texture records from `renderer.properties` each time, because a restored context replaces that object.
 
@@ -750,12 +758,14 @@ The staged lighting rig's shadow-map fingerprint is a GPU record too. The lighti
   - a texture changed part-way restarting, and an 8192² map on a 4096 renderer going whole (`tests/character-preload.test.ts`);
   - a put-off change of the shown runtime resumed after the shown runtime is wanted again, after a failed want and after a change asked while another want was built, but never for a runtime that was hidden (`tests/scene-residency.test.ts`);
   - a staged rig's maps drawn again after a restore (`tests/lighting-preset.test.ts`);
-  - the generation itself (`tests/runtime-preparation.test.ts`).
+  - the generation itself, and a kept signal failing the check once the context is lost though its event is still queued (`tests/runtime-preparation.test.ts`);
+  - a layered part baked before a loss and restore it never heard about: pending and hidden at its first read, baked again with new draws and a new target, a twin sharing only the new maps, and a bake while lost waiting for the restore (`tests/layered-material.test.ts`).
 - **T2** (`tests/webgl-scene-preparation.test.ts`, page step 8, with and without KHR_parallel_shader_compile), each on a real context lost with `WEBGL_lose_context` and restored 0.2 s later:
   - a 2048² banded upload lost after its storage and two bands starts again from its bitmap, and every texel read back is the bitmap's, with no GL error after any upload step (the texture's own image is another colour, so a fill from the image would show);
   - a V's details lost while they wait for a link slot stop within 100 ms of the lost event, before the restore, and the V is shown and draws after it. Without the extension, the loss comes while they compile;
   - a lighting change lost while it is prepared on the shown V restarts, takes over with no link and no program made in its first frame, and leaves the V prepared;
   - the setup drawn before that loss, asked again, is staged and prepared again, never drawn at once, and also takes over with nothing to link;
+  - a setup prepared since, asked in the very task the context is lost in (its event still queued), is staged too, and takes over after the restore with nothing to link;
   - 4a-i's disposal gate now also checks that no fence is alive at the baseline or once everything closed.
 
 **Results** (23 October 2026; RTX 4070, ANGLE D3D11, headless Chrome; every run under the 3 GB guard):
@@ -763,9 +773,10 @@ The staged lighting rig's shadow-map fingerprint is a GPU record too. The lighti
 | T2 step 8 gate | With KHR_parallel_shader_compile | Without it |
 |---|---|---|
 | Banded upload lost after storage and two bands | restarted: storage and four bands; texels all the bitmap's; no GL error | the same |
-| Details lost while waiting for a link slot (without the extension: while compiling) | stopped 7.9 ms after the lost event, before the restore; the V shown and drawn | stopped 8.2 ms after it; the same |
+| Details lost while waiting for a link slot (without the extension: while compiling) | stopped 7.5–7.9 ms after the lost event, before the restore; the V shown and drawn | stopped 8.2–8.5 ms after it; the same |
 | Lighting change lost while prepared on the shown V | restarted once; took over with 0 links, 0 programs in its first frame; prepared | the same |
 | The setup drawn before that loss, asked again | staged, prepared again, took over with 0 links, 0 programs | the same |
+| A setup prepared since, asked in the task the context is lost in | staged; took over after the restore with 0 links, 0 programs | the same |
 | Fences alive at the baseline and once everything closed | 0 and 0; GPU objects at the baseline | the same |
 
 The preparation probe passes 14 of 14 (peak 1.7 GB). The other WebGL probes pass too: renderer device 9, scene dispose 4 (4a-i's gate), scene host 7, studio lighting 4, plate composite 8 (peaks 0.8–1.2 GB). The probe was not run against the code before the fixes; the unit tests above fail without them.

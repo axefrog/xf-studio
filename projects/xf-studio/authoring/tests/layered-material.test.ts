@@ -304,6 +304,36 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
     expect(failed.handle.state).toBe("failed");
   });
 
+  test("a part baked before a loss and restore it never heard about (being prepared: neither shown nor kept) is baked again before its maps are read or reused (4a-v-b review 2, finding 1)", async () => {
+    const { beginContextGeneration, endContextGeneration } = await import("../src/platform/scene/context-generation");
+    let lost = false;
+    const { renderer, materials } = fakeRenderer({ lost: () => lost });
+    const incoming = createLayeredMaterial(input());
+    expect(incoming.handle.bake(renderer)).toBe(true);
+    const before = incoming.handle.target;
+    // Lost and restored while its preparation waited for a frame: no `contextRestored` reaches it, and the shared bakes aren't forgotten.
+    lost = true; endContextGeneration(renderer); lost = false; beginContextGeneration(renderer);
+    // Its first read finds the maps gone: pending and hidden, its old target dropped.
+    expect(incoming.handle.state).toBe("pending");
+    expect(incoming.material.visible).toBe(false);
+    expect(incoming.handle.target).toBeNull();
+    // Placing it bakes again: new draws, a new target.
+    const draws = materials.length;
+    expect(incoming.handle.bake(renderer)).toBe(true);
+    expect(materials.length).toBeGreaterThan(draws);
+    expect(incoming.handle.target).not.toBe(before);
+    // A twin baked after the restore shares the new maps, never the old ones.
+    const twin = createLayeredMaterial(input());
+    expect(twin.handle.bake(renderer)).toBe(true);
+    expect(twin.handle.target).toBe(incoming.handle.target);
+    // While the context is lost (its event still queued), the maps already count as gone, and a bake waits for the restore.
+    lost = true;
+    expect(incoming.handle.state).toBe("pending");
+    expect(incoming.handle.bake(renderer)).toBe(false);
+    lost = false; beginContextGeneration(renderer);
+    expect(incoming.handle.bake(renderer)).toBe(true);
+  });
+
   test("a bake while the context is lost stays pending; one that failed because the context was lost is tried again (PREV-73)", () => {
     let lost = true;
     const { renderer } = fakeRenderer({ lost: () => lost });

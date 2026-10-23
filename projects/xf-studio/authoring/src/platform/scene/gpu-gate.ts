@@ -1,4 +1,4 @@
-import { contextGeneration } from "./context-generation";
+import { contextGeneration, inGeneration } from "./context-generation";
 
 /**
  * Whether the GPU process has caught up with what the page sent before the last `mark` (a fence), asked without waiting (profiles phase
@@ -14,16 +14,15 @@ export function gpuGate(renderer: { getContext?(): unknown }) {
   const gl = typeof renderer.getContext === "function" ? renderer.getContext() as WebGL2RenderingContext | undefined : undefined;
   const sync = gl && typeof gl.fenceSync === "function" ? gl : null;
   let fence: { made: WebGLSync; generation: AbortSignal } | null = null;
-  const lost = () => !!sync && (sync.isContextLost?.() ?? false);
-  /** Forget the fence, deleting it while its context lives. */
+  /** Forget the fence, deleting it while its generation lives. */
   const drop = () => {
-    if (fence && sync && !fence.generation.aborted && !lost()) sync.deleteSync(fence.made);
+    if (fence && sync && inGeneration(renderer, fence.generation)) sync.deleteSync(fence.made);
     fence = null;
   };
   return {
     idle(): boolean {
       if (!sync || !fence) return true;
-      if (fence.generation.aborted || lost()) { fence = null; return true; }
+      if (!inGeneration(renderer, fence.generation)) { fence = null; return true; }
       if (sync.getSyncParameter(fence.made, sync.SYNC_STATUS) === sync.UNSIGNALED) return false;
       drop();
       return true;

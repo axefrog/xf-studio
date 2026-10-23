@@ -177,3 +177,28 @@ test("a renderer's context generation ends when its context is lost, already whe
   expect(contextGeneration(standIn)).toBe(contextGeneration(standIn));
   expect(contextGeneration(standIn).aborted).toBe(false);
 });
+
+test("state kept with a generation is checked against the generation read again: a loss whose event is still queued fails the check, and a restore found by a read begins the next (4a-v-b review 2, finding 2)", async () => {
+  const { beginContextGeneration, contextGeneration, endContextGeneration, inGeneration } = await import("../src/platform/scene/context-generation");
+  let lost = false;
+  const renderer = { getContext: () => ({ isContextLost: () => lost }) };
+  const kept = contextGeneration(renderer);
+  expect(inGeneration(renderer, kept)).toBe(true);
+  // Lost; the event isn't told yet and nobody has asked, so the kept signal is still live.
+  lost = true;
+  expect(kept.aborted).toBe(false);
+  // The check reads the generation again: it ends there and then, and the kept state no longer holds.
+  expect(inGeneration(renderer, kept)).toBe(false);
+  expect(kept.aborted).toBe(true);
+  // Restored, its event not told yet: the next read begins the next generation, and the event's own begin keeps it.
+  lost = false;
+  const next = contextGeneration(renderer);
+  expect([next === kept, next.aborted]).toEqual([false, false]);
+  beginContextGeneration(renderer);
+  expect(contextGeneration(renderer)).toBe(next);
+  expect(inGeneration(renderer, kept)).toBe(false);
+  expect(inGeneration(renderer, null)).toBe(false);
+  // The device's lost event ends it as before.
+  endContextGeneration(renderer); lost = true;
+  expect(inGeneration(renderer, next)).toBe(false);
+});

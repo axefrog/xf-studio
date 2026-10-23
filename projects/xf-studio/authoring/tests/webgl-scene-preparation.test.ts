@@ -195,6 +195,8 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
       expect(staged.prepared).toBe(true);
       expect(staged.firstFrame).toEqual({ links: 0, programs: 0 });
       expect(staged.before).toEqual({ staged: true, tookOver: true, firstFrame: { links: 0, programs: 0 } });
+      // A setup prepared in this generation, asked in the task the context is lost in (its event still queued): staged, not drawn at once.
+      expect(staged.queued).toEqual({ staged: true, tookOver: true, firstFrame: { links: 0, programs: 0 } });
     }
   });
 });

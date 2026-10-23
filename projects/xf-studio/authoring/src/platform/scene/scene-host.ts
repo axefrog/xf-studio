@@ -353,8 +353,13 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
    * program cache with the context), so a record from an ended generation readies nothing.
    */
   let preparedFor: { drawn: string; lighting: Set<string>; generation: AbortSignal } | null = null;
+  /**
+   * Whether `generation` is the context's generation now, and live: the device's signal is read again (a loss whose event is still queued
+   * ends it then), never trusted as kept.
+   */
+  const liveGeneration = (generation: AbortSignal) => { const now = device.contextSignal(); return generation === now && !now.aborted; };
   /** Whether the meshes drawn now have been prepared for `source`'s programs (a setup drawn before, or the one drawn now). */
-  const lightingPrepared = (source: LightingSource) => !!preparedFor && !preparedFor.generation.aborted
+  const lightingPrepared = (source: LightingSource) => !!preparedFor && liveGeneration(preparedFor.generation)
     && preparedFor.lighting.has(lighting.programStateFor(source)) && preparedFor.drawn === drawnKey();
   /** A lighting setup asked for while shown and not prepared yet: staged, drawn once a preparation readied it (see the header). */
   let pendingLighting: LightingSource | null = null;

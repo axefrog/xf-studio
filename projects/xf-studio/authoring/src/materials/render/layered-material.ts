@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { contextGeneration, inGeneration } from "../../platform/scene/context-generation";
 import { clampLayer, type RenderChunkMaterial, type RenderLayer, type RenderLayered } from "../../character/render-detail";
 
 /**
@@ -545,7 +546,8 @@ function drawFailed(renderer: THREE.WebGLRenderer, material: THREE.Material, che
 }
 /** WebGL's error for a lost context. */
 const CONTEXT_LOST_WEBGL = 0x9242;
-const contextLost = (renderer: THREE.WebGLRenderer) => (renderer.getContext() as { isContextLost?: () => boolean }).isContextLost?.() === true;
+/** Whether the context is lost; asked through its generation, which ends there and then if the loss's event is still queued. */
+const contextLost = (renderer: THREE.WebGLRenderer) => contextGeneration(renderer).aborted;
 
 /** three.js's roughness and metalness map chunks, reading the packed maps' alpha instead of G and B. */
 export const PACKED_ROUGHNESS_GLSL = /* glsl */`
@@ -563,10 +565,18 @@ const keptBytes = (width: number, height: number) => Math.round(width * height *
 /**
  * Baked maps shared between chunks whose stacks, domains and sizes are identical (PREV-63: the same part drawn twice bakes once).
  * Keyed by renderer, then by the input's identity; released when the last material using one is disposed. The maps' bytes are
- * credited to one user, the longest-standing one still using them (PREV-78), so the evidence sums to what the GPU keeps.
+ * credited to one user, the longest-standing one still using them (PREV-78), so the evidence sums to what the GPU keeps. They belong to
+ * the context generation they were baked in (platform/scene/context-generation.ts): a later generation starts with none.
  */
 type SharedBake = { target: THREE.WebGLRenderTarget; users: Set<symbol> };
-const sharedBakes = new WeakMap<THREE.WebGLRenderer, Map<string, SharedBake>>();
+const sharedBakes = new WeakMap<THREE.WebGLRenderer, { generation: AbortSignal; bakes: Map<string, SharedBake> }>();
+/** The renderer's shared bakes in its context generation now. */
+function bakesOf(renderer: THREE.WebGLRenderer): Map<string, SharedBake> {
+  const generation = contextGeneration(renderer);
+  let held = sharedBakes.get(renderer);
+  if (held?.generation !== generation) sharedBakes.set(renderer, held = { generation, bakes: new Map() });
+  return held.bakes;
+}
 const textureId = (texture: THREE.Texture | undefined) => texture ? texture.uuid : "-";
 /** A bake's identity: every parameter and input texture of its layers, its globals, domain and size. */
 export function bakeKey(input: LayeredInput): string {
@@ -599,8 +609,10 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
   let lostContext = false;
   const me = Symbol("layered bake user"), width = input.size, height = input.height ?? input.size;
   let result: THREE.WebGLRenderTarget | null = null, entry: SharedBake | null = null, release: (() => void) | null = null;
+  /** The renderer it baked with, and the context generation its maps (or a bake the loss cut short) belong to. */
+  let owner: THREE.WebGLRenderer | null = null, bakedIn: AbortSignal | null = null;
   // The baked maps live as long as the material: whoever disposes the material (the loader, per V) releases them.
-  material.addEventListener("dispose", () => { release?.(); release = null; result = null; entry = null; });
+  material.addEventListener("dispose", () => { current(); release?.(); release = null; result = null; entry = null; });
   const { min, max } = input.domain;
   const domain = new THREE.Vector4(min[0], min[1], max[0] - min[0], max[1] - min[1]);
   const show = (target: THREE.WebGLRenderTarget) => {
@@ -624,10 +636,21 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
     material.visible = false;
     material.needsUpdate = true;
   };
+  /**
+   * Bring the handle to the context's generation now, before any read or reuse of its state: maps baked in an ended generation are gone
+   * (dropped, never disposed: their GL objects went with the context), so it is pending again and hidden, and a bake the loss cut short is
+   * tried again once the context is back. A part neither shown nor kept (one being prepared) hears no `contextRestored`; this finds it.
+   */
+  function current() {
+    if (!owner || !bakedIn || inGeneration(owner, bakedIn)) return;
+    if (state === "baked") { release = null; hide(); state = "pending"; bakedIn = null; }
+    else if (state === "failed" && lostContext && !contextGeneration(owner).aborted) { state = "pending"; error = undefined; lostContext = false; bakedIn = null; }
+  }
   const handle: LayeredHandle = {
-    get state() { return state; },
-    get target() { return result; },
+    get state() { current(); return state; },
+    get target() { current(); return result; },
     contextRestored() {
+      bakedIn = null;
       // A bake that failed because the context was lost runs again (PREV-73); any other failure stands.
       if (state === "failed" && lostContext) { state = "pending"; error = undefined; lostContext = false; return; }
       if (state !== "baked") return;
@@ -637,17 +660,18 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
       state = "pending";
     },
     bake(renderer) {
+      current();
       if (state !== "pending") return state === "baked";
       // Nothing can be drawn while the context is lost: stay pending, and bake after the restore (PREV-73).
       if (contextLost(renderer)) return false;
       const unsupported = bakeUnsupported(renderer);
       if (unsupported) { state = "failed"; error = unsupported; return false; }
       const key = bakeKey(input);
-      let bakes = sharedBakes.get(renderer);
-      if (!bakes) { bakes = new Map(); sharedBakes.set(renderer, bakes); }
+      const bakes = bakesOf(renderer);
+      owner = renderer;
       const use = (shared: SharedBake) => {
-        shared.users.add(me); entry = shared; result = shared.target;
-        release = () => { shared.users.delete(me); if (!shared.users.size) { shared.target.dispose(); if (bakes!.get(key) === shared) bakes!.delete(key); } };
+        shared.users.add(me); entry = shared; result = shared.target; bakedIn = contextGeneration(renderer);
+        release = () => { shared.users.delete(me); if (!shared.users.size) { shared.target.dispose(); if (bakes.get(key) === shared) bakes.delete(key); } };
       };
       const known = bakes.get(key);
       if (known) {
@@ -740,6 +764,7 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
         error = (reason as Error).message;
         // Lost while baking (the draws report the lost context): tried again after the restore (PREV-73).
         lostContext = contextLost(renderer) || error.includes(`0x${CONTEXT_LOST_WEBGL.toString(16)}`);
+        if (lostContext) bakedIn = contextGeneration(renderer);
         made?.dispose();
         result = null;
       } finally {
@@ -751,6 +776,7 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
       return state === "baked";
     },
     evidence: () => {
+      current();
       // Credited to the longest-standing user of shared maps (PREV-78); `shared` when another chunk uses the same maps.
       const credited = state === "baked" && !!entry && entry.users.values().next().value === me;
       return { state, size: width, height, layers: input.layers.map(item => item.parameters.index),
