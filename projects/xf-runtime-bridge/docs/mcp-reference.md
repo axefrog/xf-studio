@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 85 tools, 45 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 88 tools, 47 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -21,7 +21,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (6)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
-- [Other tools](#other-tools) (2)
+- [Other tools](#other-tools) (5)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -30,13 +30,13 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 32 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 33 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 15 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
-| `write-world` | Change the world | 5 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
+| `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-character` | Change V's appearance | 5 | Yes | Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile). | `allow_writes = true` and `character` in `allow_write_classes` (on by default once writes are allowed); opening, confirming and leaving the appearance screen also need `allow_creator_leave = true`. |
 | `write-inventory` | Change V's clothing | 5 | Yes | Equips and unequips V's clothing, and can add a test item to V's inventory (and remove it again). Off in the bridge's settings until the maintainer allows it; undo by equipping the earlier item. | `allow_writes = true` and `inventory` listed by name. Off in every package unless the test build is made with `--allow-inventory`. |
-| `write-save` | Save and load the game | 4 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
+| `write-save` | Save and load the game | 5 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
 | `write-showroom` | Set up the finish showroom | 5 | Yes | Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `showroom` listed by name (the test profile's build lists it). |
 | `write-player` | Move V | 6 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
 | `act-player` | Act for V | 0 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
@@ -1544,7 +1544,7 @@ Read the game's UI state and the XF overlay host, and place the bridge's own in-
 
 ### `ui_hud`
 
-**Show, hide or move the ink panel in the game.** Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: photo_menu (default, 0.8.6: the HUD in play and, while photo mode is open, inside photo mode's own menu, where it fades with the menu for the hide-UI key, photo_hud_hide and screenshots, and its answers can also be clicked; there the anchors have no HUD floors), hud (the HUD only, hidden wherever the game hides it: menus, photo mode, the appearance screen, so the XF box shows in photo mode), notifications or top (research). modal (0.8.6, research for knowledge/photo-mode.md §15) makes the panel inside photo mode's menu hold one ModalPopup game context while photo mode is open, which is said to hold off photo mode's own keys (camera movement, the screenshot key, hide UI, exit); it takes effect only there, and the kill switch drops it. The panel in photo mode reports to session_log as ink_tree (photo mode's menu root and the XF layer: on each open, and once laid out with the root's width and rectangles), ink_pointer (hover taken, refused while a mouse button is held, replayed, left; answer clicks with the pointer's position) and ink_input (the camera's mouse and ModalPopup taken and released, with push and pop counts). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.
+**Show, hide or move the ink panel in the game.** Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: photo_menu (default, 0.8.6: the HUD in play and, while photo mode is open, inside photo mode's own menu, where it fades with the menu for the hide-UI key, photo_hud_hide and screenshots, and its answers can also be clicked; there the anchors have no HUD floors, and 0.8.7 keeps the panel out of photo mode's own menu, top bar and hint strips, measured from photo mode's widgets), hud (the HUD only, hidden wherever the game hides it: menus, photo mode, the appearance screen, so the XF box shows in photo mode), notifications or top (research). modal (0.8.7) makes the panel inside photo mode's menu hold photo mode's exit while photo mode is open (Esc and the exit hint do nothing); photo mode's camera keys are read natively and can't be held from a contained route, so they keep moving the camera (0.8.6's ModalPopup context held neither, session 14); it takes effect only there, and the kill switch drops it. The panel in photo mode reports to session_log as ink_tree (photo mode's menu root and the XF layer: on each open, and once laid out with the root's width and rectangles), ink_pointer (hover taken, refused while a mouse button is held, replayed, left; presses with their route and actions, answer clicks and ignored releases with the pointer's position) and ink_input (the camera's mouse taken and released; photo mode's exit held by modal). Its laid-out ink_tree event also gives photo mode's zones and the panel's rectangle. nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.
 
 - **Command:** `ui.hud`, the bridge method `ui.hud`
 - **Permission:** Show messages in the game (`notify`)
@@ -1561,7 +1561,7 @@ Read the game's UI state and the XF overlay host, and place the bridge's own in-
 | `layer` | string | `photo_menu`, `hud`, `notifications`, `top` | Where the panel draws: photo_menu (default: the HUD in play, inside photo mode's menu while it is open), hud (the HUD only; the XF box in photo mode), notifications or top (research). |
 | `nameplates` | boolean | `true`, `false` | Show each XF Finish Showroom head's preset name on its pedestal. |
 | `cet_label` | boolean | `true`, `false` | Show the CET line (Cyber Engine Tweaks' status line with a coloured dot, far top left) and its message lines. |
-| `modal` | boolean | `true`, `false` | Research (0.8.6): while the panel is inside photo mode's menu, hold one ModalPopup game context (photo mode's own keys held off); false lets it go. The kill switch drops it. |
+| `modal` | boolean | `true`, `false` | While the panel is inside photo mode's menu, hold photo mode's exit (Esc does nothing); photo mode's camera keys can't be held and keep working (0.8.7, session 14). false lets it go; the kill switch drops it. |
 | `reset` | boolean | `true`, `false` | Go back to the configured settings (alone). |
 
 ### `ui_state`
@@ -1604,6 +1604,58 @@ Tools not yet sorted into an area above.
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `ms` (required) | integer | 0 to 10000 | How long to hold the next save, in milliseconds (0 to 10000; 0 disarms). |
+
+### `test_events`
+
+**Read the event probes' records (test probe).** Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off). Reads the records of the game-events and save-identity probes from their own ring (512 records, at most 20 a second per kind; what goes over is counted in dropped and in the kind's next record), apart from the session's events: kinds session (each lifecycle point of a load or save, with restored, pre_game and the probe's test facts), death, defeated, knockdown, combat, heat (wanted_level, wanted_chase_active), zone (CityAreaType), district (the innermost district's enum name, previous, new_location_discovered), interior (a 2 Hz poll's flips), vehicle (mount and unmount with the seat), vehicle.stolen, vehicle.acquired, journal (hash, class, change type, state; no text), dialogue.hub (hub ids, states and choice counts; no text), dialogue.index, call (contact, phase), time (a jump of the clock, or the menu's skip), status.count and stim.count (the noisy hooks, counted every 5 s). Every record carries game_s and sim_s. since reads on from a cursor (next). stims: true switches on the stim tap (row 16), false off. Changes nothing in the game.
+
+- **Command:** `test.events`, the bridge method `test.events`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** stims: false switches the stim tap off again; reading changes nothing.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `since` | integer | at least 0 | Read records from this sequence number on (the last answer's next); 0 or none from the oldest. |
+| `limit` | integer | 1 to 500 | At most this many records (1 to 500, default 200). |
+| `stims` | boolean | `true`, `false` | true switches the stim tap on (allow-listed stims counted every 5 s), false off. |
+
+### `test_save_identity`
+
+**Write or read the save-identity test facts (test probe).** Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off). mode write sets the probe's test facts, all named xfs_probe_* so they can never be taken for the real save key: a and b (xfs_probe_a, xfs_probe_b), and pin {c0, c1, b, n} (xfs_probe_sk_c0, _c1, _b, _n, with the check xfs_probe_sk_k worked out by the plugin and written last), or pin "clear" to set them all to 0; arm_before_save: true makes Codeware's Session/BeforeSave write a fresh xfs_probe_b before every save (save-identity row 4), false stops it; persist {value, kib} fills the probe's persistent system (rows 11 and 12; kib 0 to 4096). mode read answers the facts, whether the pin's check holds, and the persistent system (present false once its file is removed from the staged mod). The facts go into any save made after; they are test facts and harmless. Takes no save lock. Needs the save permission.
+
+- **Command:** `test.save.identity`, the bridge method `test.save.identity`
+- **Permission:** Save and load the game (`write-save`)
+- **Changes the game:** Yes
+- **Undo:** pin "clear" sets every test fact back to 0; arm_before_save: false stops the BeforeSave write.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `mode` | string | `write`, `read` | write or read (default read). |
+| `a` | integer | 0 to 2147483647 | xfs_probe_a's value (0 to 2147483647). |
+| `b` | integer | 0 to 2147483647 | xfs_probe_b's value (0 to 2147483647). |
+| `pin` | object or string | the fields below; or `clear` | The pin {c0, c1, b, n} (each 0 to 2147483647), or "clear". |
+| `arm_before_save` | boolean | `true`, `false` | true: Session/BeforeSave writes a fresh xfs_probe_b before each save; false stops it. |
+| `persist` | object | the fields below | Fills the probe's persistent system: {value, kib}. |
+| `persist.value` | integer | 0 to 2147483647 | The persistent field's value. |
+| `persist.kib` | integer | 0 to 4096 | The persistent array's size in KiB (0 to 4096). |
+
+### `test_companion_probe`
+
+**Run the companion probe (test probe).** Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks, and the package's xfb_companion_probe.exe; elsewhere refused). Launches the bundled companion from the plugin's own folder the way companion@1 will: opened against writers and hashed (sha256), created suspended with no window in a job named at creation (route atomic; assigned if the system refused that, with the reason), the job kill-on-close with one process, a memory cap (memory_mb, default 64) and UI limits, its only inherited handle the pipe for its output, checked in the job before it resumes (else ended), a fixed command line, no shell. mode probe (default): the plugin lists the game's archive/pc/mod folder as the game sees it and asks the companion about its first archive and that folder; the answer has the companion's report (in_job, kill_on_close, active_process_limit, memory_limit_mb, file_seen, folder_archives), plugin_view, and vfs_reaches_child (true when the companion sees what the game sees: MO2's virtual files reach a child of the game). mode sleep starts one that waits seconds (default 600) and keeps its job, so quitting the game should end it (kill-on-close); mode stop ends it now. Changes nothing in the game.
+
+- **Command:** `test.companion.probe`, the bridge method `test.companion.probe`
+- **Permission:** Change the world (`write-world`)
+- **Changes the game:** Yes
+- **Undo:** mode stop ends a sleeping companion; quitting the game ends it too.
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `mode` | string | `probe`, `sleep`, `stop` | probe (default), sleep or stop. |
+| `seconds` | integer | 1 to 3600 | sleep only: how long it waits, 1 to 3600 (default 600). |
+| `memory_mb` | integer | 16 to 1024 | The job's memory cap in MB, 16 to 1024 (default 64). |
 
 ### `game_continue`
 

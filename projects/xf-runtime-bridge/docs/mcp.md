@@ -132,7 +132,8 @@ The bridge is built so that a mistake, a confused model or a crash can't damage 
 
 **Saves are protected.** Nothing saves the game except `game_save`, which makes one new manual save and never overwrites one. From the bridge's first change until a save is loaded, the bridge holds its own save lock:
 - `game_save` refuses (`bridge_save_lock`) unless told to override it;
-- it also refuses while the bridge still holds something a save would keep (`bridge_effects_active`).
+- it also refuses while the bridge still holds something a save would keep (`bridge_effects_active`);
+- your own saves in the game are refused too; from 0.8.7 the status surface then says why ("XF Runtime Bridge is holding saves because of a test change…"), and the XF Runtime Bridge window offers **Save anyway**, which makes one manual save past the lock on your say-so (the test profile's `-writes` build only; no tool can ask for it).
 
 Loading a save (`game_load`) discards progress, so it needs `discard_unsaved: true`.
 
@@ -148,10 +149,10 @@ Loading a save (`game_load`) discards progress, so it needs `discard_unsaved: tr
 
 A session doesn't need you at the keyboard of the AI client. The AI client asks with `ui_message` at `level: "ask"`, optionally with `choices` (one to four labels of up to 24 characters; one Done button by default). You see the question in two places:
 
-- **On the game's screen**: in the **ink panel** (the game-style panel with the red edge, top left by default; needs Codeware) while the game shows its HUD and, from 0.8.6, inside photo mode's own menu while photo mode is open, where you can also click an answer; otherwise in the **XF box** (the small dark box with the yellow heading), in menus and wherever the ink panel can't show. Each answer has its key in front of it, as the game writes its own prompts: `[F6] Done` (F6, F7, F8 and F11 by default, `answer_keys` in `config.ini`). Press the key to answer without leaving the game. Only one status surface shows at a time, and none on a loading screen.
+- **On the game's screen**: in the **ink panel** (the game-style panel with the red edge, top left by default; needs Codeware) while the game shows its HUD and, from 0.8.6, inside photo mode's own menu while photo mode is open, where you can also click an answer (0.8.7: clicks there work; 0.8.6's were ignored); otherwise in the **XF box** (the small dark box with the yellow heading), in menus and wherever the ink panel can't show. Each answer has its key in front of it, as the game writes its own prompts: `[F6] Done` (F6, F7, F8 and F11 by default, `answer_keys` in `config.ini`). Press the key to answer without leaving the game. Only one status surface shows at a time, and none on a loading screen.
 - **The XF Runtime Bridge window** in CET's overlay (test builds). It has a button per answer and a comment box for free text (Ctrl+Enter sends).
 
-The ink panel inside photo mode's menu also reports to `session_log`: `ink_tree` (photo mode's menu and the XF layer under it, on each open and once laid out), `ink_pointer` (the pointer entering it, the camera's mouse taken or refused while a button is held, answer clicks) and `ink_input` (what it holds from photo mode, and when it gives it back). `ui_hud {layer: "hud"}` keeps the panel out of photo mode, so the XF box shows there instead.
+The ink panel inside photo mode's menu also reports to `session_log`: `ink_tree` (photo mode's menu and the XF layer under it, on each open and once laid out), `ink_pointer` (the pointer entering it, the camera's mouse taken or refused while a button is held, answer clicks) and `ink_input` (what it holds from photo mode, and when it gives it back). `ui_hud {layer: "hud"}` keeps the panel out of photo mode, so the XF box shows there instead. `ui_hud {modal: true}` holds photo mode's exit while it shows (0.8.7); photo mode's camera keys can't be held and keep moving the camera. The window's answer buttons name no key: CET takes the keyboard while its overlay is open.
 
 One question shows at a time: a new question withdraws the one still waiting, and it stays on screen until you answer it, it is withdrawn or its time runs out. `session_wait` returns your answer (its label, and whether it came from a key or a button), or any comment you type. An answer you gave before the AI client started waiting still counts. **Mark this moment** in the XF Runtime Bridge window drops a marker into the session log, for "look at this".
 
@@ -214,6 +215,7 @@ Every code, with its exact wording, is in the reference's [refusal codes](mcp-re
 - **Stdio and one client.** The server runs beside one AI client on the same machine, and the bridge's main pipe takes one connection at a time (the emergency controls have their own).
 - **Opening photo mode needs the game window in front.** Every other tool works with the game in the background.
 - **Inventory changes are off** until explicitly allowed, and `act-player` has no tools yet.
+- **Test probes (0.8.7, for session 15):** `test_events`, `test_save_identity` and `test_companion_probe` work only with the test profile's `-writes` build and are refused elsewhere (`test_hooks_off`). They come out, or move into XF Lab, once XF Core's first tracks land.
 - **Some tools are research tools** and say so in their descriptions (for example `photo_camera_place`, `pose_live_apply`, `input_probe`). A few are known not to work in the game yet: photo mode puts its camera back after `photo_camera_place`. The [test card](../../../research/runtime/runtime-bridge-test-card.md) tracks each command's in-game result.
 
 ### What is proven where
