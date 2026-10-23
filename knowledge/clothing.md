@@ -237,6 +237,10 @@ From the XF bridge's wardrobe and inventory commands on 29 September 2026 (game 
 
 **Design implication.** A tool that asks "what does V show?" should read what each slot actually draws, not infer it from the vanilla wardrobe tables: that answer is the same whichever outfit system is installed, so it needs no outfit-mod adapter. The same holds for the Studio's future worn-item snapshot (ask 3).
 
+### Session 17: an Equipment-EX outfit read "hidden" in every vanilla area [runtime] [source]
+
+`player_status`'s `clothing` (bridge 0.8.10) listed every area as `hidden` while V visibly wore the outfit (white top, jeans, heels): the manager was Equipment-EX (set 0), the equipped Face and Feet items were real, the rest empty. Equipment-EX clears the vanilla areas' visuals while its outfit is on and draws the outfit's parts from its own slots, so the engine's per-area flags (`IsSlotHidden`, the overridden visual) say nothing about what the outfit shows. 0.8.11 reads the outfit's own slots through Equipment-EX's API (optional, by reflection) and reports `outfit` for an area where a part's item has that equip area [source, session 18 checks it].
+
 ## Open questions
 
 1. The save package's objects are read from their own field tables (§2.6). Is the u32 after `WardrobeSystem_ClothingSets`' set count the active set's index (8 = `INVALID` in saves without sets; a save with an active set would confirm it)?
