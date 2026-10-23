@@ -256,6 +256,20 @@ export class Sim {
     this.k.bump();
   }
 
+  /** True from a tick that stopped short of its target until a tick reaches it: the coarse tiers are catching up (S1 10.2). */
+  catchingUp = false;
+
+  /**
+   * Catch up toward a window boundary within a work budget (S1 10.2). The kernel stops between boundaries and resumes; S1 lags and
+   * does not change a period, and a read made meanwhile answers as of the last processed boundary, flagged `catchingUp` (`Reads.read`).
+   * Returns whether the target is reached.
+   */
+  catchUp(toWindow: number, budget?: number): boolean {
+    const r = this.k.tick({ to: toWindow * this.data.time.W, ...(budget !== undefined ? { budget } : {}) });
+    this.catchingUp = !r.done;
+    return r.done;
+  }
+
   /** Advance the world by whole windows. */
   advance(windows: number): void {
     const to = (this.windowNow() + windows) * this.data.time.W;

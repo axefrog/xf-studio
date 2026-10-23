@@ -95,6 +95,11 @@ export class Reads {
     return d ? d.eval(args, t) : MAYBE;
   }
 
+  /** A read and whether the coarse tiers are catching up, in which case it answers as of the last processed boundary (S1 10.2). */
+  read(name: string, args: unknown[], t: GameTime = this.k.now): { value: string; catchingUp: boolean } {
+    return { value: this.eval(name, args, t), catchingUp: this.sim.catchingUp };
+  }
+
   transitions(name: string, args: unknown[], from: GameTime, to: GameTime): ReadTransition[] {
     const d = this.defs.get(name);
     return d ? d.transitions(args, from, to) : [{ t: from, value: MAYBE }];

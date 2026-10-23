@@ -1,6 +1,7 @@
 // SF1-R: the registered reads for S2 (S1 9.1, 14.1).
 
 import { describe, expect, test } from 'bun:test';
+import { canonicalKey } from '../../src/canon.ts';
 import { H, id as hid, s as hs } from '../../src/id.ts';
 import type { EventsDigest } from '../../src/sim/proc-events.ts';
 import type { NormsDigest } from '../../src/sim/proc-norms.ts';
@@ -190,6 +191,46 @@ describe('SF1-R-3: invalidation', () => {
     const tr = sim.reads.transitions('divergence', [believer, subject], t0, sim.k.now);
     expect(tr[0]).toEqual({ t: t0, value: 'none' });
     expect(tr[tr.length - 1]!.value).toBe('large');
+  });
+});
+
+describe('the registries for S3 (S1 9.2) and catching up (S1 10.2)', () => {
+  test('producers(kind) and eventKind(name) list the kinds with their producers and tags; isSpine joins a mirrored canon person; aesthetic is undefined', () => {
+    const sim = Sim.create({ worldSeed: seedOf('SF1-R-S3'), index: fx3Slice(), data: quietData(), only: ['city.events'] });
+    expect(sim.reads.producers('theft')).toEqual(expect.arrayContaining(['city.events', 'city.mirror', 'scene.acts']));
+    expect(sim.reads.producers('game.death')).toContain('port');
+    expect(sim.reads.producers('tell')).toContain('social');
+    expect(sim.reads.producers('nothing')).toEqual([]);
+    expect(sim.reads.eventKind('assault')!.tags).toContain('personal-violence');
+    expect(sim.reads.eventKind('nothing')).toBeUndefined();
+    const canon = sim.k.mirrored('canon-person', 'xf:person');
+    expect(sim.reads.isSpine(canon)).toBe(false);
+    sim.spine.add(canon);
+    expect(sim.reads.isSpine(canon)).toBe(true);
+    expect(sim.reads.aesthetic(canon, 'hair')).toBeUndefined();
+  });
+
+  test('a jump is caught up boundary by boundary within a budget: reads answer as of the last processed boundary, flagged catchingUp, and the end is the same as one call', () => {
+    const mk = () => Sim.create({ worldSeed: seedOf('SF1-R-catch'), index: fx3Slice(), data: fxData((d) => { for (const k of Object.keys(d.shape.rate)) d.shape.rate[k] = d.shape.rate[k]!.map((x) => x * 20) as [number, number, number, number]; }) });
+    const a = mk();
+    a.advance(40);
+    const b = mk();
+    let steps = 0;
+    let flagged = 0;
+    while (!b.catchUp(40, 3)) {
+      steps++;
+      expect(b.catchingUp).toBe(true);
+      const r = b.reads.read('priceLevel', ['fx_d1']);
+      expect(r.catchingUp).toBe(true);
+      flagged++;
+      expect(steps).toBeLessThan(2000);
+    }
+    expect(b.catchingUp).toBe(false);
+    expect(b.reads.read('priceLevel', ['fx_d1']).catchingUp).toBe(false);
+    expect(flagged).toBeGreaterThan(5);
+    expect(b.windowNow()).toBe(40);
+    expect(canonicalKey(b.stateOf('city.events'))).toBe(canonicalKey(a.stateOf('city.events')));
+    expect(canonicalKey(b.digestOf('city.events'))).toBe(canonicalKey(a.digestOf('city.events')));
   });
 });
 
