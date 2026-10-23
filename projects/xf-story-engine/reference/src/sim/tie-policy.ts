@@ -140,6 +140,22 @@ export class TiePolicy {
     return this.sim.record.tieHistory[tieEdgeId(a, b)]?.spanFloor;
   }
 
+  /** The actual write order of independent tie boundaries, including equal-time writes on different pairs. */
+  noteEdge(edge: Readonly<Edge>, ended: boolean): void {
+    if (edge.type !== 'xf:tie') return;
+    const log = (this.sim.record.tieLog[edge.id] ??= []);
+    const push = (t: GameTime, value: 'yes' | 'no') => log.push({ t, value, ord: this.sim.record.tieSeq++ });
+    if (!ended) push(edge.valid.from, 'yes');
+    if (edge.valid.to !== undefined) push(edge.valid.to, 'no');
+    while (log.length > 64) log.shift();
+  }
+
+  transitionsOf(a: Id, b: Id): Array<{ t: GameTime; value: 'yes' | 'no'; ord: number }> {
+    const spans = this.intervalsOf(a, b);
+    // An edge's scheduled future end can be shortened; its superseded boundary must not be replayed.
+    return (this.sim.record.tieLog[tieEdgeId(a, b)] ?? []).filter((e) => spans.some((s) => (e.value === 'yes' ? s.from : s.to) === e.t));
+  }
+
   /** A save is about to drop the ended ties: their intervals go into the record first. */
   captureSpans(): void {
     for (const e of this.k.store.allEdges()) {

@@ -114,6 +114,8 @@ export type LogDraft = Omit<LogEntry, 'seq'>;
 
 /** One state transition of a registered read, carried in a digest's `changes` feed (S1 2.2, 9.1). */
 export interface Transition {
+  /** Persistent position in this process's transition stream, assigned when the feed is written. */
+  ord?: number;
   key: string;
   t: GameTime;
   value: string;
@@ -122,6 +124,8 @@ export interface Transition {
 
 export interface Feed<T> {
   windows: Array<{ w: number; items: T[] }>;
+  /** Only transition feeds use this counter; it survives eviction of an entirely quiet stretch. */
+  next?: number;
 }
 
 export interface DigestBase {
@@ -135,6 +139,12 @@ export function pushFeed<T>(feed: Feed<T> | undefined, w: number, items: T[], ke
   const windows = [...(feed?.windows ?? []), { w, items }];
   while (windows.length > keep) windows.shift();
   return { windows };
+}
+
+export function pushTransitions(feed: Feed<Transition> | undefined, w: number, items: Transition[], keep: number): Feed<Transition> {
+  let next = feed?.next ?? 0;
+  const stamped = items.map((tr) => ({ ...tr, ord: next++ }));
+  return { ...pushFeed(feed, w, stamped, keep), next };
 }
 
 /** The items of the windows after a cursor, in order, and whether windows were lost to the bound (a `feed-gap`). */

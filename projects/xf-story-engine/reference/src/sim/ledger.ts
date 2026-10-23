@@ -10,7 +10,7 @@ import type { ProcessOp } from '../evolution.ts';
 import type { GameTime, Id } from '../types.ts';
 import { clamp, q64 } from './arith.ts';
 import type { LedgerData } from './data.ts';
-import { type DigestBase, type Feed, type Transition, pushFeed } from './occ.ts';
+import { type DigestBase, type Feed, type Transition, pushTransitions, pushFeed } from './occ.ts';
 import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 import { simulatedDistricts } from './index-types.ts';
@@ -185,7 +185,7 @@ export function ledgerProcess(sim: Sim): S1Process<LedgerState, LedgerDigest> {
         }
       }
       const prevDigest = c.digest<LedgerDigest>(procId);
-      return { ops, state: st, digest: { v: 1, through: k, labels, changes: pushFeed(prevDigest?.changes, k, changes, sim.data.feed.keep) } };
+      return { ops, state: st, digest: { v: 1, through: k, labels, changes: pushTransitions(prevDigest?.changes, k, changes, sim.data.feed.keep) } };
     },
   };
 }

@@ -840,7 +840,7 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
     made (S1 9.1), and layer 2 evaluates a window's closing condition at each of them (S2-4): the first version had no
     `transitions` in the port and latched on the last value of a second in which a regime ended and another began. A change carries
     `ord`, where it stands among the changes other reads made at the same second, and a condition on several reads is evaluated after
-    each change in that order with every read at the value it had then (155). Eleven of the
+    each source transition in that order with every read at the value it had then; aliases update atomically (155, 163). Eleven of the
     sixteen reads of S2 2.16 and 2.17 are built (`band`, `regime`, `regimeIs`, `presence`, `priceLevel`, `refuge`, `label`, `bridge`,
     `normGap`, `tied`, `divergence`). `heatRank`, `tension`, `reach`, `protected` and `contract` are registered, answer `maybe`, and are
     refused at compile as "not supported yet", as is every read when no port is attached. A read's `deps` become the instance's
@@ -851,9 +851,8 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
 124. **The audits are pure functions over structure, so a test can hand them a fault. (amended, R1)** `audit.ts` (in the simulation layer's
     source directory) has the source lint, the kind and read audits, the writers audit over a declared table (`PROCESS_WRITES`) and
     the writes a run observes, the gate audit, the cursor audit and the schema audit (which asks the kernel's loader to validate and
-    lists every slot a derive reads). The lint reads a file with its comments removed, and with the contents of strings blanked
-    for the rules that look for a word, so a word in a message is not a finding; the rules that need a literal (a slot named in a
-    string) read it with the strings kept. The first version blanked strings for every rule, and the rule for V's cell could never
+    lists every slot a derive reads). The source lint walks TypeScript compiler ASTs (166), distinguishing executable expressions from
+    literal contents, and inspecting literal slot arguments where needed. The first version blanked strings for every rule, and the rule for V's cell could never
     match the literal it looked for: a read of `sim.w.vState` with `'cell'` in a tier 0 to 2 file was not found. The heritage
     lint applies to S1's own kinds: the kernel's `core:name` draws given and family names by an `origin` slot, which is display
     and no decision. A read of a believer's beliefs must test `memorable` within three lines, at each read.
@@ -873,10 +872,9 @@ regression test. The decisions the fixes needed:
     and a withdrawn pin and an ended contribution count twice, so a withdrawal or an end moves it as an addition does. The resident
     views and blocks and the minted facts of an event are stamped with it. A household nothing local touches has the same view at
     any time; a touched one is good only at the time it was resolved, because a contribution's validity is a window. That is not
-    enough for a resident, whose values also depend on the rules that name no node: the pack's, and any an author adds over a kind
-    or over everything. `People.general()` keys them (their Ids and windows, once per revision): a change of the rules starts the
-    caches again, one with a window makes a cache good only at its own time, and the shared memo of untouched households is used
-    only by worlds with the same rules. The first version assumed zero local state meant the resident was unchanged, and an
+    enough for a resident, whose values also depend on the rules that name no node. With any extra general rule, named rule on the
+    resident/owner chain, or additional location edge, the resident and block caches are bypassed (164). Shared memoisation is restricted
+    to the known installed pack and untouched local inputs. The first version assumed zero local state meant the resident was unchanged, and an
     authored kind-wide age constraint left a warm view saying 36 where the kernel said 17. The gate is told the age class the
     kernel resolves (`age-class`), not one worked out from the age. The spells of a resident are keyed by their age band.
 127. **The order a record lists its properties in is not part of the model. (new)** The matrix rows of a kind are taken in the
@@ -947,7 +945,7 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
     and an occurrence within the ring regenerates. The kernel drops an ended `core:cast` edge, an old reading of a quest link and a
     withdrawn pin when it saves, so S1 writes the spans (a cast edge's interval, an observed pin from `at`, a quest-linked reading's
     validity) into its record at each save, as their union per node (a cause that is live at the save is recorded up to the save and no
-    further: 156), and drops the ones that ended before the oldest occurrence
+    further, including a finite end later than the save: 156, 162), and drops the ones that ended before the oldest occurrence
     that can regenerate (a week and a window). A game that restates a quest link after a load makes a reading inside a span already
     held, so the union is what makes the record the same for a run that reloaded and one that did not. For a time before now the
     protected set is the kernel's state and the spans together. A cast edge counts for the interval it was live in: the first
@@ -955,7 +953,7 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
     spine and the essential set are read as they are (they are configuration, not history).
 144. **The record keeps the facts of the events behind memorable beliefs. (new, R1 SIM-03)** At each save S1 reads, from the kernel, the events a
     memorable belief is read back through (the source of an observed belief, the first evidence, the cause of an inference; a
-    ledger item reads none) and keeps what each was minted with, read from the contributions that hold the minted fields and not from what
+    ledger item reads none) and keeps what each was minted with, including opened summary items (162), read from the contributions that hold the minted fields and not from what
     the event resolves to at the time of the save (157): creator, cause, name, time, kind, place, participants, effects, witnesses,
     causes, outcome and the frame it served. At the load it restores them silently (140). An item nobody has opened is not kept: it has no
     people to record, and restoring one would stop the scene from regenerating its people (128). The set is cut to the events a
@@ -996,8 +994,8 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
     slots use for every candidate); a test compares it with the library on every length from 0 to 1,024 and on heads and tails of every
     split. The Ids of owned values and members are remembered (bounded); the canonical encoder writes into one buffer; the store
     indexes general contributions by slot and lists edge values without copying; the predicate matcher tests a slot before a kind;
-    a process's own state is copied by its own `cloneState` when it has one (S1's ring shares its entries, which are never edited in
-    place); reads that only look at a digest use `digestPeek` and do not copy it. A native core can ignore all of it: none of it is in
+    a process's own state is copied by its own `cloneState` when it has one (S1's ring is deep-copied: 165); reads that only look at a
+    digest use `digestPeek` and do not copy it. The queued contribution optimisation was also removed (165). A native core can ignore all of it: none of it is in
     the contract.
 154. **A frame that has ended is opened afresh, never reactivated. (new, found by the full-scale partition property)** `v.frames` used
     to set an abandoned situation frame (a neighbour V had left) or a satisfied or abandoned goal frame (an entry untracked) back to
@@ -1010,36 +1008,63 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
 155. **A closing condition is evaluated after each change, in the order the changes were made. (new, R2-01)** Layer 2 used to walk the values of
     each read separately and pair them by their index, which could meet a condition on two reads with values that never stood
     together. A transition now carries `ord` (`SimReadPort.transitions`), and `statesAt` puts the changes of every read the condition
-    names in that order, with one state after each. The order across sources at one second is that of a boundary (S0 9.4): the process
-    feeds first (`city.events`, then `order.norms`, then `group.decide`, each in the order its process wrote them), then what the
-    layer's own hooks logged (the divergence log), then the intervals of materialised ties. A change with no `ord` follows those that
+    names in that order, with one state after each source transition (aliases share a source: 163). The order across sources at one second
+    is that of a boundary (S0 9.4): the process feeds first, by tier then process id (`city.events`, `group.decide`, `order.ledger`,
+    `order.norms`), then the divergence hooks, then tie intervals. Each source has a persistent sequence across all its keys/pairs.
+    A change with no `ord` follows those that
     have one.
 156. **A cause that is live at a save is recorded up to the save. (new, R2-02)** The span of a cast edge, an observed pin or a quest link that
-    has not ended is written as `[from, now)`: the kernel keeps it and says when it ends. The first version wrote it open, and the union
+    has not ended is written as `[from, now)`, including a finite future end (162): the kernel keeps it and says when it ends. The first version wrote it open, and the union
     with the closed span the kernel later reported kept it open for ever.
 157. **The facts of an event are the fields it was minted with. (new, R2-03, R2-04, R2-05)** `Events.mintedSpec` reads them from the simulation
-    contributions whose origin is the event, not from what the event resolves to, so a rule or a pin that restates a field for a while is
+    contributions whose origin is the event (or the original summary and opening process for an opened item: 162), not from what the event resolves to, so a rule or a pin that restates a field for a while is
     not made permanent by a save. The load restores an event unless its own fields are there (`restoreEvent` decides; a contribution
     of someone else's that names the event does not stop it), and `served` is kept with the rest.
-158. **What is cached of a resident depends on the owner slots the rules read, and on the configuration. (new, R2-06, R2-07)** A rule may read the
-    slots of the owner chain (S0 2.3: `^/^/public` from a resident is its cell's), so a pin on a cell can move a resident. The stamp of a
-    household or a block therefore covers, besides the pins and contributions that name the household and its members, the pins and
-    contributions that are not the pack's, on the cell and every owner above it, on a slot that a rule reads through an owner path: the
-    rules of everything and the rules that name the household or a member. A cell's band, which the processes pin all the time and
-    nothing reads from below, is not in it, and with no rule reading an owner the stamp is what it was. The key of the cache and of
-    the memo shared between worlds covers the kernel configuration (the floor of a weight, the size of an enumeration). The edges of a
-    node are not an input of the pack's rules and are not stamped: an authored rule that reads them is a limit of the cache, and
-    `People.cacheOn = false` is the way to see it.
+158. **Resident caching requires a complete dependency set. (amended, R2-06, R2-07, R3-04)** The earlier owner-slot scan missed transitive
+    dependencies and edge predicates. Those cases now bypass caching altogether (164). The known pack's resident rules read local
+    household/resident slots and fixed ownership scopes; local stamps, time and the pack/configuration key cover that restricted case.
 159. **A belief notification waits for the staged batch that made it. (new, R2-08)** `Beliefs.onChange` listeners keep state outside the
     tables a discard restores, so `Beliefs` hands the notification to the open batch (`StagedBatch.after`), which delivers it on commit
     and drops it on a discard.
 160. **`tied` says maybe where dropped intervals covered. (new, R2-09)** A tie keeps its newest 16 intervals; once the oldest is dropped the
     record keeps `spanFloor`, the end of the newest dropped, and `tied` at a time before it that no kept interval covers is `maybe`,
-    not `no`.
-161. **The source audit reads template expressions as code and guards as code. (new, R2-10, R2-11)** `codeOf` has three readings of a string
-    (`blank`, `keep`, `mark`); the expressions in `${...}` of a template literal are code in each. The `meta:` guards of the policies are
-    found in the `mark` reading, where a literal's contents lie between marks no source contains, so a message that quotes the call is
-    not a guard.
+    not `no`. The coverage floor is itself a transition boundary, so evaluation and transitions agree on recovery (163).
+161. **The source audit parses executable expressions and rejecting guards. (amended, R2-10, R2-11, R3-08, R3-09)** The compiler AST,
+    rather than `codeOf` or call counting, drives the lint (166). Regex braces cannot end an interpolation early, and unrelated
+    executable calls cannot replace a policy's rejecting conditional. `codeOf` remains a syntax-based diagnostic utility only.
+
+### Fix round 2 (entries 162 onward)
+
+162. **Opened summary evidence keeps both sources; protection stops at the save. (R3-01, R3-02; completes R2-02)** An opened item's
+    descriptor is recovered from its summary's original committed pins and its item index; S1 summaries use the cell itself as place.
+    Its materialised fields are read only from `scene.acts` constants. The evidence record keeps these origins and restores them
+    silently, so neither a temporary authored override nor a reload changes the baseline. Ordinary events retain their own provenance.
+    Every protection span is clipped to `min(end, save time)`, even a finite future end; empty and future intervals are discarded.
+
+163. **A source transition is atomic, and independent transitions have persistent order. (R3-03, R3-07; completes R2-01, R2-09)**
+    Equal `ord` entries are aliases of one source transition, applied together before testing a compound closing predicate. All reads
+    contribute their initial value, including those without a change. Process transition feeds keep a next-sequence counter through
+    eviction and quiet windows; the four producers are version 2. Divergence logs share `divSeq` across pairs; one mirrored reading
+    shares one ordinal among every affected pair. Tie boundary logs share `tieSeq` across pairs and wait for staged commits. The read
+    orders source classes by the boundary order, then the persistent sequence. Tie transitions also include their coverage floor.
+    Older saves with unordered retained history open read-only: the missing chronology cannot be reconstructed honestly.
+164. **Extra rules bypass resident and block caches. (R3-04; completes R2-06)** Only the exact installed world-pack contributions
+    are treated as known dependencies. An extra general contribution, a named contribution on a household/resident or its owner chain,
+    or a location edge outside the pack's fixed ownership scopes bypasses both per-world caches and shared memoisation. No hand-scanned
+    dependency approximation remains. The remaining baseline memo includes world seed, pack version and kernel configuration.
+165. **Applied state and queued changes own their nested data. (R3-05, R3-06)** `city.events.cloneState` deep-copies the ring and all
+    nested descriptors. `Kernel.emit` deep-copies every queued change, including a contribution's form, selector and source. Fixture
+    callbacks can update applied and outstanding states once each without double-applying mutations through shared ring entries.
+166. **Source audits use the installed TypeScript compiler. (R3-08, R3-09; completes R2-10, R2-11)** TypeScript 7 exposes AST parsing
+    through `typescript/unstable/sync` and `typescript/unstable/ast`. A virtual project holds the supplied source in memory; each compiler
+    instance is closed after use. Lints walk syntax nodes, including nested template expressions. `heardEvent` and `absorb` must each
+    start with an unconditional early return whose conditional is provably true for a `meta:` event. Strings, unrelated calls, dead
+    conjuncts, non-returning branches and guards placed after work do not satisfy this requirement. This is a conservative syntactic
+    proof of the shipped guards, not general TypeScript control-flow verification.
+167. **Full mode restores independent cold and replay coverage.** `S1_FULL=1` runs the extra uninterrupted 1,008-window replay and
+    compares every line to the baseline, in addition to the reload comparison. It checks all 10,000 tie pairs with shared and resident
+    caches disabled and fresh per-pair caches. Default mode keeps the sampled tie comparison. The R3 regression probes can be checked
+    against pre-fix modules loaded only in memory with `bun run test/sim/check-review-mutations.ts` (default base `d4b78f79`).
 
 ### Spec findings for the coordinator (S1)
 
@@ -1047,8 +1072,8 @@ The ones that need a decision, worst first. The six questions of the first build
 
 - **S0 9.4 (the order of a boundary).** S1 10.2 relies on a step the kernel specification does not list: between the external operations
   and the snapshot, the frame work and the relevance dispatch they queued run to their end (109, 142). S0 should say so.
-- **S2 4.2 and the read port.** S2-4 asks layer 2 to evaluate a closing condition at each entry of a read's transitions. Layer 2 holds
-  none of S1's code and is handed a `SimReadPort`; the port S2 names should carry `transitions`, each change with the place it stands among the changes of other reads at the same second, because a condition on two reads needs one order for both (123, 155).
+- **S2 4.2 and the read port (resolved by S2 v1.9).** The port carries transitions in shared order (123, 155, 163); aliases of one
+  source transition are evaluated atomically. The current worktree's older spec copy is left unchanged.
 - **S1 8.4 (assimilate).** "The listener's default reasons for the actor's group" is not defined. The reference uses `attr@1` from the
   listener's side with no constraint visible, which makes everyone dispositional at the default data (150). Is that meant, or is the
   default a table?

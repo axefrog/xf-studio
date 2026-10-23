@@ -49,7 +49,14 @@ describe('SF1-T-1: symmetry', () => {
     People.shared = false;
     try {
       const other = build('SF1-T-1');
-      expect(at.map((n) => other.ties.tie(pairs[n]![0], pairs[n]![1]))).toEqual(at.map((n) => forward[n]));
+      if (FULL) {
+        other.people.cacheOn = false;
+        expect(at.length).toBe(10_000);
+      }
+      expect(at.map((n) => {
+        if (FULL) { other.people.dropCaches(); other.ties.dropCaches(); }
+        return other.ties.tie(pairs[n]![0], pairs[n]![1]);
+      })).toEqual(at.map((n) => forward[n]));
     } finally {
       People.shared = true;
     }

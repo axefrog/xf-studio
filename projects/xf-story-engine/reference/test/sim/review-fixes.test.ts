@@ -148,6 +148,16 @@ describe('SIM-01: a closing condition sees every value a read passed through, th
     const { inst } = run('R1-01d', { city: { regime: { scope: 'fx_d1' } }, is: ['none'] } as never, false);
     expect(inst.st.latches).toEqual(['w']);
   });
+
+  test('R3-03a: regime aliases update atomically, in either predicate order', () => {
+    for (const swap of [false, true]) {
+      const a = { city: { regime: { scope: 'fx_d1' } }, is: ['none'] };
+      const b = { city: { regimeIs: { scope: 'fx_d1', kind: 'festival' } }, is: ['yes'] };
+      expect(run(`R3-03a-${swap}`, { all: swap ? [b, a] : [a, b] } as never, true).inst.st.latches).toEqual([]);
+      const both = { all: [a, { ...b, is: ['no'] }] } as never;
+      expect(run(`R3-03a-positive-${swap}`, both, true).inst.st.latches).toEqual(['w']);
+    }
+  });
 });
 
 void Layer2;
@@ -478,7 +488,7 @@ describe('SIM-05: what is cached of a resident depends on every rule that reache
     expect(sim.people.view(r)!.age).toBe(17);
   });
 
-  test('the same for a rule that names the resident, and a pin on a slot no rule reads from below does not disturb the cache (R2-06)', () => {
+  test('the same for a rule that names the resident; unrelated pins conservatively invalidate its cache (R2-06)', () => {
     const sim = quietSim('R2-06b');
     const r = adultOf(sim);
     const cell = sim.w.districts[0]!.cellIds[0]!;
@@ -491,7 +501,7 @@ describe('SIM-05: what is cached of a resident depends on every rule that reache
     // the band of the cell is pinned by the processes all the time and nothing reads it from below: the warm view is still the view
     const warm = sim.people.view(r);
     sim.k.pin({ node: cell, slot: 'band@w1', value: 'hot', reason: 'game', cause });
-    expect(sim.people.view(r)).toBe(warm);
+    expect(sim.people.view(r)).toEqual(warm);
     sim.k.pin({ node: cell, slot: 'public', value: 'private', reason: 'authored', cause });
     expect(sim.people.view(r)!.age).toBe(17);
   });

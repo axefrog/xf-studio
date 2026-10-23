@@ -43,6 +43,7 @@ import type { NormsDigest } from './proc-norms.ts';
 import { recipeClasses } from './fit.ts';
 import { hrec } from '../canon.ts';
 import { PACK_ID } from './world-schema.ts';
+import { itemTime } from '../summary.ts';
 
 export interface SimOptions extends WorldOptions {
   /** Build only these processes (a test that wants one process alone). */
@@ -102,6 +103,7 @@ export class Sim {
       for (const e of entries as LogDraft[]) appendLog(this.record, e, this.data.log.max);
     });
     this.k.beliefs.onChange.push((believer, subject) => this.divergence.noteBelief(believer, subject));
+    this.k.edgeHooks.push((edge, ended) => this.tiePolicy.noteEdge(edge, ended));
     this.k.saveHooks.push(() => this.flush());
     this.k.loadHooks.push((rec, report) => this.onLoad(rec, report));
     this.installPins();
@@ -187,8 +189,19 @@ export class Sim {
     for (const id of Object.keys(rec)) if (!need.has(id)) delete rec[id];
     for (const id of need) {
       // the fields the event was minted with, not what it resolves to now (R2-04); one that has none of its own (a load dropped them) keeps its record
-      const spec = this.k.events.mintedSpec(id);
-      if (spec) rec[id] = { creator: spec.creator, cause: spec.cause, name: spec.name, time: spec.time, kind: spec.kind, ...(spec.place !== undefined ? { place: spec.place } : {}), participants: spec.participants!, effects: spec.effects!, witnesses: spec.witnesses!, causes: spec.causes!, ...(spec.outcome !== undefined ? { outcome: spec.outcome } : {}), ...(spec.served !== undefined ? { served: spec.served } : {}) };
+      const item = this.summaryOfItem(id);
+      let original: Parameters<Kernel['events']['mintedSpec']>[1];
+      if (item) {
+        const h = this.k.store.header(item.summary);
+        // Read the summary's original committed descriptor, never a resolved overlay. S1 summaries use their cell as scope/place.
+        const own = (slot: string) => this.k.store.pinsOfNode(item.summary).find((p) => p.slot === slot && p.reason === 'committed' && h?.origin.by === 'minted' && p.cause === h.origin.cause)?.value;
+        const from = own('from'), length = own('length'), kind = own('kind'), place = own('scope');
+        if (typeof from === 'number' && typeof length === 'number' && typeof kind === 'string' && typeof place === 'string') {
+          original = { descriptor: { time: itemTime(item.summary, item.index, from, length), kind, place }, provenance: { descriptor: item.summary, materialisation: 'scene.acts' } };
+        }
+      }
+      const spec = this.k.events.mintedSpec(id, original);
+      if (spec) rec[id] = { ...(original ? { provenance: original.provenance } : {}), creator: spec.creator, cause: spec.cause, name: spec.name, time: spec.time, kind: spec.kind, ...(spec.place !== undefined ? { place: spec.place } : {}), participants: spec.participants!, effects: spec.effects!, witnesses: spec.witnesses!, causes: spec.causes!, ...(spec.outcome !== undefined ? { outcome: spec.outcome } : {}), ...(spec.served !== undefined ? { served: spec.served } : {}) };
     }
   }
 
@@ -202,7 +215,7 @@ export class Sim {
       if (f.place !== undefined) spec.place = f.place;
       if (f.outcome !== undefined) spec.outcome = f.outcome;
       if (f.served !== undefined) spec.served = f.served;
-      this.k.events.restoreEvent(spec);
+      this.k.events.restoreEvent(spec, f.provenance);
     }
   }
 
@@ -219,6 +232,17 @@ export class Sim {
     }
     // a save the kernel opened read-only (a function it needs is missing) is looked at and not written: nothing here may write (SIM-12)
     if (this.k.readOnly) return;
+    // Old logs have no cross-pair order to recover. Guessing one would create a different oracle; keep those saves inspectable only.
+    const unorderedDivergence = Object.values(this.record.divLog).some((list) => list.some((e) => !Number.isSafeInteger(e.ord)));
+    const unorderedFeeds = [...this.defs.keys()].some((id) => {
+      const digest = this.k.evolution.digestPeek<{ changes?: { windows: Array<{ items: Array<{ ord?: number }> }> } }>(id);
+      return digest?.changes?.windows.some((w) => w.items.some((e) => !Number.isSafeInteger(e.ord)));
+    });
+    const unorderedTies = Object.keys(this.record.tieLog).length === 0 && (Object.values(this.record.tieHistory).some((r) => r.spans?.length) || [...this.k.store.allEdges()].some((e) => e.type === 'xf:tie'));
+    if (unorderedDivergence || unorderedFeeds || unorderedTies) {
+      this.k.readOnly = { message: 'This save has simulation history without a recorded transition order. It opens read-only.' };
+      return;
+    }
     this.w.buildNodes();
     this.restoreEvidence();
     this.policies.openWatch();

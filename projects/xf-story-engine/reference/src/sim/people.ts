@@ -5,6 +5,7 @@
 
 import { edgeActive } from '../predicate.ts';
 import { H, memberId, ownedId, s as hs } from '../id.ts';
+import { contributionId } from '../kernel.ts';
 import type { Contribution, GameTime, Id } from '../types.ts';
 import { floorDiv, invCum, mod } from './arith.ts';
 import type { CellIndex } from './index-types.ts';
@@ -58,8 +59,6 @@ export interface PeopleHooks {
   protectedBefore?(node: Id, t: GameTime): boolean;
 }
 
-/** A contribution a content pack installed: the same in every world of the pack, and never moved while it runs. */
-const isPackContribution = (c: Contribution): boolean => typeof c.source.origin === 'string' && c.source.origin.startsWith('pack:');
 const NO_HOOKS: PeopleHooks = { closed: () => false, isSpine: () => false, defect: () => {} };
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const DAY = 86400;
@@ -80,15 +79,18 @@ export class People {
   private views = new Map<Id, { stamp: number; general: string; now: number; list: Array<ResidentView | undefined> }>();
   private spells = new Map<string, { s0: number; starts: number[] }>();
   private ranks = new Map<Id, Id>();
-  private generalAt: { rev: number; key: string; timed: boolean; owner: ReadonlySet<string> } = { rev: -1, key: '', timed: false, owner: new Set() };
+  private generalAt = { rev: -1, key: '', timed: false, uncertain: false };
   /** The owner chain of a node, which never changes for a node: the node, its owner, the owner's owner, up to the root. */
   private chains = new Map<Id, Id[]>();
-  /** By contribution: the slots it reads through an owner path (`^/...`). */
-  private ownerReads = new Map<Id, string[]>();
   /** What the kernel's configuration makes of a draw (the floor of a weight, the size of an enumeration, the limits): part of what a cached value is a function of. */
   private configKeyOf = '';
+  private readonly packContributions: ReadonlySet<Id>;
 
-  constructor(private readonly w: World, private readonly keys: IdentityKeys) {}
+  constructor(private readonly w: World, private readonly keys: IdentityKeys) {
+    this.packContributions = new Set(w.pack.contributions.map(({ layer, ...spec }) => contributionId({ ...spec, source: { layer, origin: `pack:${w.pack.id}` } })));
+  }
+
+  private known(c: Contribution): boolean { return this.packContributions.has(c.id); }
 
   get k() {
     return this.w.k;
@@ -99,14 +101,13 @@ export class People {
     this.views.clear();
     this.spells.clear();
     this.ranks.clear();
-    this.generalAt = { rev: -1, key: '', timed: false, owner: new Set() };
+    this.generalAt = { rev: -1, key: '', timed: false, uncertain: false };
     this.chains.clear();
-    this.ownerReads.clear();
   }
 
   /**
    * The node and the nodes it is owned by. A rule that applies to a node may read the slots of its owner chain (S0 2.3), so a pin or a
-   * contribution on one of those slots can change what the node resolves to (R2-06); see `ownerStamp`.
+   * contribution on one of those slots can change what the node resolves to (R2-06); see `hasUncertainInputs`.
    */
   private ownerChain(node: Id): Id[] {
     const hit = this.chains.get(node);
@@ -128,65 +129,41 @@ export class People {
    * contributions that name the household (SIM-05): a cache is good only while this key holds, and, when a rule has a window, only at the
    * time it was made. Worked out once per revision.
    */
-  private general(): { key: string; timed: boolean; owner: ReadonlySet<string> } {
+  private general(): { key: string; timed: boolean; uncertain: boolean } {
     const k = this.k;
     if (this.generalAt.rev === k.revision) return this.generalAt;
     let timed = false;
-    const owner = new Set<string>();
+    let uncertain = false;
     const parts: string[] = [];
     for (const c of k.store.generalContributions()) {
       if (c.valid.from !== undefined || c.valid.to !== undefined) timed = true;
       parts.push(`${c.id}:${c.valid.from ?? ''}:${c.valid.to ?? ''}`);
-      for (const slot of this.readsOf(c)) owner.add(slot);
+      if (!this.known(c)) uncertain = true;
     }
     if (this.configKeyOf === '') this.configKeyOf = JSON.stringify(k.config);
-    this.generalAt = { rev: k.revision, key: H(hs('general'), hs(parts.join(',')), hs(this.configKeyOf)), timed, owner };
+    this.generalAt = { rev: k.revision, key: H(hs('general'), hs(parts.join(',')), hs(this.configKeyOf)), timed, uncertain };
     return this.generalAt;
   }
 
-  /** The slots a contribution reads through an owner path (`^/...`), found in the text of its target and its form. Worked out once for each. */
-  private readsOf(c: Contribution): string[] {
-    const hit = this.ownerReads.get(c.id);
-    if (hit) return hit;
-    const out: string[] = [];
-    const text = JSON.stringify({ target: c.target, form: c.form });
-    for (const m of text.matchAll(/\^(?:\/\^)*\/([\w#@.-]+)/g)) out.push(m[1]!);
-    this.ownerReads.set(c.id, out);
-    return out;
-  }
-
   /**
-   * The state of the owners above a household or a block, as far as it can matter: the pins and the contributions that are not the pack's, on
-   * a slot that a rule reads through an owner path (the rules of everything, and the rules that name the household or a member). A pin on
-   * a cell that a rule of the resident reads moves a resident's value; a pin on the cell's band, which nothing reads from below, does not,
-   * and the processes pin that all the time (R2-06). Zero when no rule reads an owner.
+   * Only the installed pack's dependency set is known. Any additional rule on the resident or owner chain can depend transitively on
+   * arbitrary values, edges or time: bypass both local and shared resolution caches for these inputs.
    */
-  private ownerStamp(chain: readonly Id[], from: number, named: readonly Id[], general: { owner: ReadonlySet<string> }): number {
+  private hasUncertainInputs(chain: readonly Id[], named: readonly Id[], general: { uncertain: boolean }): boolean {
     const store = this.k.store;
-    let slots = general.owner;
-    for (const n of named) {
+    if (general.uncertain) return true;
+    for (const n of new Set([...chain, ...named])) {
+      for (const e of store.edgesFrom(n)) {
+        if (e.type === 'core:located-in' && !(n === chain[chain.length - 1] && e.to === this.w.city && e.valid.from === 0 && e.valid.to === undefined)) return true;
+      }
       if (store.namedContributions(n) === 0) continue;
       for (const c of store.contributionsNaming(n)) {
-        if (isPackContribution(c)) continue;
-        for (const r of this.readsOf(c)) {
-          if (slots === general.owner) slots = new Set(slots);
-          (slots as Set<string>).add(r);
-        }
+        if (this.known(c)) continue;
+        return true;
       }
     }
-    if (slots.size === 0) return 0;
-    const reads = (slot: string): boolean => slot === '*' || slots.has(slot.replace(/@w-?\d+$/, ''));
-    let s = 0;
-    for (let i = from; i < chain.length; i++) {
-      const node = chain[i]!;
-      for (const p of store.pinsOfNode(node)) if (reads(p.slot)) s += store.withdrawn.has(p.id) ? 2 : 1;
-      if (store.namedContributions(node) === 0) continue;
-      for (const c of store.contributionsNaming(node)) {
-        if (isPackContribution(c) || !reads(c.target.slot)) continue;
-        s += c.valid.to !== undefined ? 2 : 1;
-      }
-    }
-    return s;
+    // The installed pack's resident derives read only the household and resident slots (stamped by the caller), never cell/district slots.
+    return false;
   }
 
   // ---- cells and blocks ----
@@ -229,8 +206,9 @@ export class People {
     const ids: Id[] = [];
     for (let i = 0; i < n; i++) ids.push(k.address(cell, `households[${i}]`));
     const general = this.general();
-    const stamp = this.stampOf(ids) + this.ownerStamp(this.ownerChain(cell), 0, ids, general);
-    const hit = this.blocks.get(cell);
+    const cacheable = this.cacheOn && !this.hasUncertainInputs(this.ownerChain(cell), ids, general);
+    const stamp = this.stampOf(ids);
+    const hit = cacheable ? this.blocks.get(cell) : undefined;
     // good while nothing local and no rule over a kind has changed; with a pin or a rule that has a window, only at the time it was made
     if (this.cacheOn && hit && hit.stamp === stamp && hit.general === general.key && (stamp === 0 && !general.timed ? true : hit.now === k.now) && hit.info.households.length === n) return hit.info;
     const sizes = ids.map((h) => {
@@ -240,7 +218,7 @@ export class People {
     const prefix = [0];
     for (const s of sizes) prefix.push(prefix[prefix.length - 1]! + s);
     const info: BlockInfo = { cell, households: ids, sizes, prefix };
-    this.blocks.set(cell, { stamp, general: general.key, now: k.now, info });
+    if (cacheable) this.blocks.set(cell, { stamp, general: general.key, now: k.now, info });
     return info;
   }
 
@@ -305,8 +283,9 @@ export class People {
     const members = [0, 1, 2, 3, 4, 5].map((j) => this.residentId(ref.household, j));
     const nodes = [ref.household, ...members.filter((m) => k.store.header(m) !== undefined)];
     const general = this.general();
-    const stamp = this.stampOf(nodes) + this.ownerStamp(this.ownerChain(ref.household), 1, nodes, general);
-    const hit = this.views.get(ref.household);
+    const cacheable = this.cacheOn && !this.hasUncertainInputs(this.ownerChain(ref.household), nodes, general);
+    const stamp = this.stampOf(nodes);
+    const hit = cacheable ? this.views.get(ref.household) : undefined;
     // a household nothing local touches, under rules that have no window, is the same at any time; one that is touched, or under a rule
     // with a window, is good only at the time it was resolved (a pin's or a rule's validity is a window). Any change of the rules that
     // name no node, an authored kind-wide constraint among them, starts the cache again (SIM-05).
@@ -315,7 +294,7 @@ export class People {
     if (this.cacheOn && hit && fresh && hit.list[ref.j] !== undefined) return hit.list[ref.j];
     // the shared memo is a pure function of the seed, the pack, the household and the rules that name no node
     const memoKey = `${k.worldSeed}|${this.w.pack.version}|${general.key}|${ref.household}`;
-    const shared = this.cacheOn && People.shared && timeless ? People.memo.get(memoKey) : undefined;
+    const shared = cacheable && People.shared && timeless ? People.memo.get(memoKey) : undefined;
     if (shared && shared.list[ref.j] !== undefined) {
       const out = shared.list[ref.j];
       this.views.set(ref.household, { stamp, general: general.key, now: k.now, list: [...shared.list] });
@@ -325,8 +304,8 @@ export class People {
     // The cache keeps the views of a household together; a stamp that moved starts it again.
     const list = hit && fresh ? hit.list : [];
     list[ref.j] = view;
-    this.views.set(ref.household, { stamp, general: general.key, now: k.now, list });
-    if (this.cacheOn && People.shared && timeless) {
+    if (cacheable) this.views.set(ref.household, { stamp, general: general.key, now: k.now, list });
+    if (cacheable && People.shared && timeless) {
       let m = People.memo.get(memoKey);
       if (!m) People.memo.set(memoKey, (m = { list: [] }));
       m.list[ref.j] = view;
@@ -556,5 +535,3 @@ export function periodOfSecond(sod: number, startHour: readonly number[]): numbe
   }
   return best;
 }
-
-

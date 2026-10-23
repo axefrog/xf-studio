@@ -17,7 +17,7 @@ import type { Sim } from './sim.ts';
  * a save made under another version opens read-only instead of resuming old state under new code.
  */
 export const PROCESS_VERSIONS: Record<string, number> = {
-  'city.events': 1, 'group.decide': 1, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 1, 'order.norms': 1, 'scene.acts': 1,
+  'city.events': 2, 'group.decide': 2, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 2, 'order.norms': 2, 'scene.acts': 1,
 };
 
 export type CoarseFine = { kind: 'exact' } | { kind: 'count' } | { kind: 'distribution'; tolerance: string };

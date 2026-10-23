@@ -14,7 +14,7 @@ import type { GameTime, Id } from '../types.ts';
 import { clamp, invCum, nbCount, spacingCount, splitCountR } from './arith.ts';
 import type { Boosts } from './cast.ts';
 import type { KindName } from './data.ts';
-import { type CastEntry, type Descriptor, type DigestBase, type EventFact, type Feed, type PendingChild, type RingEntry, type Transition, pushFeed } from './occ.ts';
+import { type CastEntry, type Descriptor, type DigestBase, type EventFact, type Feed, type PendingChild, type RingEntry, type Transition, pushTransitions, pushFeed } from './occ.ts';
 import type { GroupDigest } from './proc-groups.ts';
 import type { MirrorDigest } from './proc-mirror.ts';
 import type { NormsDigest } from './proc-norms.ts';
@@ -159,11 +159,8 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
   return {
     id: procId, version: PROCESS_VERSIONS[procId]!, tier: 0, coarseFine: { kind: 'count' }, lag: 0,
     init: () => emptyEvents(),
-    // the ring is a week of records that are added and dropped and never edited: the copy a run changes shares them
-    cloneState: (st) => {
-      const { ring, ...rest } = st;
-      return { ...structuredClone(rest), ring: [...ring] };
-    },
+    // ownOf and fixture updates may edit nested ring entries. Applied and outstanding states must stay independent.
+    cloneState: (st) => structuredClone(st),
 
     run(c: S1Ctx, w: number): S1Result<EventsState, EventsDigest> {
       const st = c.own<EventsState>();
@@ -584,7 +581,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         m4Open: m4Open(st.admit.m4Times, ev.m4Spacing, WEEK), services: svcOut, price, refuge, calendarSize: calSize,
         facts: pushFeed(prevDigest?.facts, w, facts, keep),
         counts: pushFeed(prevDigest?.counts, w, [...countAgg.values()].sort((a, b) => cmp(a.district, b.district) || cmp(a.kind, b.kind) || a.size - b.size), keep),
-        changes: pushFeed(prevDigest?.changes, w, changes, keep),
+        changes: pushTransitions(prevDigest?.changes, w, changes, keep),
       };
       return { ops, state: st, digest };
     },

@@ -8,6 +8,7 @@
 // when the game is saved (`Sim.flush`), from what the kernel holds at that moment.
 
 import type { Effect, GameTime, Id } from '../types.ts';
+import type { EventProvenance } from '../events.ts';
 import type { LogDraft, LogEntry } from './occ.ts';
 
 export interface S1Record {
@@ -17,7 +18,12 @@ export interface S1Record {
   /** Standings to re-evaluate at the next ledger run. */
   dirty: Array<{ carrier: Id; subject: Id; axis: string; seq: number }>;
   /** By "believer|subject": transitions of the `divergence` read, at most 8. */
-  divLog: Record<string, Array<{ t: GameTime; value: 'none' | 'small' | 'large' }>>;
+  divLog: Record<string, Array<{ t: GameTime; value: 'none' | 'small' | 'large'; ord: number }>>;
+  /** A persistent sequence shared by every divergence pair; ord is never a pair-local array index. */
+  divSeq: number;
+  /** Tie boundary changes share a persistent sequence across all pairs. */
+  tieLog: Record<Id, Array<{ t: GameTime; value: 'yes' | 'no'; ord: number }>>;
+  tieSeq: number;
   /** By "believer|subject": the time before which the retained transitions say nothing, once the oldest has been dropped (SIM-08). */
   divFloor: Record<string, GameTime>;
   /** Tie threads a retract has switched off. */
@@ -53,6 +59,7 @@ export interface Span {
 
 /** An event as it was minted: enough to mint it again under its own Id. */
 export interface EvidenceFacts {
+  provenance?: EventProvenance;
   creator: Id;
   cause: Id;
   name: string;
@@ -82,7 +89,7 @@ export interface TieRecord {
 }
 
 export function emptyRecord(): S1Record {
-  return { v: 1, absorbed: {}, dirty: [], divLog: {}, divFloor: {}, softExcluded: [], log: [], seq: 0, dirtySeq: 0, tells: [], tieHistory: {}, protect: {}, evidence: {} };
+  return { v: 1, absorbed: {}, dirty: [], divLog: {}, divSeq: 0, tieLog: {}, tieSeq: 0, divFloor: {}, softExcluded: [], log: [], seq: 0, dirtySeq: 0, tells: [], tieHistory: {}, protect: {}, evidence: {} };
 }
 
 /** A record as a save holds it, with every field a newer version added filled in. */

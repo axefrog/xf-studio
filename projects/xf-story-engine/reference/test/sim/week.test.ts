@@ -71,6 +71,11 @@ describe('the template-written week', () => {
     expect(b.lines).toEqual(a.lines);
   }, 60_000); // a week run is well over bun's 5 s default on a loaded machine
 
+  if (FULL) test('an additional uninterrupted week independently reproduces every baseline line', () => {
+    expect(N).toBe(1008);
+    expect(week([]).lines).toEqual(a.lines);
+  }, 120_000);
+
   test('a window is written once its outputs have applied, and writing it does not change the world', () => {
     const sim = make();
     new ReplayPort(sim).submit(script);

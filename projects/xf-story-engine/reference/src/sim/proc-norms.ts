@@ -10,7 +10,7 @@ import { mintedId } from '../id.ts';
 import type { GameTime, Id } from '../types.ts';
 import { clip01, invCum, spacingCount } from './arith.ts';
 import type { NormDef } from './data.ts';
-import { type DigestBase, type EventFact, type Feed, type Transition, pushFeed } from './occ.ts';
+import { type DigestBase, type EventFact, type Feed, type Transition, pushTransitions, pushFeed } from './occ.ts';
 import type { CastEntry, Descriptor } from './occ.ts';
 import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
@@ -257,7 +257,7 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
       }
       const prev = c.digest<NormsDigest>(procId);
       const keep = sim.data.feed.keep;
-      return { ops, state: st, digest: { v: 1, through: w, norms: out, facts: pushFeed(prev?.facts, w, facts, keep), changes: pushFeed(prev?.changes, w, changes, keep) } };
+      return { ops, state: st, digest: { v: 1, through: w, norms: out, facts: pushFeed(prev?.facts, w, facts, keep), changes: pushTransitions(prev?.changes, w, changes, keep) } };
     },
   };
 }

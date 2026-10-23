@@ -68,7 +68,7 @@ events, silent restatement), and the core of the simulation layer S1 v0.2 on top
     scripts, random call groupings and reloads, forgetting, metamorphic relations, limits, demand). Later capabilities (S1 0.3)
     are refused plainly. `S1_FULL=1` runs the long fixtures at the specification's scale.
 
-The one runtime dependency is `@noble/hashes` (BLAKE3). Everything else is ours.
+The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits use the pinned TypeScript dev dependency's compiler AST API.
 
 ## Running the tests
 
@@ -80,10 +80,17 @@ bun test
 bun x tsc --noEmit
 ```
 
-The suite has 983 tests and runs in about six minutes (the simulation layer's runs of whole weeks are most of it),
-peaking near 1.3 GB. In this repository run heavy commands under the memory guard
-(`python tools/memory_guard.py --limit 3 -- bun test`), as the repository rules ask. `S1_FULL=1 bun test test/sim/e2e.test.ts`
-runs the end-to-end fixtures at the specification's scale (a Kabuki week of 1,008 windows takes under a minute).
+The default profile declares 1,072 tests after the second review-fix round; its guarded full run and timing remain pending.
+The preceding measured baseline was 1,058 tests in about 83 seconds. Run the full suite under the repository memory guard
+with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
+
+```powershell
+& "$env:LOCALAPPDATA/Python/pythoncore-3.14-64/python.exe" ../../../tools/memory_guard.py --limit 4 -- bun test
+```
+
+`S1_FULL=1` restores the specification's long fixtures, the additional uninterrupted 1,008-window replay, and cold checks of all
+10,000 tie pairs. Run that profile under the same guard. The round-2 regression mutation check is
+`bun run test/sim/check-review-mutations.ts`: it substitutes the pre-fix modules in memory and requires each new regression to fail.
 
 ## Layout
 

@@ -9,7 +9,7 @@ import type { GameTime, Id } from '../types.ts';
 import { clip01, exptab } from './arith.ts';
 import type { GroupDef, IntentDef } from './data.ts';
 import { recipeClasses } from './fit.ts';
-import { type DigestBase, type EventFact, type Feed, type Transition, feedAfter, pushFeed } from './occ.ts';
+import { type DigestBase, type EventFact, type Feed, type Transition, feedAfter, pushTransitions, pushFeed } from './occ.ts';
 import type { EventsDigest } from './proc-events.ts';
 import type { MirrorDigest } from './proc-mirror.ts';
 import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
@@ -281,7 +281,7 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         outGroups[id] = { aff: g.aff, U, W: op.W, D: op.D, band: g.gapBand, intent: now.state === 'active' ? `active:${now.id}` : now.state, ...(now.state === 'active' ? { until: now.expires } : {}) };
       }
       const prev = c.digest<GroupDigest>(procId);
-      return { ops, state: st, digest: { v: 1, through: w, groups: outGroups, boost, pairBoost, changes: pushFeed(prev?.changes, w, changes, sim.data.feed.keep) } };
+      return { ops, state: st, digest: { v: 1, through: w, groups: outGroups, boost, pairBoost, changes: pushTransitions(prev?.changes, w, changes, sim.data.feed.keep) } };
     },
   };
 }

@@ -226,7 +226,7 @@ describe('SF1-R-3: invalidation', () => {
     // the belief emits no Change: the read says so at once, and the log is told when the belief is set, whoever sets it (SIM-08)
     expect(sim.reads.eval('divergence', [believer, subject])).toBe('large');
     expect(sim.record.divLog[key]!.length).toBe(before + 1);
-    expect(sim.record.divLog[key]![before]).toEqual({ t: setAt, value: 'large' });
+    expect(sim.record.divLog[key]![before]).toEqual({ t: setAt, value: 'large', ord: 0 });
     sim.advance(1);
     // the boundary finds nothing new to write
     expect(sim.record.divLog[key]!.length).toBe(before + 1);
@@ -236,7 +236,7 @@ describe('SF1-R-3: invalidation', () => {
     expect(tr[tr.length - 1]).toEqual({ t: setAt, value: 'large' });
     // a belief that is dropped is a change of the log too, at the time it was dropped
     sim.k.beliefs.drop(believer, sim.k.beliefs.activeOf(believer).find((x) => x.path === 'affiliation')!.id);
-    expect(sim.record.divLog[key]![before + 1]).toEqual({ t: sim.k.now, value: 'none' });
+    expect(sim.record.divLog[key]![before + 1]).toEqual({ t: sim.k.now, value: 'none', ord: 1 });
   });
 });
 

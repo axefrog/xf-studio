@@ -49,7 +49,7 @@ function statesAt(l2: Layer2, inst: Instance, pred: Pred, at: GameTime): Array<(
   const port = l2.reg.sim;
   if (!port) return [];
   const initial = new Map<string, string>();
-  const changes: Array<{ key: string; value: string; ord: number; n: number }> = [];
+  const changes: Array<{ key: string; value: string; ord: number | undefined; n: number }> = [];
   for (const { atom } of atoms(pred)) {
     if (!('city' in atom || 'social' in atom)) continue;
     const call = readCall(atom);
@@ -59,18 +59,25 @@ function statesAt(l2: Layer2, inst: Instance, pred: Pred, at: GameTime): Array<(
     const key = `${call.name}|${JSON.stringify(args)}`;
     if (initial.has(key)) continue;
     const seq = port.transitions(call.name, args, at - 1, at);
-    if (seq.length < 2) continue;
-    initial.set(key, seq[0]!.value);
-    for (const x of seq.slice(1)) changes.push({ key, value: x.value, ord: x.ord ?? Number.MAX_SAFE_INTEGER, n: changes.length });
+    initial.set(key, seq[0]?.value ?? port.eval(call.name, args, at - 1));
+    for (const x of seq.slice(1)) changes.push({ key, value: x.value, ord: x.ord, n: changes.length });
   }
   if (changes.length === 0) return [];
-  changes.sort((a, b) => a.ord - b.ord || a.n - b.n);
+  changes.sort((a, b) => (a.ord ?? Number.MAX_SAFE_INTEGER) - (b.ord ?? Number.MAX_SAFE_INTEGER) || a.n - b.n);
   const standing = new Map(initial);
-  return changes.map((c) => {
+  const out: ReturnType<typeof statesAt> = [];
+  for (let i = 0; i < changes.length;) {
+    const c = changes[i++]!;
     standing.set(c.key, c.value);
+    // Equal ord identifies aliases of ONE source transition: apply every alias before testing a compound predicate.
+    while (c.ord !== undefined && i < changes.length && changes[i]!.ord === c.ord) {
+      const alias = changes[i++]!;
+      standing.set(alias.key, alias.value);
+    }
     const state = new Map(standing);
-    return (read: string, args: unknown[]) => state.get(`${read}|${JSON.stringify(args)}`);
-  });
+    out.push((read: string, args: unknown[]) => state.get(`${read}|${JSON.stringify(args)}`));
+  }
+  return out;
 }
 
 /**

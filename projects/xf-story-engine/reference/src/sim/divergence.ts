@@ -51,12 +51,13 @@ export class Divergence {
     return value;
   }
 
-  private log(believer: Id, subject: Id, t: GameTime, value: DivValue): void {
+  private log(believer: Id, subject: Id, t: GameTime, value: DivValue, source: { ord?: number } = {}): void {
     const key = `${believer}|${subject}`;
     const list = (this.sim.record.divLog[key] ??= []);
     const last = list.length > 0 ? list[list.length - 1]!.value : 'none';
     if (last === value) return;
-    list.push({ t, value });
+    const ord = source.ord ?? (source.ord = this.sim.record.divSeq++);
+    list.push({ t, value, ord });
     if (list.length > LOG_MAX) {
       while (list.length > LOG_MAX) list.shift();
       // what came before the oldest transition kept is no longer known
@@ -73,9 +74,10 @@ export class Divergence {
 
   /** A mirrored reading changed (the game or a correction): every believer with a belief about that subject is looked at. */
   noteReading(subject: Id, _slot: string): void {
+    const source: { ord?: number } = {};
     for (const e of this.k.beliefs.entries()) {
       if (!e.active || e.belief.subject !== subject) continue;
-      this.log(e.belief.believer, subject, this.k.now, this.current(e.belief.believer, subject));
+      this.log(e.belief.believer, subject, this.k.now, this.current(e.belief.believer, subject), source);
     }
   }
 
@@ -90,6 +92,6 @@ export class Divergence {
   /** The value at `from` and every change in `(from, to]`, from the log (S1 9.1); `maybe` before the log reaches. */
   transitions(believer: Id, subject: Id, from: GameTime, to: GameTime): Array<{ t: GameTime; value: DivValue | 'maybe'; ord?: number }> {
     const list = this.sim.record.divLog[`${believer}|${subject}`] ?? [];
-    return [{ t: from, value: this.evaluate(believer, subject, from) }, ...list.flatMap((e, n) => (e.t > from && e.t <= to ? [{ t: e.t, value: e.value, ord: ORD_DIVERGENCE + n }] : []))];
+    return [{ t: from, value: this.evaluate(believer, subject, from) }, ...list.flatMap((e) => (e.t > from && e.t <= to ? [{ t: e.t, value: e.value, ord: ORD_DIVERGENCE + e.ord }] : []))];
   }
 }

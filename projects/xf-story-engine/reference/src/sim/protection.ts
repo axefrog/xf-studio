@@ -75,7 +75,7 @@ export class Protection {
     // a cause that is live now is recorded as far as now and no further: the kernel keeps it and goes on saying it holds, and when it ends the end
     // is the kernel's to say. An open span in the record would hold for ever, whatever the kernel later said (R2-02).
     const now = k.now;
-    const upTo = (from: GameTime, to: GameTime | undefined): Span => ({ from, to: to === undefined ? Math.max(from, now) : to });
+    const upTo = (from: GameTime, to: GameTime | undefined): Span => ({ from, to: Math.min(to ?? now, now) });
     for (const e of k.store.allEdges()) {
       if (e.type === 'core:cast') add(e.to, upTo(e.valid.from, e.valid.to));
     }
@@ -91,7 +91,7 @@ export class Protection {
     for (const [node, spans] of held) rec[node] = unionOf([...(rec[node] ?? []), ...spans]);
     const keep = k.now - (this.sim.data.events.heatHorizon + 1) * this.sim.data.time.W;
     for (const node of Object.keys(rec)) {
-      const spans = rec[node]!.filter((s) => s.to === undefined || s.to > keep);
+      const spans = unionOf(rec[node]!.map((s) => upTo(s.from, s.to))).filter((s) => s.to! > keep);
       if (spans.length === 0) delete rec[node];
       else rec[node] = spans;
     }

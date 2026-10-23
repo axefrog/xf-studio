@@ -223,6 +223,29 @@ describe('SF1-Q-2: the audits catch', () => {
     expect(codeOf('const a = `one\n${x}\ntwo`;\nconst b = 2;').split('\n').length).toBe(4);
   });
 
+  test('R3-08: regex braces, slashes and nested templates cannot hide executable interpolation code', () => {
+    for (const text of [
+      'const x = `${/[}]/.test(value) ? Math.random() : 0}`;',
+      'const x = `${/[}]/.test(value) ? Math.exp(1) : 0}`;',
+      'const x = `${/[{}]/.test(value) ? `${Math.random()}` : ""}`;',
+      'const x = `${/\\/\\//.test(value) ? Math.random() : 0}`;',
+    ]) expect(lintSources([{ path: 'proc-stocks.ts', text }]).some((f) => ['arithmetic', 'no-load-reads'].includes(f.audit)), text).toBe(true);
+    expect(lintSources([{ path: 'proc-stocks.ts', text: 'const x = /Math.random\\(\\)/.test(value);' }])).toEqual([]);
+  });
+
+  test('R3-09: unrelated calls, dead conjuncts, non-rejecting branches and displaced guards cannot replace either policy guard', () => {
+    const real = files.find((f) => f.path === 'policies.ts')!;
+    const disabled = real.text.replace(/ev\.kind\.startsWith\('meta:'\)/g, 'false') + "\nconst unrelated = ''.startsWith('meta:') && ''.startsWith('meta:');";
+    expect(lintSources([{ ...real, text: disabled }]).filter((f) => f.audit === 'meta-inert').map((f) => f.where)).toEqual(['policies.ts:heardEvent', 'policies.ts:absorb']);
+    for (const text of [
+      real.text.replaceAll("ev.kind.startsWith('meta:')", "false && ev.kind.startsWith('meta:')"),
+      real.text.replace("if (ev.kind.startsWith('meta:')) return;", "if (ev.kind.startsWith('meta:')) { const ignored = true; }"),
+      real.text.replace("if (ev.kind.startsWith('meta:')) return;", "this.witness(ev); if (ev.kind.startsWith('meta:')) return;"),
+    ]) expect(lintSources([{ ...real, text }]).some((f) => f.audit === 'meta-inert')).toBe(true);
+    const oneDisabled = real.text.replace("if (ev.kind.startsWith('meta:')) return;", 'if (false) return;');
+    expect(lintSources([{ ...real, text: oneDisabled }]).filter((f) => f.audit === 'meta-inert').map((f) => f.where)).toEqual(['policies.ts:heardEvent']);
+  });
+
   test('two writers of one slot', () => {
     const found = auditWriters({ ...PROCESS_WRITES, 'order.stocks': [...PROCESS_WRITES['order.stocks']!, 'pin:xf:cell.band'] });
     expect(found.map((f) => f.audit)).toEqual(['one-writer']);
