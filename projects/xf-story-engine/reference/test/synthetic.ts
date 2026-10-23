@@ -13,6 +13,7 @@ import type { Id, Layer, PinReason, Predicate, SlotPath, Value } from '../src/ty
 import { coreKernel, defsOf, dim, kind, slot } from './helpers.ts';
 import type { SchemaDefs } from '../src/schema-types.ts';
 import type { Config } from '../src/config.ts';
+import type { CoreDefsOptions } from '../src/core-schema.ts';
 
 const E8 = ['e0', 'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7'];
 const E3 = ['t0', 't1', 't2'];
@@ -55,8 +56,8 @@ export function synDefs(): SchemaDefs {
   return base;
 }
 
-export function synKernel(name: string, config?: Partial<Config>): Kernel {
-  return coreKernel(name, synDefs(), config);
+export function synKernel(name: string, config?: Partial<Config>, core?: CoreDefsOptions): Kernel {
+  return coreKernel(name, synDefs(), config, core);
 }
 
 export interface Rng {

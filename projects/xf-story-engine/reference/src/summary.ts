@@ -47,6 +47,11 @@ export class Summaries {
 
   constructor(private readonly k: Kernel) {}
 
+  invalidate(): void {
+    this.descCache.clear();
+    this.descRevision = -1;
+  }
+
   /** Mint a summary node and pin its fields `committed` by the cause (spec 9.3, SPEC-NOTES 31). */
   mintSummary(spec: SummarySpec): Id {
     const k = this.k;

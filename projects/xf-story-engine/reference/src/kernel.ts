@@ -8,9 +8,11 @@ import { H, b as hb, f as hf, i as hi, id as hid, isId, memberId, mirroredId, ow
 import { Events } from './events.ts';
 import { Evolution, type AdvanceReport, type Envelope, type SubmitResult } from './evolution.ts';
 import { Beliefs } from './beliefs.ts';
-import { Frames } from './frames.ts';
+import { StagedBatch } from './batch.ts';
+import { Settings } from './settings.ts';
+import { type Dilemma, Frames } from './frames.ts';
 import { Groups } from './groups.ts';
-import { Dispatcher } from './relevance.ts';
+import { Dispatcher, type Relevance } from './relevance.ts';
 import { Persistence } from './persistence.ts';
 import { Provenance } from './provenance.ts';
 import { Queries } from './query.ts';
@@ -30,6 +32,27 @@ import type {
 import { PIN_PRECEDENCE, type PendingChange } from './types.ts';
 import { checkValue, encodeValue, normalizeRegion } from './value.ts';
 import { Budget, DefectLog } from './work.ts';
+
+/**
+ * What the seeding layer (S2) gives the kernel (spec 10.5, 10.8; S0 v4, V4-5, V4-27). The kernel routes
+ * relevance and dilemmas for the actors layer 2 has registered, and runs its work in the tick.
+ */
+export interface Layer2Hook {
+  /** The actors layer 2 has registered: every `core:seed` instance and the pack roots that carry sowing watchers. */
+  actors(): ReadonlySet<Id>;
+  onRelevance(r: Relevance): void;
+  onDilemma(d: Dilemma): void;
+  /** A simulation window boundary was processed (game-time wake-ups are checked here, S2 section 4.3). */
+  onBoundary(boundary: number, at: GameTime): void;
+  /** Queued re-evaluations. */
+  readonly pending: number;
+  /** Run queued work within the tick budget; returns the work units used. */
+  run(budget: Budget): number;
+  /** Write the layer's records to the kernel's seed table, before a save. */
+  flush(): void;
+  /** A load finished replaying: rebuild from the seed table (S2 section 12.2). */
+  onLoad(): void;
+}
 
 export interface KernelOptions {
   schema: Schema;
@@ -124,6 +147,15 @@ export class Kernel {
   readonly dispatcher: Dispatcher;
   readonly evolution: Evolution;
   readonly retention: Retention;
+  /** Player settings (S0 14.2 `SettingsSet`, v4). */
+  readonly settings: Settings;
+
+  /** The open staged batch, if any (spec 14.2a). While one is open no other write is allowed. */
+  batch: StagedBatch | null = null;
+  /** True while a write runs through the open batch. */
+  batchWriting = false;
+  /** The seeding layer, attached by S2 (spec 10.5, v4: relevance and dilemmas routed to layer 2). */
+  layer2: Layer2Hook | null = null;
 
   /** The effect conflict table in force (spec 10.8): a registry function owned by S1. */
   conflictTable: FnRef = CONFLICT_TABLE;
@@ -153,6 +185,7 @@ export class Kernel {
     this.dispatcher = new Dispatcher(this);
     this.evolution = new Evolution(this);
     this.retention = new Retention(this);
+    this.settings = new Settings(this);
   }
 
   /** Load a schema from definitions and make a kernel over it. */
@@ -171,7 +204,26 @@ export class Kernel {
   }
 
   emit(change: Change): void {
-    this.pending.push({ change, time: this.now, revision: this.revision, epoch: this.epoch });
+    const pc: PendingChange = { change, time: this.now, revision: this.revision, epoch: this.epoch };
+    // An open staged batch is silent: its changes wait for the commit (spec 14.2a).
+    if (this.batch) this.batch.changes.push(pc);
+    else this.pending.push(pc);
+  }
+
+  /** Open a staged batch (spec 14.2a, v4, V4-26). */
+  stage(): StagedBatch {
+    this.assertWritable();
+    if (this.batch) throw new Error('a staged batch is already open');
+    this.batch = new StagedBatch(this);
+    return this.batch;
+  }
+
+  /** Forget every cache. A staged batch's discard puts the revision back, so entries made since are stale. */
+  invalidateCaches(): void {
+    this.resolver.invalidate();
+    this.queries.invalidate();
+    this.summaries.invalidate();
+    this.retention.invalidate();
   }
 
   /** A fresh epoch (spec 14.3). */
@@ -322,6 +374,7 @@ export class Kernel {
   /** Refuse a write while the save is read-only (spec 14.4). Every public write calls this first, before it changes anything. */
   assertWritable(): void {
     if (this.readOnly) throw new Error(`the save loaded read-only: ${this.readOnly.message}`);
+    if (this.batch && !this.batchWriting) throw new Error('a staged batch is open: other writes are not interleaved with it (spec 14.2a)');
   }
 
   /** Add a pin (spec 6.1). Idempotent for the same Id. Emits a `pin` change unless silent. */
@@ -365,7 +418,7 @@ export class Kernel {
     this.store.addPin(pin);
     this.bump();
     if (!spec.silent) {
-      const ch: Change = { c: 'pin', node: spec.node, slot: spec.slot, new: spec.value !== undefined ? spec.value : region!, reason: spec.reason };
+      const ch: Change = { c: 'pin', node: spec.node, slot: spec.slot, new: spec.value !== undefined ? spec.value : region!, reason: spec.reason, at: from };
       const was = old ? (old.value !== undefined ? old.value : old.region) : undefined;
       if (was !== undefined) ch.old = was;
       this.emit(ch);
@@ -427,7 +480,7 @@ export class Kernel {
     this.bump();
     const changed = !prev || JSON.stringify(prev.value) !== JSON.stringify(value);
     if (changed && !silent) {
-      const ch: Change = { c: 'reading', node, slot, new: value };
+      const ch: Change = { c: 'reading', node, slot, new: value, at: time };
       if (prev?.value !== undefined) ch.old = prev.value;
       this.emit(ch);
     }
@@ -556,6 +609,7 @@ export class Kernel {
   /** Queue an external operation under an epoch (spec 9.4, 14.3). Stale epochs are refused. */
   submit(env: Envelope): SubmitResult {
     if (this.readOnly) return { accepted: false, reason: `the save loaded read-only: ${this.readOnly.message}` };
+    if (this.batch) return { accepted: false, reason: 'a staged batch is open' };
     return this.evolution.submit(env);
   }
 
@@ -590,6 +644,15 @@ export class Kernel {
           frameSteps += this.frames.runWorklist(budget);
           dispatchSteps += this.dispatcher.run(budget);
           if (!this.frames.worklist.isEmpty || !this.dispatcher.idle) return false;
+          // The seeding layer's re-evaluations run once the frame work and dispatch are done; what they write
+          // queues frame work and dispatch again (S2 section 4.4).
+          if (this.layer2 && this.layer2.pending > 0) {
+            budget.spend(this.layer2.run(budget));
+            if (this.layer2.pending > 0 || !this.frames.worklist.isEmpty || !this.dispatcher.idle) {
+              if (budget.exhausted) return false;
+              continue;
+            }
+          }
           if (this.beliefs.pendingTicks === 0) return true;
         }
         this.beliefs.runTicks(budget);

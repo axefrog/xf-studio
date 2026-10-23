@@ -35,6 +35,12 @@ export interface Config {
   snapshotEvery: number;
   /** The most places an event summary draws from [tunable]. */
   summaryPlaceMax: number;
+  /**
+   * Whether a frame status change is a semantic change (spec 10.5, v4, V4-4). On by default. The frozen
+   * v3 determinism digest runs with it off, because its script's group decisions change frame status and
+   * a `wants` interest on a focus node then matches (SPEC-NOTES 58).
+   */
+  frameChanges: boolean;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -56,6 +62,7 @@ export const DEFAULT_CONFIG: Config = {
   explainTopK: 8,
   snapshotEvery: 10_000,
   summaryPlaceMax: 1024,
+  frameChanges: true,
 };
 
 export function makeConfig(over?: Partial<Config>): Config {

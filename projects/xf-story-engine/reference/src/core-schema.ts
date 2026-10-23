@@ -37,7 +37,24 @@ export const CORE_DRIVES: Array<{ id: string; family: string }> = [
 
 export const CORE_EFFECTS = ['harm', 'kill', 'help', 'protect', 'rescue', 'take', 'give', 'expose', 'conceal', 'move', 'meet'];
 
-export function coreDefs(wSim = 600): SchemaDefs {
+/**
+ * The core event kinds (spec 9.2, 16). `offer`, `response` and `seed-outcome` are the seeding layer's (v4, V4-2).
+ * Packs register more (S0 v4.8); until the event-kind registry exists, a caller names them in `extraEventKinds`.
+ */
+export const CORE_EVENT_KINDS = ['generic', 'robbery', 'arrival', 'meeting', 'assault', 'sale', 'weather-change'];
+/** The event kinds the seeding layer adds (v4, V4-2). */
+export const V4_EVENT_KINDS = ['offer', 'response', 'seed-outcome'];
+
+export interface CoreDefsOptions {
+  /** Include the v4 additions (V4-2, V4-3, V4-22). On by default; the frozen v3 digest runs without them (SPEC-NOTES 58). */
+  v4?: boolean;
+  /** More event kinds (S0 v4.8's registry does not exist yet). */
+  extraEventKinds?: readonly string[];
+}
+
+export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
+  const v4 = opts.v4 ?? true;
+  const extraEventKinds = opts.extraEventKinds ?? [];
   const dims: DimensionDef[] = [
     dim('core:origin', { t: 'enum', values: ['western', 'japanese'] }),
     dim('core:given-name', {
@@ -66,10 +83,17 @@ export function coreDefs(wSim = 600): SchemaDefs {
     dim('core:time', { t: 'int', min: -(2 ** 50), max: 2 ** 50 }, 'order'),
     dim('core:duration', { t: 'int', min: 1, max: 2 ** 40 }, 'order'),
     dim('core:relation', { t: 'enum', values: ['parent', 'child', 'sibling', 'partner'] }),
-    dim('core:event-kind', {
-      t: 'enum',
-      values: ['generic', 'robbery', 'arrival', 'meeting', 'assault', 'sale', 'weather-change'],
-    }),
+    dim('core:event-kind', { t: 'enum', values: [...CORE_EVENT_KINDS, ...(v4 ? V4_EVENT_KINDS : []), ...extraEventKinds] }),
+    ...(v4
+      ? [
+          // v4 additions (V4-2, V4-3, V4-22).
+          dim('core:age-class', { t: 'enum', values: ['adult', 'minor'] }),
+          dim('core:fact-value', { t: 'int', min: -2048, max: 2047 }, 'order'),
+          dim('core:seed-fact-value', { t: 'int', min: -(2 ** 31), max: 2 ** 31 - 1 }, 'order'),
+          dim('core:event-outcome', { t: 'enum', values: ['done', 'failed', 'prevented'] }),
+          dim('core:frame-ref', { t: 'text' }),
+        ]
+      : []),
     dim('core:effect-id', { t: 'enum', values: CORE_EFFECTS }),
     dim('core:participant-role', {
       t: 'enum',
@@ -159,6 +183,23 @@ export function coreDefs(wSim = 600): SchemaDefs {
         { key: 'drives', dim: 'core:drive-node', card: { many: { count: 'core:count-small' } }, mode: 'sampled', tier: 2 },
         { key: 'position', dim: 'core:position', card: 'one', mode: 'mirrored', tier: 3 },
         { key: 'place', dim: 'core:place-ref', card: 'one', mode: 'sampled', tier: 2 },
+        // v4.4 (V4-22): derived from age for generated people, mirrored for mirrored people, declared (pinned) for pack people.
+        ...(v4
+          ? [
+              {
+                key: 'age-class',
+                dim: 'core:age-class',
+                card: 'one' as const,
+                mode: 'mirrored' as const,
+                derive: {
+                  fn: { name: 'age-class', version: 1 },
+                  inputs: ['age'],
+                  preimage: { name: 'age-class', version: 1 },
+                },
+                tier: 3 as const,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -208,8 +249,31 @@ export function coreDefs(wSim = 600): SchemaDefs {
         { key: 'effects', dim: 'core:effect-node', card: { many: { count: 'core:count-participants' } }, mode: 'sampled', tier: 3 },
         { key: 'witnesses', dim: 'core:thing-ref', card: { many: { count: 'core:count-participants' } }, mode: 'assigned', tier: 3 },
         { key: 'causes', dim: 'core:event-ref', card: { many: { count: 'core:count-participants' } }, mode: 'assigned', tier: 3 },
+        // v4 (V4-3): optional. An event without them means what it always meant.
+        ...(v4
+          ? [
+              { key: 'outcome', dim: 'core:event-outcome', card: 'one' as const, mode: 'assigned' as const, tier: 3 as const },
+              { key: 'served', dim: 'core:frame-ref', card: 'one' as const, mode: 'assigned' as const, tier: 3 as const },
+            ]
+          : []),
       ],
     },
+    ...(v4
+      ? [
+          // v4 (V4-2): the seeding layer's kinds (S2 section 0.4).
+          {
+            id: 'core:game-fact',
+            extends: ['core:thing'],
+            slots: [{ key: 'value', dim: 'core:fact-value', card: 'one' as const, mode: 'mirrored' as const, tier: 1 as const }],
+          },
+          {
+            id: 'core:seed-fact',
+            extends: ['core:thing'],
+            slots: [{ key: 'value', dim: 'core:seed-fact-value', card: 'one' as const, mode: 'assigned' as const, tier: 1 as const }],
+          },
+          { id: 'core:seed', extends: ['core:thing'], facets: ['actor' as const], slots: [] },
+        ]
+      : []),
     {
       id: 'core:summary',
       extends: ['core:thing'],
@@ -235,6 +299,8 @@ export function coreDefs(wSim = 600): SchemaDefs {
     },
     { id: 'core:kin', from: ['core:person'], to: ['core:person'], attrs: { relation: 'core:relation' }, symmetric: true },
     { id: 'core:located-in', from: ['core:thing'], to: ['core:thing'], attrs: {} },
+    // v4 (V4-2): a seed's committed cast. Not perceivable; the role is carried as edge data.
+    ...(v4 ? [{ id: 'core:cast', from: ['core:seed'], to: ['core:thing'], attrs: {}, data: ['role'] }] : []),
     { id: 'core:knows', from: ['core:person'], to: ['core:person'], attrs: {}, symmetric: true },
   ];
 

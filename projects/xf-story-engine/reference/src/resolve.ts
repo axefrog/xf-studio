@@ -160,6 +160,12 @@ export class Resolver {
     this.cache.clear();
   }
 
+  /** Forget the cache and the revision it was made for (a staged batch discard puts the revision back, spec 14.2a). */
+  invalidate(): void {
+    this.cache.clear();
+    this.cacheRevision = -1;
+  }
+
   /** An outer resolution (spec 5). Hard limits turn into `failed` plus a defect. */
   resolve(node: Id, path: SlotPath, t: GameTime): ResolveResult {
     const ctx = newOpCtx(this.k.config.allowance);
@@ -410,7 +416,7 @@ export class Resolver {
     if (missing !== null) return { status: worse(status, missing === 'ok' ? 'unavailable' : missing) };
     ctx.allowance.spend(1);
     const fn = this.schema.registry.get('derive', def.derive.fn);
-    const value = fn(inputs, def.derive.fn.params ?? {});
+    const value = fn(inputs, def.derive.fn.params ?? {}, t);
     // Pins on the derived slot (spec 5.1 step 1, SPEC-NOTES 7).
     const unaryNarrowed = def.derive.preimage !== undefined && def.derive.inputs.length === 1 && !def.derive.inputs[0]!.startsWith('^/');
     if (!unaryNarrowed) {
@@ -641,7 +647,7 @@ export class Resolver {
       inputs.push(r.value);
     }
     ctx.allowance.spend(1);
-    return this.schema.registry.get('derive', form.fn)(inputs, form.fn.params ?? {});
+    return this.schema.registry.get('derive', form.fn)(inputs, form.fn.params ?? {}, t);
   }
 
   private assertReadable(env: PredicateEnv, node: Id, path: string): void {

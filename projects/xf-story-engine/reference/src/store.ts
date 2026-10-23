@@ -36,6 +36,41 @@ export class Store {
   private readonly edgesFromIdx = new Map<Id, Id[]>();
   private readonly edgesToIdx = new Map<Id, Id[]>();
 
+  /** A deep copy of every table, for a staged batch's discard (spec 14.2a). */
+  capture(): unknown {
+    return structuredClone({
+      headers: this.headers, nodes: this.nodes, headersByKind: this.headersByKind, ownedBy: this.ownedBy, membersOf: this.membersOf,
+      pinsById: this.pinsById, pinIndex: this.pinIndex, withdrawn: this.withdrawn, contribs: this.contribs,
+      contribByNode: this.contribByNode, contribGeneral: this.contribGeneral, edges: this.edges,
+      edgesFromIdx: this.edgesFromIdx, edgesToIdx: this.edgesToIdx,
+    });
+  }
+
+  /** Put the tables back as `capture` found them. */
+  restoreFrom(cap: unknown): void {
+    const c = structuredClone(cap) as Record<string, any>;
+    const swap = <T>(into: Map<string, T> | Set<string>, from: Map<string, T> | Set<string>): void => {
+      into.clear();
+      if (into instanceof Map) for (const [k, v] of from as Map<string, T>) into.set(k, v);
+      else for (const v of from as Set<string>) (into as Set<string>).add(v);
+    };
+    swap(this.headers, c.headers);
+    swap(this.nodes, c.nodes);
+    swap(this.headersByKind, c.headersByKind);
+    swap(this.ownedBy, c.ownedBy);
+    swap(this.membersOf, c.membersOf);
+    swap(this.pinsById, c.pinsById);
+    swap(this.pinIndex, c.pinIndex);
+    swap(this.withdrawn, c.withdrawn);
+    swap(this.contribs, c.contribs);
+    swap(this.contribByNode, c.contribByNode);
+    this.contribGeneral.length = 0;
+    this.contribGeneral.push(...(c.contribGeneral as Id[]));
+    swap(this.edges, c.edges);
+    swap(this.edgesFromIdx, c.edgesFromIdx);
+    swap(this.edgesToIdx, c.edgesToIdx);
+  }
+
   /** Drop every record (a load replaces all branch-local state, spec 14.3). */
   clear(): void {
     this.headers.clear();

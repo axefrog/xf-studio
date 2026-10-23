@@ -36,6 +36,18 @@ export class Groups {
     this.crossedUntil = k.now;
   }
 
+  capture(): unknown {
+    return structuredClone({ decisionLog: this.decisionLog, syncing: this.syncing, crossedUntil: this.crossedUntil });
+  }
+
+  restoreFrom(cap: unknown): void {
+    const c = structuredClone(cap) as { decisionLog: DecisionRecord[]; syncing: boolean; crossedUntil: GameTime };
+    this.decisionLog.length = 0;
+    this.decisionLog.push(...c.decisionLog);
+    this.syncing = c.syncing;
+    this.crossedUntil = c.crossedUntil;
+  }
+
   // ---- membership ----
 
   /** The membership edges of a member that are in force at `t`. */

@@ -6,14 +6,15 @@
 // S1 supplies its own.
 
 import type { DimensionDef } from './schema-types.ts';
-import type { Effect, FnRef, Region, Value } from './types.ts';
+import type { Effect, FnRef, GameTime, Region, Value } from './types.ts';
 import { ivlRegion } from './region.ts';
 import { valueKey } from './value.ts';
 
 type Params = Record<string, unknown>;
 
 export type Prior = (dim: DimensionDef, F: Value[], params: Params) => number[];
-export type Derive = (inputs: Value[], params: Params) => Value;
+/** A derive receives the query time `t` (S0 v4, V4-1); one that ignores it behaves exactly as before. */
+export type Derive = (inputs: Value[], params: Params, t: GameTime) => Value;
 export type Preimage = (output: Region, otherInputs: Value[], params: Params) => Region;
 export type Conditioned = (inputs: Value[], F: Value[], params: Params) => number[];
 export type FieldMap = (fieldValue: number, F: Value[], params: Params) => number[];
@@ -105,6 +106,8 @@ export function coreRegistry(): Registry {
   r.register('derive', 'floor-div', 1, (inputs, params) => Math.floor((inputs[0] as number) / pos(params.divisor, 'divisor')));
   r.register('derive', 'sum', 1, (inputs) => inputs.reduce<number>((a, x) => a + (x as number), 0));
   r.register('derive', 'first-char', 1, (inputs) => String(inputs[0]).slice(0, 1));
+  // v4.4 (V4-22): a person is an adult at 18 and over.
+  r.register('derive', 'age-class', 1, (inputs, params) => ((inputs[0] as number) >= ((params.adultAt as number | undefined) ?? 18) ? 'adult' : 'minor'));
 
   // Preimages for unary views: the output region mapped back to a region of the input.
   r.register('preimage', 'identity', 1, (output) => output);
@@ -113,6 +116,19 @@ export function coreRegistry(): Registry {
     if (output.r === 'all') return output;
     if (output.r !== 'ivl') throw new Error('floor-div preimage needs an interval region');
     return ivlRegion(output.ivls.map(([a, b]): [number, number] => [a * d, b * d + d - 1]));
+  });
+
+  // The preimage of the age class: the ages that give a set of classes (the dimension's own range clips the result).
+  r.register('preimage', 'age-class', 1, (output, _other, params) => {
+    const at = (params.adultAt as number | undefined) ?? 18;
+    if (output.r === 'all') return output;
+    if (output.r !== 'set') throw new Error('age-class preimage needs a set region');
+    const adult = output.values.includes('adult');
+    const minor = output.values.includes('minor');
+    const ivls: Array<[number, number]> = [];
+    if (minor) ivls.push([-(2 ** 31), at - 1]);
+    if (adult) ivls.push([at, 2 ** 31]);
+    return ivlRegion(ivls);
   });
 
   // Field maps: a field value to positive weights over F.

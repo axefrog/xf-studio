@@ -256,6 +256,7 @@ export class Evolution {
       k.bump();
     }
     k.beliefs.onBoundary(b, T);
+    k.layer2?.onBoundary(b, T);
     return cost;
   }
 

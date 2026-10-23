@@ -64,6 +64,10 @@ export class Retention {
     this.k.bump();
   }
 
+  invalidate(): void {
+    this.cache = null;
+  }
+
   clear(): void {
     this.seeds.clear();
     this.streamed.clear();
