@@ -848,7 +848,7 @@ The preparation probe passes 15 of 15, and the other WebGL probes pass too: skin
 
 **G1 parity** (as §8: `tools/scene-parity.ts`, real V, both presets, 1K and 2K, isolated server, against G1's base captures of `72369156`): **20 of 20 pass**, 15 identical and 5 within noise (one step on 1–6 pixels; worst `board3-studio-2048`, 6 of 460,192, 0.0013 %). Captures in the ignored `evidence/screenshots/043-p4a5c/`. The chunk's earlier commits gave 17 and 19 identical, the rest within noise.
 
-**G2 on real data** (`measure.ts`, a fresh profile per run, isolated server with scratch caches). Before is `a0091847` (one traced run here; 4a-v-b's own runs agree). After is the last commit of this chunk, two runs, the first traced.
+**G2 on real data** (`measure.ts`, a fresh profile per run, isolated server with scratch caches). Before is `a0091847` (one traced run here; 4a-v-b's own runs agree). After is the last commit of this chunk, two runs, the first traced. The summaries and samples are in the ignored `generated/g2c/`.
 
 | Switch | Before | After (runs 1, 2) |
 |---|---|---|
