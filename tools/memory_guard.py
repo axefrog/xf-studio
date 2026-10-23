@@ -9,7 +9,8 @@ tree when either line is crossed:
     python tools/memory_guard.py --limit 2 --floor 20 -- bun tools/native-limits.ts
 
 --limit   GB of private memory the command's processes may use together (default 8).
---floor   GB of free physical memory below which the guard trips (default 4): a tripwire near the
+--floor   GB of free memory (the lower of available RAM and available commit) below which
+          the guard trips (default 4): a tripwire near the
           machine's maximum, not a reservation. Use memory freely above it.
 
 The job also carries a hard commit limit (limit x 1.25) that the operating system enforces,
@@ -113,7 +114,9 @@ def free_physical() -> int:
     status = MEMORYSTATUSEX()
     status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
     kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
-    return status.ullAvailPhys
+    # The lower of available RAM and available commit: commit (RAM plus page file) is the
+    # limit that makes allocations fail, and it can run out while RAM still looks free.
+    return min(status.ullAvailPhys, status.ullAvailPageFile)
 
 
 def create_job(hard_limit: int) -> wintypes.HANDLE:
@@ -177,7 +180,7 @@ def record(line: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--limit", type=float, default=8.0, help="GB the command's processes may use together")
-    parser.add_argument("--floor", type=float, default=4.0, help="GB of free physical memory below which the guard trips")
+    parser.add_argument("--floor", type=float, default=4.0, help="GB of free memory (min of available RAM and available commit) below which the guard trips")
     parser.add_argument("--interval", type=float, default=0.5, help="seconds between checks")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
