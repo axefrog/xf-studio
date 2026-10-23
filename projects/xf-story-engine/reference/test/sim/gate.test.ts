@@ -12,6 +12,7 @@ import type { Effect, Id } from '../../src/types.ts';
 import { fxData, seedOf } from './helpers.ts';
 
 const HOUR = 3600;
+const FULL = process.env.S1_FULL === '1';
 const DAY = 86400;
 
 /** FX-3 with every incident rate raised, so a short run yields many occurrences. */
@@ -69,7 +70,7 @@ describe('SF1-X-1: a line', () => {
     const open = run(false, 40);
     expect(open.occurrences).toBeGreaterThan(50);
     expect(open.ring).toBeGreaterThan(0);
-    const closed = run(true, 90);
+    const closed = run(true, FULL ? 600 : 90);
     expect(closed.clashes).toBe(0);
     expect(closed.pending).toBe(0);
     expect(closed.counted).toBe(0);
@@ -164,11 +165,11 @@ describe('SF1-X-3: V', () => {
       for (const p of view.participants) expect(p.who).not.toBe(sim.w.v);
       for (const ef of view.effects) if (harm.has(ef.effect)) expect(ef.on).not.toBe(sim.w.v);
     }
-    // and 2,000 sampled occurrences of every city kind, cast the way an admitted one or an opened item is
+    // and sampled occurrences of every city kind, cast the way an admitted one or an opened item is
     const d0 = sim.w.districts[0]!;
     const kinds = ['theft', 'assault', 'gang-clash', 'shakedown', 'police-action', 'psycho-break', 'disorder', 'accident', 'commerce'] as const;
     let named = 0;
-    for (let n = 0; n < 2_000; n++) {
+    for (let n = 0; n < (FULL ? 10_000 : 2_000); n++) {
       const cell = d0.cellIds[n % 3]!;
       const kind = kinds[n % kinds.length]!;
       const time = (n * 37 % 168) * HOUR + (n % 7) * 400;
@@ -182,7 +183,7 @@ describe('SF1-X-3: V', () => {
         if (e.who === sim.w.v) throw new Error(`V was cast in ${kind} as ${e.role}`);
       }
     }
-    expect(named).toBeGreaterThan(1000);
+    expect(named).toBeGreaterThan(FULL ? 5000 : 1000);
   }, 120_000);
 
   test('the gate refuses V as a victim or a target, and a harmful effect on V', () => {

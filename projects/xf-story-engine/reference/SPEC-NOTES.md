@@ -710,5 +710,143 @@ that most need a decision.
 101. **`matchStrength` is a read over the same scan as dispatch. (new)** It takes the greatest `pullVia × m × s` over the
     interests that reach the actor's eligible frames, optionally for some interest types, with no emission threshold and no
     side effect; it ignores the frame worklist (it reads the frames as they stand).
-102. **The test runner's timeout is 30 s (`bunfig.toml`). (new)** Two digest tests re-run the 1,000-operation script several
-    times and sit near bun's 5 s default; on a loaded machine they time out. The tests are unchanged.
+102. **The test runner's default timeout is 120 s (`test/setup.ts`, preloaded by `bunfig.toml`). (new)** Two digest tests re-run
+    the 1,000-operation script several times and sit near bun's 5 s default; on a loaded machine they time out. The tests
+    are unchanged. bun ignores a `timeout` key in `bunfig.toml`, so the preload sets the default; a run of several files
+    resets it, so the slow tests carry an explicit timeout as their third argument.
+116. **`Events.mintEvent` restates an event whose header survived and whose fields did not. (new)** A load keeps the header of
+    an event that a memorable belief cites as evidence (it is a retention root) and none of its fields: they are
+    simulation-layer contributions, which a save does not hold. `mintEvent` returned at once for a node it knew, so the
+    event stayed bare and a telling about it scored 0. It now sees that the node has no contributions of its own origin,
+    puts them back, bumps the revision and emits nothing, because the occurrence was announced when it happened.
+    `test/retention.test.ts` has the case.
+117. **Queries prune before they resolve. (new)** The mirror and the norms process find raw events with a query over every event
+    under the city, which materialised every item of every summary (S0 8.3 step 9) and grew with the world: 48 ms a window
+    at window 600. A query's `must` clauses on `kind` and `time` (`eq`, `in`, `not-in`, `range`, the field bounds) are now
+    tested first on what the node already knows: a summary's kind and span (committed at minting, cached in
+    `Summaries.spans`, cleared with the summaries), an item's time (`itemTime`, the same keyed draw the descriptor uses) and
+    an event's minted kind and time (`Events.mintedFacts`). Anything that cannot pass is neither resolved nor materialised.
+    The result is the same unless a pin or a contribution later changes the `kind` or `time` of a minted event or a summary,
+    which nothing in the reference does; an item that already exists (canon, or in focus) is always left to the exact
+    check. The same run now costs 3 ms.
+
+### The simulation layer's core (S1 v0.2, `src/sim/`)
+
+Numbers are identifiers: 116 and 117 above belong to the kernel block and are not repeated here.
+
+103. **The world kernel's work allowance is 5,000,000. (new)** A resident is several nested draws (the household's profile, the
+    roster rules over six member slots, the age, the name), every rule re-reads its inputs, and a replay of a cached
+    resolution charges the recorded cost again (SPEC-NOTES 37). One resident of a household of six exceeded the default.
+    The limit is a configuration of the world, not of the kernel.
+104. **Slot keys are lower-case, so the group slots are `grp-a1` to `grp-a3`. (new)** The kernel's slot-key rule is
+    `[a-z0-9-]+`; S1 writes `grp-A1`. The public names of the groups (`A1`, `A2`, `A3`) are unchanged; only the slot key is
+    lower-case.
+105. **Iterative proportional fitting: the dimension fitted last is exact, the others are within 1e-6 after 20 iterations. (new)**
+    SF1-P-2 asks for every marginal within 1e-9 after 20 iterations. For the person table (four dimensions, 2,304 cells) that
+    holds for the last dimension and for the two-dimension hand case of SF1-P-1, and not for the others (about 1e-6). The
+    floor (`cellFloor`, 2^-30) then moves a marginal by up to about 2e-6. The tests check the iterations alone against 1e-9 for
+    the last dimension and 1e-6 for the others, and the fit against 5e-6. See the findings below.
+106. **FX-3 is a line, so "two steps away" in SF1-I-13 is two steps from `c1`. (new)** The slice has `c1`, `c2`, `c3` in a line;
+    `c3` is one step from `c2`, so with the cover at `c2` there is no cell two steps away. The tests cover at `c1` for the
+    two-steps case (`c3`), and at `c2` for the case where both neighbours are thinned. The cover rule is as written: the same
+    kind at the child's cell or one of its `adj1` cells, for `coverLull` windows.
+107. **A pending child is part of its cell's heat from the moment it is born. (new)** SF1-I-8's second event is "of size 4, at
+    `w + 10`". As a calendar entry it is heat as soon as it is injected, so the fixture injects it at `w + 9`, one window
+    before it falls due, and the band is held by the dwell exactly as the table says.
+108. **An injected child is consumed by the run that starts at its due boundary. (new)** The run for window `w` starts at
+    boundary `w` and consumes the children due at `w`; a child injected after that boundary with `due = w` waits for ever. The
+    fixtures that inject window by window use `due = w + 1`.
+109. **The recorded focus lags a reading by two windows, not one. (new)** An external operation stamped in window `k` is applied
+    at boundary `k + 1` and (S1 10.2) "processed in window `k + 1`". V's mirrored cell is such a reading, and `v.frames` opens
+    the situation frame when the relevance for the reading is dispatched, which is after the boundary has started the
+    processes. The first run to see the new cell as demand is the run for `k + 2`, so the first window V stands in a cell is
+    never in the recorded focus and its items are never opened. See the findings below.
+110. **`place` is optional on an `event` line. (new)** The port's `ReplayLine` gives `place` as required. The raw heat and district
+    kinds carry none, and a death or a combat event may be placeless; a placeless event gets the city as its place, and the
+    mirror takes V's district for the police response to a rise in heat. The name of a raw event is `raw/<t>/<n>` with `n`
+    counted by the port: after a load the game's feed starts again from a fresh port, so the same line gets the same Id.
+111. **A child's inherited cast is fixed when the child is born. (new)** A police response keeps the original victim and names the
+    original aggressor as its target. The pending child carries them (`inherit`), so firing it needs neither the parent's
+    cast nor the ring (SF1-E4). The same list rides on the ring's item `meta`.
+112. **The ring remembers how an event was minted, and `Sim.remint` and `Sim.why` read it. (new)** A ring entry for an event
+    carries its `mint` name and cause, so `Sim.remint(id)` mints it again under the same Id (its cast being a pure function of
+    the descriptor and the recorded history), and an event or a summary within seven days regenerates identically
+    (SF1-I-10). `Sim.why(id)` returns the occurrence and its ancestors, nearest first, at most `genMax` after it; an ancestor
+    the ring no longer holds is returned as an Id marked `beyondRing`. An item's `why` needs the item's header (materialise
+    it first): an Id cannot be inverted to its summary.
+113. **`scene.acts` materialises an item before it addresses the item's members, and its published list carries the summary and
+    the index. (new)** `Kernel.address` needs the node's header. The first run of the fine tier after a reload could not find
+    an item's summary from its Id alone, so each entry of `ActsState.published` now holds `summary` and `index`.
+114. **A restated reading is not a change. (new)** After a load the game restates what it knows, and `reconcile` hears the
+    readings again. A correction is logged when it corrected something, or when a reading with an earlier value moved
+    (`old` defined and different); a reading with no earlier value, or an unchanged one, logs nothing. A quest-link
+    reading logs only for a change. Without this a reload added a second `game-dead` for the same death and the decision
+    log differed from the run that never reloaded (SF1-E3).
+115. **The cap of memorable beliefs is kept by not promoting low-salience beliefs. (new)** S1 8.5: "40 memorable beliefs per person
+    ... kept by not promoting further low-salience beliefs". A belief that is memorable by rule but has salience under 3 is
+    formed as texture (not memorable) when its observer already holds `memorableCap` memorable beliefs; a salience-3 belief
+    is still promoted.
+118. **A mirrored slot with a reading gathers no contributions, so nothing is "rejected by arbitration". (new)** SF1-E3 says the
+    `simulation`-layer statement that `mv` is alive "is rejected by arbitration (precedence 200 against 500)". S0 5.1 step 2
+    returns the game's reading before any contribution is collected, so the statement is still in the store, inactive, and
+    the trace of the slot lists no constraint. The test checks the value, the `game` pin and that the statement remains.
+119. **Ended edges and abandoned frames are history a save does not keep, so they are not part of the compared records after a
+    reload. (new)** SF1-E3 compares the records after a reload with those of the run that did not reload. An abandoned frame is
+    not a retention root and an ended edge not referenced by a canon event is dropped, so the `frames`, `edges` and `headers`
+    sections differ; the fixture asserts instead that in every run the frames of `mv` are abandoned and its edges ended or gone.
+120. **"The same totals" of the metamorphic relation are the effective ones. (new)** Moving a district's opportunity out of
+    `rest` into a new simulated district changes no other district's draws only if `rest` falls by the district's effective
+    `a` (the cell weights less what the game covers, times the propensity), not by its static `staticTotalA`: the share of a
+    district is its `aD` over the city's total, and the total adds the simulated districts' `aD`.
+121. **The volume check is against the offered mean, with a tolerance for what is refused. (new)** SF1-E1 compares the immigrants
+    of each kind with the sum of the means of the run's own propensities within four standard deviations. The sum is
+    computed from the same formula the process uses (rate, shape, share, regime and group modifiers) on the snapshot each
+    run saw. Incidents that admission refuses or the cast cannot fill are offered and not admitted, so the test allows
+    ten per cent and two incidents beyond the four deviations.
+122. **The long fixtures run at a smaller scale unless `S1_FULL=1`. (new)** Scaled down by default: SF1-E1 (a Kabuki stand-in
+    of two days, the injected events at windows 100 and 160), SF1-E2 (400 windows), SF1-E4 (the boundary is found in the first
+    2,400 windows), SF1-O-3 (6 days), SF1-I-5 (4 seeds of 220 windows at 25 times the rates), SF1-I-10 (1,308 windows at 12 times
+    the rates), SF1-I-15 (120 roots), SF1-X-1 and SF1-X-3 (about a hundred occurrences and 2,000 casts), and the property tests
+    (3 seeds of 90 windows). `S1_FULL=1` runs the spec's figures (a 1,008-window Kabuki week, 100 game days, 20 seeds of 30 days,
+    1,000 roots, 2,600 windows, 10,000 casts, 12 seeds of 240 windows); SF1-E1 at that scale takes under a minute. SF1-S-2
+    runs its 20 seeds of 30 days always.
+123. **Layer 2 asks the simulation layer through `SimReadPort`; the reads it builds are the `city` and `social` atoms. (new)** The
+    port (`builds`, `eval`, `deps`) is layer 2's own type (`seeding/registries.ts`); `Reads.port()` implements it, and
+    `attachLayer2` builds layer 2 on a sim's kernel with it and with S1's spine. Eleven of the sixteen reads of S2 2.16 and
+    2.17 are built (`band`, `regime`, `regimeIs`, `presence`, `priceLevel`, `refuge`, `label`, `bridge`, `normGap`, `tied`,
+    `divergence`). `heatRank`, `tension`, `reach`, `protected` and `contract` are registered, answer `maybe`, and are refused at
+    compile as "not supported yet", as is every read when no port is attached. A read's `deps` become the instance's
+    interests; a dependency that names no kind is scoped to the nodes the read is made of (`tied`), and a read marked
+    `boundary` (`divergence`) is looked at again at every boundary, like `believes`. The invalidation of `priceLevel` is the
+    regime events, which the table says and the first version of the read did not declare.
+124. **The audits are pure functions over structure, so a test can hand them a fault. (new)** `audit.ts` (in the simulation layer's source directory) has the source
+    lint (comments and the contents of strings removed), the kind and read audits, the writers audit over a declared table
+    (`PROCESS_WRITES`) and the writes a run observes, the gate audit, the cursor audit and the schema audit (which asks the
+    kernel's loader to validate and lists every slot a derive reads). The heritage lint applies to S1's own kinds: the
+    kernel's `core:name` draws given and family names by an `origin` slot, which is display and no decision.
+125. **`gameOwnedNow` is not a name in the reference; the lint looks for it all the same. (new)** S1 12 forbids a coarse process to
+    read it. The reference has no such read, so the audit cannot rely on its absence being checked elsewhere: the lint fails on
+    the name, on the demand reads and on V's cell or position in the files of tiers 0 to 2.
+
+### Spec findings for the coordinator (S1)
+
+The ones that need a decision, worst first:
+
+- **109 (the first window V stands in a cell).** With demand coming from frames that `v.frames` opens on a relevance, the first
+  window V is in a cell is never in the recorded focus, so its items are never opened (S1 10.2 and SF1-A-3 say V's act is
+  processed in window `k + 1`). The fix is in the order of a boundary (dispatch the relevance before the snapshot is taken), or
+  in `scene.acts` (take V's mirrored cell as of the window as the focus). The reference keeps the order as it is and the
+  fixture states the fact.
+- **105 (SF1-P-2).** "Every marginal within 1e-9 after 20 iterations" is not true of the person table, only of its last
+  dimension. Either the iterations rise or the tolerance is 1e-6.
+- **118 (SF1-E3).** "Rejected by arbitration (precedence 200 against 500)" does not describe what the kernel does for a mirrored
+  slot, which gathers no contribution (S0 5.1 step 2). The fixture's claim is about the value.
+- **106 (SF1-I-13).** FX-3 has no cell two steps from `c2`.
+- **114 (restated readings).** The spec is silent on whether a reading the game restates after a load is a correction. The
+  reference says it is not, unless it changes something or moves from an earlier value.
+- **120 (the metamorphic relation).** The totals that must match are the effective ones.
+- **116 (a kernel gap).** An event kept as the evidence of a memorable belief was a bare header after a load and could not be
+  minted again; S0 11.2 and 14.3 do not say who restores its fields. Minting it again does, silently.
+- **117 (queries).** S0 8.3 step 9 enumerates every item of every summary in scope for a query. A world that has run a week made
+  the mirror's and the norms process's queries the dearest thing in a window. The pruning keeps the result and relies on the
+  `kind` and `time` of a minted event not being overridden.
