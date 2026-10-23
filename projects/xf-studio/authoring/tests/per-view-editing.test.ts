@@ -117,6 +117,8 @@ test("T1: no frame of the leaving head ever holds the new look's layers, and bac
   const w = world();
   w.raster.drain();
   await w.heads.load();
+  // Look A's masks are rastered and complete before any switch, so its hold is complete (an unfinished hold re-rasters on return).
+  w.device.showLook(); w.raster.drain(); await settle();
   const first = w.heads.shown()!, aCanvases = [...w.device.canvases];
   // The head shows look A's masks, slot by slot.
   expect(w.images(first.scene)).toEqual(aCanvases);
@@ -141,10 +143,11 @@ test("T1: no frame of the leaving head ever holds the new look's layers, and bac
   expect(w.heads.shown()).toBe(first);
   expect(w.images(first.scene)).toEqual(aCanvases);
   // Following the document again: the next completed mask of look A reaches it.
+  const edits = w.raster.requests();
   w.authoring.publishLayer({ ...w.authoring.recipe, layers: w.authoring.recipe.layers.map((layer, i) => i === 0 ? { ...layer, opacity: 0.5 } : layer) }, 0);
   w.raster.drain();
+  expect(w.raster.requests()).toBeGreaterThan(edits);
   expect(w.images(first.scene)[0]).toBe(w.device.canvases[0]!);
-  expect(w.images(first.scene)[0]).not.toBe(aCanvases[0]);
   w.open();
   w.heads.dispose();
 });
@@ -153,6 +156,7 @@ test("T1: switching back to a warm head of another look rasters, presents and co
   const w = world();
   w.raster.drain();
   await w.heads.load();
+  w.device.showLook(); w.raster.drain(); await settle();
   const first = w.heads.shown()!;
   // To the side view (look B): rastered once, made ready and shown.
   const toSide = w.heads.show(w.side);

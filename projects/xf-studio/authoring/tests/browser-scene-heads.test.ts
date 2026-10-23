@@ -465,6 +465,40 @@ test("P2-iii: nothing drawn keeps the head warm (drawn again with no build); a h
   o.heads.dispose();
 });
 
+test("P2-iii: closing a view during construction lets its surviving sibling use the shared build", async () => {
+  const views: Record<string, { scene: string; subject: string }> = {};
+  const o = owner({ v1: "female", v2: "female" }, [], null, views);
+  try {
+    const graph = o.h.ports.graph!;
+    const first = graph.addView("main", {}, { label: "First" });
+    const sibling = graph.addView(first, { scene: true }, { label: "Sibling" });
+    views[first] = views[sibling] = { scene: "s2", subject: "v2" };
+    await o.heads.load();
+    const previous = o.heads.shown()!;
+    o.gate.open.female = false;
+    // Capture both outcomes immediately: the original requester must not roll the newer one back.
+    const original = o.heads.show(first).then(() => "shown", error => error);
+    await settle();
+    expect(o.h.builds).toBe(2);
+    expect(o.heads.shown()).toBe(previous);
+    graph.closeView(first); delete views[first];
+    const surviving = o.heads.show(sibling).then(() => "shown", error => error);
+    expect(o.heads.snapshot().building).toMatchObject({ key: "s2|v2|female" });
+    o.gate.release("female");
+    expect(await surviving).toBe("shown");
+    expect(await original).toBe("shown");
+    expect(o.h.builds).toBe(2);
+    expect(o.heads.shownView()).toBe(sibling);
+    expect(o.heads.shown()!.preview.view()).toBe(sibling);
+    expect(o.heads.shown()).not.toBe(previous);
+    expect(o.heads.snapshot().residents).toMatchObject([
+      { key: "s1|v1|female", state: "warm" }, { key: "s2|v2|female", state: "shown" },
+    ]);
+    expect(o.notices).toEqual([]);
+  } finally { o.heads.dispose(); }
+  expect(o.h.host.canvases).toBe(0);
+});
+
 test("4a-vi: each view routes to the runtime holding it: the drawn one, a warm one of its V and body, or none (loading, absent)", async () => {
   const views: Record<string, { scene: string; subject: string }> = {};
   const o = owner({ v1: "female", v2: "female", v3: "female" }, [], null, views);

@@ -62,6 +62,8 @@ export function createBrowserPreviewDevice(options: {
   const makeEmptyCanvas = () => createCanvas(1);
   const canvases = authoring.recipe.layers.map(makeEmptyCanvas);
   const emptyCanvases = () => authoring.recipe.layers.map(makeEmptyCanvas);
+  /** Inputs actually painted into each canvas, independent of edits or work still in flight. Kept only as long as the canvas. */
+  const rastered = new WeakMap<HTMLCanvasElement, string>();
   /** Each slot's latest optical maps, by their identity: what a surface connected or filled later is given with its mask. */
   let optics: (PendingOptics | undefined)[] = [];
   let viewer: Scene | undefined;
@@ -123,6 +125,7 @@ export function createBrowserPreviewDevice(options: {
         canvases[i] = createCanvas(size);
       }
       canvases[i].getContext("2d")!.putImageData(createPixels(data, size), 0, 0);
+      rastered.set(canvases[i], JSON.stringify(layer));
       if (maps || albedo) {
         const key = opticalKey(layer, size), prior = optics[i];
         optics[i] = { key, data: maps ?? (prior?.key === key ? prior.data : undefined), albedo: albedo ?? (prior?.key === key ? prior.albedo : undefined) };
@@ -245,7 +248,14 @@ export function createBrowserPreviewDevice(options: {
       client.reset();
       canvases.splice(0, canvases.length, ...from.slots.map(slot => slot.canvas));
       optics = from.slots.map(slot => slot.optics);
-      coordinator.syncStack({ layers: from.slots.map(slot => JSON.parse(slot.layer) as Layer) } as Recipe);
+      // A hold's layer is what was presented, which may be newer than its canvas. Compare against completed raster inputs instead.
+      const incomplete = new Set<string>();
+      const layers = from.slots.map((slot, i) => {
+        const complete = rastered.get(slot.canvas);
+        if (complete === undefined) incomplete.add(from.ids[i]!);
+        return JSON.parse(complete ?? slot.layer) as Layer;
+      });
+      coordinator.syncStack({ layers } as Recipe, incomplete);
       return true;
     },
   };

@@ -130,8 +130,9 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   const residency = new SceneResidency<SceneHeadWant, AttachedHead>({
     build: async (want, signal, progress) => {
       progress({ stage: want.body === "male" ? "core" : "build" });
-      // Made for the view it was wanted for; shown, it draws whichever view of its scene is drawn then (`show`).
-      const head = await buildBrowserHead({ ...ports.head, view: want.view, character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
+      // Same-scene requests share construction. Resolve its view after the waits: the original view may have closed meanwhile.
+      const head = await buildBrowserHead({ ...ports.head, view: () => drawnScene() === want.scene ? drawn()! : want.view,
+        character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
         prepareCore: (body, buildSignal) => ports.prepareCore(body, (message, fraction) => {
           progress({ stage: "core", fraction: fraction ?? 0, waiting: "host", ...(message ? { detail: message } : {}) });
           // The first load: the head pane says what the host is doing, as it always has.

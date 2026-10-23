@@ -73,8 +73,8 @@ export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
   /** The workspace's view graph (it outlives any one head): the head restores the view it is made for and follows the view it draws. */
   graph?: ViewGraph;
-  /** The view the head is made for (its runtime owner's drawn view when it was wanted); `show` may draw it for another view of the scene. */
-  view?: ViewId;
+  /** The view the head is made for, resolved after construction waits so a surviving view of its scene can take over. */
+  view?: ViewId | (() => ViewId);
   viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
   /** Every layered-makeup surface to connect, in composition order; at most one is the on-head editor's. */
   layered: readonly LayeredSurfaceWiring[];
@@ -192,6 +192,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     // A build that fails releases what it made itself (createSceneRuntime does), so there is nothing to dispose until it returns.
     const scene = await ports.viewport.buildHead(body, signal);
     releases.push(() => ports.viewport.disposeHead(scene));
+    signal.throwIfAborted();
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     {
       const preferences = ports.preferences, follow = () => scene.setResearchTools?.(preferences.snapshot().researchTools === true);
@@ -216,9 +217,10 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     // The view's Surface controls tool, which the on-head editor mounted on this head follows (scene-editors.ts).
     let surfaceEnabled = true;
     const surfaceListeners = new Set<() => void>();
+    const view = typeof ports.view === "function" ? ports.view() : ports.view;
     const services = createTrustedPreviewServices({ ...ports.workspace, savedV: ports.character.save }, createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => { surfaceEnabled = enabled; for (const listener of [...surfaceListeners]) listener(); },
-    }), ports.graph ? { graph: ports.graph, view: ports.view ?? ports.graph.viewIds()[0]! } : undefined);
+    }), ports.graph ? { graph: ports.graph, view: view ?? ports.graph.viewIds()[0]! } : undefined);
     const savedAppearance = services.savedAppearance;
     const restored = services.finish();
     const { preview, motion } = restored;
