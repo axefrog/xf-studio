@@ -994,3 +994,97 @@ The real head's figure in G2 was 50–102 ms (§12); G3 measures it again on rea
 
 1. **G3** (§5): the S2 gate table on real data, warm cache and then a fresh profile, with the whole-body part, by the coordinator. The presentation-gap gate now counts the interval ending at the takeover, and the morph texture made ahead (the first runtime's too, since the patch) should remove A's last page task over 50 ms.
 2. The coordinator's merge (Sol's review is done; its six findings are fixed above).
+
+## 14. G3: the S2 gate table and parity on real data (run 24 October 2026)
+
+The last gate before phase 4a merges (§5). It is a measurement, with no change to the product. Offline browser measurements on one machine, not game evidence. Raw outputs are in the ignored `generated/g3/` (run summaries, per-frame samples) and `projects/xf-studio/authoring/evidence/screenshots/043-g3/` (the parity frames).
+
+| Item | Value |
+|---|---|
+| GPU, browser | RTX 4070 (driver 610.88), ANGLE D3D11, headless Chrome 155, the game not running |
+| After | `claude/profiles-4a` at `9ff40365` |
+| Base | `origin/main` at `d815f67d` |
+| Setup | Each build in its own worktree with its own isolated server (own port, own data folder and caches, a read-only copy of the host's settings), never port 4317 or 4331. Servers under `memory_guard.py --limit 5`; every Chrome run under `--limit 5` |
+| Harness | `tools/scene-parity.ts` and `measure.ts` here, which gained the G3 rows below (`G3_ROWS=1`, `G3_PART=memory`) |
+
+### Parity
+
+`tools/scene-parity.ts` with the rule of §8 (at most one channel step on fewer than 0.01 % of the pixels), 20 frames per capture: five looks, both lighting presets, 1K and 2K. Two base captures from the base build, three after captures from this branch, each compared with the nearest of the two bases.
+
+| Capture | Identical | Within noise | Outside the rule | Worst frame |
+|---|---|---|---|---|
+| `base-2` against `base-1` (same-build noise) | 19 | 1 | 0 | 3 pixels (0.0007 %), step 1 |
+| `after-2` | 14 | 6 | 0 | 1 pixel (0.0002 %), step 1 |
+| `after-3` | 16 | 4 | 0 | 1 pixel (0.0002 %), step 1 |
+| `after` (the first, on a fresh server) | 15 | 4 | **1** | `bare-creator-1024`: 99.5 % of the pixels, step up to 32 |
+
+The outlier is the first creator-lighting frame of a capture on a freshly started server, drawn with the neutral grade instead of the creator grade (less saturated, otherwise the same; the 2K frame after it matched). The harness's settle step passes while the grade's phase is `idle` as well as `ready`, so a grade that hasn't started loading counts as settled. It didn't recur in two reruns on the same server, and the base's first capture on its own fresh server was clean, so one fresh-server sample each can't say whether the branch makes this race likelier. **Verdict: pass** on the frames' content (every frame of two of three captures is within noise, worst 1 pixel at one step), with that one capture's neutral-grade frame open. The settle step should wait for the grade to be `ready` when the preset is creator.
+
+### The S2 gate table on real data
+
+`measure.ts` on the isolated server, three runs: two with a fresh Chrome profile (a cold program cache) and one on the second run's kept profile (`G2_WARM=1`). Each run is the G2 switches A (body: the masculine default V, never drawn on the page), B (lighting: the creator setup on the shown V) and C (body and lighting), then the G3 rows:
+
+- **D, warm switches:** eight body switches between the two bodies, both resident (shown and warm), want to the first presented frame.
+- **E, cancel:** the context is lost and restored first (it drops the warm runtime, D2), so the other body is asked for from nothing. The body is asked for, and 150 ms later the shown body is chosen again. The idle is off and a hash of the canvas is taken on every frame, so a frame drawn for anything not shown is a change. A 5 s tail would show a late result.
+- **F, last choice:** after the same drop, male, female and male again 120 ms apart.
+
+| S2 row | Run 1 (cold) | Run 2 (cold) | Run 3 (kept profile) | Gate |
+|---|---|---|---|---|
+| A body: want to first presented frame | 8.7 s | 9.3 s | 2.5 s | progress, no gate |
+| B lighting: change to takeover | 18.2 s | 17.4 s | took over in 14 ms with nothing to prepare (see below) | progress, no gate |
+| C body and lighting | 21.4 s | 20.5 s | 10.3 s | progress, no gate |
+| **Warm switch** (D, 8 switches per run): want to first presented frame | 18.8 to 29.5 ms | 18.8 to 30.1 ms | 18.4 to 25.5 ms | ≤ 100 ms: **pass** |
+| D: want to the show | 6.9 to 14.4 ms | 7.2 to 16.1 ms | 7.2 to 14.2 ms | |
+| **Cancel** (E): the cancel to the preparation being over, with the preparation in its core and build steps | 8.1 ms | 5.7 ms | 4.5 ms | ≤ 100 ms: **pass** (frame resolution; the synthetic gate times it exactly) |
+| **No stray frames** (E, the whole window of about 7 s; F, until the takeover): frames drawn by the shown runtime, changes to the canvas | 0 and 0 (E); 0 canvas changes (F) | the same | the same | **pass** |
+| **No late result shown** (E and F, a 5 s tail after the preparation ended) | the shown V never changed | the same | the same | **pass** |
+| **Last choice wins** (F): the V shown | only the final choice (male), 4.75 s after the first | 4.77 s | 4.75 s | **pass**: the shown keys were female, then male once, never an interim |
+| **No task of 50 ms or more** (A, B, C, D, E, F; the Long Tasks API) | none | none | none | **pass** |
+| **No link in the first shown frame**: A, B, C | 0, 0, 0 | 0, 0, 0 | 0, 0, 0 | **pass** |
+| No link in the first shown frame: D, the warm switches | 2 programs on each of the 4 male shows (0 on the 4 female ones) | the same | 0 of 8 | **fail** in the cold runs, below |
+| **No presentation gap over 100 ms**: longest gap during A, B, C, and over D | 52.3, 27.5, 18.9 ms; D 18.8 ms | 66.8, 26.8, 19.0 ms; D 20.3 ms | 18.9, 14.1, 19.4 ms; D 19.0 ms | ≤ 100 ms: **pass** |
+| Progress shown (the pane said something on every frame from 150 ms in; the fraction only grew) | longest silent stretch 0 ms | 0 ms | 0 ms | **pass** |
+| Programs linked in A, B, C before the show | 42, 75, 80 | 42, 75, 80 | 42, 0, 80 | |
+| Duration of the run | 154 s | 152 s | 736 s (600 s of it is B, below) | |
+| Peak memory (the guard's peak for Chrome and the harness, limit 5 GB) | 4.1 GB | 4.2 GB | 4.2 GB | |
+
+**The one failing row.** On each warm switch to the masculine V in the cold-profile runs, two programs are linked in the first shown frame: `LineBasicMaterial` and `PointsMaterial` (the first use waited 1.0 to 1.3 ms). They are the line and point materials of the on-head surface editor (`legacy/eye-makeup/browser/surface-editor.ts`, the only place they are made), which the owner mounts on a head each time it is shown. The feminine V shows none, and the kept-profile run shows none for either body, so what decides it hasn't been found; the cause above is the likeliest reading, not a verified one. The wait is about a millisecond and no frame is late (the longest gap in D is 20 ms), but the S2 row says no link in the first shown frame, so it fails by the letter. A fix would prepare the editor's materials ahead (in the preparation's warm-up) or keep them for the editor's lifetime instead of making them per mount.
+
+**B in the kept-profile run.** The creator setup took over in 14 ms with nothing to prepare: no program linked, no preparation. That profile had restored the creator setup at load, so its programs were already in the page. `measure.ts` ends a lighting run only after it has seen a preparation, so it waited out its 600 s limit and marked the run "never took over". That is the harness's condition, not the product: the first presented frame was 19.7 ms.
+
+**Rows `measure.ts` can't drive on real data, and where they are covered.** The synthetic gate `tests/webgl-scene-runtimes.test.ts` covers each:
+
+- a hidden runtime drawing no frame before it is shown, and a cancelled one drawing none (the real-data check above looks at the canvas and the shown runtime's frame count, which a hidden runtime's draw would change, but it can't count a hidden runtime's own draws);
+- a build coming back after it was superseded (its last step can't be stopped) and being disposed, never shown;
+- eviction, and a V in a scene of its own opened and closed.
+
+Phase 4a has no way to open a second V on the page: a want's key is (scene, V, body), the page has one scene and one V, so the only keys are the two bodies and nothing is ever evicted. Phase 2's tabs add it. The cancel and last-choice rows use a lost and restored context to start from nothing, which is real data but not the path a person takes (a person would ask for a body whose runtime was evicted, or for a second V).
+
+### Memory returned
+
+`G3_PART=memory`: a fresh profile, A, B and C, then ten cycles of a switch to the masculine V and back, four cycles of a studio and creator setup change, 10 s idle, and a lost and restored context. After each step the Chrome processes' private bytes (the GPU process, the page's renderer) and the GPU process's dedicated video memory (Windows' per-process GPU counters), the page's JS heap after a collection, and the live GL objects (created minus deleted, counted by wrapping the context's create and delete calls) were read. Both bodies are resident throughout (the shown one and one warm), which is D2's budget.
+
+| After | GPU process private | GPU dedicated video | Page renderer private | JS heap | Live GL objects: textures / buffers / framebuffers / programs / vertex arrays |
+|---|---|---|---|---|---|
+| Start (the feminine V alone) | 1,831 MB | 1,164 MB | 704 MB | 299 MB | 144 / 372 / 32 / 104 / 155 |
+| A (the masculine V shown, the feminine warm) | 2,691 MB | 1,799 MB | 820 MB | 489 MB | 279 / 754 / 60 / 146 / 300 |
+| C (the feminine shown, the masculine warm) | 2,924 MB | 1,900 MB | 745 MB | 510 MB | 301 / 762 / 70 / 299 / 572 |
+| 1 body cycle | 2,932 MB | 1,904 MB | 745 MB | 510 MB | 301 / 762 / 70 / 299 / 572 |
+| 3, 6 and 9 body cycles | 2,932, 2,926, 2,928 MB | 1,904 MB each | 729, 771, 787 MB | 510 MB | the same, every time |
+| 1 and 4 lighting cycles | 2,920, 2,924 MB | 1,891, 1,890 MB | 792, 761 MB | 511 MB | 289 / 762 / 64 / 299 / 572 both times |
+| 10 s idle | 2,923 MB | 1,890 MB | 722 MB | 511 MB | the same |
+| After a lost and restored context (informational) | 2,006 MB | 1,221 MB | 679 MB | 364 MB | not meaningful (a lost context's objects are never deleted) |
+
+- **Returned.** From the first cycle to the ninth, the GPU process's private bytes moved by 6 MB, its dedicated video memory by 0.2 MB, and the live GL objects not at all. The page's renderer wandered by about 60 MB (729 to 792 MB) with no direction. Each body cycle links 2 programs (the surface editor's, above) and deletes them again: Three's live program count is flat while the probe's link count rises by 2 per cycle. The setup cycles freed 12 textures and 6 framebuffers net, never more.
+- **What a second whole-body runtime costs** (the evidence D2 said a byte cap would wait for): about 860 MB of the GPU process's private bytes, 635 MB of dedicated video memory, 116 MB in the page's renderer and 190 MB of JS heap, with 135 textures, 382 buffers and 28 framebuffers. A card with 8 GB of video memory holds it comfortably; a 4 GB card is where a byte budget would start to matter.
+- **A second V opened and closed** can't be driven on real data (above). The synthetic gate does it (a V in a scene of its own opened, +48 textures and +33 programs, and closed: GL objects and Three's programs as before; closing everything: at the baseline), and 4a-i's disposal gate holds the same after five runtimes. The lost-context row is not a leak test, since a lost context frees everything. It shows only that dropping the warm runtime and rebuilding the shown one lands within 175 MB of the start.
+
+### Verdict
+
+| Part | Verdict |
+|---|---|
+| 1. Parity | **Pass**, with one capture's neutral-grade frame open (a harness settle race, not reproduced) |
+| 2. The S2 gate table | **Pass on every row but one**: warm switches to the masculine V link two small programs in the first shown frame (cold-profile runs; 1.0 to 1.3 ms each time). Every other row passes in all three runs, with the rows the harness can't drive pointed at the synthetic gate |
+| 3. Memory returned | **Pass** for what real data can drive (no growth over ten body cycles and four setup cycles); a second V's open and close is covered by the synthetic gate |
+
+The merge is the coordinator's call on the one failing row: it costs about a millisecond and no late frame, and the fix is small (prepare the editor's materials ahead or keep them), but the table's row is literal. The only tool change is `measure.ts` (the G3 rows, GL object counts, OS memory).

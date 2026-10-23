@@ -19,6 +19,15 @@
  * API), the programs linked and maps uploaded before the show, in the first shown frame and after it, how long the page waited on a
  * program's first use, the stages the preparation went through, and whether the pane showed progress throughout. The record is checked
  * against the gates by `verdict` in the output. `G2_PROFILE=1` also keeps a sampled CPU profile of each switch beside the summary.
+ *
+ * Gate G3 (README.md §14) adds, on the same page and profile:
+ *   G3_ROWS=1    after A, B and C: D, eight warm body switches (the first re-prepares the other body for the shown setup, the rest are
+ *                warm: want to first presented frame), E, a warm body's preparation cancelled by a switch back to the shown V, and F, three
+ *                body choices 120 ms apart (the last wins), both with the idle off and a hash of the canvas on every frame (a frame drawn
+ *                for anything that is not shown shows as a change), and a quiet tail that a late result would show in;
+ *   G3_PART=memory  instead of A to F: the memory part. The OS-side memory of this Chrome (the GPU process's private bytes and dedicated
+ *                video memory, the page's renderer) and the live GL object counts after every cycle of warm body switches and setup
+ *                changes, to show what returns and what plateaus.
  */
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -56,10 +65,33 @@ const RECORD = `(() => {
     const original = proto[method];
     proto[method] = function(...args) { const t = performance.now(); const result = original.apply(this, args); if (g2.tex.length < 100000) g2.tex.push([t, performance.now() - t]); return result; };
   }
+  // Live GL objects by kind (created minus deleted), for the memory part: a runtime that is closed must give its objects back.
+  const live = g2.gl = { texture: 0, buffer: 0, framebuffer: 0, renderbuffer: 0, program: 0, vertexArray: 0, sampler: 0, shader: 0 }, alive = new WeakSet();
+  for (const [kind, create, remove] of [["texture", "createTexture", "deleteTexture"], ["buffer", "createBuffer", "deleteBuffer"], ["framebuffer", "createFramebuffer", "deleteFramebuffer"],
+    ["renderbuffer", "createRenderbuffer", "deleteRenderbuffer"], ["program", "createProgram", "deleteProgram"], ["vertexArray", "createVertexArray", "deleteVertexArray"],
+    ["sampler", "createSampler", "deleteSampler"], ["shader", "createShader", "deleteShader"]]) {
+    const made = proto[create], removed = proto[remove];
+    proto[create] = function(...args) { const object = made.apply(this, args); if (object) { alive.add(object); live[kind]++; } return object; };
+    proto[remove] = function(object) { if (object && alive.has(object)) { alive.delete(object); live[kind]--; } return removed.call(this, object); };
+  }
+  // A hash of the drawing buffer, 32 x 32 samples of it: a frame drawn onto the canvas changes it (the idle is off while it is watched).
+  let hashCanvas = null;
+  g2.canvasHash = () => {
+    const source = document.querySelector("#device-head canvas");
+    if (!source || !source.width) return -1;
+    hashCanvas ??= Object.assign(document.createElement("canvas"), { width: 32, height: 32 });
+    const context = hashCanvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(source, 0, 0, 32, 32);
+    const data = context.getImageData(0, 0, 32, 32).data;
+    let hash = 2166136261;
+    for (let i = 0; i < data.length; i++) { hash ^= data[i]; hash = Math.imul(hash, 16777619); }
+    return hash >>> 0;
+  };
   const strings = [], index = new Map();
   const intern = s => { if (s === null || s === undefined) return -1; let i = index.get(s); if (i === undefined) { i = strings.length; strings.push(s); index.set(s, i); } return i; };
   g2.strings = strings;
   /** One sample of what the page shows: the shown runtime and its frames, the preparation in flight, the pane's words. */
+  let watching = false;
   const sample = () => {
     const e = window.xfStudioSceneEvidence?.();
     const shown = e?.residency.residents.find(r => r.state === "shown");
@@ -68,7 +100,7 @@ const RECORD = `(() => {
     const state = document.querySelector(".viewport-state:not([hidden])");
     const visibleLine = line && !line.hidden ? line.innerText.trim() : null;
     return [performance.now(), intern(shown?.key ?? null), e?.frames.frames ?? -1, intern(prep?.stage ?? null), prep ? Math.round(prep.fraction * 1000) / 1000 : -1,
-      intern(prep?.waiting ?? null), intern(visibleLine), intern(state ? state.innerText.trim() : null), intern(window.xfStudioPresentation.viewport.snapshot().head.phase), intern(prep?.detail ?? null)];
+      intern(prep?.waiting ?? null), intern(visibleLine), intern(state ? state.innerText.trim() : null), intern(window.xfStudioPresentation.viewport.snapshot().head.phase), intern(prep?.detail ?? null), watching ? g2.canvasHash() : -2];
   };
   /** Dispatch \`action\`, sample every animation frame until \`done(sample)\` (or \`maxMs\`), then \`tailMs\` more. */
   g2.run = async (action, doneSource, minMs, tailMs, maxMs) => {
@@ -90,6 +122,37 @@ const RECORD = `(() => {
       if (now - t0 > maxMs) break;
     }
     return { t0, dispatchedAt, doneAt, timedOut: doneAt === null, dispatch: JSON.stringify(await answer ?? null).slice(0, 300), ticks, strings: strings.slice(), startKey: strings[before[1]] ?? null };
+  };
+  /**
+   * A scripted run (G3's cancel and last-choice rows): dispatch each [atMs, action] at its time from the start, sample every animation frame
+   * (with the canvas hash) until \`minMs\`, then until the preparation is over, then \`tailMs\` more, so a result arriving late shows.
+   */
+  g2.script = async (steps, minMs, tailMs, maxMs) => {
+    watching = true;
+    const before = sample(), ticks = [before], t0 = performance.now(), sent = [];
+    const answers = steps.map(([at, action], i) => new Promise(resolve => setTimeout(() => {
+      sent[i] = performance.now();
+      Promise.resolve(window.xfStudioShell.runtime.dispatch(action)).then(answer => resolve(JSON.stringify(answer ?? null).slice(0, 200)), error => resolve("error: " + error));
+    }, at)));
+    let idleAt = null;
+    for (;;) {
+      await new Promise(r => requestAnimationFrame(r));
+      const s = sample(); ticks.push(s);
+      const now = s[0];
+      const dispatched = sent.filter(Boolean).length === steps.length;
+      if (idleAt === null && dispatched && now - t0 >= minMs && s[3] < 0) idleAt = now;
+      if (idleAt !== null && now - idleAt >= tailMs) break;
+      if (now - t0 > maxMs) break;
+    }
+    watching = false;
+    return { t0, sent, answers: await Promise.all(answers), idleAt, timedOut: idleAt === null, ticks, strings: strings.slice(), startKey: strings[before[1]] ?? null };
+  };
+  /** The page's own figures: the live GL objects, the JS heap after a collection, and the residents. */
+  g2.memory = async () => {
+    window.gc?.(); await new Promise(r => setTimeout(r, 50)); window.gc?.();
+    const e = window.xfStudioSceneEvidence?.();
+    return { gl: { ...g2.gl }, programs: window.xfsGl.programs.length, jsHeapMB: Math.round((performance.memory?.usedJSHeapSize ?? 0) / 1048576 * 10) / 10,
+      residents: e?.residency.residents.map(r => r.key + ":" + r.state) ?? [] };
   };
 })();`;
 
@@ -188,6 +251,79 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
   };
 }
 
+
+/**
+ * The OS-side memory of this run's Chrome (G3's memory part): every chrome.exe whose command line names the profile folder, by process
+ * type with its private bytes, and the GPU process's dedicated and shared video memory from Windows' per-process GPU counters. Read between
+ * switches only: starting PowerShell is work that would blur a timing.
+ */
+function chromeMemory(profile: string) {
+  const leaf = resolve(profile).split(/[\/]/).pop()!;
+  const script = String.raw`$leaf='${leaf}'
+$procs = @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like "*$leaf*" })
+$rows = @(foreach ($q in $procs) {
+  $type = if ($q.CommandLine -match '--type=([a-z\-]+)') { $Matches[1] } else { 'browser' }
+  $g = Get-Process -Id $q.ProcessId -ErrorAction SilentlyContinue
+  if ($g) { [pscustomobject]@{ pid = $q.ProcessId; type = $type; privateMB = [math]::Round($g.PrivateMemorySize64 / 1MB, 1); workingSetMB = [math]::Round($g.WorkingSet64 / 1MB, 1) } }
+})
+$ids = @($rows | ForEach-Object { $_.pid })
+function Counter($name) { $r = @{}; try { foreach ($s in (Get-Counter "\GPU Process Memory(*)\$name" -ErrorAction Stop).CounterSamples) { if ($s.InstanceName -match 'pid_(\d+)_' -and $ids -contains [int]$Matches[1]) { $r[$Matches[1]] = [math]::Round($s.CookedValue / 1MB, 1) } } } catch {}; $r }
+$ded = Counter 'Dedicated Usage'; $sh = Counter 'Shared Usage'
+$out = @($rows | ForEach-Object { $_ | Add-Member -NotePropertyName dedicatedGpuMB -NotePropertyValue $ded["$($_.pid)"] -PassThru | Add-Member -NotePropertyName sharedGpuMB -NotePropertyValue $sh["$($_.pid)"] -PassThru })
+$adapter = 0; try { $adapter = [math]::Round(((Get-Counter '\GPU Adapter Memory(*)\Dedicated Usage' -ErrorAction Stop).CounterSamples | Measure-Object CookedValue -Sum).Sum / 1MB, 0) } catch {}
+[pscustomobject]@{ rows = $out; counters = $ded.Count; adapter = $adapter } | ConvertTo-Json -Compress -Depth 4`;
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  const result = Bun.spawnSync(["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], { stdout: "pipe", stderr: "pipe" });
+  const text = result.stdout.toString().trim();
+  let rows: { pid: number; type: string; privateMB: number; workingSetMB: number; dedicatedGpuMB: number | null; sharedGpuMB: number | null }[] = [];
+  let counters = 0, adapter = 0;
+  try { const parsed = JSON.parse(text); const list = parsed.rows; rows = Array.isArray(list) ? list : list ? [list] : []; counters = parsed.counters; adapter = parsed.adapter; } catch { return { error: (text + result.stderr.toString()).slice(0, 300) }; }
+  const sum = (type: string, field: "privateMB" | "dedicatedGpuMB" | "sharedGpuMB") => round(rows.filter(r => r.type === type).reduce((total, r) => total + (r[field] ?? 0), 0));
+  return { gpuProcessPrivateMB: sum("gpu-process", "privateMB"), gpuDedicatedVideoMB: sum("gpu-process", "dedicatedGpuMB"), gpuSharedVideoMB: sum("gpu-process", "sharedGpuMB"),
+    rendererPrivateMB: sum("renderer", "privateMB"), browserPrivateMB: sum("browser", "privateMB"), totalPrivateMB: round(rows.reduce((total, r) => total + r.privateMB, 0)), processes: rows.length, gpuCounterInstancesMatched: counters, machineWideAdapterDedicatedMB: adapter };
+}
+const memories: { label: string; os: ReturnType<typeof chromeMemory>; page: unknown }[] = [];
+async function remember(label: string) {
+  await page.wait(1500);
+  const entry = { label, os: chromeMemory(profileArg), page: await page.evaluate(`window.__g2.memory()`) };
+  memories.push(entry);
+  log("memory:" + label, entry);
+}
+
+
+type ScriptRun = { t0: number; sent: number[]; answers: string[]; idleAt: number | null; timedOut: boolean; ticks: Tick[]; strings: string[]; startKey: string | null };
+/**
+ * A scripted run (E, the cancel row, and F, the last-choice row) reduced to the S2 rows it speaks to: which V was shown and when, whether
+ * the preparation was running when the cancel came and how soon it was over, the frames the shown runtime drew and the changes to the
+ * canvas before anything else was shown (the idle is off, so none is expected), and whether a late result changed what is shown afterwards.
+ */
+function analyseScript(run: ScriptRun, cancelStep: number | null) {
+  const { ticks, strings, t0 } = run;
+  const str = (tick: Tick, field: number) => (tick[field]! >= 0 ? strings[tick[field]!]! : null);
+  const shown: { key: string; atMs: number }[] = [];
+  for (const tick of ticks) { const key = str(tick, T.key); if (key && shown[shown.length - 1]?.key !== key) shown.push({ key, atMs: round(tick[T.t]! - t0) }); }
+  const takeover = ticks.findIndex(tick => { const key = str(tick, T.key); return key !== null && key !== run.startKey; });
+  const before = takeover < 0 ? ticks : ticks.slice(0, takeover);
+  let hashChanges = 0;
+  for (let i = 1; i < before.length; i++) if (before[i]![10] !== before[i - 1]![10]) hashChanges++;
+  const framesDelta = before[before.length - 1]![T.frames]! - before[0]![T.frames]!;
+  const cancelAt = cancelStep === null ? null : run.sent[cancelStep]!;
+  const preparingTicks = ticks.filter(tick => str(tick, T.stage) !== null);
+  const beforeCancel = cancelAt === null ? [] : ticks.filter(tick => tick[T.t]! < cancelAt);
+  const afterCancel = cancelAt === null ? null : ticks.find(tick => tick[T.t]! >= cancelAt && str(tick, T.stage) === null);
+  const lateTicks = takeover < 0 ? ticks : ticks.slice(takeover + 1);
+  return {
+    sentAtMs: run.sent.map(at => round(at - t0)), answers: run.answers, timedOut: run.timedOut, startKey: run.startKey, shown,
+    preparation: { firstSeenMs: preparingTicks[0] ? round(preparingTicks[0][T.t]! - t0) : null, lastSeenMs: preparingTicks.length ? round(preparingTicks[preparingTicks.length - 1]![T.t]! - t0) : null,
+      stages: [...new Set(preparingTicks.map(tick => str(tick, T.stage)))] },
+    cancel: cancelAt === null ? null : { preparingWhenCancelled: beforeCancel.length > 0 && str(beforeCancel[beforeCancel.length - 1]!, T.stage) !== null,
+      cancelToPreparationOverMs: afterCancel ? round(afterCancel[T.t]! - cancelAt) : null },
+    beforeTakeover: { ticks: before.length, framesDrawnByShown: framesDelta, canvasChanges: hashChanges },
+    afterTakeover: { ticks: lateTicks.length, keyChanges: new Set(lateTicks.map(tick => str(tick, T.key))).size > 1 ? "changed" : "stable" },
+    finalKey: shown[shown.length - 1]?.key ?? null,
+  };
+}
+
 type Analysis = ReturnType<typeof analyse>;
 /**
  * The gates G2 sets (README.md §5, §11): no task of 50 ms or more during preparation or in the second after the show, no link in the first
@@ -221,6 +357,8 @@ try {
     return { gpu: info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "unknown", parallelShaderCompile: gl.getSupportedExtensions().includes("KHR_parallel_shader_compile"),
       userAgent: navigator.userAgent, programsAtStart: window.xfsGl.programs.length, lighting: window.xfStudioPresentation.authoring.previewState().lighting,
       setup: window.xfStudioPresentation.authoring.previewState().lightingSetups.active, residency: window.xfStudioSceneEvidence().residency }; })()`));
+  const g3Rows = process.env.G3_ROWS === "1", memoryPart = process.env.G3_PART === "memory";
+  if (g3Rows || memoryPart) await remember("start");
   const firstTasks = await pageRecord();
   log("start", { programsLinked: firstTasks.programs.length, longTasksSinceStart: firstTasks.long.map(([s, d]) => [Math.round(s), Math.round(d)]).slice(0, 12),
     firstFrameCpuMs: await page.evaluate(`window.xfStudioSceneEvidence().frames.cpuFrame`) });
@@ -272,7 +410,93 @@ try {
     // The raw samples stay beside the summary for a closer look (an ignored folder).
     writeFileSync(resolve(outArg).replace(/\.json$/, `-${name}-ticks.json`), JSON.stringify({ strings: run.strings, fields: Object.keys(T), t0: run.t0, ticks: run.ticks.map(tick => tick.map((v, i) => i === 0 ? round(v! - run.t0, 2) : v)) }));
     await page.wait(3000);
+    if (g3Rows || memoryPart) await remember("after " + name);
   }
+  const bodyAction = (bodyGender: string) => ({ kind: "character.useDefault", bodyGender });
+  const bodyDone = (bodyGender: string) => `s[1] >= 0 && strings[s[1]].endsWith("|${bodyGender}") && s[3] < 0 && s[2] >= 1`;
+  /** Switch body and wait for it to be shown and the preparation over; the run's analysis. */
+  const switchBody = async (bodyGender: string, tailMs = 1000) => {
+    const run = await page.evaluate(`window.__g2.run(${JSON.stringify(bodyAction(bodyGender))}, ${JSON.stringify(bodyDone(bodyGender))}, 300, ${tailMs}, 600000)`) as Run;
+    return { run, analysis: analyse(run, await pageRecord(), "body") };
+  };
+  /** Change the lighting preset and wait at least `minMs` and for the preparation to end. */
+  const switchLighting = async (preset: string, minMs = 4000) => {
+    const run = await page.evaluate(`window.__g2.run(${JSON.stringify({ kind: "preview.setLightingPreset", preset })}, "s[3] < 0 && s[2] >= 1", ${minMs}, 500, 600000)`) as Run;
+    return { run, analysis: analyse(run, await pageRecord(), "lighting") };
+  };
+  if (g3Rows) {
+    // D. Eight body switches in a row, as the S2 table's warm switch: want to the first presented frame, 100 ms at most for a runtime that
+    // is warm and prepared. A switch that had to prepare the other body again for the setup shown is counted apart.
+    const bodies = ["male", "female", "male", "female", "male", "female", "male", "female"];
+    const warm: Record<string, unknown>[] = [];
+    for (const [i, body] of bodies.entries()) {
+      const { analysis } = await switchBody(body);
+      const prepared = analysis.stages.length > 0;
+      warm.push({ i: i + 1, body, preparedAgain: prepared, wantToShownMs: analysis.wantToShownMs, wantToFirstPresentedMs: analysis.wantToFirstPresentedMs, timedOut: analysis.timedOut,
+        longTasks50: analysis.longTasks.total.count50, maxTaskMs: analysis.longTasks.total.maxMs, linksInFirstShownFrame: analysis.programs.firstShownFrame, frameGapMaxMs: analysis.frameGapMs.allMax,
+        linkNames: analysis.programs.firstShownFrameNames, linkWaitMaxMs: analysis.programs.firstUseWaitMaxMs.firstShownFrame,
+        stages: analysis.stages.map(stage => stage.stage), verdict: verdict(analysis) });
+      await page.wait(1000);
+    }
+    const warmOnly = warm.filter(row => !row.preparedAgain);
+    const warmMax = Math.max(0, ...warmOnly.map(row => row.wantToFirstPresentedMs as number));
+    log("D.warmSwitches", { switches: warm, warmCount: warmOnly.length, warmWantToFirstPresentedMaxMs: warmMax,
+      latencyPass: warmOnly.length > 0 && warmOnly.every(row => row.wantToFirstPresentedMs !== null && (row.wantToFirstPresentedMs as number) <= 100),
+      noLinkInFirstShownFramePass: warm.every(row => row.linksInFirstShownFrame === 0), switchesWithALink: warm.filter(row => row.linksInFirstShownFrame !== 0).length,
+      pass: warmOnly.length > 0 && warmOnly.every(row => row.wantToFirstPresentedMs !== null && (row.wantToFirstPresentedMs as number) <= 100 && (row.verdict as { pass: boolean }).pass) });
+    await remember("after D");
+    // E and F watch the canvas, so the idle goes off (nothing then draws but a change of what is shown).
+    await page.evaluate(`window.xfStudioShell.runtime.dispatch({ kind: "motion.setIdle", enabled: false })`);
+    await page.wait(1500);
+    // A lost and restored context drops the warm runtime first (D2), so the other body is asked for from nothing: built and prepared, which takes seconds.
+    const dropWarm = async () => {
+      await page.evaluate(`(async () => { const gl = document.querySelector("#device-head canvas").getContext("webgl2"); const ext = gl.getExtension("WEBGL_lose_context");
+        ext.loseContext(); await new Promise(r => setTimeout(r, 300)); ext.restoreContext(); })()`);
+      await page.wait(2000);
+      await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && !e.residency.preparation && window.xfStudioPresentation.viewport.snapshot().head.phase === 'ready'; })()", 300_000);
+      await page.wait(3000);
+    };
+    await dropWarm();
+    const residentsBefore = await page.evaluate(`window.xfStudioSceneEvidence().residency.residents.map(r => r.key + ":" + r.state)`);
+    const e = await page.evaluate(`window.__g2.script(${JSON.stringify([[0, bodyAction("male")], [150, bodyAction("female")]])}, 2500, 5000, 600000)`) as ScriptRun;
+    const eAnalysis = analyseScript(e, 1);
+    const ePass = !eAnalysis.timedOut && !!eAnalysis.cancel?.preparingWhenCancelled && (eAnalysis.cancel.cancelToPreparationOverMs ?? 1e9) <= 100 && eAnalysis.shown.length === 1
+      && eAnalysis.beforeTakeover.framesDrawnByShown === 0 && eAnalysis.beforeTakeover.canvasChanges === 0 && eAnalysis.afterTakeover.keyChanges === "stable";
+    log("E.cancel", { residentsBefore, ...eAnalysis, pass: ePass });
+    writeFileSync(resolve(outArg).replace(/\.json$/, "-E-ticks.json"), JSON.stringify({ strings: e.strings, t0: e.t0, ticks: e.ticks.map(tick => tick.map((v, i) => i === 0 ? round(v! - e.t0, 2) : v)) }));
+    await page.wait(1000);
+    await dropWarm();
+    const f = await page.evaluate(`window.__g2.script(${JSON.stringify([[0, bodyAction("male")], [120, bodyAction("female")], [240, bodyAction("male")]])}, 1000, 5000, 600000)`) as ScriptRun;
+    const fAnalysis = analyseScript(f, null);
+    const fPass = !fAnalysis.timedOut && fAnalysis.shown.length === 2 && !!fAnalysis.finalKey?.endsWith("|male") && fAnalysis.beforeTakeover.canvasChanges === 0 && fAnalysis.afterTakeover.keyChanges === "stable";
+    log("F.lastChoice", { ...fAnalysis, pass: fPass });
+    writeFileSync(resolve(outArg).replace(/\.json$/, "-F-ticks.json"), JSON.stringify({ strings: f.strings, t0: f.t0, ticks: f.ticks.map(tick => tick.map((v, i) => i === 0 ? round(v! - f.t0, 2) : v)) }));
+    await remember("after F");
+  }
+  if (memoryPart) {
+    // The memory part: what the page and the GPU process hold after cycles of warm body switches and of setup changes. Both bodies are
+    // resident (the shown one and one warm): a leak shows as growth from cycle to cycle, the warm one's cost as the step from "start".
+    for (let cycle = 1; cycle <= 10; cycle++) {
+      await switchBody("male", 500); await switchBody("female", 500);
+      if (cycle === 1 || cycle % 3 === 0) await remember(`after ${cycle} body cycle${cycle > 1 ? "s" : ""}`);
+    }
+    for (let cycle = 1; cycle <= 4; cycle++) {
+      await switchLighting("studio"); await switchLighting("creator");
+      if (cycle === 1 || cycle === 4) await remember(`after ${cycle} lighting cycle${cycle > 1 ? "s" : ""}`);
+    }
+    await page.wait(10_000);
+    await remember("after 10 s idle");
+    // Informational: a lost and restored context drops the warm runtime first (D2); what the GPU process holds afterwards, rebuilt, is the shown one alone.
+    try {
+      await page.evaluate(`(async () => { const gl = document.querySelector("#device-head canvas").getContext("webgl2"); const ext = gl.getExtension("WEBGL_lose_context");
+        ext.loseContext(); await new Promise(r => setTimeout(r, 500)); ext.restoreContext(); })()`);
+      await page.wait(3000);
+      await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && !e.residency.preparation && window.xfStudioPresentation.viewport.snapshot().head.phase === 'ready'; })()", 300_000);
+      await page.wait(3000);
+      await remember("after a lost and restored context");
+    } catch (error) { log("contextLossError", String(error)); }
+  }
+  log("memories", memories);
   log("console", page.console.filter(entry => /error|exception/i.test(entry.type)).slice(0, 20));
   log("gpuAtEnd", await page.evaluate(`window.xfStudioSceneEvidence().residency`));
   out.durationS = round((Date.now() - started) / 1000);
