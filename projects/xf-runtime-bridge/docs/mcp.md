@@ -42,6 +42,7 @@ The tools fall into areas, each with its own section in the reference:
 | [World](mcp-reference.md#world) | The clock, a freeze, the weather, streaming and ground probes |
 | [Wardrobe, clothing and cyberware](mcp-reference.md#wardrobe-clothing-and-cyberware) | Read what V wears; equip and unequip through the game's own requests (off unless explicitly allowed) |
 | [XF Finish Showroom](mcp-reference.md#xf-finish-showroom) | Mannequin heads wearing XF makeup presets, with light rigs, for close-up finish checks |
+| [NPC direction](mcp-reference.md#npc-direction) | Bring in XF's own passers-by (never saved), walk them up to V, give them lines, a gaze, a face and dialogue choices whose pick comes back to `session_wait`, run a short scene written as data (`npc_scenario`); stand-ins that can be shot, spawns out of V's sight and a release that waits until she can't see them (the `+npc` branch build only) |
 | [Capture and the agent's view](mcp-reference.md#capture-and-the-agents-view) | Screenshots with named crops, re-crops, bursts for flicker checks, contact sheets; `scene_report`, the agent's own view of the shot (where each subject sits in the frame, whether it is blocked, which lights reach it) with pre-capture checks that refuse a bad shot |
 | [Saves](mcp-reference.md#saves) | List saves, make a new manual save, load one |
 | [Overlay and in-game UI](mcp-reference.md#overlay-and-in-game-ui) | The game's UI state, the XF overlay's state, placing the XF panel |
@@ -119,6 +120,7 @@ The bridge is built so that a mistake, a confused model or a crash can't damage 
 | `read`, `notify`, `control` | Nothing in the game (messages to the player; stopping or pausing the bridge's own work) | Every build that has the bridge on |
 | `write-photo`, `write-world`, `write-character` | Photo mode; the clock, a freeze, the weather, XF map pins; the appearance screen | The test profile's `-writes` build |
 | `write-save`, `write-showroom`, `write-player` | A new manual save or a load; XF Finish Showroom's test heads; V's position, view and stance | The `-writes` build, listed by name |
+| `write-npc` | XF's own actors, the NPCs it picks near V, their lines and the dialogue choices it shows | The `-writes` build of the `+npc` branch, listed by name |
 | `write-inventory` | V's clothing and cyberware | Off in every build unless the `-writes` build is made with `--allow-inventory` |
 | `act-player` | Irreversible actions for V (dialogue, devices, consumables) | Reserved: no tool uses it |
 
@@ -126,9 +128,9 @@ The bridge is built so that a mistake, a confused model or a crash can't damage 
 
 **Every change can be undone.** Each change answers with an `undo`: the exact command that puts back what it changed (or a plain note when there is nothing to put back). Each tool's undo is in the reference. The session's event stream (`session_log`) records every change with its undo, every refusal and every note.
 
-**The kill switch.** `bridge_kill`, the bridge's own stop key in the game (Ctrl + Shift + End by default, `[ui] kill_key` in `config.ini`, changed on the XF Runtime Bridge window's Keys section; it works in play, photo mode, menus and loading screens while CET's overlay is closed), **Stop the bridge** in the XF Runtime Bridge window, a CET hotkey you bind, or a `KILL` file beside the bridge's session file. Each one stops the bridge at once and cancels anything still queued, then puts back what it left on: a frozen world, a hidden photo-mode menu, a held weather, V's cyberware and wardrobe, the effects it put on V, its showroom heads and pins. After that nothing reaches the game until you press **Reconnect** in the XF Runtime Bridge window or restart the game. The kill switch is always available, in every MCP configuration.
+**The kill switch.** `bridge_kill`, the bridge's own stop key in the game (Ctrl + Shift + End by default, `[ui] kill_key` in `config.ini`, changed on the XF Runtime Bridge window's Keys section; it works in play, photo mode, menus and loading screens while CET's overlay is closed), **Stop the bridge** in the XF Runtime Bridge window, a CET hotkey you bind, or a `KILL` file beside the bridge's session file. Each one stops the bridge at once and cancels anything still queued, then puts back what it left on: a frozen world, a hidden photo-mode menu, a held weather, V's cyberware and wardrobe, the effects it put on V, its showroom heads and pins, and every NPC it directs (its actors removed, lines and dialogue choices taken down, gazes and faces given back). After that nothing reaches the game until you press **Reconnect** in the XF Runtime Bridge window or restart the game. The kill switch is always available, in every MCP configuration.
 
-**Pause and handover.** **Pause changes** in the XF Runtime Bridge window refuses every change until you resume. An AI client can also hand the game to you (`session_handover`): it stops its routines, gives V back and refuses changes until `session_resume`.
+**Pause and handover.** **Pause changes** in the XF Runtime Bridge window refuses every change until you resume. An AI client can also hand the game to you (`session_handover`): it stops its routines, gives V back, releases every NPC it directs and refuses changes until `session_resume`. The pause releases the NPCs too.
 
 **Saves are protected.** Nothing saves the game except `game_save`, which makes one new manual save and never overwrites one. From the bridge's first change until a save is loaded, the bridge holds its own save lock:
 - `game_save` refuses (`bridge_save_lock`) unless told to override it;
@@ -214,6 +216,7 @@ Every code, with its exact wording, is in the reference's [refusal codes](mcp-re
 - **Stdio and one client.** The server runs beside one AI client on the same machine, and the bridge's main pipe takes one connection at a time (the emergency controls have their own).
 - **Opening photo mode needs the game window in front.** Every other tool works with the game in the background.
 - **Inventory changes are off** until explicitly allowed, and `act-player` has no tools yet.
+- **NPC direction is offline only.** The `npc_*` tools are in the `+npc` branch build and have not run in the game yet; body gestures (`npc_act`) are refused until the XF gesture carrier is built.
 - **Some tools are research tools** and say so in their descriptions (for example `photo_camera_place`, `pose_live_apply`, `input_probe`). A few are known not to work in the game yet: photo mode puts its camera back after `photo_camera_place`. The [test card](../../../research/runtime/runtime-bridge-test-card.md) tracks each command's in-game result.
 
 ### What is proven where
