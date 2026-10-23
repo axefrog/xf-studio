@@ -1508,7 +1508,18 @@ Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unve
 
 ## Build record (bridge 0.8.10, branch build, not staged)
 
-Being built; the record follows in the next commit.
+Built 23 October 2026 on `claude/bridge-080a` at `4b0e7764ca4c`, clean tree: 0.8.9 (`ad5a9d70`) with session 16's fixes on top ([design §3.18](runtime-bridge-design.md#318-bridge-0810-session-16s-findings)). From a clean build (`cmake --build build --config Release --clean-first`; manifest `"commit": "4b0e7764ca4cd5a8a05e08104433f266a44cba4c"`, `"source_tree_clean": true`; no compiler warning, only MSBuild's MSB8028 notice on `xfb_companion_probe`'s intermediate folder, as in 0.8.9), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed to -writes-no-inventory; the second rewrote the default and diagnostic zips, whose hashes below are the files it left): version 0.8.10 in the DLL, the manifest, `package.json` and the CET layer; the zips carry the same files as 0.8.9's, plus the changed scripts; 27 natives (no new one). On that commit: `xfb_selftest --unit` UNIT OK (766 checks) in three runs, the first straight after the clean build; the self-test 851 of 851; `bun test tools` 529 pass and 4 skipped (the opt-in on-screen capture tests; `tools/test/batch23.test.ts` checks the pin mark's edge rule through its mirror at session 16's geometry, the `holocall` pointer, the hub poll, the layer tag, the clothing list, the reaction log and the tripwire's arithmetic; `npc.test.ts` the scene's first steps); typecheck; the Lua lint, the world-object rule and the MCP reference against the catalogue; the redscript lint without Codeware, with the probes, with Codeware's scripts (the framework clone's `scripts/`) and the probes, with Codeware, the Equipment-EX stub, TweakXL's scripts and the probes, and with the probes but without `XFRuntimeBridgeProbePersist.reds`, each against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…ee86`); `tools/check_links.py` and `tools/check_private_paths.py`. Every run under `tools/memory_guard.py --limit 4` (peak 1.0 GB, the build). The tests leave no `xfb-*` folder in the system temp folder. The unit checks added: the turn-first walks (walk_away facing V, already facing her way, a turn that never finishes, dissolve, no facing known, `npc.move`), and the sight-line spawn (kept, moved, exact point, none visible, not walkable).
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.8.10.zip` (bridge off) | `c765ef228544e79e35848d0d41f5f9a13ef842db174bd632f84cdcd07ea8e434` |
+| `xf-runtime-bridge-0.8.10-diagnostic.zip` (read-only) | `87136bbd65e04055aaf3b4834d8a8f1279ec49abff3768dc8313207ec9524a0d` |
+| `xf-runtime-bridge-0.8.10-writes-no-inventory.zip` (writes, no inventory class) | `c546d9d21aac72f2c5eadf454e76e171c8df148af767edcebf8fd83afd354f85` |
+| `xf-runtime-bridge-0.8.10-writes.zip` (writes with the inventory class: session 17's zip) | `bd8c8477df03e48aa0fe9959ab0cd11363d22d0d3fee72a822963d070499aabc` |
+| (`XFRuntimeBridge.dll` inside each) | `13d34ce289ebc498be0963e332686d7efec0b85c53aee7e41666224dc999fdae` |
+| (`xfb_companion_probe.exe`, the -writes zips only; `test_companion_probe`'s `sha256` must match) | `491184cf5fe9b519c80f1881ec4950c8454e8f0c5e09106221c0429f8b70a21a` |
+
+**Watch in the session:** `plugin_version` 0.8.10 and `natives=27` (Z1); any `script.callback_failed`, `script.bad_json` or redscript error naming `XFNpc`, `XFNpcRegistry`, `XFInkStyle`, `XFInkOverlay`, `XFInkPanel`, `XFPhotoMenuPanel`, `XFSenses` or `XFEventProbe`; `npc-reactions` lines (N3), `command turn sent` then `command move sent` for a release (N1, N2); the laid-out `ink_tree` and the panel `geometry` line (D1r2); `dialogue.hub` records (G6r2); the game's private bytes and the free commit at Z1 and across the three loads (M1).
 
 ## Build record (bridge 0.8.9, branch build, not staged)
 
