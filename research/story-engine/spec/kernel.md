@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.10, 23 October 2026.
+**Status:** v4.11, 23 October 2026.
+- v4.11 adds three clarifications from S1 v0.2 (V4-47 to V4-49).
 - v4.10 adds eight clarifications from writing [S1](simulation.md) (V4-39 to V4-46).
 - v4.9 completes the process interface for S1 (V4-35 to V4-38), from the [P3](../p3-simulation-layer.md) design.
 - v4.8: an event-kind registry; occurrence ids and times on delivered envelopes; `tempo` in settings (V4-32 to V4-34).
@@ -1312,6 +1313,9 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-44 | `matchStrength(actor, change, types?)`: the greatest relevance the kernel's matching gives a change against an actor's eligible frames, as a read | §10.5 | K-6 | A small read |
 | V4-45 | An event may be minted with a `time` earlier than the boundary at which it is applied | §9.2 | K-7 | A clarification |
 | V4-46 | A layer's `SeedRecord` with no `actor` retains only its own `nodes` | §14.1 | K-8 | A clarification |
+| V4-47 | `publish-item`: a process operation that publishes a summary item once, as one `event` change. Later regeneration of the item stays silent (I-13) | §9.3, §9.4 | [S1](simulation.md) v0.2 §16.1 N-1 | To implement with V4-38 |
+| V4-48 | Restating a contribution identical to one already in effect is a silent no-op: no new id, no change, no revision | §4.1 | N-2 | A clarification |
+| V4-49 | A process's last published digest is persisted with its `ProcessState`, so digest reads are identical after a load | §9.4, §14.1 | N-3 | A clarification |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
