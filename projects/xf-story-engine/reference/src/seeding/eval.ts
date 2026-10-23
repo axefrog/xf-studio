@@ -27,6 +27,11 @@ export interface Explain {
 export interface EvalCtx {
   inst?: Instance;
   t: GameTime;
+  /**
+   * The value to use for a registered read, in place of its answer at `t`: set while a closing condition is walked through the values a read
+   * passed through at one time (S2-4). Undefined for a read it does not name.
+   */
+  readOf?: (read: string, args: unknown[]) => string | undefined;
 }
 
 const DAY = 86_400;
@@ -467,7 +472,7 @@ function ex(l2: Layer2, ctx: EvalCtx, p: Pred, depth: number, explain: boolean):
     if (!port?.builds(call.name)) return done('maybe', `the ${call.family} read "${call.name}" is not supported yet`);
     const args = resolveReadArgs(call, ctx.inst);
     if (args === undefined) return done('maybe', 'a role of the read is not cast');
-    const value = port.eval(call.name, args, ctx.t);
+    const value = ctx.readOf?.(call.name, args) ?? port.eval(call.name, args, ctx.t);
     if (value === 'maybe') return done('maybe', `the simulation layer has no reading of ${call.name} yet`);
     return done(verdictOf(p.is.includes(value)));
   }

@@ -118,6 +118,11 @@ export class Beliefs {
   private tickList = new Worklist<{ believer: Id; boundary: number; at: GameTime }>();
   /** A run of hooks stopped part-way through a boundary's list (the budget ran out) and has not finished. */
   private hooksStopped = false;
+  /**
+   * Heard when a belief is added, replaced or dropped, at the time it happens, whoever does it. Beliefs emit no Changes (spec 11), so a
+   * layer that keeps a history of what they say (S1's divergence log) cannot wait for the next boundary to learn of one (SIM-08).
+   */
+  readonly onChange: Array<(believer: Id, subject: Id) => void> = [];
 
   /**
    * Boundary `boundary` (at game time `at`) was processed: every believer is due its `onTick` for it
@@ -220,6 +225,7 @@ export class Beliefs {
       outcome = 'kept';
     }
     this.k.bump();
+    if (outcome === 'added' || outcome === 'replaced') for (const f of this.onChange) f(b.believer, b.subject);
     return outcome;
   }
 
@@ -231,6 +237,7 @@ export class Beliefs {
       if (b.id === beliefId) {
         m.delete(key);
         this.k.bump();
+        for (const f of this.onChange) f(believer, b.subject);
         return true;
       }
     }

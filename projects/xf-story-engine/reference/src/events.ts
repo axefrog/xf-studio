@@ -66,6 +66,19 @@ export class Events {
    * Minting the same (creator, cause, name) again returns the same node and does nothing.
    */
   mintEvent(spec: EventSpec): Id {
+    return this.put(spec, false);
+  }
+
+  /**
+   * Put an event's fields back under its own Id and announce nothing (S0 14.3, SPEC-NOTES 116, 140): the occurrence was announced when it
+   * first happened. A load keeps the header of an event that a memorable belief cites, and none of its fields; a layer that can say what
+   * the event was restores it here, whether or not the header survived. An event whose fields are already there is left alone.
+   */
+  restoreEvent(spec: EventSpec): Id {
+    return this.put(spec, true);
+  }
+
+  private put(spec: EventSpec, quiet: boolean): Id {
     const k = this.k;
     k.assertWritable();
     const nid = H(hs('mint'), hid(spec.creator), hid(spec.cause), hs(spec.name));
@@ -116,7 +129,7 @@ export class Events {
     if (untouched) this.minted.set(nid, { kind: spec.kind, time: spec.time, local: k.store.localState(nid) });
     else this.minted.delete(nid);
     k.bump();
-    if (have) return nid;
+    if (have || quiet) return nid;
     const ch: Parameters<Kernel['emit']>[0] = {
       c: 'event', event: nid, kind: spec.kind,
       participants: participants.map((p) => ({ who: p.who, role: p.role })),

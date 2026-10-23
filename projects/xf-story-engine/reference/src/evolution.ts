@@ -319,6 +319,10 @@ export class Evolution {
       }
     }
 
+    // 2b. What the operations of this boundary queued (frame work, relevance dispatch) runs to its end before the snapshot, so a fine-tier
+    // process judges demand after a reading of V's cell has opened its frames (S1 10.2: the window V arrives in is covered).
+    if (due.length > 0 || ready.length > 0) k.settleInputs();
+
     // 3. Take the snapshot and start the processes whose window this is (coarse tiers first).
     const starting = [...this.processes.values()].sort((x, y) => x.tier - y.tier || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
     const started: Array<{ id: string; batch: OutstandingBatch }> = [];

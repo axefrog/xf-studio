@@ -73,6 +73,11 @@ export interface SimReadPort {
   builds(read: string): boolean;
   /** The answer of a read at a time: one of the read's registered strings, or `maybe`. */
   eval(read: string, args: unknown[], t: number): string;
+  /**
+   * The value at `from` (an entry with `t = from`), then every change in `(from, to]` in time order, the changes at one time in the order they
+   * were made (S1 9.1, S2-4). `eval` at a time gives only the last of the values a time passed through; a closing condition is evaluated at each.
+   */
+  transitions(read: string, args: unknown[], from: number, to: number): Array<{ t: number; value: string }>;
   /** The kernel values a read depends on, and whether it must be looked at again at every boundary (beliefs emit no Changes). */
   deps(read: string): { interests: Array<{ kind?: string; slot: string }>; boundary: boolean };
 }

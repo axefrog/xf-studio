@@ -204,6 +204,19 @@ export class Store {
     return this.contribByNode.get(node)?.length ?? 0;
   }
 
+  /**
+   * The contributions that name no node (a rule over a kind, a region or everything), in Id order. What a layer caches of a node's
+   * resolved values depends on these as well as on the pins and contributions that name the node (SIM-05).
+   */
+  generalContributions(): Contribution[] {
+    const out: Contribution[] = [];
+    for (const i of this.contribGeneral) {
+      const c = this.contribs.get(i);
+      if (c) out.push(c);
+    }
+    return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+
   /** Whether a contribution that names no node (a rule over a kind, or over everything) could touch one of these slots. */
   generalTouches(slots: readonly string[]): boolean {
     for (const i of this.contribGeneral) {

@@ -46,7 +46,7 @@ export class Summaries {
   private descCache = new Map<string, { d: ItemDescriptor | null; cost: number; height: number }>();
   private descRevision = -1;
   /** The kind, start and length of each summary, which are committed at minting and do not change: a cache that a query's time bound prunes by. */
-  private spans = new Map<Id, { span: { kind: Value | undefined; from: number; length: number } | null; local: number }>();
+  private spans = new Map<Id, { span: { kind: Value | undefined; from: number; length: number } | null; local: number; at?: GameTime }>();
   private descNow = Number.NaN;
   private warmList = new Worklist<{ summary: Id; next: number }>();
 
@@ -85,7 +85,11 @@ export class Summaries {
   /** The kind, start and length of a summary, from the cache or resolved once. */
   spanOf(ctx: OpCtx, summary: Id, t: GameTime): { kind: Value | undefined; from: number; length: number } | null {
     const have = this.spans.get(summary);
-    if (have !== undefined && have.local === this.k.store.localState(summary)) return have.span;
+    const local = this.k.store.localState(summary);
+    // The span taken at minting holds at any time (nothing local touched the summary then, and a change since moves the stamp). One
+    // resolved while something local names the summary holds only at the time it was resolved: a contribution's validity is a window
+    // that opens and closes without moving the stamp (SIM-06).
+    if (have !== undefined && have.local === local && (have.at === undefined || have.at === t)) return have.span;
     const read = (slot: string): Value | undefined => {
       const r = this.k.resolver.resolveWithin(ctx, summary, slot, t);
       failIfFailed(r.status, `${slot} of ${summary}`);
@@ -94,7 +98,7 @@ export class Summaries {
     const from = read('from');
     const length = read('length');
     const span = typeof from === 'number' && typeof length === 'number' ? { kind: read('kind'), from, length } : null;
-    this.spans.set(summary, { span, local: this.k.store.localState(summary) });
+    this.spans.set(summary, local === 0 ? { span, local } : { span, local, at: t });
     return span;
   }
 

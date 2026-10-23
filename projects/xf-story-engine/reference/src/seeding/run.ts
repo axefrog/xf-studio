@@ -40,8 +40,34 @@ export function windowStates(l2: Layer2, inst: Instance, t: GameTime): WindowSta
 }
 
 /**
+ * The states a condition passes through at one time (S2-4): the registered reads it names can change more than once at a time (a regime
+ * ends and another starts at the same second), and `eval` at that time gives only the last value. Each state takes the value its read had
+ * after that many of the changes at the time; a read with one value is not walked, `eval` gives it.
+ */
+function statesAt(l2: Layer2, inst: Instance, pred: Pred, at: GameTime): Array<(read: string, args: unknown[]) => string | undefined> {
+  const port = l2.reg.sim;
+  if (!port) return [];
+  const seqs = new Map<string, string[]>();
+  for (const { atom } of atoms(pred)) {
+    if (!('city' in atom || 'social' in atom)) continue;
+    const call = readCall(atom);
+    if ('error' in call || !port.builds(call.name)) continue;
+    const args = resolveReadArgs(call, inst);
+    if (args === undefined) continue;
+    const values = port.transitions(call.name, args, at - 1, at).slice(1).map((x) => x.value);
+    if (values.length > 1) seqs.set(`${call.name}|${JSON.stringify(args)}`, values);
+  }
+  if (seqs.size === 0) return [];
+  const n = Math.max(...[...seqs.values()].map((v) => v.length));
+  return Array.from({ length: n }, (_, i) => (read: string, args: unknown[]) => {
+    const seq = seqs.get(`${read}|${JSON.stringify(args)}`);
+    return seq === undefined ? undefined : seq[Math.min(i, seq.length - 1)];
+  });
+}
+
+/**
  * Window `closes` predicates are evaluated at the time of each delivered change (S2 section 4.2), so a closing value
- * latches even if a later change has already reverted it.
+ * latches even if a later change has already reverted it, and at each value a registered read passed through at that time.
  */
 function latchFromChanges(l2: Layer2, inst: Instance, triggers: Trigger[]): void {
   const st = inst.st;
@@ -50,8 +76,9 @@ function latchFromChanges(l2: Layer2, inst: Instance, triggers: Trigger[]): void
     const c = tr.change as Change & { at?: GameTime };
     const at = c.c === 'reading' || c.c === 'pin' ? c.at ?? tr.time : tr.time;
     for (const w of st.document.windows) {
-      if (st.latches.includes(w.id) || w.closes === undefined) continue;
-      if (evalPred(l2, { inst, t: at }, w.closes) === 'yes') {
+      const closes = w.closes;
+      if (st.latches.includes(w.id) || closes === undefined) continue;
+      if (evalPred(l2, { inst, t: at }, closes) === 'yes' || statesAt(l2, inst, closes, at).some((readOf) => evalPred(l2, { inst, t: at, readOf }, closes) === 'yes')) {
         st.latches.push(w.id);
         l2.record(inst, 'beat', { window: w.id, latched: true, at });
       }

@@ -624,6 +624,31 @@ export class Kernel {
     this.groups.onEdgeChange(e);
   }
 
+  /**
+   * Open an ended edge again under its own Id (SPEC-NOTES 141): the edge is live from `at`, with the attributes given (its old ones where
+   * none are). An edge has one interval, so a layer that reads its past keeps the interval that ended; `addEdge` returns an ended edge
+   * unchanged, which is right for an edge whose identity includes its time and wrong for one with a stable Id.
+   */
+  reopenEdge(id: Id, at: GameTime = this.now, attrs?: Record<string, Value>): Edge {
+    this.assertWritable();
+    const e = this.store.edges.get(id);
+    if (!e) throw new Error(`unknown edge: ${id}`);
+    if (e.valid.to === undefined || e.valid.to > at) throw new Error(`the edge is not ended: ${id}`);
+    const def = this.schema.edgeType(e.type);
+    for (const [key, v] of Object.entries(attrs ?? {})) {
+      const dimId = def.attrs[key];
+      if (!dimId) throw new Error(`${e.type} has no attribute "${key}"`);
+      const bad = checkValue(this.schema.dim(dimId).value, v);
+      if (bad) throw new Error(`${e.type} attribute "${key}": ${bad}`);
+    }
+    e.valid = { from: at };
+    if (attrs) e.attrs = { ...e.attrs, ...attrs };
+    this.bump();
+    this.emit({ c: 'edge', edge: e, ended: false });
+    this.groups.onEdgeChange(e);
+    return e;
+  }
+
   /** Change an edge's attributes or data in place (a membership's strength or obligations, spec 10.8). */
   updateEdge(id: Id, patch: { attrs?: Record<string, Value>; data?: Record<string, unknown> }): Edge {
     this.assertWritable();
@@ -719,6 +744,20 @@ export class Kernel {
       boundaries: adv.boundaries, runs: adv.runs, frameSteps, dispatchSteps, materialised, forgotten,
       done: adv.done && settled && this.summaries.pendingMaterialisation === 0 && this.retention.pendingForgetting === 0,
     };
+  }
+
+  /**
+   * Run the frame work and the relevance dispatch that a boundary's operations queued to their end, with no budget. The evolution calls
+   * it between the boundary's operations and its snapshot (S1 10.2): the work is the same whichever tick takes the boundary, so the
+   * sequence of work does not depend on where ticks fall (SPEC-NOTES 56, 142).
+   */
+  settleInputs(): void {
+    const budget = new Budget(Number.POSITIVE_INFINITY);
+    for (let n = 0; n < 10_000; n++) {
+      this.frames.runWorklist(budget);
+      this.dispatcher.run(budget);
+      if (this.frames.worklist.isEmpty && this.dispatcher.idle) return;
+    }
   }
 
   /** Run ticks until nothing is pending (a test and tool convenience). */
