@@ -178,6 +178,31 @@ describe('roots, marks and forgetting (spec 7.3, I-3)', () => {
     expect(snapshot()).toEqual(before);
   });
 
+  test('an event kept as the evidence of a memorable belief is a bare header after a load; minting it again restates its fields, silently', () => {
+    const k = coreKernel('restate');
+    const place = k.root('place', 'core:place');
+    const alice = k.root('alice', 'core:person');
+    k.pin({ node: alice, slot: 'age', value: 30, reason: 'authored', cause });
+    const spec = { creator: alice, cause, name: 'e', time: 77, kind: 'sale', place, participants: [{ who: alice, role: 'vendor' }] };
+    const e = k.events.mintEvent(spec);
+    k.beliefs.set({ believer: alice, subject: alice, path: 'did.sell', value: 'x', confidence: 1, evidence: [e], source: { by: 'observed', event: e }, formed: 0, refreshed: 0, memorable: true });
+    k.persistence.save('A');
+    k.persistence.load('A');
+    expect(k.store.header(e)).toBeDefined();
+    expect(k.value(e, 'kind')).toBeUndefined();
+    const announced = k.pending.length;
+    expect(k.events.mintEvent(spec)).toBe(e);
+    expect(k.value(e, 'time')).toBe(77);
+    expect(k.value(e, 'kind')).toBe('sale');
+    expect(k.value(e, 'place')).toBe(place);
+    expect(k.value(k.address(e, 'participants[0]'), 'who')).toBe(alice);
+    expect(k.pending.length).toBe(announced);
+    // and once restated, a third mint does nothing
+    const contributions = k.store.contributionsOrigin(e).length;
+    k.events.mintEvent(spec);
+    expect(k.store.contributionsOrigin(e).length).toBe(contributions);
+  });
+
   test('a canon event survives the sweep, and its pinned fields still resolve', () => {
     const k = coreKernel('canon');
     const place = k.root('place', 'core:place');
