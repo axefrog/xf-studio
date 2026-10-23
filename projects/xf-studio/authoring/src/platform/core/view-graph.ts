@@ -282,20 +282,23 @@ export class ViewGraph {
   /**
    * A camera jump (Front view, Whole body, a creator framing, a restored camera): the device has already moved the camera
    * (`applied`), so this records the step and leaves the position it jumped from on the camera's Back trail. A jump that left the
-   * camera where it was records nothing and leaves no trail entry.
+   * camera where it was records nothing and leaves no trail entry. `applied: false`: no device moved (a restore naming a view no device
+   * frames edits its node only), so every device that draws through the camera applies it.
    */
-  cameraJump(view: ViewId, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>, label: string): void {
+  cameraJump(view: ViewId, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>, label: string,
+    options: { applied?: boolean } = {}): void {
+    const applied = options.applied ?? true;
     const camera = this.nodes.get(this.record(view).camera)!;
     const from = nodeEntry(this.rules, "camera", camera.id, camera.kind, { ...camera.state, ...before });
     const to = nodeEntry(this.rules, "camera", camera.id, camera.kind, { ...camera.state, ...after });
     if (!from || !to) throw new ViewGraphError("invalid_value", "That camera position isn't valid.");
     // Where the camera really was (navigation records nothing, so the node may lag the device): the step undoes to it.
     this.nodes.set(camera.id, from);
-    if (same(from.state, to.state)) { this.emit([camera.id], false, "edit", true); return; }
+    if (same(from.state, to.state)) { this.emit([camera.id], false, "edit", applied); return; }
     const trail = this.trail(camera.id);
     trail.back.push(clone(from.state)); trail.forward = [];
     if (trail.back.length > CAMERA_TRAIL_LIMIT) trail.back.shift();
-    this.commit([to], undefined, { label, applied: true });
+    this.commit([to], undefined, { label, applied });
   }
   /**
    * Device state read for a save in progress (an idle's phase, which moves without any change): only the slot codec's `unrecorded` fields,
@@ -311,9 +314,12 @@ export class ViewGraph {
     this.nodes.set(current.id, next);
     return true;
   }
-  /** Camera navigation the device did (orbit, zoom, pan, a lens change): kept as the node's state, never recorded (§3.6). */
-  cameraMoved(view: ViewId, pose: Readonly<Record<string, unknown>>): void {
-    this.edit(view, "camera", { state: pose }, { applied: true });
+  /**
+   * Camera navigation the device did (orbit, zoom, pan, a lens change): kept as the node's state, never recorded (§3.6). `applied: false`:
+   * no device moved (an orbit step naming a view no device frames), so every device that draws through the camera applies it.
+   */
+  cameraMoved(view: ViewId, pose: Readonly<Record<string, unknown>>, options: { applied?: boolean } = {}): void {
+    this.edit(view, "camera", { state: pose }, { applied: options.applied ?? true });
   }
   /** How far the view's camera can go Back and Forward along its trail. */
   cameraTrail(view: ViewId) {

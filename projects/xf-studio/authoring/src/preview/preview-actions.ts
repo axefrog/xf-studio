@@ -190,11 +190,15 @@ export class PreviewActions {
   /** Stop following the graph (the head this device draws was released). */
   dispose() { this.unsubscribe(); this.listeners.clear(); }
   private notify() { for (const listener of this.listeners) listener(); }
-  /** The graph changed: the device applies what changed for the view it draws (Undo, Redo, a shared node edited elsewhere). */
+  /**
+   * The graph changed: the device applies what changed for the view it draws (Undo, Redo, a shared node edited elsewhere). A change no
+   * device applied moves the camera too when it changed the drawn view's camera node: a Back step, or a restore or orbit step naming a
+   * view that shares the node but that no device frames (otherwise the device would later write its old pose back over it).
+   */
   private follow(change: ViewGraphChange) {
     if (!change.views.includes(this.shown) && !change.structure) return;
     if (change.applied) this.applied = this.shownFields();
-    else this.apply(change.origin === "history");
+    else this.apply(true);
     if (!this.dispatching) this.notify();
   }
   /** What the device should show for the view it draws: its graph state, with the tools the presentation withdrew off. */
@@ -413,12 +417,15 @@ export class PreviewActions {
     this.notify();
     return limited === undefined ? {} : { limited };
   }
-  /** A camera action on a view this device doesn't frame (only restores, orbit steps, Back and Forward pass `check`): its node only. */
+  /**
+   * A camera action on a view this device doesn't frame (only restores, orbit steps, Back and Forward pass `check`): its node only. No
+   * device moved, so the edit is published as unapplied: a device drawing through the same camera node applies it (`follow`).
+   */
   private nodeCamera(view: ViewId, action: PreviewAction) {
     const pose = this.nodePose(view);
     switch (action.kind) {
-      case "camera.restore": this.graph.cameraJump(view, { pose: pose ?? action.camera }, { pose: action.camera }, "Saved camera"); break;
-      case "camera.navigate": this.graph.cameraMoved(view, { pose: navigateCamera(pose!, action.command) }); break;
+      case "camera.restore": this.graph.cameraJump(view, { pose: pose ?? action.camera }, { pose: action.camera }, "Saved camera", { applied: false }); break;
+      case "camera.navigate": this.graph.cameraMoved(view, { pose: navigateCamera(pose!, action.command) }, { applied: false }); break;
       case "camera.back": case "camera.forward":
         this.graph.cameraStep(this.graph.target(view), action.kind === "camera.back" ? "back" : "forward", pose ? { pose } : {}); break;
     }

@@ -387,6 +387,33 @@ test("4a-vi: each view routes to the runtime holding it: the drawn one, a warm o
   o.heads.dispose();
 });
 
+test("4a-vi: a head of the scene's V before a body switch holds the view no more: while the male head builds, a choice valid for him is checked against the stored ranges, not the female head's", async () => {
+  const o = owner({ v1: "female" });
+  await o.heads.load();
+  const female = o.heads.shown()!;
+  expect(o.heads.runtimes.route("main")).toMatchObject({ reach: "drawn", preview: female.preview });
+  // The female head offers one eye shape (the fake scene's); the male head, still building, will offer his own.
+  o.gate.open.male = false;
+  female.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+  await settle();
+  expect(o.heads.shown()).toBe(female);
+  const route = o.heads.runtimes.route("main")!;
+  expect(route.reach).toBe("loading");
+  // Sol's reproduction: shape 5 is valid for the male head; the female head's options no longer decide it.
+  const choice = { kind: "preview.setEyeShape" as const, view: "main", index: 5 };
+  expect(route.preview.check(choice, route.reach)).toEqual({ available: true });
+  expect(female.preview.check(choice, "drawn")).toMatchObject({ available: false, code: "invalid_value" });
+  // Shown, the male head holds the view again.
+  o.gate.release("male");
+  await settle();
+  const male = o.heads.shown()!;
+  expect(male.body).toBe("male");
+  expect(o.heads.runtimes.route("main")).toMatchObject({ reach: "drawn", preview: male.preview });
+  // And the female head, warm, is no longer the view's: the V is male now.
+  expect(o.heads.runtimes.route("main")!.preview).not.toBe(female.preview);
+  o.heads.dispose();
+});
+
 test("4a-v: show(view) wants the head of that view's scene like any subject change; the head shown stays until it is ready, and a missing view is refused", async () => {
   const views: Record<string, { scene: string; subject: string }> = {};
   const o = owner({ v1: "female", v2: "female" }, [], null, views);

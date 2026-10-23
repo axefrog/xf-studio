@@ -206,16 +206,18 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     return { scene, character, body, key: `${scene}|${character}|${body}` };
   }
   /**
-   * The resident head holding what `view`'s scene shows now, and how (view-routes.ts): the shown head for its own scene; a warm head of the
-   * scene's V and body; else the shown head's services for graph edits only, the view's V being made ready (`loading`) or not (`absent`).
-   * It makes no context: a V whose context was never made has no head.
+   * The resident head holding what `view`'s scene shows now, and how (view-routes.ts): the shown head when it shows the scene's V and body
+   * now; a warm head of them; else the shown head's services for graph edits only, the view's V being made ready (`loading`) or not
+   * (`absent`). A head of the scene's V before a change (the female head while the male one builds) holds the view no more. It makes no
+   * context: a V whose context was never made has no head.
    */
   function route(view: string): ViewRoute | undefined {
     const shown = residency.shown(), scene = ports.scenes.of(view);
     if (!shown || scene === undefined) return undefined;
-    if (residency.shownWant()?.scene === scene) return { reach: view === drawn() ? "drawn" : "scene", preview: shown.preview, motion: shown.motion };
     const character = ports.scenes.subject(scene), body = character === undefined ? undefined : contexts.get(character)?.context.shownBody();
-    const warm = body === undefined ? undefined : residency.resident(`${scene}|${character}|${body}`)?.runtime;
+    const key = body === undefined ? undefined : `${scene}|${character}|${body}`;
+    if (key !== undefined && residency.shownWant()?.key === key) return { reach: view === drawn() ? "drawn" : "scene", preview: shown.preview, motion: shown.motion };
+    const warm = key === undefined ? undefined : residency.resident(key)?.runtime;
     if (warm) return { reach: "warm", preview: warm.preview, motion: warm.motion };
     return { reach: residency.pending()?.scene === scene ? "loading" : "absent", preview: shown.preview, motion: shown.motion };
   }

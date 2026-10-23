@@ -123,6 +123,30 @@ describe("an action naming a hidden view never touches the shown runtime", () =>
   });
 });
 
+test("a restore or orbit step naming a hidden view that shares the drawn view's camera moves the drawn device too, so hiding it keeps the pose (Sol's reproduction)", () => {
+  const { core, a, calls } = world();
+  // A view of another scene looking through the main view's camera, held by a hidden runtime.
+  const shared = core.views.addView(MAIN_VIEW, { camera: true }, { label: "Shared camera" });
+  const c = runtime({ views: core.views } as never, shared, "C", calls, { hidden: true });
+  const pose = { position: [0.3, 1.6, -0.9], target: [0, 1.6, 0], fov: 45 } as CameraState;
+  expect(c.preview.check({ kind: "camera.restore", view: shared, camera: pose }, "warm")).toEqual({ available: true });
+  c.preview.dispatch({ kind: "camera.restore", view: shared, camera: pose }, "warm");
+  // The edit was published as unapplied: the drawn device, drawing through that camera, moved; the hidden one follows it too.
+  expect(calls).toEqual(expect.arrayContaining(["A.restoreCamera", "C.restoreCamera"]));
+  expect(a.preview.snapshot().camera.fov).toBe(45);
+  // Hiding the drawn head writes its live pose to the node: the requested one, not the 30° it showed before.
+  a.preview.storeCamera();
+  expect(previewFields(core.views, MAIN_VIEW).camera?.fov).toBe(45);
+  // An orbit step the same way.
+  calls.length = 0;
+  c.preview.dispatch({ kind: "camera.navigate", view: shared, command: { kind: "orbit", yaw: 15, pitch: 0 } }, "warm");
+  expect(calls).toContain("A.restoreCamera");
+  const orbited = previewFields(core.views, MAIN_VIEW).camera!;
+  expect(orbited.position).not.toEqual(pose.position);
+  a.preview.storeCamera();
+  expect(previewFields(core.views, MAIN_VIEW).camera).toEqual(orbited);
+});
+
 test("a preview service without a router works its reach out from its own view: framing only for the view it draws", () => {
   const { core, second, a } = world();
   expect(a.preview.check({ kind: "camera.front", view: second })).toEqual({ available: false, code: "not_ready", reason: VIEW_HIDDEN });

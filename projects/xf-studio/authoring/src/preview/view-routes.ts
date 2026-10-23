@@ -13,7 +13,8 @@
  * | `loading`, `absent` | the camera node only | checked against the stored ranges only, applied | refused |
  *
  * - **Camera.** The pose of a view no runtime draws lives in its camera node (decision D3): a restore, an orbit step, Back and Forward
- *   edit the node, and the runtime that draws the view later starts there. Framing (Front view, Whole body, the creator cameras, the lens)
+ *   edit the node, and the runtime that draws the view later starts there. Such an edit is published as one no device applied, so a device
+ *   drawing another view through the same camera node moves with it (and never writes its old pose back). Framing (Front view, Whole body, the creator cameras, the lens)
  *   is computed by a device from its live camera, its lens and the subject's bounds: a view not drawn has none to compute with, so it is
  *   refused plainly (`not_ready`) until the view is shown.
  * - **Preview settings** are graph edits a runtime follows. A resident runtime of the view's V and body checks them against what its head
