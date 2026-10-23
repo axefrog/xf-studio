@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import * as THREE from "three";
-import { extendSkin, restoreFirstWeights } from "../src/materials/render/skin";
+import { extendSkin, floatJointIndices, restoreFirstWeights } from "../src/materials/render/skin";
 import { derivedCharacterRecords, derivedCharacterTest, derivedPreviewFile, derivedPreviewTest } from "./private-assets";
 test("CPU surface picking retains contributions beyond the first four", () => {
   const g = new THREE.BufferGeometry();
@@ -180,4 +180,25 @@ test("a second extendSkin keeps hooks added over the first and marks the materia
   const same = mat.version;
   extendSkin(two, mat);
   expect(mat.version).toBe(same);
+});
+
+test("joint indices become floats with the same values, every set, so ANGLE builds no vertex shader at a program's first draw (experiment 043 §12)", () => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0], 3));
+  g.setAttribute("skinIndex", new THREE.Uint16BufferAttribute([0, 1, 2, 300, 4, 5, 6, 7], 4));
+  g.setAttribute("joints_1", new THREE.Uint8BufferAttribute([8, 9, 10, 11, 12, 13, 14, 255], 4));
+  const weights = new THREE.Float32BufferAttribute([1, 0, 0, 0, 1, 0, 0, 0], 4);
+  g.setAttribute("skinWeight", weights);
+  floatJointIndices(g);
+  for (const [name, expected] of [["skinIndex", [0, 1, 2, 300, 4, 5, 6, 7]], ["joints_1", [8, 9, 10, 11, 12, 13, 14, 255]]] as const) {
+    const attribute = g.getAttribute(name);
+    expect(attribute.array).toBeInstanceOf(Float32Array);
+    expect([...attribute.array]).toEqual([...expected]);
+    expect(attribute.itemSize).toBe(4);
+  }
+  // Float data (and the weights) are left as they were.
+  const floats = g.getAttribute("skinIndex");
+  floatJointIndices(g);
+  expect(g.getAttribute("skinIndex")).toBe(floats);
+  expect(g.getAttribute("skinWeight")).toBe(weights);
 });

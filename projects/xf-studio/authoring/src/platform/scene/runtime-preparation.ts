@@ -24,10 +24,11 @@ import { gpuDrained, gpuGate } from "./gpu-gate";
  *    again in the same task, so the canvas never shows it. The GPU process presents no frame while it makes a draw's shader variants, so
  *    one draw of a whole cold scene held the screen still for all of them at once (33–36 s on real data, experiment 043 §11). Each piece
  *    draws only some of the scene (`warmUp(only)`), and the next waits, a frame at a time, for a fence on the last: frames are presented
- *    between pieces, the shown V and the progress line with them. Pieces start with one drawable and double while the GPU keeps up; a
- *    drawable drawn into several targets at once (the skin scatter's input) is a piece of its own, since ANGLE builds its real pixel shader
- *    at that first draw, on the GPU process's main thread (`drawsMultiTarget`): no frame is presented for that one build's length, and that
- *    is the floor of this design. A last draw of everything follows (what only the whole frame makes), and its fence.
+ *    between pieces, the shown V and the progress line with them. Pieces start with one drawable and double while the GPU keeps up. A
+ *    build the GPU process makes at a draw holds presentation for its whole length, so none may be long: no program draws into several
+ *    targets at once (ANGLE builds such a pixel shader at its first draw, 1–6 s for a skin variant), and no float vertex input is fed
+ *    integers (it builds such a vertex shader at its first draw, 25–70 ms each; experiment 043 §12). A last draw of everything follows
+ *    (what only the whole frame makes), and its fence.
  *
  * Every step checks the signal: an abort stops at the next step and rejects with `signal.reason` (links already sent finish on the
  * driver's threads either way), the wait for a link slot included. Progress goes to `report` as the stage, how far into it, and what it
@@ -48,8 +49,6 @@ export type RuntimePreparationPorts = {
     prepareSteps(object: THREE.Object3D, camera: THREE.Camera): { steps: (() => void)[]; programs(): readonly LinkedProgram[];
       result(): { ready: Promise<void>; textures: THREE.Texture[]; programs(): readonly LinkedProgram[] } };
     prepareDisplay(): { ready: Promise<void>; programs(): readonly LinkedProgram[] };
-    /** Whether a drawable is drawn into several targets at once (its first draw builds a shader of its own: a piece to itself). */
-    drawsMultiTarget?(object: THREE.Object3D): boolean;
   };
   /**
    * Before the scene is compiled: the feature renderers' own passes made ready and their GPU state current (feature-renderers.ts
@@ -178,13 +177,9 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   report("warm-up", 0);
   let warmedUp = false;
   if (drawables.length > 1) {
-    const alone = (object: THREE.Object3D) => lighting.drawsMultiTarget?.(object) ?? false;
     for (let at = 0, size = 1; at < drawables.length;) {
       await pace();
-      // A drawable drawn into several targets goes alone; a piece of others stops before the next such one.
-      let end = at + 1;
-      if (!alone(drawables[at]!)) while (end < Math.min(drawables.length, at + size) && !alone(drawables[end]!)) end++;
-      const piece = new Set(drawables.slice(at, end));
+      const piece = new Set(drawables.slice(at, at + size));
       if (!ports.warmUp(piece)) break;
       warmedUp = true;
       at += piece.size;

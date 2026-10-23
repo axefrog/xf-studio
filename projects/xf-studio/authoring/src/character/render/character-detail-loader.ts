@@ -8,7 +8,7 @@ import { CPU_READ_SIZE, hasReducedImage, materialAdapter, setReducedImage, textu
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture, UNCOVERED_BODY, withdrawUncoveredBody } from "../render-detail";
 import { renderTemplate } from "../../materials/render-templates";
-import { releaseFullSkinDepth, restoreFirstWeights } from "../../materials/render/skin";
+import { floatJointIndices, releaseFullSkinDepth, restoreFirstWeights } from "../../materials/render/skin";
 import type { DetailLimit } from "../detail-limits";
 import { prepareEyeballGeometry, type EyeballHandle, type EyeShellHandle } from "../../materials/render/eye-material";
 import type { FaceDecalHandle } from "../../materials/render/face-decal-material";
@@ -278,6 +278,7 @@ export async function parseDetailGeometry(buffer: ArrayBuffer): Promise<ParsedGe
   const weights = new Map<string, Float32Array>();
   gltf.scene.traverse(object => {
     if (!(object instanceof THREE.SkinnedMesh)) return;
+    floatJointIndices(object.geometry);
     const found = raw.get(gltf.parser.json.meshes[gltf.parser.associations.get(object)?.meshes ?? -1]?.name);
     if (found) weights.set(object.name, found);
   });
@@ -319,7 +320,7 @@ export function plannedReads(record: CharacterDetail): { component: RenderCompon
  */
 export function bindRigid(mesh: THREE.Mesh, root: THREE.Object3D, options: { follow?: boolean } = {}): THREE.SkinnedMesh {
   const geometry = mesh.geometry, count = geometry.getAttribute("position").count;
-  geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
+  geometry.setAttribute("skinIndex", new THREE.Float32BufferAttribute(new Float32Array(count * 4), 4));
   geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(Float32Array.from({ length: count * 4 }, (_, i) => i % 4 ? 0 : 1), 4));
   const skinned = new THREE.SkinnedMesh(geometry, mesh.material);
   skinned.name = mesh.name;

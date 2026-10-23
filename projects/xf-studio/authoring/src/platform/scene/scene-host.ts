@@ -417,7 +417,6 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
         return { steps: made.steps.map(step => () => lighting.withStaged(step)), programs: made.programs, result: made.result };
       },
       prepareDisplay: () => lighting.withStaged(() => lighting.prepareDisplay()),
-      drawsMultiTarget: (object: THREE.Object3D) => lighting.drawsMultiTarget(object),
     } : lighting;
     // The feature renderers' own passes first (eye makeup's composite), then their surfaces as the first frame draws them.
     const base = { renderer, scene, camera, lighting: prepareLighting, frame: nextFrame, signal, features: (signal?: AbortSignal) => features?.prepare(signal),

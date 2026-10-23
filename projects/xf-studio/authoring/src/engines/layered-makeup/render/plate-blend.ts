@@ -252,9 +252,7 @@ const RESIDUAL = /* glsl */`
 const PLATE_SCATTER_OUTPUT = /* glsl */`
 #include <dithering_fragment>
 #ifdef XFS_SCATTER_INPUT
-	gl_FragColor = vec4( max( ( xfsScatterE - ( 1.0 - diffuseColor.a ) * xfsScatterEUnder ) / max( diffuseColor.a, 1e-3 ), vec3( 0.0 ) ), diffuseColor.a );
-	xfsScatterOut1 = vec4( clamp( xfsSqrtDecal, 0.0, 1.0 ), xfsCoverage );
-	xfsScatterOut2 = vec4( clamp( xfsPs.y * xfsInv, 0.0, 1.0 ), 0.0, 0.0, xfsCoverage );
+	xfsScatterWrite( vec4( max( ( xfsScatterE - ( 1.0 - diffuseColor.a ) * xfsScatterEUnder ) / max( diffuseColor.a, 1e-3 ), vec3( 0.0 ) ), diffuseColor.a ), vec4( clamp( xfsSqrtDecal, 0.0, 1.0 ), xfsCoverage ), vec4( clamp( xfsPs.y * xfsInv, 0.0, 1.0 ), 0.0, 0.0, xfsCoverage ) );
 #endif`;
 
 /**

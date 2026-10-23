@@ -24,7 +24,7 @@
  */
 import * as THREE from "three";
 import type { RenderChunkMaterial, RenderSkinProfile } from "../../character/render-detail";
-import { declarePass, SCATTER_INPUT_OUTPUTS, type PassSkinProfile } from "../../platform/api/scene";
+import { declarePass, SCATTER_INPUT_WRITE, type PassSkinProfile } from "../../platform/api/scene";
 
 /**
  * How a `TintColor` byte reaches the program: sRGB-decoded. The 2.31 executable's material constant-buffer packer turns every `Color`
@@ -349,7 +349,7 @@ ${CONTACT_SHADOW_GLSL}
 uniform vec3 xfsLobes;
 uniform vec3 xfsWrap;
 uniform float xfsWrapGate;
-${SCATTER_INPUT_OUTPUTS}
+${SCATTER_INPUT_WRITE}
 #ifdef XFS_SCATTER_INPUT
 // The direct diffuse irradiance at albedo 1 (the game's forced albedo, research/materials/shader-skin.md §6.1): the forward diffuse before
 // the albedo multiplies it, shadows included, image-based light excluded. A plate keeps the skin's under it apart (xfsScatterEUnder).
@@ -458,9 +458,7 @@ export const skinLightUniforms = (parameters: Pick<SkinParameters, "lobes" | "wr
 const SKIN_SCATTER_OUTPUT = /* glsl */`
 #include <dithering_fragment>
 #ifdef XFS_SCATTER_INPUT
-	gl_FragColor = vec4( xfsScatterE, vViewPosition.z );
-	xfsScatterOut1 = vec4( sqrt( clamp( diffuseColor.rgb, 0.0, 1.0 ) ), ( xfsScatterSlot + 1.0 ) / 8.0 );
-	xfsScatterOut2 = vec4( metalnessFactor, 0.0, 0.0, 1.0 );
+	xfsScatterWrite( vec4( xfsScatterE, vViewPosition.z ), vec4( sqrt( clamp( diffuseColor.rgb, 0.0, 1.0 ) ), ( xfsScatterSlot + 1.0 ) / 8.0 ), vec4( metalnessFactor, 0.0, 0.0, 1.0 ) );
 #endif`;
 
 /** Patch a `MeshStandardMaterial` program for the skin; throws when this Three.js build lacks an expected chunk. */

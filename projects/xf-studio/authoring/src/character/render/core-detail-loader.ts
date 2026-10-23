@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { HeadLoadError } from "../../preview/head-load-error";
-import { restoreFirstWeights } from "../../materials/render/skin";
+import { floatJointIndices, restoreFirstWeights } from "../../materials/render/skin";
 import { CORE_TEXTURE_COLOUR, CORE_TEXTURE_SLOTS, coreAssetName, coreDetailUrl, parseCoreDetail, type CoreBody, type CoreDetail,
   type CoreTextureSlot, type RenderResource } from "../render-detail";
 
@@ -91,6 +91,7 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
       const raw = weights.get(gltf.parser.json.meshes[association?.meshes ?? -1]?.name);
       if (!raw) throw Error(`Cannot restore full skin weights for ${mesh.name}`);
       mesh.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
+      floatJointIndices(mesh.geometry);
     }
     const loader = new THREE.TextureLoader();
     await Promise.all(CORE_TEXTURE_SLOTS.map(async slot => {

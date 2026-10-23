@@ -429,9 +429,10 @@ test("4a-v: a superseded composite preparation stops waiting on its links at onc
   const outcome = await Promise.race([prepared.then(() => "released"), new Promise(resolve => setTimeout(() => resolve("still waiting"), 500))]);
   expect(outcome).toBe("released");
   expect(performance.now() - started).toBeLessThan(120);
-  // The composite's three passes were compiled; released unused, each program deletes its two shaders with it.
-  expect(programs).toHaveLength(3);
+  // The composite's seven passes were compiled (the layer and the resolve for each of its three targets, and the roughness chain); released
+  // unused, each program deletes its two shaders with it.
+  expect(programs).toHaveLength(7);
   for (const program of programs) program.destroy();
-  expect(deleted).toHaveLength(6);
+  expect(deleted).toHaveLength(14);
   features.dispose();
 });

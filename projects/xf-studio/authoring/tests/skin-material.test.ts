@@ -173,14 +173,14 @@ describe("skin shader", () => {
     expect(f).toContain("float xfsTintWeight = abs( xfsTint.w ) * xfsM.x;");
     expect(f).toContain("xfsTint.w >= 0.0 ? xfsTint.rgb * xfsA : xfsOverlay( xfsA, xfsTint.rgb )");
     expect(f).toContain("xfsA + xfsTintWeight * ( clamp( xfsTinted, 0.0, 1.0 ) - xfsA )");
-    // The wrap is gated by the host (off while the screen-space scatter runs), and the scatter-input variant writes E, class depth,
-    // √albedo with the slot, and the metalness (research/materials/shader-skin.md §11.3).
+    // The wrap is gated by the host (off while the screen-space scatter runs), and the scatter-input variants write E with the class depth,
+    // √albedo with the slot, or the metalness, one target each (research/materials/shader-skin.md §11.3; experiment 043 §12).
     expect(f).toContain("xfsWrapGate * xfsWrap");
     expect(f).toContain("xfsScatterE += xfsLightColour * wrapped * burley * BRDF_Lambert( vec3( 1.0 - material.metalness ) );");
-    expect(f).toContain("gl_FragColor = vec4( xfsScatterE, vViewPosition.z );");
-    expect(f).toContain("( xfsScatterSlot + 1.0 ) / 8.0");
-    expect(f).toContain("layout( location = 2 ) out highp vec4 xfsScatterOut2;");
-    expect(f.indexOf("#include <dithering_fragment>")).toBeLessThan(f.indexOf("gl_FragColor = vec4( xfsScatterE"));
+    expect(f).toContain("xfsScatterWrite( vec4( xfsScatterE, vViewPosition.z ), vec4( sqrt( clamp( diffuseColor.rgb, 0.0, 1.0 ) ), ( xfsScatterSlot + 1.0 ) / 8.0 ), vec4( metalnessFactor, 0.0, 0.0, 1.0 ) );");
+    expect(f).toContain("#define xfsScatterWrite( s0, s1, s2 ) gl_FragColor = ( s1 )");
+    expect(f).not.toMatch(/layout\s*\(\s*location/);
+    expect(f.indexOf("#include <dithering_fragment>")).toBeLessThan(f.indexOf("xfsScatterWrite( vec4( xfsScatterE"));
   });
 
   test("a Three.js build without an expected chunk fails loudly instead of drawing a wrong skin", () => {

@@ -54,11 +54,11 @@ function skinned(positions: number[], name: string, sets = 1): THREE.SkinnedMesh
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute(new Array(count).fill([0, 0, -1]).flat(), 3));
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(headUvs(count), 2));
-  geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
+  geometry.setAttribute("skinIndex", new THREE.Float32BufferAttribute(new Float32Array(count * 4), 4));
   geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(Array.from({ length: count }, () => [1, 0, 0, 0]).flat(), 4));
   // Further sets as the core loader leaves them (`joints_n`/`weights_n`, all weight on the first set), read by skin.ts `skinSets`.
   for (let n = 1; n < sets; n++) {
-    geometry.setAttribute(`joints_${n}`, new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
+    geometry.setAttribute(`joints_${n}`, new THREE.Float32BufferAttribute(new Float32Array(count * 4), 4));
     geometry.setAttribute(`weights_${n}`, new THREE.Float32BufferAttribute(new Float32Array(count * 4), 4));
   }
   geometry.setIndex(quadIndices(count));

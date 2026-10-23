@@ -100,7 +100,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
         return bone;
       });
       const geometry = eyes.geometry.clone(), positions = geometry.getAttribute("position");
-      const indices = new Uint16Array(positions.count*4), weights = new Float32Array(positions.count*4);
+      const indices = new Float32Array(positions.count*4), weights = new Float32Array(positions.count*4);
       const point = new THREE.Vector3();
       for (let i=0;i<positions.count;i++) {
         point.fromBufferAttribute(positions,i).applyMatrix4(eyes.matrixWorld);
@@ -113,7 +113,8 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
         const sides = [0,1,2].map(j => indices[triangles.getX(i+j)*4]);
         if (sides[0]!==sides[1] || sides[0]!==sides[2]) throw Error("Eye geometry crosses gaze attachment groups");
       }
-      geometry.setAttribute("skinIndex",new THREE.Uint16BufferAttribute(indices,4));
+      // Float joint indices, as every skinned geometry has them (skin.ts `floatJointIndices`).
+      geometry.setAttribute("skinIndex",new THREE.Float32BufferAttribute(indices,4));
       geometry.setAttribute("skinWeight",new THREE.Float32BufferAttribute(weights,4));
       const skinned = new THREE.SkinnedMesh(geometry,eye.material);
       // Keep the eye component's own facial morph targets (eye shape) on the rigidly attached copy.

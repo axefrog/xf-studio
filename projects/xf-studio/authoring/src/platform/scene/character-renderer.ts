@@ -665,10 +665,10 @@ export function createCharacterRenderer(input: {
       eyes: { core: eyes, appearance: eyeAppearance() } }),
     /** Developer evidence: each baked layered part's packed maps read back at their centre texel (colour + roughness, normal + metalness). */
     layeredSamples: () => (characterDetails?.components ?? []).flatMap(item => (item.layered ?? []).map(({ mesh, handle }) => {
-      const target = handle.target;
-      if (!target) return { mesh: mesh.name, state: handle.state };
-      const read = (index: number) => { const pixel = new Uint8Array(4);
-        renderer.readRenderTargetPixels(target, target.width >> 1, target.height >> 1, 1, 1, pixel, undefined, index); return [...pixel]; };
+      const maps = handle.maps;
+      if (!maps) return { mesh: mesh.name, state: handle.state };
+      const read = (index: number) => { const pixel = new Uint8Array(4), target = maps[index]!;
+        renderer.readRenderTargetPixels(target, target.width >> 1, target.height >> 1, 1, 1, pixel); return [...pixel]; };
       return { mesh: mesh.name, state: handle.state, colour: read(0), normal: read(1) };
     })),
   };

@@ -362,10 +362,10 @@ export function createLightingSetupStage(options: {
       for (const material of materialsOf(drawable)) materials.add(material);
     }));
     for (const mesh of meshes) {
-      // The skin scatter's input variant, and the contact shadows' caster depth.
-      steps.push(step(() => {
+      // The skin scatter's input variants (one program per target, S0 to S2), and the contact shadows' caster depth.
+      for (let target = 0; target < 3; target++) steps.push(step(() => {
         if (!display.scatterPossible || Array.isArray(mesh.material)) return;
-        const variant = scatter.variantOf(mesh.material);
+        const variant = scatter.variantsOf(mesh.material)[target];
         if (variant) compileAs(mesh, variant);
       }));
       steps.push(step(() => { if (contactOn && mesh.castShadow) compileAs(mesh, contact.casterMaterial(mesh)); }));
@@ -481,15 +481,6 @@ export function createLightingSetupStage(options: {
         state.toneMappingExposure = was.exposure; display.setExposure(was.gameExposure);
         environment.lights.forEach((probe, i) => { probe.visible = was.probes[i]!.visible; (probe as THREE.LightProbe).intensity = was.probes[i]!.intensity; });
       }
-    },
-    /**
-     * Whether `object` is drawn into the skin scatter's three targets too (its input variant). ANGLE on D3D11 links a program's pixel shader
-     * for its first output only and builds the three-output one at its first draw, on the GPU process's main thread, which presents no frame
-     * meanwhile (1–20 s for a skin under a cold cache, experiment 043 §11): a warm-up draws such an object in a piece of its own.
-     */
-    drawsMultiTarget(object: THREE.Object3D): boolean {
-      const mesh = object as THREE.Mesh;
-      return !!mesh.isMesh && display.scatterPossible && !Array.isArray(mesh.material) && scatter.variantOf(mesh.material) !== null;
     },
     /** The program state (`programState`) the scene would have lit by `next`, without lighting it. */
     programStateFor(next: LightingSource): string { return programStateOf(resolveLightingSource(next, sex, trial)); },

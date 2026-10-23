@@ -123,9 +123,14 @@ test("the V's skin, its scatter input and contact caster variants, and the head'
   expect(forward!.vertex).toContain("fullSkin += getBoneMatrix(joints_1.w) * weights_1.w;");
   expect(glslDeclarations(forward!.vertex).variables.has("joints_1")).toBe(true);
   expect(forward!.fragment).toContain("xfsTint");
-  const scatter = createSkinScatter(renderer).variantOf(material);
-  expect(scatter).not.toBeNull();
-  checked(compile(head, scatter!), "skin scatter input");
+  // Its scatter input: one program per target (S0 to S2), each writing one output (experiment 043 §12).
+  const scatter = createSkinScatter(renderer).variantsOf(material);
+  expect(scatter).toHaveLength(3);
+  for (const [target, variant] of scatter.entries()) {
+    const [program] = checked(compile(head, variant), `skin scatter input S${target}`);
+    expect(program!.fragment).not.toMatch(/layout\s*\(\s*location\s*=\s*[1-9]/);
+    expect(program!.fragment).toContain("xfsScatterWrite(");
+  }
   head.castShadow = true;
   head.customDepthMaterial = fullSkinDepthMaterial(head);
   const caster = createContactShadows(renderer, contactShadowUniforms).casterMaterial(head);
@@ -154,8 +159,7 @@ test("eye makeup's layer slots (tint, glint, flake maps), the lit plate and the 
   const stack = createMakeupStack(anchor, 1);
   const scatter = createSkinScatter(renderer);
   const variants = (mesh: THREE.Mesh, label: string) => {
-    const variant = scatter.variantOf(mesh.material as THREE.Material);
-    if (variant) checked(compile(mesh, variant), `${label} scatter input`);
+    for (const [target, variant] of scatter.variantsOf(mesh.material as THREE.Material).entries()) checked(compile(mesh, variant), `${label} scatter input S${target}`);
   };
   // The lit plate (plate-blend.ts), with its skin light.
   checked(compile(stack.plate), "lit plate");

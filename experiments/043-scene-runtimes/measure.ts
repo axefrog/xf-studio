@@ -28,7 +28,10 @@ import { GL_PROBE } from "../../projects/xf-studio/authoring/tools/gl-probe";
 const [portArg, outArg, profileArg] = process.argv.slice(2);
 const port = Number(portArg);
 if (!port || port === 4317 || port === 4331 || !outArg || !profileArg) throw Error("Usage: measure.ts <port (not 4317/4331)> <out.json> <new chrome profile dir>");
-if (existsSync(resolve(profileArg))) throw Error(`The Chrome profile folder ${profileArg} exists: a cold run needs a new one.`);
+// G2_WARM=1: a profile that exists is wanted (a second session on the same profile: does the browser's program cache keep what it built?).
+const warmProfile = process.env.G2_WARM === "1";
+if (existsSync(resolve(profileArg)) !== warmProfile) throw Error(warmProfile ? `G2_WARM=1 needs the profile folder of an earlier run; ${profileArg} doesn't exist.`
+  : `The Chrome profile folder ${profileArg} exists: a cold run needs a new one.`);
 const started = Date.now();
 const out: Record<string, unknown> = { date: new Date().toISOString() };
 const save = () => writeFileSync(resolve(outArg), JSON.stringify(out, null, 1));
@@ -184,8 +187,8 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
 }
 
 type Analysis = ReturnType<typeof analyse>;
-/** The longest the screen may go without a presented frame while a preparation runs: the progress line and bar must keep repainting. */
-const FRAME_GAP_MS = 500;
+/** The longest the screen may go without a presented frame while a preparation runs: the progress line and bar must keep repainting (4a-v-c). */
+const FRAME_GAP_MS = 100;
 /**
  * The gates G2 sets (README.md §5, §11): no task of 50 ms or more during preparation or in the second after the show, no link in the first
  * shown frame, and progress shown and repainting (the pane says something on every frame, and no frame is held back for long).
@@ -206,6 +209,13 @@ try {
   console.log("waiting for the feminine default V");
   await page.waitFor("document.querySelector('.dock-group') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'ready'", 900_000);
   await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && e.characterDetails.components.length > 0 && !e.residency.preparation; })()", 900_000);
+  if (warmProfile) {
+    // A profile kept from an earlier session keeps its workspace too: start from the same V and setup as a fresh one does.
+    await page.evaluate(`(async () => { const run = window.xfStudioShell.runtime.dispatch;
+      await run({ kind: "character.useDefault", bodyGender: "female" }); await run({ kind: "preview.setLightingPreset", preset: "studio" }); })()`);
+    await page.waitFor(`(() => { const e = window.xfStudioSceneEvidence?.(); const shown = e?.residency.residents.find(r => r.state === "shown");
+      return !!shown && shown.key.endsWith("|female") && !e.residency.preparation && window.xfStudioPresentation.authoring.previewState().lighting.preset === "studio"; })()`, 900_000);
+  }
   await page.wait(4000);
   log("environment", await page.evaluate(`(() => { const gl = document.createElement("canvas").getContext("webgl2"); const info = gl.getExtension("WEBGL_debug_renderer_info");
     return { gpu: info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "unknown", parallelShaderCompile: gl.getSupportedExtensions().includes("KHR_parallel_shader_compile"),
@@ -223,17 +233,24 @@ try {
     ["C.bodyAndLighting", "body", { kind: "character.useDefault", bodyGender: "female" },
       `s[1] >= 0 && strings[s[1]].endsWith("|female") && s[3] < 0 && s[2] >= 1`, 300, 1000, 600_000],
   ];
+  // The trace's events go to the switch traced now (the page keeps its handlers for good, so they are added once).
+  let traceSink: unknown[] | null = null, traceDone: (() => void) | null = null;
+  page.on("Tracing.dataCollected", params => { traceSink?.push(...(params as { value: unknown[] }).value); });
+  page.on("Tracing.tracingComplete", () => { traceDone?.(); });
   for (const [name, kind, action, done, minMs, tailMs, maxMs] of runs) {
     // G2_PROFILE=1: a sampled CPU profile of each switch beside the summary (`<out>-<name>.cpuprofile`), to see what a long task did.
     const profiling = process.env.G2_PROFILE === "1";
     if (profiling) { await page.send("Profiler.enable"); await page.send("Profiler.setSamplingInterval", { interval: 500 }); await page.send("Profiler.start"); }
-    // G2_TRACE=<switch name>: a Chrome trace of that switch (the GPU process's shader compiles and command buffer tasks, the page's tasks).
-    const tracing = process.env.G2_TRACE === name, events: unknown[] = [];
+    // G2_TRACE=<switch name>[,<name>…] or `all`: a Chrome trace of those switches (the GPU process's shader compiles and command buffer
+    // tasks, the page's tasks).
+    const traceNames = (process.env.G2_TRACE ?? "").split(","), tracing = traceNames.includes(name) || traceNames.includes("all"), events: unknown[] = [];
     let traced: Promise<void> | undefined;
     if (tracing) {
-      traced = new Promise<void>(complete => page.on("Tracing.tracingComplete", () => complete()));
-      page.on("Tracing.dataCollected", params => { events.push(...(params as { value: unknown[] }).value); });
-      await page.send("Tracing.start", { categories: "gpu.angle,gpu,devtools.timeline,disabled-by-default-devtools.timeline", transferMode: "ReportEvents" });
+      traced = new Promise<void>(complete => { traceDone = complete; });
+      traceSink = events;
+      // The GPU process's tasks and ANGLE's shader builds by default (each D3DCompile with its HLSL source); G2_TRACE_CATEGORIES adds the
+      // page's own (`devtools.timeline,…`), at many times the size.
+      await page.send("Tracing.start", { categories: process.env.G2_TRACE_CATEGORIES ?? "gpu.angle,gpu", transferMode: "ReportEvents" });
     }
     const run = await page.evaluate(`window.__g2.run(${JSON.stringify(action)}, ${JSON.stringify(done)}, ${minMs}, ${tailMs}, ${maxMs})`) as Run;
     if (profiling) {
@@ -243,6 +260,7 @@ try {
     if (tracing) {
       await page.send("Tracing.end");
       await traced;
+      traceSink = null; traceDone = null;
       writeFileSync(resolve(outArg).replace(/\.json$/, `-${name}.trace.json`), JSON.stringify({ t0: run.t0, events }));
     }
     const record = await pageRecord();

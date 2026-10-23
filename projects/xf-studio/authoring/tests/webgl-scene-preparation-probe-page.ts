@@ -58,7 +58,9 @@ export type ScenePreparationProbe = {
   cold: { wantToShownMs: number; showToPresentedMs: number; longestTaskMs: number; tasksOver50: number; framesBeforeShown: number; warmUps: number;
     canvasUnchanged: boolean; firstFrame: { links: number; programs: number; uploads: number }; result: RuntimePreparationResult | null;
     /** Frames presented during its warm-up, and the longest wait between two of them (the GPU process presents none while it builds a draw's shaders). */
-    warmUpFrames: number; warmUpFrameGapMs: number };
+    warmUpFrames: number; warmUpFrameGapMs: number;
+    /** The longest wait between two presented frames from the want to the show (4a-v-c). */
+    frameGapMs: number };
   /** 5: a lighting setup prepared on the shown V. */
   setup: { staged: boolean; tookOverMs: number; longestTaskMs: number; tasksOver50: number; unchangedUntilTakeover: boolean; checks: number;
     firstFrame: { links: number; programs: number; frames: number }; changedAfter: boolean; warmUps: number; warmUpFrames: number; warmUpFrameGapMs: number;
@@ -370,6 +372,7 @@ try {
     recording = false;
     const warmUpFrom = stageLog.find(entry => entry.label === `${b.key}:warm-up`)?.at ?? shownAt;
     const warmUpFrames = frameTimes.filter(time => time >= warmUpFrom && time <= shownAt).length, warmUpFrameGapMs = longestGap(warmUpFrom, shownAt);
+    const frameGapMs = longestGap(start, shownAt);
     stageLog.push({ at: performance.now(), label: "probe:shown" });
     const unchanged = checksum() === before;
     const at = { ...calls, programs: counter.made().program };
@@ -393,7 +396,7 @@ try {
     await sleep(1000);
     probe.cold = { wantToShownMs: presented - start, showToPresentedMs: presented - shownAt, longestTaskMs: longest(start, presented + 1000),
       tasksOver50: over50(start, presented + 1000), framesBeforeShown: framesBefore, warmUps, canvasUnchanged: unchanged, firstFrame,
-      result: results.get(b.key) ?? null, warmUpFrames, warmUpFrameGapMs };
+      result: results.get(b.key) ?? null, warmUpFrames, warmUpFrameGapMs, frameGapMs };
     await settle();
   }
 

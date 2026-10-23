@@ -75,17 +75,27 @@ export const passParticipation = (material: THREE.Material): PassParticipation |
   material.userData?.[PASS_KEY] as PassParticipation | undefined;
 
 /**
- * The scatter-input pass's shader contract (platform/scene/skin-scatter.ts). A variant's program has `SCATTER_INPUT_DEFINE` defined and
- * writes three targets: location 0 (Three's `gl_FragColor`) = S0, the direct diffuse irradiance at albedo 1 (RGB) and, for a Subsurface
- * pixel, its view depth (A, 0 elsewhere: the class-1 flag); `xfsScatterOut1` = S1, √albedo (RGB) and the profile slot as (slot + 1) / 8
- * (A); `xfsScatterOut2` = S2, the metalness (R). A decal's alpha in each output is its blend weight for that target; the blend keeps the
- * alphas underneath. `SCATTER_INPUT_OUTPUTS` declares the two extra outputs at global scope (once per program).
+ * The scatter-input passes' shader contract (platform/scene/skin-scatter.ts). The input is three targets: S0, the direct diffuse irradiance
+ * at albedo 1 (RGB) and, for a Subsurface pixel, its view depth (A, 0 elsewhere: the class-1 flag); S1, √albedo (RGB) and the profile slot
+ * as (slot + 1) / 8 (A); S2, the metalness (R). Each target is drawn by a pass of its own, so every program writes one output: ANGLE on
+ * Direct3D 11 links a program for its first output only and builds one that writes several again at its first draw, on the GPU process's
+ * main thread, with no frame presented meanwhile (1–6 s for a skin variant; experiment 043 §12). A variant's program has
+ * `SCATTER_INPUT_DEFINE` defined, and `SCATTER_S1_DEFINE` or `SCATTER_S2_DEFINE` for the S1 and S2 passes (neither for S0). It writes
+ * through `xfsScatterWrite( s0, s1, s2 )`, which keeps only its pass's value (the others are never compiled). A decal's alpha in each value
+ * is its blend weight for that target; the blend keeps the alphas underneath. `SCATTER_INPUT_WRITE` defines the macro (once per program).
  */
 export const SCATTER_INPUT_DEFINE = "XFS_SCATTER_INPUT";
-export const SCATTER_INPUT_OUTPUTS = /* glsl */`
+export const SCATTER_S1_DEFINE = "XFS_SCATTER_S1";
+export const SCATTER_S2_DEFINE = "XFS_SCATTER_S2";
+export const SCATTER_INPUT_WRITE = /* glsl */`
 #ifdef XFS_SCATTER_INPUT
-layout( location = 1 ) out highp vec4 xfsScatterOut1;
-layout( location = 2 ) out highp vec4 xfsScatterOut2;
+#if defined( XFS_SCATTER_S1 )
+#define xfsScatterWrite( s0, s1, s2 ) gl_FragColor = ( s1 )
+#elif defined( XFS_SCATTER_S2 )
+#define xfsScatterWrite( s0, s1, s2 ) gl_FragColor = ( s2 )
+#else
+#define xfsScatterWrite( s0, s1, s2 ) gl_FragColor = ( s0 )
+#endif
 #endif`;
 
 /** The skin under each vertex of a surface: linear colour (3), roughness (1) and metalness (1), with how it was read. */

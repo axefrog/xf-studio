@@ -122,9 +122,7 @@ describe("the decal family material", () => {
       expect(fragment).not.toContain(gone);
     // Its scatter input blends the decal's own colour at the colour alpha, E at the drawn alpha, metalness at the surface alpha.
     expect(fragment).toContain("vec3 xfsTrueColour = xfsColour;");
-    expect(fragment).toContain("gl_FragColor = vec4( xfsScatterE, xfsDrawn );");
-    expect(fragment).toContain("xfsScatterOut1 = vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA );");
-    expect(fragment).toContain("xfsScatterOut2 = vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA );");
+    expect(fragment).toContain("xfsScatterWrite( vec4( xfsScatterE, xfsDrawn ), vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA ), vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA ) );");
     // Without a skin light the decal keeps Three's standard lighting.
     expect(patchFaceDecalShader(program(), { underlay: false, skinLight: false }).fragmentShader).not.toContain("RE_Direct_XfsSkin");
     expect(() => patchFaceDecalShader({ vertexShader: "", fragmentShader: "#include <common>" }, { underlay: false, skinLight: false })).toThrow("expects");

@@ -62,6 +62,16 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
+  test("no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)", () => {
+    // ANGLE builds a program that writes several outputs, or reads integers into a float input, again at its first draw, on the GPU
+    // process's main thread, presenting nothing meanwhile (13.9 s and 4.0 s here before 4a-v-c, experiment 043 §12). With
+    // KHR_parallel_shader_compile the page's own tasks stay under 50 ms too, so a frame is presented at least every 100 ms.
+    expect({ cold: parallel.cold.frameGapMs <= 100, setup: parallel.setup.frameGapMs <= 100 }).toEqual({ cold: true, setup: true });
+    // The fallback's page tasks are long (recorded, not gated), but no warm-up piece holds the GPU process for long either.
+    for (const probe of [parallel, fallback]) expect({ cold: probe.cold.warmUpFrameGapMs <= 100, setup: probe.setup.warmUpFrameGapMs <= 100 })
+      .toEqual({ cold: true, setup: true });
+  });
+
   test("a lighting setup never drawn, asked of the shown V: staged, prepared while the setup before stays drawn, then taken over with nothing to link (4a-v-b)", () => {
     for (const probe of [parallel, fallback]) {
       const { setup } = probe;

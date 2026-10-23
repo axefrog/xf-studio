@@ -35,6 +35,21 @@ export function skinSets(g: THREE.BufferGeometry) {
     sets.push({ j: `joints_${n}`, w: `weights_${n}` });
   return sets;
 }
+/**
+ * A geometry's joint indices as floats (profiles phase 4a-v-c, experiment 043 §12). Three declares every joint index `vec4` and feeds a
+ * glTF's integer JOINTS data as it is; ANGLE on Direct3D 11 then builds each program's vertex shader again for that input at the program's
+ * first draw, on the GPU process's main thread (25–70 ms each, with no frame presented meanwhile). Indices are small integers, exact as
+ * floats, so skinning is unchanged. Float data is left as it is.
+ */
+export function floatJointIndices(geometry: THREE.BufferGeometry): void {
+  for (const { j } of skinSets(geometry)) {
+    const attribute = geometry.getAttribute(j);
+    if (!attribute || attribute.array instanceof Float32Array) continue;
+    const size = attribute.itemSize, values = new Float32Array(attribute.count * size);
+    for (let i = 0; i < attribute.count; i++) for (let k = 0; k < size; k++) values[i * size + k] = attribute.getComponent(i, k);
+    geometry.setAttribute(j, new THREE.Float32BufferAttribute(values, size));
+  }
+}
 /** The skinning a material's compile adds (`extendSkin`), read when its program is built. */
 type SkinExtension = { declarations: string; sum: string; offset: number; sets: number;
   baseCompile?: THREE.Material["onBeforeCompile"]; baseKey?: THREE.Material["customProgramCacheKey"] };

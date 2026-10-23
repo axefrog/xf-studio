@@ -242,10 +242,12 @@ void main() {
 }`;
 
 /**
- * One layer, front to back. Three accumulation targets: (colour RGB, remaining), (roughness, metalness, Σa, microblend mix),
- * (layer normal XY, microblend normal XY).
+ * One layer, front to back, for accumulation target `target` (profiles phase 4a-v-c: every program writes one output, so a program is drawn
+ * once per target; ANGLE on Direct3D 11 would build a program writing several again at its first draw, on the GPU process's main thread,
+ * experiment 043 §12). Three accumulation targets: (colour RGB, remaining), (roughness, metalness, Σa, microblend mix), (layer normal XY,
+ * microblend normal XY). `xfsLayer` computes all three, and `main` keeps its target's.
  */
-const LAYER_FRAGMENT = /* glsl */`
+const layerFragment = (target: 0 | 1 | 2) => /* glsl */`
 precision highp float;
 precision highp sampler2D;
 in vec2 vBakeUv;
@@ -272,9 +274,7 @@ uniform vec4 uColourMask;
 uniform vec4 uLayer;
 uniform vec4 uMaps0;
 uniform vec2 uMaps1;
-layout( location = 0 ) out highp vec4 oAcc0;
-layout( location = 1 ) out highp vec4 oAcc1;
-layout( location = 2 ) out highp vec4 oAcc2;
+layout( location = 0 ) out highp vec4 oTarget;
 ${LAYER_ACCUMULATE_GLSL}
 vec4 xfsTiled( sampler2D map, vec2 uv, float tile, vec2 offset, float ratio ) {
 	vec2 fr = vec2( fract( uv.x ), fract( 1.0 - uv.y ) );
@@ -283,7 +283,7 @@ vec4 xfsTiled( sampler2D map, vec2 uv, float tile, vec2 offset, float ratio ) {
 	vec2 dx = dFdx( uv ) * vec2( tile * ratio, tile ), dy = dFdy( uv ) * vec2( tile * ratio, tile );
 	return textureGrad( map, at, dx, dy );
 }
-void main() {
+void xfsLayer( out vec4 oAcc0, out vec4 oAcc1, out vec4 oAcc2 ) {
 	vec2 uv = uDomain.xy + vBakeUv * uDomain.zw;
 	ivec2 texel = ivec2( gl_FragCoord.xy );
 	vec4 acc0 = texelFetch( uAcc0, texel, 0 );
@@ -314,14 +314,19 @@ void main() {
 	oAcc1.x = acc1.x + w * xfsLevels( roughness, uRough.xy, uRough.zw );
 	oAcc1.y = acc1.y + w * xfsLevels( metalness, uMetal.xy, uMetal.zw );
 	oAcc2.xy = acc2.xy + w * normal * uLayer.z;
+}
+void main() {
+	vec4 acc0, acc1, acc2;
+	xfsLayer( acc0, acc1, acc2 );
+	oTarget = acc${target};
 }`;
 
 /**
- * Final pass: the accumulated layers as the lit material's two packed maps (PREV-63): base colour with roughness in alpha (an sRGB
- * 8-bit target: the hardware encodes the colour and keeps alpha linear), and the tangent normal (game frame, over the mesh-wide normal)
- * with metalness in alpha (linear 8-bit).
+ * Final pass, for kept map `target`: the accumulated layers as the lit material's two packed maps (PREV-63): base colour with roughness
+ * in alpha (an sRGB 8-bit target: the hardware encodes the colour and keeps alpha linear), and the tangent normal (game frame, over the
+ * mesh-wide normal) with metalness in alpha (linear 8-bit). One output per program, as the layer's.
  */
-const RESOLVE_FRAGMENT = /* glsl */`
+const resolveFragment = (target: 0 | 1) => /* glsl */`
 precision highp float;
 precision highp sampler2D;
 in vec2 vBakeUv;
@@ -334,8 +339,7 @@ uniform vec4 uDomain;
 uniform vec4 uGlobalUv;
 /** Global normal intensity, whether it is set. */
 uniform vec2 uGlobal;
-layout( location = 0 ) out highp vec4 oColour;
-layout( location = 1 ) out highp vec4 oNormal;
+layout( location = 0 ) out highp vec4 oTarget;
 ${LAYER_ACCUMULATE_GLSL}
 void main() {
 	ivec2 texel = ivec2( gl_FragCoord.xy );
@@ -353,17 +357,13 @@ void main() {
 		base = xfsGlobalNormal( texture( uGlobalNormal, at ).rg * 2.0 - 1.0, uGlobal.x );
 	}
 	vec3 n = xfsRnm( base, detail );
-	oColour = vec4( clamp( acc0.rgb, 0.0, 1.0 ), clamp( acc1.x, 0.0, 1.0 ) );
-	oNormal = vec4( n * 0.5 + 0.5, clamp( acc1.y, 0.0, 1.0 ) );
+	vec4 colour = vec4( clamp( acc0.rgb, 0.0, 1.0 ), clamp( acc1.x, 0.0, 1.0 ) );
+	vec4 normal = vec4( n * 0.5 + 0.5, clamp( acc1.y, 0.0, 1.0 ) );
+	oTarget = ${target === 0 ? "colour" : "normal"};
 }`;
 
-/** Before the first layer: nothing accumulated, all coverage remaining (alpha of the first target), zero normals. */
-const CLEAR_FRAGMENT = /* glsl */`
-precision highp float;
-layout( location = 0 ) out highp vec4 o0;
-layout( location = 1 ) out highp vec4 o1;
-layout( location = 2 ) out highp vec4 o2;
-void main() { o0 = vec4( 0.0, 0.0, 0.0, 1.0 ); o1 = vec4( 0.0 ); o2 = vec4( 0.0 ); }`;
+/** Before the first layer, each accumulation target is cleared to this: nothing accumulated, all coverage remaining (the first's alpha), zero normals. */
+const ACCUMULATION_CLEAR = [1, 0, 0] as const;
 
 /** The textures one layer samples (the loader's, with their colour flags already applied; data maps are never colour-decoded). */
 export type LayerTextures = { color?: THREE.Texture; normal?: THREE.Texture; roughness?: THREE.Texture; metalness?: THREE.Texture;
@@ -385,6 +385,8 @@ export type LayeredEvidence = { state: "pending" | "baked" | "failed"; size: num
   globalNormal: boolean; error?: string;
   /** Bytes the kept maps take on the GPU (both packed maps with their mips), shared with every chunk baked from the same stack. */
   bytes: number; shared: boolean };
+/** The kept maps of a bake: colour with roughness in alpha, and the normal with metalness in alpha, a target each. */
+export type BakedMaps = readonly [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget];
 export type LayeredHandle = {
   readonly state: "pending" | "baked" | "failed";
   /**
@@ -400,7 +402,7 @@ export type LayeredHandle = {
   /** Plain data for the developer evidence. */
   evidence(): LayeredEvidence;
   /** The baked maps (colour + roughness, normal + metalness) once baked: read by the real-GPU test. */
-  readonly target: THREE.WebGLRenderTarget | null;
+  readonly maps: BakedMaps | null;
 };
 
 /** The chunk-wide values a layered chunk's template instance sets (the record carries scalars; vectors fall back to identity). */
@@ -496,11 +498,11 @@ export const bakeUnsupported = (renderer: THREE.WebGLRenderer): string | null =>
     : !renderer.extensions?.has?.("EXT_color_buffer_float") && !renderer.extensions?.has?.("EXT_color_buffer_half_float") ? "half-float render targets are unavailable" : null;
 
 /**
- * The bake's programs and quad, made once per renderer (PREV-66): every bake reuses them, so a V's five piercing chunks compile three
- * programs once instead of fifteen times. Uniforms are set per layer. After a context restore three.js compiles them again on first use.
+ * The bake's programs and quad, made once per renderer (PREV-66): every bake reuses them, so a V's five piercing chunks compile the five
+ * programs once instead of for each. `passes` are the layer pass for each accumulation target and `resolves` the final pass for each kept
+ * map, one output each; each list shares one set of uniforms, set per layer. After a context restore three.js compiles them again on first use.
  */
-type BakeKit = { pass: THREE.RawShaderMaterial; resolve: THREE.RawShaderMaterial; clear: THREE.RawShaderMaterial; mesh: THREE.Mesh;
-  scene: THREE.Scene; camera: THREE.Camera };
+type BakeKit = { passes: THREE.RawShaderMaterial[]; resolves: THREE.RawShaderMaterial[]; mesh: THREE.Mesh; scene: THREE.Scene; camera: THREE.Camera };
 const kits = new WeakMap<THREE.WebGLRenderer, BakeKit>();
 function bakeKit(renderer: THREE.WebGLRenderer): BakeKit {
   let kit = kits.get(renderer);
@@ -509,19 +511,20 @@ function bakeKit(renderer: THREE.WebGLRenderer): BakeKit {
   quad.setAttribute("position", new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
   const raw = (fragmentShader: string, uniforms: Record<string, THREE.IUniform>) => new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3,
     vertexShader: PASS_VERTEX, fragmentShader, depthTest: false, depthWrite: false, uniforms });
-  const pass = raw(LAYER_FRAGMENT, { uAcc0: { value: null }, uAcc1: { value: null }, uAcc2: { value: null }, uColour: { value: white() }, uNormal: { value: white() },
+  const passUniforms: Record<string, THREE.IUniform> = { uAcc0: { value: null }, uAcc1: { value: null }, uAcc2: { value: null }, uColour: { value: white() }, uNormal: { value: white() },
     uRoughness: { value: white() }, uMetalness: { value: white() }, uMicroblend: { value: white() }, uMask: { value: white() },
     uDomain: { value: new THREE.Vector4() }, uTint: { value: new THREE.Vector3() }, uTile: { value: new THREE.Vector4() }, uMicro: { value: new THREE.Vector4() },
     uRough: { value: new THREE.Vector4() }, uMetal: { value: new THREE.Vector4() }, uColourMask: { value: new THREE.Vector4() },
-    uLayer: { value: new THREE.Vector4() }, uMaps0: { value: new THREE.Vector4() }, uMaps1: { value: new THREE.Vector2() } });
-  const resolve = raw(RESOLVE_FRAGMENT, { uAcc0: { value: null }, uAcc1: { value: null }, uAcc2: { value: null }, uGlobalNormal: { value: white() },
-    uDomain: { value: new THREE.Vector4() }, uGlobalUv: { value: new THREE.Vector4() }, uGlobal: { value: new THREE.Vector2() } });
-  const clear = raw(CLEAR_FRAGMENT, {});
-  const mesh = new THREE.Mesh(quad, pass);
+    uLayer: { value: new THREE.Vector4() }, uMaps0: { value: new THREE.Vector4() }, uMaps1: { value: new THREE.Vector2() } };
+  const resolveUniforms: Record<string, THREE.IUniform> = { uAcc0: { value: null }, uAcc1: { value: null }, uAcc2: { value: null },
+    uGlobalNormal: { value: white() }, uDomain: { value: new THREE.Vector4() }, uGlobalUv: { value: new THREE.Vector4() }, uGlobal: { value: new THREE.Vector2() } };
+  const passes = ([0, 1, 2] as const).map(target => raw(layerFragment(target), passUniforms));
+  const resolves = ([0, 1] as const).map(target => raw(resolveFragment(target), resolveUniforms));
+  const mesh = new THREE.Mesh(quad, passes[0]);
   mesh.frustumCulled = false;
   const scene = new THREE.Scene();
   scene.add(mesh);
-  kit = { pass, resolve, clear, mesh, scene, camera: new THREE.Camera() };
+  kit = { passes, resolves, mesh, scene, camera: new THREE.Camera() };
   kits.set(renderer, kit);
   return kit;
 }
@@ -532,11 +535,14 @@ function bakeKit(renderer: THREE.WebGLRenderer): BakeKit {
  * that fails any of these would otherwise leave black maps reported as baked. The two GL queries stall the pipeline, so a bake asks
  * for the framebuffer once per target and for errors once per pass (PREV-75): an error flag stays set until it is read.
  */
-function drawFailed(renderer: THREE.WebGLRenderer, material: THREE.Material, checks: { framebuffer: boolean; error: boolean }): string | null {
+function drawFailed(renderer: THREE.WebGLRenderer, material: THREE.Material | null, checks: { framebuffer: boolean; error: boolean }): string | null {
   const gl = renderer.getContext();
-  const program = (renderer.properties.get(material) as { currentProgram?: { diagnostics?: { runnable: boolean; programLog: string } } }).currentProgram;
-  if (!program) return "the bake program was not built";
-  if (program.diagnostics && !program.diagnostics.runnable) return `the bake program failed to build: ${program.diagnostics.programLog.slice(0, 200)}`;
+  // No material: a clear, which builds nothing.
+  if (material) {
+    const program = (renderer.properties.get(material) as { currentProgram?: { diagnostics?: { runnable: boolean; programLog: string } } }).currentProgram;
+    if (!program) return "the bake program was not built";
+    if (program.diagnostics && !program.diagnostics.runnable) return `the bake program failed to build: ${program.diagnostics.programLog.slice(0, 200)}`;
+  }
   if (checks.framebuffer) {
     const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
     if (status !== gl.FRAMEBUFFER_COMPLETE) return `the bake target is incomplete (0x${status.toString(16)})`;
@@ -568,7 +574,7 @@ const keptBytes = (width: number, height: number) => Math.round(width * height *
  * credited to one user, the longest-standing one still using them (PREV-78), so the evidence sums to what the GPU keeps. They belong to
  * the context generation they were baked in (platform/scene/context-generation.ts): a later generation starts with none.
  */
-type SharedBake = { target: THREE.WebGLRenderTarget; users: Set<symbol> };
+type SharedBake = { maps: BakedMaps; users: Set<symbol> };
 const sharedBakes = new WeakMap<THREE.WebGLRenderer, { generation: AbortSignal; bakes: Map<string, SharedBake> }>();
 /** The renderer's shared bakes in its context generation now. */
 function bakesOf(renderer: THREE.WebGLRenderer): Map<string, SharedBake> {
@@ -608,18 +614,18 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
   /** The bake failed because the context was lost (tried again after the restore, PREV-73). */
   let lostContext = false;
   const me = Symbol("layered bake user"), width = input.size, height = input.height ?? input.size;
-  let result: THREE.WebGLRenderTarget | null = null, entry: SharedBake | null = null, release: (() => void) | null = null;
+  let result: BakedMaps | null = null, entry: SharedBake | null = null, release: (() => void) | null = null;
   /** The renderer it baked with, and the context generation its maps (or a bake the loss cut short) belong to. */
   let owner: THREE.WebGLRenderer | null = null, bakedIn: AbortSignal | null = null;
   // The baked maps live as long as the material: whoever disposes the material (the loader, per V) releases them.
   material.addEventListener("dispose", () => { current(); release?.(); release = null; result = null; entry = null; });
   const { min, max } = input.domain;
   const domain = new THREE.Vector4(min[0], min[1], max[0] - min[0], max[1] - min[1]);
-  const show = (target: THREE.WebGLRenderTarget) => {
+  const show = (maps: BakedMaps) => {
     // The lit material samples the maps over the baked UV range: uv' = (uv − min) / (max − min).
     const repeat = new THREE.Vector2(1 / (max[0] - min[0]), 1 / (max[1] - min[1]));
     const offset = new THREE.Vector2(-min[0] * repeat.x, -min[1] * repeat.y);
-    const [colour, normal] = target.textures as [THREE.Texture, THREE.Texture];
+    const [colour, normal] = maps.map(target => target.texture) as [THREE.Texture, THREE.Texture];
     // A shared target is shared only by bakes of the same domain, so every user sets the same transform.
     material.map = colour; material.roughnessMap = colour;
     material.normalMap = normal; material.metalnessMap = normal;
@@ -648,7 +654,7 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
   }
   const handle: LayeredHandle = {
     get state() { current(); return state; },
-    get target() { current(); return result; },
+    get maps() { current(); return result; },
     contextRestored() {
       bakedIn = null;
       // A bake that failed because the context was lost runs again (PREV-73); any other failure stands.
@@ -670,46 +676,57 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
       const bakes = bakesOf(renderer);
       owner = renderer;
       const use = (shared: SharedBake) => {
-        shared.users.add(me); entry = shared; result = shared.target; bakedIn = contextGeneration(renderer);
-        release = () => { shared.users.delete(me); if (!shared.users.size) { shared.target.dispose(); if (bakes.get(key) === shared) bakes.delete(key); } };
+        shared.users.add(me); entry = shared; result = shared.maps; bakedIn = contextGeneration(renderer);
+        release = () => { shared.users.delete(me); if (!shared.users.size) { for (const map of shared.maps) map.dispose(); if (bakes.get(key) === shared) bakes.delete(key); } };
       };
       const known = bakes.get(key);
       if (known) {
         use(known);
-        show(known.target);
+        show(known.maps);
         state = "baked";
         return true;
       }
       const kit = bakeKit(renderer);
-      const targets: THREE.WebGLRenderTarget[] = [];
+      // Two sets of the three accumulation targets (one read, the other written), a target each, so every program writes one output.
+      const sets: THREE.WebGLRenderTarget[][] = [];
       const previousTarget = renderer.getRenderTarget(), autoClear = renderer.autoClear;
       const clearColour = renderer.getClearColor(new THREE.Color()), clearAlpha = renderer.getClearAlpha();
-      let made: THREE.WebGLRenderTarget | null = null;
+      let made: THREE.WebGLRenderTarget[] = [];
       try {
         // Start from a clean error state: an earlier draw's error is not the bake's.
         const gl = renderer.getContext();
         for (let i = 0; i < 8 && gl.getError() !== gl.NO_ERROR; i++) { /* drain */ }
         // Half-float accumulation (PREV-63): signed normals and coverage sums above 1 need a float format; half precision keeps the
         // bake within the CPU reference's tolerance.
-        const accumulate = () => new THREE.WebGLRenderTarget(width, height, { count: 3, type: THREE.HalfFloatType, format: THREE.RGBAFormat,
-          depthBuffer: false, generateMipmaps: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-        targets.push(accumulate(), accumulate());
+        const accumulate = () => ACCUMULATION_CLEAR.map(() => new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType,
+          format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }));
+        sets.push(accumulate(), accumulate());
         renderer.autoClear = false;
-        kit.mesh.material = kit.clear;
-        renderer.setRenderTarget(targets[0]!);
-        renderer.render(kit.scene, kit.camera);
-        let failure = drawFailed(renderer, kit.clear, { framebuffer: true, error: true });
+        // Each target's framebuffer is checked the first time it is bound (PREV-75).
+        const checked = new Set<THREE.WebGLRenderTarget>();
+        const bind = (target: THREE.WebGLRenderTarget) => {
+          renderer.setRenderTarget(target);
+          const first = !checked.has(target);
+          checked.add(target);
+          return first;
+        };
+        let failure: string | null = null;
+        sets[0]!.forEach((target, k) => {
+          const first = bind(target);
+          renderer.setClearColor(0x000000, ACCUMULATION_CLEAR[k]!);
+          renderer.clear(true, false, false);
+          failure ??= drawFailed(renderer, null, { framebuffer: first, error: false });
+        });
+        failure ??= drawFailed(renderer, null, { framebuffer: false, error: true });
         let from = 0;
-        const checked = new Set<THREE.WebGLRenderTarget>([targets[0]!]);
-        const u = kit.pass.uniforms, g = input.globals;
+        const u = kit.passes[0]!.uniforms, g = input.globals;
         (u.uDomain!.value as THREE.Vector4).copy(domain);
-        kit.mesh.material = kit.pass;
         input.layers.forEach(({ parameters: layer, textures }, order) => {
           if (failure) return;
           const to = 1 - from;
-          u.uAcc0!.value = targets[from]!.textures[0];
-          u.uAcc1!.value = targets[from]!.textures[1];
-          u.uAcc2!.value = targets[from]!.textures[2];
+          u.uAcc0!.value = sets[from]![0]!.texture;
+          u.uAcc1!.value = sets[from]![1]!.texture;
+          u.uAcc2!.value = sets[from]![2]!.texture;
           u.uColour!.value = textures.color ?? white();
           u.uNormal!.value = textures.normal ?? white();
           u.uRoughness!.value = textures.roughness ?? white();
@@ -725,39 +742,47 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
           (u.uLayer!.value as THREE.Vector4).set(order === input.layers.length - 1 && layer.index === 0 ? 1 : 0, layer.opacity, layer.normalStrength, layer.mbContrast);
           (u.uMaps0!.value as THREE.Vector4).set(+!!textures.color, +!!textures.normal, +!!textures.roughness, +!!textures.metalness);
           (u.uMaps1!.value as THREE.Vector2).set(+!!textures.microblend, +!!textures.mask);
-          kit.pass.uniformsNeedUpdate = true;
-          renderer.setRenderTarget(targets[to]!);
-          renderer.render(kit.scene, kit.camera);
-          failure = drawFailed(renderer, kit.pass, { framebuffer: !checked.has(targets[to]!), error: false });
-          checked.add(targets[to]!);
+          // The layer into each target of the other set, from the whole of this one.
+          kit.passes.forEach((pass, k) => {
+            if (failure) return;
+            pass.uniformsNeedUpdate = true;
+            kit.mesh.material = pass;
+            const first = bind(sets[to]![k]!);
+            renderer.render(kit.scene, kit.camera);
+            failure = drawFailed(renderer, pass, { framebuffer: first, error: false });
+          });
           from = to;
         });
         // One error check for every layer drawn (an error flag stays set until it is read).
-        failure ??= drawFailed(renderer, kit.pass, { framebuffer: false, error: true });
+        failure ??= drawFailed(renderer, null, { framebuffer: false, error: true });
         if (failure) throw Error(failure);
         // The kept maps: colour (sRGB) with roughness in alpha, and the normal with metalness in alpha, both 8-bit with mips.
-        made = new THREE.WebGLRenderTarget(width, height, { count: 2, type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false,
-          generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
-        made.textures[0]!.colorSpace = THREE.SRGBColorSpace;
-        const r = kit.resolve.uniforms;
-        r.uAcc0!.value = targets[from]!.textures[0];
-        r.uAcc1!.value = targets[from]!.textures[1];
-        r.uAcc2!.value = targets[from]!.textures[2];
+        made = [0, 1].map(() => new THREE.WebGLRenderTarget(width, height, { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false,
+          generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter }));
+        made[0]!.texture.colorSpace = THREE.SRGBColorSpace;
+        const r = kit.resolves[0]!.uniforms;
+        r.uAcc0!.value = sets[from]![0]!.texture;
+        r.uAcc1!.value = sets[from]![1]!.texture;
+        r.uAcc2!.value = sets[from]![2]!.texture;
         r.uGlobalNormal!.value = g.normal ?? white();
         (r.uDomain!.value as THREE.Vector4).copy(domain);
         (r.uGlobalUv!.value as THREE.Vector4).set(g.normalUvScale[0], g.normalUvScale[1], g.normalUvBias[0], g.normalUvBias[1]);
         (r.uGlobal!.value as THREE.Vector2).set(g.normalIntensity, g.normal ? 1 : 0);
-        kit.resolve.uniformsNeedUpdate = true;
-        kit.mesh.material = kit.resolve;
-        renderer.setRenderTarget(made);
-        renderer.render(kit.scene, kit.camera);
-        const resolveFailure = drawFailed(renderer, kit.resolve, { framebuffer: true, error: true });
-        if (resolveFailure) throw Error(resolveFailure);
-        const baked: SharedBake = { target: made, users: new Set() };
+        kit.resolves.forEach((resolve, k) => {
+          if (failure) return;
+          resolve.uniformsNeedUpdate = true;
+          kit.mesh.material = resolve;
+          const first = bind(made[k]!);
+          renderer.render(kit.scene, kit.camera);
+          failure = drawFailed(renderer, resolve, { framebuffer: first, error: false });
+        });
+        failure ??= drawFailed(renderer, null, { framebuffer: false, error: true });
+        if (failure) throw Error(failure);
+        const baked: SharedBake = { maps: [made[0]!, made[1]!], users: new Set() };
         bakes.set(key, baked);
         use(baked);
-        made = null;
-        show(baked.target);
+        made = [];
+        show(baked.maps);
         state = "baked";
       } catch (reason) {
         state = "failed";
@@ -765,13 +790,14 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
         // Lost while baking (the draws report the lost context): tried again after the restore (PREV-73).
         lostContext = contextLost(renderer) || error.includes(`0x${CONTEXT_LOST_WEBGL.toString(16)}`);
         if (lostContext) bakedIn = contextGeneration(renderer);
-        made?.dispose();
+        for (const target of made) target.dispose();
         result = null;
       } finally {
+        kit.mesh.material = kit.passes[0]!;
         renderer.setRenderTarget(previousTarget);
         renderer.setClearColor(clearColour, clearAlpha);
         renderer.autoClear = autoClear;
-        for (const target of targets) target.dispose();
+        for (const target of sets.flat()) target.dispose();
       }
       return state === "baked";
     },

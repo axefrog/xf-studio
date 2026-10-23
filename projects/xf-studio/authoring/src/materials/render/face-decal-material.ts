@@ -264,9 +264,7 @@ diffuseColor = vec4( xfsColour, xfsDrawn );
 const DECAL_SCATTER_OUTPUT = /* glsl */`
 #include <dithering_fragment>
 #ifdef XFS_SCATTER_INPUT
-	gl_FragColor = vec4( xfsScatterE, xfsDrawn );
-	xfsScatterOut1 = vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA );
-	xfsScatterOut2 = vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA );
+	xfsScatterWrite( vec4( xfsScatterE, xfsDrawn ), vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA ), vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA ) );
 #endif`;
 
 /** Patch a `MeshStandardMaterial` program for the decal family; throws when this Three.js build lacks an expected chunk. */
