@@ -46,6 +46,12 @@ export class Events {
   private canonRecords = new Map<Id, CanonEntry[]>();
   /** Summary items published as events in this session (V4-47). Not persisted: the publishing layer keeps its own record. */
   readonly published = new Set<Id>();
+  /** The kind and time each event was minted with: a cache for queries to reject a candidate before resolving it. Not persisted. */
+  private minted = new Map<Id, { kind: string; time: number }>();
+
+  mintedFacts(id: Id): { kind: string; time: number } | undefined {
+    return this.minted.get(id);
+  }
 
   constructor(private readonly k: Kernel) {}
 
@@ -63,6 +69,7 @@ export class Events {
     const have = k.store.header(nid) !== undefined;
     if (have && k.store.contributionsOrigin(nid).length > 0) return nid;
     if (!have) k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
+    this.minted.set(nid, { kind: spec.kind, time: spec.time });
     const put = (node: Id, slot: SlotPath, value: Value): void => {
       k.contribute({
         source: { layer: 'simulation', origin: nid },
@@ -259,6 +266,7 @@ export class Events {
 
   clear(): void {
     this.canonRecords.clear();
+    this.minted.clear();
   }
 
   capture(): unknown {

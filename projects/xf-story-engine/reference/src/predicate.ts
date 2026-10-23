@@ -250,29 +250,47 @@ export function evalAll(env: PredicateEnv, ps: Predicate[] | undefined, node: Id
   return true;
 }
 
+/** What a query's tests say about the kind and time of a summary item or a minted event, before any of them is materialised or resolved. */
+export interface ItemPrefilter {
+  /** Whether something of this kind and time can pass the query's tests on those two things. */
+  keep(kind: Value | undefined, time: number): boolean;
+  /** Whether anything of this kind can. */
+  kindOk(kind: Value | undefined): boolean;
+  /** The closed range of times the tests allow, when they bound it. */
+  range?: [number, number];
+}
+
 /**
  * What a query's `must` clauses say about the two things a summary item's descriptor already knows, its kind and its time: a test that
- * can reject an item before it is materialised. It handles only the clauses that read the item's own `kind` and `time` with
- * `eq`, `in`, `not-in`, `range` and the field bounds; every other clause is left to the exact check. Returns undefined when there is none.
+ * can reject an item before it is materialised. It handles only the clauses that read the node's own `kind` and `time` with `eq`, `in`,
+ * `not-in`, `range` and the field bounds; every other clause is left to the exact check. Returns undefined when there is none.
  */
-export function itemPrefilter(must: Predicate[] | undefined): ((kind: Value | undefined, time: number) => boolean) | undefined {
-  const tests: Array<(kind: Value | undefined, time: number) => boolean> = [];
+export function itemPrefilter(must: Predicate[] | undefined): ItemPrefilter | undefined {
+  const kinds: Array<(kind: Value | undefined) => boolean> = [];
+  let lo = Number.NEGATIVE_INFINITY;
+  let hi = Number.POSITIVE_INFINITY;
   for (const p of must ?? []) {
     if (p.path === 'kind' && (p.op === 'eq' || p.op === 'in' || p.op === 'not-in')) {
-      tests.push((kind) => {
+      kinds.push((kind) => {
         if (kind === undefined) return true;
         if (p.op === 'eq') return valueKey(kind) === valueKey(p.arg as Value);
         return p.op === 'in' ? inArg(kind, p.arg) : !inArg(kind, p.arg);
       });
     } else if (p.path === 'time') {
       const a = p.arg;
-      if (p.op === 'range' && Array.isArray(a) && typeof a[0] === 'number' && typeof a[1] === 'number') tests.push((_k, t) => t >= (a[0] as number) && t <= (a[1] as number));
-      else if (p.op === 'field-at-least' && typeof a === 'number') tests.push((_k, t) => t >= a);
-      else if (p.op === 'field-at-most' && typeof a === 'number') tests.push((_k, t) => t <= a);
+      if (p.op === 'range' && Array.isArray(a) && typeof a[0] === 'number' && typeof a[1] === 'number') {
+        lo = Math.max(lo, a[0]);
+        hi = Math.min(hi, a[1]);
+      } else if (p.op === 'field-at-least' && typeof a === 'number') lo = Math.max(lo, a);
+      else if (p.op === 'field-at-most' && typeof a === 'number') hi = Math.min(hi, a);
     }
   }
-  if (tests.length === 0) return undefined;
-  return (kind, time) => tests.every((f) => f(kind, time));
+  const bounded = lo > Number.NEGATIVE_INFINITY || hi < Number.POSITIVE_INFINITY;
+  if (kinds.length === 0 && !bounded) return undefined;
+  const kindOk = (kind: Value | undefined): boolean => kinds.every((f) => f(kind));
+  const out: ItemPrefilter = { kindOk, keep: (kind, time) => kindOk(kind) && time >= lo && time <= hi };
+  if (bounded) out.range = [lo, hi];
+  return out;
 }
 
 export function inSpatialRegion(pos: Value, region: SpatialRegion): boolean {

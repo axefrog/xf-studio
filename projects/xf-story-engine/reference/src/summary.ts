@@ -8,7 +8,7 @@
 import { ln } from './fdlibm-log.ts';
 import { H, i as hi, id as hid, mintedId, rand, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
-import { inSpatialRegion, isUnder } from './predicate.ts';
+import { type ItemPrefilter, inSpatialRegion, isUnder } from './predicate.ts';
 import { type OpCtx, newOpCtx } from './resolve.ts';
 import type { GameTime, Id, NodeHeader, PinReason, QueryScope, SlotPath, Value } from './types.ts';
 import { Budget, LimitExceeded, Worklist, failIfFailed } from './work.ts';
@@ -45,6 +45,8 @@ export class Summaries {
   private canon = new Map<Id, Set<number>>();
   private descCache = new Map<string, { d: ItemDescriptor | null; cost: number; height: number }>();
   private descRevision = -1;
+  /** The kind, start and length of each summary, which are committed at minting and do not change: a cache that a query's time bound prunes by. */
+  private spans = new Map<Id, { kind: Value | undefined; from: number; length: number } | null>();
   private descNow = Number.NaN;
   private warmList = new Worklist<{ summary: Id; next: number }>();
 
@@ -67,6 +69,7 @@ export class Summaries {
     pin('length', spec.length);
     pin('scope', spec.scope);
     if (spec.count !== undefined) pin('count', spec.count);
+    this.spans.set(nid, { kind: spec.kind, from: spec.from, length: spec.length });
     return nid;
   }
 
@@ -74,6 +77,22 @@ export class Summaries {
 
   canonOf(summary: Id): number[] {
     return [...(this.canon.get(summary) ?? [])].sort((a, b) => a - b);
+  }
+
+  /** The kind, start and length of a summary, from the cache or resolved once. */
+  spanOf(ctx: OpCtx, summary: Id, t: GameTime): { kind: Value | undefined; from: number; length: number } | null {
+    const have = this.spans.get(summary);
+    if (have !== undefined) return have;
+    const read = (slot: string): Value | undefined => {
+      const r = this.k.resolver.resolveWithin(ctx, summary, slot, t);
+      failIfFailed(r.status, `${slot} of ${summary}`);
+      return r.value;
+    };
+    const from = read('from');
+    const length = read('length');
+    const span = typeof from === 'number' && typeof length === 'number' ? { kind: read('kind'), from, length } : null;
+    this.spans.set(summary, span);
+    return span;
   }
 
   summaries(): Id[] {
@@ -228,12 +247,19 @@ export class Summaries {
    * The items of every summary overlapping the scope, as materialised item Ids whose place falls inside
    * the scope. The query then checks each exactly. Charged to the query's allowance.
    */
-  itemCandidates(ctx: OpCtx, scope: QueryScope, t: GameTime, roots: Id[], keep?: (kind: Value | undefined, time: number) => boolean): Id[] {
+  itemCandidates(ctx: OpCtx, scope: QueryScope, t: GameTime, roots: Id[], pre?: ItemPrefilter): Id[] {
     if ('nodes' in scope) return [];
     const env = this.k.resolver.makeEnv(ctx, t);
     const out: Id[] = [];
     for (const S of this.summaries()) {
       ctx.allowance.spend(1);
+      // A summary whose kind cannot pass the query's tests, or whose span lies outside the times they allow, has no item to offer: it is
+      // skipped before anything of it is resolved.
+      const span = pre ? this.spanOf(ctx, S, t) : null;
+      if (pre && span) {
+        if (!pre.kindOk(span.kind)) continue;
+        if (pre.range && (span.from + span.length <= pre.range[0] || span.from > pre.range[1])) continue;
+      }
       const spr = this.k.resolver.resolveWithin(ctx, S, 'scope', t);
       failIfFailed(spr.status, `scope of ${S}`);
       const sp = spr.value;
@@ -245,25 +271,11 @@ export class Summaries {
       failIfFailed(cr.status, `count of ${S}`);
       const count = cr.value;
       if (typeof count !== 'number') continue;
-      let kind: Value | undefined;
-      let from: Value | undefined;
-      let length: Value | undefined;
-      if (keep) {
-        const kr = this.k.resolver.resolveWithin(ctx, S, 'kind', t);
-        failIfFailed(kr.status, `kind of ${S}`);
-        kind = kr.value;
-        const fr = this.k.resolver.resolveWithin(ctx, S, 'from', t);
-        failIfFailed(fr.status, `from of ${S}`);
-        from = fr.value;
-        const lr = this.k.resolver.resolveWithin(ctx, S, 'length', t);
-        failIfFailed(lr.status, `length of ${S}`);
-        length = lr.value;
-      }
       for (let i = 0; i < count; i++) {
         ctx.allowance.spend(1);
         // An item that cannot pass the query's tests on its kind and time is neither placed nor materialised for the query to reject it;
         // an item that already exists (a canon item, one in focus) is left to the exact check.
-        if (keep && typeof from === 'number' && typeof length === 'number' && !this.k.store.header(this.itemId(S, i)) && !keep(kind, itemTime(S, i, from, length))) continue;
+        if (pre && span && !this.k.store.header(this.itemId(S, i)) && !pre.keep(span.kind, itemTime(S, i, span.from, span.length))) continue;
         const d = this.descriptor(ctx, S, i, t);
         if (!d || d.place === undefined) continue;
         const inside = 'region' in scope
@@ -323,6 +335,7 @@ export class Summaries {
   clear(): void {
     this.canon.clear();
     this.descCache.clear();
+    this.spans.clear();
     this.warmList.clear();
   }
 }

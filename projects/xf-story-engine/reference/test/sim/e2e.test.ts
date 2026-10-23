@@ -7,9 +7,9 @@ import { H, id as hid, mintedId, s as hs } from '../../src/id.ts';
 import type { SaveRecord } from '../../src/persistence.ts';
 import type { Change, Id } from '../../src/types.ts';
 import { defaultData, type S1Data } from '../../src/sim/data.ts';
-import type { PendingChild } from '../../src/sim/occ.ts';
+import type { PendingChild, RingEntry } from '../../src/sim/occ.ts';
 import { ReplayPort, type ReplayLine } from '../../src/sim/port.ts';
-import type { ActsState } from '../../src/sim/proc-acts.ts';
+import { itemDescriptor, type ActsState } from '../../src/sim/proc-acts.ts';
 import type { EventsState } from '../../src/sim/proc-events.ts';
 import type { NormsDigest, NormsState } from '../../src/sim/proc-norms.ts';
 import type { StocksDigest } from '../../src/sim/proc-stocks.ts';
@@ -273,6 +273,145 @@ describe('SF1-E3: the mirror overriding a simulated value with a game reading', 
     expect(reloaded.k.value(mv, 'alive')).toBe('no');
   }, 900_000);
 });
+
+
+
+describe('SF1-E4: reload after the parent has left the ring', () => {
+  const make = (): Sim =>
+    Sim.create({
+      worldSeed: seedOf('SF1-E4'), index: fx3Slice(),
+      data: fxData((d) => {
+        for (const k of Object.keys(d.shape.rate)) d.shape.rate[k] = d.shape.rate[k]!.map((x) => x * 3) as [number, number, number, number];
+        for (const kd of d.kinds) kd.delayWeights = [0, 0, 0, 0.3, 0.4, 0.3];
+      }),
+    });
+  const adult = { alive: 'yes', 'age-class': 'adult' } as const;
+
+  /** R1's goal frame: an authored, committed, active frame of a mirrored canon person, held by a live seed so that it is a retention root. */
+  function authorGoal(sim: Sim): Id {
+    const k = sim.k;
+    const r1 = new ReplayPort(sim).node('r1');
+    const seed = k.root('live-seed-r1', 'core:seed');
+    k.retention.setSeed({ id: seed, actor: r1, state: {}, nodes: [r1] });
+    return k.frames.open({ actor: r1, level: 'goal', origin: H(hs('r1-goal')), weight: 1, payload: { goal: { effects: [] } }, cause: seed, status: 'active' }).id;
+  }
+
+  const prepare = (sim: Sim): Id => {
+    new ReplayPort(sim).submit([
+      { t: 0, op: 'person', key: 'r1', slots: { affiliation: 'civilian', 'quest-linked': 'yes', ...adult } },
+      { t: 0, op: 'reading', node: 'v', slot: 'cell', value: 'c1' },
+    ]);
+    sim.advance(1);
+    return authorGoal(sim);
+  };
+
+  /** A pending child whose parent has left the ring and which is due within the horizon. */
+  const horizon = 300;
+  const found = (sim: Sim): PendingChild | undefined => {
+    const now = sim.windowNow();
+    return Object.values(eventsState(sim).calendar).flat().find((c) => c.parentFacts.w < now - 1008 && c.due <= now + horizon && c.due > now + 1);
+  };
+
+  /** Where a fired child is in the ring: an event under its parent, or an item of the summary of its due window, found by its parent. */
+  const outcomeOf = (sim: Sim, c: PendingChild): { id: Id; ring: RingEntry; index?: number } | undefined => {
+    const ring = eventsState(sim).ring;
+    if (c.size >= 2) {
+      const id = mintedId(eventsProc, c.parent, `child/${c.index}`);
+      const ring1 = ring.find((e) => e.id === id);
+      return ring1 ? { id, ring: ring1 } : undefined;
+    }
+    for (const e of ring) {
+      if (e.w !== c.due || e.cell !== c.cell || e.kind !== c.kind || !e.meta) continue;
+      for (const [j, m] of Object.entries(e.meta)) if (m.parent === c.parent) return { id: sim.k.summaries.materialise(e.id, Number(j)), ring: e, index: Number(j) };
+    }
+    return undefined;
+  };
+
+  test('the child fires as in U with the same kind, size, cell, time and cast; its why chain has at most 4 links with ancestors beyond the ring marked; R1\'s goal stays active; published items are not published again', () => {
+    const U = make();
+    const goalU = prepare(U);
+    let bStar = -1;
+    let child: PendingChild | undefined;
+    let fresh!: Sim;
+    let published: ActsState['published'] = [];
+    let goalFresh!: Id;
+    const limit = FULL ? 2600 : 2400;
+    while (U.windowNow() < limit) {
+      U.advance(1);
+      if (bStar < 0 && (child = found(U))) {
+        bStar = U.windowNow();
+        // run R: to b*, save, and a fresh process under another epoch
+        U.k.persistence.save('E4');
+        published = actsOf(U).published.map((p) => ({ ...p }));
+        goalFresh = goalU;
+        fresh = transfer(U, 'E4', make, 11);
+      }
+      if (bStar >= 0 && U.windowNow() >= bStar + horizon + 2) break;
+    }
+    expect(bStar).toBeGreaterThan(1008);
+    expect(child).toBeDefined();
+    expect(U.k.frames.frame(goalU)!.status).toBe('active');
+    expect(published.length).toBeGreaterThan(0);
+
+    // the game restates where V is and who R1 is
+    new ReplayPort(fresh).submit([{ t: fresh.k.now, op: 'reading', node: 'v', slot: 'cell', value: 'c1' }, { t: fresh.k.now, op: 'person', key: 'r1', slots: { affiliation: 'civilian', 'quest-linked': 'yes', ...adult } }]);
+    const emitted: Id[] = [];
+    const emit = fresh.k.emit.bind(fresh.k);
+    fresh.k.emit = (change: Change, time?: number) => {
+      if (change.c === 'event') emitted.push(change.event);
+      emit(change, time);
+    };
+    // the active goal is retained through the reload
+    expect(fresh.k.frames.frame(goalFresh)).toBeDefined();
+    expect(fresh.k.frames.frame(goalFresh)!.status).toBe('active');
+    fresh.advance(U.windowNow() - bStar);
+    expect(fresh.windowNow()).toBe(U.windowNow());
+    expect(fresh.k.frames.frame(goalFresh)!.status).toBe('active');
+
+    // the child fires with the same kind, size, cell, time and cast; its parent has left the ring
+    const inU = outcomeOf(U, child!)!;
+    const inR = outcomeOf(fresh, child!)!;
+    expect(inU).toBeDefined();
+    expect(inR).toBeDefined();
+    expect(inR.id).toBe(inU.id);
+    expect(inR.ring).toEqual(inU.ring);
+    if (child!.size >= 2) {
+      expect(inU.ring.event!.size).toBe(child!.size);
+      expect(inU.ring.event!.kind).toBe(child!.kind);
+      expect(inU.ring.event!.cell).toBe(child!.cell);
+      expect(fresh.policies.viewEvent(inR.id)!.participants).toEqual(U.policies.viewEvent(inU.id)!.participants);
+      expect(fresh.policies.viewEvent(inR.id)!.effects).toEqual(U.policies.viewEvent(inU.id)!.effects);
+    } else {
+      expect(inU.ring.kind).toBe(child!.kind);
+      expect(inU.ring.cell).toBe(child!.cell);
+      expect(inU.ring.w).toBe(child!.due);
+      const d = (s: Sim, o: typeof inU) => itemDescriptor(s, o.ring.id, o.index!, o.ring.w, o.ring.cell, o.ring.kind, o.ring.meta![o.index!]!);
+      expect(d(fresh, inR)).toEqual(d(U, inU));
+      expect(fresh.casting.cast(d(fresh, inR))).toEqual(U.casting.cast(d(U, inU)));
+    }
+    expect(eventsState(U).ring.some((e) => e.id === child!.parent)).toBe(false);
+
+    // the why chain has at most four links, and the ancestors the ring no longer holds are Ids marked beyondRing
+    const why = fresh.why(inR.id)!;
+    expect(why).toBeDefined();
+    expect(why.length).toBeLessThanOrEqual(5);
+    expect(why[0]!.id).toBe(inR.id);
+    expect(why[1]!.id).toBe(child!.parent);
+    expect(why[1]!.beyondRing).toBe(true);
+    expect(why).toEqual(U.why(inU.id)!);
+
+    // the whole record is U's, and nothing published before b* is published again
+    expect(differing(recordOf(fresh), recordOf(U))).toEqual([]);
+    for (const p of published) expect(emitted.includes(p.item)).toBe(false);
+    expect(actsOf(fresh).published.map((p) => p.item)).toEqual(actsOf(U).published.map((p) => p.item));
+    // those inside the ring are re-installed silently when their cell is in focus
+    const inRing = published.filter((p) => bStar - p.w < 1008);
+    expect(inRing.length).toBeGreaterThan(0);
+    for (const p of inRing.slice(-3)) expect(fresh.k.value(p.item, 'kind')).toBeDefined();
+  }, 900_000);
+});
+
+const actsOf = (sim: Sim): ActsState => sim.k.evolution.states.get('scene.acts')!.state as ActsState;
 
 
 void defaultData;
