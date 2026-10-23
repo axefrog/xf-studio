@@ -14,6 +14,12 @@ The maintainer, quoted word for word: "there's a system for races that shows che
 2. Can a mod spawn and clear them along an arbitrary path, on foot as well as by car?
 3. How do they relate to the GPS route line, and to custom map pins with routes?
 
+## The lead to start from
+
+The maintainer's MO2 has In-World Navigation 0.1.20 (Nexus 4583, by Jack Humbert, MIT licensed), with its source at `https://github.com/jackhumbert/in_world_navigation`. It draws holographic arrows in the world that follow the minimap's navigation path. It's built from a RED4ext DLL, redscript (`packed.reds`, `module.reds`) and an archive. Names it uses: `navPathFXs`, `navPathTransforms`, `UpdateNavPath`, and the `navPath*Resource` effects (White, Yellow, Teal, Blue, Cyan, FastTravelMetro).
+
+Its source is public, so read it first, and credit it if we use what it teaches. Then compare it with what the race quests do.
+
 ## Existing material
 
 Nothing in the knowledge base covers race guidance or the GPS route. Related pages:
