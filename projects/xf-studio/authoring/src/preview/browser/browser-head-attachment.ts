@@ -211,6 +211,12 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
         prepareSignal.throwIfAborted();
         // The V's own details on a head of its body (the feminine head standing in for an unavailable masculine one shows none), with its
         // own makeup hidden as the view hides it, as show would place them.
+        // The view's Body switch and uncensored setting decide what the V's request draws (as `show` follows them). They are the view's,
+        // the same for every head of the scene, so setting them now asks for no other V than the shown head already shows, and the body
+        // isn't loaded only to be dropped at show.
+        const view = preview.snapshot();
+        context.setBodyShown(view.body !== false);
+        context.setUncensored(view.uncensored === true);
         const request = context.detailRequest();
         if (request.bodyGender === scene.body) {
           scene.setHiddenOptions(context.hiddenOptions());
