@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { hudBlocks, placeEdgeMark, type Rect } from "../overlay/ink-place.ts";
+import { hudBlocks, placeEdgeMark, slideAlong, type Rect } from "../overlay/ink-place.ts";
 import { validate } from "../api/schema.ts";
 import { GIB, freeCommitBytes, parseReading, tripped } from "../commit-tripwire.ts";
 import { findCommand } from "../api/catalogue.ts";
@@ -34,7 +34,10 @@ describe("0.8.10 D1: the pin mark at a side edge keeps clear of the minimap, the
     const asked: Rect = { x: 12, y: 230, ...mark };
     const kept = placeEdgeMark(asked, visible, panel);
     for (const z of [...blocks, panel]) expect(hit(kept, z, 12)).toBe(false);
-    expect(kept.y).toBeGreaterThanOrEqual(panel.y + panel.h + 12);
+    // The Sol review of 0.8.10, finding 2: it stays on its edge (0.8.10's first rule alternated between the bars and the panel
+    // and landed near (3952, 2052)); the nearest free interval is just below the panel.
+    expect(kept.x).toBe(asked.x);
+    expect(kept.y).toBe(panel.y + panel.h + 12);
     const withoutPanel = placeEdgeMark(asked, visible, null);
     expect(withoutPanel.y).toBeGreaterThanOrEqual(300 + 12);
     expect(withoutPanel.y).toBeLessThan(kept.y);
@@ -42,7 +45,7 @@ describe("0.8.10 D1: the pin mark at a side edge keeps clear of the minimap, the
 
   test("a mark already in a free place stays where it is; at other screens the blocks scale with the screen's height", () => {
     const free: Rect = { x: 5184 - 12 - mark.w, y: 1400, ...mark };
-    expect(placeEdgeMark(free, visible, null)).toMatchObject({ x: free.x, y: free.y, how: "kept" });
+    expect(placeEdgeMark(free, visible, null)).toMatchObject({ x: free.x, y: free.y });
     for (const [w, h] of [[3840, 2160], [5760, 2160], [3840, 1080]] as const) {
       const v: Rect = { x: 0, y: 0, w, h };
       const s = h / 2160;
@@ -59,7 +62,19 @@ describe("0.8.10 D1: the pin mark at a side edge keeps clear of the minimap, the
     expect(ink).toContain("new Vector4(v.X, v.Y, 700.0 * h, 300.0 * h)");
     expect(ink).toContain("new Vector4(v.X, v.Y + v.W - 520.0 * h, 570.0 * h, 520.0 * h)");
     expect(ink).toContain("this.m_panelRect = this.m_view.Place(frame, scale, v, units, true);");
-    expect(ink).toContain('rightSide ? "center_right" : "center_left", how);');
+    expect(ink).toContain("public static func SlideAlong(r: Vector4, zones: array<Vector4>, v: Vector4, gap: Float) -> Vector4 {");
+    expect(ink).toContain("XFInkStyle.SlideAlong(new Vector4(left, top, XFInkPins.MarkWidth() * size, XFInkPins.MarkHeight() * size), zones, v, 12.0 * units);");
+  });
+
+  test("an edge mark never leaves its edge, whatever the zones: no free interval keeps the asked place, and a tight screen stays on its edge", () => {
+    const zones: Rect[] = [{ x: 0, y: 0, w: 5184, h: 1000 }, { x: 0, y: 1000, w: 5184, h: 1160 }];
+    const asked: Rect = { x: 12, y: 500, ...mark };
+    expect(slideAlong(asked, zones, visible, 12)).toMatchObject({ x: 12, y: 500 });
+    for (const y of [0, 300, 1000, 2000]) {
+      const kept = placeEdgeMark({ x: 5184 - 12 - mark.w, y, ...mark }, visible, { x: 4000, y: 1300, w: 1000, h: 200 });
+      expect(kept.x).toBe(5184 - 12 - mark.w);
+      for (const z of [...blocks, { x: 4000, y: 1300, w: 1000, h: 200 }]) expect(hit(kept, z, 12)).toBe(false);
+    }
   });
 });
 
@@ -80,6 +95,21 @@ describe("0.8.10 G6: dialogue.hub also comes from the 2 Hz poll", () => {
     expect(probe).toContain("if Equals(out, this.m_lastHubs) {");
     expect(probe).toContain("if first && ArraySize(hubs.choiceHubs) == 0 {");
     expect(probe.match(/XFProbeOut\.Emit\("dialogue\.hub"/g)?.length).toBe(1);
+  });
+
+  test("the Sol review of 0.8.10, finding 1: the poll reads no game system while the gate is closed, and keeps rescheduling", () => {
+    const at = probe.indexOf("public func Poll() -> Void {");
+    const body = probe.slice(at, probe.indexOf("this.PollHubs();", at));
+    expect(body.indexOf("if !XFBridge_Live() {")).toBeGreaterThan(0);
+    expect(body.indexOf("if !XFBridge_Live() {")).toBeLessThan(body.indexOf("GetPlayer(game)"));
+    expect(body.slice(body.indexOf("if !XFBridge_Live() {"), body.indexOf("let game = this.GetGameInstance();", body.indexOf("if !XFBridge_Live() {") + 10))).toContain("DelayCallback(this.m_poll, 0.5, false);");
+  });
+
+  test("the Sol review of 0.8.10, finding 3: npc.where answers V's real head and the sight ray starts there", () => {
+    const npc = read("redscript", "XFRuntimeBridgeNpc.reds");
+    expect(npc).toContain("if XFScene.Head(player, head) {");
+    expect(npc).toContain('headText = ",\\"head\\":" + XFScene.Arr(head);');
+    expect(read("native", "src", "core", "Npc.cpp")).toContain('const Vec3 eye = aV.contains("head") ? ToVec(aV["head"])');
   });
 });
 

@@ -152,9 +152,27 @@ export function hudBlocks(visible: Rect): Rect[] {
  * 0.8.10: a pin mark at the screen's side edge (its asked rectangle) kept clear of the HUD's blocks and of the ink panel when
  * it is on screen, sliding along the edge to the nearest free place, as XFInkOverlay.PlacePinMark does with XFInkStyle.Avoid.
  */
-export function placeEdgeMark(asked: Rect, visible: Rect, panel: Rect | null, units = 1): Rect & { how: ZoneHow } {
+export function placeEdgeMark(asked: Rect, visible: Rect, panel: Rect | null, units = 1): Rect {
   const zones = hudBlocks(visible);
   if (panel && panel.w > 1 && panel.h > 1) zones.push(panel);
-  const rightSide = asked.x + asked.w / 2 > visible.x + visible.w / 2;
-  return avoidZones(asked, zones, visible, 12 * units, rightSide ? "center_right" : "center_left");
+  return slideAlong(asked, zones, visible, 12 * units);
+}
+
+/**
+ * The Sol review of 0.8.10, finding 2: a mark on a side edge keeps its x and moves along the edge only, to the nearest free
+ * interval (XFInkStyle.SlideAlong): the asked top when clear, else the nearest top just above or below a zone, inside the
+ * visible screen and clear of every zone; with none free it stays where asked (clamped).
+ */
+export function slideAlong(r: Rect, zones: readonly Rect[], v: Rect, gap: number): Rect {
+  const low = v.y + gap, high = Math.max(low, v.y + v.h - gap - r.h);
+  const asked = Math.min(Math.max(r.y, low), high);
+  const clear = (y: number) => !zones.some((z) => zoneHit({ ...r, y }, z, gap));
+  if (clear(asked)) return { ...r, y: asked };
+  let best: number | null = null;
+  for (const z of zones) {
+    for (const top of [z.y - gap - r.h, z.y + z.h + gap]) {
+      if (top >= low && top <= high && clear(top) && (best === null || Math.abs(top - asked) < Math.abs(best - asked))) best = top;
+    }
+  }
+  return { ...r, y: best ?? asked };
 }

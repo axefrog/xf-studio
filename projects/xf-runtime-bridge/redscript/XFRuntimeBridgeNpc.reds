@@ -309,7 +309,13 @@ public abstract class XFNpcV {
     let busy = XFPlayer.Busy(player);
     let state = XFPlayer.BusyState(player);
     let camera = XFNpcV.Camera();
-    return "{\"ok\":true,\"phase\":" + XFJson.Str(phase) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"busy\":" + XFJson.Str(busy) + ",\"busy_state\":" + XFJson.Str(state) + camera + "}";
+    // The Sol review of 0.8.10, finding 3: V's real head (her Head slot, so a crouch lowers it) is where sight lines start.
+    let head: Vector4;
+    let headText = "";
+    if XFScene.Head(player, head) {
+      headText = ",\"head\":" + XFScene.Arr(head);
+    }
+    return "{\"ok\":true,\"phase\":" + XFJson.Str(phase) + ",\"position\":" + XFScene.Arr(position) + headText + ",\"yaw\":" + XFJson.Num(yaw) + ",\"busy\":" + XFJson.Str(busy) + ",\"busy_state\":" + XFJson.Str(state) + camera + "}";
   }
 }
 

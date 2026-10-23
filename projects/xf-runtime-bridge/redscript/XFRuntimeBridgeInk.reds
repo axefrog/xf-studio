@@ -400,6 +400,41 @@ public abstract class XFInkStyle {
     return blocks;
   }
 
+  // The Sol review of 0.8.10, finding 2: a mark on a side edge keeps its left and moves along the edge only, to the nearest free
+  // interval: the asked top when it is clear, else the nearest top just above or below a zone that it hits, inside the visible
+  // screen v and clear of every zone (gap apart). With no free interval it stays where it was asked (clamped). The photo-menu
+  // rule's Avoid can alternate between two zones and land across the screen; an edge mark must never leave its edge.
+  public static func SlideAlong(r: Vector4, zones: array<Vector4>, v: Vector4, gap: Float) -> Vector4 {
+    let low = v.Y + gap;
+    let high = MaxF(low, v.Y + v.W - gap - r.W);
+    let asked = ClampF(r.Y, low, high);
+    let best = asked;
+    if XFInkStyle.Clear(new Vector4(r.X, asked, r.Z, r.W), zones, gap) {
+      return new Vector4(r.X, asked, r.Z, r.W);
+    }
+    let found = false;
+    let bestAt = 0.0;
+    let i = 0;
+    while i < ArraySize(zones) {
+      let k = 0;
+      while k < 2 {
+        let top = k == 0 ? zones[i].Y - gap - r.W : zones[i].Y + zones[i].W + gap;
+        if top >= low && top <= high && XFInkStyle.Clear(new Vector4(r.X, top, r.Z, r.W), zones, gap) {
+          if !found || AbsF(top - asked) < AbsF(bestAt - asked) {
+            found = true;
+            bestAt = top;
+          }
+        }
+        k += 1;
+      }
+      i += 1;
+    }
+    if found {
+      best = bestAt;
+    }
+    return new Vector4(r.X, best, r.Z, r.W);
+  }
+
   // 0.8.9 (session 15's A5): the panel's rectangle p (left, top, width, height) kept out of photo mode's zones (its menu, its
   // top bar, the title row with its icon, its hint strips) inside the visible screen v, gap apart. The asked place when it is
   // clear; else the panel slides out of each zone it meets along its anchor's own edge first (sideways for a top or bottom
@@ -1492,9 +1527,7 @@ public class XFInkOverlay extends ScriptableSystem {
       if this.m_panelShown && this.m_panelRect.Z > 1.0 && this.m_panelRect.W > 1.0 {
         ArrayPush(zones, this.m_panelRect);
       }
-      let how: String;
-      let rightSide = at.X > v.X + v.Z * 0.5;
-      let kept = XFInkStyle.Avoid(new Vector4(left, top, XFInkPins.MarkWidth() * size, XFInkPins.MarkHeight() * size), zones, v, 12.0 * units, rightSide ? "center_right" : "center_left", how);
+      let kept = XFInkStyle.SlideAlong(new Vector4(left, top, XFInkPins.MarkWidth() * size, XFInkPins.MarkHeight() * size), zones, v, 12.0 * units);
       left = kept.X;
       top = kept.Y;
     }

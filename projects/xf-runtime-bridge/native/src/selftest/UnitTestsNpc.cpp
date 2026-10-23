@@ -67,6 +67,8 @@ struct Fake
     bool walkable = true;    // ground: every probe walkable at the asked point
     bool rayBlocked = false; // ray: static geometry between every two points
     std::function<bool(const n::Vec3&, const n::Vec3&)> blockedWhen; // 0.8.10: ray: geometry only between some points
+    n::Vec3 groundShift{0.0, 0.0, 0.0};                             // 0.8.10: ground: the navmesh answers this far from the asked point
+    std::vector<n::Vec3> rayFrom;                                    // 0.8.10: every ray's origin
     int groundProbes = 0;
     n::Ops Ops()
     {
@@ -138,10 +140,11 @@ struct Fake
         ops.ground = [this](const n::Vec3& aPoint) {
             ++groundProbes;
             calls.push_back("ground");
-            return walkable ? json{{"walkable", true}, {"streamed", true}, {"point", {aPoint[0], aPoint[1], aPoint[2]}}} : json{{"walkable", false}, {"streamed", true}};
+            return walkable ? json{{"walkable", true}, {"streamed", true}, {"point", {aPoint[0] + groundShift[0], aPoint[1] + groundShift[1], aPoint[2] + groundShift[2]}}} : json{{"walkable", false}, {"streamed", true}};
         };
         ops.ray = [this](const n::Vec3& aFrom, const n::Vec3& aTo) {
             calls.push_back("ray");
+            rayFrom.push_back(aFrom);
             return json{{"blocked", rayBlocked || (blockedWhen && blockedWhen(aFrom, aTo))}};
         };
         return ops;
@@ -885,6 +888,26 @@ void SightTests()
     fake.calls.clear();
     const auto code = CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}, {"side_m", 1.5}}}}, ops); });
     Check("0.8.10 spawn: nowhere visible within reach is refused no_visible_spot before any spawn step", code == "no_visible_spot" && !fake.Called("spawn"));
+    fake.blockedWhen = nullptr;
+    // The Sol review of 0.8.10, finding 3: the ray starts at V's real head (a crouch lowers it), not at standing height.
+    service.Release(json{{"who", "all"}}, ops);
+    fake.v["head"] = {0.0, 0.0, 0.9};
+    fake.rayFrom.clear();
+    service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}, {"side_m", 1.5}}}}, ops);
+    Check("0.8.10 spawn: the sight ray starts at V's head as the game reports it (crouched: 0.9), not at standing height",
+          !fake.rayFrom.empty() && Near(fake.rayFrom[0][2], 0.9));
+    fake.blockedWhen = [](const n::Vec3& aFrom, const n::Vec3& aTo) { return aFrom[2] < 1.0 && aTo[0] > 1.0; }; // cover that only a low head sees behind
+    service.Release(json{{"who", "all"}}, ops);
+    Check("0.8.10 spawn: crouched behind cover the asked spot is not seen and moves", service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}, {"side_m", 1.5}}}}, ops).contains("moved_for_sight"));
+    fake.v.erase("head");
+    fake.blockedWhen = nullptr;
+    // Finding 4: the navmesh may answer up to 2 m from the asked point; the search keeps to kSightSearchM of the asked spot.
+    service.Release(json{{"who", "all"}}, ops);
+    fake.groundShift = {-0.8, 0.0, 0.0};
+    fake.blockedWhen = [](const n::Vec3&, const n::Vec3& aTo) { return aTo[0] > -3.2; }; // visible only far to the left
+    const auto farCode = CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}, {"side_m", 1.5}}}}, ops); });
+    Check("0.8.10 spawn: a snapped result beyond kSightSearchM (4.8 m from the asked spot) is not taken (no_visible_spot)", farCode == "no_visible_spot", farCode);
+    fake.groundShift = {0.0, 0.0, 0.0};
     fake.blockedWhen = nullptr;
     fake.walkable = false;
     Check("0.8.10 spawn: ground that is not walkable is the spawn's own refusal to give (the check steps aside)", CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}}}}, ops); }) != "no_visible_spot");

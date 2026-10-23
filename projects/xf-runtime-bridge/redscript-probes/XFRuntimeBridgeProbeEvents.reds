@@ -332,6 +332,14 @@ public class XFEventProbe extends ScriptableSystem {
     if !this.m_on {
       return;
     }
+    // The Sol review of 0.8.10, finding 1: m_on stays true until detach, but a load closes the script gate before it, and no game
+    // system is read then (the hub poll, the player, the clock); the callback keeps rescheduling.
+    if !XFBridge_Live() {
+      if IsDefined(this.m_poll) {
+        GameInstance.GetDelaySystem(this.GetGameInstance()).DelayCallback(this.m_poll, 0.5, false);
+      }
+      return;
+    }
     let game = this.GetGameInstance();
     let player = GetPlayer(game);
     if IsDefined(player) {

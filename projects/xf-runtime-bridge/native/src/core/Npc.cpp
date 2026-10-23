@@ -662,7 +662,8 @@ json Service::FindVisibleSpot(const json& aV, const Vec3& aAsked, const Ops& aOp
         return out;
     }
     const auto vPos = ToVec(aV.value("position", json::array({0, 0, 0})));
-    const Vec3 eye{vPos[0], vPos[1], vPos[2] + kSightEyeM};
+    // V's real head from the game (a crouch lowers it); standing height only where the game didn't say.
+    const Vec3 eye = aV.contains("head") ? ToVec(aV["head"]) : Vec3{vPos[0], vPos[1], vPos[2] + kSightEyeM};
     size_t probes = 0;
     const auto snap = [&](const Vec3& aAt, Vec3& aOut) {
         ++probes;
@@ -726,7 +727,7 @@ json Service::FindVisibleSpot(const json& aV, const Vec3& aAsked, const Ops& aOp
             break;
         }
         Vec3 found{};
-        if (!snap(candidate, found) || HorizontalDistance(found, vPos) < 1.0 || Distance(found, aAsked) > kSightSearchM + 1.0)
+        if (!snap(candidate, found) || HorizontalDistance(found, vPos) < 1.0 || Distance(found, aAsked) > kSightSearchM)
         {
             continue;
         }
