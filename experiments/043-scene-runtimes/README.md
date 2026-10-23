@@ -1,6 +1,6 @@
 # Experiment 043: scene runtimes (profiles phase 4a)
 
-**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9), 4a-iv (§10) and 4a-v (§11) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
+**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9), 4a-iv (§10) and 4a-v with its G2 follow-up 4a-v-b (§11) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `72369156` (phase 1 merged). Tests are in `projects/xf-studio/authoring/tests/`.
 
@@ -520,9 +520,9 @@ It closes S2's second defect: a lighting setup's or a V's first draw froze the p
   1. **The feature renderers' own passes** (`FeatureRenderer.prepare`, new and optional): eye makeup compiles its composite's three passes ahead (`createPlateComposite().compile`), then composites, so its merged plate exists and is visible as the first frame draws it. Its wait on the links is abortable (`platform/api/abortable.ts`): a superseded preparation lets go at once rather than when the driver finishes.
   2. **Every mesh the next frame draws**, through the lighting stage's `prepare`: the forward scene, the scatter and contact variants, and each caster's shadow depth variants. The shadow pass's pick of a depth material is reproduced (`shadowDepthMaterial`, after three r186's `getDepthMaterial`), including the variant it picks when the maps redraw inside the contact prepass, where every caster wears its depth material. A mesh's own `customDepthMaterial` is live (the contact prepass draws with it), so every field the pick writes on it is put back once the mesh is compiled: compiling ahead changes nothing that is drawn. Each mesh is marked as receiving shadows before it is compiled, as the frame marks it: Three keys a program on it.
   3. **The display's own passes** (`prepareDisplay`): the game grade or the studio's coverage and tone passes, the skin scatter's blur, and a stand-in for Three's background plane (`BackgroundMaterial`, otherwise linked inside the first studio frame: 2.3 s cold).
-  4. **Links.** With KHR_parallel_shader_compile the preparation asks, once a frame and without waiting, how many programs are linked, then takes each one's first use a few per frame. Without it a fence stands in (see the fallback below).
-  5. **Textures.** The maps the compiled materials hold (their own properties and uniforms: Three copies built-in maps into uniforms only when it draws), uploaded a few per frame.
-  6. **One hidden warm-up draw** on the renderer device (`RendererDevice.warmUp`). The hidden runtime draws one frame exactly as shown, and in the same task the device draws the shown runtime again, so the canvas keeps the shown V's pixels and nothing of the hidden one reaches the screen. It builds what only a draw makes (the driver's input layouts, frame-sized targets), and a fence then waits for the GPU. Warm-ups count in the slot's `warmUps`, never in its `frames`.
+  4. **Links.** With KHR_parallel_shader_compile the preparation asks, once a frame and without waiting, how many programs are linked, then takes each one's first use a few per frame. Without it a fence stands in (see the fallback below). Steps 2 to 4 go about one program per step, with only a few linking at once (4a-v-b, below).
+  5. **Textures.** The maps the compiled materials hold (their own properties and uniforms: Three copies built-in maps into uniforms only when it draws), uploaded a few per frame, a large one in bands, each once the GPU process has caught up (4a-v-b).
+  6. **Hidden warm-up draws** on the renderer device (`RendererDevice.warmUp`), in pieces since 4a-v-b. The hidden runtime draws exactly as shown, and in the same task the device draws the shown runtime again, so the canvas keeps the shown V's pixels and nothing of the hidden one reaches the screen. They build what only a draw makes (the driver's input layouts, frame-sized targets, three-target pixel shaders), and a fence after each piece is waited for a frame at a time. Warm-ups count in the slot's `warmUps`, never in its `frames`.
 - **A lost context restarts the preparation** (`acrossContextLoss`). A program compiled before a loss holds a handle the restored context doesn't know, so its link never completes and a preparation polling it would wait for good. The renderer device publishes its context's lifetime (`contextSignal`, aborted on loss) and when it is usable again (`contextReady`, after every runtime restored its own). Each attempt runs under that signal as well as the want's, so a loss stops it at its next step and drops the programs it held; once the context is back the preparation starts again from the beginning, reporting `programs` waiting on the GPU meanwhile. Only the want's own abort, or a failure that isn't the loss, ends it unfinished.
 - **What a preparation leaves behind.** Three deletes a program's shaders only at its first use, so a program compiled ahead and released unused (a superseded preparation) left both shaders on the driver. `releaseShadersWithPrograms` (`materials/render/linked-programs.ts`) deletes them with the program, for the lighting stage's programs and the plate composite's passes alike. The renderer's scenes now share one prefiltered room (`studio-environment.ts`): it took 32–61 ms of the page's thread per runtime, and the last runtime to go frees it.
 - **The head** (`browser-head-attachment.ts`, `AttachedHead.prepare`). It asks for the V's details on a head of their body and waits until they are placed (shown, failed or waiting for WolvenKit), reporting the host's progress. The V's own makeup is hidden as the view hides it. Then it fills each layered surface with the authored makeup as it is now, and prepares the scene with it, together with the lighting setups of any other view of the same scene (phase 4a has none). `prepared()` is the scene's.
@@ -598,51 +598,132 @@ Before the fixes in this chunk, the same probe found the cold V's warm-up draw l
 - **4a-iv's page didn't start in a browser.** Wiring made before the scene runtime owner (the live face's following, the UV editor's first draw, the status source) read `heads` at once, before `const heads` existed, so the page stopped with a ReferenceError. No test starts the real page; the first real-browser run since 4a-iv (this chunk's capture run) found it. The root now reads the shown head through `shownHead`, which answers nothing until the owner is made. `tests/studio-startup-order.test.ts` checks the source order and fails on 4a-iv's.
 - **The first load is prepared too.** With nothing shown, the pane shows its loading state through every stage, and the head appears with its V's details, programs and maps ready, rather than bare and filling in. On a warm host that adds the details' time (about 1 s) to the time before the first head.
 - **The first build's room.** The first runtime on a renderer still prefilters the room on the page's thread, with PMREM's own programs linked inside it: 0.4 s cold, 80–100 ms warm (the probe's first V: one task of 98–164 ms). Later runtimes share it. Sharing it with the first build too, or moving the prefilter off the page's thread, is a performance-track item.
-- **The cold link time itself** (35 s on synthetic heads, 94 s in S2 on real data) is moved off the page's thread and behind progress, not removed. G2 measured it on real data with a fresh profile: 20 to 36 s of GPU-side wait when prepared (bodies and lighting setups together), 89 to 104 s as one blocked task when a lighting change is not prepared. Its size stays a performance-track item.
-- **A lighting change on the shown view** still compiles its new programs inside the next frame. 4a-v prepares runtimes before they are shown (a V, a body, a view), not a setup change on the runtime already shown. The same machinery (the stage's `prepare` and `prepareDisplay` against the new setup, then swapping it in) can cover that next, so the old setup stays drawn until the new one is linked.
+- **The cold link time itself** (35 s on synthetic heads, 94 s in S2 on real data) is moved off the page's thread and behind progress, not removed: 40–47 s on real data for a lighting change or a body under the creator rig (G2 after 4a-v-b, below). Its size stays a performance-track item.
+- **A lighting change on the shown view** is prepared ahead too (4a-v-b, below): the new setup is staged, prepared while the setup before stays drawn, and takes over once ready.
 - **A finding on the way (not changed, to keep parity; PREV-208).** The shadow maps are redrawn inside the contact prepass, whose casters wear their depth materials. Three's shadow pass then picks a depth material for the depth material itself, and turns its cull side over on every redraw (`shadowSide[material.side]`). So the maps are drawn with front-face culling on one redraw and back-face on the next. Compiling ahead covers both variants, and itself changes no depth material's side (it puts back what it wrote). Whether the maps should be drawn once per frame outside the prepass is the ledger's PREV-208.
 - **Details catch up on a warm V.** A warm head shown again is shown at once, then catches up with its V as before (an update in place), because preparing its details first would make every warm switch wait for the host.
 - **Uploads in a frame.** The first shown frame still sends what every frame sends: the bones' matrices (9 small updates here), as a later frame does. The gate counts map uploads.
 - **The UI captures** are taken with a verification hook (`xfStudioShowPreparation`), so each stage is drawn by the pane's own code at a known fraction. A real switch passes through the same states too quickly to capture. The tool is `tools/preparation-look.ts <out dir> [port]`: an isolated server with throwaway data, one Chrome at a time, light and dark at a narrow and a wide window, and the Character panel's eye-shape fallback line from a real body switch. The line's box is recorded in each stage. Server and Chrome together need about 5 GB with the real default V. The captures wait for a window with enough free memory (none yet), so the UI review is still to come.
 - **The Body switch before the details.** A head's preparation sets the V's context to the view's Body switch and uncensored setting before it asks for the details, as `show` would. They are the view's, the same for every head of the scene, so a hidden body is never loaded only to be dropped at show.
 
-**G2 results (23 October 2026): FAIL.** Real data (the default feminine and masculine V from the local game files, read through the normal resolver), a fresh headless Chrome 155 profile per run (a cold program cache), RTX 4070 on ANGLE D3D11 with `KHR_parallel_shader_compile` present, code of `655e5028`, harness `measure.ts` at `ff73dc4b`. Isolated server on its own port with scratch caches. The game was not running. The feminine V is shown first, under the Soft studio setup; three switches follow, each timed from the request to one second after the new V is shown. "Long task" is the Long Tasks API (50 ms or more). The raw samples were kept in an ignored `generated/g2/`.
+### 4a-v-b: closing G2's failures (built)
 
-| Switch | Run 2 | Run 3 |
+G2's first run (23 October, the "before" column below) failed on six findings. This part closes four of them and narrows the fifth to one cause outside the page; the sixth (a body's long tasks) is down to one borderline task.
+
+**What changed.**
+
+- **A lighting change on the shown V is prepared ahead** (finding 4, PREV-209). The scene runtime no longer draws a setup whose programs no preparation has readied (`setLighting`, `platform/scene/scene-host.ts`).
+  - It stages it beside the drawn setup (`preview/render/lighting-setup-stage.ts` `stage`): the staged setup has a light rig of its own, outside the scene, and its own shadow-map fingerprint. `withStaged` puts it in place only for the length of one synchronous call, then puts back everything the call changed, the casters' own depth materials included (PREV-208 turns them over in every shadow redraw).
+  - The runtime says it needs preparing (`onUnprepared`). Its owner prepares it like a warm runtime: `SceneResidency.refresh` calls the port's `prepareShown`, the head's `prepareShown`, then the runtime's `prepare`. That compiles every drawable in steps, uploads the new maps and draws the warm-up in pieces, all under the staged setup. Every frame between steps still draws the setup before.
+  - At the end the staged setup takes over (`setSource` adopts its rig, with the lights and shadow maps its warm-up made). A failed preparation still hands over, so the choice is never lost; only an abort stops it.
+  - A value edit (same programs: a light dragged, an exposure) and a setup prepared before are drawn at once, as before.
+  - The status line says "Lighting: getting ready…" and then "Lighting: almost ready…" with the same bar (`studio-ui/preparation-text.ts`, `PreparationState.change: "shown"`). The bar is now named by the line beside it (`aria-labelledby`).
+- **Decision: a setup change is a want on the shown runtime, owned by the residency.** The residency already owns every preparation (supersession by `AbortController`, typed progress, eviction), so the shown runtime's change gets the same rules without a second owner:
+  - a newer change of the shown runtime restarts it;
+  - a want for another runtime (a body or V change) supersedes it, and the hidden runtime then takes the staged setup at once, to be prepared before it is shown again;
+  - the setup drawn, asked again, stops it at once.
+
+  Doing it inside the runtime alone would have needed its own abort, progress and interplay with the residency's builds, which is two owners of one runtime's preparation.
+- **Compiling ahead goes in steps of about one program** (finding 2, the `details` and C's compile tasks). `prepareSteps` (lighting stage) gives one step per drawable's forward program and one per pass variant of each mesh. Both the runtime's preparation and the V's details (`character-renderer.ts prepareDetails`) let a frame through whenever a step used up its share. One part's compile in one call was 294–306 ms.
+- **Only a few programs link at once** (`platform/scene/link-pacing.ts`): a quarter of the cores, two to six (five here). Asking for all of a setup's links at once (20–50) started that many D3DCompile jobs in the GPU process and took every core: the page's own thread then sat in tasks of 100–500 ms with nothing of its own in them (C's "compile steps" of up to 857 ms, and B's 103–489 ms once prepared). The programs stage takes about 15 % longer.
+- **Large maps upload in bands** (`character-detail-loader.ts uploadStep`). A decoded map of 2048² or more gets its storage first (Three's `dataReady` off), then one band of 512 rows per step (`copyTextureToTexture` from its bitmap), with the mipmaps made after the last band. Any caller continues a banded upload where another stopped. A 4096² map whole took 35–63 ms; a band takes 5–15 ms.
+- **Uploads wait for the GPU process, a frame at a time** (`platform/scene/gpu-gate.ts`). Each upload step is sent only once a fence after the previous one has signalled. A 1024² map's upload took 141 ms when it was sent while the GPU process was busy building a shader: the call waited for room to pass its texels.
+- **The on-head editor's guides are compiled with the head** (finding 3). `LineBasicMaterial` and `PointsMaterial` were the on-head editor's handles and outlines, added to the scene at show. The viewport device makes stand-ins with the same materials for each head (`surfaceGuideStandIns`). Its preparation compiles them, and they keep the programs alive while the head lives.
+- **The show task is light** (finding 2). Mounting the editor built the plate's surface map and the head's occlusion tree (90–115 ms). They are now made ahead, a step per frame (`surfaceEditorParts`, the preparation's `work`). The tree is built from a typed table of triangle centres instead of a map of vectors (the same arithmetic, so the same tree).
+- **Warm-ups are drawn in pieces** (finding 6). The hidden runtime is drawn with only a few drawables visible (`drawables.ts drawOnly`), then the device draws the shown runtime as usual, and the next piece waits, a frame at a time, for a fence. Pieces start at one drawable and double while the GPU keeps up. A drawable drawn into the skin scatter's three targets goes in a piece of its own (`drawsMultiTarget`). A last draw of everything follows. The renderer device's `warmUp(slot, draw)` also warms up the shown runtime under a staged setup.
+
+**What still holds the screen (finding 6, root cause).** A Chrome trace of G2's B switch (`measure.ts` with `G2_TRACE=B.lighting`, and the T2 page traced the same way) shows what the GPU process does while no frame is presented. ANGLE on D3D11 links each program's pixel shader for its first output only, on worker threads. A program that writes three outputs gets its real pixel shader at its first draw into a three-target framebuffer, compiled synchronously on the GPU process's main thread (`D3DCompile` with `SV_TARGET0–2`, under `CommandBufferService:PutChanged`).
+
+- **Which programs.** Those are the skin scatter's input variants (skin, brows, face decals, mouth), plus the layered bakes and the makeup composite, which draw to two targets.
+- **How long each build takes.** On real data a skin variant took 1.1 s under the studio setup and 5.9 s under the creator rig; on synthetic heads, up to 13–15 s. Nothing is presented meanwhile, so the shown V and the progress line freeze for that long.
+- **No variant can be made ahead.** Binding a three-target stand-in while linking changes nothing, because ANGLE takes the layout from the shader, not from the bound framebuffer.
+- **The cache doesn't keep them.** Chrome caches a program's binary when it is linked, before these draw-time variants exist, so a warm profile probably builds them again in every session (not yet measured).
+- **What would fix it.** Split the scatter input so the lit, heavy program writes one target and the albedo and metalness go through a cheap program of their own. That is a renderer change with a parity check (§2.3's risk 1, now measured), and it is not in this part.
+
+Pieces cut the freeze from the whole warm-up to the longest single build. G2 still fails its "progress keeps repainting" gate on that one build.
+
+**Gates.**
+
+- **T1** (`tests/scene-residency.test.ts`, two new tests on the injected clock):
+  - the shown runtime is prepared again while it stays shown, its progress says `change: "shown"`, and a newer change restarts it;
+  - a want for another runtime supersedes it, it waits while another runtime is wanted, and a change back to what is prepared stops it.
+- **The owner** (`tests/browser-scene-heads.test.ts`, one new): an unprepared shown head is prepared again with only its scene's `prepare` (no details, no other setups), stays shown and reports `change: "shown"`. A body change then supersedes it.
+- **Link pacing, the GPU gate and banded uploads** (`tests/link-pacing.test.ts`, `tests/character-preload.test.ts`):
+  - the limit is a quarter of the cores, two to six, and a new program waits while the limit is linking;
+  - an upload is sent only once the GPU caught up;
+  - a 4096² map takes its storage, then eight bands with the mipmaps after the last, and its bitmap closes then.
+- **Words** (`tests/preparation-progress.test.ts`): the lighting lines fit the one-line budget and use no developer words.
+- **T2** (`tests/webgl-scene-preparation.test.ts`, 11 tests, 2 new), on the synthetic heads, with and without KHR_parallel_shader_compile:
+  - the cold V's warm-up is drawn in pieces, with frames presented between them;
+  - a setup with spot lights never drawn, asked of the shown V:
+    - is staged, and the setup before stays pixel for pixel until the new one takes over;
+    - takes over with no link and no program made in its first frame;
+    - has no task of 50 ms or more from the change to 1 s after it, with the extension;
+    - reports `change: "shown"` and moves forward only;
+    - a newer setup asked meanwhile is the only one ever drawn;
+    - the drawn setup asked again stops the preparation at once.
+
+  The GPU objects return to the baseline after everything closes; the staged preparations that were stopped first leaked shaders, until each step freed its own.
+
+**Results** (23 October 2026; RTX 4070, ANGLE D3D11; synthetic runs under the 3 GB guard, peak 1.5 GB):
+
+| T2 gate (synthetic heads) | With KHR_parallel_shader_compile | Without it |
 |---|---|---|
-| **A: body** (masculine V, same lighting setup). Request to first presented frame | 11.8 s (core 1.8 s, build 1.5 s, details 2.8 s, programs 1.2 s, warm-up 4.2 s) | 9.9 s (core 0.02 s, build 1.6 s, details 2.9 s, programs 1.0 s, warm-up 4.1 s) |
-| A: long tasks of 50 ms or more during preparation | **3**, max 294 ms (two in `details`: 159 and 294 ms; one in `textures`: 74 ms) | **3**, max 226 ms (`details`: 159 and 226 ms; `textures`: 67 ms) |
-| A: long tasks in the second after the show | 1: 94 ms, the show task | 1: 90 ms |
-| A: programs linked during preparation / in the first shown frame | 28 / **2** | 28 / **2** |
-| A: texture calls in the first shown frame (slowest) | 28 (0.1 ms) | 28 (0.1 ms) |
-| A: progress | the pane's line said something on every frame from 150 ms to the show, six stages, fraction 0 to 0.98, never decreasing | the same (306 frames, five stages: the core stage was too short to show) |
-| A: longest gap between animation frames / longest late timer, during preparation | 4.2 s (the warm-up's GPU wait) / 0.30 s | 4.1 s / 0.23 s |
-| **B: lighting** (Character creator setup on the shown masculine V, never drawn) | **one main-thread task of 104.0 s**; 38 programs linked in it, each waiting on the driver (up to 20 s); no progress shown | **one task of 91.9 s**; the same 38 programs (up to 16 s) |
-| **C: body and lighting** (feminine V again under the creator setup; its warm runtime was prepared for Soft studio). Request to first presented frame | 57.8 s (programs 21.8 s, warm-up 35.8 s) | 53.1 s (programs 20.1 s, warm-up 32.8 s) |
-| C: long tasks of 50 ms or more during preparation | **13**, max 849 ms (all in `programs`) | **6**, max 857 ms (all in `programs`) |
-| C: long tasks in the second after the show | 1: 115 ms | 1: 97 ms |
-| C: programs linked during preparation / in the first shown frame | 54 / **2** | 54 / **2** |
-| C: progress | line on every frame (1,145 of 1,146), fraction 0.31 to 0.96, never decreasing; **but no animation frame for 35.7 s** during the warm-up's GPU wait | the same (1,094 of 1,095); no frame for 32.8 s |
-| Peak memory | Chrome and capture 4.4 GB (limit 5); server 1.7 GB (limit 5) | Chrome 4.5 GB; server 1.7 GB |
-| Run time | 207 s | 188 s |
+| Cold V: longest task from the want to 1 s after the show | none of 50 ms or more | 11.1 s (4 tasks) |
+| Cold V: pieces, frames presented during its warm-up, longest frame gap | 6 pieces, 18 frames, 13.9 s (one three-target build) | 6, 18, 13.3 s |
+| Cold V: first shown frame links / programs made | 0 / 0 | 0 / 0 |
+| Setup on the shown V: change to takeover | 7.4 s | 7.4 s |
+| Setup: longest task from the change to 1 s after | none of 50 ms or more | 2.0 s (3 tasks) |
+| Setup: pixels until takeover; links and programs in its first frame | unchanged (9 checks); 0, 0 | unchanged; 0, 0 |
+| Setup: longest frame gap while prepared | 4.0 s (one three-target build) | 3.9 s |
+| Setup replaced meanwhile / back to the drawn setup | only the newest drawn / stopped in 0 ms | the same |
+| Warm switches; cancel | 4–9 ms; 6.4 ms | 4–6 ms; 0.2 ms |
+| Other WebGL probes (renderer device, disposal, scene host, studio lighting, plate composite) | 32 of 32 pass | |
 
-Run 1 (the same harness before two small fixes; the page waited for a second frame that an idle page never draws, so its "after the show" windows are wrong, but its other figures hold): A 24.4 s with a cold masculine core (core stage 14.4 s), 4 long tasks in preparation, max 311 ms; B one task of 89.4 s; C 50.5 s, 25 long tasks in preparation, max 282 ms. **The server's peak on that first, fully cold run was 4.0 GB** (every cache empty: the feminine and masculine creator options, poses, icons, swatches, both cores, details exports; it was killed twice under `--limit 3` at 3.1 GB on the way). Runs 2 and 3 had the other caches warm and peaked at 1.7 GB, close to S2's 1.8 GB. Run 2 had the masculine core's cache deleted and made it again (1.8 s over the warm caches), so the core preparation alone does not reach 3 GB: the cold-start peak is the host's first-time work for both bodies together (which part, not separated).
+**G2 on real data, before and after.** The same harness and setting as the first run (below): the default feminine and masculine V from the local game files, a fresh headless Chrome 155 profile per run, RTX 4070 on ANGLE D3D11 with KHR_parallel_shader_compile, an isolated server with scratch caches.
 
-**Verdict: FAIL.** The gate asks for no task of 50 ms or more during preparation and no link in the first shown frame. Where the failures are:
+- **Before:** runs 2 and 3 of 23 October, at `655e5028`.
+- **After:** two runs at this chunk's last commit (`after-run1`, `after-run2` in the ignored `generated/g2b/`). Another program, a game, was open on the machine during them (about 20 % CPU overall).
+- **Measured windows.** B is now timed like a switch, from the request to the frame the new setup takes over in. The frame gap is a new gate: no 500 ms without a presented frame while preparing.
 
-1. **Long tasks in a body switch (A).** Three in every run, 67 to 294 ms. Two sit in the `details` stage, at the moment the head's 4096 x 4096 map is uploaded (35 to 47 ms of it) and its details are placed; one is the `textures` step (67 to 74 ms). The 8 ms step budget does not hold for these.
-2. **The show task (A, C).** The task that shows the prepared V (the hidden warm-up redraw and the swap) takes 90 to 115 ms.
-3. **Two programs in the first shown frame (A, C).** `LineBasicMaterial` and `PointsMaterial`, linked 8 to 22 ms after the show, with a first-use wait of 1 to 5.5 ms. They are overlay helper materials that no preparation pass compiles. The cost is small, but the gate is zero links.
-4. **A lighting change is not prepared (B), as the caveats above say.** The page's thread is held for 89 to 104 s while 38 programs link one after another (the cold link of S2, 94 s, is this). It is the same path as any lighting change on the shown V on a cold cache.
-5. **Compile steps on a warm body under a new lighting setup (C).** 6 to 25 long tasks, up to 857 ms, all in the `programs` stage: the page-side part of compiling ahead is not made of small steps there.
-6. **The warm-up moves the wait to the GPU process, not off the screen.** The page's thread stays free (the late timer never exceeds 0.87 s during preparation), but the hidden warm-up draw makes the GPU process create the driver's pipeline state for every new program, and no animation frame is presented meanwhile: 4 s in A, 33 to 36 s in C. The progress line and bar do not repaint during that time, so "progress throughout" holds in the page's state but not on the screen. Whether the warm-up's cost can be split across frames, or the programs' first draw made earlier and in pieces, is the next question.
+| Switch | Before (runs 2, 3) | After (runs 1, 2) |
+|---|---|---|
+| **A: body.** Request to first presented frame | 11.8 s, 9.9 s | 14.7 s, 10.3 s (run 1's details stage took 8.4 s on the host) |
+| A: tasks of 50 ms or more during preparation | 3 (max 294 ms), 3 (max 226 ms) | 1 (52 ms, the first warm-up piece), 0 |
+| A: tasks of 50 ms or more in the second after the show | 1 (94 ms, the show), 1 (90 ms) | 0, 0 |
+| A: programs linked in the first shown frame | 2, 2 (`LineBasicMaterial`, `PointsMaterial`) | 0, 0 |
+| A: longest frame gap during preparation | 4.2 s, 4.1 s | 1.8 s, 1.8 s |
+| **B: lighting** (the creator setup on the shown masculine V) | one blocked task of 104.0 s, 91.9 s; 38 links in it; no progress | prepared: 41.0 s, 39.6 s to takeover, with the setup before drawn throughout |
+| B: tasks of 50 ms or more | that one task | 0, 0 |
+| B: links in the first frame under the new setup | (all 38) | 0, 0 |
+| B: progress | none | "Lighting: getting ready…", then "Lighting: almost ready…", on every frame; fraction never decreasing |
+| B: longest frame gap | 104 s, 92 s | 17.8 s, 16.9 s |
+| **C: body and lighting.** Request to first presented frame | 57.8 s, 53.1 s | 46.3 s, 46.8 s |
+| C: tasks of 50 ms or more during preparation | 13 (max 849 ms), 6 (max 857 ms) | 0, 0 |
+| C: tasks of 50 ms or more in the second after the show | 1 (115 ms), 1 (97 ms) | 0, 0 |
+| C: programs linked in the first shown frame | 2, 2 | 0, 0 |
+| C: longest frame gap during preparation | 35.7 s, 32.8 s | 18.9 s, 19.1 s |
 
-What passes: the previous V stayed drawn throughout, and progress was reported in order with a fraction that never went back. A warm switch and the superseded cases are covered by the T2 probe, not G2.
+**Verdict: still FAIL, on one gate.** Long tasks during preparation are down to one task of 52 ms in one of six switches: the first warm-up piece, where Three builds the head's morph-target texture on the page's thread. Links in the first shown frame are zero everywhere, and progress is shown throughout. Frames stop being presented for the length of one three-target pixel shader build at a time: 1.8 s in A, 17–19 s in B and C. That is the root cause above, and the fix is the scatter-input split.
 
-**First load (outside the gate).** The page's first V (the feminine default V, nothing yet shown) on a fresh profile: 80 programs linked, a first frame of 2.2 to 2.8 s of CPU, and long tasks in the first 15 s of 0.5 to 2.8 s each (in two runs: 0.11, 0.53, five of 0.05 to 0.08 s, 0.63 s, 1.6 s, 0.11 s, 2.8 s; and 0.12, 0.51, five of 0.05 to 0.08 s, 0.54 s, 1.6 s, 0.11 s, 2.2 s). The first frame's room prefilter and the first build's programs are the known cost of the "first build's room" caveat above. It belongs to the load-time track.
+**G2 before (23 October 2026, the first run).** The detail behind the "before" column, at `655e5028`, harness `ff73dc4b`, the game not running:
+
+- **A.** Three long tasks per run (67–294 ms) in the details and textures steps, a show task of 90–115 ms, and two overlay programs linked in the first shown frame.
+- **B.** Not prepared: one blocked task of 89–104 s.
+- **C.** Compile steps of up to 857 ms, and no frame for 33–36 s during the warm-up's GPU wait.
+- **The server's peak.** On the fully cold first run it was 4.0 GB, with every cache empty (both cores, creator options, poses, icons, details). It was killed twice under `--limit 3` at 3.1 GB. Warm caches peaked at 1.7 GB. This is noted only; it isn't changed here.
+
+**First load (outside the gate).** The page's first V on a fresh profile links 80 programs, takes 2.2–2.8 s of CPU for its first frame, and has long tasks of 0.5–2.8 s in its first 15 s. The first build's room prefilter and programs are the known cost (the "first build's room" caveat above). It belongs to the load-time track, and so do the three-target builds above, which every session probably pays again.
 
 **What 4a-vi needs from this.**
 
-- **The S2 gates in their final test form** (`tests/webgl-scene-runtimes.test.ts`): this chunk's probe already measures the preparation half (warm switch, cancel, stray frames, long tasks, links and uploads in the first frame).
-- **G2 failed** (results above). `measure.ts` in this folder reruns it: `bun experiments/043-scene-runtimes/measure.ts <port> <out.json> <new profile folder>` against an isolated server. The six findings are what 4a-v still owes before 4a-vi's gate: details and texture steps over budget, the show task, the two overlay programs, a prepared lighting change, small compile steps on a warm body, and the warm-up's GPU wait.
+- **The three-target builds.** Split the skin scatter's input into a lit single-output program and a cheap albedo-and-metalness program. Also measure whether a warm Chrome profile builds them again. This is the last G2 failure, and it needs its own chunk with a G1 parity run. The layered bakes and the makeup composite draw to two targets too: smaller builds, the same cause.
+- **The head's morph-target texture** is built inside the first warm-up piece's draw (about 30 ms of the 52 ms task). Three builds it at a mesh's first draw and offers no other way to make it.
+- **The S2 gates in their final test form** (`tests/webgl-scene-runtimes.test.ts`). The preparation probe already measures the preparation half: warm switch, cancel, stray frames, long tasks, links and uploads in the first frame, the shown runtime's setup change, and the warm-up's frames.
 - **Routing by named view** can use `heads.show(view)` and `scenes.of(view)`: a tab switch is then a want, and the view's preview and motion services follow the runtime shown.
+- **Face shadows and skin scatter switches** still recompile on the shown V inside the next frame. The same staging would cover them (`programStateOf` already includes both switches).
+- **A knowledge page on program linking in WebGL** (planned for 4a-vi) should take this part's findings:
+  - ANGLE's draw-time pixel shaders for programs that write several targets;
+  - links in parallel saturating the cores;
+  - uploads that wait for a busy GPU process;
+  - per-program compile steps.

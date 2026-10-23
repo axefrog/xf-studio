@@ -385,7 +385,7 @@ function withdrawUploadSource(texture: THREE.Texture) {
   const waiting = (uploadWaiting.get(bitmap) ?? 1) - 1;
   if (waiting > 0) uploadWaiting.set(bitmap, waiting); else { uploadWaiting.delete(bitmap); bitmap.close(); }
 }
-const released = (event: { target: THREE.Texture }) => withdrawUploadSource(event.target);
+const released = (event: { target: THREE.Texture }) => { banded.delete(event.target); withdrawUploadSource(event.target); };
 /** A texture's first upload can come from `bitmap` (see `uploadTexture`; the loader offers each map's, tests their own). */
 export function offerUploadSource(texture: THREE.Texture, bitmap: ImageBitmap) {
   if (uploadSources.has(texture)) return;
@@ -401,6 +401,50 @@ export function offerUploadSource(texture: THREE.Texture, bitmap: ImageBitmap) {
   }
 }
 const uploadWatched = new WeakSet<THREE.Texture>();
+
+/** Decoded maps of at least this many texels are uploaded in bands of rows (`uploadStep`): a 4096² map whole took 35–63 ms of the page. */
+const BANDED_TEXELS = 2048 * 2048;
+/** Rows per band: 512 rows of a 4096-wide map are 8 MB, about 5–10 ms. */
+const BAND_ROWS = 512;
+/** Large maps part-way through their first upload: the next band, and the bitmap they are copied from (a texture of its own). */
+const banded = new WeakMap<THREE.Texture, { next: number; source: THREE.Texture; width: number; rows: number }>();
+/** Whether `texture`'s first upload is under way in bands (its storage is made, some rows aren't copied yet): it still needs `uploadStep`. */
+export const uploadUnfinished = (texture: THREE.Texture) => banded.has(texture);
+/**
+ * One step of `texture`'s first upload (profiles phase 4a-v-b), with `renderer`: the whole map at once (`uploadTexture`), or, for a large
+ * map with a decoded bitmap, its storage first and then one band of rows per step (`copyTextureToTexture` from the bitmap; the last band
+ * makes the mipmaps). Every caller continues a banded upload where another left it, so one stopped part-way (a preparation superseded)
+ * is finished by the next that needs the map. Returns true once the map is uploaded.
+ */
+export function uploadStep(texture: THREE.Texture, renderer: THREE.WebGLRenderer): boolean {
+  const pending = banded.get(texture);
+  if (!pending) {
+    const bitmap = uploadSources.get(texture);
+    if (!bitmap || bitmap.width * bitmap.height < BANDED_TEXELS || typeof renderer.copyTextureToTexture !== "function") {
+      uploadTexture(texture, map => renderer.initTexture(map));
+      return true;
+    }
+    // Its storage, all mip levels, without its texels (Three's `dataReady`); the bitmap stays (no `onUpdate` withdrawal yet).
+    const image = texture.image, onUpdate = texture.onUpdate;
+    texture.image = bitmap; texture.source.dataReady = false; texture.onUpdate = null as unknown as typeof texture.onUpdate;
+    try { renderer.initTexture(texture); }
+    finally { texture.image = image; texture.source.dataReady = true; texture.onUpdate = onUpdate; }
+    banded.set(texture, { next: 0, source: new THREE.Texture(bitmap), width: bitmap.width, rows: bitmap.height });
+    return false;
+  }
+  const { next, source, width, rows } = pending, height = Math.min(BAND_ROWS, rows - next), last = next + height >= rows;
+  // Three makes the mipmaps after a copy into level 0 when the texture asks for them: only after the last band.
+  const mipmaps = texture.generateMipmaps;
+  texture.generateMipmaps = last && mipmaps;
+  try {
+    renderer.copyTextureToTexture(source, texture, new THREE.Box2(new THREE.Vector2(0, next), new THREE.Vector2(width, next + height)),
+      new THREE.Vector2(0, next));
+  } finally { texture.generateMipmaps = mipmaps; }
+  if (!last) { pending.next += height; return false; }
+  banded.delete(texture);
+  withdrawUploadSource(texture);
+  return true;
+}
 /** Whether `texture` has a decoded bitmap waiting for its first upload (tests). */
 export const hasUploadSource = (texture: THREE.Texture) => uploadSources.has(texture);
 

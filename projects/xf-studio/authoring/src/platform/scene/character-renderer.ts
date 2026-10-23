@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import { linkPacer } from "./link-pacing";
+import { gpuGate } from "./gpu-gate";
 import { copyMaterialShading, extendSkin, fullSkinDepthMaterial, releaseFullSkinDepth } from "../../materials/render/skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../materials/render/eye-material";
 import type { ProfileEncoding } from "../../materials/hair-colour-model";
 import { prepareTemplateGeometry, type AdapterContext, type ResolvedSkinSurface } from "../../materials/render/character-material-adapters";
-import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, uploadTexture, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
+import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, uploadStep, uploadUnfinished, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
   type LoadedCharacterDetails } from "../../character/render/character-detail-loader";
 import { chunkOfMesh, type CharacterDetail, type DetailSlot } from "../../character/render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../character/render/head-skin-placement";
@@ -203,11 +204,14 @@ export function createCharacterRenderer(input: {
     };
     const uploadAll = async (textures: Iterable<THREE.Texture>) => {
       for (const texture of textures) {
-        if (signal?.aborted) return;
-        if (!needsUpload(texture)) continue;
-        await pace();
-        if (signal?.aborted) return;
-        upload(texture);
+        // A large map a band at a time, a frame let through whenever a step used up its share.
+        while (needsWork(texture)) {
+          if (signal?.aborted) return;
+          await pace();
+          while (!uploadGate().idle() && !signal?.aborted) { await preparation.frame(); started = performance.now(); }
+          if (signal?.aborted) return;
+          if (upload(texture)) break;
+        }
       }
     };
     /**
@@ -331,7 +335,18 @@ export function createCharacterRenderer(input: {
     || (texture as { isRenderTargetTexture?: boolean }).isRenderTargetTexture === true || (texture as THREE.DepthTexture).isDepthTexture
     || (texture as THREE.VideoTexture).isVideoTexture || (texture as THREE.CubeTexture).isCubeTexture
     || (properties.get(texture) as { __version?: number }).__version === texture.version);
-  const upload = (texture: THREE.Texture) => { if (needsUpload(texture)) uploadTexture(texture, map => renderer.initTexture(map)); };
+  /** Whether a map still needs uploading: never uploaded, or a large one part-way through its bands (`uploadStep`). */
+  const needsWork = (texture: THREE.Texture) => !released.has(texture) && (needsUpload(texture) || uploadUnfinished(texture));
+  /** The GPU process caught up with the last upload sent (gpu-gate.ts): the next is sent only then, so none waits inside the call. */
+  let gate: ReturnType<typeof gpuGate> | undefined;
+  const uploadGate = () => gate ??= gpuGate(typeof renderer.getContext === "function" ? renderer.getContext() : undefined);
+  /** One step of a map's upload (all of it, or one band of a large one); true once it needs no more. */
+  const upload = (texture: THREE.Texture) => {
+    if (!needsWork(texture)) return true;
+    const done = uploadStep(texture, renderer);
+    uploadGate().mark();
+    return done;
+  };
   const watchRelease = (texture: THREE.Texture) => {
     const forget = () => { released.add(texture); texture.removeEventListener("dispose", forget); };
     texture.addEventListener("dispose", forget);
@@ -342,7 +357,7 @@ export function createCharacterRenderer(input: {
     // Each turn just after a frame, in a task of its own (never inside the frame's own draw).
     const turn = () => {
       const began = performance.now();
-      while (uploads.length && performance.now() - began < PREPARE_FRAME_MS) upload(uploads.shift()!);
+      while (uploads.length && performance.now() - began < PREPARE_FRAME_MS && uploadGate().idle()) if (upload(uploads[0]!)) uploads.shift();
       if (uploads.length) requestAnimationFrame(() => afterTask(turn)); else uploading = false;
     };
     requestAnimationFrame(() => afterTask(turn));

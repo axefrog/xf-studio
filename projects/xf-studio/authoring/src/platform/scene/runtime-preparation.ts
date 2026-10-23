@@ -1,9 +1,10 @@
 import * as THREE from "three";
 import type { LinkedProgram } from "../../materials/render/linked-programs";
-import { uploadTexture } from "../../character/render/character-detail-loader";
+import { uploadStep, uploadUnfinished } from "../../character/render/character-detail-loader";
 import { PREPARE_FRAME_MS } from "./character-renderer";
 import { isDrawable } from "./drawables";
 import { linkPacer } from "./link-pacing";
+import { gpuGate } from "./gpu-gate";
 
 /**
  * Preparing a scene runtime before it is shown (profiles phase 4a-v, experiments/043-scene-runtimes §11): what its first shown frame would
@@ -16,7 +17,8 @@ import { linkPacer } from "./link-pacing";
  *    the driver links them on its own threads and the preparation asks, once a frame and without waiting, how many are done. Without it a
  *    fence stands in: once the GPU process has worked through what was sent, the links have been made, and asking no longer waits long.
  *    Then each program's first use (its uniforms and attributes read back, a synchronous round trip) is taken, a few per frame.
- * 2. **Textures.** The maps those programs sample, and the core head's own, uploaded a few per frame (a 4096² map takes about 40 ms).
+ * 2. **Textures.** The maps those programs sample, and the core head's own, uploaded a few per frame, a large one in bands of rows (a 4096²
+ *    map whole took 35–63 ms).
  * 3. **Warm-up, in pieces.** Hidden draws on the renderer device (`warmUp`): whatever only a draw makes (Three's draw-time programs,
  *    the driver's own shader variants and pipeline state, frame-sized targets, small uploads) is made there, and the shown runtime is drawn
  *    again in the same task, so the canvas never shows it. The GPU process presents no frame while it makes a draw's shader variants, so
@@ -158,15 +160,23 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   const needsUpload = (texture: THREE.Texture) => !(texture.version === 0 || !texture.image
     || (texture as { isRenderTargetTexture?: boolean }).isRenderTargetTexture === true || (texture as THREE.DepthTexture).isDepthTexture
     || (texture as THREE.VideoTexture).isVideoTexture || (texture as THREE.CubeTexture).isCubeTexture
-    || (properties.get(texture) as { __version?: number }).__version === texture.version);
+    || (properties.get(texture) as { __version?: number }).__version === texture.version) || uploadUnfinished(texture);
   const textures = [...new Set([...compiled.flatMap(entry => entry.textures ?? []), ...ports.textures?.() ?? []])].filter(needsUpload);
   report("textures", 0);
   let uploads = 0;
+  // Each upload sent only once the GPU process caught up with the last (gpu-gate.ts): none waits inside the call.
+  const gate = gpuGate(gl);
   for (const [index, texture] of textures.entries()) {
-    await pace();
-    if (!needsUpload(texture)) continue;
-    uploadTexture(texture, map => renderer.initTexture(map));
-    uploads++;
+    // A large map a band at a time (character-detail-loader.ts `uploadStep`), a frame let through whenever a step used up its share.
+    let counted = false;
+    while (needsUpload(texture)) {
+      await pace();
+      while (!gate.idle()) await frame();
+      if (!counted) { uploads++; counted = true; }
+      const done = uploadStep(texture, renderer);
+      gate.mark();
+      if (done) break;
+    }
     report("textures", (index + 1) / textures.length);
   }
   report("textures", 1);

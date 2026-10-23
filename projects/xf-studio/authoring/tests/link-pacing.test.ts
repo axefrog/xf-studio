@@ -23,3 +23,18 @@ test("a new program waits, a frame at a time, until fewer than the limit are lin
   const serial = linkPacer({ parallel: false, limit: 1, frame: async () => { throw Error("never waits"); } });
   serial.add(programs); await serial.admit();
 });
+
+test("an upload is sent only once the GPU process has caught up with the last one (gpu-gate.ts); without fences the gate is always idle", async () => {
+  const { gpuGate } = await import("../src/platform/scene/gpu-gate");
+  let signaled = false, deleted = 0;
+  const gl = { fenceSync: () => ({}), flush() {}, getSyncParameter: () => signaled ? 1 : 0, deleteSync() { deleted++; }, isContextLost: () => false,
+    SIGNALED: 1, SYNC_STATUS: 2, SYNC_GPU_COMMANDS_COMPLETE: 3 } as unknown as WebGL2RenderingContext;
+  const gate = gpuGate(gl);
+  expect(gate.idle()).toBe(true);
+  gate.mark();
+  expect(gate.idle()).toBe(false);
+  signaled = true;
+  expect(gate.idle()).toBe(true);
+  expect(deleted).toBe(1);
+  expect(gpuGate(undefined).idle()).toBe(true);
+});
