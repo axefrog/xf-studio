@@ -346,19 +346,28 @@ describe("own defaults: Save as default, update, rename, delete and restore, thr
   test("own defaults survive a restart: before the library has them (the outbox replays them) and after", async () => {
     const documents = storeDocuments(), storage = memoryOutboxStorage(), a = windowOn(documents, storage);
     expect(act(a, { kind: "tabs.saveAsDefault", tab: a.s.tabId(), name: "Before" })).toBeUndefined();
-    const id = a.s.tab(a.s.tabId())!.origin!, saved = json(a.defaults.get(id));
+    // What a command names as its base starts again at the library's revision when a window opens: the rest is the same bytes.
+    const listed = (w: Window) => { const { owner: _owner, ...rest } = w.defaults.get(id)!; return json(rest); };
+    const id = a.s.tab(a.s.tabId())!.origin!, saved = listed(a);
     // The window closes before the library has it: the command waits in the outbox's storage, written synchronously.
     a.outbox.stop();
     expect(documents.store.get(LAYOUT_DEFAULT_DOCUMENT, id)).toBeNull();
-    const b = windowOn(documents, storage);
+    // Reopened while the library is still unreachable: the default is there, from the outbox alone.
+    const unreachable = { ...documents, transact: () => new Promise<never>(() => {}) };
+    const b = windowOn(unreachable, storage);
     await b.defaults.load();
-    expect(json(b.defaults.get(id))).toBe(saved);
-    await quiet(b.outbox);
+    expect(listed(b)).toBe(saved);
+    expect(act(b, { kind: "tabs.new", default: id })).toBeUndefined();
+    b.outbox.stop();
+    // Reopened with the library reachable: the outbox replays it there.
+    const reached = windowOn(documents, storage);
+    await reached.defaults.load();
+    await quiet(reached.outbox);
     expect(documents.store.get<{ name: string }>(LAYOUT_DEFAULT_DOCUMENT, id)!.value.name).toBe("Before");
     // After: a window with a fresh outbox reads it from the library.
     const c = windowOn(documents);
     await c.defaults.load();
-    expect(json(c.defaults.get(id))).toBe(saved);
+    expect(listed(c)).toBe(saved);
     expect(act(c, { kind: "tabs.new", default: id })).toBeUndefined();
   });
 
