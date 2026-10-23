@@ -244,7 +244,7 @@ Orbiting in either view writes `c1`, which dirties both views. A light change in
 | **Compare lighting** | A new view sharing the scene, camera and display, with the other light preset (Studio or Creator) |
 | **Link camera to ▸ \<view\>** / **Link lights to ▸** / **Link display to ▸** | Points this view's slot at the other view's node; the old node is collected if unreferenced |
 | **Unlink camera** / **Unlink lights** / **Unlink display** | Copies the shared node and points this view at the copy (a fork: both start identical) |
-| **Close view** | Removes the view. Its unshared nodes go with it, and it can be reopened from **Reopen closed view** (the last five, like removed presets). The main view cannot be closed. |
+| **Close view** | Removes the view. Its unshared nodes go with it, and it can be reopened from **Reopen closed view** (the last five, like removed presets). Any view can be closed, the main view and the drawn view included: the window then draws another view of the shown tab, or none ([experiment 044 P2-iii](../../experiments/044-profile-tabs/README.md#10-p2-iii-as-built)). |
 
 The view header shows a small link badge per shared slot, lettered per node ("Camera A" in both views). Hovering highlights the other views that share it. The Camera & light panel follows the focused view and names what is shared ("Lights: shared with Head"). Its sliders edit the node, so the link is visible where the edit happens.
 

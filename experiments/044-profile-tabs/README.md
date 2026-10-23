@@ -1,6 +1,6 @@
 # Experiment 044: profile tabs and contributed defaults (profiles phase 2)
 
-**Status:** plan agreed, with the coordinator's decisions on M1–M3 (§6). P2-i (session operations and one history, §8) and P2-ii (fragments, substitution, the modules' defaults and Save as default, §9) are built on `claude/profiles-p2`; P2-iii to P2-vii are to come. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
+**Status:** plan agreed, with the coordinator's decisions on M1–M3 (§6). P2-i (session operations and one history, §8), P2-ii (fragments, substitution, the modules' defaults and Save as default, §9) and P2-iii's per-view editing, kept makeup and drawn view (§10) are built on `claude/profiles-p2`; P2-iii-b (a 3D view panel per view, U7) and P2-iv to P2-vii are to come. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `076a7a65`. Tests are in `projects/xf-studio/authoring/tests/`. Effort is in the design's units (agent-days).
 
@@ -319,6 +319,76 @@ Each new gate was checked against a deliberate fault: without the outbox's pendi
 - **P2-iv: the tab menu.** Reset ▸ lists the origin first. Save as default… dispatches `tabs.saveAsDefault`. Update "<name>" shows when `defaults.get(tab.origin)?.owner.kind === "user"`. An own default row's Delete dispatches `defaults.delete`, and the toast's Undo `defaults.restore`. The UI also owns presenting `unavailable` and the own-default conflicts (`LayoutDefaults.conflicts`, `resolve`).
 - **P2-iv: an empty dock.** A tab made from the Save Explorer default holds no view, and a fragment of a tab with no arrangement saves an empty dock (`state: {}`). The dock still falls back to the factory arrangement when a tab's arrangement doesn't parse (`restoreDockPreference`). §2.3 says that fallback goes ("an empty tab is empty"), so the strip's switch must load an empty arrangement as empty.
 - **P2-v:** feature focus is derived from the tab's instances. Eye makeup's default holds only shell and eye-makeup panels, so it activates eye makeup alone.
+
+## 10. P2-iii as built
+
+On `claude/profiles-p2`, after P2-ii. Source paths as in §1. The chunk proved too big for one pass, so it is split as its brief allowed: this part is items 1, 3 and 4 of the brief (per-view editing, the warm look's makeup kept, the drawn view following the shown tab) with their gates; **P2-iii-b** is item 2, a 3D view panel per view with the "not drawn" state (U7), which is presentation work with its style-guide entry first, captures and the UI review. Until it lands there is still one 3D view panel, and it shows whichever view is drawn.
+
+**The drawn view follows the shown tab** (`drawnView`, `app/profiles/profile-window.ts`): the shown tab's most recently focused view, else its first, else none.
+
+- The root listens to the session and calls `heads.show(drawnView(session))` whenever that changes: another tab shown, another view focused, the drawn view closed (by an operation or by Undo or Redo). Otherwise a session change is the drawn scene's look changing (Presets), which the look editor follows as before.
+- `heads.show(undefined)` draws nothing (the shown tab holds no view). The head shown before is hidden and kept warm (`SceneResidency.hideShown`; with nothing shown the budget holds one more warm runtime, so residents never outnumber the shown one plus `warm`), so drawing it again needs no build. Before the first load, `show` only moves the drawn view and the document; the load then shows it.
+- A runtime whose scene no longer exists (its tab closed) goes once it isn't shown (`closeGone`). A head on screen whose own view went is hidden at once when a head of another scene is wanted, so it never stays drawn for a view that is gone; a view of the same scene redraws it. A device whose view went stops following the graph (`PreviewActions.follow`), and hiding it stores no camera and no motion phase (`trusted-preview-services.ts`, `MotionActions.release(false)`).
+- The heads owner's `drawnView` is explicit (initialised from the session, then changed only by `show`), so the root can compare it with the session's target. `MAIN_VIEW` is gone from the startup and the heads owner; the scenes port names `has(scene)`.
+- **The refusals go.** P2-i's drawn-view refusals (closing or resetting the drawn view's tab, closing it, an Undo or Redo removing it) and the history mechanism only they used (`HistoryTarget.refusal`, `HistoryScope.blocked`, `ViewGraph.historyBlocked`, `HistoryStack.peek`) are removed; `checkClosable` keeps only the newer-build rule.
+
+**Per-view editing** (decision D3; `preview/browser/browser-scene-heads.ts`, `browser-head-attachment.ts`). One editor document follows the drawn view's look (the heads owner's `document` port: `shows(view)`, `follow(view)`, which the root gives as the look editor's `show`). `show(view)` of a view of another look, in this order:
+
+1. The on-head editor is unmounted, which settles an open gesture (cancelled) on the look and view it began on.
+2. The head on screen holds its layers (`AttachedHead.holdSurfaces`): its layered surfaces stop following the document and keep exactly what they show (the preview device's hold), while the head stays drawn.
+3. The document switches (`lookEditor.show`, which settles any open control run or gesture through `document.replacing()` and records the look it belonged to first).
+4. The view's head is wanted: filled and prepared with the new look while hidden, and shown at the takeover with the editor mounted for the view. The UV editor follows the document at once, and its albedo follows the shown head at the takeover.
+
+Going back before the takeover switches the document back and supersedes the want; the head on screen follows the document again (`connectSurfaces`, bringing up to date only what changed) and its editor is mounted again (`settle`). A view of the same look switches no document, and the head on screen stays connected until the takeover. A head that can't be shown leaves the view the head on screen draws drawn again, with its look. `ANOTHER_LOOK`, `editors.refusal` and the owner's refusal are removed.
+
+**The warm look's makeup** (`legacy/eye-makeup/browser/browser-preview-device.ts`). A surface's hold now records the look its layers are (the device's `look` port, the look editor's scope key) and the tier they were rastered at. When the document shows another look (`showLook`, which replaces `resetStack` in the root's `lookShown`) and no surface is connected, a hold of that look at this tier gives its canvases and optical maps back to the device, and only the layers changed since are rastered (`syncStack` against the held layers). A warm head of that look then holds the current layers, so it is prepared, shown at once, and connecting it presents nothing: no raster, no upload, no composite. Otherwise (no such hold, or a surface still connected) every layer is rastered afresh, as before. The hold is the warm head's (it goes with the head's release), so the residency budget bounds it, and 4a-i's disposal gate holds.
+
+**Gates.**
+
+| Gate | Test | Result |
+|---|---|---|
+| No frame of the leaving head holds the new look's layers | `tests/per-view-editing.test.ts` (real heads owner, head attachment, preview device and makeup stacks; fake scenes; a raster worker the test answers) | While the side view's head is made ready, every slot of the head on screen keeps look A's canvas, none of look B's, though the document shows B and B's masks completed |
+| Back before the takeover | same | Look A again from the hold: 0 raster requests, an empty raster queue, the device's canvases A's again; the head on screen follows the next A mask |
+| Warm look switch, offline | same | Back to a warm head of the other look: 0 raster requests, the stack's material and texture versions and composite state unchanged; to look B, warm too: the same. Released with its head, no look is held |
+| Gestures settle | same | A gesture open across the document's switch is committed to look A; its next frame is refused and its end changes nothing of look B |
+| Order of a look switch | `tests/browser-scene-heads.test.ts` (4 new) | `unmount`, `hold`, `follow` before anything is built; then `connect` and `mount` on the new head; back before the takeover `follow`, `connect`, `mount` on the head on screen with nothing built shown; a view of the same look holds nothing until the takeover; nothing drawn keeps the head warm and draws it again with no build; a head whose view went is hidden at once and its runtime goes once another is shown |
+| Residency shows nothing | `tests/scene-residency.test.ts` (1 new) | The build in flight stops, the shown runtime stays warm, residents never exceed the shown one plus `warm` |
+| The drawn view moves | `tests/profile-sessions.test.ts`, `tests/layout-defaults.test.ts` | Closing the drawn view, resetting and closing its tab, and an Undo or Redo removing it all run; `drawnView` then names another view of the shown tab, or none, at every change. Reset of the drawn view's tab works and its Undo draws the old view again |
+| **T2: look switch between warm runtimes** | `tests/webgl-scene-runtimes.test.ts`, page section 6d (synthetic heads, a fresh headless Chrome, with and without KHR_parallel_shader_compile) | See below |
+| The S2 gate table | `tests/webgl-scene-runtimes.test.ts` | 26 of 26 pass (the table gains the look-switch row) |
+
+Each offline gate was checked against a deliberate fault: without holding the surfaces before the document switches, and with `showLook` always rastering afresh, the per-view editing tests fail.
+
+**T2 results** (24 October 2026; RTX 4070, ANGLE D3D11, headless Chrome; under the 3 GB guard, peak 1.8 GB). Two scenes, each showing its own look, switched as the owner switches them; eight warm switches each run:
+
+| | With KHR_parallel_shader_compile | Without it |
+|---|---|---|
+| Look switch, from the document showing the look to the runtime's first presented frame (≤ 100 ms) | 16.8–33.0 ms (one or two frames at the page's 60 Hz) | 16.8–33.2 ms |
+| Links, programs made, raster requests, composite draws (layer, resolve and level draws on the runtime shown) | 0, 0, 0, 0 on every switch | the same |
+| First shown frame: links, programs | 0, 0 | 0, 0 |
+| The cold look (nothing held it) | rastered afresh, not taken back | the same |
+| A third scene evicts the least recently shown | `s3` evicted; its look is held no more | the same |
+| GPU objects and Three's programs once everything closed | as before the section | the same |
+
+**Decisions and caveats.**
+
+- **The chunk split.** The 3D view panel per view (item 2) is presentation: the dock must hold `view.<id>` panels that come and go with the shown tab's views, the device's canvas must move to the drawn view's panel, and U7 needs its style-guide entry, captures and the UI review. It is independent of the switch mechanics here, so it follows as P2-iii-b.
+- **The leaving head of a closed view** isn't kept drawn while another scene's head is prepared: its view's nodes are gone, so it could follow nothing. The pane shows its loading progress instead. A close is the person's own act, and its Undo brings the tab back with the scene's runtime built again (G4's T-h asks for the runtime to be disposed).
+- **The kept makeup is the warm surface's hold**, CPU canvases at the preview tier (a 2K mask is 16 MB) plus what the warm head already keeps on the GPU. A hold at another tier (the quality changed while warm) isn't taken back; that look is rastered afresh. The budget is residency's count; no byte budget yet (043 §10).
+- **Adoption needs no surface connected.** A look shown on the drawn scene itself (Presets) while its head is connected rasters afresh as before, because the connected surface would need every slot given again.
+- **The history refusal mechanism** existed only for the drawn-view rule, so it was removed rather than left without a user.
+
+**What P2-iii-b needs.**
+
+- **U7 first:** the style guide's "not drawn" state, extending *Setup card and head pane states* (`c-setup`) and *Viewport overlays* (`c-viewport`): the view's title, its V and look, and **Show here**; pressing in the pane or focusing it draws it.
+- **Panels per view:** the shell's `head` panel becomes one controller per view panel ID (`head` for the main view, `view.<id>` otherwise; `viewPanel`), made and withdrawn as the shown tab's views change. The catalogue must know `view.*` IDs so `restoreDockPreference` places them instead of keeping them as unknown. The device's canvas (`viewport.attach("head", slot)`) follows the drawn view's panel; the presentation needs the drawn view (a `viewport.snapshot()` field) and Show here dispatches focus to the view (`focus.view`), which the root already follows.
+- **Captures:** the not-drawn state and a tab with two views, light and dark, narrow and wide, from an isolated `?verify=1` server.
+
+**What P2-iv needs.**
+
+- Switching a tab is `tabs.show`; the drawn view and the document follow by themselves (the root's session listener). The strip needs nothing else from the heads owner.
+- A tab whose scene has no V: `heads.show` hides the head on screen and rejects with "That view's V isn't known yet."; P2-vi's empty state takes it from there.
+- `checkClosable(tab)` has one argument now, and close and reset of the drawn view's tab are available.
 
 ## Related pages
 

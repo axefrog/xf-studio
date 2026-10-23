@@ -410,7 +410,7 @@ Undo reverses all of an operation, including pushing or popping a fragment. A se
 - **Never Undo:** focus with the shown tab, a tab's arrangement and the instances the dock makes there, and what a scene shows. A step holds a tab's arrangement and instances only when it makes, closes or resets the tab (experiment 044 D15). Add or remove a panel and change a binding become recorded operations with phase 3's picker and binding selector.
 - **The graph** has no required main view and no `MAX_VIEWS`; views carry their tab, and new IDs come from the session. Reset keeps the tab and pushes its content as a `reset` fragment (D16). Closed fragments keep their views' and nodes' places and the views' focus numbers, so close then Reopen is byte-identical.
 - **Actions:** `tabs.show`, `rename`, `move`, `close`, `reopen`, `duplicate` and `arrange` (Duplicate at the data level only until phase 6's menu entry).
-- **Settled before anyone hears; replays keep what Undo doesn't hold.** Notifications wait until an operation, Undo or Redo has settled, and each listener is isolated. A recorded tab operation makes `view:<profile>` the editing context. A tab or fragment an Undo or Redo brings in takes its arrangement, instances, scene targets and focus numbers from what it takes away. Until phase 2's per-view drawing, the view the window draws can't close (refused with the reason, steps kept).
+- **Settled before anyone hears; replays keep what Undo doesn't hold.** Notifications wait until an operation, Undo or Redo has settled, and each listener is isolated. A recorded tab operation makes `view:<profile>` the editing context. A tab or fragment an Undo or Redo brings in takes its arrangement, instances, scene targets and focus numbers from what it takes away. Since P2-iii any view may close, the drawn one included: the window draws another view of the shown tab, or none (§4.5).
 
 ### 4.2 Defaults are graph fragments
 
@@ -505,6 +505,13 @@ Both were queued as beta blockers. Phase 4a is where they are fixed and gated, s
 - **View actions routed by the view they name** (`preview/view-routes.ts`, 043 §13). The application sends camera, preview and motion actions to the runtime holding the named view, and says how it holds it. Framing (Front view, Whole body, the creator cameras, the lens) needs a device drawing the view and is refused plainly (`not_ready`) otherwise; a restore, an orbit step, Back and Forward edit the view's camera node. Preview settings are checked against the head of the view's V, a warm one included, else against the stored ranges. Motion acts only for a view whose scene is on screen. `heads.show(view)` draws a view: the head of another view of the same scene is redrawn for it.
 - **Editors per view** (`preview/browser/scene-editors.ts`): the runtime owner mounts the on-head editor on the head shown for the drawn view, naming that view's look; loaders are ready per V (a head shows the V the request names). UI-boundary exception 17 is gone.
 - **The S2 gate table** runs on synthetic heads as `tests/webgl-scene-runtimes.test.ts` (T2), and on real data as `measure.ts` in experiment 043 (G2, G3).
+
+**Built in phase 2, P2-iii** ([experiment 044 §10](../../experiments/044-profile-tabs/README.md#10-p2-iii-as-built)).
+
+- **The drawn view follows the shown tab:** the window draws its most recently focused view, else its first, else none (`drawnView`, `profile-window.ts`), and follows it when another tab is shown, another view focused, or the drawn view closed. Drawing none keeps the head shown before warm. A runtime whose scene no longer exists goes once another is shown.
+- **Per-view editing** (experiment 044 decision D3): one editor document follows the drawn view's look. Drawing a view of another look settles the on-head editor, lets the head on screen hold the layers it shows, and then switches the document, so the leaving head never shows the new look's layers; going back before the takeover reconnects it. 4a-vi's cross-look refusal and phase 2's drawn-view refusals are gone.
+- **A warm runtime keeps its look's makeup:** its surface's hold is tagged with its look and tier, and the preview device takes it back when the document shows that look again, so a switch back rasters, uploads and composites nothing; the hold goes with its runtime, so the residency budget bounds it.
+- **Still one 3D view panel.** Panels per view (`view.<id>`) and the "not drawn" state (U7) are P2-iii-b.
 
 ## 5. Panel ownership
 
