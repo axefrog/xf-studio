@@ -54,7 +54,9 @@ export type ProcessOp =
   /** `teller` tells `listener` its belief `belief`, in the telling event `event`, changed by `operator` (S1 8.4). */
   | { op: 'tell'; teller: Id; listener: Id; belief: Id; event: Id; operator: TellOperator | null }
   | { op: 'belief-set'; belief: BeliefSpec }
-  | { op: 'belief-drop'; believer: Id; belief: Id };
+  | { op: 'belief-drop'; believer: Id; belief: Id }
+  /** Append entries to a layer's own record (S1's decision log): applied by the sink the layer registered under `owner`. */
+  | { op: 'record'; owner: string; entries: unknown };
 
 /** A node demand reaches (V4-37): its demand tier and claim at the snapshot. */
 export interface DemandedNode {
@@ -177,6 +179,8 @@ export class Evolution {
   private queue: QueuedOp[] = [];
   /** Operations applied at boundaries after their window (a diagnostic, never a policy). */
   lateOps = 0;
+  /** Where a `record` operation goes: a layer registers a sink for its record (S1's decision log). */
+  readonly sinks = new Map<string, (entries: unknown, at: GameTime, processId: string) => void>();
 
   constructor(private readonly k: Kernel) {}
 
@@ -282,8 +286,8 @@ export class Evolution {
       }
       // The state and the digest the batch carries replace the process's own, atomically with its operations
       // (V4-35, V4-36); a batch without one leaves it alone.
-      if ('state' in d.batch) d.state.state = structuredClone(d.batch.state);
-      if ('digest' in d.batch) d.state.digest = structuredClone(d.batch.digest);
+      if ('state' in d.batch) d.state.state = d.batch.state;
+      if ('digest' in d.batch) d.state.digest = d.batch.digest;
       d.state.outstanding = d.state.outstanding.filter((x) => x !== d.batch);
     }
     // The Ids the outstanding batches name are retention roots (SPEC-NOTES 33), so a batch leaving them changes
@@ -444,6 +448,12 @@ export class Evolution {
       case 'belief-drop':
         k.beliefs.drop(op.believer, op.belief);
         break;
+      case 'record': {
+        const sink = this.sinks.get(op.owner);
+        if (!sink) throw new Error(`no record sink for ${op.owner}`);
+        sink(op.entries, T, processId);
+        break;
+      }
     }
   }
 

@@ -13,7 +13,7 @@ export interface RoleSpec {
   role: string;
   source:
     | { from: 'offenders' }
-    | { from: 'group'; side: 'A' | 'B' }
+    | { from: 'group'; side: 'A' | 'B'; roles?: string[] }
     | { from: 'residents'; roles?: string[]; aff?: 'gang' }
     | { from: 'responders' }
     | { from: 'parent'; role: string };
@@ -62,7 +62,7 @@ const ROLE_SPECS = (kind: string, hasParent: boolean): RoleSpec[] => {
       ];
     case 'shakedown':
       return [
-        { role: 'aggressor', source: { from: 'group', side: 'A' }, count: [1, 1], adult: true, groupOk: true },
+        { role: 'aggressor', source: { from: 'group', side: 'A', roles: ['gang'] }, count: [1, 1], adult: true, groupOk: true },
         res('victim', [1, 1], { roles: ['vendor', 'shopkeeper'] }),
       ];
     case 'police-action':
