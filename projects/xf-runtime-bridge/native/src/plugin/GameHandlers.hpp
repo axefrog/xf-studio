@@ -15,6 +15,10 @@ void RegisterMethods060(Dispatcher& aDispatcher);
 // Bridge 0.7 (Handlers070.cpp): cyberware, world state and probes, the weather, ui.state, game.saves, photo.scene.set and the
 // overlay host's state.
 void RegisterMethods070(Dispatcher& aDispatcher);
+// The senses for the Story Engine (HandlersSenses.cpp): world.facts, world.district, player.status. Called by RegisterMethods.
+void RegisterMethodsSenses(Dispatcher& aDispatcher);
+// scene.read's npc_detail (HandlersSenses.cpp): gives each NPC row of aOut its character record's detail when aWanted.
+void AddNpcDetail(nlohmann::json& aOut, bool aWanted, const std::string& aCid);
 // Game thread, every Running tick: runs the behaviours (core/Behaviours.hpp) through the redscript layer.
 void TickBehaviours(double aDt, bool aScriptsReady);
 // Game thread, from RestoreAfterKill (RB-90): writes back the first values photo.camera.preset saw for every camera preset

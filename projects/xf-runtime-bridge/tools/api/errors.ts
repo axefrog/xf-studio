@@ -142,6 +142,7 @@ export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   expectation_failed: "The pre-capture check failed, so no screenshot was taken. The answer lists which check failed and why; fix the framing or light and try again, or pass on_fail: warn to capture anyway.",
   unsupported: "This game doesn't offer a safe way to do that yet.",
   unavailable: "That part of the game isn't available right now.",
+  no_district: "The game hasn't told its district system where V is yet. It does so when V crosses an area border, so a moment after a load, or once V moves, it will.",
   failed: "Something went wrong inside the game bridge. The plugin log has the details.",
   disconnected: "The connection to the game closed. Is the game still running?",
   client_timeout: "The game bridge didn't answer. The game may be frozen or loading; try again shortly.",

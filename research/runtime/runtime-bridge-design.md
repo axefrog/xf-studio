@@ -338,6 +338,14 @@ Built offline (23 October 2026) on 0.8.6, after session 14 on 0.8.6 the same day
 - **Natives: 26** (22 in 0.8.6, plus `XFBridge_SaveRefused`, `XFBridge_SaveAnyway`, `XFBridge_Event`, `XFBridge_ProbeFlags`).
 - **Answered offline: wrapping a native method (game-events row 17).** redscript 0.5.31 refuses `@wrapMethod` on a native method at compile time ("wrapping natives is not supported"), so the session row is not needed: native methods stay unhooked, and their script-side callers are wrapped instead [offline: a lint of a one-file wrap of `gameAutoSaveSystem.RequestCheckpoint` against the 2.31 bundle].
 
+### 3.16 Bridge 0.8.8: 0.8.7 with NPC direction and the senses reads
+
+Built offline (23 October 2026) by merging the two branches that were stacked onto session 15 into the 0.8.7 line, so that session 15 runs one build: `claude/bridge-080-npc` (0.8's part B, built on 0.8.6 as `0.8.6+npc`; [NPC direction design](npc-direction-design.md)) and `claude/bridge-senses` (the Story Engine's read-only senses, built on 0.8.7 before its Sol fixes as `0.8.7+senses`; [runtime requirements](../story-engine/runtime-requirements.md) S2 to S6). Both are ordinary merges; nothing in 0.8.7's save owner, probes or panel changed, and neither branch changed a native (26 in all).
+
+- **What is in it.** Everything in §3.15; the `npc` write class with `npc.list`, `npc.pick`, `npc.status`, `npc.spawn`, `npc.move`, `npc.follow`, `npc.turn`, `npc.place`, `npc.stop`, `npc.say`, `npc.look`, `npc.face`, `npc.act`, `npc.choices`, `npc.release` and the tools-side `npc.scenario`, with the XF actor records (`xf_npc_actors.yaml`, the -writes package only) and `NPC_REFUSALS`; and the reads `world.facts`, `world.district`, `player.status` and `scene.read {npc_detail}`.
+- **Where they met.** The catalogue, `errors.ts`, `GameHandlers.*`, the self-test's registration, `CMakeLists.txt` and the unit-test runner took both sides' additions. Packaging stages the 0.8.7 probes (`redscript-probes/`, the companion) and the NPC actor records side by side, each in the -writes package only. The self-test host's scene keeps the senses branch's record names without spaces (`Character.Sim_NPC_A`), which the NPC checks do not read.
+- **Grades.** NPC direction and the senses reads are [source] and [offline]; none of it has run in game. The in-game rows are folded into one ordered [session-15 card](runtime-bridge-test-card.md#session-15-checks-bridge-088).
+
 ## 4. Safety model
 
 **The security boundary is the Windows user at medium integrity.** The bridge keeps out:

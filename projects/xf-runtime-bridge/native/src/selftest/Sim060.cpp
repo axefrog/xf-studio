@@ -9,6 +9,7 @@
 #include "core/Params.hpp"
 #include "core/Player.hpp"
 #include "core/Scene.hpp"
+#include "core/Senses.hpp"
 #include "core/Writes.hpp"
 
 namespace w = xfb::writes;
@@ -267,13 +268,31 @@ void Sim060::Register()
                                        }
                                        auto o = subject(npc.at, npc.yaw, request.occlusion);
                                        o["id"] = std::string("sim:") + npc.name;
-                                       o["record"] = std::string("Character.") + npc.name; // 0.7: the record, not a display name (the world-object rule)
+                                       // 0.7: the record, not a display name (the world-object rule); senses: a name a record can have (no spaces)
+                                       std::string record = std::string("Character.") + npc.name;
+                                       std::replace(record.begin(), record.end(), ' ', '_');
+                                       o["record"] = record;
                                        o["class"] = "NPCPuppet";
                                        o["distance"] = distance;
                                        o["dead"] = false;
                                        npcs.push_back(o);
                                    }
                                    out["npcs"] = npcs;
+                                   if (request.npcDetail)
+                                   {
+                                       // senses (S3): the simulated character records, as the script's Characters answers them.
+                                       json characters = json::object();
+                                       for (const auto& record : senses::NpcRecords(npcs))
+                                       {
+                                           characters[record] = record == "Character.Sim_NPC_A"
+                                                                    ? json{{"affiliation", {{"record", "Factions.TygerClaws"}, {"name", "TygerClaws"}}}, {"npc_type", "Human"}, {"rarity", "Weak"},
+                                                                           {"quest_affiliation", "None"}, {"archetype", "Gangster"}, {"attitude_group", "tyger_claws"}, {"crowd", false},
+                                                                           {"light_crowd", false}, {"child", false}}
+                                                                    : json(nullptr);
+                                       }
+                                       senses::MergeNpcDetail(out["npcs"], characters);
+                                       out["npc_detail"] = true;
+                                   }
                                }
                                if (has("showroom"))
                                {

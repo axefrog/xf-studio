@@ -88,6 +88,7 @@ json SceneRead(const MethodContext& aContext)
         }
         out["points"] = points;
     }
+    AddNpcDetail(out, request.npcDetail, aContext.cid);
     return out;
 }
 

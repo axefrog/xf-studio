@@ -2124,6 +2124,7 @@ void RegisterMethods(Dispatcher& aDispatcher)
     RegisterMethods060(aDispatcher);
     RegisterMethods070(aDispatcher);
     RegisterMethodsNpc(aDispatcher);
+    RegisterMethodsSenses(aDispatcher);
     auto& state = Get();
 
     aDispatcher.Register({"bridge.info", Access::Read, RunOn::BridgeThread,

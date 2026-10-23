@@ -222,6 +222,10 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "cyberware.equip": [...INVENTORY, "arms_drawn", "not_equippable", "unavailable"],
   "cyberware.unequip": [...INVENTORY, "arms_drawn", "not_added_by_bridge"],
   "world.state": ["game_not_ready"],
+  // The senses for the Story Engine (catalogueSenses.ts): game_not_ready on the main menu and during a load.
+  "world.facts": ["game_not_ready", "unavailable"],
+  "world.district": ["game_not_ready", "no_district", "unavailable"],
+  "player.status": ["game_not_ready", "not_in_gameplay"],
   "world.probe": ["unavailable"],
   "world.weather.set": ["codeware_missing", "quest_scene", "not_in_gameplay", "call_failed", "unavailable"],
   "ui.state": ["game_not_ready"],

@@ -36,6 +36,7 @@ import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroo
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
 import { COMMANDS_080_NPC } from "./catalogue080npc.ts";
+import { SENSES_COMMANDS } from "./catalogueSenses.ts";
 import { applyCatalogue080 } from "./catalogue080.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
 import { decodePng } from "../capture/image.ts";
@@ -1759,6 +1760,8 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   ...COMMANDS_070,
   // Bridge 0.8: NPC direction (research/runtime/npc-direction-design.md).
   ...COMMANDS_080_NPC,
+  // The senses for the Story Engine (read-only): quest facts in a batch, V's district, V's status.
+  ...SENSES_COMMANDS,
 ]);
 
 export function findCommand(name: string): CommandDef | undefined {

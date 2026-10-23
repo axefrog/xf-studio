@@ -21,6 +21,7 @@ struct ReadRequest
     bool occlusion = true;  // static-geometry rays from the camera to each face
     std::vector<std::array<double, 3>> points; // world points to push through the game's own projection (at most 32)
     std::array<double, 3> pieceEyes{0.0, 0.0497, 1.691}; // a showroom head's eyes in its entity frame
+    bool npcDetail = false; // senses (S3): each NPC row gains its character record's affiliation, type, rarity and flags
 };
 
 // photo.camera.preset (0.6, research): a photo-mode camera preset's flats rewritten through TweakXL, then selected, the camera

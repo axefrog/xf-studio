@@ -328,6 +328,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
       occlusion: bool("Check the sight line from the camera to each face (default true)."),
       points: { type: "array", description: "World points to project with the game's own projection.", items: point3("A world point [x, y, z]."), maxItems: 32 },
       piece_eyes: point3("A showroom head's eyes in its own frame (default [0, 0.0497, 1.691], the showroom build's)."),
+      npc_detail: bool("Also give each NPC its character record's details (affiliation, type, rarity, archetype, attitude group, crowd flags) under \"character\". Off by default; one extra lookup per distinct record."),
     }),
     bridge: { method: "scene.read" },
   },

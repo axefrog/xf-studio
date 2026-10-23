@@ -5235,6 +5235,9 @@ void Bridge087Tests()
     std::filesystem::remove_all(folder, ec);
 }
 
+// UnitTestsSenses.cpp: the senses' parameter checks and merge helpers; answers the number of failed checks.
+int SensesUnitTests();
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -5273,6 +5276,7 @@ int RunUnitTests()
     Bridge086Tests();
     Bridge087Tests();
     gFailures += RunNpcUnitTests();
+    gFailures += SensesUnitTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

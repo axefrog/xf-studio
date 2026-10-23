@@ -39,6 +39,7 @@
 #include "selftest/Sim060.hpp"
 #include "selftest/Sim070.hpp"
 #include "selftest/SimNpc.hpp"
+#include "selftest/SimSenses.hpp"
 
 #include <functional>
 #include <limits>
@@ -2667,6 +2668,13 @@ int wmain(int argc, wchar_t** argv)
         hooks070.killed = [&bridge] { return bridge.GetDispatcher().IsKilled(); };
         hooks070.weaponDrawn = [] { return sim060 && sim060->WeaponDrawn(); };
         xfb::selftest::RegisterSim070(dispatcher, queue, config, std::move(hooks070));
+        // The senses for the Story Engine (selftest/SimSenses.cpp).
+        xfb::selftest::SimSensesHooks senses;
+        senses.phase = [] {
+            std::scoped_lock _(sim.mutex);
+            return sim.phase;
+        };
+        xfb::selftest::RegisterSimSenses(dispatcher, std::move(senses));
     }
     {
         // Bridge 0.8's NPC direction against a simulated street (selftest/SimNpc.cpp), with the plugin's shared service.
