@@ -9,7 +9,8 @@ tree when either line is crossed:
     python tools/memory_guard.py --limit 2 --floor 20 -- bun tools/native-limits.ts
 
 --limit   GB of private memory the command's processes may use together (default 8).
---floor   GB of free physical memory the machine must keep (default 16).
+--floor   GB of free physical memory below which the guard trips (default 4): a tripwire near the
+          machine's maximum, not a reservation. Use memory freely above it.
 
 The job also carries a hard commit limit (limit x 1.25) that the operating system enforces,
 in case polling is too slow for a sudden allocation, and kill-on-close, so the tree dies with
@@ -176,7 +177,7 @@ def record(line: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--limit", type=float, default=8.0, help="GB the command's processes may use together")
-    parser.add_argument("--floor", type=float, default=16.0, help="GB of free physical memory to keep")
+    parser.add_argument("--floor", type=float, default=4.0, help="GB of free physical memory below which the guard trips")
     parser.add_argument("--interval", type=float, default=0.5, help="seconds between checks")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
