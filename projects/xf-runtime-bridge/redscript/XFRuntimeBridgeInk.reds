@@ -704,6 +704,11 @@ public class XFInkPanel {
   private let m_answered: ref<inkText>;
   private let m_chips: array<ref<inkText>>;
   private let m_hovered: Int32;
+  // 0.8.11 (UI review of 0.8.11, fix 3): the line under the answers (photo mode's menu only: it holds the place while a question
+  // waits, so a held Esc fills it without moving anything) and the answers' flash.
+  private let m_hint: ref<inkText>;
+  private let m_hintReserved: Bool;
+  private let m_flash: Float;
   // RB-114: the frame whose question and answer keys are on screen now (set when Apply draws them).
   public let drawn: ref<XFHudFrame>;
 
@@ -816,6 +821,12 @@ public class XFInkPanel {
       ArrayPush(view.m_chips, chip);
       k += 1;
     }
+    let hint = XFInkStyle.Text(n"hint", 24, n"Regular", n"MainColors.Grey", false);
+    hint.SetMargin(new inkMargin(0.0, 6.0, 0.0, 0.0));
+    hint.SetWrappingAtPosition(980.0);
+    hint.SetVisible(false);
+    hint.Reparent(body);
+    view.m_hint = hint;
     return view;
   }
 
@@ -823,10 +834,43 @@ public class XFInkPanel {
     return this.m_plate;
   }
 
+  // 0.8.11 (UI review of 0.8.11, fix 3): photo mode's menu panel keeps a line under the question for a note (a held Esc says so
+  // there); the line holds its place, empty, while a question waits. ShowHint("") empties it.
+  public func ReserveHint() -> Void {
+    this.m_hintReserved = true;
+  }
+
+  public func ShowHint(text: String) -> Void {
+    this.m_hint.SetText(StrLen(text) > 0 ? text : " ");
+  }
+
+  // The answers flash (red and back) for a moment: a key that did nothing is seen to have done nothing.
+  public func Flash() -> Void {
+    this.m_flash = 0.9;
+  }
+
+  public func Step(dt: Float) -> Void {
+    if this.m_flash <= 0.0 {
+      return;
+    }
+    this.m_flash -= dt;
+    if this.m_flash <= 0.0 {
+      this.m_flash = 0.0;
+      this.SetHovered(this.m_hovered);
+      return;
+    }
+    let on = (Cast<Int32>(this.m_flash / 0.15) % 2) == 0;
+    let i = 0;
+    while i < ArraySize(this.m_chips) {
+      XFInkStyle.Bind(this.m_chips[i], on ? n"MainColors.Red" : n"MainColors.Yellow");
+      i += 1;
+    }
+  }
+
   // 0.8.10 (session 16's A7r: after a reopen the HUD-layer panel could not be told from the one inside photo mode's menu): the
   // tag beside the heading names where this panel is drawn, in plain words (XFInkWhere); "test" alone for the default layer.
   public func SetWhere(place: String) -> Void {
-    this.m_tag.SetText(StrLen(place) > 0 ? "test - " + place : "test");
+    this.m_tag.SetText(StrLen(place) > 0 ? "test · " + place : "test");
   }
 
   public func ChipCount() -> Int32 {
@@ -909,6 +953,7 @@ public class XFInkPanel {
       this.m_answered.SetText("Answered: " + frame.answeredLabel);
     }
     this.m_row.SetVisible(count > 0 || answered);
+    this.m_hint.SetVisible(this.m_hintReserved && count > 0);
   }
 
   // 0.8: the plate and the edge at the body's measured size (its content plus the body's margins); nothing until measured.

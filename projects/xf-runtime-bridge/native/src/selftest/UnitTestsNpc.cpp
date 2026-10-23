@@ -909,6 +909,25 @@ void FacingAndFaceTests()
         Check("0.8.11 ... once, not on every poll", !fake.Called("command a1 stop"));
     }
     {
+        // The Sol review of 0.8.11, finding 2: a placement after a face_v move clears the facing target itself; the tick must not
+        // send a stop on top of it (it would cancel the pending teleport).
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        make(fake, service, ops);
+        service.Move(json{{"who", "a1"}, {"to", "v"}, {"face_v", true}}, ops);
+        service.Tick(n::kTurnFirstMaxS + 0.2, {}, ops);
+        fake.calls.clear();
+        service.Place(json{{"who", "a1"}, {"at", json::array({2.0, 2.0, 0.0})}}, ops);
+        Check("0.8.11 move with face_v then place: the placement goes out", fake.Called("command a1 place"));
+        fake.calls.clear();
+        Poll(service, fake, ops);
+        Poll(service, fake, ops);
+        Check("0.8.11 ... and no stop follows it (the placement cleared the facing target already)", !fake.Called("command a1 stop"));
+    }
+    {
         xfb::EventLog log;
         n::Service service;
         service.SetEvents(&log);

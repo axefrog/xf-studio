@@ -47,6 +47,11 @@ const IMGUI = `
     GetWindowPos = function() return winX, winY end,
     GetWindowSize = function() return winW, winH end,
     SetNextWindowPos = function(px, py, cond) rec("nextpos:" .. tostring(px) .. "," .. tostring(py)) end,
+    GetCursorScreenPos = function() return 38, 12 end,
+    GetForegroundDrawList = function() return "fg" end,
+    GetColorU32 = function(r, g, b, a) return "col" end,
+    GetTextLineHeight = function() return 14 end,
+    ImDrawListAddCircleFilled = function(list, x, y, r, c, n) rec("dot@" .. tostring(x) .. "," .. tostring(y) .. " r=" .. tostring(r)) end,
     PushClipRect = function(a, b, c, d, i) rec("clip") end,
     PopClipRect = function() rec("unclip") end,
     PushStyleVar = function(i, a, b) end,
@@ -112,6 +117,23 @@ describe.skipIf(!existsSync(FENGARI))("0.8.7 the CET layer: the CET line's dot, 
     expect(count).toBe("1");
   });
 
+  test("0.8.11 (UI review fix 1): a draw-list call that raises is named in the mod's log once, and the words hang past the dot as in 0.8.5", () => {
+    const out = run(`
+      ImGui.GetForegroundDrawList = function() error("no such call") end
+      local a = draw()
+      draw()
+      local n, named = 0, false
+      for _, line in ipairs(logged) do
+        if string.find(line, "status dot hangs", 1, true) then n = n + 1 end
+        if string.find(line, "no such call", 1, true) then named = true end
+      end
+      return a .. "@@" .. n .. "@@" .. tostring(named)`);
+    const [frame, count, named] = out.split("@@");
+    expect(frame).toMatch(/bullet@26\|sameline/);
+    expect(count).toBe("1");
+    expect(named).toBe("true");
+  });
+
   test("F-key hints: the window's answer buttons name no key (CET has the keyboard while the window shows); the CET line keeps them", () => {
     const out = run(`
       handlers.onOverlayOpen()
@@ -153,6 +175,9 @@ describe.skipIf(!existsSync(FENGARI))("0.8.7 the CET layer: the CET line's dot, 
       return offered .. "@@" .. table.concat(nativeCalls, ",") .. "@@" .. after .. "@@" .. hidden`);
     const [offered, calls, after, hidden] = out.split("@@");
     expect(offered).toContain("button:Save anyway");
+    // 0.8.11 (UI review of 0.8.11, fix 2): the reason above the button, "or load a save" beside it.
+    expect(offered).toMatch(/Saves are held: a test change would go into them\.[^@]*button:Save anyway[^@]*sameline[^@]*or load a save/);
+    expect(hidden).not.toContain("Saves are held");
     expect(calls).toBe("SaveAnyway:cet-panel");
     expect(after).toContain("Saving... The XF Runtime Bridge window says when it's done.");
     expect(hidden).not.toContain("button:Save anyway");
@@ -263,7 +288,7 @@ describe("0.8.7 the pin mark, the save lock's notice, the probes", () => {
     const actions = read("redscript", "XFRuntimeBridgeActions.reds");
     expect(actions).toMatch(/@wrapMethod\(UIInGameNotificationEvent\)\s+public final static func CreateSavingLockedEvent\(const locks: script_ref<array<gameSaveLock>>\) -> ref<UIInGameNotificationEvent> \{\s+let result = wrappedMethod\(locks\);\s+XFBridge_SaveRefused\(XFBridgeActions\.OwnSaveLockHeld\(\)\);/);
     const natives = read("native", "src", "plugin", "Natives.cpp");
-    expect(natives).toContain('"XF Runtime Bridge is holding saves because of a test change. Load a save, or use Save anyway in the XF Runtime Bridge window."');
+    expect(natives).toContain('"XF Runtime Bridge is holding saves because of a test change. Load a save, or use Save anyway in the XF Runtime Bridge window (open the CET overlay)."');
     // Save anyway: only where the window offers it (writes and the save class), never a pipe method.
     expect(natives).toContain("if (!SaveAnywayOffered())");
     expect(read("native", "src", "plugin", "Plugin.cpp")).toContain("(state.config.writeClasses & kWriteSave) == 0");

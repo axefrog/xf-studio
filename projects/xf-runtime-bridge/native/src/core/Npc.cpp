@@ -1196,7 +1196,7 @@ json Service::Follow(const json& aParams, const Ops& aOps)
         }
         CheckRange(Resolve(target, v), v);
     }
-    aOps.command(who, command);
+    Send(who, command, aOps);
     std::scoped_lock _(m_mutex);
     auto& npc = Ours(who, true);
     const bool replaced = npc.motion.has_value();
@@ -1256,7 +1256,7 @@ json Service::Turn(const json& aParams, const Ops& aOps)
         command.target.point = away ? Vec3{from[0] - dx, from[1] - dy, from[2]} : Vec3{there[0], there[1], from[2]};
         goal = YawTowards(away ? -dx : dx, away ? -dy : dy);
     }
-    aOps.command(who, command);
+    Send(who, command, aOps);
     std::scoped_lock _(m_mutex);
     auto& npc = Ours(who, true);
     // The review's finding 4: the turn's AI command replaces any walk or follow the actor had, so its tracking goes too
@@ -1335,7 +1335,7 @@ json Service::Place(const json& aParams, const Ops& aOps)
         CheckRange(spot, v);
     }
     command.target.point = spot;
-    auto step = aOps.command(who, command);
+    auto step = Send(who, command, aOps);
     {
         std::scoped_lock _(m_mutex);
         auto& npc = Ours(who, true);
@@ -1363,6 +1363,21 @@ json Service::Place(const json& aParams, const Ops& aOps)
     return out;
 }
 
+// 0.8.11 (the Sol review, finding 2): every command the script receives clears the facing target an earlier move left, unless the
+// command is a move that sets its own, so the native flag that asks for the tick's clearing stop follows it (a stop sent after a
+// placement would cancel the teleport).
+json Service::Send(const std::string& aWho, const Command& aCommand, const Ops& aOps)
+{
+    auto step = aOps.command(aWho, aCommand);
+    std::scoped_lock _(m_mutex);
+    const auto it = m_npcs.find(aWho);
+    if (it != m_npcs.end() && !(aCommand.kind == "move" && aCommand.faceV))
+    {
+        it->second.facingSet = false;
+    }
+    return step;
+}
+
 json Service::Stop(const json& aParams, const Ops& aOps)
 {
     RequireKnown("npc.stop", aParams);
@@ -1379,7 +1394,7 @@ json Service::Stop(const json& aParams, const Ops& aOps)
     json step = json::object();
     try
     {
-        step = aOps.command(who, command);
+        step = Send(who, command, aOps);
     }
     catch (const MethodError& e)
     {
@@ -1863,13 +1878,13 @@ void Service::BeginWalk(Npc& aNpc, const Command& aWalk, const Vec3& aToward, Mo
     if (turn)
     {
         // A refusal of the turn (a lost actor, a closed gate) is the walk's refusal too.
-        aOps.command(aNpc.who, *turn);
+        Send(aNpc.who, *turn, aOps);
         aMotion.pending = aWalk;
         aMotion.yawGoal = goal;
         aMotion.hasYawGoal = true;
         return;
     }
-    aOps.command(aNpc.who, aWalk);
+    Send(aNpc.who, aWalk, aOps);
 }
 
 json Service::StopHeld(Npc& aNpc, const Ops& aOps, bool aKeepLines)
@@ -1923,7 +1938,7 @@ json Service::StopHeld(Npc& aNpc, const Ops& aOps, bool aKeepLines)
     {
         Command stop;
         stop.kind = "stop";
-        guarded("command", [&] { aOps.command(aNpc.who, stop); });
+        guarded("command", [&] { Send(aNpc.who, stop, aOps); });
         aNpc.motion.reset();
     }
     return done;
@@ -2893,7 +2908,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             }
             Command stop;
             stop.kind = "stop";
-            aOps.command(who, stop);
+            Send(who, stop, aOps);
         }
         catch (const std::exception&)
         {
@@ -2932,7 +2947,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             {
                 throw MethodError("writes_closed", "the write gate closed before the re-turn");
             }
-            aOps.command(who, turn);
+            Send(who, turn, aOps);
         }
         catch (const std::exception&)
         {
@@ -2952,7 +2967,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             {
                 throw MethodError("writes_closed", "the write gate closed before the walk");
             }
-            aOps.command(who, walk);
+            Send(who, walk, aOps);
         }
         catch (const std::exception&)
         {
@@ -3021,7 +3036,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
                 stop.kind = "stop";
                 try
                 {
-                    aOps.command(who, stop);
+                    Send(who, stop, aOps);
                 }
                 catch (const std::exception&)
                 {
@@ -3042,7 +3057,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
                 stop.kind = "stop";
                 try
                 {
-                    aOps.command(who, stop);
+                    Send(who, stop, aOps);
                 }
                 catch (const std::exception&)
                 {
@@ -3065,7 +3080,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
                 stop.kind = "stop";
                 try
                 {
-                    aOps.command(who, stop);
+                    Send(who, stop, aOps);
                 }
                 catch (const std::exception&)
                 {

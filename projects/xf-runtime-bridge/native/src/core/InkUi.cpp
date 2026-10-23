@@ -224,7 +224,7 @@ Status Summarize(const BridgeView& aView)
     }
     else if (aView.killed)
     {
-        whole("killed", "Stopped. Reconnect in the XF Runtime Bridge window (CET overlay), or restart the game.");
+        whole("killed", "Stopped. Reconnect in the XF Runtime Bridge window (open the CET overlay), or restart the game.");
         out.connection = "Stopped.";
     }
     else if (!aView.listening)
@@ -640,7 +640,7 @@ std::string AnswerHint(const std::vector<std::string>& aChoices, const std::vect
     {
         hint += (hint.empty() ? "" : "   ") + KeyPrompt(aAnswerKeys[i], aChoices[i]);
     }
-    return hint.empty() ? "Answer in the XF Runtime Bridge window (CET overlay)." : hint;
+    return hint.empty() ? "Answer in the XF Runtime Bridge window (open the CET overlay)." : hint;
 }
 
 std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, MessageBoard& aBoard, const std::vector<std::string>& aAnswerKeys,

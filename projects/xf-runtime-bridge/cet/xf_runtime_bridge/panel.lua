@@ -691,14 +691,19 @@ function panel.body(state, queue, theme, which)
         -- save right now"): while the lock holds, the player can save anyway, on their own say-so (the -writes package only:
         -- the plugin offers it only where writes and the save class are allowed).
         local lock = info and type(info.save_lock) == "table" and info.save_lock or nil
+        -- 0.8.11 (UI review of 0.8.11, fix 2): the reason first, in the muted colour, then the button on its own row with "or load
+        -- a save" beside it, as the Stop row has its key hint.
         if lock and lock.save_anyway then
-          ImGui.SameLine()
+          ImGui.Spacing()
+          coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Saves are held: a test change would go into them.")
           if button("Save anyway") then
             queue("saveanyway")
           end
           if ImGui.IsItemHovered() then
             ImGui.SetTooltip("Makes a manual save now, past the XF Runtime Bridge's save lock. The test change goes into that save.")
           end
+          ImGui.SameLine()
+          coloured(panel.colour(theme, which, "XfTextMuted", GREY), "or load a save")
         end
         -- 0.8 (the UI review): the kill switch on its own row, in the danger colour, away from the everyday buttons. 0.8.5 (the
         -- UI review's fix 8): the Studio's danger button (.btn.danger): danger text and border on a clear fill; hover and press

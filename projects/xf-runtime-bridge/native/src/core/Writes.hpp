@@ -222,6 +222,11 @@ json TestSaveDelay(const json& aParams, bool aAllowed, std::atomic<int32_t>& aSl
 // 0.8.7: one save at a time, from its first check to its relock; a second, from any entry point, is refused save_in_progress.
 json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps);
 
+// 0.8.11 (UI review of 0.8.11, fix 2): what the XF Runtime Bridge window says when Save anyway doesn't go through: plain words and
+// one next step for each reason code a save can fail with, never the raw reason (one of them names game_save). Unknown codes get
+// the general line.
+std::string SaveAnywayFailureCopy(const std::string& aCode);
+
 struct LoadOps
 {
     std::function<void()> guard;                                  // as SaveOps::guard, before loading

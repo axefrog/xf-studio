@@ -377,6 +377,19 @@ bool MessageBoard::Pending(PendingAsk& aOut, Clock::time_point aNow)
     return PendingLocked(aOut, aNow);
 }
 
+void MessageBoard::NoteArmed(uint64_t aId, Clock::time_point aNow)
+{
+    std::scoped_lock _(m_mutex);
+    for (auto& message : m_messages)
+    {
+        if (message.id == aId && !message.choices.empty())
+        {
+            message.armed = aNow;
+            return;
+        }
+    }
+}
+
 json MessageBoard::Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow)
 {
     return Answer(aId, aChoice, false, aNow);
@@ -398,7 +411,7 @@ json MessageBoard::Answer(uint64_t aId, int32_t aChoice, bool aByKey, Clock::tim
         {
             return json{{"ok", false}, {"why", "that message has no answer buttons, or was answered already"}, {"message_id", id}};
         }
-        if (aByKey && aNow - message.posted < kKeyGuard)
+        if (aByKey && aNow - std::max(message.posted, message.armed) < kKeyGuard)
         {
             return json{{"ok", false}, {"why", "the question has only just appeared, so a key press this soon is taken as a stray one; press again"},
                         {"message_id", id}, {"too_soon", true}};

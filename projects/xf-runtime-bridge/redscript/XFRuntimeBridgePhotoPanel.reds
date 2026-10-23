@@ -91,6 +91,8 @@ public class XFPhotoMenuPanel {
   private let m_global: Bool;
   // 0.8.7: how often modal held photo mode's exit in this open.
   private let m_exitHolds: Int32;
+  // 0.8.11: how long the note about a held Esc stays on the panel.
+  private let m_heldFor: Float;
   // 0.8.7: photo mode's zones the panel keeps out of (layer units: left, top, width, height), their names, and where the
   // panel went.
   private let m_zones: array<Vector4>;
@@ -164,10 +166,30 @@ public class XFPhotoMenuPanel {
     if !now.valid || !now.modal || !now.show || !Equals(now.layer, "photo_menu") || Equals(now.tone, "killed") {
       return false;
     }
+    // 0.8.11 (UI review of 0.8.11, fix 3): only while a question is waiting for its answer; with none, Esc leaves as always.
+    if now.askId <= 0 || ArraySize(now.askKeys) == 0 {
+      return false;
+    }
     this.m_exitHolds += 1;
     XFBridge_InkEvent("ink_input", "photo-menu panel held photo mode's exit (ui_hud modal)",
       "{\"exit_held\":true,\"holds\":" + IntToString(this.m_exitHolds) + "}");
+    // A key that does nothing looks like a glitch: the answers flash and the line under them says why.
+    if IsDefined(this.m_view) {
+      this.m_view.Flash();
+      this.m_view.ShowHint(this.HeldText());
+      this.m_heldFor = 4.0;
+    }
     return true;
+  }
+
+  // What the held Esc says: the bridge's real stop key where it has one.
+  private func HeldText() -> String {
+    let text = XFBridge_KillKey("get", "");
+    let label = StrBeforeFirst(StrAfterFirst(text, "\"label\":\""), "\"");
+    if StrContains(text, "\"enabled\":true") && StrLen(label) > 0 {
+      return "Answer first, or press " + label + " to stop the bridge";
+    }
+    return "Answer first, or stop the bridge in the XF Runtime Bridge window (open the CET overlay)";
   }
 
   // ---- Opening and closing -------------------------------------------------------------------------------------------------
@@ -185,6 +207,8 @@ public class XFPhotoMenuPanel {
     // Input still owed from an earlier open (one that ended while the scripts' gate was shut) goes back first.
     this.Settle();
     let created = this.Ensure(root);
+    this.m_view.ReserveHint();
+    this.m_view.ShowHint("");
     let index = this.Front(root);
     this.m_open = true;
     this.m_killed = false;
@@ -195,6 +219,7 @@ public class XFPhotoMenuPanel {
     this.m_hoverWaiting = false;
     this.m_menuHovered = false;
     this.m_exitHolds = 0;
+    this.m_heldFor = 0.0;
     this.ClearPress();
     this.Listen(true);
     let frame = XFHudFrame.Parse(XFBridge_Hud());
@@ -385,6 +410,13 @@ public class XFPhotoMenuPanel {
     }
     this.m_frames += 1;
     this.m_since += timeDelta;
+    this.m_view.Step(timeDelta);
+    if this.m_heldFor > 0.0 {
+      this.m_heldFor -= timeDelta;
+      if this.m_heldFor <= 0.0 {
+        this.m_view.ShowHint("");
+      }
+    }
     if this.m_since >= 0.2 {
       this.m_since = 0.0;
       let frame = XFHudFrame.Parse(XFBridge_Hud());

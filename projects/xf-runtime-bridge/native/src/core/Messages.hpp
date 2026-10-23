@@ -147,6 +147,10 @@ public:
     // kKeyGuard of the question appearing is ignored, {ok: false, why, too_soon: true}; buttons and clicks aren't held back.
     nlohmann::json Answer(uint64_t aId, int32_t aChoice, bool aByKey, Clock::time_point aNow = Clock::now());
     static constexpr std::chrono::milliseconds kKeyGuard{500};
+    // 0.8.11 (UI review of 0.8.11, fix 6: a question that waited behind the phone, a hidden menu or a loading screen arrived with
+    // no guard): the guard also starts again whenever the question's keys become armed on a surface (its first draw, a re-show
+    // after the phone or photo mode's menu), told here by the ink panel's report (XFBridge_InkDrawn).
+    void NoteArmed(uint64_t aId, Clock::time_point aNow = Clock::now());
     // RB-96/RB-103: what became of ask aId (session.wait reads it through ui.ask.state).
     AskState StateOf(uint64_t aId, Clock::time_point aNow = Clock::now());
     static constexpr size_t kAnsweredKept = 64;
@@ -160,6 +164,7 @@ private:
         Clock::time_point expires;
         std::vector<std::string> choices; // an unanswered ask's; empty once answered
         Clock::time_point posted{};       // 0.8.9: when it appeared (the answer keys' guard)
+        Clock::time_point armed{};        // 0.8.11: when its keys last became armed on a surface (the guard starts again)
         std::string answered;             // 0.8: an answered ask's answer label (its text stays the question)
     };
     void DropExpired(Clock::time_point aNow);

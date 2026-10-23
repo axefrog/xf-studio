@@ -534,6 +534,14 @@ void InkDrawn(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, i
     Guarded("XFBridge_InkDrawn", [&] {
         auto& state = Get();
         const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        // 0.8.11 (UI review of 0.8.11, fix 6): the question's keys become armed when the panel starts reporting it: a new
+        // question, or the same one after a gap (the phone, photo mode's menu, a loading screen). The key guard starts again.
+        const auto before = state.inkKeysAsk.load();
+        const auto beforeAt = state.inkShownAtMs.load();
+        if (id > 0 && (before != static_cast<uint64_t>(id) || now - beforeAt > State::kInkShownMs))
+        {
+            state.messages.NoteArmed(static_cast<uint64_t>(id));
+        }
         // 0.8.2: shown is the panel on screen (whatever it shows); id the question it draws (0: none).
         state.inkShownAsk.store(shown && id > 0 ? static_cast<uint64_t>(id) : 0);
         state.inkVisible.store(shown);
@@ -640,7 +648,7 @@ void MouseHeld(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, 
 // 0.8.7, what the player reads when their own save is refused by the bridge's lock (the status surface; the game's own
 // notice stays as it is).
 constexpr const char* kSaveHeldText =
-    "XF Runtime Bridge is holding saves because of a test change. Load a save, or use Save anyway in the XF Runtime Bridge window.";
+    "XF Runtime Bridge is holding saves because of a test change. Load a save, or use Save anyway in the XF Runtime Bridge window (open the CET overlay).";
 
 // XFBridge_SaveRefused(ours: Bool) -> Bool   (0.8.7: the redscript layer's wrap of the game's refused-save notice; ours: the
 // bridge's own lock was among the reasons). Then the status surface says why for 12 s (at most once every 4 s) and the event
@@ -723,15 +731,23 @@ void SaveAnyway(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CS
                 data["ok"] = true;
                 data["lock_overridden"] = result.value("lock_overridden", false);
             }
+            catch (const MethodError& e)
+            {
+                // The window says it in plain words with one next step; the event keeps the reason for an agent.
+                text = xfb::writes::SaveAnywayFailureCopy(e.code);
+                data["ok"] = false;
+                data["code"] = e.code;
+                data["why"] = e.what();
+            }
             catch (const std::exception& e)
             {
-                text = std::string("The save didn't go through: ") + e.what();
+                text = xfb::writes::SaveAnywayFailureCopy("");
                 data["ok"] = false;
                 data["why"] = e.what();
             }
             catch (...)
             {
-                text = "The save didn't go through.";
+                text = xfb::writes::SaveAnywayFailureCopy("");
                 data["ok"] = false;
             }
             MessageRequest message;

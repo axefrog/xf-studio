@@ -523,7 +523,7 @@ local function answerHint(ask)
     end
   end
   if #parts == 0 then
-    return "Click an answer in the XF Runtime Bridge window (CET overlay)."
+    return "Click an answer in the XF Runtime Bridge window (open the CET overlay)."
   end
   return table.concat(parts, MIDDLE_DOT) .. ", or click an answer in the XF Runtime Bridge window."
 end
@@ -538,23 +538,36 @@ local function colouredWrapped(colour, text)
   ImGui.PopStyleColor(1)
 end
 
--- 0.8.6 (the UI review's P5: the status words sat 66 px in against 26 px on the right): the status dot hangs in the window's
--- left padding, so the words start at the padding, as the right side ends there. 0.8.7 (session 14's T3: it didn't take in
--- game; the hanging indent applied): 0.8.6 needed the padding to be a whole font size wide, and CET's padding is narrower
--- than its font. Now only the dot itself has to fit: Dear ImGui's bullet is a circle a fifth of a font size in radius,
--- centred half a font size into the bullet's cell (no frame padding), so the cell starts half a font size left of where the
--- dot's centre should be, the middle of the padding, even left of the window's edge, with the clip widened to the window so
--- the padding doesn't cut it. Answers false, drawing nothing, where the padding can't hold the dot or this CET lacks the
--- calls; the first such frame says why in the mod's log.
+-- 0.8.6 (the UI review's P5: the status words sat 66 px in against 26 px on the right): the status dot sits in the window's
+-- left padding, so the words start at the padding, as the right side ends there. 0.8.7 and 0.8.9 drew it with a widened clip
+-- rect (PushClipRect, GetWindowSize, SetCursorPosX) and checked those with type(); in game (sessions 14 to 16) the check said
+-- this CET lacks one of them every time ("the status dot hangs before the words ... lacks PushClipRect, GetWindowPos,
+-- GetWindowSize or SetCursorPosX") although the installed CET registers all four names, and the hanging dot put the words 66 px
+-- in. 0.8.11 (UI review of 0.8.11, fix 1) draws the dot on the foreground draw list instead, which no window clip cuts and which
+-- needs only calls other mods use (GetForegroundDrawList, ImDrawListAddCircleFilled, GetColorU32, GetCursorScreenPos,
+-- GetWindowPos, GetTextLineHeight): its centre is the middle of the padding, at the middle of the line, and the cursor stays
+-- at the padding. Nothing is tested for by type(): the calls are made under pcall, and what raised is named in the mod's log
+-- once. Answers false, drawing nothing, where the padding can't hold the dot or a call fails (the text then hangs past the
+-- dot, as in 0.8.5).
+local function xyOf(a, b)
+  if type(a) == "table" then return a.x or a[1], a.y or a[2] end
+  return a, b
+end
+
 local function statusDot(tone, startX)
-  local font = ImGui.GetFontSize()
-  local radius = font * 0.2
+  local radius = ImGui.GetFontSize() * 0.2
   local why = nil
   if not (startX >= 2 * radius + 2) then
     why = "the window's padding (" .. tostring(startX) .. " px) is narrower than the dot (" .. tostring(2 * radius + 2) .. " px)"
-  elseif type(ImGui.PushClipRect) ~= "function" or type(ImGui.GetWindowPos) ~= "function"
-    or type(ImGui.GetWindowSize) ~= "function" or type(ImGui.SetCursorPosX) ~= "function" then
-    why = "this CET's ImGui lacks PushClipRect, GetWindowPos, GetWindowSize or SetCursorPosX"
+  else
+    local ok, err = pcall(function()
+      local _, sy = xyOf(ImGui.GetCursorScreenPos())
+      local wx = xyOf(ImGui.GetWindowPos())
+      local list = ImGui.GetForegroundDrawList()
+      local colour = ImGui.GetColorU32(tone[1], tone[2], tone[3], tone[4])
+      ImGui.ImDrawListAddCircleFilled(list, wx + startX / 2, sy + ImGui.GetTextLineHeight() / 2, radius, colour, 12)
+    end)
+    if not ok then why = "the draw-list call raised: " .. tostring(err) end
   end
   if why then
     if not state.dotFallbackLogged then
@@ -563,18 +576,6 @@ local function statusDot(tone, startX)
     end
     return false
   end
-  local wx, wy = ImGui.GetWindowPos()
-  local ww, wh = ImGui.GetWindowSize()
-  ImGui.PushClipRect(wx, wy, wx + (ww or 0), wy + (wh or 0), false)
-  ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 0, 0)
-  ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
-  ImGui.SetCursorPosX(startX / 2 - font / 2)
-  ImGui.Bullet()
-  ImGui.PopStyleColor(1)
-  ImGui.PopStyleVar(1)
-  ImGui.PopClipRect()
-  ImGui.SameLine(0, 0)
-  ImGui.SetCursorPosX(startX)
   return true
 end
 

@@ -1757,4 +1757,42 @@ json TestSaveDelay(const json& aParams, bool aAllowed, std::atomic<int32_t>& aSl
                 {"undo", json{{"method", "test.save.delay"}, {"params", json{{"ms", previous}}}}}};
 }
 
+std::string SaveAnywayFailureCopy(const std::string& aCode)
+{
+    if (aCode == "save_in_progress" || aCode == "busy")
+    {
+        return "Another save is still being made. Try again in a moment.";
+    }
+    if (aCode == "not_in_gameplay")
+    {
+        return "A manual save works only in normal play. Leave the menu or photo mode, then try again.";
+    }
+    if (aCode == "bridge_effects_active")
+    {
+        return "The bridge is still holding something on V. Use Stop the bridge to put it back, then save from the game's own menu.";
+    }
+    if (aCode == "saving_locked" || aCode == "bridge_save_lock")
+    {
+        return "The game still refuses to save here. Try again in a moment, or load a save.";
+    }
+    if (aCode == "save_failed")
+    {
+        return "The game said the save failed, and nothing new was saved. Try again in a moment.";
+    }
+    if (aCode == "save_uncertain")
+    {
+        return "The game took the save but didn't confirm it. Look in the load menu before you save again.";
+    }
+    if (aCode == "killed")
+    {
+        return "The bridge has been stopped, so it can't save. Use the game's own save, or load a save.";
+    }
+    if (aCode == "game_not_ready")
+    {
+        return "The game isn't ready to save yet. Try again once V is back in the world.";
+    }
+    return "The save didn't go through. Try again in a moment, or load a save.";
+}
+
+
 } // namespace xfb::writes

@@ -84,6 +84,7 @@ describe("0.8.10 A7: each layer's panel says where it is drawn (0.8.11: in plain
     expect(ink).toContain("public func SetWhere(place: String) -> Void {");
     expect(ink).toContain("this.m_view.SetWhere(XFInkWhere.Of(frame.layer));");
     expect(ink).not.toContain('"layer " + frame.layer');
+    expect(ink).toContain('"test · " + place'); // 0.8.11: the separator every XF line uses
     for (const words of ['return "HUD";', 'return "notifications layer";', 'return "top layer";']) expect(ink).toContain(words);
     expect(read("redscript", "XFRuntimeBridgePhotoPanel.reds")).toContain('this.m_view.SetWhere("");');
   });

@@ -440,6 +440,8 @@ private:
         double maxS = kChoicesMaxS;
     };
 
+    // 0.8.11: aOps.command, then the facing bookkeeping (see the definition).
+    json Send(const std::string& aWho, const Command& aCommand, const Ops& aOps);
     void Emit(const std::string& aKind, const std::string& aLevel, const std::string& aText, json aData);
     // The refusal order's step 2 (design §5.2): V in the world, on foot, out of combat, scenes and dialogue. Returns V.
     json RequireV(const Ops& aOps) const;

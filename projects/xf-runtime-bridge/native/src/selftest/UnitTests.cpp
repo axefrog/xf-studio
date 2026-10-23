@@ -3219,6 +3219,28 @@ void Bridge070Tests()
         Check("0.8.9 an answer key within 0.5 s of its question is ignored (too_soon), works after; a button isn't held back",
               !early.value("ok", true) && early.value("too_soon", false) && later.value("ok", false) && later["label"] == "B" && button.value("ok", false),
               early.dump() + later.dump() + button.dump());
+    {
+        // 0.8.11 (UI review of 0.8.11, fix 6): the guard starts again when the question's keys become armed on a surface.
+        xfb::MessageBoard armBoard;
+        const auto a0 = xfb::MessageBoard::Clock::now();
+        armBoard.Post({"Armed late?", 60, "ask", false, {"A", "B"}}, a0);
+        const auto a1 = a0 + std::chrono::seconds(20);
+        const auto armStray = armBoard.Answer(0, 0, true, a1 + std::chrono::milliseconds(100));
+        Check("0.8.11 a question that waited is answered by a key at once if nothing armed it since (the old rule)", armStray.value("ok", false), armStray.dump());
+        armBoard.Post({"Behind the phone?", 60, "ask", false, {"A", "B"}}, a0);
+        xfb::PendingAsk armPending;
+        armBoard.Pending(armPending, a0);
+        armBoard.NoteArmed(armPending.id, a1);
+        const auto armEarly = armBoard.Answer(0, 0, true, a1 + std::chrono::milliseconds(200));
+        const auto armLate = armBoard.Answer(0, 1, true, a1 + std::chrono::milliseconds(600));
+        Check("0.8.11 a question whose keys became armed later ignores a key for 0.5 s from then, not from when it was posted",
+              !armEarly.value("ok", true) && armEarly.value("too_soon", false) && armLate.value("ok", false), armEarly.dump() + armLate.dump());
+        armBoard.Post({"Button?", 60, "ask", false, {"A", "B"}}, a0);
+        armBoard.Pending(armPending, a0);
+        armBoard.NoteArmed(armPending.id, a1);
+        const auto armClick = armBoard.Answer(0, 1, false, a1 + std::chrono::milliseconds(50));
+        Check("0.8.11 a armClick is not held back by it", armClick.value("ok", false), armClick.dump());
+    }
         xfb::MessageRequest custom{"Which light?", 30, "ask", false, {"Key", "Fill", "Rim"}};
         const auto posted = board.Post(custom, t0);
         Check("0.7 an ask takes its own choices", posted["choices"] == json::array({"Key", "Fill", "Rim"}));
@@ -3645,7 +3667,7 @@ void Bridge080Tests()
                   k::Summarize(off).text == "Switched off in the bridge's settings." && k::Summarize(off).tone == "off" &&
                   k::Summarize(idle).text == "Not ready yet. Restart the game if this stays." && k::Summarize(idle).tone == "idle" &&
                   k::Summarize(killed).tone == "killed" &&
-                  k::Summarize(killed).text == "Stopped. Reconnect in the XF Runtime Bridge window (CET overlay), or restart the game.");
+                  k::Summarize(killed).text == "Stopped. Reconnect in the XF Runtime Bridge window (open the CET overlay), or restart the game.");
         bool plain = true;
         for (const auto& v : {view, readOnly, waiting, off, idle, killed})
         {
@@ -4410,7 +4432,7 @@ void Session9Tests()
         Check("0.8.2 (review 5) the frame says whether the keys answer the question, and the XF box's line follows it",
               armed.value("keys", std::string()) == "1" && unarmed.value("keys", std::string()) == "0" &&
                   k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, true) == "[F6] Yes   [F7] No" &&
-                  k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, false) == "Answer in the XF Runtime Bridge window (CET overlay).",
+                  k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, false) == "Answer in the XF Runtime Bridge window (open the CET overlay).",
               armed.dump());
         // Connection status follows the session (session 9): a request a moment ago counts as connected.
         view.hasClient = false;
@@ -5287,6 +5309,23 @@ void Bridge087Tests()
     std::filesystem::remove_all(folder, ec);
 }
 
+// 0.8.11 (UI review of 0.8.11, fix 2): Save anyway's failures read in plain words with a next step, never the raw reason.
+void Bridge0811Tests()
+{
+    namespace w = xfb::writes;
+    for (const std::string code : {"save_in_progress", "busy", "not_in_gameplay", "bridge_effects_active", "saving_locked", "bridge_save_lock",
+                                   "save_failed", "save_uncertain", "killed", "game_not_ready", "something_new", ""})
+    {
+        const auto copy = w::SaveAnywayFailureCopy(code);
+        Check(("0.8.11 Save anyway failure '" + code + "' reads in plain words (no code names, a next step)").c_str(),
+              !copy.empty() && copy.find("game_save") == std::string::npos && copy.find('_') == std::string::npos &&
+                  (copy.find("Try again") != std::string::npos || copy.find("load") != std::string::npos || copy.find("Use ") != std::string::npos ||
+                   copy.find("Leave ") != std::string::npos || copy.find("Look ") != std::string::npos),
+              copy);
+    }
+    Check("0.8.11 another save in progress says so", w::SaveAnywayFailureCopy("save_in_progress").find("Another save") == 0);
+}
+
 // UnitTestsSenses.cpp: the senses' parameter checks and merge helpers; answers the number of failed checks.
 int SensesUnitTests();
 
@@ -5327,6 +5366,7 @@ int RunUnitTests()
     Bridge083Tests();
     Bridge086Tests();
     Bridge087Tests();
+    Bridge0811Tests();
     gFailures += RunNpcUnitTests();
     gFailures += SensesUnitTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);

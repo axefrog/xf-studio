@@ -914,11 +914,12 @@ public abstract class XFNpc {
     if !IsDefined(ai) {
       return;
     }
-    let before = FromVariant<wref<GameObject>>(ai.GetBehaviorArgument(n"FacingTarget"));
-    // A crowd member the bridge picked keeps whatever its own AI holds; only a target our own move set is cleared there.
-    if !entry.facingSet && (Equals(entry.kind, "pick") || !IsDefined(before)) {
+    // The Sol review of 0.8.11, finding 1: only a target our own move set is cleared. An actor handed back to the game after a
+    // fight, or a crowd member the bridge picked, keeps whatever its own AI holds.
+    if !entry.facingSet {
       return;
     }
+    let before = FromVariant<wref<GameObject>>(ai.GetBehaviorArgument(n"FacingTarget"));
     let none: wref<GameObject>;
     ai.SetBehaviorArgument(n"FacingTarget", ToVariant(none));
     if entry.facingLogged < 4 {

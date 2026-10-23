@@ -17,8 +17,10 @@ describe("0.8.11 N1: a move's facing target is cleared, not left to steer later 
     expect(npc).toContain("XFNpc.ClearFacing(entry, puppet, cid, kind);");
     expect(npc).toContain("entry.facingSet = true;");
   });
-  test("a crowd member the bridge picked keeps what its own AI holds", () => {
-    expect(npc).toContain('if !entry.facingSet && (Equals(entry.kind, "pick") || !IsDefined(before)) {');
+  test("only a target our own move set is cleared (an actor handed back, or a pick, keeps what its own AI holds)", () => {
+    expect(npc).toContain("if !entry.facingSet {
+      return;
+    }");
   });
   test("V is not the facing target of a move unless face_v is asked", () => {
     expect(read("native", "src", "core", "Npc.cpp")).toContain('params::CheckBoolean(aParams, "face_v").value_or(false)');
@@ -43,5 +45,46 @@ describe("0.8.11 SS5: Equipment-EX's outfit decides what an area shows", () => {
     expect(shows.indexOf('return "outfit";')).toBeLessThan(shows.indexOf("data.IsSlotHidden(area)"));
     expect(wardrobe).toContain("XFWardrobe.OutfitItem(data, areas[i])");
     expect(wardrobe).not.toContain("XFInventory.ItemName(data.GetSlotOverridenVisualItem(");
+  });
+});
+
+describe("0.8.11 review fixes: the held Esc says so, and only while a question waits", () => {
+  const panel = read("redscript", "XFRuntimeBridgePhotoPanel.reds");
+  const ink = read("redscript", "XFRuntimeBridgeInk.reds");
+  test("Esc is held only with a question pending, and then the answers flash and the line under them says why", () => {
+    expect(panel).toContain("if now.askId <= 0 || ArraySize(now.askKeys) == 0 {
+      return false;
+    }");
+    expect(panel).toContain("this.m_view.Flash();");
+    expect(panel).toContain("this.m_view.ShowHint(this.HeldText());");
+    expect(panel).toContain('"Answer first, or press " + label + " to stop the bridge"');
+    expect(panel).toContain('XFBridge_KillKey("get", "")');
+  });
+  test("the line holds its place (reserved while a question waits, so nothing moves) and is emptied after a few seconds", () => {
+    expect(ink).toContain("this.m_hint.SetVisible(this.m_hintReserved && count > 0);");
+    expect(ink).toContain('this.m_hint.SetText(StrLen(text) > 0 ? text : " ");');
+    expect(panel).toContain("this.m_heldFor = 4.0;");
+    expect(panel).toContain('this.m_view.ShowHint("");');
+  });
+});
+
+describe("0.8.11 review fixes: the CET layer and the copy", () => {
+  const init = read("cet", "xf_runtime_bridge", "init.lua");
+  test("the status dot is drawn on the foreground draw list, under pcall, and what raised is named in the log", () => {
+    expect(init).toContain("ImGui.ImDrawListAddCircleFilled(list,");
+    expect(init).toContain("ImGui.GetForegroundDrawList()");
+    expect(init).toContain('"the draw-list call raised: "');
+    expect(init).not.toContain("ImGui.PushClipRect(");
+  });
+  test("one wording sends the player to the window: '(open the CET overlay)', never '(CET overlay)'", () => {
+    for (const file of [read("cet", "xf_runtime_bridge", "init.lua"), read("native", "src", "core", "InkUi.cpp"), read("native", "src", "plugin", "Natives.cpp")]) {
+      expect(file).not.toContain("(CET overlay)");
+    }
+    expect(read("native", "src", "plugin", "Natives.cpp")).toContain("Save anyway in the XF Runtime Bridge window (open the CET overlay).");
+  });
+  test("Save anyway's failure reads from the plain-copy table, never the raw reason", () => {
+    const natives = read("native", "src", "plugin", "Natives.cpp");
+    expect(natives).toContain("xfb::writes::SaveAnywayFailureCopy(e.code)");
+    expect(natives).not.toContain("The save didn't go through: ");
   });
 });

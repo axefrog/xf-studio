@@ -42,6 +42,11 @@ const IMGUI = `
     SetCursorPosX = function(v) rec("setX:" .. tostring(v)); cx = v end,
     GetWindowPos = function() return 12, 12 end,
     GetWindowSize = function() return 600, 120 end,
+    GetCursorScreenPos = function() return 38, 12 end,
+    GetForegroundDrawList = function() return "fg" end,
+    GetColorU32 = function(r, g, b, a) return "col" end,
+    GetTextLineHeight = function() return 14 end,
+    ImDrawListAddCircleFilled = function(list, x, y, r, c, n) rec("dot@" .. tostring(x) .. "," .. tostring(y) .. " r=" .. tostring(r)) end,
     PushClipRect = function(a, b, c, d, i) rec("clip:" .. table.concat({ a, b, c, d, tostring(i) }, ",")) end,
     PopClipRect = function() rec("unclip") end,
     PushStyleVar = function(i, a, b) rec("var:" .. tostring(i) .. "=" .. tostring(a) .. (b and ("," .. tostring(b)) or "")) end,
@@ -154,11 +159,11 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
     expect(out).not.toContain("Answer: F6");
   });
 
-  test("P5 (0.8.7, session 14's T3): the status dot sits in the middle of the window's left padding (clip widened), so the words start at the padding like every later line", () => {
+  test("P5 (0.8.11, UI review fix 1): the status dot is drawn on the foreground draw list at the middle of the window's left padding and of the line, so the words start at the padding like every later line", () => {
     const out = run(`return draw()`);
-    // The dot's cell (one font size, 14, wide; the dot at its middle) starts half a font size left of the padding's middle (26 /
-    // 2 = 13), so at 6; then the words at the padding, 26, with no hanging indent.
-    expect(out).toMatch(/clip:12,12,612,132,false\|var:FramePadding=0,0\|colour:Text=[^|]+\|setX:6(\.0)?\|bullet@6(\.0)?\|.*unclip\|sameline:0,0\|setX:26\|colour:Text=[^|]+\|wrapped@26:XF Runtime Bridge/);
+    // Window at 12, 12; padding 26: the dot's centre is at 12 + 13 = 25, and 12 + 7 (half the 14 px line) = 19 down; radius a fifth of the font.
+    expect(out).toMatch(/dot@25(\.0)?,19(\.0)? r=2\.8\|colour:Text=[^|]+\|wrapped@26:XF Runtime Bridge/);
+    expect(out).not.toContain("bullet@");
     expect(out).not.toContain("indent:");
   });
 
