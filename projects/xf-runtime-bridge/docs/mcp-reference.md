@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 88 tools, 47 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 91 tools, 47 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -13,9 +13,9 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Connection, session and answers](#connection-session-and-answers) (14)
 - [Photo mode](#photo-mode) (18)
 - [Appearance screen (character creator)](#appearance-screen-character-creator) (6)
-- [Player](#player) (7)
+- [Player](#player) (8)
 - [Behaviours](#behaviours) (6)
-- [World](#world) (7)
+- [World](#world) (9)
 - [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (8)
 - [XF Finish Showroom](#xf-finish-showroom) (5)
 - [Capture and the agent's view](#capture-and-the-agents-view) (6)
@@ -30,7 +30,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 33 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 36 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 15 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -820,6 +820,20 @@ No parameters.
 | `slot` | integer | 1 to 3 | With weapon.slot: the weapon slot 1-3. |
 | `menu` | string | `inventory`, `map`, `journal`, `perks`, `crafting`, `wardrobe` | With menu.open: which menu. |
 
+### `player_status`
+
+**Read V's status.** V's life state in one read: health (points, maximum, percent), level and street cred with their experience, money (eddies), the wanted level (the police system's heat stage, the star state and whether the police chase V, beside the two quest facts for comparison), the vehicle V is in (mounted or not, which record, driver or passenger), an inventory summary (counts and quantities by item type, not a list), and the scanner (whether V is in scanner mode, how far the scan is, and what the scanner is on). parts picks some of vitals, progress, money, heat, vehicle, inventory and scanner (default all). Read only; player_state has V's position and movement.
+
+- **Command:** `player.status`, the bridge method `player.status`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`not_in_gameplay`](#refusal-not-in-gameplay)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `parts` | array of string | at most 7 items; each `vitals`, `progress`, `money`, `heat`, `vehicle`, `inventory`, `scanner` | Which parts (default all): vitals, progress, money, heat, vehicle, inventory, scanner. |
+
 ## Behaviours
 
 Routines that run inside the game at frame rate: a turntable, a smooth look, a glide along a walkable path, keeping a subject framed. Each streams its progress to the session's events and stops on `behave_stop`, the kill switch or loading a save.
@@ -1057,6 +1071,33 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 | `name` | string | at most 96 characters; matches `^[A-Za-z0-9_.-]+$` | The weather state, such as 24h_weather_rain. |
 | `blend_s` | number | 0 to 60 | Blend time, 0 to 60 seconds. Default 2. |
 | `cycle` | boolean | `true`, `false` | Give the weather back to the game's own cycle (after setting name, if given). |
+
+### `world_facts`
+
+**Read quest facts in a batch.** Reads many named quest facts in one call: facts (a list of at most 128 names) and/or preset. The preset main_story is the 93 main-story facts of the 2.31 quest data (research/story-engine/main-story-facts.json; the answer also groups them by category), final_boards the 25 the game's final boards read. Names are letters, digits, _ and . only. A fact the game never set reads 0, the same as one set to 0. Read only; world_state reads up to 16 facts beside the clock and weather.
+
+- **Command:** `world.facts`, the bridge method `world.facts`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`unavailable`](#refusal-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `facts` | array of string | at most 128 items; each at most 96 characters; matches `^[A-Za-z0-9_.]+$` | Quest fact names to read (at most 128). |
+| `preset` | string | `main_story`, `final_boards` | A named list of facts, read with any extra facts: main_story (The main-story facts of the 2.31 quest data (93), grouped in the answer by category.) final_boards (The facts the game's own final boards read (25): whose fate matters for the ending.) |
+
+### `world_district`
+
+**Read V's district.** Where V is in Night City's own terms, from the game's district system (the one the minimap and the police use): the innermost area, and above it the subdistrict and district (a place such as Kabuki_NoTellMotel inside Kabuki inside Watson), each with its name, type, crime multiplier and gangs, the police preset in force, Dogtown and Badlands flags, and the map's own location text as a cross-check. District is not position: player_state has the coordinates. Refused with no_district for a moment after a load, until the game has told its district system where V is. Read only.
+
+- **Command:** `world.district`, the bridge method `world.district`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`no_district`](#refusal-no-district), [`unavailable`](#refusal-unavailable)
+
+No parameters.
 
 ## Wardrobe, clothing and cyberware
 
@@ -1423,6 +1464,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 | `occlusion` | boolean | `true`, `false` | Check the sight line from the camera to each face (default true). |
 | `points` | array of array of number | at most 32 items; each exactly 3 items | World points to project with the game's own projection. |
 | `piece_eyes` | array of number | exactly 3 items | A showroom head's eyes in its own frame (default [0, 0.0497, 1.691], the showroom build's). |
+| `npc_detail` | boolean | `true`, `false` | Also give each NPC its character record's details (affiliation, type, rarity, archetype, attitude group, crowd flags) under "character". Off by default; one extra lookup per distinct record. |
 
 ### `scene_report`
 
@@ -1716,6 +1758,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-metadata-pending"></a>`metadata_pending` | The game hadn't sent that save's details yet, so nothing was loaded. Try again in a moment. |
 | <a id="refusal-no-active-outfit"></a>`no_active_outfit` | V isn't wearing a wardrobe outfit, so what is equipped already shows. Nothing was changed. Use inventory_equip, or wardrobe_equip with set to put an outfit on first. |
 | <a id="refusal-no-bridge"></a>`no_bridge` | The game bridge isn't running. Start the game from the XF test profile (with XF Runtime Bridge enabled) and wait for the main menu; the bridge opens its connection when the game starts. When the connection disappears mid-session: The game bridge's connection is gone: the game has probably closed or crashed. Start it again from the XF test profile. |
+| <a id="refusal-no-district"></a>`no_district` | The game hasn't told its district system where V is yet. It does so when V crosses an area border, so a moment after a load, or once V moves, it will. |
 | <a id="refusal-no-effect"></a>`no_effect` | That would change nothing in the game, so it wasn't sent: V's photo-mode face animation runs on the stand-in (target puppet, the default), not on the head item. Leave target out. |
 | <a id="refusal-no-free-slot"></a>`no_free_slot` | The game has no free manual save slot. Nothing was saved. Delete an old manual save in the game's Load menu, then try again. |
 | <a id="refusal-no-ground"></a>`no_ground` | There is no walkable ground near that point, so V wasn't moved there. Pick a point on the floor (or pass ground: exact at your own risk). |

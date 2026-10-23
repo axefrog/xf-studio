@@ -34,6 +34,7 @@ import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showro
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
+import { SENSES_COMMANDS } from "./catalogueSenses.ts";
 import { applyCatalogue080 } from "./catalogue080.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
 import { decodePng } from "../capture/image.ts";
@@ -1750,6 +1751,8 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   ...PLAYER_COMMANDS,
   // Bridge 0.7 (research/runtime/bridge-hook-inventory.md).
   ...COMMANDS_070,
+  // The senses for the Story Engine (read-only): quest facts in a batch, V's district, V's status.
+  ...SENSES_COMMANDS,
 ]);
 
 export function findCommand(name: string): CommandDef | undefined {
