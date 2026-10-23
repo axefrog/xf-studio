@@ -345,7 +345,7 @@ function scopeContains(env: PredicateEnv, scope: NonNullable<Selector['scope']>,
  * slot path, and a change to one window of a simulated temporal slot is a change to that slot (SPEC-NOTES 57).
  */
 function baseSlotOf(slotKey: string): string {
-  return slotKey.replace(/@w-?\d+$/, '');
+  return slotKey.includes('@w') ? slotKey.replace(/@w-?\d+$/, '') : slotKey;
 }
 
 /**
@@ -354,14 +354,16 @@ function baseSlotOf(slotKey: string): string {
  * slot, scope, `where`.
  */
 export function selectorMatches(env: PredicateEnv, sel: Selector, node: Id, slotPath: SlotPath | null): boolean {
-  if (sel.kind !== undefined) {
-    const k = env.kindOf(node);
-    if (!k || !env.schema.isKind(k, sel.kind)) return false;
-  }
+  // the conditions are a conjunction, so the order is free: the cheap test of the slot goes first, because a resolution tests every rule that
+  // names no node and most of them name another slot
   if (slotPath !== null && sel.slot !== '*') {
     if (sel.slot.endsWith('[*]')) {
       if (!slotPath.startsWith(sel.slot.slice(0, -3) + '[')) return false;
     } else if (sel.slot !== slotPath && sel.slot !== baseSlotOf(slotPath)) return false;
+  }
+  if (sel.kind !== undefined) {
+    const k = env.kindOf(node);
+    if (!k || !env.schema.isKind(k, sel.kind)) return false;
   }
   if (sel.scope && !scopeContains(env, sel.scope, node)) return false;
   return evalAll(env, sel.where, node);

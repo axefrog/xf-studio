@@ -69,6 +69,8 @@ export interface S1Process<S, D> {
   /** A fine-tier process also runs for the demand of the windows just ended (kernel `demandLookback`). */
   demandLookback?: number;
   init(sim: Sim): S;
+  /** A copy of the state for the run to change, sharing what the process never edits (see `ProcessDef.cloneState`). */
+  cloneState?(state: S): S;
   run(c: S1Ctx, k: number): S1Result<S, D>;
 }
 
@@ -83,6 +85,7 @@ export function toProcessDef<S, D>(sim: Sim, p: S1Process<S, D>): ProcessDef {
     lag: p.lag,
     ...(p.demandLookback ? { demandLookback: p.demandLookback } : {}),
     init: () => p.init(sim),
+    ...(p.cloneState ? { cloneState: (state: unknown) => p.cloneState!(state as S) } : {}),
     run(pctx: ProcessCtx, k: number): ProcessResult {
       const logs: LogDraft[] = [];
       const T = pctx.windowStart;

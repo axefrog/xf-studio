@@ -70,7 +70,8 @@ export class Reads {
   }
 
   private dg<D>(id: string): D | undefined {
-    return this.k.evolution.digestOf<D>(id);
+    // a read looks at a digest and keeps nothing of it
+    return this.k.evolution.digestPeek<D>(id);
   }
 
   /** The district a scope names: a district, a cell of one, or the city. */

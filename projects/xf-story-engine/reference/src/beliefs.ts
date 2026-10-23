@@ -176,8 +176,12 @@ export class Beliefs {
     return out.sort((a, b) => cmpId(a.belief.id, b.belief.id) || Number(b.active) - Number(a.active));
   }
 
+  /** The memorable records, in the order `entries` gives: the same list, without sorting the texture beliefs that are about to be dropped from it. */
   memorable(): BeliefEntry[] {
-    return this.entries().filter((e) => e.belief.memorable);
+    const out: BeliefEntry[] = [];
+    for (const m of this.byBeliever.values()) for (const b of m.values()) if (b.memorable) out.push({ belief: b, active: true });
+    for (const b of this.history) if (b.memorable) out.push({ belief: b, active: false });
+    return out.sort((a, b) => cmpId(a.belief.id, b.belief.id) || Number(b.active) - Number(a.active));
   }
 
   // ---- writes ----

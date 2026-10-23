@@ -33,6 +33,11 @@ export class Store {
   private readonly contribs = new Map<Id, Contribution>();
   private readonly contribByNode = new Map<Id, Id[]>();
   private readonly contribGeneral: Id[] = [];
+  /**
+   * The general contributions by the slot they name, each with its place in `contribGeneral`: a resolution looks at the ones that can name
+   * its slot, in the order the list holds them, not at every rule of the pack. Derived, and rebuilt when the list changes.
+   */
+  private generalIdx: { bySlot: Map<string, Array<{ pos: number; c: Contribution }>>; wild: Array<{ pos: number; c: Contribution }> } | null = null;
 
   readonly edges = new Map<Id, Edge>();
   private readonly edgesFromIdx = new Map<Id, Id[]>();
@@ -69,6 +74,7 @@ export class Store {
     swap(this.contribByNode, c.contribByNode);
     this.contribGeneral.length = 0;
     this.contribGeneral.push(...(c.contribGeneral as Id[]));
+    this.generalIdx = null;
     swap(this.edges, c.edges);
     swap(this.edgesFromIdx, c.edgesFromIdx);
     swap(this.edgesToIdx, c.edgesToIdx);
@@ -88,6 +94,7 @@ export class Store {
     this.contribs.clear();
     this.contribByNode.clear();
     this.contribGeneral.length = 0;
+    this.generalIdx = null;
     this.edges.clear();
     this.edgesFromIdx.clear();
     this.edgesToIdx.clear();
@@ -318,7 +325,10 @@ export class Store {
         if (!list) this.contribByNode.set(n, (list = []));
         list.push(c.id);
       }
-    } else this.contribGeneral.push(c.id);
+    } else {
+      this.contribGeneral.push(c.id);
+      this.generalIdx = null;
+    }
     return true;
   }
 
@@ -337,15 +347,40 @@ export class Store {
       if (at >= 0) list.splice(at, 1);
     };
     if (named) for (const n of named) drop(this.contribByNode.get(n));
-    else drop(this.contribGeneral);
+    else {
+      drop(this.contribGeneral);
+      this.generalIdx = null;
+    }
   }
 
   allContributions(): Contribution[] {
     return [...this.contribs.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
-  /** Contributions that may apply to a node: those naming it, and those with no named nodes. Unsorted, deduplicated. */
-  contributionCandidates(node: Id, extraNamed: Id[] = []): Contribution[] {
+  private generalIndex(): NonNullable<Store['generalIdx']> {
+    if (this.generalIdx) return this.generalIdx;
+    const bySlot = new Map<string, Array<{ pos: number; c: Contribution }>>();
+    const wild: Array<{ pos: number; c: Contribution }> = [];
+    this.contribGeneral.forEach((i, pos) => {
+      const c = this.contribs.get(i);
+      if (!c) return;
+      const slot = c.target.slot;
+      if (slot === '*' || slot.endsWith('[*]')) wild.push({ pos, c });
+      else {
+        const list = bySlot.get(slot);
+        if (list) list.push({ pos, c });
+        else bySlot.set(slot, [{ pos, c }]);
+      }
+    });
+    return (this.generalIdx = { bySlot, wild });
+  }
+
+  /**
+   * Contributions that may apply to a node: those naming it, and those with no named nodes. Deduplicated. With the slot being resolved,
+   * the general ones are only those that can name it (its own name, its name without a window, or a wildcard), in the order the list
+   * holds them; the selector still decides.
+   */
+  contributionCandidates(node: Id, extraNamed: Id[] = [], slot?: string): Contribution[] {
     const seen = new Set<Id>();
     const out: Contribution[] = [];
     const take = (ids: Id[] | undefined) => {
@@ -358,7 +393,17 @@ export class Store {
     };
     take(this.contribByNode.get(node));
     for (const e of extraNamed) take(this.contribByNode.get(e));
-    take(this.contribGeneral);
+    if (slot === undefined) take(this.contribGeneral);
+    else {
+      const idx = this.generalIndex();
+      const base = slot.includes('@w') ? slot.replace(/@w-?\d+$/, '') : slot;
+      const lists = [idx.bySlot.get(slot), base !== slot ? idx.bySlot.get(base) : undefined, idx.wild].filter((l): l is Array<{ pos: number; c: Contribution }> => l !== undefined && l.length > 0);
+      if (lists.length === 1) {
+        for (const e of lists[0]!) out.push(e.c);
+      } else if (lists.length > 1) {
+        for (const e of lists.flat().sort((a, b) => a.pos - b.pos)) out.push(e.c);
+      }
+    }
     return out;
   }
 
@@ -400,6 +445,11 @@ export class Store {
 
   edgesTo(node: Id): Edge[] {
     return (this.edgesToIdx.get(node) ?? []).map((i) => this.edges.get(i)!);
+  }
+
+  /** Every edge, in no order: for a walk that builds a set. */
+  edgeValues(): IterableIterator<Edge> {
+    return this.edges.values();
   }
 
   allEdges(): Edge[] {

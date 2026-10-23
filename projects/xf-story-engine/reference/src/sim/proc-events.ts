@@ -159,6 +159,11 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
   return {
     id: procId, version: PROCESS_VERSIONS[procId]!, tier: 0, coarseFine: { kind: 'count' }, lag: 0,
     init: () => emptyEvents(),
+    // the ring is a week of records that are added and dropped and never edited: the copy a run changes shares them
+    cloneState: (st) => {
+      const { ring, ...rest } = st;
+      return { ...structuredClone(rest), ring: [...ring] };
+    },
 
     run(c: S1Ctx, w: number): S1Result<EventsState, EventsDigest> {
       const st = c.own<EventsState>();

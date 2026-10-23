@@ -157,7 +157,7 @@ export class Retention {
       this.idsIn(p.region, out);
     }
     const canonEvents = new Set(k.events.canonEvents());
-    for (const e of k.store.allEdges()) {
+    for (const e of k.store.edgeValues()) {
       if (this.isRootEdge(e, canonEvents)) push(e.from, e.to, e.cause);
     }
     for (const { belief: b } of k.beliefs.memorable()) {

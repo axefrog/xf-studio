@@ -88,7 +88,7 @@ export function weekLines(sim: Sim, w: number): WeekLine[] {
   }
 
   // what the game did, as the mirror re-described it
-  const mirror = sim.digestOf<MirrorDigest>('city.mirror');
+  const mirror = sim.k.evolution.digestPeek<MirrorDigest>('city.mirror');
   for (const win of mirror?.facts.windows ?? []) {
     if (win.w !== w) continue;
     for (const f of win.items) {
@@ -97,7 +97,7 @@ export function weekLines(sim: Sim, w: number): WeekLine[] {
       out.push({ t: f.time, rank: 0, text: `${clockOf(sim, f.time)}  ${f.kind} (size ${f.size}) at ${name(f.cell)}, from the game's ${raw}.` });
     }
   }
-  const norms = sim.digestOf<NormsDigest>('order.norms');
+  const norms = sim.k.evolution.digestPeek<NormsDigest>('order.norms');
   for (const win of norms?.facts.windows ?? []) {
     if (win.w !== w) continue;
     for (const f of win.items) out.push({ t: f.time, rank: 0, text: `${clockOf(sim, f.time)}  ${f.kind} (${f.public ? 'in public' : 'in private'}) at ${name(f.cell)}.` });
@@ -143,7 +143,7 @@ export function weekLines(sim: Sim, w: number): WeekLine[] {
     }
   };
   const feeds: Array<{ windows: Array<{ w: number; items: Transition[] }> } | undefined> = [
-    sim.digestOf<EventsDigest>('city.events')?.changes, norms?.changes, sim.digestOf<GroupDigest>('group.decide')?.changes, sim.digestOf<LedgerDigest>('order.ledger')?.changes,
+    sim.k.evolution.digestPeek<EventsDigest>('city.events')?.changes, norms?.changes, sim.k.evolution.digestPeek<GroupDigest>('group.decide')?.changes, sim.k.evolution.digestPeek<LedgerDigest>('order.ledger')?.changes,
   ];
   for (const feed of feeds) {
     for (const win of feed?.windows ?? []) {

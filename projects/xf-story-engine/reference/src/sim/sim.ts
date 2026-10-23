@@ -391,7 +391,7 @@ export class Sim {
   /** Whether a regime of the district closes a person's stall at `t` (S1 4.5). */
   private closedAt(role: string, cell: Id, t: GameTime): boolean {
     if (role !== 'vendor' && role !== 'shopkeeper') return false;
-    const dg = this.k.evolution.digestOf<{ regimes: Array<{ scope: Id; closes: string[] }> }>('city.events');
+    const dg = this.k.evolution.digestPeek<{ regimes: Array<{ scope: Id; closes: string[] }> }>('city.events');
     const district = this.w.cell(cell).district;
     return (dg?.regimes ?? []).some((r) => r.scope === district && r.closes.includes('vendor'));
     void t;

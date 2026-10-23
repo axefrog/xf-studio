@@ -6,7 +6,7 @@
 // into `failed` plus a defect. Resolution never emits changes and never bumps the revision (I-13).
 
 import { ln } from './fdlibm-log.ts';
-import { H, i as hi, id as hid, ownedId, rand, s as hs, val as hval } from './id.ts';
+import { H, i as hi, id as hid, ownedId, rand, randOverValues, s as hs, val as hval } from './id.ts';
 import type { Kernel } from './kernel.ts';
 import {
   type Binding, type PredicateEnv, ReadViolation, evalAll, selectorMatches,
@@ -569,7 +569,7 @@ export class Resolver {
     // Contributions.
     const env = this.makeEnv(ctx, t, { node, order: info.order });
     let applicable = 0;
-    for (const c of this.k.store.contributionCandidates(node)) {
+    for (const c of this.k.store.contributionCandidates(node, [], path)) {
       if (!this.applicableTo(c, t)) continue;
       let matches: boolean;
       try {
@@ -868,10 +868,12 @@ export class Resolver {
     const noise: number[] = [];
     const totals: number[] = [];
     const seed = this.k.worldSeed;
+    // the key is the same for every candidate but the value: its part before the value is encoded once
+    const noiseOf = randOverValues(hs('g'), hid(seed), hid(node), hs(path), hi(window));
     for (let n = 0; n < values.length; n++) {
       let score = priorStrength * ln(prior0[n]!);
       for (const f of normFactors) score += f.strength * ln(f.hat[n]!);
-      const u = rand(hs('g'), hid(seed), hid(node), hs(path), hi(window), hval(encodeValue(vt, values[n]!)));
+      const u = noiseOf(encodeValue(vt, values[n]!));
       const g = -ln(-ln(u));
       scores.push(score);
       noise.push(g);

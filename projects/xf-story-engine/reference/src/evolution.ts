@@ -114,6 +114,12 @@ export interface ProcessDef {
   demandLookback?: number;
   /** The state of a new lineage (V4-35): what `own()` answers before the first batch with a state has applied. */
   init?(ctx: { worldSeed: Id }): unknown;
+  /**
+   * How a copy of the process's state is made for `own()`, when a deep copy is dearer than it needs to be: a process whose state holds a
+   * long list of records that it only ever adds to and drops from, never edits, can share those records between the copies. The copy
+   * must be one the process can change without the applied state changing. Absent: a structured clone.
+   */
+  cloneState?(state: unknown): unknown;
   run(ctx: ProcessCtx, k: number): ProcessOp[] | ProcessResult;
 }
 
@@ -200,7 +206,7 @@ export class Evolution {
   /** A process's own state as of the last applied boundary, or what `init` gives before any state has applied (V4-35). */
   ownOf<S = any>(def: ProcessDef): S | undefined {
     const st = this.states.get(def.id);
-    if (st && st.state !== null && st.state !== undefined) return structuredClone(st.state) as S;
+    if (st && st.state !== null && st.state !== undefined) return (def.cloneState ? def.cloneState(st.state) : structuredClone(st.state)) as S;
     if (def.init) return def.init({ worldSeed: this.k.worldSeed }) as S;
     return undefined;
   }
@@ -212,6 +218,14 @@ export class Evolution {
   digestOf<D = any>(processId: string): D | undefined {
     const st = this.states.get(processId);
     return st && st.digest !== undefined ? (structuredClone(st.digest) as D) : undefined;
+  }
+
+  /**
+   * The last published digest itself, for a reader that only looks at it: it is replaced when a batch applies and never edited in place, so
+   * looking costs nothing. `digestOf` is the copy, for a reader that may keep or change what it gets.
+   */
+  digestPeek<D = any>(processId: string): D | undefined {
+    return this.states.get(processId)?.digest as D | undefined;
   }
 
   stateOf(id: string): ProcessState {

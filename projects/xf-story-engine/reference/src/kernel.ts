@@ -223,8 +223,11 @@ export class Kernel {
    * earlier than the boundary that applies it (an event minted late, V4-45).
    */
   emit(change: Change, time: GameTime = this.now): void {
-    // A change is a snapshot of what happened: a later write, or a discarded batch's, must not reach it.
-    const pc: PendingChange = { change: structuredClone(change), time: Math.min(time, this.now), revision: this.revision, epoch: this.epoch };
+    // A change is a snapshot of what happened: a later write, or a discarded batch's, must not reach it. A contribution is the one that
+    // is written to afterwards (ending it replaces its valid), and its target and form are never edited, so it is copied to there
+    // instead of deep: a pack puts hundreds of them in the queue when a world is made.
+    const snapshot: Change = change.c === 'contribution' ? { ...change, contribution: { ...change.contribution, valid: { ...change.contribution.valid } } } : structuredClone(change);
+    const pc: PendingChange = { change: snapshot, time: Math.min(time, this.now), revision: this.revision, epoch: this.epoch };
     // An open staged batch is silent: its changes wait for the commit (spec 14.2a).
     if (this.batch) this.batch.changes.push(pc);
     else this.pending.push(pc);

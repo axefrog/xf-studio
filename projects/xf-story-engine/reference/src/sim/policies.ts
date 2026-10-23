@@ -489,7 +489,7 @@ export class Policies {
 
   private sizeOf(ev: EventView): number {
     for (const id of ['city.mirror', 'city.events']) {
-      const dg = this.k.evolution.digestOf<{ facts: { windows: Array<{ items: Array<{ id: Id; size: number }> }> } }>(id);
+      const dg = this.k.evolution.digestPeek<{ facts: { windows: Array<{ items: Array<{ id: Id; size: number }> }> } }>(id);
       for (const win of dg?.facts.windows ?? []) for (const f of win.items) if (f.id === ev.id) return f.size;
     }
     return ev.kind === 'regime-start' ? 3 : 1;
