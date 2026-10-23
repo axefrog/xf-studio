@@ -16,12 +16,33 @@ export const isFinal = (s: BeatState): boolean => s === 'done' || s === 'failed'
 const LIVE: ReadonlySet<BeatState> = new Set(['available', 'running']);
 export const isLive = (s: BeatState): boolean => LIVE.has(s);
 
+/** The seed facts some effect of the document writes: a seed fact nothing writes can never change (S2 section 7.5, SF-24). */
+const writtenCache = new WeakMap<object, Set<string>>();
+export function writtenFacts(inst: Instance): Set<string> {
+  let out = writtenCache.get(inst.st.document);
+  if (out) return out;
+  out = new Set<string>();
+  const add = (es: Array<{ fact?: string }> | undefined): void => { for (const e of es ?? []) if (e.fact !== undefined) out!.add(e.fact); };
+  const doc = inst.st.document;
+  for (const b of Object.values(doc.beats)) add(b.leaves as never);
+  add(doc.unattended.outcome as never);
+  for (const f of inst.st.closure.fragments) {
+    add(f.leaves as never);
+    for (const a of f.offer?.actions ?? []) add(a.writes as never);
+    for (const d of f.offer?.decline ?? []) add(d.writes as never);
+    add(f.offer?.nullPath.writes as never);
+  }
+  writtenCache.set(inst.st.document, out);
+  return out;
+}
+
 /** Whether a predicate reads anything that can still change: a fact, a role, a time, a count (S2 section 7.5). */
-export function canChange(p: Pred): boolean {
+export function canChange(p: Pred, written?: ReadonlySet<string>): boolean {
   if (p === 'yes' || p === 'no') return false;
   let any = false;
   for (const { atom } of atoms(p)) {
     if ('response' in atom || 'beat' in atom) continue;
+    if ('seedFact' in atom && written && !written.has(atom.seedFact)) continue;
     any = true;
   }
   return any;
@@ -61,7 +82,7 @@ export function linkState(l2: Layer2, inst: Instance, key: string, t: GameTime):
         // The condition is always evaluated, whether the source was done or omitted (S2 section 7.1, SF-60).
         const on: Pred = l.on ?? 'yes';
         const v = evalPred(l2, ctx, on);
-        flow.push({ sat: v === 'yes', never: v === 'no' && !canChange(on) });
+        flow.push({ sat: v === 'yes', never: v === 'no' && !canChange(on, writtenFacts(inst)) });
       }
     }
   }
@@ -84,8 +105,10 @@ export function linkState(l2: Layer2, inst: Instance, key: string, t: GameTime):
 
 // ---- fragments ----
 
-interface Chosen {
+export interface Chosen {
   fragment: Fragment;
+  /** The fragment before the content ceiling was applied. */
+  base: Fragment;
   gated?: { class: string; intensity: number; ceiling: number; became: string };
 }
 
@@ -137,17 +160,26 @@ export function chooseFragment(l2: Layer2, inst: Instance, key: string, n: numbe
     }
   }
   if (!pick) return undefined;
-  const settings = l2.k.settings.at(t);
-  for (const tag of pick.content ?? []) {
+  return gateFragment(l2, inst, key, pick);
+}
+
+/**
+ * The content ceiling (S2 section 2.19): above it a fragment plays its `implied` form and a droppable beat is dropped. Checked at
+ * fragment choice, and again at release with the settings in force then.
+ */
+export function gateFragment(l2: Layer2, inst: Instance, key: string, base: Fragment): Chosen | 'drop' | undefined {
+  const b = inst.st.document.beats[key]!;
+  const settings = l2.k.settings.at(l2.k.now);
+  for (const tag of base.content ?? []) {
     const ceiling = ceilingOf(settings, tag.class);
     if (tag.intensity > ceiling) {
-      const implied = pick.implied ? fragmentOf(inst, pick.implied) : undefined;
-      if (implied) return { fragment: implied, gated: { class: tag.class, intensity: tag.intensity, ceiling, became: 'implied' } };
+      const implied = base.implied ? fragmentOf(inst, base.implied) : undefined;
+      if (implied) return { fragment: implied, base, gated: { class: tag.class, intensity: tag.intensity, ceiling, became: 'implied' } };
       if (b.droppable) return 'drop';
       return undefined;
     }
   }
-  return { fragment: pick };
+  return { fragment: base, base };
 }
 
 // ---- the beat engine ----
@@ -262,7 +294,7 @@ function makeAvailable(l2: Layer2, inst: Instance, key: string): boolean {
   rt.state = 'available';
   rt.since = l2.k.now;
   rt.availableAt = l2.k.now;
-  rt.fragment = chosen.fragment.id;
+  rt.fragment = chosen.base.id;
   rt.delayed = false;
   l2.record(inst, 'beat', { beat: key, to: 'available', fragment: chosen.fragment.id, ...(chosen.gated ? { gated: chosen.gated } : {}) });
   if (b.kind === 'aftermath' && b.aftermath) return true; // waits its delay
@@ -273,7 +305,7 @@ function makeAvailable(l2: Layer2, inst: Instance, key: string): boolean {
 /** Make the delivery of an available beat, or start it at once if it has no channel. */
 function deliverBeat(l2: Layer2, inst: Instance, key: string, gated?: { class: string; intensity: number; ceiling: number; became: string }): void {
   const rt = inst.st.beats[key]!;
-  const frag = fragmentOf(inst, rt.fragment!)!;
+  const frag = gated ? fragmentOf(inst, fragmentOf(inst, rt.fragment!)!.implied!)! : fragmentOf(inst, rt.fragment!)!;
   if (frag.channels.length === 0 && !frag.offer) {
     l2.startDirect(inst, key);
     return;
@@ -355,7 +387,7 @@ export function isStuck(l2: Layer2, inst: Instance): boolean {
       const src = st.beats[srcKey];
       if (!src) continue;
       if (!isFinal(src.state)) return false;
-      if ('because' in l && l.on !== undefined && canChange(l.on)) return false;
+      if ('because' in l && l.on !== undefined && canChange(l.on, writtenFacts(inst))) return false;
       if ('because' in l && l.on === undefined && src.state !== 'skipped') return false;
     }
     if (!(doc.beats[k]!.links ?? []).length && !doc.start.includes(k)) continue;

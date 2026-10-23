@@ -14,7 +14,7 @@ import * as ids from './ids.ts';
 import type { Instance, Layer2 } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
 import type { DisplayReport } from './port.ts';
-import { fragmentOf, isFinal } from './beats.ts';
+import { fragmentOf, gateFragment, isFinal, skipBeat } from './beats.ts';
 import { transition, onRoleLost, closeSeed, applyRejection } from './run.ts';
 import type {
   AttentionAspect, BeatRuntime, ChannelId, ContentRef, Delivery, ExposureGrade, Fragment, Pred, Receipt, TimingRequest,
@@ -220,6 +220,12 @@ export function arbiterStep(l2: Layer2, s: number): void {
   A.releases = A.releases.filter((r) => r > s - l2.tun.capWindow);
   for (const { inst, d } of allDeliveries(l2)) {
     if (d.state !== 'queued' || d.stopped) continue;
+    // The total attempt bound (S2 section 8.5): one bound per logical offer, across channels and reloads.
+    if (d.what === 'offer' && !d.pull && d.attempts >= l2.tun.maxAttempts) {
+      d.stopped = true;
+      l2.record(inst, 'expired', { delivery: d.id, why: 'the total attempt bound was reached: the offer waits for pull' });
+      continue;
+    }
     const frag = d.fragment ? fragmentOf(inst, d.fragment) : undefined;
     const channel = d.what === 'closing' || d.what === 'coda' || d.what === 'news' || d.what === 'notice' || d.what === 'reply'
       ? (pickContentChannel(l2, inst, d) ?? undefined)
@@ -277,7 +283,8 @@ export function arbiterStep(l2: Layer2, s: number): void {
 
 function pickContentChannel(l2: Layer2, inst: Instance, d: Delivery): ChannelId | undefined {
   const unit = inst.st.template.pack ? l2.packs.get(inst.st.template.pack)?.text(d.content) : undefined;
-  const ladder = unit?.channels ?? ['message'];
+  // The closing trace is class 0 (S2 section 6.4): by default it is a trace in the world.
+  const ladder = unit?.channels ?? (d.what === 'closing' ? ['trace'] : ['message']);
   for (const c of ladder) if (l2.port.channelAvailable(c)) return c;
   return undefined;
 }
@@ -411,6 +418,10 @@ function lapse(l2: Layer2, inst: Instance, d: Delivery): void {
   }
 }
 
+function skipOmitted(l2: Layer2, inst: Instance, beat: string): void {
+  skipBeat(l2, inst, beat, 'omitted', 'missing content');
+}
+
 function setBeatState(l2: Layer2, inst: Instance, beat: string, state: BeatRuntime['state']): void {
   const rt = inst.st.beats[beat]!;
   rt.state = state;
@@ -431,10 +442,54 @@ function prepareAndRelease(l2: Layer2, inst: Instance, d: Delivery, channel: Cha
   const k = l2.k;
   const closing = d.what === 'closing' || d.what === 'coda' || d.what === 'news' || d.what === 'notice' || d.what === 'reply' || d.what === 'signpost';
   let prepared: Prepared = { commits: [] };
+  const rtg = d.beat ? st.beats[d.beat] : undefined;
+  if (rtg?.fragment !== undefined && (d.what === 'offer' || d.what === 'beat')) {
+    // The content ceiling is checked again at release, with the settings in force now (S2 section 2.19, SF-51).
+    const base = fragmentOf(inst, rtg.fragment);
+    const g = base ? gateFragment(l2, inst, d.beat!, base) : undefined;
+    if (g === 'drop') {
+      d.state = 'withdrawn';
+      l2.record(inst, 'expired', { delivery: d.id, why: 'above the content ceiling' });
+      if (rtg.state === 'available') skipBeat(l2, inst, d.beat!, 'omitted', 'above the content ceiling');
+      l2.queueReeval(inst, 'content ceiling');
+      return false;
+    }
+    if (!g) return false;
+    if (g.fragment.id !== d.fragment) {
+      d.fragment = g.fragment.id;
+      d.content = g.fragment.forms.standard;
+    }
+    d.provenance.form = g.gated ? 'implied' : 'standard';
+    if (g.gated) d.provenance.gated = [g.gated];
+    else delete d.provenance.gated;
+  }
+  if (d.content !== undefined && typeof d.content === 'string' && !d.content.startsWith('game:') && (d.what === 'offer' || d.what === 'beat')) {
+    // Content that vanished under a live instance (S2 section 12.3): the implied form, else the delivery is skipped with a neutral
+    // entry before anything is committed, and the seed never stalls on it.
+    const pack = st.template.pack ? l2.packs.get(st.template.pack) : undefined;
+    if (!pack?.text(d.content)) {
+      const frag0 = d.fragment ? fragmentOf(inst, d.fragment) : undefined;
+      if (frag0?.implied && pack?.text(frag0.implied)) {
+        d.content = frag0.implied;
+        d.provenance.form = 'implied';
+      } else {
+        d.state = 'withdrawn';
+        l2.record(inst, 'expired', { delivery: d.id, why: 'missing-content' });
+        const rt0 = d.beat ? st.beats[d.beat] : undefined;
+        if (rt0 && d.beat && rt0.state === 'available') skipOmitted(l2, inst, d.beat);
+        l2.queueReeval(inst, 'missing content');
+        return false;
+      }
+    }
+  }
   if (!closing && d.beat) {
     const r = prepare(l2, inst, d);
     if (!r.ok) {
-      if (r.hard) l2.record(inst, 'prepare-failed', { delivery: d.id, why: r.reason });
+      if (r.hard) {
+        l2.record(inst, 'prepare-failed', { delivery: d.id, why: r.reason });
+        // The delivery goes back to the seed, not to V: the seed applies the failure's policy (S2 section 8.4).
+        l2.queueReeval(inst, 'prepare failed');
+      }
       return false;
     }
     prepared = r.prepared;
@@ -605,6 +660,20 @@ export function displayReport(l2: Layer2, r: DisplayReport): void {
   const isOffer = d.what === 'offer';
   const displayed = isOffer ? best === 'confirmed' : GRADE[best] >= GRADE.presented;
   if (GRADE[best] >= GRADE.presented) upsertReceipt(l2, inst, d, r);
+  // The ceiling is checked again just before presenting; the player's current settings win. Released words are not replaced
+  // (S2-I-16): the presentation layer hides them, or shows the permitted fallback, and records which (S2 section 8.5).
+  if (GRADE[best] >= GRADE.presented && d.state === 'released' && d.fragment) {
+    const f = fragmentOf(inst, d.fragment);
+    const settings = l2.k.settings.at(l2.k.now);
+    for (const tag of f?.content ?? []) {
+      if (tag.intensity > ceilingOf(settings, tag.class)) {
+        const fallback = f?.implied ? 'fallback' : 'hidden';
+        d.provenance.gated = [...(d.provenance.gated ?? []), { class: tag.class, intensity: tag.intensity, ceiling: ceilingOf(settings, tag.class), became: `presentation:${fallback}` }];
+        l2.record(inst, 'display', { delivery: d.id, presentation: fallback });
+        break;
+      }
+    }
+  }
   if (displayed && d.state === 'released') {
     d.state = 'displayed';
     d.displayedAt = r.atPlay;
@@ -682,8 +751,7 @@ export function respondTo(l2: Layer2, id: Id, resp: Response): boolean {
     // One input, within the retract window, for a push of class 2 or above (S2 section 8.3): quiet.
     if (d.timing.class < 2 || (d.retractUntil !== undefined && l2.arbiter.play > d.retractUntil)) return false;
     d.state = 'answered';
-    l2.record(inst, 'beat', { retracted: d.id });
-    l2.record(inst, 'transition', { retracted: true, delivery: d.id });
+    l2.record(inst, 'retracted', { delivery: d.id });
     for (const tag of frag.content ?? []) {
       const s = k.settings.current();
       k.settings.set({ content: { softExclusions: [...s.content.softExclusions, { class: tag.class, level: tag.intensity }] } });

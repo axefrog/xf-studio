@@ -321,6 +321,7 @@ export class Layer2 implements Layer2Hook {
       capabilities: this.opts.capabilities ?? this.port.capabilities(), maxLive: this.tun.maxLive, watchMax: this.tun.watchMax,
       worldSeed: this.worldSeed,
     };
+    c.portReport = { channels: { has: (ch: string) => this.port.channelAvailable(ch) } as unknown as ReadonlySet<string>, capabilities: this.port.capabilities() };
     if (this.opts.relationshipFacts) c.relationshipFacts = this.opts.relationshipFacts;
     const ladders = new Set<string>();
     for (const p of this.packs.values()) for (const s of p.pack.seeds) if (s.profile?.id === 'relationship-ladder') ladders.add(s.id);
