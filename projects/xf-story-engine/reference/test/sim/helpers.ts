@@ -1,9 +1,12 @@
 // Fixtures for the simulation layer's tests: worlds over the fixture slice FX-3 and the Kabuki stand-in (S1 14).
 
-import { H, s } from '../../src/id.ts';
+import { hrec } from '../../src/canon.ts';
+import { H, memberId, s } from '../../src/id.ts';
 import type { Id } from '../../src/types.ts';
 import { type S1Data, defaultData } from '../../src/sim/data.ts';
-import { fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
+import type { Per4 } from '../../src/sim/data.ts';
+import type { WorldIndex } from '../../src/sim/index-types.ts';
+import { districtIdOf, fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
 import { World } from '../../src/sim/world.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import type { PendingChild } from '../../src/sim/occ.ts';
@@ -85,3 +88,28 @@ export function occurrences(sim: Sim): Array<{ id: Id; kind: string; w: number; 
   return out;
 }
 
+
+/** A second simulated district out of the rest of the city: the same totals, so no other district's opportunity changes. */
+export function withSecondDistrict(): WorldIndex {
+  const ix = structuredClone(fx3Slice());
+  const d1 = Object.values(ix.districts)[0]!;
+  const id2 = districtIdOf('fx_d2');
+  const cells2 = [0, 1, 2].map((i) => memberId(id2, 'cells', i));
+  const map = new Map(d1.cellIds.map((c, i) => [c, cells2[i]!]));
+  const d2 = { ...structuredClone(d1), id: id2, key: 'fx_d2', cellIds: cells2 };
+  ix.districts[id2] = d2;
+  for (const c of d1.cellIds) {
+    const cc = structuredClone(ix.cells[c]!);
+    const mapIds = (xs: Id[]): Id[] => xs.map((x) => map.get(x)!).sort();
+    ix.cells[map.get(c)!] = { ...cc, id: map.get(c)!, district: id2, adj1: mapIds(cc.adj1), adj2: mapIds(cc.adj2) };
+  }
+  // the new district's effective opportunity (the cells' A, less what the game covers, times the propensity) leaves the rest
+  for (const k of Object.keys(ix.rest.totalA)) {
+    ix.rest.totalA[k] = ix.rest.totalA[k]!.map((x, p) => x - d1.cellIds.reduce((acc, c) => acc + ix.cells[c]!.A[k]![p]! * (1 - ix.cells[c]!.gameCoverage[k]!) * ix.cells[c]!.F[k]!, 0)) as Per4;
+  }
+  ix.names = { ...ix.names, fx_d2: id2 };
+  const { hash: _h, ...rest } = ix;
+  void _h;
+  ix.hash = H(s('world-index'), hrec(rest as unknown as Record<string, unknown>));
+  return ix;
+}

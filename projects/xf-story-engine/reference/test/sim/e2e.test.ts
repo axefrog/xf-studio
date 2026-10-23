@@ -219,8 +219,13 @@ describe('SF1-E3: the mirror overriding a simulated value with a game reading', 
     const game = k.store.livePinsOn(mv, 'alive').filter((p) => p.reason === 'game');
     expect(game.length).toBeGreaterThanOrEqual(1);
     expect(game.every((p) => p.value === 'no' || p.value === 'yes')).toBe(true);
-    // the simulation-layer statement is still there, and loses: the mirrored slot is never sampled
+    // the game's reading is returned before any contribution is gathered (S0 5.1 step 2): the simulation-layer statement stays in the store,
+    // inactive, and the trace of the slot lists no constraint from it (S1 v0.3, SF1-E3)
     expect(k.store.allContributions().some((c) => c.source.layer === 'simulation' && c.source.origin === sim.w.s1 && c.target.slot === 'alive')).toBe(true);
+    const trace = k.trace(mv, 'alive');
+    expect(trace.mode).toBe('mirrored');
+    expect(trace.reading).toBeDefined();
+    expect(trace.constraints).toEqual([]);
     // the simulated values are corrected: C is thinned by cover, D and E fire
     const covers = sim.record.log.filter((e) => e.reason === 'game-covers');
     expect(covers.length).toBe(1);

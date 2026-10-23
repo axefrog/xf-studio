@@ -112,6 +112,26 @@ export class World {
   get districts(): DistrictIndex[] {
     return simulatedDistricts(this.index);
   }
+  /**
+   * The simulated district whose outline holds a position (x, y), in `Id` order when outlines touch; undefined when none does or the
+   * slice has no outlines (S1 8.8: a mirrored person's district comes from the mirrored position).
+   */
+  districtAt(position: unknown): DistrictIndex | undefined {
+    if (!Array.isArray(position) || typeof position[0] !== 'number' || typeof position[1] !== 'number') return undefined;
+    const [x, y] = position as [number, number];
+    for (const d of this.districts) {
+      const poly = d.polygon;
+      if (!poly || poly.length < 3) continue;
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [xi, yi] = poly[i]!;
+        const [xj, yj] = poly[j]!;
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+      if (inside) return d;
+    }
+    return undefined;
+  }
   /** The group node of an affiliation slot `A1`, `A2` or `A3` of a district (S1 7.0). */
   group(district: Id, slot: 'A1' | 'A2' | 'A3'): Id {
     return ownedId(district, `grp-${slot.toLowerCase()}`);

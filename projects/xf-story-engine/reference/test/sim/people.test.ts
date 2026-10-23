@@ -86,7 +86,7 @@ describe('SF1-P-1: IPF by hand', () => {
 });
 
 describe('SF1-P-2: a district fit', () => {
-  test('FX-3: every marginal within 1e-9, w = t / max(t) has maximum 1, the household table has 60 cells', () => {
+  test('FX-3: after 20 iterations the dimension fitted last is within 1e-9 and every other marginal within 1e-6 (S1 v0.3), w = t / max(t) has maximum 1, the household table has 60 cells', () => {
     const ix = fx3Slice();
     const d = Object.values(ix.districts)[0]!;
     const fit = fitDistrict(d, defaultData());
@@ -99,7 +99,7 @@ describe('SF1-P-2: a district fit', () => {
     };
     const norm = (a: number[]): number[] => a.map((x) => x / a.reduce((p, q) => p + q, 0));
     const check = (got: number[], want: number[], tol: number): void => got.forEach((g, i) => expect(Math.abs(g - norm(want)[i]!)).toBeLessThan(tol));
-    // After the 20 iterations the last dimension fitted is exact to rounding and the others are within 1e-6 (SPEC-NOTES 105).
+    // After the 20 iterations the dimension fitted last is within 1e-9 and the others within 1e-6: iterative proportional fitting converges at a finite rate.
     const raw = ipfIterate(personSeed(d, defaultData()), [8, 12, 4, 6], [d.marginals.age, d.marginals.role, d.marginals.income, d.marginals.aff], 20);
     const rawSum = raw.reduce((a, b) => a + b, 0);
     const rawNorm = raw.map((x) => x / rawSum);
@@ -107,7 +107,7 @@ describe('SF1-P-2: a district fit', () => {
     check(marg(rawNorm, 288, 8), d.marginals.age, 1e-6);
     check(marg(rawNorm, 24, 12), d.marginals.role, 1e-6);
     check(marg(rawNorm, 6, 4), d.marginals.income, 1e-6);
-    // The floor raises every empty cell to 2^-30, which moves a marginal by up to about 2e-6 (SPEC-NOTES 105).
+    // The floor raises every empty cell to 2^-30, which moves a marginal by up to about 2e-6.
     check(marg(fit.person, 1, 6), d.marginals.aff, 5e-6);
     check(marg(fit.household, 12, 5), d.marginals.household.type, 1e-8);
     expect(Math.max(...fit.personWeights)).toBe(1);

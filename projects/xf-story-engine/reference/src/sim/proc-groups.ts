@@ -49,7 +49,7 @@ export interface GroupState {
 }
 
 export interface GroupDigest extends DigestBase {
-  groups: Record<Id, { aff: string; U: Record<string, number>; W: Record<string, number>; D: number; intent: string; until?: number }>;
+  groups: Record<Id, { aff: string; U: Record<string, number>; W: Record<string, number>; D: number; /** The gap band the group maintains (0 low, 1 mid, 2 high), with its hysteresis. */ band: 0 | 1 | 2; intent: string; until?: number }>;
   /** District, then affiliation class index, then kind. */
   boost: Record<Id, Record<number, Record<string, number>>>;
   pairBoost: Record<Id, Array<{ a: number; b: number; mult: number; until: number }>>;
@@ -278,7 +278,7 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
           for (const [kind, v] of Object.entries(idf.boost)) b[kind] = Math.min(cfg.boostMax, Math.max(cfg.boostMin, (b[kind] ?? 0) + v));
           if (idf.pairMult !== undefined && now.rival !== undefined) (pairBoost[g.district] ??= []).push({ a: mine, b: now.rival, mult: idf.pairMult, until: now.expires });
         }
-        outGroups[id] = { aff: g.aff, U, W: op.W, D: op.D, intent: now.state === 'active' ? `active:${now.id}` : now.state, ...(now.state === 'active' ? { until: now.expires } : {}) };
+        outGroups[id] = { aff: g.aff, U, W: op.W, D: op.D, band: g.gapBand, intent: now.state === 'active' ? `active:${now.id}` : now.state, ...(now.state === 'active' ? { until: now.expires } : {}) };
       }
       const prev = c.digest<GroupDigest>(procId);
       return { ops, state: st, digest: { v: 1, through: w, groups: outGroups, boost, pairBoost, changes: pushFeed(prev?.changes, w, changes, sim.data.feed.keep) } };

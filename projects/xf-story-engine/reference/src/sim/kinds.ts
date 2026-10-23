@@ -181,6 +181,11 @@ export function lintKinds(data: S1Data): string[] {
     if (k.classes === undefined) problems.push(`kind ${k.name} has no content listing`);
     if (k.name.startsWith('meta:') && k.producers.some((p) => p !== 's2' && p !== 'port')) problems.push(`kind ${k.name} starts with meta: and has a producer in S1`);
   }
+  // The core produces and casts the kinds of its own table (the role specifications and the producers are code, not data): a kind added to
+  // the data would be given the core's producers and no roles, and would pass for a supported one (SIM-15). Anything else waits for its capability.
+  for (const d of data.kinds) {
+    if (!(CITY_KIND_NAMES as readonly string[]).includes(d.name)) problems.push(`kind ${d.name} is not supported yet: the core produces and casts only ${CITY_KIND_NAMES.join(', ')}`);
+  }
   for (const d of data.kinds) {
     const nMax = data.events.nMax;
     let worst = 0;

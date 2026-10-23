@@ -13,8 +13,8 @@ import { itemDescriptor } from '../../src/sim/proc-acts.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { districtIdOf, fx3Slice } from '../../src/sim/slices.ts';
 import { lcg } from './feed.ts';
-import { CELLS, execute, genPlan, genScript, make, shrink } from './gen.ts';
-import { eventsState, fxData, inject, child, occurrences, seedOf } from './helpers.ts';
+import { CELLS, differenceOf, execute, genPlan, genScript, make, shrink, shrinkDifference } from './gen.ts';
+import { eventsState, fxData, inject, child, occurrences, seedOf, withSecondDistrict } from './helpers.ts';
 import { differing, recordOf } from './records.ts';
 
 const W = 600;
@@ -27,20 +27,34 @@ describe('partition and reload', () => {
     test(`seed ${n}: random call groupings and random saves and loads give the same records as one call`, () => {
       const seed = 0x5eed + n * 7919;
       const script = genScript(seed, WINDOWS);
-      const ref = execute(script, { groups: [WINDOWS], reloads: [] }, WINDOWS);
-      const rr = recordOf(ref);
+      const once = (s: ReplayLine[]) => recordOf(execute(s, { groups: [WINDOWS], reloads: [] }, WINDOWS));
+      const rr = once(script);
       for (const planSeed of [seed + 1, seed + 2]) {
         const plan = genPlan(planSeed, WINDOWS);
-        const got = recordOf(execute(script, plan, WINDOWS));
-        const d = differing(rr, got).filter((x) => x !== 'headers');
+        const planned = (s: ReplayLine[]) => recordOf(execute(s, plan, WINDOWS));
+        const d = differenceOf(rr, planned(script));
         if (d.length > 0) {
-          // the named streams: report the seed, the plan and the smallest script that still differs
-          const small = shrink(script, (s) => differing(rr, recordOf(execute(s, plan, WINDOWS))).filter((x) => x !== 'headers').length > 0);
+          // the named streams: report the seed, the plan and the smallest script that still differs, each reduced script run both ways again
+          const small = shrinkDifference(script, once, planned);
           throw new Error(`records differ in ${d.join(', ')}\nseed ${seed}, plan ${JSON.stringify(plan)}\nsmallest script ${JSON.stringify(small)}`);
         }
       }
     }, 600_000);
   }
+
+  test('the shrinker runs both ways again on every reduced script, so it keeps the difference that was found and no other', () => {
+    // two ways of running a script that differ because of the line at 777 and, in the original reference only, because of its length
+    const script = Array.from({ length: 12 }, (_, n): ReplayLine => ({ t: n === 7 ? 777 : n, op: 'fact', name: 'x', value: n }));
+    const reference = (s: ReplayLine[]) => ({ out: String(s.length > 0) });
+    const other = (s: ReplayLine[]) => ({ out: String(s.length > 0 && !s.some((l) => l.t === 777)) });
+    const small = shrinkDifference(script, reference, other);
+    expect(small.length).toBe(1);
+    expect(small[0]!.t).toBe(777);
+    // against the original's result, which is what the first version did, the empty script keeps the difference by being different
+    const original = reference(script);
+    const first = shrink(script, (s) => differenceOf(original, other(s)).length > 0);
+    expect(first.length).not.toBe(1);
+  });
 
   test('the generator is deterministic and the shrinker keeps the failure', () => {
     expect(genScript(7, 60)).toEqual(genScript(7, 60));
@@ -114,31 +128,6 @@ describe('summary and item agreement at each cell', () => {
     }, 120_000);
   }
 });
-
-/** A second simulated district out of the rest of the city: the same totals, so no other district's opportunity changes. */
-function withSecondDistrict(): WorldIndex {
-  const ix = structuredClone(fx3Slice());
-  const d1 = Object.values(ix.districts)[0]!;
-  const id2 = districtIdOf('fx_d2');
-  const cells2 = [0, 1, 2].map((i) => memberId(id2, 'cells', i));
-  const map = new Map(d1.cellIds.map((c, i) => [c, cells2[i]!]));
-  const d2 = { ...structuredClone(d1), id: id2, key: 'fx_d2', cellIds: cells2 };
-  ix.districts[id2] = d2;
-  for (const c of d1.cellIds) {
-    const cc = structuredClone(ix.cells[c]!);
-    const mapIds = (xs: Id[]): Id[] => xs.map((x) => map.get(x)!).sort();
-    ix.cells[map.get(c)!] = { ...cc, id: map.get(c)!, district: id2, adj1: mapIds(cc.adj1), adj2: mapIds(cc.adj2) };
-  }
-  // the new district's effective opportunity (the cells' A, less what the game covers, times the propensity) leaves the rest
-  for (const k of Object.keys(ix.rest.totalA)) {
-    ix.rest.totalA[k] = ix.rest.totalA[k]!.map((x, p) => x - d1.cellIds.reduce((acc, c) => acc + ix.cells[c]!.A[k]![p]! * (1 - ix.cells[c]!.gameCoverage[k]!) * ix.cells[c]!.F[k]!, 0)) as Per4;
-  }
-  ix.names = { ...ix.names, fx_d2: id2 };
-  const { hash: _h, ...rest } = ix;
-  void _h;
-  ix.hash = H(hs('world-index'), hrec(rest as unknown as Record<string, unknown>));
-  return ix;
-}
 
 describe('metamorphic relations', () => {
   const busy = (d: Parameters<typeof fxData>[0] extends ((x: infer D) => void) | undefined ? D : never): void => {

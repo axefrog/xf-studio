@@ -59,25 +59,96 @@ describe('SF1-S-3: the m4 budget', () => {
 });
 
 describe('SF1-S-5: one admission owner', () => {
-  test('two size-4 incidents in one window: the earlier by (time, Id) is admitted, the later refused; the budget gains one entry', () => {
+  const w = 600;
+  type How = { reverse?: boolean; calls?: number[]; reload?: boolean };
+
+  /** Two size-4 incidents due in window `w`, in the districts' first two cells; the budget is open. */
+  function incidents(names: readonly [string, string], how: How = {}) {
     const sim = quietSim('SF1-S-5');
     const d = sim.w.districts[0]!;
-    const w = 600;
     sim.startAt(w);
-    inject(sim,
-      child(sim, 'a', 0, w, 'gang-clash', 4, d.cellIds[0]!, { sides: { a: 2, b: 3 } }),
-      child(sim, 'b', 0, w, 'gang-clash', 4, d.cellIds[1]!, { sides: { a: 3, b: 2 } }));
-    sim.advance(1);
-    const ids = ['a', 'b'].map((n) => mintedId(proc, H(s('fixture-parent'), s(n)), 'child/0'));
+    const kids = [
+      child(sim, names[0], 0, w, 'gang-clash', 4, d.cellIds[0]!, { sides: { a: 2, b: 3 } }),
+      child(sim, names[1], 0, w, 'gang-clash', 4, d.cellIds[1]!, { sides: { a: 3, b: 2 } }),
+    ];
+    inject(sim, ...(how.reverse ? [...kids].reverse() : kids));
+    if (how.reload) {
+      sim.k.persistence.save('S5');
+      sim.k.persistence.load('S5');
+    }
+    for (const n of how.calls ?? [1]) sim.advance(n);
+    const ids = kids.map((k) => mintedId(proc, k.parent, 'child/0'));
+    // the candidate times are the keyed draws the process makes: the incident of the earlier time, then the smaller Id, comes first
+    const times = kids.map((k) => w * 600 + Math.floor(sim.ids.child(k.parent, 0, 't') * 600));
+    const first = times[0]! < times[1]! || (times[0] === times[1] && ids[0]! < ids[1]!) ? 0 : 1;
     const admitted = ids.filter((id) => sim.k.store.header(id) !== undefined);
-    expect(admitted.length).toBe(1);
-    const times = ids.map((id) => sim.k.value(id, 'time') as number | undefined);
-    const st = sim.stateOf<EventsState>('city.events')!;
-    expect(st.admit.m4Times).toEqual([w]);
-    expect(sim.record.log.filter((e) => e.reason === 'budget-m4').length).toBe(1);
-    // the admitted one is the earlier by (time, Id): the refused one would have come later
-    expect(admitted[0]).toBeDefined();
-    void times;
+    const refused = sim.record.log.filter((e) => e.reason === 'budget-m4').map((e) => e.refs[0]);
+    const m4Times = sim.stateOf<EventsState>('city.events')!.admit.m4Times;
+    return { ids, first, admitted, refused, m4Times, outcome: JSON.stringify([admitted, refused, m4Times]) };
+  }
+
+  const PAIRS: Array<[string, string]> = [['a', 'b'], ['b', 'a'], ['c', 'd'], ['d', 'c'], ['e', 'f'], ['f', 'e'], ['g', 'h'], ['h', 'g']];
+
+  test('two size-4 incidents in one window: the earlier by (time, Id) is admitted and the later refused budget-m4, whichever way round they come; the budget gains one entry', () => {
+    const winners = new Set<number>();
+    for (const names of PAIRS) {
+      const r = incidents(names);
+      winners.add(r.first);
+      expect(r.admitted, names.join()).toEqual([r.ids[r.first]!]);
+      expect(r.refused, names.join()).toEqual([r.ids[1 - r.first]!]);
+      expect(r.m4Times, names.join()).toEqual([w]);
+    }
+    // the fixture has both cases: the earlier is the first incident and the earlier is the second
+    expect([...winners].sort()).toEqual([0, 1]);
+  });
+
+  test('the same result whatever the order the candidates were produced in, in one call or many, and after a save before the window', () => {
+    for (const names of PAIRS.slice(0, 2)) {
+      const base = incidents(names);
+      expect(incidents(names, { reverse: true }).outcome).toBe(base.outcome);
+      expect(incidents(names, { calls: [1, 1, 1] }).outcome).toBe(base.outcome);
+      expect(incidents(names, { reload: true }).outcome).toBe(base.outcome);
+      expect(incidents(names, { reload: true, reverse: true, calls: [1, 2] }).outcome).toBe(base.outcome);
+    }
+  });
+
+  test('a regime-end of a size-4 regime is minted and counted by no budget', () => {
+    const sim = quietSim('SF1-S-5r');
+    const district = sim.w.districts[0]!.id;
+    const fest = sim.data.regimes.find((r) => r.kind === 'festival')!;
+    sim.startAt(w);
+    const id = H(s('fixture-regime'), hid(district));
+    sim.setState('city.events', (st) => {
+      (st as EventsState).regimes.push({ id, kind: 'festival', scope: district, start: (w - fest.maxDwell) * 600, startW: w - fest.maxDwell, plannedLength: fest.plannedLength, maxDwell: fest.maxDwell, size: 4, effects: fest.effects, closes: fest.closes, priceShift: fest.priceShift });
+    });
+    sim.advance(2);
+    const end = mintedId(proc, proc, `regime-end/${id}`);
+    expect(sim.k.value(end, 'kind')).toBe('regime-end');
+    expect(sim.stateOf<EventsState>('city.events')!.admit.m4Times).toEqual([]);
+    expect(sim.record.log.filter((e) => e.reason === 'budget-m4')).toEqual([]);
+  });
+
+  test('a size-4 regime that arrives while the budget is closed starts as size 3 and uses none; with the budget open it starts as size 4 and uses one', () => {
+    const arrive = (tag: string, closed: boolean) => {
+      const sim = quietSim(`SF1-S-5s-${tag}`, (d) => { d.regimes.find((r) => r.kind === 'crackdown')!.arrival = 5760; });
+      sim.startAt(w);
+      if (closed) sim.setState('city.events', (st) => { (st as EventsState).admit.m4Times = [w - 1]; });
+      sim.advance(2);
+      const regime = sim.stateOf<EventsState>('city.events')!.regimes.find((r) => r.kind === 'crackdown')!;
+      return { regime, m4Times: sim.stateOf<EventsState>('city.events')!.admit.m4Times };
+    };
+    let tried = 0;
+    for (let n = 0; n < 80; n++) {
+      const open = arrive(String(n), false);
+      if (open.regime.size !== 4) continue;
+      tried++;
+      expect(open.m4Times).toEqual([w]);
+      const closed = arrive(String(n), true);
+      expect(closed.regime.size).toBe(3);
+      expect(closed.m4Times).toEqual([w - 1]);
+      if (tried >= 2) break;
+    }
+    expect(tried).toBeGreaterThan(0);
   });
 });
 

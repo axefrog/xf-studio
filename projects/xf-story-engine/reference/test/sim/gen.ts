@@ -7,6 +7,7 @@ import { fx3Slice } from '../../src/sim/slices.ts';
 import type { WorldIndex } from '../../src/sim/index-types.ts';
 import { lcg, restate, transfer } from './feed.ts';
 import { fxData, seedOf } from './helpers.ts';
+import { type Sections, differing, recordOf } from './records.ts';
 
 const W = 600;
 
@@ -84,6 +85,20 @@ export function execute(script: readonly ReplayLine[], plan: Plan, windows: numb
   }
   expect(at).toBe(windows);
   return sim;
+}
+
+/** The sections in which a script's records differ between two ways of running it, `headers` aside (the save keeps only what is retained). */
+export function differenceOf(a: Sections, b: Sections): string[] {
+  return differing(a, b).filter((x) => x !== 'headers');
+}
+
+/**
+ * The smallest script on which two ways of running it still give different records. Both ways are run again on every reduced script: a
+ * reduced script is compared with its own reference, never with the result of the original, which would keep a difference that has nothing
+ * to do with the one found.
+ */
+export function shrinkDifference(script: ReadonlyArray<ReplayLine>, reference: (s: ReplayLine[]) => Sections, other: (s: ReplayLine[]) => Sections): ReplayLine[] {
+  return shrink(script, (s) => differenceOf(reference(s), other(s)).length > 0);
 }
 
 /** Shrink a failing script: drop lines while the failure stays. Returns the smallest script found. */

@@ -320,7 +320,10 @@ export class Policies {
 
   /** +1 when the observer's affiliation is hostile to the actor's, -1 when friendly (the same group), else 0 (S1 8.3). */
   attitudeTilt(observer: Id, actor: Id, ev: EventView): number {
-    const district = this.districtOfPlace(ev.place);
+    return this.tiltIn(observer, actor, this.districtOfPlace(ev.place));
+  }
+
+  private tiltIn(observer: Id, actor: Id, district: Id): number {
     const a = this.classNameOf(observer, district);
     const b = this.classNameOf(actor, district);
     if (a === 'civilian' || b === 'civilian') return 0;
@@ -368,19 +371,47 @@ export class Policies {
       const i = m.ladder.indexOf(path.slice(4));
       if (i >= 0 && i < m.ladder.length - 1) path = `did.${m.ladder[i + 1]}`;
     }
-    if (operator === 'assimilate' && b.region !== undefined) {
-      const classes = m.reasons[this.lastEffect(b)] ?? m.reasons.meet!;
-      region = { r: 'set', values: [...classes.situational].sort() };
+    if (operator === 'assimilate' && b.path === 'reason' && b.region !== undefined) {
+      const act = this.actOf(b);
+      region = this.defaultReasons(listener, b.subject, act.effect, act.place);
     }
     const out: ReturnType<Policies['toldBelief']> = { confidence, hop: (b.hop ?? 0) + 1, path };
     if (region) out.region = region;
-    void listener;
     return out;
   }
 
-  private lastEffect(b: Belief): Effect {
-    const m = /^did\.(.+)$/.exec(b.path);
-    return (m ? m[1] : 'meet') as Effect;
+  /**
+   * The act a belief about reasons is about: the effect it had on someone other than the actor, and where it happened, read from the event
+   * the belief cites (the inference's cause, else its first evidence). When that event cannot be read the reasons themselves name their
+   * class, and `meet` stands when nothing says (SIM-14).
+   */
+  private actOf(b: Belief): { effect: Effect; place?: Id } {
+    const did = /^did\.(.+)$/.exec(b.path);
+    const ids = [b.source.by === 'inferred' ? b.source.from[0] : undefined, b.evidence[0]].filter((x): x is Id => x !== undefined);
+    for (const id of ids) {
+      const ev = this.viewEvent(id);
+      const e = ev?.effects.find((x) => x.on !== b.subject);
+      if (ev && e) return { effect: e.effect, ...(ev.place !== undefined ? { place: ev.place } : {}) };
+    }
+    if (did) return { effect: did[1] as Effect };
+    if (b.region?.r === 'set') {
+      const held = b.region.values;
+      for (const [effect, c] of Object.entries(this.sim.data.minds.reasons)) {
+        if (held.every((x) => c.dispositional.includes(x) || c.situational.includes(x))) return { effect: effect as Effect };
+      }
+    }
+    return { effect: 'meet' };
+  }
+
+  /**
+   * The reasons a listener expects of an actor's group before anything of the situation is seen (S1 8.4 `assimilate`): the attribution of
+   * `attr@1` from the listener's side, with no constraint visible, so only the listener's attitude to the actor's group tilts it (S1 8.3).
+   */
+  defaultReasons(listener: Id, actor: Id, effect: Effect, place: Id | undefined): Region {
+    const m = this.sim.data.minds;
+    const wD = clamp(m.wD + m.wDTilt * this.tiltIn(listener, actor, this.districtOfPlace(place)), 0.2, 0.9);
+    const classes = m.reasons[effect] ?? m.reasons.meet!;
+    return { r: 'set', values: [...(wD >= 0.5 ? classes.dispositional : classes.situational)].sort() };
   }
 
   /**
@@ -575,10 +606,21 @@ export class Policies {
     else if (h.kind === 'xf:journal') this.sim.vFrames.journalChanged(ch.node);
   }
 
-  /** The group node of an affiliation: the district's A1 to A3 that stands for it, in district order; undefined when no group does. */
-  groupOfAffiliation(aff: string): Id | undefined {
-    for (const d of this.sim.w.districts) {
+  /**
+   * The group node an affiliation joins (S1 8.8): the A1 to A3 of the person's current district, taken from the mirrored position, when that
+   * district lists the affiliation; otherwise of the first simulated district, in `Id` order, that does; undefined when no group does.
+   */
+  groupOfAffiliation(aff: string, person?: Id): Id | undefined {
+    const listed = (d: { id: Id; affOrder: string[] }): Id | undefined => {
       for (const [i, slot] of (['A1', 'A2', 'A3'] as const).entries()) if (d.affOrder[2 + i] === aff) return this.sim.w.group(d.id, slot);
+      return undefined;
+    };
+    const here = person === undefined ? undefined : this.sim.w.districtAt(this.k.value(person, 'position'));
+    const mine = here === undefined ? undefined : listed(here);
+    if (mine !== undefined) return mine;
+    for (const d of this.sim.w.districts) {
+      const g = listed(d);
+      if (g !== undefined) return g;
     }
     return undefined;
   }
@@ -604,7 +646,7 @@ export class Policies {
       if (corrected || (!quiet && old !== undefined && old !== value)) this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-dead', refs: [person] });
     } else if (slot === 'affiliation' && value !== old) {
       // end the old membership, add the new one when its group exists, caused by the game (S1 8.8 step 2); one already held is kept
-      const target = typeof value === 'string' ? this.groupOfAffiliation(value) : undefined;
+      const target = typeof value === 'string' ? this.groupOfAffiliation(value, person) : undefined;
       for (const e of k.groups.memberships(person)) {
         if (e.to === target) continue;
         k.endEdge(e.id, k.now);

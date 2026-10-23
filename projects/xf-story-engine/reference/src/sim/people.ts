@@ -4,7 +4,7 @@
 // the lifetime, the spells, the routines, who is present in a cell, and the protected set.
 
 import { edgeActive } from '../predicate.ts';
-import { memberId, ownedId } from '../id.ts';
+import { H, memberId, ownedId, s as hs } from '../id.ts';
 import type { GameTime, Id } from '../types.ts';
 import { floorDiv, invCum, mod } from './arith.ts';
 import type { CellIndex } from './index-types.ts';
@@ -54,6 +54,8 @@ export interface PeopleHooks {
   /** A canon character of the main story (S1 4.4). */
   isSpine(node: Id): boolean;
   defect(kind: string, detail: string): void;
+  /** Whether a cast, an observation or a quest link protected the node at a time before now (the kernel's state and the record's spans). */
+  protectedBefore?(node: Id, t: GameTime): boolean;
 }
 
 const NO_HOOKS: PeopleHooks = { closed: () => false, isSpine: () => false, defect: () => {} };
@@ -72,10 +74,11 @@ export class People {
    */
   static shared = true;
   private static memo = new Map<string, { list: Array<ResidentView | undefined> }>();
-  private blocks = new Map<Id, { stamp: number; now: number; info: BlockInfo }>();
-  private views = new Map<Id, { stamp: number; now: number; list: Array<ResidentView | undefined> }>();
+  private blocks = new Map<Id, { stamp: number; general: string; now: number; info: BlockInfo }>();
+  private views = new Map<Id, { stamp: number; general: string; now: number; list: Array<ResidentView | undefined> }>();
   private spells = new Map<string, { s0: number; starts: number[] }>();
   private ranks = new Map<Id, Id>();
+  private generalAt: { rev: number; key: string; timed: boolean } = { rev: -1, key: '', timed: false };
 
   constructor(private readonly w: World, private readonly keys: IdentityKeys) {}
 
@@ -88,6 +91,26 @@ export class People {
     this.views.clear();
     this.spells.clear();
     this.ranks.clear();
+    this.generalAt = { rev: -1, key: '', timed: false };
+  }
+
+  /**
+   * The rules that name no node (the pack's, and any an author adds over a kind or over everything), as a key that moves when one is added,
+   * removed or ended, and whether any has a window of its own. What is resolved for a resident depends on them as much as on the pins and
+   * contributions that name the household (SIM-05): a cache is good only while this key holds, and, when a rule has a window, only at the
+   * time it was made. Worked out once per revision.
+   */
+  private general(): { key: string; timed: boolean } {
+    const k = this.k;
+    if (this.generalAt.rev === k.revision) return this.generalAt;
+    let timed = false;
+    const parts: string[] = [];
+    for (const c of k.store.generalContributions()) {
+      if (c.valid.from !== undefined || c.valid.to !== undefined) timed = true;
+      parts.push(`${c.id}:${c.valid.from ?? ''}:${c.valid.to ?? ''}`);
+    }
+    this.generalAt = { rev: k.revision, key: H(hs('general'), hs(parts.join(','))), timed };
+    return this.generalAt;
   }
 
   // ---- cells and blocks ----
@@ -130,8 +153,10 @@ export class People {
     const ids: Id[] = [];
     for (let i = 0; i < n; i++) ids.push(k.address(cell, `households[${i}]`));
     const stamp = this.stampOf(ids);
+    const general = this.general();
     const hit = this.blocks.get(cell);
-    if (this.cacheOn && hit && hit.stamp === stamp && (stamp === 0 || hit.now === k.now) && hit.info.households.length === n) return hit.info;
+    // good while nothing local and no rule over a kind has changed; with a pin or a rule that has a window, only at the time it was made
+    if (this.cacheOn && hit && hit.stamp === stamp && hit.general === general.key && (stamp === 0 && !general.timed ? true : hit.now === k.now) && hit.info.households.length === n) return hit.info;
     const sizes = ids.map((h) => {
       const s = k.value(h, 'size');
       return typeof s === 'number' ? s : 0;
@@ -139,7 +164,7 @@ export class People {
     const prefix = [0];
     for (const s of sizes) prefix.push(prefix[prefix.length - 1]! + s);
     const info: BlockInfo = { cell, households: ids, sizes, prefix };
-    this.blocks.set(cell, { stamp, now: k.now, info });
+    this.blocks.set(cell, { stamp, general: general.key, now: k.now, info });
     return info;
   }
 
@@ -203,23 +228,28 @@ export class People {
     const k = this.k;
     const members = [0, 1, 2, 3, 4, 5].map((j) => this.residentId(ref.household, j));
     const stamp = this.stampOf([ref.household, ...members.filter((m) => k.store.header(m) !== undefined)]);
+    const general = this.general();
     const hit = this.views.get(ref.household);
-    // a household nothing local touches is the same at any time; one that is touched is good only at the time it was resolved (a pin's validity is a window)
-    const fresh = hit !== undefined && hit.stamp === stamp && (stamp === 0 || hit.now === k.now);
+    // a household nothing local touches, under rules that have no window, is the same at any time; one that is touched, or under a rule
+    // with a window, is good only at the time it was resolved (a pin's or a rule's validity is a window). Any change of the rules that
+    // name no node, an authored kind-wide constraint among them, starts the cache again (SIM-05).
+    const timeless = stamp === 0 && !general.timed;
+    const fresh = hit !== undefined && hit.stamp === stamp && hit.general === general.key && (timeless || hit.now === k.now);
     if (this.cacheOn && hit && fresh && hit.list[ref.j] !== undefined) return hit.list[ref.j];
-    const memoKey = `${k.worldSeed}|${this.w.pack.version}|${ref.household}`;
-    const shared = this.cacheOn && People.shared && stamp === 0 ? People.memo.get(memoKey) : undefined;
+    // the shared memo is a pure function of the seed, the pack, the household and the rules that name no node
+    const memoKey = `${k.worldSeed}|${this.w.pack.version}|${general.key}|${ref.household}`;
+    const shared = this.cacheOn && People.shared && timeless ? People.memo.get(memoKey) : undefined;
     if (shared && shared.list[ref.j] !== undefined) {
       const out = shared.list[ref.j];
-      this.views.set(ref.household, { stamp, now: k.now, list: [...shared.list] });
+      this.views.set(ref.household, { stamp, general: general.key, now: k.now, list: [...shared.list] });
       return out;
     }
     const view = this.resolveView(res, ref);
     // The cache keeps the views of a household together; a stamp that moved starts it again.
     const list = hit && fresh ? hit.list : [];
     list[ref.j] = view;
-    this.views.set(ref.household, { stamp, now: k.now, list });
-    if (this.cacheOn && People.shared && stamp === 0) {
+    this.views.set(ref.household, { stamp, general: general.key, now: k.now, list });
+    if (this.cacheOn && People.shared && timeless) {
       let m = People.memo.get(memoKey);
       if (!m) People.memo.set(memoKey, (m = { list: [] }));
       m.list[ref.j] = view;
@@ -238,10 +268,13 @@ export class People {
     const arch = k.value(res, 'archetype');
     if (typeof age !== 'number' || typeof life !== 'string' || typeof soc !== 'string' || typeof arch !== 'string') return undefined;
     const died = k.value(res, 'died');
+    // the class the kernel resolves, which is what the gate must receive: the slot is derived from the age, and may also be narrowed on its own;
+    // a class that is missing or unavailable counts as a minor (S1 6)
+    const ageClass = k.value(res, 'age-class') === 'adult' ? 'adult' : 'minor';
     const lifeQ = this.w.data.people.lifeQ;
     const view: ResidentView = {
       id: res, household: ref.household, cell: ref.cell, hIndex: ref.hIndex, j: ref.j, profile: x, aband: profileA(x), role: ROLES[profileR(x)]!, affc: profileF(x),
-      age, ageClass: age >= 18 ? 'adult' : 'minor', sociability: this.w.data.people.sociability.values[SOCIABILITY.indexOf(soc as (typeof SOCIABILITY)[number])]!,
+      age, ageClass, sociability: this.w.data.people.sociability.values[SOCIABILITY.indexOf(soc as (typeof SOCIABILITY)[number])]!,
       archetype: arch as Archetype, life: Number(life), deathAge: Math.max(age + 1, lifeQ[Number(life)]!),
     };
     if (typeof died === 'number') view.died = died;
@@ -279,7 +312,8 @@ export class People {
   /** The state of a track at `t`: `{ k, state, start, end }`, from a cached walk of at most 64 spells (S1 4.2). */
   stateAt(v: ResidentView, track: 'work' | 'health', t: GameTime): { k: number; state: number; start: number; end: number } {
     const sp = this.w.data.people.spell;
-    const key = `${v.id}|${track}`;
+    // the spells depend on the age band as well as the person, and the band can move with a pin on the profile
+    const key = `${v.id}|${track}|${v.aband}`;
     let rec = this.spells.get(key);
     if (!rec || !this.cacheOn) {
       const s0 = this.spellBase(v, track);
@@ -306,14 +340,22 @@ export class People {
 
   // ---- protection ----
 
-  /** Whether a node is protected at `t`: cast by a live seed, observed by V, a mirrored canon person, the spine or essential (S1 4.4). */
+  /**
+   * Whether a node is protected at `t`: cast by a live seed, observed by V, a mirrored canon person, the spine or essential (S1 4.4). For
+   * a time before now the answer is the protected set as of that time, from the spans the kernel still holds and those a save recorded
+   * (`Protection`): what was protected then does not change when its cause ends, or when the game is saved and loaded.
+   */
   protectedAt(n: Id, t: GameTime): boolean {
     const k = this.k;
-    for (const e of k.store.edgesTo(n)) {
-      if (e.type === 'core:cast' && edgeActive(e, t) && k.retention.seeds.has(e.from)) return true;
-    }
-    for (const p of k.store.pinsOfNode(n)) {
-      if (p.reason === 'observed' && p.at <= t && !k.store.isWithdrawn(p.id)) return true;
+    if (t < k.now) {
+      if (this.hooks.protectedBefore?.(n, t)) return true;
+    } else {
+      for (const e of k.store.edgesTo(n)) {
+        if (e.type === 'core:cast' && edgeActive(e, t) && k.retention.seeds.has(e.from)) return true;
+      }
+      for (const p of k.store.pinsOfNode(n)) {
+        if (p.reason === 'observed' && p.at <= t && !k.store.isWithdrawn(p.id)) return true;
+      }
     }
     const h = k.store.header(n);
     if (h?.origin.by === 'mirrored') {

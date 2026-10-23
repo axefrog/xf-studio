@@ -18,7 +18,7 @@ import { Gate } from './gate.ts';
 import { type IdentityKeys, identityKeys } from './keys.ts';
 import type { CastEntry, Descriptor, Occurrence } from './occ.ts';
 import { People } from './people.ts';
-import { type S1Record, appendLog, emptyRecord } from './record.ts';
+import { type EvidenceFacts, type S1Record, appendLog, emptyRecord, recordFrom } from './record.ts';
 import { PROCESS_VERSIONS, toProcessDef } from './s1ctx.ts';
 import { Ties } from './ties.ts';
 import { type WorldOptions, World } from './world.ts';
@@ -35,6 +35,7 @@ import { Policies, reconcileAll } from './policies.ts';
 import { TiePolicy } from './tie-policy.ts';
 import { VFrames } from './vframes.ts';
 import { Divergence } from './divergence.ts';
+import { Protection } from './protection.ts';
 import { Reads } from './reads.ts';
 import type { LogDraft } from './occ.ts';
 import type { StocksDigest } from './proc-stocks.ts';
@@ -66,6 +67,7 @@ export class Sim {
   readonly vFrames: VFrames;
   readonly divergence: Divergence;
   readonly reads: Reads;
+  readonly protection: Protection;
   /** The canon characters of the main story (S1 4.4), joined to mirrored nodes by game key. */
   readonly spine = new Set<Id>();
   readonly mirrorProc: Id = processCause('city.mirror');
@@ -88,15 +90,18 @@ export class Sim {
     this.vFrames = new VFrames(this);
     this.divergence = new Divergence(this);
     this.reads = new Reads(this);
+    this.protection = new Protection(this);
     this.people.hooks = {
       closed: (v, t) => this.closedAt(v.role, v.cell, t),
       isSpine: (n) => this.spine.has(n),
       defect: (kind, detail) => this.logNow({ w: this.windowNow(), proc: 'people', kind: 'defect', reason: kind, refs: [], key: detail }),
+      protectedBefore: (n, t) => this.protection.protectedBefore(n, t),
     };
     // The record's sink for the processes' log entries, the hooks that save and restore the record.
     this.k.evolution.sinks.set('s1', (entries) => {
       for (const e of entries as LogDraft[]) appendLog(this.record, e, this.data.log.max);
     });
+    this.k.beliefs.onChange.push((believer, subject) => this.divergence.noteBelief(believer, subject));
     this.k.saveHooks.push(() => this.flush());
     this.k.loadHooks.push((rec, report) => this.onLoad(rec, report));
     this.installPins();
@@ -146,14 +151,104 @@ export class Sim {
     appendLog(this.record, e, this.data.log.max);
   }
 
-  /** Write the S1 record to the seed table, so a save holds it (S0 14.1). */
+  /**
+   * Write the S1 record to the seed table, so a save holds it (S0 14.1). First the history the kernel would drop in the save is written into
+   * the record: the spans of protection, the facts of the events behind memorable beliefs and the intervals of ended ties.
+   */
   flush(): void {
+    if (!this.k.readOnly) {
+      this.protection.capture();
+      this.captureEvidence();
+      this.tiePolicy.captureSpans();
+    }
     this.k.retention.setSeed({ id: this.w.s1, state: structuredClone(this.record), nodes: [] });
+  }
+
+  /** The events whose facts a memorable belief is read back through (S1 8.4): the source of an observed belief, the first evidence, the inference's cause. A ledger item reads none. */
+  private evidenceNeeded(): Set<Id> {
+    const out = new Set<Id>();
+    for (const { belief: b } of this.k.beliefs.memorable()) {
+      if (b.path.startsWith('rep-')) continue;
+      if (b.source.by === 'observed') out.add(b.source.event);
+      if (b.evidence[0] !== undefined) out.add(b.evidence[0]);
+      if (b.source.by === 'inferred' && b.source.from[0] !== undefined) out.add(b.source.from[0]);
+    }
+    return out;
+  }
+
+  /** An event as it was minted, read back from the kernel; undefined for a node that is not a readable minted event (an item nobody has opened has no people to record). */
+  private factsOf(id: Id): EvidenceFacts | undefined {
+    const k = this.k;
+    const h = k.store.header(id);
+    if (!h || h.origin.by !== 'minted' || !k.schema.isKind(h.kind, 'core:event')) return undefined;
+    const kind = k.value(id, 'kind');
+    const time = k.value(id, 'time');
+    const pc = k.value(id, 'participants#count');
+    if (typeof kind !== 'string' || typeof time !== 'number' || typeof pc !== 'number') return undefined;
+    const count = (key: string): number => {
+      const c = k.value(id, key);
+      return typeof c === 'number' ? c : 0;
+    };
+    const f: EvidenceFacts = { creator: h.origin.creator, cause: h.origin.cause, name: h.origin.name, time, kind, participants: [], effects: [], witnesses: [], causes: [] };
+    const place = k.value(id, 'place');
+    if (typeof place === 'string') f.place = place;
+    for (let i = 0; i < count('participants#count'); i++) {
+      const m = k.address(id, `participants[${i}]`);
+      const who = k.value(m, 'who');
+      const role = k.value(m, 'role');
+      if (typeof who === 'string' && typeof role === 'string') f.participants.push({ who, role });
+    }
+    for (let i = 0; i < count('effects#count'); i++) {
+      const m = k.address(id, `effects[${i}]`);
+      const on = k.value(m, 'on');
+      const effect = k.value(m, 'effect');
+      if (typeof on === 'string' && typeof effect === 'string') f.effects.push({ on, effect: effect as Effect });
+    }
+    for (let i = 0; i < count('witnesses#count'); i++) {
+      const w = k.value(id, `witnesses[${i}]`);
+      if (typeof w === 'string') f.witnesses.push(w);
+    }
+    for (let i = 0; i < count('causes#count'); i++) {
+      const c = k.value(id, `causes[${i}]`);
+      if (typeof c === 'string') f.causes.push(c);
+    }
+    const outcome = k.value(id, 'outcome');
+    if (outcome === 'done' || outcome === 'failed' || outcome === 'prevented') f.outcome = outcome;
+    return f;
+  }
+
+  /**
+   * Keep, in the record, the facts of the events a memorable belief is read back through (SIM-03). The simulation-layer contributions that
+   * hold an event's fields are not saved, so a load keeps the header of such an event and none of its fields; the facts are put back from
+   * here when the save is loaded, whether or not the ring still holds the event.
+   */
+  private captureEvidence(): void {
+    const need = this.evidenceNeeded();
+    const rec = this.record.evidence;
+    for (const id of Object.keys(rec)) if (!need.has(id)) delete rec[id];
+    for (const id of need) {
+      const f = this.factsOf(id);
+      if (f) rec[id] = f;
+    }
+  }
+
+  /** Put the recorded events back, silently: each was announced when it happened (S0 14.3). One that already has contributions naming it (an opened item the scene regenerated) is left alone. */
+  private restoreEvidence(): void {
+    for (const id of Object.keys(this.record.evidence).sort()) {
+      if (this.k.store.namedContributions(id) > 0) continue;
+      const f = this.record.evidence[id]!;
+      const spec: Parameters<Kernel['events']['restoreEvent']>[0] = {
+        creator: f.creator, cause: f.cause, name: f.name, time: f.time, kind: f.kind, participants: f.participants, effects: f.effects, witnesses: f.witnesses, causes: f.causes,
+      };
+      if (f.place !== undefined) spec.place = f.place;
+      if (f.outcome !== undefined) spec.outcome = f.outcome;
+      this.k.events.restoreEvent(spec);
+    }
   }
 
   private onLoad(rec: { meta: { packs: Array<{ id: string; version: string }> } }, report: { changedPacks?: string[] }): void {
     const seed = this.k.retention.seeds.get(this.w.s1);
-    this.record = seed ? (structuredClone(seed.state) as S1Record) : emptyRecord();
+    this.record = seed ? recordFrom(seed.state) : emptyRecord();
     this.people.dropCaches();
     this.ties.dropCaches();
     // The simulation data are pinned for the lineage (S1 1.4): another version of the pack, the data or the index opens the save read-only.
@@ -162,7 +257,10 @@ export class Sim {
       this.k.readOnly = { message: `This save was made with other simulation data (${mine.join(', ')}). It opens read-only.` };
       return;
     }
+    // a save the kernel opened read-only (a function it needs is missing) is looked at and not written: nothing here may write (SIM-12)
+    if (this.k.readOnly) return;
     this.w.buildNodes();
+    this.restoreEvidence();
     this.policies.openWatch();
     reconcileAll(this.policies);
     void rec;
@@ -227,7 +325,7 @@ export class Sim {
   /**
    * Mint an occurrence of the ring again under its own Id (S1 11): an event or a summary within seven days regenerates identically,
    * its cast being a pure function of its descriptor and recorded history. Returns the Id, or undefined when the ring no longer holds it.
-   * It publishes nothing new beyond what minting an event does for a node that has no fields.
+   * It publishes nothing: restoring an occurrence is silent.
    */
   remint(id: Id): Id | undefined {
     const e = this.ringEntry(id);
@@ -242,7 +340,8 @@ export class Sim {
     this.completeDescriptor(d);
     const cast = this.casting.cast(d);
     if (cast === 'no-cast') return undefined;
-    return this.k.events.mintEvent(this.eventSpecOf(d, cast, proc, e.mint.cause, e.mint.name));
+    // the occurrence was announced when it first happened, so restoring it announces nothing, whether or not its header survived a load (SIM-02)
+    return this.k.events.restoreEvent(this.eventSpecOf(d, cast, proc, e.mint.cause, e.mint.name));
   }
 
   /** The summary an item belongs to and its index, from the item's header. */

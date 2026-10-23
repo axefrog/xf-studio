@@ -376,14 +376,11 @@ describe('SF1-W-7: only memorable beliefs decide', () => {
     sim.spine.add(mv);
     protect(sim, listener, victim);
     const k = sim.k;
-    const sources: Array<() => Id> = [];
     const believe = (n: number, subject: Id, path: string, value: string, memorable: boolean): void => {
-      const mint = (): Id => k.events.mintEvent({
+      const E = k.events.mintEvent({
         creator: sim.w.port, cause: sim.w.port, name: `src${n}`, time: 1000 + n, kind: 'assault', place: d.cellIds[0]!,
         participants: [{ who: subject, role: 'aggressor' }, { who: victim, role: 'victim' }], effects: [{ on: victim, effect: 'harm' }], witnesses: [teller],
       });
-      sources.push(mint);
-      const E = mint();
       k.beliefs.set({ believer: teller, subject, path, at: 1000 + n, value, confidence: 1, evidence: [E], source: { by: 'observed', event: E }, formed: k.now, refreshed: k.now, memorable });
     };
     believe(0, mv, 'did.harm', victim, true);
@@ -396,8 +393,8 @@ describe('SF1-W-7: only memorable beliefs decide', () => {
     if (kind === 'reload') {
       k.persistence.save('A');
       k.persistence.load('A');
-      // the events within the ring re-mint under the same Ids, and authored frames come from their seeds, which are restated after a load
-      for (const mint of sources) mint();
+      // nothing mints the events again: the load restores the facts of the events behind memorable beliefs (SIM-03); authored frames come from
+      // their seeds, which are restated after a load
       protect(sim, listener, victim);
       new ReplayPort(sim).submit([{ t: k.now, op: 'person', key: 'mv', slots: { affiliation: 'civilian', alive: 'yes', 'age-class': 'adult' } }]);
       sim.advance(1);
@@ -469,14 +466,15 @@ describe('SF1-T-4: the cap on materialised ties and the retract (Sol 8, 16)', ()
   const live = (sim: Sim, who: Id) => [...sim.k.store.edgesFrom(who), ...sim.k.store.edgesTo(who)].filter((e) => e.type === 'xf:tie' && (e.valid.to === undefined || e.valid.to > sim.k.now));
   const residents = (sim: Sim): Id[] => sim.w.districts[0]!.cellIds.flatMap((c) => sim.people.residentsOfBlock(c));
 
-  test('V tied to 21 residents holds 20: the weakest tie of V is ended for the newest, and an NPC at the cap with free ties makes room', () => {
+  test('V is outside the cap: tied to 21 residents V holds 21 and none is ended; an NPC at the cap with free ties makes room (S1 v0.3, 4.6)', () => {
     const sim = quietSim('SF1-T-4a');
     const cap = sim.data.ties.maxMaterialised;
     const all = residents(sim);
-    for (const r of all.slice(0, cap + 1)) expect(sim.tiePolicy.materialise(r, sim.w.v)).toBeDefined();
-    expect(live(sim, sim.w.v).length).toBe(cap);
-    expect(sim.tiePolicy.hasEdge(all[cap]!, sim.w.v)).toBe(true);
-    // an ordinary resident with nothing protecting their ties makes room the same way
+    for (const r of all.slice(0, cap + 5)) expect(sim.tiePolicy.materialise(r, sim.w.v)).toBeDefined();
+    expect(live(sim, sim.w.v).length).toBe(cap + 5);
+    for (const r of all.slice(0, cap + 5)) expect(sim.tiePolicy.hasEdge(r, sim.w.v)).toBe(true);
+    expect(sim.record.log.filter((e) => e.reason === 'tie-cap')).toEqual([]);
+    // an ordinary resident with nothing protecting their ties makes room by ending the weakest
     const a = all[30]!;
     for (const b of all.slice(31, 31 + cap + 3)) expect(sim.tiePolicy.materialise(a, b)).toBeDefined();
     expect(live(sim, a).length).toBe(cap);
@@ -504,6 +502,41 @@ describe('SF1-T-4: the cap on materialised ties and the retract (Sol 8, 16)', ()
     expect(sim.tiePolicy.materialise(extra, b)).toBeDefined();
     expect(sim.tiePolicy.materialise(a, b)).toBeUndefined();
     expect(live(sim, b).length).toBe(1);
+  });
+
+  test('a tie to V never counts as the weakest: an NPC ends another tie to make room, and is refused when nothing else can be ended (S1 v0.3, 4.6)', () => {
+    const sim = quietSim('SF1-T-4d');
+    const cap = sim.data.ties.maxMaterialised;
+    const all = residents(sim);
+    const v = sim.w.v;
+    // an NPC with a tie to V and the cap less one others, none of them depended on: the new tie ends one of the others
+    const a = all[0]!;
+    expect(sim.tiePolicy.materialise(a, v)).toBeDefined();
+    const others = all.slice(1, cap + 2);
+    for (const o of others.slice(0, cap - 1)) expect(sim.tiePolicy.materialise(a, o)).toBeDefined();
+    expect(live(sim, a).length).toBe(cap);
+    expect(sim.tiePolicy.materialise(a, others[cap - 1]!)).toBeDefined();
+    expect(live(sim, a).length).toBe(cap);
+    expect(sim.tiePolicy.hasEdge(a, v)).toBe(true);
+    expect(sim.tiePolicy.hasEdge(a, others[cap - 1]!)).toBe(true);
+    expect(sim.record.log.filter((e) => e.reason === 'tie-cap')).toEqual([]);
+    // an NPC whose other ties are all depended on: the tie to V is the only one that could be ended, and it is not, so the new tie is refused
+    const b = all[40]!;
+    const mates = all.slice(41, 41 + cap + 1);
+    expect(sim.tiePolicy.materialise(b, v)).toBeDefined();
+    for (const [n, o] of mates.slice(0, cap - 1).entries()) {
+      expect(sim.tiePolicy.materialise(b, o)).toBeDefined();
+      protect(sim, o, b, 1, `t4d-${n}`);
+    }
+    expect(live(sim, b).length).toBe(cap);
+    const before = live(sim, b).map((e) => e.id).sort();
+    expect(sim.tiePolicy.materialise(b, mates[cap - 1]!)).toBeUndefined();
+    expect(live(sim, b).map((e) => e.id).sort()).toEqual(before);
+    expect(sim.tiePolicy.hasEdge(b, v)).toBe(true);
+    expect(sim.record.log.filter((e) => e.reason === 'tie-cap').length).toBe(1);
+    // and V's own list is never asked for room
+    expect(sim.tiePolicy.materialise(mates[cap]!, v)).toBeDefined();
+    expect(live(sim, v).length).toBe(3);
   });
 
   const talk = (sim: Sim, npc: Id, kind: string, name: string): Id =>

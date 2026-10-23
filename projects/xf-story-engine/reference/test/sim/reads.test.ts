@@ -207,7 +207,7 @@ describe('SF1-R-3: invalidation', () => {
     expect(tr[tr.length - 1]!.value).toBe(now);
   });
 
-  test('a believer\'s memorable belief about a subject\'s affiliation is set: divergence is re-evaluated at the next boundary and its log gains an entry', () => {
+  test('a believer\'s memorable belief about a subject\'s affiliation is set: the read says so at once and the log gains the entry at the time it was set; a boundary adds none', () => {
     const sim = quietSim('SF1-R-3c');
     const d = sim.w.districts[0]!;
     const believer = sim.people.residentAt(d.cellIds[0]!, 0);
@@ -216,18 +216,24 @@ describe('SF1-R-3: invalidation', () => {
     sim.advance(1);
     expect(sim.reads.eval('divergence', [believer, subject])).toBe('none');
     const E = H(hs('ev'), hid(subject));
-    sim.k.beliefs.set({ believer, subject, path: 'affiliation', at: sim.k.now, value: 'TygerClaws', confidence: 1, evidence: [E], source: { by: 'observed', event: E }, formed: sim.k.now, refreshed: sim.k.now, memorable: true });
-    // the belief emits no Change: the read says so at once, and the log learns of it at the boundary
+    const key = `${believer}|${subject}`;
+    const before = (sim.record.divLog[key] ?? []).length;
+    const setAt = sim.k.now;
+    sim.k.beliefs.set({ believer, subject, path: 'affiliation', at: setAt, value: 'TygerClaws', confidence: 1, evidence: [E], source: { by: 'observed', event: E }, formed: setAt, refreshed: setAt, memorable: true });
+    // the belief emits no Change: the read says so at once, and the log is told when the belief is set, whoever sets it (SIM-08)
     expect(sim.reads.eval('divergence', [believer, subject])).toBe('large');
-    const before = (sim.record.divLog[`${believer}|${subject}`] ?? []).length;
+    expect(sim.record.divLog[key]!.length).toBe(before + 1);
+    expect(sim.record.divLog[key]![before]).toEqual({ t: setAt, value: 'large' });
     sim.advance(1);
-    const log = sim.record.divLog[`${believer}|${subject}`]!;
-    expect(log.length).toBe(before + 1);
-    expect(log[log.length - 1]!.value).toBe('large');
-    const t0 = sim.k.now - 2 * W;
+    // the boundary finds nothing new to write
+    expect(sim.record.divLog[key]!.length).toBe(before + 1);
+    const t0 = setAt - 2 * W;
     const tr = sim.reads.transitions('divergence', [believer, subject], t0, sim.k.now);
     expect(tr[0]).toEqual({ t: t0, value: 'none' });
-    expect(tr[tr.length - 1]!.value).toBe('large');
+    expect(tr[tr.length - 1]).toEqual({ t: setAt, value: 'large' });
+    // a belief that is dropped is a change of the log too, at the time it was dropped
+    sim.k.beliefs.drop(believer, sim.k.beliefs.activeOf(believer).find((x) => x.path === 'affiliation')!.id);
+    expect(sim.record.divLog[key]![before + 1]).toEqual({ t: sim.k.now, value: 'none' });
   });
 });
 

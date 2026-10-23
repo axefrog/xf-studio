@@ -41,6 +41,7 @@ export interface S1Read {
 
 const MAYBE = 'maybe';
 const GAP_NAMES = ['aligned', 'gap', 'wide'] as const;
+const GROUP_GAP_NAMES = ['low', 'mid', 'high'] as const;
 
 /** The value of a keyed transition feed at `from`, and the changes in `(from, to]`; `maybe` when `from` is older than the feed (S1 9.1). */
 export function feedTransitions(sim: Sim, feed: Feed<Transition> | undefined, key: string, current: string, from: GameTime, to: GameTime): ReadTransition[] {
@@ -185,8 +186,12 @@ export class Reads {
       (a) => { const d = this.districtOf(a[0]); const dg = this.dg<EventsDigest>('city.events'); return d && dg ? dg.refuge[d] ?? MAYBE : MAYBE; },
       (d: EventsDigest) => d?.changes);
 
-    // label(audience, subject, axis)
+    // label(audience, subject, axis): the audience is a carrier's node (what a cast role resolves to, or an Id written in a seed), or the
+    // name of a carrier in the pack's configuration, which stands for that carrier in the first simulated district
     const labelNode = (a: unknown[]): Id | undefined => {
+      if (typeof a[0] !== 'string') return undefined;
+      const node = sim.ledger.carriers().find((c) => c.node === a[0]);
+      if (node) return node.node;
       const car = this.sim.data.ledger.carriers.find((c) => c.id === a[0]);
       const district = sim.w.districts[0]?.id;
       return car && district ? sim.ledger.carrierNode(car.id, district) : undefined;
@@ -205,17 +210,23 @@ export class Reads {
       (a) => { const d = this.districtOf(a[1]); const dg = this.dg<NormsDigest>('order.norms'); const g = d && dg ? dg.norms[d]?.[String(a[0])]?.gap : undefined; return g === undefined ? MAYBE : GAP_NAMES[g]!; },
       (d: NormsDigest) => d?.changes);
 
-    // tied(a, b, type)
+    // tied(a, b, type): built for the type `xf:tie` (S1 9.1); another type is not built, and answers `maybe`
     this.add({
       name: 'tied', version: 1, deps: { digests: [], interests: [{ slot: '*' }], time: true, roles: ['a', 'b'] },
-      eval: (a, t) => (typeof a[0] === 'string' && typeof a[1] === 'string' ? (t >= this.k.now ? this.tied(a[0], a[1]) : this.transitions('tied', a, t, t)[0]!.value) : MAYBE),
+      eval: (a, t) => (typeof a[0] === 'string' && typeof a[1] === 'string' ? this.tiedAt(a[0], a[1], a[2], t) : MAYBE),
       transitions: (a, from, to) => {
         if (typeof a[0] !== 'string' || typeof a[1] !== 'string') return [{ t: from, value: MAYBE }];
-        const e = sim.tiePolicy.edge(a[0], a[1]) ?? [...sim.k.store.edgesFrom(a[0]), ...sim.k.store.edgesTo(a[0])].find((x) => x.type === 'xf:tie' && (x.from === a[1] || x.to === a[1]));
-        if (!e) return [{ t: from, value: this.tied(a[0], a[1]) }];
-        const out: ReadTransition[] = [{ t: from, value: e.valid.from <= from && (e.valid.to === undefined || from < e.valid.to) ? 'yes' : 'no' }];
-        if (e.valid.from > from && e.valid.from <= to) out.push({ t: e.valid.from, value: 'yes' });
-        if (e.valid.to !== undefined && e.valid.to > from && e.valid.to <= to) out.push({ t: e.valid.to, value: 'no' });
+        // the value changes where a materialised interval opens or closes (the implicit tie is a pure function of the pair, and never changes)
+        const at = new Set<number>();
+        for (const s of sim.tiePolicy.intervalsOf(a[0], a[1])) {
+          if (s.from > from && s.from <= to) at.add(s.from);
+          if (s.to !== undefined && s.to > from && s.to <= to) at.add(s.to);
+        }
+        const out: ReadTransition[] = [{ t: from, value: this.tiedAt(a[0], a[1], a[2], from) }];
+        for (const t of [...at].sort((x, y) => x - y)) {
+          const value = this.tiedAt(a[0], a[1], a[2], t);
+          if (value !== out[out.length - 1]!.value) out.push({ t, value });
+        }
         return out;
       },
     });
@@ -233,7 +244,8 @@ export class Reads {
     // groupGap(group)
     this.fed('groupGap', { ...ev('group.decide'), interests: [{ kind: 'xf:group', slot: 'group-gap' }] }, 'group.decide',
       (a) => (typeof a[0] === 'string' ? `group-gap|${a[0]}` : undefined),
-      (a) => { const dg = this.dg<GroupDigest>('group.decide'); const g = typeof a[0] === 'string' ? dg?.groups[a[0]] : undefined; return g ? (g.D < sim.data.groups.gapBands.low ? 'low' : g.D < sim.data.groups.gapBands.mid ? 'mid' : 'high') : MAYBE; },
+      // the band the group maintains, with its hysteresis, which is also what the transitions say (SIM-09)
+      (a) => { const dg = this.dg<GroupDigest>('group.decide'); const g = typeof a[0] === 'string' ? dg?.groups[a[0]] : undefined; return g ? GROUP_GAP_NAMES[g.band] : MAYBE; },
       (d: GroupDigest) => d?.changes);
   }
 
@@ -242,6 +254,7 @@ export class Reads {
     return {
       builds: (name) => this.defs.get(name)?.built === true,
       eval: (name, args, t) => this.eval(name, args, t),
+      transitions: (name, args, from, to) => this.transitions(name, args, from, to).map((x) => ({ t: x.t, value: x.value })),
       deps: (name) => {
         const d = this.defs.get(name);
         return { interests: d ? d.deps.interests.map((i) => ({ ...i })) : [], boundary: d?.deps.boundary === true };
@@ -253,6 +266,19 @@ export class Reads {
     if (this.sim.tiePolicy.hasEdge(a, b)) return 'yes';
     const t = this.sim.ties.tie(a, b);
     return t === undefined ? MAYBE : t.tied ? 'yes' : 'no';
+  }
+
+  /**
+   * Whether two people were tied at `t` (S1 9.1): the implicit tie, a pure function of the pair that holds at any time, together with every
+   * interval in which the tie was materialised, those that ended and were opened again among them (SIM-07, SIM-11). Only `xf:tie` is built.
+   */
+  tiedAt(a: Id, b: Id, type: unknown, t: GameTime): string {
+    if (type !== undefined && type !== 'xf:tie') return MAYBE;
+    if (t >= this.k.now) return this.tied(a, b);
+    const implicit = this.sim.ties.tie(a, b);
+    if (implicit?.tied) return 'yes';
+    if (this.sim.tiePolicy.intervalsOf(a, b).some((s) => s.from <= t && (s.to === undefined || t < s.to))) return 'yes';
+    return implicit === undefined ? MAYBE : 'no';
   }
 
   // ---- registries for S3 (S1 9.2) ----

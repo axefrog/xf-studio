@@ -38,6 +38,11 @@ export interface DistrictIndex {
   staticTotalA: Record<KindName, Per4>;
   /** In grid order, then venues. */
   cellIds: Id[];
+  /**
+   * The district's outline in the game's x and y, when the slice has one (the real slice's polygon; the stand-ins have none). A mirrored
+   * person's position is placed in a district by it (S1 8.8).
+   */
+  polygon?: Array<[number, number]>;
 }
 
 export interface CellIndex {

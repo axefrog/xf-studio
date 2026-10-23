@@ -38,6 +38,8 @@ export const tieEdgeId = (a: Id, b: Id): Id => {
 };
 export const regardEdgeId = (npc: Id, toward: Id): Id => H(hs('edge'), hs('xf:regard'), hid(npc), hid(toward));
 const SAMPLED = H(hs('tie'), hs('sampled'));
+/** The ended intervals of one tie that the record keeps, newest last. */
+const SPAN_MAX = 16;
 
 export class TiePolicy {
   constructor(private readonly sim: Sim) {}
@@ -90,8 +92,12 @@ export class TiePolicy {
 
   /**
    * Materialise the tie between two nodes (S1 4.6): a person has at most 20; a new one beyond that ends the weakest that nothing depends on.
-   * When either end is full and nothing of theirs can be ended, nothing is ended and nothing is made: the result is `undefined` and the
-   * refusal is logged (the cap is a hard limit on retained state, S1-I-12).
+   * V is outside the cap: the record of whom V knows is never trimmed. When the other end is full and nothing of theirs can be ended,
+   * nothing is ended and nothing is made: the result is `undefined` and the refusal is logged `tie-cap` (the cap is a hard limit on
+   * retained state, S1-I-12).
+   *
+   * A tie that was materialised and ended is opened again under its stable Id (SIM-07): the edge is live from now, and the interval that
+   * ended is kept in the tie's record for the reads of the past (`intervalsOf`).
    */
   materialise(a: Id, b: Id): Edge | undefined {
     const have = this.edge(a, b);
@@ -109,10 +115,40 @@ export class TiePolicy {
       if (room !== 'free') drops.push(room);
     }
     for (const e of drops) this.k.endEdge(e.id, this.k.now);
-    return this.k.addEdge({
-      id: tieEdgeId(a, b), type: 'xf:tie', from: lo, to: hi, cause: SAMPLED, valid: { from: this.k.now },
-      attrs: { kind: t?.kind ?? 'neighbour', status: 'acquainted', strength: 0, lastContact: -1 },
-    });
+    const id = tieEdgeId(a, b);
+    const attrs = { kind: t?.kind ?? 'neighbour', status: 'acquainted', strength: 0, lastContact: -1 };
+    const ended = this.k.store.edges.get(id);
+    if (ended) {
+      this.addSpan(this.record(a, b), ended.valid.from, ended.valid.to!);
+      return this.k.reopenEdge(id, this.k.now, attrs);
+    }
+    return this.k.addEdge({ id, type: 'xf:tie', from: lo, to: hi, cause: SAMPLED, valid: { from: this.k.now }, attrs });
+  }
+
+  /** Remember an interval in which a tie was materialised and ended: the newest `SPAN_MAX`, without repeats. */
+  private addSpan(rec: TieRecord, from: GameTime, to: GameTime): void {
+    const spans = (rec.spans ??= []);
+    if (spans.some((s) => s.from === from && s.to === to)) return;
+    spans.push({ from, to });
+    spans.sort((x, y) => x.from - y.from || x.to - y.to);
+    while (spans.length > SPAN_MAX) spans.shift();
+  }
+
+  /** A save is about to drop the ended ties: their intervals go into the record first. */
+  captureSpans(): void {
+    for (const e of this.k.store.allEdges()) {
+      if (e.type !== 'xf:tie' || e.valid.to === undefined) continue;
+      this.addSpan(this.record(e.from, e.to), e.valid.from, e.valid.to);
+    }
+  }
+
+  /** Every interval in which the pair's tie was materialised: those that ended and were opened again, and the edge's own (live or ended). */
+  intervalsOf(a: Id, b: Id): Array<{ from: GameTime; to?: GameTime }> {
+    const id = tieEdgeId(a, b);
+    const out: Array<{ from: GameTime; to?: GameTime }> = [...(this.sim.record.tieHistory[id]?.spans ?? [])];
+    const e = this.k.store.edges.get(id);
+    if (e && !out.some((s) => s.from === e.valid.from && s.to === e.valid.to)) out.push(e.valid.to === undefined ? { from: e.valid.from } : { from: e.valid.from, to: e.valid.to });
+    return out;
   }
 
   private ties(who: Id): Edge[] {
@@ -123,20 +159,20 @@ export class TiePolicy {
 
   /**
    * Room for one more tie of `who`: `free` under the cap, else the weakest tie that neither V, a live frame nor a memorable belief depends
-   * on (a tie to V is V's, so an NPC never gives one up; V's own are given up like anyone's, weakest first), or `none`.
+   * on, or `none` (S1 4.6). V has no cap, and a tie to V never counts as the weakest: V's ties are never trimmed.
    */
   private roomFor(who: Id, other: Id): Edge | 'free' | 'none' {
+    const v = this.sim.w.v;
+    if (who === v) return 'free';
     const mine = this.ties(who);
     if (mine.length < this.cfg.maxMaterialised) return 'free';
-    const v = this.sim.w.v;
     let weakest: Edge | undefined;
     let weakestS = Number.POSITIVE_INFINITY;
     for (const e of mine) {
       const o = e.from === who ? e.to : e.from;
       if (o === other || o === v) continue;
       if (this.k.frames.framesOf(o).length > 0) continue;
-      // V holds no beliefs: a tie of V's is kept while the other end remembers V
-      if (this.k.beliefs.memorable().some((x) => (x.belief.believer === who && (x.belief.subject === o || x.belief.evidence.includes(e.id))) || (who === v && x.belief.believer === o && x.belief.subject === v))) continue;
+      if (this.k.beliefs.memorable().some((x) => x.belief.believer === who && (x.belief.subject === o || x.belief.evidence.includes(e.id)))) continue;
       const s = this.strengthOf(e.from, e.to);
       if (s < weakestS) {
         weakestS = s;

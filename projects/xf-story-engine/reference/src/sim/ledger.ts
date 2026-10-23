@@ -117,10 +117,14 @@ export class Ledger {
     return out;
   }
 
-  /** `aggregate(audience, subject, path, t)`: the carriers' items merged; one origin across carriers keeps the one with the larger reach (S1 8.6). */
+  /**
+   * `aggregate(audience, subject, path, t)`: the carriers' items merged; one origin across carriers keeps the one with the larger reach
+   * (S1 8.6). Carriers are taken in Id order, and of two items of one origin with the same reach the one of the smaller carrier is kept, so the
+   * answer does not depend on the order the audience was written in (SIM-13).
+   */
   aggregate(carriers: readonly Id[], subject: Id, axis: string, t: GameTime): Aggregate {
     const best = new Map<Id, LedgerItem>();
-    for (const c of carriers) {
+    for (const c of [...new Set(carriers)].sort(cmp)) {
       for (const it of this.itemsOf(c, subject, axis, t)) {
         const have = best.get(it.origin);
         if (!have || it.reach > have.reach) best.set(it.origin, it);
