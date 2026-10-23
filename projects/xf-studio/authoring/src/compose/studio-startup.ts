@@ -29,6 +29,7 @@ import { createBrowserModInstall } from "../installation/browser/browser-mod-ins
 import { builtModsOf, type BuiltMod } from "../installation/mod-install-actions";
 import { createBrowserPreviewDevice } from "../legacy/eye-makeup/browser/browser-preview-device";
 import { createBrowserSceneHeads } from "../preview/browser/browser-scene-heads";
+import type { AttachedHead } from "../preview/browser/browser-head-attachment";
 import { sceneLayeredSurfaces } from "../preview/browser/scene-surfaces";
 import { CharacterWarmStart } from "../character/browser/character-warm-start";
 import { CreatorCatalogue } from "../character/creator-catalogue";
@@ -227,13 +228,18 @@ async function start(host: StudioHost, root: HTMLElement) {
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
   let uvEditor: ReturnType<ReturnType<typeof createBrowserViewportDevice>["mountUV"]> | undefined;
 
+  /**
+   * The head shown now: the scene runtime owner's (`heads`, made below), read by what is wired before it. Several of those read it at once
+   * when they are made (the live face starts following, the UV editor draws its first frame), before the owner exists: none is shown then.
+   */
+  let shownHead: () => AttachedHead | undefined = () => undefined;
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
   const region = STUDIO_COMPOSITION.region;
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const statusSource = new PresentationStatusSource(() => {
-    const head = heads.shown(), eye = head?.scene.eyeAppearance().optics;
+    const head = shownHead(), eye = head?.scene.eyeAppearance().optics;
     return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), outbox: outboxView(documents.outbox.status()),
       glitter: measurements.snapshot(), assets: { ...status.assets,
       characterDetails: head?.characterDetails.snapshot(),
@@ -296,7 +302,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       savedV: () => workspace.savedV,
       collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
-      preview: () => heads.shown()?.preview.snapshot(), sample: () => heads.shown()?.motion.sample(), views: () => workspace.views,
+      preview: () => shownHead()?.preview.snapshot(), sample: () => shownHead()?.motion.sample(), views: () => workspace.views,
       uiPreferences: () => { const { layout: _live, ...rest } = preferences.snapshot(); return { ...rest, ...(legacyLayout ? { layout: legacyLayout } : {}) }; },
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
@@ -355,7 +361,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   setBuilds = () => presets.builtMods();
   core.app.attach({ facial, presets, transitions });
   facial.follow(() => combineFacePoses(STUDIO_FACE_POSES.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
-    () => heads.shown()?.motion.snapshot());
+    () => shownHead()?.motion.snapshot());
   // Changes ease by the expression's transition setting; an edit inside an open form control (a slider drag) follows at once.
   facial.animate({ setting: () => transitions.get("expression"), continuous: () => !!core.app.featureControlSnapshot() });
   transitions.subscribe(persist);
@@ -383,7 +389,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     recipe: () => core.geometry.recipe(), layer: () => core.geometry.layer(),
     selected: () => core.presentation.selected, ...fieldHooks,
     canvases: () => previewDevice.canvases,
-    albedo: () => heads.shown()?.scene.albedo.image as HTMLImageElement | undefined,
+    albedo: () => shownHead()?.scene.albedo.image as HTMLImageElement | undefined,
     surfaceEdge: () => core.app.surfaceEdge(core.presentation.layer()?.id),
     begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id, targets.named().look); },
     apply: proposal => core.app.applyGesture("uv", proposal),
@@ -425,6 +431,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       host.onPreviewReady?.();
     },
   });
+  shownHead = () => heads.shown();
   // 3D preview setup: follows the host's preparation and WolvenKit setup, then loads the head.
   const previewSetup = new PreviewSetupActions({
     preparation: host.previewPreparation, wolvenKit: host.wolvenKitSetup, detection: installDetection, localSetup,
