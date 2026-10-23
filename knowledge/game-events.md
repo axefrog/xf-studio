@@ -39,7 +39,7 @@ The one thing to read before building anything is [section 2](#2-how-a-mod-attac
 |---|---|---|---|
 | `@wrapMethod(Class)` on a script-implemented method | Run our code around the game's. Call `wrappedMethod(...)` first, then read | [runtime] (`PlayerPuppet.OnGameAttached`, [runtime access](runtime-access.md#1-load-order-and-entry-points); the bridge's photo-mode and creator wraps) | The cheapest hook for any `cb func`. Many mods may wrap one method; each calls the next |
 | `@wrapMethod` on a **private** script method | Same, on `private final func` | [community] RPGProgressionSystem wraps `PreventionSystem.StartSearchingTimerRequest` and `StartBlinkingTimerRequest`; `DamageSystem.ProcessVehicleHit` | Works for script-implemented methods of native classes too |
-| `@wrapMethod` on a **native** method | Wrapping a method declared `native` (`gameAutoSaveSystem.RequestCheckpoint`) | [source] for the compiler: it compiles, but cannot work as a hook ([below](#wrapping-a-native-method)); [hypothesis] for what the game then does | Don't; wrap the script-side caller instead |
+| `@wrapMethod` on a **native** method | Wrapping a method declared `native` (`gameAutoSaveSystem.RequestCheckpoint`) | [offline] the compiler refuses it (redscript 0.5.31: "wrapping natives is not supported"; [below](#wrapping-a-native-method)) | Don't; wrap the script-side caller instead |
 | `@addMethod` / `@addField` | Add a helper to a game class | [runtime] (`PlayerPuppet.XFBridgeDescribe`, `SaveLocksManager.XFBridgeOtherLocks`) | Needed to read private fields |
 | Blackboard listener | `IBlackboard.RegisterListenerInt/Bool/String/Name/Uint/Variant(id, object, funcName, opt fireIfValueExist)`, plus `RegisterDelayedListener…` that coalesces within a frame | [source] the game's own UI does it (`orphans.script:17415-17535`); [community] Night City Allies keeps its listeners in a `ScriptableSystem` | The callback is a `cb func` on the object with the value as its argument. The bridge reads blackboards but registers no listener |
 | Fact listener | `QuestsSystem.RegisterListener(factName, object, funcName) -> Uint32`; the callback takes the new `Int32` | [source] `core/gameplay/prereqs/factValuePrereq.script:39`, `player.script:6047` | One listener per fact name; there is **no** "any fact changed" hook |
@@ -57,16 +57,18 @@ The one thing to read before building anything is [section 2](#2-how-a-mod-attac
 
 ### Wrapping a native method
 
-Read in redscript's compiler at `3ca666c` [source]; what the game does with the result is [hypothesis].
+**Observed: the compiler refuses it.** redscript 0.5.31, compiling a one-file wrap of the native `gameAutoSaveSystem.RequestCheckpoint` against the 2.31 bundle, stops with "wrapping natives is not supported" [offline: the bridge's lint, recorded in the [runtime bridge design](../research/runtime/runtime-bridge-design.md)]. That observation outranks the source reading below, which found no such check at commit `3ca666c` (the check may live in a code path that reading missed, or differ between versions). Either way, the conclusion is the same.
 
-- **The compiler resolves it.** `@wrapMethod(Class)` looks the method up by name, parameter types and return type among all the class's methods, native or not. The only refusals are a missing match and a user-defined (mod-defined) target (`crates/compiler/frontend/src/stages/resolution.rs:786-797, 826-830, 1415-1473`). No diagnostic mentions native targets, and the compiler's annotation tests have no native case (`crates/compiler/frontend/tests/data/annotation-checks.reds`). So a wrap of a native method of a native class compiles.
+Earlier source reading, kept for how a wrap works:
+
+- **The compiler resolves it.** `@wrapMethod(Class)` looks the method up by name, parameter types and return type among all the class's methods, native or not. The only refusals are a missing match and a user-defined (mod-defined) target (`crates/compiler/frontend/src/stages/resolution.rs:786-797, 826-830, 1415-1473`). No diagnostic mentions native targets, and the compiler's annotation tests have no native case (`crates/compiler/frontend/tests/data/annotation-checks.reds`). The reading concluded that a wrap of a native method compiles. The observed compile above shows it doesn't.
 - **The output cannot hook it.** A wrap works by moving bytecode. The backend makes a new function named `<method>$wrapper<i>`, moves the original's bytecode into it, writes the wrapper's code into the original's slot, and points `wrappedMethod()` at the new function (`crates/compiler/backend/src/monomorph.rs:499-598`; the slot is written by `set_code` at `:370-390`). For a native method:
   - there is no bytecode to move;
   - the moved copy keeps the original's flags, `native` included (`:586-594`), under a name the game has no native implementation for;
   - the original slot also keeps its `native` flag, now holding wrapper code;
   - and the game binds natives by name, as two compiler details imply: native names stay unmangled so they match the game's own (`:1046-1056`), and natives are called with a static invoke (`crates/compiler/backend/src/assemble.rs:669-678`).
 - **What follows** [hypothesis]. The wrapper either never runs or its `wrappedMethod()` call fails to bind. Either way, the engine's own C++ callers of a native method never pass through script, so even a working script wrap would see script callers only.
-- **The rule stands:** wrap the script-side caller. Row 17 can show what the game does with such a build (whether it ignores the wrap, logs it or refuses the bundle), but it can no longer make the hook work, so it is worth running only to learn the failure mode.
+- **The rule stands:** wrap the script-side caller. Row 17 isn't needed: the compiler refuses such a build.
 
 Script-implemented methods of native classes (the `cb func` and `func` bodies in the decompiled bundle) are unaffected: they have bytecode to move, which is why the wraps in the table above work.
 
