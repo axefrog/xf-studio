@@ -8,6 +8,10 @@ The maintainer, quoted word for word: "there's a system for races that shows che
 
 **Purpose:** bridge sessions could guide the maintainer with an in-world marker instead of written directions (session 15's directions were wrong). Later, the Story Engine could use the same thing for its guidance.
 
+## The ambition behind it
+
+> "FYI, in general we're shooting for Borg-level augmentation of this game. Our cybernetic tendrils into electrical pathway the game has to offer. Total integration, and then some." (the maintainer, 23 Oct, on game integration as a whole)
+
 ## Questions
 
 1. What draws the race chevrons and checkpoints? Script classes, entities or effects, and the records or quest nodes that place them.
