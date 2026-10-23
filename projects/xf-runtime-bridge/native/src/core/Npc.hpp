@@ -87,6 +87,15 @@ inline constexpr double kViewMarginDeg = 10.0; // a spot this close outside the 
 inline constexpr size_t kMaxHiddenProbes = 24; // ground probes an out-of-sight spawn may make before it gives up
 inline constexpr double kDissolveM = 15.0;     // dissolve: despawned only this far from V (and out of sight)
 inline constexpr double kDissolveWalkM = 20.0; // dissolve with walk: it walks off to this far from V
+// 0.8.10 (session 16's N3 and N5: she walked backwards away from V): a walk whose way lies further than this from the actor's
+// facing begins with a turn on the spot (the game's own walks do; the move command alone left her facing V).
+inline constexpr double kTurnFirstDeg = 80.0;
+inline constexpr double kTurnFirstMaxS = 3.0; // then the walk starts anyway
+// 0.8.10: a spawn that was asked for relative to V (ahead_m, side_m) needs a sight line from her head, else the nearest spot that has one.
+inline constexpr double kSightEyeM = 1.6;
+inline constexpr double kSightChestM = 1.2;
+inline constexpr double kSightSearchM = 4.0; // how far from the asked spot the search for a visible one may go
+inline constexpr size_t kMaxSightProbes = 30; // ground probes that search may make
 
 // --- the tables -------------------------------------------------------------------------------------
 
@@ -358,6 +367,8 @@ private:
         double lastAge = 0.0;
         double sinceProgress = 0.0;
         bool blockedSent = false;
+        // 0.8.10: a walk waiting for its turn on the spot (kTurnFirstDeg): sent once the actor faces yawGoal, or after kTurnFirstMaxS.
+        std::optional<Command> pending;
     };
     // A held facing (npc.turn with hold): kept towards (or away from) a target until npc.turn off or the release.
     struct Facing
@@ -430,6 +441,12 @@ private:
     // Stops everything held on one NPC (lines, look, face, gesture, motion, its hub) through Ops; never throws.
     json StopHeld(Npc& aNpc, const Ops& aOps, bool aKeepLines);
     void ReleaseOne(const std::string& aWho, const std::string& aHow, const std::string& aReason, const Ops& aOps);
+    // 0.8.10: the turn on the spot a walk toward aToward begins with when the way lies more than kTurnFirstDeg off the actor's
+    // facing (nothing when it faces that way, or its facing is not known); aGoal is the yaw the turn ends at.
+    static std::optional<Command> TurnBeforeWalk(const Npc& aNpc, const Vec3& aToward, double& aGoal);
+    // 0.8.10: starts aWalk for aNpc: its turn first when TurnBeforeWalk asks (aMotion then holds the walk as pending), else the
+    // walk itself. Throws what the game step throws. Called with the mutex held.
+    void BeginWalk(Npc& aNpc, const Command& aWalk, const Vec3& aToward, Motion& aMotion, const Ops& aOps);
     void ReleaseEverything(const std::string& aReason, const Ops& aOps);
     json NpcJson(const Npc& aNpc) const;
     void OnPoll(const json& aReading, const Ops& aOps, const TickInput& aInput);
@@ -440,6 +457,11 @@ private:
     bool OutOfSight(const Camera& aCamera, const Vec3& aPoint, const Ops& aOps) const;
     // V16: a walkable spot out of V's sight between aMin and aMax metres from her: {point, probes}, or throws no_hidden_spot.
     json FindHiddenSpot(const json& aV, double aMin, double aMax, const Ops& aOps) const;
+    // 0.8.10 (session 16's N4: an actor asked for 2 m ahead of V at a vending machine stood where V could not see her): for a
+    // spawn asked for relative to V, the walkable spot the actor will stand on with a sight line from V's head to her chest:
+    // the asked one when it has it, else the nearest that has, within kSightSearchM. {moved, point, probes}; throws
+    // no_visible_spot when there is none. Answers {moved: false} without a probe when this build can't ray or probe the ground.
+    json FindVisibleSpot(const json& aV, const Vec3& aAsked, const Ops& aOps) const;
     // V15: a fight began: a stand-in's direction ends (lines, look, face, gesture, walk, its hub) and its own AI has it.
     void HandBack(Npc& aNpc, const std::string& aReason, const Ops& aOps);
     // Refuses a command for an actor the bridge no longer directs (handed back to its AI, or dead).

@@ -464,6 +464,7 @@ public class XFPhotoMenuPanel {
         this.m_view.MoveTo(kept.X, kept.Y);
       }
       this.m_placed = kept;
+      this.m_view.SetWhere("photo menu");
       this.m_view.Apply(frame, XFInkHost.Available());
       if !killed && !this.m_global {
         this.Listen(true);

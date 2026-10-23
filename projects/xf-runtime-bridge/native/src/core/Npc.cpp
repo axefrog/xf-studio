@@ -654,6 +654,92 @@ json Service::FindHiddenSpot(const json& aV, double aMin, double aMax, const Ops
                                             " tried); turn V towards a wall or open ground, or give at instead");
 }
 
+json Service::FindVisibleSpot(const json& aV, const Vec3& aAsked, const Ops& aOps) const
+{
+    json out{{"moved", false}, {"probes", 0}};
+    if (!aOps.ray || !aOps.ground)
+    {
+        return out;
+    }
+    const auto vPos = ToVec(aV.value("position", json::array({0, 0, 0})));
+    const Vec3 eye{vPos[0], vPos[1], vPos[2] + kSightEyeM};
+    size_t probes = 0;
+    const auto snap = [&](const Vec3& aAt, Vec3& aOut) {
+        ++probes;
+        try
+        {
+            const auto ground = aOps.ground(aAt);
+            if (!ground.value("walkable", false) || !ground.contains("point"))
+            {
+                return false;
+            }
+            aOut = ToVec(ground["point"]);
+            return true;
+        }
+        catch (const std::exception&)
+        {
+            return false;
+        }
+    };
+    const auto seen = [&](const Vec3& aSpot) {
+        try
+        {
+            return !aOps.ray(eye, Vec3{aSpot[0], aSpot[1], aSpot[2] + kSightChestM}).value("blocked", false);
+        }
+        catch (const std::exception&)
+        {
+            return true; // can't tell: the asked spot stands
+        }
+    };
+    Vec3 spot{};
+    if (!snap(aAsked, spot) || seen(spot))
+    {
+        // Not walkable: the spawn says so itself. Seen: nothing to change.
+        out["probes"] = probes;
+        return out;
+    }
+    std::vector<Vec3> candidates;
+    for (const double radius : {0.75, 1.5, 2.5, kSightSearchM})
+    {
+        for (int k = 0; k < 8; ++k)
+        {
+            const double a = k * kPi / 4.0;
+            candidates.push_back({aAsked[0] + radius * std::cos(a), aAsked[1] + radius * std::sin(a), aAsked[2]});
+        }
+    }
+    const double toward = HorizontalDistance(aAsked, vPos);
+    if (toward > 1.0)
+    {
+        for (const double step : {1.0, 2.0, 3.0, kSightSearchM})
+        {
+            if (toward - step >= 1.0)
+            {
+                candidates.push_back({aAsked[0] + (vPos[0] - aAsked[0]) * step / toward, aAsked[1] + (vPos[1] - aAsked[1]) * step / toward, aAsked[2]});
+            }
+        }
+    }
+    std::stable_sort(candidates.begin(), candidates.end(), [&](const Vec3& a, const Vec3& b) { return Distance(a, aAsked) < Distance(b, aAsked); });
+    for (const auto& candidate : candidates)
+    {
+        if (probes >= kMaxSightProbes)
+        {
+            break;
+        }
+        Vec3 found{};
+        if (!snap(candidate, found) || HorizontalDistance(found, vPos) < 1.0 || Distance(found, aAsked) > kSightSearchM + 1.0)
+        {
+            continue;
+        }
+        if (seen(found))
+        {
+            return json{{"moved", true}, {"point", json::array({found[0], found[1], found[2]})}, {"probes", probes}, {"moved_m", std::round(Distance(found, aAsked) * 100) / 100}};
+        }
+    }
+    throw MethodError("no_visible_spot", "V can't see that place (something stands between her and it, such as a machine or a wall) and nowhere within " +
+                                             std::to_string(static_cast<int>(kSightSearchM)) + " m of it is walkable with a sight line to her (" + std::to_string(probes) +
+                                             " tried); step away from the obstacle, or ask for another place");
+}
+
 Vec3 Service::Resolve(const Target& aTarget, const json& aV) const
 {
     const auto vPos = ToVec(aV.value("position", json::array({0, 0, 0})));
@@ -949,6 +1035,21 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
         std::scoped_lock _(m_mutex);
         point = Resolve(at, v);
         CheckRange(point, v);
+    }
+    // 0.8.10: asked for relative to V (ahead_m, side_m), she can see the actor: a spot with no sight line to her head is replaced
+    // by the nearest visible walkable one (a point given by coordinates is staged exactly as given).
+    json sightMove = nullptr;
+    if (at.kind == Target::Kind::Offset)
+    {
+        const auto visible = FindVisibleSpot(v, point, aOps);
+        if (visible.value("moved", false))
+        {
+            sightMove = json{{"from", json::array({point[0], point[1], point[2]})}, {"to", visible["point"]}, {"moved_m", visible["moved_m"]}};
+            point = ToVec(visible["point"]);
+        }
+    }
+    {
+        std::scoped_lock _(m_mutex);
         const auto facing = Resolve(face, v);
         yaw = YawTowards(facing[0] - point[0], facing[1] - point[1]);
         who = "a" + std::to_string(m_nextActor);
@@ -979,6 +1080,11 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     if (!hiddenSpot.is_null())
     {
         out["out_of_sight"] = hiddenSpot;
+    }
+    if (!sightMove.is_null())
+    {
+        out["moved_for_sight"] = sightMove;
+        out["note"] = "the asked place had no sight line to V's head, so the actor stands at the nearest walkable place she can see";
     }
     if (npc.StandsIn())
     {
@@ -1034,7 +1140,6 @@ json Service::Move(const json& aParams, const Ops& aOps)
     {
         command.target.point = point;
     }
-    auto step = aOps.command(who, command);
     std::scoped_lock _(m_mutex);
     auto& npc = Ours(who, true);
     const bool replaced = npc.motion.has_value();
@@ -1044,8 +1149,13 @@ json Service::Move(const json& aParams, const Ops& aOps)
     motion.point = point;
     motion.stopM = command.distance;
     motion.maxS = maxS;
+    BeginWalk(npc, command, point, motion, aOps);
     npc.motion = motion;
     json out{{"who", who}, {"to", TargetJson(to)}, {"gait", GaitName(command.gait)}, {"stop_m", command.distance}, {"max_s", maxS}, {"replaced", replaced}};
+    if (motion.pending)
+    {
+        out["turns_first"] = true; // 0.8.10: the way is more than kTurnFirstDeg off its facing: it turns on the spot, then walks
+    }
     out["undo"] = Undo("npc.stop", {{"who", who}});
     out["undo_note"] = "npc.stop halts the actor where it is (it doesn't walk back); npc.arrived or npc.move_failed follows";
     return out;
@@ -1711,6 +1821,48 @@ json Service::Choices(const json& aParams, const Ops& aOps)
                 {"undo", Undo("npc.choices", {{"withdraw", hub.id}})}, {"undo_note", "the undo withdraws the choices; they go by themselves after max_s"}};
 }
 
+std::optional<Command> Service::TurnBeforeWalk(const Npc& aNpc, const Vec3& aToward, double& aGoal)
+{
+    if (!aNpc.known || !aNpc.yawKnown)
+    {
+        return std::nullopt;
+    }
+    const double dx = aToward[0] - aNpc.position[0], dy = aToward[1] - aNpc.position[1];
+    if (std::abs(dx) + std::abs(dy) < 0.5)
+    {
+        return std::nullopt;
+    }
+    aGoal = YawTowards(dx, dy);
+    if (std::abs(YawDifference(aNpc.yaw, aGoal)) <= kTurnFirstDeg)
+    {
+        return std::nullopt;
+    }
+    Command turn;
+    turn.kind = "turn";
+    turn.target.kind = Target::Kind::Point;
+    turn.target.point = Vec3{aToward[0], aToward[1], aNpc.position[2]};
+    return turn;
+}
+
+void Service::BeginWalk(Npc& aNpc, const Command& aWalk, const Vec3& aToward, Motion& aMotion, const Ops& aOps)
+{
+    // The game's own walks begin facing the way they go. The move command alone does not turn a standing actor to a way behind
+    // it: session 16's actor, facing V, backed away from her for the whole walk. So the turn goes first, on the spot, and the
+    // walk follows once she faces it (OnPoll), or after kTurnFirstMaxS.
+    double goal = 0.0;
+    const auto turn = TurnBeforeWalk(aNpc, aToward, goal);
+    if (turn)
+    {
+        // A refusal of the turn (a lost actor, a closed gate) is the walk's refusal too.
+        aOps.command(aNpc.who, *turn);
+        aMotion.pending = aWalk;
+        aMotion.yawGoal = goal;
+        aMotion.hasYawGoal = true;
+        return;
+    }
+    aOps.command(aNpc.who, aWalk);
+}
+
 json Service::StopHeld(Npc& aNpc, const Ops& aOps, bool aKeepLines)
 {
     // Called with the mutex held (recursive); the Ops steps are the game's, each guarded so one failure doesn't stop the rest.
@@ -1895,15 +2047,19 @@ json Service::Release(const json& aParams, const Ops& aOps)
             command.distance = 1.0;
             try
             {
-                aOps.command(who, command);
                 Motion motion;
                 motion.kind = "walk_away";
                 motion.target = command.target;
                 motion.point = away;
                 motion.stopM = 1.5;
                 motion.maxS = kWalkAwayMaxS * 3;
+                BeginWalk(npc, command, away, motion, aOps);
                 npc.motion = motion;
                 out["to"] = json::array({away[0], away[1], away[2]});
+                if (motion.pending)
+                {
+                    out["turns_first"] = true;
+                }
             }
             catch (const std::exception&)
             {
@@ -1951,9 +2107,17 @@ json Service::Release(const json& aParams, const Ops& aOps)
         command.target.point = away;
         command.distance = 1.0;
         bool walking = true;
+        Motion motion;
+        motion.kind = "walk_away";
+        motion.target = command.target;
+        motion.point = away;
+        motion.stopM = 1.5;
+        motion.maxS = kWalkAwayMaxS;
         try
         {
-            aOps.command(who, command);
+            // 0.8.10 (session 16's N3 and N5: backwards away from V): facing V when released, she turns to the way she is going first.
+            npc.facing.reset();
+            BeginWalk(npc, command, away, motion, aOps);
         }
         catch (const std::exception&)
         {
@@ -1964,16 +2128,15 @@ json Service::Release(const json& aParams, const Ops& aOps)
             ReleaseOne(who, "despawn", "", aOps);
             return json{{"who", who}, {"how", "despawn"}, {"note", "it couldn't walk away (no path), so it was despawned"}, {"undo", nullptr}};
         }
-        Motion motion;
-        motion.kind = "walk_away";
-        motion.target = command.target;
-        motion.point = away;
-        motion.stopM = 1.5;
-        motion.maxS = kWalkAwayMaxS;
         npc.motion = motion;
         npc.releasing = "walk_away";
-        return json{{"who", who}, {"how", "walk_away"}, {"to", json::array({away[0], away[1], away[2]})},
-                    {"undo", nullptr}, {"undo_note", "nothing to undo: npc.released follows when it has walked off and gone"}};
+        json released{{"who", who}, {"how", "walk_away"}, {"to", json::array({away[0], away[1], away[2]})},
+                      {"undo", nullptr}, {"undo_note", "nothing to undo: npc.released follows when it has walked off and gone"}};
+        if (motion.pending)
+        {
+            released["turns_first"] = true;
+        }
+        return released;
     }
     ReleaseOne(who, chosen, "", aOps);
     return json{{"who", who}, {"how", chosen}, {"undo", nullptr}, {"undo_note", "nothing to undo"}};
@@ -2415,7 +2578,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
     std::vector<std::pair<std::string, std::string>> picksEnded;
     std::vector<std::pair<std::string, std::string>> failed, followEnded;
     std::vector<json> blocked, turned;
-    std::vector<std::pair<std::string, Command>> holdTurns;
+    std::vector<std::pair<std::string, Command>> holdTurns, startWalks;
     {
         std::scoped_lock _(m_mutex);
         for (const auto& entry : aReading.value("npcs", json::array()))
@@ -2552,6 +2715,23 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             auto& motion = *npc.motion;
             const auto state = entry.value("command_state", std::string());
             motion.lastState = state;
+            if (motion.pending)
+            {
+                // 0.8.10: the turn on the spot before a walk: the walk goes out once she faces her way (or the turn ended, or it took too long).
+                const bool faced = npc.yawKnown && std::abs(YawDifference(npc.yaw, motion.yawGoal)) <= kTurnedToleranceDeg;
+                const bool ended = state == "Success" || state == "Failure" || state == "Cancelled" || state == "Interrupted";
+                if (faced || ended || motion.age >= kTurnFirstMaxS)
+                {
+                    startWalks.emplace_back(who, *motion.pending);
+                    motion.pending.reset();
+                    motion.age = 0.0;
+                    motion.lastAge = 0.0;
+                    motion.sinceProgress = 0.0;
+                    motion.bestDistance = 1e9;
+                    motion.blockedSent = false;
+                }
+                continue;
+            }
             if (motion.kind == "move" || motion.kind == "walk_away")
             {
                 Vec3 target = motion.point;
@@ -2687,6 +2867,34 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             const auto it = m_npcs.find(who);
             if (it != m_npcs.end())
             {
+                it->second.motion.reset();
+            }
+        }
+    }
+    for (const auto& [who, walk] : startWalks)
+    {
+        try
+        {
+            if (aInput.writesOpen && !aInput.writesOpen())
+            {
+                throw MethodError("writes_closed", "the write gate closed before the walk");
+            }
+            aOps.command(who, walk);
+        }
+        catch (const std::exception&)
+        {
+            std::scoped_lock _(m_mutex);
+            const auto it = m_npcs.find(who);
+            if (it != m_npcs.end() && it->second.motion)
+            {
+                if (it->second.motion->kind == "walk_away")
+                {
+                    walkedAway.push_back(who);
+                }
+                else
+                {
+                    failed.emplace_back(who, "no_path");
+                }
                 it->second.motion.reset();
             }
         }

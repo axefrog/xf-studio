@@ -104,9 +104,9 @@ describe("0.8.9 NPC direction: device screens, the actor's own reactions, the wa
     for (const fn of ["TriggerFacialLookAtReaction", "CanTriggerExpressionLookAt", "ActivateReactionLookAt", "ResetFacial", "OnResetFacialEvent"]) {
       const at = npc.indexOf(`func ${fn}(`);
       expect(at, fn).toBeGreaterThan(0);
-      expect(npc.slice(at, at + 400)).toContain("XFNpcRegistry.HoldsReactionsOf(this.GetOwner())");
+      expect(npc.slice(at, at + 400)).toContain("XFNpcRegistry.HoldsReactionsOf(this.GetOwner(), ");
     }
-    expect(npc).toContain('if Equals(entry.kind, "actor") && !StrEndsWith(entry.record, "_reactive") {');
+    expect(npc).toContain('(Equals(entry.kind, "actor") && !StrEndsWith(entry.record, "_reactive"))');
     expect(npc).toContain("reactions.XFBridgeEndReactionLook();");
   });
 

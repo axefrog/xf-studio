@@ -78,6 +78,7 @@ public class XFEventProbe extends ScriptableSystem {
   // is recorded.
   private let m_lastIndex: String;
   private let m_lastCall: String;
+  private let m_lastHubs: String;
   private let m_interior: Int32;
   private let m_lastGame: Float;
   private let m_lastSim: Float;
@@ -192,7 +193,14 @@ public class XFEventProbe extends ScriptableSystem {
 
   // Hub ids, activity states and choice counts only: the choices' text is the game's writing.
   protected cb func OnXFHubs(value: Variant) -> Bool {
-    let hubs = FromVariant<DialogChoiceHubs>(value);
+    this.NoteHubs(FromVariant<DialogChoiceHubs>(value));
+    return false;
+  }
+
+  // 0.8.10 (session 16's G6: dialogue.index arrived, dialogue.hub never did): the delayed listener never fired for the game's
+  // own hubs, so the 2 Hz poll reads the blackboard as well; a change of hubs, states or choice counts is recorded once, by
+  // whichever path sees it first. A first look at no hubs is the baseline, not a record.
+  private func NoteHubs(hubs: DialogChoiceHubs) -> Void {
     let out = "\"hubs\":[";
     let i = 0;
     while i < ArraySize(hubs.choiceHubs) && i < 8 {
@@ -200,8 +208,24 @@ public class XFEventProbe extends ScriptableSystem {
       out += (i > 0 ? "," : "") + "{\"id\":" + IntToString(hub.id) + ",\"state\":" + IntToString(EnumInt(hub.activityState)) + ",\"choices\":" + IntToString(ArraySize(hub.choices)) + "}";
       i += 1;
     }
-    XFProbeOut.Emit("dialogue.hub", out + "],\"count\":" + IntToString(ArraySize(hubs.choiceHubs)));
-    return false;
+    out += "],\"count\":" + IntToString(ArraySize(hubs.choiceHubs));
+    if Equals(out, this.m_lastHubs) {
+      return;
+    }
+    let first = StrLen(this.m_lastHubs) == 0;
+    this.m_lastHubs = out;
+    if first && ArraySize(hubs.choiceHubs) == 0 {
+      return;
+    }
+    XFProbeOut.Emit("dialogue.hub", out);
+  }
+
+  private func PollHubs() -> Void {
+    let defs = GetAllBlackboardDefs();
+    let board = GameInstance.GetBlackboardSystem(this.GetGameInstance()).Get(defs.UIInteractions);
+    if IsDefined(board) {
+      this.NoteHubs(FromVariant<DialogChoiceHubs>(board.GetVariant(defs.UIInteractions.DialogChoiceHubs)));
+    }
   }
 
   protected cb func OnXFIndex(value: Int32) -> Bool {
@@ -320,6 +344,7 @@ public class XFEventProbe extends ScriptableSystem {
       }
     }
     this.m_ticks += 1;
+    this.PollHubs();
     if this.m_ticks % 2 == 0 {
       let clock = GameInstance.GetTimeSystem(game);
       let gameNow = IsDefined(clock) ? clock.GetGameTimeStamp() : -1.0;

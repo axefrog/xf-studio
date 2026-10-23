@@ -382,7 +382,24 @@ public abstract class XFSenses {
       }
       i += 1;
     }
-    return out + "],\"equipped\":[" + equippedOut + "]}";
+    // 0.8.10 (session 16's SS5r: equipped listed two clothing items while V wore more): equipped counts what the inventory has
+    // equipped, which under a wardrobe outfit is only the gear beneath it; the outfit's own pieces are visual and never
+    // equipped. clothing says, per area, what is equipped there and what the area shows.
+    let clothing = "";
+    if IsDefined(equipment) {
+      let areas = XFWardrobe.Areas();
+      let a = 0;
+      while a < ArraySize(areas) {
+        clothing += (a > 0 ? "," : "") + "{\"area\":" + XFJson.Str(XFInventory.AreaName(areas[a])) + ",\"equipped\":" + XFJson.Str(XFInventory.ItemName(equipment.GetActiveItem(areas[a])))
+          + ",\"shows\":" + XFJson.Str(XFWardrobe.Shows(equipment, areas[a])) + "}";
+        a += 1;
+      }
+      clothing = "{" + XFWardrobe.ManagerJson(equipment) + ",\"set\":" + IntToString(XFWardrobe.ActiveSet()) + ",\"areas\":[" + clothing + "]}";
+    } else {
+      clothing = "null";
+    }
+    return out + "],\"equipped\":[" + equippedOut + "],\"clothing\":" + clothing
+      + ",\"equipped_note\":\"equipped counts the inventory's equipped items by type; with a wardrobe or script outfit on, the pieces V seems to wear are the outfit's (visual only, never equipped), so clothing lists, per area, what is equipped and what the area shows\"}";
   }
 
   // Whether V is in scanner mode (the player state machine's Vision is Focus) and what the scanner has: the entity the

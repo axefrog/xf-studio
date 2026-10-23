@@ -37,6 +37,7 @@ public class XFNpcEntry {
   public let command: ref<AICommand>;
   public let look: ref<LookAtAddEvent>;
   public let faced: Bool;
+  public let held: Int32; // 0.8.10: how many of the game's own reactions were held back on it (npc-reactions in the plugin log)
   public let lines: array<Int32>;
   public let carrier: EntityID;
   public let hasCarrier: Bool;
@@ -117,19 +118,25 @@ public class XFNpcRegistry extends ScriptableSystem {
   // preset guard (CanTriggerExpressionLookAt) only stops presets of the NoReaction type, which Civilian_NoReaction isn't.
   // Held back always on a quiet actor (what reactions quiet promises), and on any actor or pick while the bridge directs
   // its face, its look or a line.
-  public func HoldsReactions(id: EntityID) -> Bool {
+  public func HoldsReactions(id: EntityID, what: String) -> Bool {
     for entry in this.m_entries {
       if entry.id == id {
-        if Equals(entry.kind, "actor") && !StrEndsWith(entry.record, "_reactive") {
-          return true;
+        let holds = (Equals(entry.kind, "actor") && !StrEndsWith(entry.record, "_reactive")) || entry.faced || IsDefined(entry.look) || ArraySize(entry.lines) > 0;
+        if holds {
+          // 0.8.10 (session 16's N5: an actor barked on arrival and nothing said whether the game's reaction or our own greeting
+          // did it): the first few holds per actor are logged, so the log shows whether the stand-down was at work and when.
+          entry.held += 1;
+          if entry.held <= 6 {
+            XFBridgeLog.Info("npc-reactions", entry.who + " held the game's " + what + " (" + IntToString(entry.held) + ")");
+          }
         }
-        return entry.faced || IsDefined(entry.look) || ArraySize(entry.lines) > 0;
+        return holds;
       }
     }
     return false;
   }
 
-  public static func HoldsReactionsOf(owner: ref<GameObject>) -> Bool {
+  public static func HoldsReactionsOf(owner: ref<GameObject>, what: String) -> Bool {
     // The Sol review of 0.8.9, finding 1: these wraps run from the game's own reaction callbacks, outside ScriptCall's gate,
     // so while the scripts aren't live they pass straight through without asking any system.
     if !XFBridge_Live() || !IsDefined(owner) {
@@ -139,7 +146,7 @@ public class XFNpcRegistry extends ScriptableSystem {
     if !IsDefined(registry) || ArraySize(registry.m_entries) == 0 {
       return false;
     }
-    return registry.HoldsReactions(owner.GetEntityID());
+    return registry.HoldsReactions(owner.GetEntityID(), what);
   }
 
   // The entry whose entity is this id ("" when none): npc.list marks the session's own.
@@ -521,7 +528,7 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
 // XFNpcRegistry.HoldsReactions says so; every other reaction (fear, combat, bumps) runs as the game has it.
 @wrapMethod(ReactionManagerComponent)
 private final func TriggerFacialLookAtReaction(opt forceFear: Bool, opt playVO: Bool) -> Void {
-  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner(), "look-at face and greeting") {
     return;
   }
   wrappedMethod(forceFear, playVO);
@@ -529,7 +536,7 @@ private final func TriggerFacialLookAtReaction(opt forceFear: Bool, opt playVO: 
 
 @wrapMethod(ReactionManagerComponent)
 private final func CanTriggerExpressionLookAt() -> Bool {
-  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner(), "expression look-at check") {
     return false;
   }
   return wrappedMethod();
@@ -541,7 +548,7 @@ private final func CanTriggerExpressionLookAt() -> Bool {
 // the face and bark are, and ended when the bridge sends a walk (XFBridgeEndReactionLook).
 @wrapMethod(ReactionManagerComponent)
 private func ActivateReactionLookAt(targetEntity: ref<Entity>, opt end: Bool, opt repeat: Bool, opt duration: Float, opt upperBody: Bool, opt inVehicle: Bool) -> Bool {
-  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner(), "reaction look-at") {
     return false;
   }
   return wrappedMethod(targetEntity, end, repeat, duration, upperBody, inVehicle);
@@ -556,7 +563,7 @@ public func XFBridgeEndReactionLook() -> Void {
 
 @wrapMethod(ReactionManagerComponent)
 private final func ResetFacial(cooldown: Float) -> Void {
-  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner(), "face reset") {
     return;
   }
   wrappedMethod(cooldown);
@@ -564,7 +571,7 @@ private final func ResetFacial(cooldown: Float) -> Void {
 
 @wrapMethod(ReactionManagerComponent)
 protected cb func OnResetFacialEvent(evt: ref<ResetFacialEvent>) -> Bool {
-  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner(), "face reset event") {
     return true;
   }
   return wrappedMethod(evt);

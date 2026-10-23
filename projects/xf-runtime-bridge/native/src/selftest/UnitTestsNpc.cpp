@@ -66,6 +66,7 @@ struct Fake
     json hub = json{{"id", 0}, {"answer", -1}};
     bool walkable = true;    // ground: every probe walkable at the asked point
     bool rayBlocked = false; // ray: static geometry between every two points
+    std::function<bool(const n::Vec3&, const n::Vec3&)> blockedWhen; // 0.8.10: ray: geometry only between some points
     int groundProbes = 0;
     n::Ops Ops()
     {
@@ -139,9 +140,9 @@ struct Fake
             calls.push_back("ground");
             return walkable ? json{{"walkable", true}, {"streamed", true}, {"point", {aPoint[0], aPoint[1], aPoint[2]}}} : json{{"walkable", false}, {"streamed", true}};
         };
-        ops.ray = [this](const n::Vec3&, const n::Vec3&) {
+        ops.ray = [this](const n::Vec3& aFrom, const n::Vec3& aTo) {
             calls.push_back("ray");
-            return json{{"blocked", rayBlocked}};
+            return json{{"blocked", rayBlocked || (blockedWhen && blockedWhen(aFrom, aTo))}};
         };
         return ops;
     }
@@ -422,8 +423,15 @@ void DirectorTests()
     Poll(service, fake, ops);
     turned = Events(log, "npc.turned");
     Check("hold: the re-turn is reported (again)", turned.size() == 2 && turned[1]["data"]["again"] == true);
-    // A walk suspends the hold; after arrival it turns away again.
-    service.Move(json{{"who", "a1"}, {"to", json::array({0, 10, 0})}, {"stop_m", 1}}, ops);
+    // A walk suspends the hold; after arrival it turns away again. 0.8.10: the way (+Y) lies behind it (yaw 180), so it turns first.
+    fake.calls.clear();
+    const auto behind = service.Move(json{{"who", "a1"}, {"to", json::array({0, 10, 0})}, {"stop_m", 1}}, ops);
+    Check("0.8.10 move: a way behind the actor turns it on the spot first (no walk yet)", behind["turns_first"] == true && fake.Called("command a1 turn") && !fake.Called("command a1 move"));
+    fake.npcs["a1"]["yaw"] = 0.0;
+    fake.npcs["a1"]["command_state"] = "Success";
+    fake.calls.clear();
+    Poll(service, fake, ops);
+    Check("0.8.10 move: once it faces that way the walk goes out", fake.Called("command a1 move") && Events(log, "npc.arrived").empty());
     fake.npcs["a1"]["position"] = {0.0, 9.5, 0.0};
     fake.npcs["a1"]["yaw"] = 0.0; // walked facing +Y: now facing away from V? V at (0, 8): away is +Y, so it already does
     fake.v["position"] = {0.0, 12.0, 0.0}; // V ahead of it now: away is -Y
@@ -755,6 +763,132 @@ void ReviewTests()
               CodeOf([&] { service.Turn(json{{"who", p3}, {"to", "v"}}, ops); }) == "not_ours" &&
               CodeOf([&] { service.Release(json{{"who", p3}, {"how", "despawn"}}, ops); }) == "bad_params");
 }
+// 0.8.10 (session 16's N3 and N5: she walked backwards away from V on release): a walk whose way is behind the actor begins with a
+// turn on the spot; the walk goes out once she faces it, or after kTurnFirstMaxS.
+void TurnFirstTests()
+{
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops);
+        fake.npcs["a1"]["exists"] = true;
+        fake.npcs["a1"]["spawned"] = true;
+        fake.npcs["a1"]["position"] = {0.0, 3.0, 0.0};
+        fake.npcs["a1"]["yaw"] = 180.0; // facing V, who is at the origin
+        Poll(service, fake, ops);
+        fake.calls.clear();
+        const auto away = service.Release(json{{"who", "a1"}, {"how", "walk_away"}}, ops);
+        Check("0.8.10 walk_away: facing V she turns to the way she goes first, and no walk goes out yet",
+              away["turns_first"] == true && fake.Called("command a1 turn") && !fake.Called("command a1 move"), away.dump());
+        fake.npcs["a1"]["command_state"] = "Executing";
+        fake.calls.clear();
+        Poll(service, fake, ops);
+        Check("0.8.10 walk_away: still turning, nothing more is sent", !fake.Called("command a1"));
+        fake.npcs["a1"]["yaw"] = 5.0; // within 15 degrees of her way (+Y, yaw 0)
+        fake.calls.clear();
+        Poll(service, fake, ops);
+        Check("0.8.10 walk_away: the walk goes out once she faces her way", fake.Called("command a1 move") && !fake.Called("command a1 turn"));
+        fake.npcs["a1"]["position"] = {0.0, 17.5, 0.0};
+        fake.npcs["a1"]["command_state"] = "Executing";
+        Poll(service, fake, ops);
+        Check("0.8.10 walk_away: released as before when she has walked off", Events(log, "npc.released").size() == 1 && Events(log, "npc.released")[0]["data"]["how"] == "walk_away" && !service.Active());
+    }
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops);
+        fake.npcs["a1"]["exists"] = true;
+        fake.npcs["a1"]["spawned"] = true;
+        fake.npcs["a1"]["position"] = {0.0, 3.0, 0.0};
+        fake.npcs["a1"]["yaw"] = 0.0; // already facing the way she goes
+        Poll(service, fake, ops);
+        fake.calls.clear();
+        const auto away = service.Release(json{{"who", "a1"}, {"how", "walk_away"}}, ops);
+        Check("0.8.10 walk_away: already facing her way she just walks", !away.contains("turns_first") && fake.Called("command a1 move") && !fake.Called("command a1 turn"));
+    }
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops);
+        fake.npcs["a1"]["exists"] = true;
+        fake.npcs["a1"]["spawned"] = true;
+        fake.npcs["a1"]["position"] = {0.0, 3.0, 0.0};
+        fake.npcs["a1"]["yaw"] = 180.0;
+        Poll(service, fake, ops);
+        const auto away = service.Release(json{{"who", "a1"}, {"how", "walk_away"}}, ops);
+        fake.npcs["a1"]["command_state"] = "Executing";
+        fake.calls.clear();
+        service.Tick(n::kTurnFirstMaxS + 0.2, {}, ops);
+        Check("0.8.10 walk_away: a turn that never finishes does not hold the walk back (it goes out after kTurnFirstMaxS)", away["turns_first"] == true && fake.Called("command a1 move"));
+    }
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops);
+        fake.npcs["a1"]["exists"] = true;
+        fake.npcs["a1"]["spawned"] = true;
+        fake.npcs["a1"]["position"] = {0.0, 3.0, 0.0};
+        fake.npcs["a1"]["yaw"] = 180.0;
+        Poll(service, fake, ops);
+        fake.calls.clear();
+        const auto off = service.Release(json{{"who", "a1"}, {"how", "dissolve"}}, ops);
+        Check("0.8.10 dissolve: the walk off turns her to her way first too", off["turns_first"] == true && fake.Called("command a1 turn") && !fake.Called("command a1 move"), off.dump());
+        // No facing of her own is known (before the first poll answers): the walk goes out at once, as before.
+        n::Service fresh;
+        Fake other;
+        const auto freshOps = other.Ops();
+        fresh.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, freshOps);
+        other.calls.clear();
+        const auto unknown = fresh.Release(json{{"who", "a1"}, {"how", "walk_away"}}, freshOps);
+        Check("0.8.10 walk_away: with no facing known the walk goes out at once", !unknown.contains("turns_first") && other.Called("command a1 move"));
+    }
+}
+
+// 0.8.10 (session 16's N4: an actor asked for 2 m ahead of V at a vending machine stood where V could not see her): a spawn asked
+// for relative to V needs a sight line from V's head; otherwise the nearest visible walkable spot is used.
+void SightTests()
+{
+    xfb::EventLog log;
+    n::Service service;
+    service.SetEvents(&log);
+    Fake fake;
+    const auto ops = fake.Ops();
+    const auto plain = service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}, {"side_m", 1.5}}}}, ops);
+    Check("0.8.10 spawn: a visible spot is used as asked (no change, no note)", !plain.contains("moved_for_sight") && Near(plain["asked_at"][0].get<double>(), 1.5) && Near(plain["asked_at"][1].get<double>(), 2.0));
+    // An obstacle (a machine) between V's head and everything with x > 1 and 1 < y < 4.
+    fake.blockedWhen = [](const n::Vec3&, const n::Vec3& aTo) { return aTo[0] > 1.0 && aTo[1] > 1.0 && aTo[1] < 4.0; };
+    service.Release(json{{"who", "all"}}, ops);
+    fake.calls.clear();
+    const auto moved = service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}, {"side_m", 1.5}}}}, ops);
+    const auto where = fake.npcs[moved["who"].get<std::string>()]["position"];
+    Check("0.8.10 spawn: a spot with no sight line moves to the nearest visible walkable one, and says so",
+          moved.contains("moved_for_sight") && moved["moved_for_sight"]["moved_m"].get<double>() > 0.0 && moved["moved_for_sight"]["moved_m"].get<double>() <= n::kSightSearchM && where[0].get<double>() <= 1.0 + 1e-9,
+          moved.dump());
+    Check("0.8.10 spawn: the actor faces V from where she stands now", std::abs(std::abs(moved["yaw"].get<double>()) - 180.0) < 60.0);
+    service.Release(json{{"who", "all"}}, ops);
+    const auto exact = service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({1.5, 2.0, 0.0})}}, ops);
+    Check("0.8.10 spawn: a point given by coordinates is staged exactly as given, seen or not", !exact.contains("moved_for_sight"));
+    service.Release(json{{"who", "all"}}, ops);
+    fake.blockedWhen = [](const n::Vec3&, const n::Vec3&) { return true; };
+    fake.calls.clear();
+    const auto code = CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}, {"side_m", 1.5}}}}, ops); });
+    Check("0.8.10 spawn: nowhere visible within reach is refused no_visible_spot before any spawn step", code == "no_visible_spot" && !fake.Called("spawn"));
+    fake.blockedWhen = nullptr;
+    fake.walkable = false;
+    Check("0.8.10 spawn: ground that is not walkable is the spawn's own refusal to give (the check steps aside)", CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}}}}, ops); }) != "no_visible_spot");
+}
 } // namespace
 
 int RunNpcUnitTests()
@@ -767,5 +901,7 @@ int RunNpcUnitTests()
     DirectorTests();
     StagingTests();
     ReviewTests();
+    TurnFirstTests();
+    SightTests();
     return gNpcFailures;
 }

@@ -461,8 +461,15 @@ describe("0.8 npc against the self-test host's street", () => {
   test("0.8.9: the stranger scene gates its lines on arrival (near_m 3), leaves its lines their reading time, and uses the default choice timeout", () => {
     const scene = loadScenario(join(SCENARIO_DIR, "stranger_question.json"));
     const says = scene.steps.filter((s) => s.do === "npc.say" && (s.trigger === "greeting" || typeof s.text === "string") && !("on" in s));
-    expect(says.length).toBe(2);
+    // 0.8.10 (session 16's N5: the "greeting" bark, a voiceset line the game picks, was her curt "waiting for a friend"): the scene
+    // speaks only its own subtitle; she smiles from the moment she appears, before she walks, and the smile is never replaced.
+    expect(says.length).toBe(1);
+    expect(scene.steps.some((s) => s.trigger !== undefined)).toBe(false);
     for (const say of says) expect(say.near_m).toBe(3);
+    const doing = scene.steps.filter((s) => "do" in s).map((s) => s.do + (s.do === "npc.face" ? ":" + s.expression : ""));
+    expect(doing.slice(0, 3)).toEqual(["npc.spawn", "npc.face:smile", "npc.move"]);
+    const topFaces = scene.steps.filter((s) => s.do === "npc.face").map((s) => s.expression);
+    expect(topFaces).toEqual(["smile"]);
     expect(says.every((s) => s.seconds === undefined)).toBe(true);
     const choices = scene.steps.find((s) => s.do === "npc.choices")!;
     expect(choices.max_s).toBeUndefined();

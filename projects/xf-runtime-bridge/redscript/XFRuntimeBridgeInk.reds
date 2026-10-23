@@ -385,6 +385,21 @@ public abstract class XFInkStyle {
     return new Vector2(0.0, 0.0);
   }
 
+  // 0.8.10 (session 16's D1r: the pin mark at the side edge landed inside the minimap on the right and over the status bars
+  // above the ink panel on the left): the game's own HUD blocks as rectangles in the root's units (left, top, width, height) for
+  // the visible screen v, from Floor's measurements in design units (2160 per screen height): the minimap and the quest tracker
+  // at the top right (the tracker grows to about 1250 units), the weapon block and prompts at the bottom right, the status bars
+  // at the top left and the status and cyberware icons at the bottom left. tools/overlay/ink-place.ts has the same table.
+  public static func HudBlocks(v: Vector4) -> array<Vector4> {
+    let h = v.W / 2160.0;
+    let blocks: array<Vector4>;
+    ArrayPush(blocks, new Vector4(v.X + v.Z - 860.0 * h, v.Y, 860.0 * h, 1250.0 * h));
+    ArrayPush(blocks, new Vector4(v.X + v.Z - 860.0 * h, v.Y + v.W - 480.0 * h, 860.0 * h, 480.0 * h));
+    ArrayPush(blocks, new Vector4(v.X, v.Y, 700.0 * h, 300.0 * h));
+    ArrayPush(blocks, new Vector4(v.X, v.Y + v.W - 520.0 * h, 570.0 * h, 520.0 * h));
+    return blocks;
+  }
+
   // 0.8.9 (session 15's A5): the panel's rectangle p (left, top, width, height) kept out of photo mode's zones (its menu, its
   // top bar, the title row with its icon, its hint strips) inside the visible screen v, gap apart. The asked place when it is
   // clear; else the panel slides out of each zone it meets along its anchor's own edge first (sideways for a top or bottom
@@ -628,6 +643,7 @@ public class XFInkPanel {
   private let m_under: ref<inkRectangle>;
   private let m_edge: ref<inkRectangle>;
   private let m_diamond: ref<inkRectangle>;
+  private let m_tag: ref<inkText>;
   private let m_status: ref<inkText>;
   private let m_messages: array<ref<inkText>>;
   private let m_row: ref<inkHorizontalPanel>;
@@ -707,6 +723,7 @@ public class XFInkPanel {
     tag.SetVAlign(inkEVerticalAlign.Center);
     tag.SetMargin(new inkMargin(16.0, 0.0, 0.0, 0.0));
     tag.Reparent(header);
+    view.m_tag = tag;
 
     let status = XFInkStyle.Text(n"status", 26, n"Medium", n"MainColors.Grey", false);
     status.SetMargin(new inkMargin(0.0, 6.0, 0.0, 4.0));
@@ -750,6 +767,12 @@ public class XFInkPanel {
 
   public func Plate() -> ref<inkRectangle> {
     return this.m_plate;
+  }
+
+  // 0.8.10 (session 16's A7r: after a reopen the HUD-layer panel could not be told from the one inside photo mode's menu): the
+  // tag beside the heading names where this panel is drawn, "test" alone on the HUD layer.
+  public func SetWhere(place: String) -> Void {
+    this.m_tag.SetText(StrLen(place) > 0 ? "test  |  " + place : "test");
   }
 
   public func ChipCount() -> Int32 {
@@ -925,6 +948,10 @@ public class XFInkOverlay extends ScriptableSystem {
   private let m_visibleFrom: String;
   private let m_announced: String;
   private let m_phoneOpen: Bool;
+  // 0.8.10: where the panel sits now (left, top, width, height, the root's units) and whether it is on screen, so a pin's edge
+  // mark keeps clear of it.
+  private let m_panelRect: Vector4;
+  private let m_panelShown: Bool;
   private let m_units: Float;
   private let m_platesRoot: ref<inkCanvas>;
   private let m_plates: array<ref<inkText>>;
@@ -1167,7 +1194,8 @@ public class XFInkOverlay extends ScriptableSystem {
     if v.Z < 100.0 || v.W < 100.0 {
       v = new Vector4(0.0, 0.0, this.m_width, this.m_height);
     }
-    this.m_view.Place(frame, scale, v, units, true);
+    this.m_panelRect = this.m_view.Place(frame, scale, v, units, true);
+    this.m_panelShown = frame.show && !this.m_phoneOpen;
     this.KeepOnTop();
     // 0.8.3: announced whenever it changes (the first measurement replaces the model a moment after mounting), so a session
     // can check the arithmetic against a capture.
@@ -1177,6 +1205,7 @@ public class XFInkOverlay extends ScriptableSystem {
       this.m_reported = true;
       XFBridge_Announce("ink", "panel geometry " + geometry);
     }
+    this.m_view.SetWhere(Equals(this.m_layer, "hud") && Equals(frame.layer, "hud") ? "" : "layer " + frame.layer);
     this.m_view.Apply(frame, true);
     this.m_platesRoot.SetVisible(frame.nameplates);
     this.ReportDrawn(frame);
@@ -1457,6 +1486,17 @@ public class XFInkOverlay extends ScriptableSystem {
       let v = this.m_visible.Z > 100.0 ? this.m_visible : new Vector4(0.0, 0.0, this.m_width, this.m_height);
       left = ClampF(left, v.X + 8.0 * units, v.X + v.Z - 8.0 * units - XFInkPins.MarkWidth() * size);
       top = ClampF(top, v.Y + 8.0 * units, v.Y + v.W - 8.0 * units - XFInkPins.MarkHeight() * size);
+      // 0.8.10: and clear of the HUD's own blocks and of the ink panel: it slides along the edge to the nearest free place, which
+      // is where the game's own edge marker sits (lower down the side than the top).
+      let zones = XFInkStyle.HudBlocks(v);
+      if this.m_panelShown && this.m_panelRect.Z > 1.0 && this.m_panelRect.W > 1.0 {
+        ArrayPush(zones, this.m_panelRect);
+      }
+      let how: String;
+      let rightSide = at.X > v.X + v.Z * 0.5;
+      let kept = XFInkStyle.Avoid(new Vector4(left, top, XFInkPins.MarkWidth() * size, XFInkPins.MarkHeight() * size), zones, v, 12.0 * units, rightSide ? "center_right" : "center_left", how);
+      left = kept.X;
+      top = kept.Y;
     }
     mark.SetScale(new Vector2(size, size));
     mark.SetMargin(new inkMargin(left, top, 0.0, 0.0));

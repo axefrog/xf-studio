@@ -131,3 +131,30 @@ export function avoidZones(panel: Rect, zones: readonly Rect[], visible: Rect, g
   }
   return { ...nudged, how: "overlapping" };
 }
+
+/**
+ * 0.8.10 (session 16's D1r): the game's own HUD blocks as rectangles in the root's units for the visible screen, as
+ * XFInkStyle.HudBlocks has them (Floor's measurements, in design units of 2160 per screen height): the minimap and the quest
+ * tracker at the top right (the tracker grows to about 1250), the weapon block and prompts at the bottom right, the status
+ * bars at the top left and the status and cyberware icons at the bottom left.
+ */
+export function hudBlocks(visible: Rect): Rect[] {
+  const h = visible.h / 2160;
+  return [
+    { x: visible.x + visible.w - 860 * h, y: visible.y, w: 860 * h, h: 1250 * h },
+    { x: visible.x + visible.w - 860 * h, y: visible.y + visible.h - 480 * h, w: 860 * h, h: 480 * h },
+    { x: visible.x, y: visible.y, w: 700 * h, h: 300 * h },
+    { x: visible.x, y: visible.y + visible.h - 520 * h, w: 570 * h, h: 520 * h },
+  ];
+}
+
+/**
+ * 0.8.10: a pin mark at the screen's side edge (its asked rectangle) kept clear of the HUD's blocks and of the ink panel when
+ * it is on screen, sliding along the edge to the nearest free place, as XFInkOverlay.PlacePinMark does with XFInkStyle.Avoid.
+ */
+export function placeEdgeMark(asked: Rect, visible: Rect, panel: Rect | null, units = 1): Rect & { how: ZoneHow } {
+  const zones = hudBlocks(visible);
+  if (panel && panel.w > 1 && panel.h > 1) zones.push(panel);
+  const rightSide = asked.x + asked.w / 2 > visible.x + visible.w / 2;
+  return avoidZones(asked, zones, visible, 12 * units, rightSide ? "center_right" : "center_left");
+}
