@@ -405,3 +405,56 @@ describe('world requirements (S2 sections 3.2 and 3.5)', () => {
     }
   });
 });
+
+describe('SF-25 and SF-36: attribution lines play only while the belief of the NPC holds, and V can correct them', () => {
+  const build = (name: string): { w: World; inst: Instance } => mini(name, { windows: [{ id: 'w', opens: 'yes', onClose: 'withdraw' }] } as never, (p) => {
+    p.fragments.find((f) => f.id === 'f-finish')!.responses = [{
+      to: { kind: 'robbery', participant: 'v' }, because: 'V robbed the stall', content: 'pack:t-go', attribution: true, reply: 'pack:t-no',
+      needs: 'believes(npc, v, age, is: {r: ivl, ivls: [[20, 30]]})', replyWrites: [{ tells: { listener: 'npc', about: 'v', path: 'age', value: 50 } }],
+    }];
+    p.texts.find((t) => t.id === 't-go')!.states = 'motive';
+  });
+  const act = (w: World): void => {
+    const robbery = w.k.events.mintEvent({ creator: w.v, cause: w.v, name: 'rob', time: w.k.now, kind: 'robbery', participants: [{ who: w.v, role: 'actor' }], witnesses: [w.v] });
+    w.k.events.makeCanon(robbery, 'observed', w.v);
+  };
+  const believe = (w: World, inst: Instance): void => {
+    const ev = H(hs('ev'), hs('1'));
+    w.k.beliefs.set({ believer: inst.st.roles.npc!.cast!, subject: w.v, path: 'age', value: 25, confidence: 0.6, evidence: [ev], source: { by: 'observed', event: ev }, formed: 0, refreshed: 0, memorable: true });
+  };
+  const finish = (w: World, inst: Instance): NonNullable<ReturnType<typeof delivery>> => {
+    const d = offer(w, inst);
+    w.l2.respond(d.id, { kind: 'action', id: 'go' });
+    settle(w);
+    return d;
+  };
+
+  test('without the belief of the NPC the line does not play', () => {
+    const { w, inst } = build('SF-25a');
+    act(w);
+    finish(w, inst);
+    playUntil(w, () => delivery(inst, 'finish') !== undefined);
+    expect(delivery(inst, 'finish')!.responses).toEqual([]);
+  });
+
+  test('with the belief, and the act of V on record, the line plays; the correcting reply of V writes an observed telling, the belief revises, and the line no longer applies', () => {
+    const { w, inst } = build('SF-36');
+    act(w);
+    finish(w, inst);
+    believe(w, inst);
+    playUntil(w, () => delivery(inst, 'finish') !== undefined);
+    const fin = delivery(inst, 'finish')!;
+    expect(fin.responses).toEqual(['f-finish#0']);
+    const holds = { believes: { who: 'npc', of: 'v', path: 'age', is: { r: 'ivl' as const, ivls: [[20, 30]] as Array<[number, number]> } } } as const;
+    expect(w.l2.evaluate(inst, holds)).toBe('yes');
+    expect(w.l2.reply(fin.id, 'f-finish#0')).toBe(true);
+    // The belief really revised, through a telling V made, which is an observed event.
+    const b = w.k.beliefs.get(inst.st.roles.npc!.cast!, w.v, 'age')!;
+    expect(b.value).toBe(50);
+    expect(b.source.by).toBe('told');
+    expect(w.k.events.isCanon((b.source as { event: Id }).event)).toBe(true);
+    expect(w.l2.evaluate(inst, holds)).toBe('no');
+    // The reply is used once.
+    expect(w.l2.reply(fin.id, 'f-finish#0')).toBe(false);
+  });
+});

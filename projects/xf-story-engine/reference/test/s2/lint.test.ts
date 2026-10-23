@@ -365,3 +365,17 @@ describe('the pack format: a broken pack never takes down the others', () => {
     void R1_ID;
   });
 });
+
+describe('SF-39 and SF-42: evidence lints', () => {
+  test('SF-39: a callback citing an event V saw only at ambient is an L-62 error; a soft callback with its hedge passes', () => {
+    expect(codes(lintOf((p) => { frag(p, 'f-finish').callback = { cites: { event: { kind: 'robbery' }, atLeast: 'ambient' }, atLeast: 'ambient' }; }), 'error')).toContain('L-62');
+    expect(codes(lintOf((p) => { frag(p, 'f-finish').callback = { cites: { event: { kind: 'robbery' }, atLeast: 'presented' }, atLeast: 'presented', hedged: true }; }), 'error')).not.toContain('L-62');
+    expect(codes(lintOf((p) => { frag(p, 'f-finish').callback = { cites: { event: { kind: 'robbery' }, atLeast: 'confirmed' }, atLeast: 'confirmed' }; }), 'error')).not.toContain('L-62');
+  });
+  test('SF-42: a mustReach beat whose only route is an overheard bark is an L-63 error', () => {
+    const trip = lintOf((p, s) => { s.beats!.finish!.mustReach = true; frag(p, 'f-finish').channels = ['bark']; });
+    expect(codes(trip, 'error')).toContain('L-63');
+    const pass = lintOf((p, s) => { s.beats!.finish!.mustReach = true; frag(p, 'f-finish').channels = ['bark', 'journal']; });
+    expect(codes(pass, 'error')).not.toContain('L-63');
+  });
+});

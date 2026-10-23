@@ -22,7 +22,7 @@ import { compileSeed } from './compile.ts';
 import { L2Registry } from './registries.ts';
 import * as ids from './ids.ts';
 import type { DisplayReport, Layer2Port } from './port.ts';
-import { Arbiter, arbiterStep, displayReport, findDelivery, respondTo, startDirect, type Response } from './arbiter.ts';
+import { Arbiter, arbiterStep, displayReport, findDelivery, replyTo, respondTo, startDirect, type Response } from './arbiter.ts';
 import { completeBeat } from './beats.ts';
 import { marksAt } from './effects.ts';
 import { evalPred, explainPred, ledger, type Explain, type LedgerEntry } from './eval.ts';
@@ -518,6 +518,11 @@ export class Layer2 implements Layer2Hook {
   /** V answers an offer (S2 section 7.4). Returns whether the answer was accepted. */
   respond(delivery: Id, resp: Response): boolean {
     return respondTo(this, delivery, resp);
+  }
+
+  /** V uses a response template's reply (an attribution line's correcting reply writes an observed telling, SF-36). */
+  reply(delivery: Id, template: string): boolean {
+    return replyTo(this, delivery, template);
   }
 
   /** S7 reports a beat's content completed. */

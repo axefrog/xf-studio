@@ -8,7 +8,7 @@ import type { Contribution, Form, GameTime, Id, Region } from '../types.ts';
 import { ceilingOf } from '../settings.ts';
 import { bound, playOf } from './doc.ts';
 import { applyEffects } from './effects.ts';
-import { evalPred, roleVerdict } from './eval.ts';
+import { evalPred, matchPattern, roleVerdict } from './eval.ts';
 import { claimWins, claimsConflict, effective, verdictOnNode } from './cast.ts';
 import * as ids from './ids.ts';
 import type { Instance, Layer2 } from './layer2.ts';
@@ -525,6 +525,7 @@ function prepareAndRelease(l2: Layer2, inst: Instance, d: Delivery, channel: Cha
     const u = l2.global.fragmentUses[d.fragment] ?? { count: 0, lastAt: 0, lastOffer: 0 };
     l2.global.fragmentUses[d.fragment] = { count: u.count + 1, lastAt: k.now, lastOffer: l2.global.offerCount };
   }
+  if (d.fragment) d.responses = selectResponses(l2, inst, d);
   if (cls >= 2) d.retractUntil = l2.arbiter.play + l2.tun.retractWindow;
   if (cls <= 2 && cls !== 0 && l2.arbiter.session === 'resituating') l2.arbiter.cueReleased = true;
   l2.arbiter.log.push({ at: l2.arbiter.play, delivery: d.id, seed: inst.id, class: cls, channel, score, delta: 0 });
@@ -823,6 +824,57 @@ function setBeat(l2: Layer2, inst: Instance, beat: string, state: BeatRuntime['s
     return;
   }
   setBeatState(l2, inst, beat, state);
+}
+
+// ---- NPC responses to V's acts (S2 sections 2.9 and 2.22) ----
+
+/**
+ * The response templates of a fragment that apply now: the act they answer (`to`) is one V was confirmed to have done, and
+ * their `needs` is yes. An attribution line plays only while its `needs` (the NPC's belief about V) is yes (SF-25); a
+ * template never reads the player model (S2-I-13).
+ */
+function selectResponses(l2: Layer2, inst: Instance, d: Delivery): string[] {
+  const frag = d.fragment ? fragmentOf(inst, d.fragment) : undefined;
+  const out: string[] = [];
+  (frag?.responses ?? []).forEach((r, i) => {
+    if (r.needs !== undefined && evalPred(l2, { inst, t: l2.k.now }, r.needs as Pred) !== 'yes') return;
+    const acted = l2.ledger().some((e) => e.kind === 'event' && e.grade === 'confirmed' && matchPattern(l2, inst, r.to, e.facts, false) !== null);
+    if (acted) out.push(`${frag!.id}#${i}`);
+  });
+  return out;
+}
+
+/**
+ * V uses a template's reply. A correcting reply writes an observed telling (S2 section 8.8, L-60): an event with V and the
+ * NPC as witnesses, and the NPC's belief set from V's own telling, so the belief really revises and the line no longer applies (SF-36).
+ */
+export function replyTo(l2: Layer2, deliveryId: Id, template: string): boolean {
+  const hit = findDelivery(l2, deliveryId);
+  if (!hit || !hit.d.responses?.includes(template)) return false;
+  const { inst, d } = hit;
+  const [fid, idx] = template.split('#');
+  const frag = fragmentOf(inst, fid!);
+  const tpl = frag?.responses?.[Number(idx)];
+  if (!tpl) return false;
+  const k = l2.k;
+  for (const [n, w] of (tpl.replyWrites ?? []).entries()) {
+    const listener = inst.st.roles[w.tells.listener]?.cast;
+    const about = w.tells.about === 'v' ? k.vId : inst.st.roles[w.tells.about]?.cast;
+    if (listener === undefined || about === undefined) continue;
+    const ev = k.events.mintEvent({
+      creator: inst.id, cause: inst.id, name: `reply:${d.id}:${idx}:${n}`, time: k.now, kind: 'response',
+      participants: [{ who: k.vId, role: 'actor' }, { who: listener, role: 'participant' }], witnesses: [k.vId, listener],
+    });
+    k.events.makeCanon(ev, 'observed', inst.id);
+    k.beliefs.set({
+      believer: listener, subject: about, path: w.tells.path, value: w.tells.value, confidence: 1, evidence: [ev],
+      source: { by: 'told', teller: k.vId, event: ev }, formed: k.now, refreshed: k.now, memorable: true,
+    });
+    l2.record(inst, 'response', { event: ev, kind: 'reply', template, beat: d.beat });
+  }
+  d.responses = (d.responses ?? []).filter((x) => x !== template);
+  l2.queueReeval(inst, 'reply');
+  return true;
 }
 
 // ---- closing deliveries (S2 section 6.4, 8.6) ----
