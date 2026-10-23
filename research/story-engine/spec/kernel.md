@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.12, 23 October 2026.
+**Status:** v4.13, 24 October 2026.
+- v4.13 names the settle step of a boundary (§9.4), which S1 §10.2 relies on.
 - v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (found while building v4 in the reference model).
 - v4.11 adds three clarifications from S1 v0.2 (V4-47 to V4-49).
 - v4.10 adds eight clarifications from writing [S1](simulation.md) (V4-39 to V4-46).
@@ -735,7 +736,8 @@ Simulation processes are S1's. The kernel defines when they run and what they ma
 - **Order at each boundary** `t = k × W_sim`:
   1. Apply the outputs of every process run whose span ends at `t`, by tier (coarse first), then by `id`.
   2. Apply the external operations stamped in the window that just ended, by timestamp, then `Id`. These are game readings, observations and seed operations.
-  3. Take the snapshot that processes starting at `t` read.
+  3. **Settle the inputs** (v4.13): run the frame work and the relevance dispatch that steps 1 and 2 queued until nothing is left, so policies have reacted to the boundary's inputs (V's new cell opens its frames) before anything reads demand.
+  4. Take the snapshot that processes starting at `t` read.
 
   Processes never see each other's outputs within a span (double buffering).
 - **Outstanding outputs are state.** A batch computed but not yet applied is part of the process's `ProcessState`, with its application boundary. It is persisted, restored on load under the new epoch, and applied at its boundary without re-running the process.

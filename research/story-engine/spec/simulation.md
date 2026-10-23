@@ -1,6 +1,6 @@
 # S1. Simulation layer specification
 
-**Status:** v0.3, 23 October 2026. v0.3 rules on six questions from the first build: the fit's tolerance, the first window V stands in a cell, SF1-E3's wording, the protected set as of a time, V and the tie cap, and which group a changed affiliation joins. This is the specification stage of [P3](../p3-simulation-layer.md) (work package [WP-11](../plan.md#82-work-packages)). It is exact enough to build the first implementation of layer 1 in the TypeScript reference model from this page and the kernel specification [S0](kernel.md) (v4.10) alone.
+**Status:** v0.4, 24 October 2026. v0.4 rules on seven questions from the first fix round: what the record keeps (§2.2), reopening a tie (§4.7), reopening a frame (§8.2), assimilation's default reasons (§8.4), a position's district (§8.8), and, in S0 v4.13 and S2 v1.9, the settle step and the read port's order. v0.3 rules on six questions from the first build: the fit's tolerance, the first window V stands in a cell, SF1-E3's wording, the protected set as of a time, V and the tie cap, and which group a changed affiliation joins. This is the specification stage of [P3](../p3-simulation-layer.md) (work package [WP-11](../plan.md#82-work-packages)). It is exact enough to build the first implementation of layer 1 in the TypeScript reference model from this page and the kernel specification [S0](kernel.md) (v4.10) alone.
 - **The core.** This version specifies the **core**: the processes, policies, data and reads that milestone M3 builds. That is one district (Kabuki) at coarse and medium detail, in its smallest useful form (§0.2). Everything else in P3 is a **later capability** (§0.3). The first implementation rejects it plainly rather than half-doing it.
 - **Reviews.** Round 1, GPT-6 Astra, on v0.1: 20 findings and the whole over-engineering section, all adopted (§18). v0.2 shrinks the core, runs every process one window at a time, and fixes the findings.
 - **What it reads and what reads it.** S1 fills the hooks of S0 (§9.4 processes, §11 beliefs, §10.8 the conflict table) and is read by the seeding layer [S2](seeding.md) (§2.16 and §2.17) and the procedural engine [S3](procedural.md) (v0.3, §1.2 and §6.1).
@@ -356,6 +356,14 @@ interface S1Record {
 
 A policy updates the record at relevance-dispatch time, inside the boundary being processed, in the kernel's dispatch order. The record is saved with the other states and restored on load.
 
+**What else the record keeps** (v0.4), because a save drops it from the kernel and a regenerating occurrence or a past read needs it:
+- **Spans of protection:** per node, the union of its cast-edge intervals, observed pins from `at`, and quest-linked validity. A cause live at a save is written up to the save. Spans that ended before the oldest occurrence that can regenerate are dropped.
+- **The facts of events behind memorable beliefs:** the minted fields (from the event's own contributions, not what it resolves to), restored silently at load. The set is cut to the events a belief still cites.
+- **Ended tie intervals:** the newest 16 per tie, with `spanFloor`, the end of the newest dropped one.
+- **The divergence log's floor:** the time its oldest kept transition reaches back to.
+
+Reads at a time the record no longer covers answer `maybe`.
+
 ### 2.3 The decision log and the defect list
 
 The log serves P9 and P10 ([P3 §12](../p3-simulation-layer.md#12-what-s1-exposes)). It is part of the S1 record, so it is deterministic and survives a reload.
@@ -609,6 +617,8 @@ function pGeo(a: Id, b: Id): number { return data.ties.cGeo / (HN * rankOf(a, b)
 ### 4.7 The tie record
 
 Stable ties and recorded interactions are the core of the relationship layer. All numbers are **[tunable]**.
+
+**Reopening.** A tie that ended and is wanted again is reopened under its stable `Id`, with fresh attributes. The interval that ended goes to the record (§2.2), and `tied` at a past time reads the implicit tie or any recorded interval, so the past is never rewritten.
 - `tie(A, B)`: edge `xf:tie`, symmetric; attrs `kind` (`kin`, `crew`, `colleague`, `neighbour`, `friend`, `rival`), `status`, `strength` (q 1/64), `lastContact` (int, −1 if none); data `history`.
 - `regard(A → B)`: edge `xf:regard`, directed; `warmth`, `respect` (−1 to 1), `trustA`, `trustB`, `trustI` (0 to 1), `evN`. `belief(A about B)` is the kernel's belief record.
 - **For a tie with V, only the NPC's side exists.** There is no `regard(V → NPC)` and no field that models V's feelings ([D-09](../decisions.md)).
@@ -1331,7 +1341,7 @@ Individual drives, importance and urgency models are later capabilities (§0.3).
 
 `v.frames` opens only what the game states, from the mirror, and never V's drives:
 
-1. **A situation frame** for V's cell at tier 3, and one for each of its `adj1` cells at tier 2, always open. Id `H("mint", v, v, "frame:situation:" + cell)`, actor `v`. When V's mirrored `cell` changes, the frames for the old cell are abandoned and the new ones opened.
+1. **A situation frame** for V's cell at tier 3, and one for each of its `adj1` cells at tier 2, always open. Id `H("mint", v, v, "frame:situation:" + cell)`, actor `v`. When V's mirrored `cell` changes, the frames for the old cell are abandoned and the new ones opened. A frame abandoned earlier under the same `Id` is **opened afresh**, never reactivated: it is the only reading under which a run that goes on and a run that is saved and loaded agree.
 2. **A goal frame for each objective the game tracks.** A tracked journal entry (a mirrored node) becomes a goal frame on `v` that `wants` the entry's target and place, `active` or `blocked` by the entry's journal state, with `source: game` and the journal record as `cause`. It says what the game asked, not what V feels.
 3. **A step frame** for the person V is speaking to, from the dialogue feed (tier 4 on that person).
 4. **Nothing else.** Inferred frames come from the director's beliefs (S0 §11.3). No process pins V's drives (S0 I-12).
@@ -1386,7 +1396,13 @@ p_tell   = base * max over b of score(b)           // base = 0.3 [tunable]; draw
 **One operator at most per hop,** drawn by `invCum([0.15, 0.10, 0.10, 0.65], rand("op", teller, listener, b.id, hop))` over `level`, `sharpen`, `assimilate`, none (**[tunable]**), up to a hop limit of 4:
 - `level` (loses detail): the told confidence is multiplied by 0.8 and the `reason` belief is not passed;
 - `sharpen` (keeps and exaggerates): the path is raised one rung of `meet < take < harm < kill` where the effect is on that ladder;
-- `assimilate` (bends to what the listener expects): the `reason` region is replaced by the listener's default reasons for the actor's group.
+- `assimilate` (bends to what the listener expects): the `reason` region is replaced by the listener's default reasons for the actor's group. Those come from the relation of the listener's group to the actor's, through the table `data.minds.assimilate` **[tunable]**:
+  - `same`: situational (one's own people are excused);
+  - `friendly`: situational;
+  - `neutral`: `attr@1` from the listener's side;
+  - `hostile`: dispositional (the other side's harm is character).
+
+  The act's effect is recovered from the event the belief cites. A belief that isn't about reasons isn't bent.
 
 **The telling is a minted event** of kind `tell`, carrying its operator. **It has no effects.** Its participants are the `teller`, the `listener` and the `subject`, and the subject is an **informational participant**: a telling about V or about a protected person is ordinary communication and is not refused by the gate (§6). `expose` is reserved for an actual consequential disclosure, which seeds produce and the targeting rules govern. Events that policies mint (`tell`, `reply`) have creator `s1` and cause the source event, and the name `<kind>/<teller>/<other>/<short id>/<boundary index>`. The listener's belief has `source: { by: 'told', teller, event: tellingEvent }`, **`evidence` the teller's, unchanged**, and `confidence = min(b.confidence, 0.9) × 0.8`. A rumour therefore never corroborates itself (S0 F-9).
 
@@ -1487,7 +1503,7 @@ The pure functions `tie`, `neighbours` and `bridge`, the materialisation rule an
 The game is ground truth. `reconcile` runs when the watch frame hears a reading Change of a mirrored person's `alive`, `affiliation` or `quest-linked`. A load, a jump and a mirror correction are all just sources of such readings: after a load the kernel reads the game's state, which becomes `game` readings at the current time ([S0 §14.3](kernel.md#143-loading-is-replacement)), and where a reading differs it is a Change. **No policy reads the load class, a load count or the epoch.** `reconcile` does, in this order:
 
 1. **Diff** each assumption S1 holds about the changed person against the reading: a frame of a mirrored actor, a membership edge, a materialised tie edge.
-2. **Supersede what the game now contradicts.** If `alive` is no: `frame-status abandoned` (cause: the reading's change) on every active or blocked frame of the person; `end-edge` on their memberships and ties (the edge stays as history). If `affiliation` changed (a move, not a first reading or a reading restated after a load): end the old membership edge, and add the new one if a group stands for the new affiliation, cause `game`. The group is the one of the person's current district, from the mirrored position, if that district lists the affiliation; otherwise the first simulated district, in `Id` order, that does. A person the game reads as dead joins nothing.
+2. **Supersede what the game now contradicts.** If `alive` is no: `frame-status abandoned` (cause: the reading's change) on every active or blocked frame of the person; `end-edge` on their memberships and ties (the edge stays as history). If `affiliation` changed (a move, not a first reading or a reading restated after a load): end the old membership edge, and add the new one if a group stands for the new affiliation, cause `game`. The group is the one of the person's current district, from the mirrored position, if that district lists the affiliation (a position's district is the **innermost** district outline containing it: the slice gives each district an optional `polygon` and `zBand`, see [places](../../../knowledge/places.md)); otherwise the first simulated district, in `Id` order, that does. A person the game reads as dead joins nothing.
 3. **Leave beliefs alone.** A belief is not truth. People may still believe the dead person lives. That divergence is story material, not an error. It is logged as a `divLog` transition (§9.1).
 4. **Log** every correction with reason `game-dead`, `game-moved` or `game-fact`. The log never reaches V.
 
