@@ -29,6 +29,7 @@ const FIXTURES: Array<[string, string]> = [
   ['F-13', 'partition'],
   ['F-14', 'retained member'],
   ['F-15', 'cycle guard'],
+  ['F-16', 'session independence'],
   ['C-a', 'pedestrian in the rain'],
   ['C-b', 'vendor and the collector'],
   ['C-c', 'a customer arrives'],

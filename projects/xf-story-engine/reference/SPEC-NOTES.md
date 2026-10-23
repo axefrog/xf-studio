@@ -1,7 +1,7 @@
 # Spec notes for the reference model
 
-Interpretations made while building the TypeScript reference model of S0 v3
-(`research/story-engine/spec/kernel.md`). Each entry gives the section, the issue, the reading chosen and
+Interpretations made while building the TypeScript reference model of S0 (v3, then the v4 core) and of the
+core of S2 v1.7 (`research/story-engine/spec/kernel.md` v4.12, `seeding.md`). Each entry gives the section, the issue, the reading chosen and
 why. The coordinator decides afterwards and updates the spec.
 
 **Status.** The coordinator has decided entries 1 to 29: entries 1 to 4 and 6 to 29 are accepted as
@@ -11,7 +11,8 @@ needed, each the most faithful reading found. Entries 52 to 57 are **new** since
 of the reference model (findings SR-01 to SR-14, fixed): readings that the fixes needed. Entries 31, 33,
 37, 39, 42 and 50 were amended by the same review and say so. A second review (SR2-01 to SR2-08, fixed)
 found that entries 54 to 57 claimed more than the code guaranteed; entries 33, 53, 54, 55, 56 and 57
-now state exactly what the code does, including what it leaves alone. Entry numbers are stable so messages and
+now state exactly what the code does, including what it leaves alone. Entries 58 to 92 are **new** from the v4 and layer 2 build and its fix round (the last section, with its findings for the
+coordinator). Entry numbers are stable so messages and
 reviews can point at them; the sections below order them worst first, meaning the entries that change
 observable results come before presentation choices.
 
@@ -417,3 +418,240 @@ budget (the script's ticks use the default one); relevance matching of changes t
 temporal slots; a load whose game time is several boundaries ahead of the save; and every failure and
 refusal defect. The unit tests of `test/sr2.test.ts` cover the resumed ticks, the catch-up after a load and the
 temporal matching.
+
+## Kernel v4 core and layer 2 core (entries 58 onward)
+
+These entries come from building the S0 v4 core (section 20) and the S2 core (section 0.3) in a second,
+independent run, and from fix round 1 after its independent review (findings L2-01 to L2-17), which moved
+the layer to S2 v1.7 and S0 v4.12. Numbers continue after 57. They are ordered worst first: the readings that
+change observable behaviour or a frozen digest come before the ones that only fill a gap. The block headed
+**Spec findings for the coordinator** at the end lists the ones that most need a decision.
+
+58. **The v4 changes move the frozen v3 digest; both are switchable. S0 v4.12 now says so.** The `frame` change
+    (V4-4) adds two emissions to the v3 run, and the v4 schema (V4-2, V4-3, V4-22) changes function versions and
+    so the schema hash. The frozen v3 digest `d534e0dcef3f85d27cefa552217152ec` therefore runs with
+    `frameChanges: false` and `coreDefs({ v4: false })`, and is unchanged: S0 v4.12 section 20 defines the digest
+    on the v3 schema with frame changes off. A second frozen digest, `da48cabc405ed361ce6ad5f3b895a822` over 1,069
+    entries, covers the same script with both on (`test/digest-v4.test.ts`); a native core must reproduce both. The
+    defaults of the kernel are v4 on. Fix round 1 changed neither digest: the change payload snapshot (L2-01), the
+    operation Id without the epoch (L2-04) and the captured focus (L2-13) moved no result the script exercises.
+59. **A ladder ends when an exit beat has been played, and T12 reads `unattended` as well. S2 v1.6 and v1.7
+    settle the first half.** Only the exit beats write `exit` (through `leaves`, when they complete), so the
+    expansion's `end` is A.4's `any[top rung done, exit > 0]` and waits for the exit's content. What SF-7 then
+    asks for, "T12 with closure status `resolved` and `witnessed` true" after a decline, needs T12 to fire from
+    `unattended`, because T10 (a decline) puts the seed there and T12's row says `running`. The reference fires T12
+    from `running` and from `unattended`, in table order before T13. **This needs a ruling** (see the findings
+    block). The variant that ignores every offer ends by T13 with `abandoned`: with `reoffers: 0` the first offer's
+    lapse is T10, and the plan settles it.
+60. **The attempt bound counts offers only, and a pull lifts it. In-scene offers are exempt (S2 v1.7).** S2 8.5
+    bounds attempts per logical offer across channels and reloads. Replies and beats are not offers and do not count.
+    When the bound is reached the delivery is `expired` ("waits for pull") and the offer is `stopped` until V pulls (a
+    recap or a deliberate approach), which lifts it. The bound is checked at candidate selection as well as at release,
+    or a fifth push could be queued (SF-62). A request that expires unreleased (a busy UI throughout its `maxWait`) is
+    a timeout and counts as an attempt; its retry takes the place of the expired delivery under the same id, so there is
+    one delivery object per id (review R-4, R-8). An in-scene offer is not a push: it is not stopped by the bound, and
+    its retry keeps its `inScene` mark.
+61. **In-scene offers (S2 v1.7).** An offer inside a scene V is already in is released at the beat's moment: the busy-UI,
+    attention, spacing, cap, category and session gates do not apply, and neither does the tempo-off filter (it is not
+    a push). Display grades, receipts and the joint latch still apply, and it follows the response lifecycle. It is not
+    counted towards the attempt bound. The scene it follows must be running: when the beat it follows becomes final
+    before the offer is released or answered, the offer is dropped with `why: the scene ended`, whether it is queued,
+    released or displayed, and its beat is skipped as `rejected` (`dropEndedScenes`, run at every re-evaluation and
+    every arbiter step). L-131a is static: the offer's fragment and the fragment of the beat it links `because` carry
+    the same `scene` label (S2 v1.7 `Fragment.scene`). The earlier wording of this note, which said the gates were
+    "pacing, attention and region" and that the offer kept the attempt bound, was wrong about both.
+62. **A seed fact counts as changeable only if something writes it (`writtenFacts`). (new)** `writtenFacts` and
+    `canChange` serve the run-time beat analysis (a `never` link, the stuck check): a seed fact nothing writes is a
+    constant there. The lint does not use it. (The earlier wording said it did; L-05 reads `consumers`, and L-06 reads
+    consequences, note 80.)
+63. **The fit report casts first and ignores the live instance's own claim. (new)** S2's fit report builds a
+    throwaway instance. It casts before windows are computed (a template that cannot cast reports `waits`, not a
+    window), and a live instance of the same template is not counted as a claimant against the throwaway one. Its
+    decline preview names the exit beat's content when the decline has none of its own.
+64. **Offer identity counts offer and beat deliveries only. (new)** The id of an offer hashes the number of
+    earlier releases of that offer. Reply deliveries are another kind and must not shift an offer's identity, or
+    the same offer would get a new id after V answers (SF-64). `missed` ignores replies for the same reason.
+65. **A hard prepare failure re-evaluates the seed at once. (new)** S2 8.4: if prepare finds a hard condition no
+    longer holds, the delivery is dropped and the seed queued for re-evaluation in the same pass (SF-23), not at
+    the next change that happens to touch it.
+66. **Content gates run before prepare, at release. (new)** A delivery whose fragment is above a content ceiling
+    in force at release is `expired` ("above the content ceiling") and its beat omitted (SF-51); a delivery
+    whose content is missing from the pack (and has no implied form) is `expired` ("missing-content"). Both
+    happen before prepare, which would otherwise stage and discard a batch for a result already known.
+67. **Predicate text extensions. (new)** The grammar of S2 2.6 leaves open: `all()` and `any()` for an empty or
+    one-member group, the other role operators (`in {..}`, `not in {..}`, `in [a, b]`, `has-edge(..)`), `@role`
+    as an argument, durations `<seconds>g` (game time) and `<seconds>p` (play time), and generic `{key: value}`
+    patterns. The printer and parser round-trip every form (tested with generated predicates).
+68. **`since` for a beat is its last move into a final or deferred state; a duration runs on its own clock.** `finalAt` and
+    `finalAtPlay` are written each time a beat becomes `done`, `skipped`, `failed` or `deferred`, and a state's entry writes
+    `entered` and `enteredPlay`. `since(x) >= <n>g` compares the game time **read at the last window boundary** (S2 4.3:
+    a game-clock duration is checked at window boundaries only, so a result never depends on where the host's ticks
+    fell) with the game stamp; `<n>p` compares the cumulative play time (`playTotal`) with the play stamp. A beat or
+    state never entered has no stamp, and `since` is `no`. The same two clocks serve a timed `wait` step of a casting
+    ladder, the unattended plan's `after`, an aftermath's delay and a game-clock `maxWait`. A game-time wake-up is
+    rounded up to the boundary that ends the window it falls due in; a play-time wake-up is checked by the arbiter's step
+    (L2-08).
+69. **Layer 2 state loads in a fixed order and starts a new session. (new)** `onLoad` rebuilds instances from
+    the kernel's `SeedRecord` roots and layer 2's global record, resets deliveries, reinstalls each seed's
+    contributions with origin `pack:seed/<id>`, and starts a new arbiter in `settling` (S2 8.6). Play-clock
+    stamps are relative to the session (`playBase`, `baseTotal`) so a save means the same in the next session. A
+    save flushes layer 2 first (`layer2.flush()`), so the file holds the committed state. A load that is read-only
+    (a function the save needs is gone) rebuilds the instance table and the arbiter for reading and writes nothing:
+    no root, watcher, contribution, withdrawal, maintenance or lifecycle write (L2-12). A play-clock duration that was
+    running restarts from the load (S2 2.12): a play-clock `since` stamp that has not yet elapsed, a timed `wait`, an
+    unattended plan and an aftermath on the play clock restart from the load's cumulative play time; a duration
+    that had already passed stays passed. The state and beat stamps are history and are never rewritten: a restart is
+    recorded for that one duration (`playRestarts`), so two durations on one stamp, one passed and one running, stay
+    apart (R2-02). A game-clock offer lapse is kept (`lapseGameAt`), not restarted.
+70. **A staged batch is a snapshot and a restore, with one shared allowance. (new)** V4-26 allows it. The batch holds the
+    revision and captures of the store, frames, beliefs, events and groups; `discard` restores all of them and
+    invalidates the query, summary, resolution and retention caches. A write outside the batch while it is open is
+    refused with a plain error, and `Persistence.load` and `Persistence.save` are refused with a batch open (a save from
+    inside the batch's own write callback too: its operations are not persisted). Discard also restores the settings log,
+    the seed table, streaming and the summaries' canon sets (review R-1, R-2). A change is a snapshot of what happened:
+    `emit` copies the payload, so a staged write that is discarded, or a later write, cannot alter a notification that was
+    already queued (L2-01). A batch whose reads ran out of the allowance is never committed: the release that staged it fails
+    softly and the batch is discarded, since a check that ran out proved nothing (R2-01). Every read made through a batch (`resolve`, `value`, `trace`, `query`) draws on **one**
+    allowance, S0 14.2a's "shared work allowance", not a fresh one each; the batch exposes what it has used. The spec does
+    not say what a failing commit does; the reference has none, so the failure path is a discard.
+71. **Redaction scrubs settings content and the director's beliefs about V; a new v4 lineage records its initial
+    settings. (new)** V4-21 says sensitive material is dropped by default from an export. `redactSensitive` removes
+    `BeliefSet` ops whose believer is the director and subject is V and replaces a `SettingsSet` content block with a
+    `redacted` preset with empty ceilings; the same for a snapshot. `PersistedView.settings` is omitted when empty so v3
+    records are byte identical. S0 14.2 says the lineage root records the initial settings: a kernel that has layer 2
+    attached while its lineage is still empty (no save, no log) writes them, at the time of attachment. An empty log in a
+    v3 save stays as it is, and loading it into a world with layer 2 keeps it empty. The frozen v4 digest has no layer 2,
+    so it records none.
+72. **Reply selection and attribution. (new)** S2 8.8 says an NPC's template reply can correct a telling. The
+    templates offered with a delivery are chosen at release (`selectResponses`): those whose `needs` holds and
+    whose `to` pattern matches a confirmed event V has acted on. A template whose `to` is a **response kind**
+    (`decline:<id>`, `action:<id>`, `decline:*`, `action:*`, `any`; S2 v1.6 section 2.9) is chosen when V answers, and
+    the `response` record entry lists it. V using one (`reply`) writes an observed telling (an event with V and the NPC
+    as witnesses) and sets the NPC's belief from V's own words, so the belief really revises and the line no longer
+    applies (SF-25, SF-36).
+73. **Effects by persistence class. (new)** A seed-fact write rewrites the single pin it owns; maintenance
+    writes go through a queue that a reset empties; cosmetic marks live on the instance and are never read by a
+    predicate. The accept, decline and not-now crash-point sweeps show a reset at any point leaves no partial
+    state. The class of a seed-fact write is the effect's own `persist`, then the fact's (`SeedFactDecl.persist`), then
+    `lasting` for a fact with a `route` and `resettable` for any other (S2 v1.6 2.5). An `authoredOnly` fact (a ladder
+    boundary) is always lasting, is written by authored seeds only, and only rises: a write that would lower it is refused
+    with a record entry (Appendix A.2 step 6, L2-11).
+74. **The fit hook is clamped and recorded raw and clamped, in every draw. (new)** The `fit` hook sees the choice id, the
+    option and the instance only. Its weight is clamped to plus or minus `fitCap` before it enters the Gumbel-max draw
+    as a bonus (S2 3.4), and the trace records both. The draw is `rand("seed-draw", ...)` with `H("tie", ...)` for
+    exact ties. The mode and variant draws and the draws among alternates keep `raw` and `clamped` beside the value and
+    attempt, as the casting draw does.
+
+75. **T9 to T11 answer to the offer that committed the seed, by id. (new)** The state `offered` alone does not
+    say which delivery is the first offer: an in-scene follow-up answered while the first offer is open would
+    fire T9. The instance records `firstOffer` (the delivery id released at T7) and T9 to T11 apply only to an
+    answer, lapse or miss of that delivery (review R-5).
+76. **Reverse invalidation is by kind, for instances and for sowing. (new)** S2 4.1 asks that readers of settings and of
+    other seeds be re-evaluated when those change. The reference tags each instance with what it reads beyond its own
+    state (a `setting` atom or a fragment with content tags; a `seed` atom; an `exposed` atom) and queues the readers
+    when a setting is set (seen at the next layer-2 step), when any seed changes state, and when a display report
+    changes the exposure ledger. The tags derive from the stored document, so nothing needs rebuilding at a load, which
+    queues every instance anyway (review R-6). A pack's sowing predicates are tagged the same way (`sowReads`): the
+    pack is queued for sowing when one of those changes, and at each boundary for an `hour` atom. The sowing watcher and
+    an instance's watch frame share one dependency collection (`addPredInterests`): a guarded fact also waits on the
+    facts its `decidedBy` reads, and a `decided` test waits on its guard (L2-09).
+77. **Migration applies at load as well as at install. (new)** A pack installed before a load may carry
+    `migrate: withdraw` for the saved version; `onLoad` applies it before the instance is reinstalled (T1). A
+    game-clock duration is not restarted by a load: `submittedGame` is kept (clamped to the world's time),
+    while play-clock stamps restart (review R-9, R-10).
+78. **Answering is confirmation. (new)** An answer to an offer that is released but not yet reported displayed
+    first processes a `confirmed` display report, so the offer event, the grade and the receipt exist before the
+    response event that cites them (review R-11). A receipt is stamped with the time its retained grade was reached:
+    raising the grade restamps `at` and `playTotal`, and a repeat report of a grade already held does not (L2-14).
+79. **Cosmetic effects write no pin; replies and closing deliveries outlive a seed's pending requests. (new)** S2
+    2.5: a cosmetic effect is the canon event and its carrier and no pin, so a predicate cannot read it back. A
+    `reply` (a retract's `retractQuietly`, a lapse's line) is not cancelled when the seed ends, as a closing
+    delivery is not; closing deliveries are retired, with the references their job held, when shown or at
+    `closeExpiry` (review R-13 to R-15).
+80. **L-06 reads consequences (S2 v1.6 2.9).** Every action of a consequential choice needs a consequence something reads: a
+    write to a seed fact with a consumer, or a link whose `on` reads the response with `action:<id>` (a bare `action`
+    or `action:*` reads every action, so it counts as a consequence but tells none apart). No two actions may have the
+    same consequence: their writes, as sets of fact = value pairs (every write, not only the read ones), differ, or a response link
+    names one of them. R1's `stay` writes nothing and is read by `exit-stay`, so the scenario passes. The earlier
+    "distinct value per action" reading (review R-16) is replaced.
+81. **Later capabilities are checked in every variant, and in the whole closure of fragments. (new)** A variant's parts
+    merge over the seed, so a clock in an unchosen variant is refused at compile time as well. The fields of a
+    fragment (`implies`, `ask`, `render`, `modelOk`, `says`, `means`, `humour`, `told`, short and full forms, recall)
+    and its predicates are checked on **every** fragment the document reaches: the beats' fragments, the ladder's, the
+    close content and signposts, and what their `implied` forms and other content references reach in turn, in the
+    document that runs and in every variant (review R-7, L2-15).
+82. **A channel-free beat with an objective stays running. (new)** S2 7.3 completes a beat on its content only
+    when it has no objective; one with an objective starts at once (no channel to wait for) and is left to the
+    running pass (review R-3).
+
+**Fix round 1 (entries 83 onward).**
+
+83. **Closure status and witnessing (S2 v1.6 6.4, L2-17).** `resolved` only after T12; every T13 is `abandoned` even if
+    its plan makes `end` yes; forced closures (withered, withdrawn, T13) retire open promises. `witnessed` is derived
+    from exposure: for T12, true when a delivery of one of the beats that completed last (the ending beats) has a
+    receipt of at least `presented` (the beat that completed last is found by the order of the record, `doneAt`, because two completions
+    in one pass share their stamps, R2-04); for T13 and forced closures, false (the plan is not shown). A seed that reaches its
+    end with no display receipt (a channel-free completion) is therefore unwitnessed and queues the news.
+84. **Links (S2 v1.6 7.1).** `join` combines the chain links (`because`, `then`); `obstructedBy` is a guard that must
+    always hold. A beat in `start` needs no chain links. A beat a `failure` leads to waits for that failure (the failing
+    beat records `failedBy`, the entry's index) and then also needs its own chain links; when every beat that could fail
+    into it has ended some other way, it is skipped as rejected. A beat with no chain links, not in `start` and not led
+    to, is satisfied at once and waits only for its fragment's `needs` (R1's lapse exit); the lint's reachability and the
+    fit report count it (`reachableBeats`). Ties go by key, and a beat that becomes available is live for the later ones in
+    the same pass.
+85. **Casting before the window (S2 v1.6 5).** Casting runs in `sown`, `waiting` and `cast` whatever the windows say
+    (it was already so; a regression test now pins it). Only T4 needs a window open.
+86. **R1's expansion (S2 v1.6 Appendix A).** `stay` and `decline` write nothing; the decline has no response content
+    (`OfferSpec.decline[].response` is optional) and `exit-decline` plays `exits.decline`; every offer beat has a
+    `reoffer`, `offer-1` too; Takemura's `must` includes `age-class` = adult. The lapse exit's gate lives in its
+    fragment's `needs` (A.4), which a profile cannot generate: the ladder lint checks the contract (L-10): `since(offer-1)`
+    at least `lapseAfter`, and no pacing act since `offer-1`. This is A.4's one simplification (measured from `offer-1`).
+87. **L-99 proves acceptance by structure (L2-02).** A scene's enabling link must imply that V accepted an action of the
+    offer it follows: an `all` is proved by any one part, an `any` by every part; `not`, a bare test, `yes` and any form
+    that cannot be shown to imply it are not proofs. A seed-fact test proves it only if it is false at the fact's initial
+    value and no write other than the offer's actions can make it true (a decline, the null path, another fragment, a beat or
+    the plan). The scene's beat must not be in `start`, offered again by `reoffer`, or led to by a failure; with `join: any`
+    every chain link must prove it and a `then` link cannot.
+88. **The resituating gate (S2 8.2, L2-16).** `resituating` admits one cue of class 2 or lower: a delivery of the
+    last-attended seed (the one with the most recent receipt of at least `presented`, by the cumulative play time), or, with no seed
+    attended, a class-0 delivery (the hook). Class-0 deliveries pass anyway. Releasing the cue ends the orientation.
+89. **Cast edges are role-qualified (L2-06) and stand-ins are staged (L2-05).** A cast edge's Id hashes the seed, the role,
+    the node, the time and the delivery that committed it, so two roles on one node have two edges and a recommitted role a
+    new one. While a batch commits roles, world requirements and authored relationships resolve a role through the staged
+    binding map, so a stand-in (minted inside the batch) gets its commit-time requirements installed and checked.
+90. **Lapse and expiry re-evaluate (L2-03).** A lapse, a missed release and an unreleased expiry queue the owning instance,
+    so the new state's wake-ups are installed (T10 gets its T13 wake-up).
+91. **The kernel's operation Id (L2-04).** An external operation's Id is `H("xop", stamp, op, ordinal)`: the epoch only
+    refuses stale operations (I-16).
+
+92. **The second review's findings (R2-01 to R2-09).** The staged commit is bounded (R2-01, see 70). A canon event's exposure wakes the instances and
+    the sowing watcher that read it (`exposed` with an event pattern watches the event kind, R2-03). L-06 evaluates each link condition under
+    every answer to the offer, response atoms set by the answer and everything else unknown, so a grouped test (`is go or skip`) does not
+    tell two actions apart and a test of any action tells actions from a decline only (R2-05). The ladder's lapse contract must be implied by
+    every way the fragment's `needs` can be yes (R2-06). Predicates in the fragments and documents of an unchosen variant are checked for later
+    capabilities (R2-07). `commitRoles` first binds every role (a stand-in is minted), then installs goals, relationships and requirements, so
+    a role may name one that commits later in the order (R2-08). A game-clock offer lapse (`lapse.after.clock = game`) is kept as a game time,
+    falls due at the window boundary that ends the window it fell due in, and is not restarted by a load (R2-09).
+
+### Spec findings for the coordinator
+
+The ones that need a decision, worst first:
+
+- **59 (T12 from `unattended`).** SF-7 expects T12 after a decline, but T10 puts the seed in `unattended` and T12's
+  row reads `running`. The reference lets T12 fire from `unattended` too. If that is not intended, SF-7's expected
+  ending changes (or T10 on a decline in a ladder must leave the seed `running`).
+- **68 (clocks).** The spec says game-clock durations are checked at window boundaries; the reference reads every
+  game-clock duration (`since`, waits, the plan, an aftermath, a `maxWait`) at the last boundary. If a `since` atom
+  should instead read exact time and only the wake-up be rounded, results differ by up to one window.
+- **69 (restart).** A play-clock `since` that has not yet elapsed restarts at a load; one that has elapsed stays
+  elapsed. The text of 2.12 names `maxWait`, a lapse and a category timer; it does not name `since` or a casting wait.
+- **80 (L-06, "differ").** Distinctness is judged on every write and every named response, not only the read ones; a
+  stricter reading (only the consequences something reads) would also reject two actions that share a read write and
+  differ in an unread one.
+- **88 (the cue).** With no seed attended the "class-0 hook" is any class-0 delivery; 8.2 does not say which.
+- **Later capabilities refused.** Each later construct is rejected at compile time with "X is not supported yet"
+  and the spec's instead-text where one exists: clocks and projections, short and full forms, plants,
+  language-model fields, city reads, the tone, dread, setting, stage, words and model lint blocks, scale
+  metadata, constructed traces and late causes. `test/s2/fixtures.test.ts` names the fixture each one blocks
+  (50 of SF-1 to SF-64 have named tests, SF-18 in its count form only; 14 wait wholly for a later capability;
+  the kernel's F-16 has its own test, and F-17 to F-20 wait for the deferred memory machinery).

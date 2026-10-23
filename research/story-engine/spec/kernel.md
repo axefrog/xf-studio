@@ -1,6 +1,10 @@
 # S0. Kernel specification
 
-**Status:** v4.8, 23 October 2026.
+**Status:** v4.12, 23 October 2026.
+- v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (found while building v4 in the reference model).
+- v4.11 adds three clarifications from S1 v0.2 (V4-47 to V4-49).
+- v4.10 adds eight clarifications from writing [S1](simulation.md) (V4-39 to V4-46).
+- v4.9 completes the process interface for S1 (V4-35 to V4-38), from the [P3](../p3-simulation-layer.md) design.
 - v4.8: an event-kind registry; occurrence ids and times on delivered envelopes; `tempo` in settings (V4-32 to V4-34).
 - v4.7 clarifies pattern frames for layer 3 (V4-31).
 - v4.6 adds staged batches, widens relevance routing to layer 2, tightens the production gate, fixes recall to once per encounter, and defers the memory machinery and implicit edges from the first version, after GPT-6 Astra's second review of S2 (V4-26 to V4-30 in §20).
@@ -727,7 +731,7 @@ A city's incidents can therefore start as counts in per-window summaries. Fine d
 
 Simulation processes are S1's. The kernel defines when they run and what they may read.
 
-- **One shared window.** All processes share a base simulation window, `W_sim` **[tunable 600 s]**. A process runs every `n`-th window, `n ≥ 1`, aligned so it runs when `k mod n = 0`. `run(ctx, k)` computes its outputs for windows `k` to `k + n − 1`. Its randomness is keyed `("proc", worldSeed, processId, k, …)`.
+- **One shared window.** All processes share a base simulation window, `W_sim` **[tunable 600 s]**. A process runs every `n`-th window, `n ≥ 1`, aligned so it runs when `k mod n = 0`. `run(ctx, k)` computes its outputs for windows `k` to `k + n − 1`. Its randomness is keyed `("proc", worldSeed, processId, w, …)`, where `w` is the window being computed, not the run's start (v4.10).
 - **Order at each boundary** `t = k × W_sim`:
   1. Apply the outputs of every process run whose span ends at `t`, by tier (coarse first), then by `id`.
   2. Apply the external operations stamped in the window that just ended, by timestamp, then `Id`. These are game readings, observations and seed operations.
@@ -735,6 +739,18 @@ Simulation processes are S1's. The kernel defines when they run and what they ma
 
   Processes never see each other's outputs within a span (double buffering).
 - **Outstanding outputs are state.** A batch computed but not yet applied is part of the process's `ProcessState`, with its application boundary. It is persisted, restored on load under the new epoch, and applied at its boundary without re-running the process.
+- **The process interface** (v4.9). `run(ctx, k)` may:
+  - **read its own state** and return a replacement with its batch. The state is applied atomically with the batch, and double-buffered like any output;
+  - **read other processes' published digests** as of the boundary snapshot, read-only;
+  - for a fine-tier process, **call `demanded(tier)`**, which returns the nodes demand reaches at that tier, with the claim;
+  - **return operations of these kinds:**
+    - frame operations: open, status, weight, interests;
+    - group `decide` and `order` (§12);
+    - `observe`;
+    - `tell`;
+    - belief set.
+
+    They are applied with the batch, in its order, under the same rules as the other operations.
 - **Partition independence (I-15).** Given the same timestamped external operations and the same demand history, a process's history doesn't depend on how ticks fell.
 - **Catch-up.** After an absence, tiers 0–2 run every missed boundary in order, each within the hard limits.
 - **Fine tiers (3–5)** run only where demand reaches them (§10.6). They never catch up: when V arrives, their state is generated from the coarse state, consistent with the pins.
@@ -809,10 +825,10 @@ type Change =
   | { c: 'minted'; node: Id; kind: KindId }
   | { c: 'contribution'; contribution: Contribution; ended: boolean }
   | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value }    // a game reading that changed a value
-  | { c: 'frame'; frame: Id; actor: Id; level: string; old: string; new: string };   // a frame status change (v4)
+  | { c: 'frame'; frame: Id; actor: Id; level: string; focus: Id[]; old: string; new: string };   // a frame status change (v4)
 ```
 
-A `frame` change is produced when a frame's `status` changes. Weight and parent changes produce none.
+A `frame` change is produced when a frame's `status` changes to a different value. Weight and parent changes produce none. It carries the frame's focus nodes, because its bindings are the actor and each focus node, and a matcher sees only the change.
 
 Cache fills, regeneration and save replay produce no changes.
 
@@ -1248,14 +1264,14 @@ The [reference model](../../../projects/xf-story-engine/README.md) is on `main`:
 
 ## 20. Version 4 additions
 
-v4 adds what the seeding layer and sifting need. None of the additions changes a result the reference model produces today: the determinism digest stays valid. Each is marked "v4" where it appears.
+v4 adds what the seeding layer and sifting need. Two additions change the frozen determinism digest's results if they are switched on: the v4 core schema names one more function (`derive:age-class@1`), which changes every saved record's `meta.versions`, and the `frame` change (V4-4) adds changes wherever the digest's script changes frame status. So the digest is defined on the **v3 schema with frame changes off**. An implementation reproduces it in that configuration, and the v4 behaviour separately, through the v4 fixtures (§16.1, F-16 onward). Each is marked "v4" where it appears.
 
 | # | Addition | Section | Needed by | Reference model |
 |---|---|---|---|---|
 | V4-1 | Derives receive the query time `t` | §2.1 | S1 urgency and deadlines ([DS-66](../design-seeds.md)) | To implement; existing derives ignore `t` |
 | V4-2 | `core:game-fact`, `core:seed-fact`, `core:seed`, the `core:cast` edge, and event kinds `offer`, `response`, `seed-outcome` | §2.6 | S2 §0.4 | To implement (schema only) |
 | V4-3 | Optional `outcome` and `served` on events | §9.2 | Sifting ([dossier 6](../craft/d06-sifting-tellability.md) G-3) | To implement (schema only) |
-| V4-4 | A `frame` change on frame status changes, with its bindings | §10.5 | Sifting (G-2); closure and reversals | To implement. It adds changes, so relevance can grow; the digest's fixtures produce no status changes, so it is unaffected |
+| V4-4 | A `frame` change on frame status changes, with its bindings | §10.5 | Sifting (G-2); closure and reversals | Built. It adds changes, so relevance can grow. The digest's script does change frame status, so the digest runs with frame changes off (see above) |
 | V4-5 | Relevance on seed frames reaches layer 2 | §10.5 | S2 §4 | To implement (delivery only) |
 | V4-6 | Dilemma recipients stated | §10.8 | S2 §9, S3 (G-5) | A clarification |
 | V4-7 | Any layer may keep `SeedRecord`s under its own ids | §14.1 | S2 §12, S3's promoted matches (G-8) | Already true |
@@ -1286,6 +1302,21 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-32 | The event-kind registry; kinds matched through the `kind` slot | §9.2, §10.5 | S3's sifter (Astra's S3 review, D-16) | A clarification and a small registry |
 | V4-33 | Occurrence id and game time on delivered emissions and dilemmas | §10.5, §10.8 | D-16 | Delivery only |
 | V4-34 | `tempo` in `SettingsSet` | §14.2 | D-16 | With V4-12 |
+| V4-35 | A process reads and replaces its own state, with its batch | §9.4 | S1 processes ([P3](../p3-simulation-layer.md) §16, K-1) | To implement |
+| V4-36 | A process reads other processes' published digests | §9.4 | K-2 | To implement |
+| V4-37 | `demanded(tier)` for fine-tier processes | §9.4, §10.6 | K-3 | To implement |
+| V4-38 | The process operation set: frames, decide, order, observe, tell, belief set | §9.4 | K-4 | To implement |
+| V4-39 | A summary whose scope has no place strictly under it gives its items the scope itself as their place | §9.3 | [S1](simulation.md) §16.1 K-1 | A clarification |
+| V4-40 | A `Derive` input that resolves `unavailable` reaches the derive as `undefined`; other statuses propagate | §5.1 | K-2 | A clarification |
+| V4-41 | **A process draw is keyed by the window being computed**: `rand("proc", worldSeed, processId, w, …)`, not by the run's start, so a draw is independent of where a run starts | §9.4 | K-3 | To implement; the reference model's `ctx.rand` changes |
+| V4-42 | Process digests are readable by registered reads and hooks, as of the last applied boundary | §9.4 | K-4 | A clarification |
+| V4-43 | The process operation shapes, and `contributionId(spec)` as a pure function | §9.4 | K-5 | With V4-38 |
+| V4-44 | `matchStrength(actor, change, types?)`: the greatest relevance the kernel's matching gives a change against an actor's eligible frames, as a read | §10.5 | K-6 | A small read |
+| V4-45 | An event may be minted with a `time` earlier than the boundary at which it is applied | §9.2 | K-7 | A clarification |
+| V4-46 | A layer's `SeedRecord` with no `actor` retains only its own `nodes` | §14.1 | K-8 | A clarification |
+| V4-47 | `publish-item`: a process operation that publishes a summary item once, as one `event` change. Later regeneration of the item stays silent (I-13) | §9.3, §9.4 | [S1](simulation.md) v0.2 §16.1 N-1 | To implement with V4-38 |
+| V4-48 | Restating a contribution identical to one already in effect is a silent no-op: no new id, no change, no revision | §4.1 | N-2 | A clarification |
+| V4-49 | A process's last published digest is persisted with its `ProcessState`, so digest reads are identical after a load | §9.4, §14.1 | N-3 | A clarification |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**

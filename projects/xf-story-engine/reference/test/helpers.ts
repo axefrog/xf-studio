@@ -1,7 +1,7 @@
 // Test helpers: a small fixture schema builder and kernel factory.
 
 import type { Config } from '../src/config.ts';
-import { coreDefs, mergeDefs } from '../src/core-schema.ts';
+import { type CoreDefsOptions, coreDefs, mergeDefs } from '../src/core-schema.ts';
 import { H, s } from '../src/id.ts';
 import { Kernel } from '../src/kernel.ts';
 import type { DimensionDef, KindDef, SchemaDefs, SlotDef } from '../src/schema-types.ts';
@@ -33,9 +33,9 @@ export function fxKernel(name: string, defs: SchemaDefs, config?: Partial<Config
 }
 
 /** A kernel over the core schema plus fixture definitions. */
-export function coreKernel(name: string, extra?: SchemaDefs, config?: Partial<Config>): Kernel {
+export function coreKernel(name: string, extra?: SchemaDefs, config?: Partial<Config>, core: CoreDefsOptions = {}): Kernel {
   const cfg = config ?? {};
-  const defs = extra ? mergeDefs(coreDefs(cfg.wSim ?? 600), extra) : coreDefs(cfg.wSim ?? 600);
+  const defs = extra ? mergeDefs(coreDefs(cfg.wSim ?? 600, core), extra) : coreDefs(cfg.wSim ?? 600, core);
   const o: { defs: SchemaDefs; worldSeed: Id; config?: Partial<Config> } = { defs, worldSeed: fxSeed(name) };
   if (config) o.config = config;
   return Kernel.create(o);

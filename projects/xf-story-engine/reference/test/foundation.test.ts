@@ -107,8 +107,8 @@ describe('registry and core functions (spec 2.1)', () => {
     expect(reg.get('prior', { name: 'uniform', version: 1 })(dim, ['a', 'b'], {})).toEqual([1, 1]);
     expect(reg.get('prior', { name: 'weights', version: 1 })(dim, ['a', 'b'], { weights: { a: 3 }, default: 2 })).toEqual([3, 2]);
     expect(() => reg.get('prior', { name: 'weights', version: 1 })(dim, ['a'], { weights: { a: 0 } })).toThrow();
-    expect(reg.get('derive', { name: 'floor-div', version: 1 })([37], { divisor: 10 })).toBe(3);
-    expect(reg.get('derive', { name: 'concat', version: 1 })(['Alex', 'Reyes'], { sep: ' ' })).toBe('Alex Reyes');
+    expect(reg.get('derive', { name: 'floor-div', version: 1 })([37], { divisor: 10 }, 0)).toBe(3);
+    expect(reg.get('derive', { name: 'concat', version: 1 })(['Alex', 'Reyes'], { sep: ' ' }, 0)).toBe('Alex Reyes');
     expect(reg.get('preimage', { name: 'floor-div', version: 1 })(ivlRegion([[3, 3]]), [], { divisor: 10 })).toEqual(ivlRegion([[30, 39]]));
     expect(reg.get('conditioned', { name: 'table', version: 1 })(['x'], ['a', 'b'], { table: { x: { a: 5 } } })).toEqual([5, 1]);
     expect(reg.get('fieldmap', { name: 'boost-value', version: 1 })(0.5, ['a', 'b'], { gain: 2, value: 'a' })).toEqual([2, 1]);

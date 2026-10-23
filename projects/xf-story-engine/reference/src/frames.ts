@@ -296,6 +296,33 @@ export class Frames {
     this.cachedPull.delete(id);
   }
 
+  /** A deep copy of the frame state, for a staged batch's discard (spec 14.2a). */
+  capture(): unknown {
+    return structuredClone({
+      frames: this.frames, kids: this.kids, versions: this.versions, cachedPull: this.cachedPull, worklist: this.worklist.snapshot(),
+      demandRoots: this.demandRoots, dilemmaSeen: this.dilemmaSeen, dilemmas: this.dilemmas, demandLog: this.demandLog,
+      demandOpen: this.demandOpen, viaDecision: this.viaDecision,
+    });
+  }
+
+  restoreFrom(cap: unknown): void {
+    const c = structuredClone(cap) as Record<string, any>;
+    this.frames = c.frames;
+    this.kids = c.kids;
+    this.versions = c.versions;
+    this.cachedPull.clear();
+    for (const [k, v] of c.cachedPull as Map<Id, number>) this.cachedPull.set(k, v);
+    this.worklist.restore(c.worklist);
+    this.demandRoots.clear();
+    for (const a of c.demandRoots as Set<Id>) this.demandRoots.add(a);
+    this.dilemmaSeen = c.dilemmaSeen;
+    this.dilemmas.length = 0;
+    this.dilemmas.push(...(c.dilemmas as Dilemma[]));
+    this.demandLog = c.demandLog;
+    this.demandOpen = c.demandOpen;
+    this.viaDecision = c.viaDecision;
+  }
+
   clear(): void {
     this.frames.clear();
     this.kids.clear();
@@ -319,10 +346,16 @@ export class Frames {
   }
 
   setStatus(id: Id, status: FrameStatus, cause: Id): ContextFrame {
-    return this.mutate(id, (f) => {
-      f.status = status;
-      f.cause = cause;
+    const before = this.frames.get(id)?.status;
+    const f = this.mutate(id, (fr) => {
+      fr.status = status;
+      fr.cause = cause;
     }, { dilemma: true });
+    // A status change is a semantic change (spec 10.5, v4); weight and parent changes are not.
+    if (this.k.config.frameChanges && before !== undefined && before !== status) {
+      this.k.emit({ c: 'frame', frame: id, actor: f.actor, level: f.level, focus: [...f.focus.nodes], old: before, new: status });
+    }
+    return f;
   }
 
   setWeight(id: Id, weight: number, cause: Id): ContextFrame {
@@ -576,10 +609,12 @@ export class Frames {
                 if (this.dilemmaSeen.get(key) === stamp) continue;
                 this.dilemmaSeen.set(key, stamp);
                 const severity = this.pull(A.id, pullMemo) * this.pull(B.id, pullMemo);
-                this.dilemmas.push({
+                const d: Dilemma = {
                   id: H(hs('dilemma'), hid(A.actor), hid(A.id), hid(B.id), hid(target), hs(eff.effect), hs(stamp)),
                   actor: A.actor, frameA: A.id, frameB: B.id, target, effect: eff.effect, severity, cause: A.id,
-                });
+                };
+                this.dilemmas.push(d);
+                this.routeDilemma(d);
               }
             }
           }
@@ -587,6 +622,19 @@ export class Frames {
       }
     }
     return cost;
+  }
+
+  /**
+   * Dilemmas whose frames belong to an actor layer 2 has registered go to layer 2 as well (S0 v4, V4-27). A frame
+   * belongs to an actor when its own actor or the actor of one of its ancestor frames is registered: a role's
+   * goal frame sits on the cast node, below the seed's role frame.
+   */
+  private routeDilemma(d: Dilemma): void {
+    const l2 = this.k.layer2;
+    if (!l2) return;
+    const actors = l2.actors();
+    const owned = [d.frameA, d.frameB].some((f) => this.ancestorsOrSelf(f).some((a) => actors.has(this.frames.get(a)?.actor ?? '')));
+    if (owned) l2.onDilemma(d);
   }
 
   drainDilemmas(): Dilemma[] {

@@ -10,7 +10,7 @@ import type { Kernel } from './kernel.ts';
 import { type Binding, namesNode, selectorMatches } from './predicate.ts';
 import { INTEREST_TYPES, type InterestType } from './registry.ts';
 import { type OwnValue, newOpCtx } from './resolve.ts';
-import type { Change, Edge, Id, PendingChange, Selector, Value } from './types.ts';
+import type { Change, Edge, GameTime, Id, PendingChange, Selector, Value } from './types.ts';
 import { type Budget, LimitExceeded } from './work.ts';
 
 export interface Relevance {
@@ -20,6 +20,8 @@ export interface Relevance {
   revision: number;
   type: InterestType;
   r: number;
+  /** The game time the change was made at (S0 v4, V4-33). */
+  time: GameTime;
 }
 
 interface ScanEntry {
@@ -81,6 +83,12 @@ export function bindingsOf(change: Change): { bindings: Binding[]; wild: Extract
     }
     case 'minted':
       return { bindings: [{ node: change.node }], wild: null };
+    case 'frame': {
+      // A frame status change binds the frame's actor (role `actor`) and each node in its focus (role `focus`) (spec 10.5, v4).
+      const out: Binding[] = [{ node: change.actor, role: 'actor' }];
+      for (const n of change.focus) out.push({ node: n, role: 'focus' });
+      return { bindings: out, wild: null };
+    }
     case 'contribution': {
       const sc = change.contribution.target.scope;
       if (sc && 'nodes' in sc) return { bindings: sc.nodes.map((n): Binding => ({ node: n, slot: change.contribution.target.slot })), wild: null };
@@ -180,7 +188,7 @@ export class Dispatcher {
         const ord = a.pos;
         const have = a.best.get(key);
         if (!have || r > have.rel.r || (r === have.rel.r && ord < have.ord)) {
-          a.best.set(key, { rel: { actor: df.actor, frame: d, change: a.pc.change, revision: a.pc.revision, type: e.type, r }, ord });
+          a.best.set(key, { rel: { actor: df.actor, frame: d, change: a.pc.change, revision: a.pc.revision, type: e.type, r, time: a.pc.time }, ord });
         }
       }
     }
@@ -202,9 +210,13 @@ export class Dispatcher {
         x.ord - y.ord
       );
     });
+    const l2 = this.k.layer2;
+    const l2Actors = l2?.actors();
     for (const row of rows) {
       this.emitted.push(row.rel);
       for (const l of this.listeners) l(row.rel);
+      // Emissions on frames whose actor layer 2 has registered also go to layer 2, in the same order (S0 v4, V4-5).
+      if (l2 && l2Actors!.has(row.rel.actor)) l2.onRelevance(row.rel);
     }
   }
 

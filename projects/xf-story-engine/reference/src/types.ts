@@ -202,7 +202,7 @@ export type QueryOutcome =
 // ---- changes (spec 10.5) ----
 
 export type Change =
-  | { c: 'pin'; node: Id; slot: SlotPath; old?: Value | Region; new: Value | Region; reason: string }
+  | { c: 'pin'; node: Id; slot: SlotPath; old?: Value | Region; new: Value | Region; reason: string; at?: GameTime }
   | { c: 'edge'; edge: Edge; ended: boolean }
   | {
       c: 'event'; event: Id; kind: string; place?: Id;
@@ -210,7 +210,9 @@ export type Change =
     }
   | { c: 'minted'; node: Id; kind: KindId }
   | { c: 'contribution'; contribution: Contribution; ended: boolean }
-  | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value };
+  | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value; at?: GameTime }
+  /** A frame's status changed (v4, V4-4). Weight and parent changes produce none. */
+  | { c: 'frame'; frame: Id; actor: Id; level: string; focus: Id[]; old: string; new: string };
 
 /** A change as queued: stamped with the time it was made, the revision it produced, and the epoch it was made in. */
 export interface PendingChange {

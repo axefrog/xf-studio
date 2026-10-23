@@ -8,11 +8,13 @@
 
 import type { BeliefEntry } from './beliefs.ts';
 import { canonicalEqual } from './canon.ts';
+import { rootId } from './id.ts';
 import type { EventCanonRecord } from './events.ts';
 import type { ProcessState } from './evolution.ts';
 import type { ContextFrame } from './frames.ts';
 import type { Kernel } from './kernel.ts';
 import type { SeedRecord } from './retention.ts';
+import type { SettingsEntry } from './settings.ts';
 import type { SummaryRecord } from './summary.ts';
 import type { Contribution, Edge, Form, GameTime, Id, NodeHeader, Pin, Tier, Value } from './types.ts';
 
@@ -31,7 +33,9 @@ export type PersistOp =
   | { op: 'SummarySet'; summary: SummaryRecord }
   | { op: 'FrameState'; id: Id; frame: ContextFrame | null }
   | { op: 'SeedState'; id: Id; seed: SeedRecord | null }
-  | { op: 'ProcessState'; state: ProcessState };
+  | { op: 'ProcessState'; state: ProcessState }
+  /** Every player setting that changes what is offered or remembered, in force from `settings.at` (v4, V4-12). Sensitive. */
+  | { op: 'SettingsSet'; settings: SettingsEntry };
 
 export type PersistOpKind = PersistOp['op'];
 
@@ -74,6 +78,8 @@ export interface PersistedData {
   frames: ContextFrame[];
   seeds: SeedRecord[];
   processes: ProcessState[];
+  /** Left out when empty, so a record with no settings change is what it was before v4. */
+  settings?: SettingsEntry[];
 }
 
 export interface GamePort {
@@ -130,6 +136,8 @@ export class PersistedView {
   frames = new Map<Id, ContextFrame>();
   seeds = new Map<Id, SeedRecord>();
   processes = new Map<string, ProcessState>();
+  /** The settings log, in order (append-only). */
+  settings: SettingsEntry[] = [];
 
   static fromData(d: PersistedData): PersistedView {
     const v = new PersistedView();
@@ -143,16 +151,19 @@ export class PersistedView {
     for (const f of d.frames) v.frames.set(f.id, clone(f));
     for (const s of d.seeds) v.seeds.set(s.id, clone(s));
     for (const p of d.processes) v.processes.set(p.id, clone(p));
+    v.settings = clone(d.settings ?? []);
     return v;
   }
 
   toData(): PersistedData {
     const sorted = <T>(m: Map<string, T>): T[] => [...m.entries()].sort((a, b) => cmp(a[0], b[0])).map((e) => clone(e[1]));
-    return {
+    const out: PersistedData = {
       headers: sorted(this.headers), pins: sorted(this.pins), edges: sorted(this.edges), contributions: sorted(this.contributions),
       beliefs: sorted(this.beliefs), canon: sorted(this.canon), summaries: sorted(this.summaries), frames: sorted(this.frames),
       seeds: sorted(this.seeds), processes: sorted(this.processes),
     };
+    if (this.settings.length > 0) out.settings = clone(this.settings);
+    return out;
   }
 
   clone(): PersistedView {
@@ -216,6 +227,9 @@ export class PersistedView {
         break;
       case 'ProcessState':
         this.processes.set(op.state.id, clone(op.state));
+        break;
+      case 'SettingsSet':
+        this.settings.push(clone(op.settings));
         break;
     }
   }
@@ -284,6 +298,7 @@ export class Persistence {
     for (const fid of k.retention.rootFrameIds()) v.frames.set(fid, clone(k.frames.frame(fid)!));
     for (const s of k.retention.seeds.values()) v.seeds.set(s.id, clone(s));
     for (const p of k.evolution.snapshotStates()) v.processes.set(p.id, clone(p));
+    v.settings = k.settings.all();
     // Pins: those on persisted nodes; a game reading only when something retains it.
     const keep = new Set<Id>();
     for (const e of v.edges.values()) keep.add(e.cause);
@@ -372,6 +387,8 @@ export class Persistence {
     for (const [id, s] of [...cur.seeds].sort((a, b) => cmp(a[0], b[0]))) if (!same(base.seeds.get(id), s)) ops.push({ op: 'SeedState', id, seed: clone(s) });
     for (const id of [...base.seeds.keys()].sort(cmp)) if (!cur.seeds.has(id)) ops.push({ op: 'SeedState', id, seed: null });
     for (const [id, p] of [...cur.processes].sort((a, b) => cmp(a[0], b[0]))) if (!same(base.processes.get(id), p)) ops.push({ op: 'ProcessState', state: clone(p) });
+    // Settings are an append-only log: the entries the chain does not hold yet (a branch always starts from its parent's log).
+    for (let n = base.settings.length; n < cur.settings.length; n++) ops.push({ op: 'SettingsSet', settings: clone(cur.settings[n]!) });
     return ops;
   }
 
@@ -380,6 +397,10 @@ export class Persistence {
   /** Write a save record for the current state, as a child of the save last written or loaded (spec 14.2). */
   save(saveKey: string): SaveRecord {
     this.k.assertWritable();
+    // A staged batch's operations are not persisted (spec 14.2a): not even from inside its own write callback.
+    if (this.k.batch) throw new Error('a staged batch is open: it is committed or discarded before a save (spec 14.2a)');
+    // The seeding layer writes its records to the seed table first (spec 14.1).
+    this.k.layer2?.flush();
     if (this.chain.has(saveKey)) throw new Error(`save key already used: ${saveKey}`);
     const k = this.k;
     const cur = this.currentView();
@@ -443,7 +464,9 @@ export class Persistence {
     const { view, replayed } = this.rebuild(saveKey);
 
     // 1. Discard all branch-local state.
+    if (k.batch) throw new Error('a staged batch is open: it is committed or discarded before a load (spec 14.2a)');
     k.store.clear();
+    k.settings.clear();
     k.beliefs.clear();
     k.events.clear();
     k.summaries.clear();
@@ -468,6 +491,7 @@ export class Persistence {
     for (const b of view.beliefs.values()) k.beliefs.restore(clone(b));
     for (const c of view.canon.values()) k.events.setCanonRecord(clone(c));
     for (const s of view.summaries.values()) k.summaries.setRecord(clone(s));
+    k.settings.restore(view.settings);
     for (const f of view.frames.values()) k.frames.insert(clone(f));
     for (const s of view.seeds.values()) k.retention.seeds.set(s.id, clone(s));
     for (const r of rec.meta.demandRoots) k.frames.demandRoots.add(r);
@@ -517,10 +541,32 @@ export class Persistence {
     report.epoch = k.newEpoch();
     this.base = view.clone();
     this.baseKey = saveKey;
+    // The seeding layer rebuilds its instances from the seed table the replay put back (S2 section 12.2).
+    k.layer2?.onLoad();
     return report;
   }
 
   records(): SaveRecord[] {
     return [...this.chain.values()];
   }
+}
+
+/**
+ * A copy of a record fit for an export or a bug report (spec 14.2, v4, V4-21): the sensitive material is dropped
+ * by default. That is the content settings, and the director's beliefs about V.
+ */
+export function redactSensitive(rec: SaveRecord, worldSeed: Id): SaveRecord {
+  const director = rootId(worldSeed, 'director');
+  const v = rootId(worldSeed, 'v');
+  const secret = (e: BeliefEntry): boolean => e.belief.believer === director && e.belief.subject === v;
+  const scrub = (s: SettingsEntry): SettingsEntry => ({ ...s, content: { preset: 'redacted', ceiling: {}, notice: {}, softExclusions: [] } });
+  const out = clone(rec);
+  out.ops = out.ops
+    .filter((op) => !(op.op === 'BeliefSet' && secret(op.entry)))
+    .map((op) => (op.op === 'SettingsSet' ? { op: 'SettingsSet' as const, settings: scrub(op.settings) } : op));
+  if (out.snapshot) {
+    out.snapshot.beliefs = out.snapshot.beliefs.filter((e) => !secret(e));
+    if (out.snapshot.settings) out.snapshot.settings = out.snapshot.settings.map(scrub);
+  }
+  return out;
 }

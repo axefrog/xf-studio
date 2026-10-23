@@ -1,6 +1,6 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v1.2, 23 October 2026. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
+**Status:** v1.8, 23 October 2026. v1.8 rules on five questions from the core's fix round: T12 from `unattended`, game-clock reads at window boundaries, play-clock restarts at a load, L-06's "differ", and the resituating hook. v1.7 says how in-scene offers meet the attempt bound and a scene's end. v1.6 settles what the first implementation of the core found silent or contradictory (found while building it in the reference model): closure status, guard links, unchained beats, casting before the window, the category gate, R1's exits and adult guarantee, and L-06. v1.5 adds in-scene offers and puts obstacles in the core, from [language check 1](../language-check-1.md). v1.4: v1.4 aligns the city and social reads with [S1](simulation.md): bands are registered strings, and regimes have two reads. v1.3: v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
 - **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
 - **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
 - **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
@@ -58,8 +58,8 @@ The first implementation proves one complete path: **pack → cast → offer →
 | Packs and instances (§1) | Namespaced ids, maturity, structure versions with a frozen semantic closure (§12.3), one-shot and bounded repeatable seeds |
 | Binding (§2.2, §2.4, §5) | Fixed, preferred and open parts; bounded role queries; identities; `must` and `prefer`; claim priority; ladders of `wait`, `relax` and `withdraw` |
 | Predicates (§2.6) | Kleene logic; guarded game facts; seed facts; `role`, `cast`; beat, response and seed states; `since`, `hour`; `count`; `exposed`; `setting`; registered reads (`fn`) with declared dependencies |
-| Execution (§6, §7) | One beat graph; links with their conditions always evaluated (§7.1); objectives and failures; one end predicate; the unattended plan |
-| Offers (§2.9, §7.4) | Actions, declines, null path, bounded reoffers, retract, foresight and writes; one response lifecycle for every offer |
+| Execution (§6, §7) | One beat graph; links with their conditions always evaluated (§7.1); objectives and failures; **obstacle beats with their affordances**; one end predicate; the unattended plan |
+| Offers (§2.9, §7.4) | Actions, declines, null path, bounded reoffers, retract, foresight and writes; one response lifecycle for every offer; **in-scene offers** (§8.3) |
 | Effects (§2.5) | Seed-fact writes, declared kernel effects, reward-table references, capability-checked game writes, only for operations the game port supports |
 | Delivery (§8) | One arbiter, channel fallback, attention gates, spacing and caps, a total retry bound, three exposure grades, persistent answerable offers, receipts |
 | Content (§2.19, §2.20) | Registered classes, ceilings, the floors, one fallback chain, author-fill presentation slots, game content by reference, origin |
@@ -91,7 +91,7 @@ The first implementation proves one complete path: **pack → cast → offer →
 |---|---|
 | Document integrity | L-01, L-13, L-73, L-74 |
 | Binding guarantees | L-02, L-17, L-76 |
-| Choices and writes | L-05, L-06, L-12, L-15 |
+| Choices and writes | L-05, L-06, L-12, L-15, L-27 |
 | Closure and failure | L-07, L-09, L-89 |
 | Perspective | L-19, L-52, L-56, L-57, L-60, L-61 |
 | Evidence | L-49, L-58, L-62, L-63 |
@@ -374,7 +374,7 @@ interface Dependency { on: RoleKey | { fact: string }; hold: 'keep' | 'substitut
 | `resettable` | The incidental: a stall closed for the day, a guard moved | The write also schedules a game-time **wake-up** at `at + reset` **[tunable 7 game days]**. At that wake-up, if the pin is still current, layer 2 withdraws it, and the fact reads its `initial` again |
 | `cosmetic` | A mark on a wall, a changed sign | The canon event, and a **carrier**: the place, media feed or person that shows it, and how long it lasts. No pin |
 
-The default is `lasting` for game-fact writes, rewards, and effects on ties or standing. Everything else defaults to `resettable`. These must be `lasting`, and marking one `resettable` is an error (L-12):
+The default is `lasting` for game-fact writes, rewards, effects on ties or standing, and writes to a seed fact with a `route` (a route variable records where the story went). Everything else defaults to `resettable`. An effect's own `persist` wins, then the fact's. These must be `lasting`, and marking one `resettable` is an error (L-12):
 - game-fact writes;
 - writes made by a `turning` event: beliefs, importance, membership.
 
@@ -528,6 +528,7 @@ interface Fragment {
   ask?: FragmentRef;                   // the handle: what V can ask or approach to learn more (§2.14)
   roles: RoleKey[];                    // role slots it uses; the beat maps them (Beat.bind)
   applies?: Pred;                      // among alternates, the most specific applicable one wins (§7.2)
+  scene?: string;                      // a scene label: beats whose fragments share it may chain `inScene` offers (§8.3, L-131a)
   tone?: ToneTag;
   repeat?: 'never' | { times: number } | 'free';   // default free; counted per save branch (§7.2)
   minGap?: { game?: number; offers?: number };
@@ -568,11 +569,12 @@ interface Beat {
   mustReach?: boolean;                 // V needs this to take an option (L-63)
   droppable?: boolean;                 // may be dropped above the player's ceiling (§2.19)
   reoffer?: { when: Pred; max: number };              // offer beats: may be offered again (§7.4)
+  inScene?: boolean;                   // an offer made inside a running beat's own scene (§8.3)
 }
 
 type Link =
   | { because: BeatKey; on?: Pred }    // after that beat ends and `on` is yes (default yes)
-  | { obstructedBy: BeatKey }          // not while that beat is available or running
+  | { obstructedBy: BeatKey }          // a guard: not while that beat is available or running
   | { then: BeatKey };                 // plain order; allowed only into texture beats (L-03)
 
 interface Objective { kind: 'task' | 'condition'; succeeds: Pred; fails?: Pred; warns?: Pred }
@@ -612,7 +614,7 @@ interface OfferSpec {
   actions: Array<{ id: string; stance: Stance; foresight: ContentRef; writes?: EffectDecl[]; costs?: Cost[] }>;
   nullPath: { id: string; content?: ContentRef; writes?: EffectDecl[] };   // the authored option of doing nothing
   lapse: { after: Duration; then: 'unattended' | 'reoffer' | 'withdraw'; content?: ContentRef };
-  decline: Array<{ id: string; response: ContentRef; writes?: EffectDecl[] }>;
+  decline: Array<{ id: string; response?: ContentRef; writes?: EffectDecl[] }>;   // omit `response` when an exit beat plays it
   choice: 'flavour' | 'consequential' | 'unchoice';
   retractQuietly?: ContentRef;         // shown when V retracts with one input; default nothing
 }
@@ -630,7 +632,8 @@ interface UnattendedPlan {
 ```
 
 - **A stake on `v`** (V's money, items, standing) is allowed only as a consequence of an action V accepts (L-15).
-- **A consequential choice:** each action's `writes` MUST include a distinct value of one seed fact, and that fact MUST have a consumer (L-06).
+- **A consequential choice:** every action MUST have a consequence that something reads: a write to a seed fact with a consumer, or a link whose `on` reads the response (`{ response: …, is: [action:<id>] }`). No two actions may have the same consequence: their writes, as sets of fact = value pairs, differ (on any fact), or a response link tells them apart (L-06).
+- **What a response template answers.** `to` matches V's acts. An answer to an offer is one of them, matched by response kind: `decline:<id>`, `action:<id>`, `action:*` or `any`.
 - **A decision beat's stances** need at least three, including `refuse` (L-14).
 ```ts
 interface Cost {
@@ -759,7 +762,9 @@ A beat's request takes the seed's `timing`; its class and channel come from the 
 - `maxWait: { clock: 'play', s: 1800 }`;
 - `onExpire: 'retry'` for authored seeds, and `'unattended'` for procedural ones.
 
-**Play-clock durations across a load.** The play clock restarts at a load (§8.2). A play-clock duration that was running (`maxWait`, a lapse, a category timer) restarts from the load. Game-clock durations don't.
+**Play-clock durations across a load.** The play clock restarts at a load (§8.2). **Every** play-clock duration that was still running restarts from the load: `maxWait`, a lapse, a category timer, a `since`, a timed casting wait. One that had already elapsed stays elapsed. Game-clock durations don't restart.
+
+**Game-clock durations are read at window boundaries.** A game-clock duration (`since`, a timed wait, the unattended plan, an aftermath delay, `maxWait` on the game clock) is measured as of the last simulation window boundary, never at the host's exact tick, so its result is the same however ticks fell (§4.3).
 
 ### 2.13 Scale, turns, threads and forms
 
@@ -910,7 +915,7 @@ type CityRead =
   | { refuge: { leaf: RoleKey | Id } };              // whether V could lie low there
 ```
 
-S1 exposes these as pins and process state. **No atom exposes a heat number.** A `city` atom is `maybe` until S1 has a reading for its scope.
+S1 exposes these as pins and process state ([S1 §9](simulation.md)). **No atom exposes a heat number.** Band names are registered strings from S1's pack, not a fixed list. `regime(scope)` answers the kind of the greatest live regime; `regimeIs(scope, kind)` answers yes or no. A read whose phase isn't built answers `maybe`. A `city` atom is `maybe` until S1 has a reading for its scope.
 
 **Hot state opens windows.** A window may open on a band and close on its fall, latched like any other window (§2.7). A world requirement may name a band or a regime. When a fitted seed is sited at a hot cell, the fit report cites the band that justified it. "Why now" is answered by a cause chain of at most four links, through the parents S1 records on each event.
 
@@ -1504,7 +1509,7 @@ So a closing value latches even if a later change has already reverted it by the
 
 ### 4.3 Wake-ups
 
-Each live instance keeps a list of **wake-ups**: `(clock, time)` pairs, each for a reason. Game-time wake-ups are checked at every simulation window boundary (S0 §9.4). Play-time wake-ups are checked by the arbiter's step (§8.3).
+Each live instance keeps a list of **wake-ups**: `(clock, time)` pairs, each for a reason. Game-time wake-ups are checked at every simulation window boundary (S0 §9.4), and fire only there: a wake-up due inside a window fires at the boundary that ends it, so a result never depends on where the host's ticks fell. Play-time wake-ups are checked by the arbiter's step (§8.3).
 
 | Reason | Clock and time |
 |---|---|
@@ -1538,6 +1543,8 @@ Re-evaluation is a worklist item (S0 §10.7), processed in instance `Id` order. 
 4. applies lifecycle transitions (§6.2), up to `maxTransitions` per step **[tunable 8]**. If more would apply, the instance is queued again behind the others.
 
 ## 5. Casting
+
+**Casting doesn't wait for the window.** Tentative casting runs in `sown`, `waiting` and `cast`, whatever the windows say. A window may read a role (R1's reads Takemura), and such a read is `maybe` until the role is cast, so gating casting on the window would deadlock. Only T4 needs a window open. A role that can't be filled follows its ladder from its cursor (§5.4).
 
 ### 5.1 Order
 
@@ -1661,8 +1668,8 @@ Each transition is recorded (§10.1). At each re-evaluation step, the first appl
 | T10 | `offered` | V's response to the first offer is a decline; the null path with no reoffers left; or an exposed lapse with `then: 'unattended'` | `unattended` | Its content and writes (§7.4) |
 | T10a | `offered`, `running` | V retracts an offer (§7.4) | `withdrawn` | Quietly: pending deliveries cancelled; no response effects; no unattended plan; a neutral `retracted` entry. History already committed stays |
 | T11 | `offered` | The first offer was answered "not now" with reoffers left, lapsed with `then: 'reoffer'`, or lapsed without ever being displayed, within the offer's total attempt bound (§8.5) | `cast` | The offer beat is `deferred` (§7.4); `attempt` + 1 for the offer's draws |
-| T12 | `running` | `end` is yes, and no promise without `mayStayOpen` is open | `resolved` | Close as a success (§6.4) |
-| T13 | `unattended` | The plan's `after` has passed since entry | `resolved` | Apply `outcome`; mint its events; close as settled (§6.4) |
+| T12 | `running`, `unattended` | `end` is yes, and no promise without `mayStayOpen` is open | `resolved` | Close as a success (§6.4) |
+| T13 | `unattended` | The plan's `after` has passed since entry, and T12 hasn't fired | `resolved` | Apply `outcome`; mint its events; close as settled (§6.4) |
 | T14 | `cast` | The first request expired unreleased with `onExpire: 'unattended'` | `unattended` | — |
 | T15 | `running` | The seed is **stuck** (§7.5) | `withered` | Close as `abandoned`; record a `stuck` defect |
 
@@ -1680,9 +1687,9 @@ A seed **closes** on every move to `resolved` or `withered`, and on a move to `w
 
 1. **Mints one `seed-outcome` event,** committed. Its kernel fields are only the seed and the time. The details go in a `closure` record entry keyed by the event's `Id`:
    - **`status`:**
-     - `resolved`, after T12, or after T13 with `end` yes;
+     - `resolved`, after T12 only: the seed reached its end while V was in it, including through content V's own answer set going (T12 from `unattended`, as when a decline's exit plays);
      - `transformed`, if a child seed `growsFrom` it;
-     - `abandoned`, otherwise;
+     - `abandoned`, otherwise, including every T13: a seed the world settled without V is never `resolved`, even if its plan makes `end` yes;
    - **`witnessed`:** true if V was exposed (§10.2) to the beat or plan that ended it;
    - **`looseEnds`:**
      - consequence facts no declared consumer has read;
@@ -1692,7 +1699,7 @@ A seed **closes** on every move to `resolved` or `withered`, and on a move to `w
      - `changes`: every turning event the seed caused, each with a `witnessed` flag.
 
    Witnessed and settled completions write the same record. Only the flag differs.
-2. **Retires open promises** on forced closures (withered, withdrawn, or T13 with `end` not yes). They go into `looseEnds`; this is not a defect.
+2. **Retires open promises** on forced closures (withered, withdrawn, or T13). They go into `looseEnds`; this is not a defect.
 3. **Queues closing deliveries.** These outlive the seed (§8.6):
    - the closing trace, if the seed has `closing` and was released: class 0, purpose `close`. A seed at gig level or above needs one (L-35);
    - the release window's `closeContent`, for coda and memory;
@@ -1735,7 +1742,15 @@ A final state never changes. A beat leaves `locked` at most once.
 - `obstructedBy b`: `b` is not `available` and not `running`;
 - `then b`: `b` is in a final state.
 
-`join: 'all'` needs every incoming link; `'any'` needs one. Beats in `start` need no links. Ties among beats becoming available at once are broken by key.
+`join` combines the **chain links** (`because`, `then`): `'all'` needs every one; `'any'` needs one. An `obstructedBy` link is a **guard**, not a chain link: every guard must hold, whatever `join` says.
+
+**When a beat may become available:**
+- a beat in `start` needs no chain links;
+- a beat a failure `leadsTo` (§7.3) becomes available when that failure happens, and any links it has are checked normally;
+- a beat with no chain links, not in `start` and not led to, becomes available when its fragment's `needs` is yes (R1's lapse exit). The lint's reachability (L-44) and the fit report count it as reachable;
+- otherwise, by its chain links, as above.
+
+In each case its guards must hold. Ties among beats becoming available at once are broken by key, and a beat that becomes available obstructs the later ones in the same pass.
 
 ### 7.2 Choosing the fragment
 
@@ -1849,7 +1864,7 @@ Its source is the game port (S5). It is session state and is not persisted. Afte
 |---|---|---|---|
 | `settling` | At a load | `pull` deliveries only | After `settle` play seconds **[tunable 90]** |
 | `returning` | After settling, only when the save's age is 30 minutes or more (§8.7) | The return view's deliveries, class 1 or lower; class 0 deliveries | When the view's deliveries are released, or after 120 play seconds |
-| `resituating` | After settling or returning | One cue of class 2 or lower: from the seed V was last attending, or, with none, one class-0 hook. Class 0 deliveries also pass | When that cue is released, or after 120 play seconds **[tunable]** |
+| `resituating` | After settling or returning | One cue of class 2 or lower: from the seed V was last attending (the one with V's latest receipt), or, with none, one class-0 hook: the first class-0 delivery the arbiter releases, in its usual order. Class 0 deliveries also pass | When that cue is released, or after 120 play seconds **[tunable]** |
 | `normal` | After resituating | As §8.3 | — |
 
 **Away** is an overlay, set and cleared by S5's away marker. While it is set, only classes 0 and 1 pass, whatever the state.
@@ -1882,7 +1897,7 @@ The arbiter runs once a second of play:
    | 3 | The session state and the away overlay allow it (§8.2) | applies | applies | applies |
    | 4 | `spacing` play seconds since the last release **[tunable 60]** | — | — | applies |
    | 5 | Fewer than `cap` releases in the last `capWindow` **[tunable 2 per 600 s]** | — | — | applies |
-   | 6 | Its category timer has run out **[tunable per category; default 300 s]** | — | — | applies |
+   | 6 | If it names a category: that category's timer has run out **[tunable per category; default 300 s]**. A delivery with no category skips this gate | — | — | applies |
    | 7 | For an `atJoint` delivery: a joint is **latched** (below) | applies | — | applies |
 
    Class-0 deliveries don't count towards spacing or the cap. At most one class-0 delivery is released per `class0Gap` **[tunable 20 s]**.
@@ -1908,6 +1923,15 @@ The arbiter runs once a second of play:
 6. **Prepare and release** the best delivery (§8.4). If preparation fails, try the next, up to `prepareTries` per step **[tunable 3]**. Release at most one delivery per step, plus at most one class-0 delivery.
 
 **What the arbiter never does.** It holds, delays, expires and releases. It never creates or changes content.
+
+**In-scene offers.** A choice V makes inside a scene that is already running (a conversation, an encounter) is part of that scene's content, not a new push. A beat marked `inScene: true` is released straight into the running scene of the beat it follows:
+- It skips the arbiter's busy-UI gate, attention gates, spacing, cap, category and session gates.
+- It still follows the response lifecycle (§7.4), the honesty rules (§2.9) and the content ceilings (§2.19).
+- It isn't a push, so it doesn't count towards the attempt bound (§8.5).
+- If the scene ends (the beat it follows becomes final) before it is released or answered, it is dropped with the reason "the scene ended". Its beat is skipped as rejected.
+- It must link `because` a beat that is `running` with the same scene, and it is refused otherwise (L-131a).
+
+Only offers that **start** contact go through the arbiter's gates.
 
 **Retracting.** Every released push of class 2 or above can be **retracted by one input** (S5) for `retractWindow` seconds **[tunable 10]**. A retraction is a `retract` response (§7.4).
 
@@ -2147,7 +2171,7 @@ Dropping never renumbers; a reference to a dropped entry reads as "dropped". P7 
 ### 10.1a The read API for layer 3
 
 Layer 2 exposes a read-only `Layer2View` (S3 §1.2) to layer 3 and to tools:
-- `instances()`, `instance(id)`, `sownBy(decision)`;
+- `instances()`, `instance(id)`, `sownBy(decision)`. `sownBy` keeps answering after an instance ends and is compacted, from a small index of decisions in the global record;
 - `global()`;
 - `exposedNode(node, atLeast)`;
 - `playTotal()`: the **current** cumulative play time in this branch, not the value last saved.
@@ -2158,7 +2182,7 @@ Its views are projections of the instance state (§12.1) and the record. Each de
 - the `playTotal` at closure, beside the game time;
 - each delivery's wait as play seconds (`maxWaitPlay`), with `Duration`s normalised.
 
-A shared `claimConflict(node, span)` read answers whether a node is held.
+A shared `claimConflict(node, span, share)` read answers whether a node is held under a claim that conflicts with one of that span and sharing, by the rules of §9.1.
 
 ### 10.2 The exposure ledger
 
@@ -2230,7 +2254,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-03 | A `then` link into a beat that isn't `texture`; or a seed with more than two beats whose links are all `then` | error |
 | L-04 | The static count of beats that can be live at once exceeds `maxLive` | warning |
 | L-05 | A route variable with no consumer | error |
-| L-06 | A consequential choice whose actions don't write distinct values of one consumed fact | error |
+| L-06 | A consequential choice with an action that has no consequence anything reads, or two actions with the same consequence (§2.9) | error |
 | L-07 | A failure caused by distance, time or neglect without `warnFirst` | error |
 | L-08 | A promise no beat's `leaves` can pay | warning |
 | L-09 | A window with `coda` or `memory` and no `closeContent` | error |
@@ -2353,6 +2377,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-128 | A non-colour phrasing that reads nothing from the record | error |
 | L-129 | An option label that names an emotion, or isn't from the closed list | error |
 | L-130 | A told story containing an event its teller neither witnessed nor was told | error |
+| L-131a | An `inScene` offer that doesn't link `because` a beat whose fragment has the same `scene` label | error |
 | L-131 | A `modelOk` unit without a model-free `says` that leaves the same facts | error |
 | L-132 | `modelOk` on an excluded unit (§2.23): authored-source, author-fill, offers, responses, attribution, `mustReach`, humour, told evaluations, system voices, intensity 2 or 3 | error |
 | L-133 | A model render when the cast binds anyone who isn't an adult | error, at cast time |
@@ -2550,7 +2575,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-4 | **Coupling.** As SF-3; raise a `prefer` term's strength from 1 to 3 | The cast changes only if the new score makes a different candidate win, checked from the recorded draw |
 | SF-5 | **Claim, either order.** An authored seed A and a procedural seed P both want the same fixer, exclusive. Run once casting A first, and once casting P first and committing it | A casts the fixer both times. In the second run, P's role is lost and P re-casts or follows its ladder. Both records have one `claim` entry each |
 | SF-6 | **Fixed part rejected on a mirrored slot.** An authored world requirement fixes a cast person's mirrored `place` to a bar. The game then reads the person elsewhere | At the next re-evaluation, the direct check fails. The seed is `withdrawn`, with a `fixed-rejected` entry. No kernel contradiction |
-| SF-7 | **Scenario R1** ([Appendix A.3](#a3-reference-scenario-r1)). Facts: q112 not done; then q112 done, Takemura alive and allied | `waiting` (window `maybe`); then `cast`; release prepared and confirmed; display confirmed, so the offer event is minted with a deterministic `Id`; V declines at the first rung; the decline exit's content plays; `unattended`; then `resolved`, with closure status `abandoned` |
+| SF-7 | **Scenario R1** ([Appendix A.3](#a3-reference-scenario-r1)). Facts: q112 not done; then q112 done, Takemura alive and allied | `waiting` (window `maybe`); then `cast`; release prepared and confirmed; display confirmed, so the offer event is minted with a deterministic `Id`; V declines at the first rung; the decline exit's content plays, and only then does `exit` read 1; `resolved` by T12, with closure status `resolved` and `witnessed` true. A variant that ignores every offer until the plan settles it ends by T13 with status `abandoned` |
 | SF-8 | **R1, closed by the point of no return.** As SF-7, but the point-of-no-return fact is set while `waiting` | `withered`. Its coda is a closing delivery that survives a save and load and is delivered once |
 | SF-9 | **Reload with a displayed offer.** SF-7 up to the displayed offer. Save; load | The same state and offer `Id`. The offer is not presented as new. Its play-clock lapse restarts from the load. The arbiter settles for 90 s, then re-situates with one cue |
 | SF-10 | **Arbiter gates.** Five class-2 pushes submitted at play time 0 in `normal`, spacing 60, cap 2 per 600 | Releases at 0 and 60; the third waits until 600 |
@@ -2757,21 +2782,22 @@ For `n = rungs.length`, and rung index `i` from 0:
 2. **Offer beats** `offer-i`, for `i = 1 … n−1`:
    - **Fragment.** `play: offers[rungs[i]].offer`, fixed. The fragment's `OfferSpec`:
      - has an `accept` action writing `rung = i`;
-     - has a `stay` action writing `exit = 2` (stay as now);
-     - has a decline, `decline`, writing `exit = 1`, with `exits.decline` as its response;
+     - has a `stay` action (stay as now), which writes nothing: `exit-stay` reads the response;
+     - has a decline, `decline`, which writes nothing and has no response content of its own: `exit-decline` reads the response and plays `exits.decline`;
      - has a null path writing nothing, with `notNow` as its content;
      - lapses with `then: 'reoffer'`.
-   - **Repeat offers:** `reoffer: { when: count(pacing.acts with the person, since offer-i) ≥ pacing.perRung, max: reoffers + 1 }`.
+   - **Repeat offers,** on every offer beat, `offer-1` included:
+     `reoffer: { when: count(pacing.acts with the person, since offer-i) ≥ pacing.perRung, max: reoffers + 1 }`.
    - **Links.**
      - `offer-1` is in `start`.
      - `offer-i`, for `i > 1`, has `because offer-(i−1), on: (rung = i−1) and count(pacing.acts with the person, since offer-(i−1)) ≥ pacing.perRung`.
    - **Pacing** therefore counts V's acts with the person, never the clock.
-3. **Exit beats,** all of kind `exit`, each leaving `exit` set:
+3. **Exit beats,** all of kind `exit`, each leaving `exit` set when it completes. Only the exit beats write `exit`, so the end (step 7) waits for the exit's content to play:
    - `exit-decline`: `because` any offer beat, `on: response is decline:*`, `join: any`. Content `exits.decline`.
    - `exit-stay`: `because` any offer beat, `on: response is action:stay`, `join: any`. Content `exits.stay`.
    - `exit-lapse`: available when `since` the last `done` offer beat (or sowing) ≥ `lapseAfter`, and the count of qualifying acts in that span is 0. Content `exits.lapse`.
 
-   The three are mutually `obstructedBy`, so at most one plays.
+   The three guard each other with `obstructedBy`, so at most one plays (§7.1).
 4. **Absence** (a later capability). A reunion after a long absence needs a supported repetition mechanism. In the core, `absence` is not expanded, and the lapse exit covers a relationship left alone.
 5. **Intimacy.** If `intimate` is set: a beat `intimate`, `because offer-(n−1), on: rung = n−1`. It plays `{ alternates: [scene, fade] }`:
    - `scene` applies when the player's content setting allows `contentTag`;
@@ -2790,7 +2816,7 @@ For `n = rungs.length`, and rung index `i` from 0:
 ### A.3 Reference scenario R1
 
 The parameters for the [P4 §5](../p4-seeding-layer.md#5-reference-scenario-r1-in-this-language) seed:
-- **`with`:** `takemura`, a role whose identity is fixed to the game's Takemura, with `anchor: true` and `onLost: withdraw`;
+- **`with`:** `takemura`, a role whose identity is fixed to the game's Takemura, with `anchor: true` and `onLost: withdraw`. Its `must` includes `age-class` = adult, because the intimate beat binds it (L-95);
 - **`rungs`:** acquainted, confided, close, partner;
 - **`pacing`:** one shared activity per rung;
 - **`lapseAfter`:** 14 game days;
@@ -2834,7 +2860,7 @@ context: { all: [ { fact: q115_point_of_no_return, op: eq, value: 0 }, { role: t
 intent: { prohibitions: [], tone: [restraint, grief] }
 roles:
   takemura: { kind: core:person, identity: game:takemura, anchor: true, onLost: withdraw, onUnfilled: [wait, withdraw],
-              must: [ <alive> ], textAttrs: [name] }
+              must: [ <alive>, { path: age-class, op: eq, arg: adult } ], textAttrs: [name] }
   place:    { kind: core:place, prefer: [ { p: <quiet>, strength: 2 }, { p: <in Japantown>, strength: 2 } ],
               onUnfilled: [wait, withdraw] }
 facts:
@@ -2850,7 +2876,8 @@ windows:
     closeContent: pack:quiet-hour-coda
 start: [offer-1]
 beats:
-  offer-1: { play: pack:qh-offer-acquainted }
+  offer-1: { play: pack:qh-offer-acquainted,
+             reoffer: { when: { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-1 }, op: ge, value: 1 }, max: 3 } }
   offer-2: { play: pack:qh-offer-confided, links: [ { because: offer-1, on: { all: [ { seedFact: rung, op: eq, value: 1 },
              { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-1 }, op: ge, value: 1 } ] } } ],
              reoffer: { when: { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-2 }, op: ge, value: 1 }, max: 3 } }
@@ -2885,8 +2912,8 @@ needs: { all: [ { since: { beat: offer-1 }, atLeast: { clock: game, s: 1209600 }
 ```
 
 **Each offer fragment** `pack:qh-offer-<rung>` has the `OfferSpec`:
-- `actions`: `accept` (writes `rung` to the rung's index, 1 to 3) and `stay` (stance `help`; writes `exit = 2`);
-- `decline`: `decline`, whose response is `pack:qh-exit-decline`;
+- `actions`: `accept` (writes `rung` to the rung's index, 1 to 3) and `stay` (stance `help`; no writes: `exit-stay` reads the response, which L-06 counts as its consequence);
+- `decline`: `decline`, with no writes and no response content (`exit-decline` plays `pack:qh-exit-decline`);
 - `nullPath`: "not now", with no writes;
 - `lapse`: `{ after: { clock: play, s: 1800 }, then: reoffer }`;
 - `choice`: `consequential`.

@@ -20,9 +20,14 @@ export interface EventSpec {
   effects?: Array<{ on: Id; effect: Effect }>;
   witnesses?: Id[];
   causes?: Id[];
+  /** v4 (V4-3): an attempt, a success or a prevented act. Optional. */
+  outcome?: 'done' | 'failed' | 'prevented';
+  /** v4 (V4-3): the Id of the frame whose goal the act served. Optional. */
+  served?: Id;
 }
 
-export type EventField = 'time' | 'place' | 'kind' | 'participants' | 'effects' | 'witnesses' | 'causes';
+export type EventField = 'time' | 'place' | 'kind' | 'participants' | 'effects' | 'witnesses' | 'causes' | 'outcome' | 'served';
+/** The fields every event has (spec 9.2). `outcome` and `served` are optional and joined in only when the event carries them. */
 export const EVENT_FIELDS: readonly EventField[] = ['time', 'place', 'kind', 'participants', 'effects', 'witnesses', 'causes'];
 
 /** One canon declaration: which fields were pinned, with what reason, and the pins that did it. */
@@ -85,6 +90,8 @@ export class Events {
     const causes = spec.causes ?? [];
     put(nid, 'causes#count', causes.length);
     causes.forEach((c, i) => put(nid, `causes[${i}]`, c));
+    if (spec.outcome !== undefined) put(nid, 'outcome', spec.outcome);
+    if (spec.served !== undefined) put(nid, 'served', spec.served);
     if (spec.place !== undefined && k.store.header(spec.place)) {
       k.addEdge({ type: 'core:located-in', from: nid, to: spec.place, cause: nid, valid: { from: spec.time }, silent: true });
     }
@@ -122,6 +129,8 @@ export class Events {
       case 'time':
       case 'place':
       case 'kind':
+      case 'outcome':
+      case 'served':
         out.push({ node: event, slot: field });
         break;
       case 'participants':
@@ -145,9 +154,10 @@ export class Events {
    * (V saw it) pins at 600 with the event as evidence; `committed` (a seed, or an effect that depends on
    * it) pins at 300. The pins are written silently: the event change already announced the event.
    */
-  makeCanon(event: Id, reason: 'observed' | 'committed', cause: Id, fields: readonly EventField[] = EVENT_FIELDS): Id[] {
+  makeCanon(event: Id, reason: 'observed' | 'committed', cause: Id, fields?: readonly EventField[]): Id[] {
     const k = this.k;
     k.assertWritable();
+    fields ??= this.defaultFields(event);
     const h = k.store.header(event);
     if (!h || !k.schema.isKind(h.kind, 'core:event')) throw new Error(`not an event: ${event}`);
     const pins: Id[] = [];
@@ -165,6 +175,18 @@ export class Events {
     this.canonRecords.set(event, entries);
     k.bump();
     return pins;
+  }
+
+  /** Every field the event has: the seven of spec 9.2, and `outcome` and `served` when the event carries them (v4). */
+  defaultFields(event: Id): EventField[] {
+    const out: EventField[] = [...EVENT_FIELDS];
+    const h = this.k.store.header(event);
+    if (h && this.k.schema.slotInfo(h.kind, 'outcome')) {
+      for (const f of ['outcome', 'served'] as const) {
+        if (this.k.resolve(event, f, this.k.now).status === 'ok') out.push(f);
+      }
+    }
+    return out;
   }
 
   isCanon(event: Id): boolean {
@@ -186,6 +208,14 @@ export class Events {
 
   clear(): void {
     this.canonRecords.clear();
+  }
+
+  capture(): unknown {
+    return structuredClone(this.canonRecords);
+  }
+
+  restoreFrom(cap: unknown): void {
+    this.canonRecords = structuredClone(cap) as Map<Id, CanonEntry[]>;
   }
 
   /** Known events whose `time` resolves to exactly `t` (used by `knows`, SPEC-NOTES 21). */

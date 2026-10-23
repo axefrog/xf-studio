@@ -104,6 +104,9 @@ export class Worklist<T> {
   snapshot(): T[] {
     return [...this.items];
   }
+  restore(items: T[]): void {
+    this.items = [...items];
+  }
 
   /** Run steps until the list is empty or the budget runs out. Returns the number of steps taken. */
   run(budget: Budget, step: (item: T) => StepResult): number {

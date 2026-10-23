@@ -47,6 +47,11 @@ export class Summaries {
 
   constructor(private readonly k: Kernel) {}
 
+  invalidate(): void {
+    this.descCache.clear();
+    this.descRevision = -1;
+  }
+
   /** Mint a summary node and pin its fields `committed` by the cause (spec 9.3, SPEC-NOTES 31). */
   mintSummary(spec: SummarySpec): Id {
     const k = this.k;
@@ -277,6 +282,19 @@ export class Summaries {
       item.next++;
       return { cost: 1, done: item.next >= count };
     });
+  }
+
+  /** A deep copy of the canon sets and the warm list, for a staged batch's discard (spec 14.2a). */
+  capture(): unknown {
+    return structuredClone({ canon: this.records(), warm: this.warmList.snapshot() });
+  }
+
+  restoreFrom(cap: unknown): void {
+    const c = structuredClone(cap) as { canon: SummaryRecord[]; warm: Array<{ summary: Id; next: number }> };
+    this.canon.clear();
+    for (const r of c.canon) this.canon.set(r.summary, new Set(r.canon));
+    this.warmList.restore(c.warm);
+    this.invalidate();
   }
 
   clear(): void {

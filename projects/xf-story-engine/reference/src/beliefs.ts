@@ -231,6 +231,19 @@ export class Beliefs {
     } else this.history.push({ ...entry.belief, evidence: [...entry.belief.evidence] });
   }
 
+  /** A deep copy of the belief state, for a staged batch's discard (spec 14.2a). */
+  capture(): unknown {
+    return structuredClone({ byBeliever: this.byBeliever, history: this.history, tickList: this.tickList.snapshot(), hooksStopped: this.hooksStopped });
+  }
+
+  restoreFrom(cap: unknown): void {
+    const c = structuredClone(cap) as Record<string, any>;
+    this.byBeliever = c.byBeliever;
+    this.history = c.history;
+    this.tickList.restore(c.tickList);
+    this.hooksStopped = c.hooksStopped;
+  }
+
   clear(): void {
     this.byBeliever.clear();
     this.history.length = 0;
