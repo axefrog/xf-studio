@@ -7,7 +7,8 @@
 // recorded for the window the item occurred in, and keys named by the item (its Id, which holds its original window), never by the
 // opening window.
 
-import { H, id as hid, i as hi, mintedId, rand, s as hs } from '../id.ts';
+import { H, mintedId } from '../id.ts';
+import { itemTime } from '../summary.ts';
 import type { ProcessOp } from '../evolution.ts';
 import { processCause } from '../evolution.ts';
 import type { Effect, Id } from '../types.ts';
@@ -39,7 +40,7 @@ export function itemDescriptor(sim: Sim, summary: Id, index: number, w: number, 
   const W = sim.data.time.W;
   const id = sim.k.summaries.itemId(summary, index);
   const d: Descriptor = {
-    id, kind, size: 1, w, time: w * W + Math.floor(rand(hs('item-t'), hid(summary), hi(index)) * W), cell, gen: meta.gen, chain: meta.chain, public: false, witnesses: 0,
+    id, kind, size: 1, w, time: itemTime(summary, index, w * W, W), cell, gen: meta.gen, chain: meta.chain, public: false, witnesses: 0,
   };
   if (meta.parent !== undefined) d.parent = meta.parent;
   if (meta.sides) d.sides = meta.sides;
@@ -119,7 +120,7 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
             for (let j = 0; j < entry.count; j++) {
               const meta = entry.meta[j];
               if (!meta) continue;
-              const time = (k - 1) * sim.data.time.W + Math.floor(rand(hs('item-t'), hid(S), hi(j)) * sim.data.time.W);
+              const time = itemTime(S, j, (k - 1) * sim.data.time.W, sim.data.time.W);
               items.push({ summary: S, index: j, time, id: sim.k.summaries.itemId(S, j), kind: kd.name, meta });
             }
           }

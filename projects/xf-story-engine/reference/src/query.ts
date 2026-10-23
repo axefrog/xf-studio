@@ -6,7 +6,7 @@
 
 import { canonicalKey } from './canon.ts';
 import type { Kernel } from './kernel.ts';
-import { type PredicateEnv, evalAll, evalPredicate, inSpatialRegion } from './predicate.ts';
+import { type PredicateEnv, evalAll, evalPredicate, inSpatialRegion, itemPrefilter } from './predicate.ts';
 import { type OpCtx, newOpCtx } from './resolve.ts';
 import type { CandidateQuery } from './schema-types.ts';
 import type { GameTime, Id, Query, QueryItem, QueryOutcome, QueryScope } from './types.ts';
@@ -152,7 +152,7 @@ export class Queries {
     // Summaries within scope: item descriptors enumerated as candidates under the same allowance (spec 8.3 step 9).
     const itemCandidates: Id[] = [];
     if (this.k.schema.hasKind('core:event') && findKinds.has('core:event')) {
-      itemCandidates.push(...this.k.summaries.itemCandidates(ctx, scope, q.at, this.roots(scope)));
+      itemCandidates.push(...this.k.summaries.itemCandidates(ctx, scope, q.at, this.roots(scope), itemPrefilter(q.must)));
     }
     for (const id of itemCandidates) {
       if (findKinds.has(this.k.store.header(id)?.kind ?? '')) check(id);

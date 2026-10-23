@@ -38,6 +38,9 @@ export interface ItemDescriptor {
 
 const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** The time of an item: a keyed draw inside its summary's span (spec 9.3). */
+export const itemTime = (summary: Id, index: number, from: number, length: number): GameTime => from + Math.floor(rand(hs('item-t'), hid(summary), hi(index)) * length);
+
 export class Summaries {
   private canon = new Map<Id, Set<number>>();
   private descCache = new Map<string, { d: ItemDescriptor | null; cost: number; height: number }>();
@@ -175,7 +178,7 @@ export class Summaries {
       finish(null);
       return undefined;
     }
-    const time = from + Math.floor(rand(hs('item-t'), hid(summary), hi(index)) * length);
+    const time = itemTime(summary, index, from, length);
     const d: ItemDescriptor = { id: this.itemId(summary, index), index, time };
     // Strictly under the scope: the scope itself is excluded before the cut to the lowest Ids (SPEC-NOTES 31).
     const candidates = this.k.schema.hasKind('core:place')
@@ -225,7 +228,7 @@ export class Summaries {
    * The items of every summary overlapping the scope, as materialised item Ids whose place falls inside
    * the scope. The query then checks each exactly. Charged to the query's allowance.
    */
-  itemCandidates(ctx: OpCtx, scope: QueryScope, t: GameTime, roots: Id[]): Id[] {
+  itemCandidates(ctx: OpCtx, scope: QueryScope, t: GameTime, roots: Id[], keep?: (kind: Value | undefined, time: number) => boolean): Id[] {
     if ('nodes' in scope) return [];
     const env = this.k.resolver.makeEnv(ctx, t);
     const out: Id[] = [];
@@ -242,8 +245,25 @@ export class Summaries {
       failIfFailed(cr.status, `count of ${S}`);
       const count = cr.value;
       if (typeof count !== 'number') continue;
+      let kind: Value | undefined;
+      let from: Value | undefined;
+      let length: Value | undefined;
+      if (keep) {
+        const kr = this.k.resolver.resolveWithin(ctx, S, 'kind', t);
+        failIfFailed(kr.status, `kind of ${S}`);
+        kind = kr.value;
+        const fr = this.k.resolver.resolveWithin(ctx, S, 'from', t);
+        failIfFailed(fr.status, `from of ${S}`);
+        from = fr.value;
+        const lr = this.k.resolver.resolveWithin(ctx, S, 'length', t);
+        failIfFailed(lr.status, `length of ${S}`);
+        length = lr.value;
+      }
       for (let i = 0; i < count; i++) {
         ctx.allowance.spend(1);
+        // An item that cannot pass the query's tests on its kind and time is neither placed nor materialised for the query to reject it;
+        // an item that already exists (a canon item, one in focus) is left to the exact check.
+        if (keep && typeof from === 'number' && typeof length === 'number' && !this.k.store.header(this.itemId(S, i)) && !keep(kind, itemTime(S, i, from, length))) continue;
         const d = this.descriptor(ctx, S, i, t);
         if (!d || d.place === undefined) continue;
         const inside = 'region' in scope

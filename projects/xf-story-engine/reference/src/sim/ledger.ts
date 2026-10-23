@@ -106,7 +106,7 @@ export class Ledger {
     const out: LedgerItem[] = [];
     const prefix = `rep-${axis}[`;
     for (const b of this.sim.k.beliefs.activeOf(carrier)) {
-      if (b.subject !== subject || !b.path.startsWith(prefix) || (b.at ?? 0) > t) continue;
+      if (!b.memorable || b.subject !== subject || !b.path.startsWith(prefix) || (b.at ?? 0) > t) continue;
       const v = b.value as number[] | undefined;
       if (!v) continue;
       out.push({

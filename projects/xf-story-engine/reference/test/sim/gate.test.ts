@@ -153,23 +153,37 @@ describe('SF1-X-2: the floors', () => {
 });
 
 describe('SF1-X-3: V', () => {
-  test('thousands of sampled events: V is never a victim or a target, and no harmful effect names V', () => {
+  test('sampled events: V is never a victim or a target, and no harmful effect names V', () => {
     const sim = busySim('SF1-X-3', 40);
     sim.advance(100);
     const events = cityEvents(sim);
-    expect(events.length).toBeGreaterThan(150);
+    expect(events.length).toBeGreaterThan(50);
     const harm = new Set<string>(sim.data.gate.harmEffects);
-    let people = 0;
     for (const e of events) {
       const view = sim.policies.viewEvent(e)!;
-      for (const p of view.participants) {
-        people++;
-        expect(p.who).not.toBe(sim.w.v);
-      }
+      for (const p of view.participants) expect(p.who).not.toBe(sim.w.v);
       for (const ef of view.effects) if (harm.has(ef.effect)) expect(ef.on).not.toBe(sim.w.v);
     }
-    expect(people).toBeGreaterThan(150);
-  });
+    // and 2,000 sampled occurrences of every city kind, cast the way an admitted one or an opened item is
+    const d0 = sim.w.districts[0]!;
+    const kinds = ['theft', 'assault', 'gang-clash', 'shakedown', 'police-action', 'psycho-break', 'disorder', 'accident', 'commerce'] as const;
+    let named = 0;
+    for (let n = 0; n < 2_000; n++) {
+      const cell = d0.cellIds[n % 3]!;
+      const kind = kinds[n % kinds.length]!;
+      const time = (n * 37 % 168) * HOUR + (n % 7) * 400;
+      const id = H(hs('x3-sample'), hi(n));
+      const d = descriptor(sim, `x3-${n}`, kind, cell, time, { id, sides: sim.casting.drawSides(id, cell, kind, NO_BOOSTS) });
+      const cast = sim.casting.cast(d);
+      if (cast === 'no-cast') continue;
+      for (const e of cast) {
+        if (e.who === undefined) continue;
+        named++;
+        if (e.who === sim.w.v) throw new Error(`V was cast in ${kind} as ${e.role}`);
+      }
+    }
+    expect(named).toBeGreaterThan(1000);
+  }, 120_000);
 
   test('the gate refuses V as a victim or a target, and a harmful effect on V', () => {
     const sim = busySim('SF1-X-3b', 1, undefined, ['city.events']);

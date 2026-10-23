@@ -8,7 +8,8 @@
 
 import { processCause } from '../evolution.ts';
 import type { ProcessOp } from '../evolution.ts';
-import { H, id as hid, i as hi, mintedId, rand, s as hs } from '../id.ts';
+import { H, id as hid, i as hi, mintedId, s as hs } from '../id.ts';
+import { itemTime } from '../summary.ts';
 import type { GameTime, Id } from '../types.ts';
 import { clamp, invCum, nbCount, spacingCount, splitCountR } from './arith.ts';
 import type { Boosts } from './cast.ts';
@@ -412,7 +413,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         const meta: NonNullable<RingEntry['meta']> = {};
         list.forEach((d, j) => {
           d.id = sim.k.summaries.itemId(S, j);
-          d.time = T + Math.floor(rand(hs('item-t'), hid(S), hi(j)) * W);
+          d.time = itemTime(S, j, T, W);
           if (d.sides?.a === undefined) {
             const sides = sim.casting.drawSides(d.id, d.cell, d.kind, boosts);
             if (Object.keys(sides).length > 0) d.sides = sides;
