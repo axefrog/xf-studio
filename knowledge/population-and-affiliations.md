@@ -333,6 +333,10 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 | 15 | C, M | Trigger a gang chase (a gig retaliation or a courier incident); `scene_read` the chasers | `record` names matching a `DynamicSpawnSystem` unit pool for that gang (for example `gang_chase_valentino_*`) | Names not in the pools: the chase uses another source. Record them |
 | 16 | C | `world_district` where the session stands, and `scene_read {npc_detail: true}` beside the NPCs of rows 1 to 15 (bridge 0.8.8, offline; [card rows](../research/runtime/runtime-bridge-test-card.md#t-the-city-walk-42-min)) | `world_district` names the district, subdistrict and place the map shows; each NPC row's `character.affiliation.name` is its `Character` record's affiliation (compare row 4's gangs) | A district that differs from the map's text, or `character: null` for a record the table in section 9 lists: record both. Still missing: the entity template path (script can't read it; the offline record-to-path join stays the source) |
 
+**Answered so far.** Row 16 [runtime: session 15, 23 October 2026, bridge 0.8.8]:
+- `world_district` agreed with the map each time: Watson / Little China with Maelstrom as the district's gang (`chain` `["LittleChina", "Watson"]`, `map.agrees` true); Kabuki after a fast travel, with no stale name in the read straight after the arrival; inside Misty's shop, Viktor's clinic, Tom's Diner and the Afterlife's entrance a third level (`LittleChina_MistysShop`, `LittleChina_VictorsClinic`, ...), gone again on the street.
+- `scene_read {npc_detail: true}` on a busy Little China street: NCPD officers at 10 to 20 m with affiliation NCPD; "mq026_prophet" (Gary the Prophet, as the maintainer named him) and the food and drink vendors as Civilian, the vendors with `crowd` true. The street cops' record was `Character.q001_holo_police_officer`, an odd record for ordinary police (the prologue's hologram cop reused, or a mod's); not yet explained. Leaving `npc_detail` out leaves `character` out.
+
 ## Open questions
 
 1. **Where each community is.** Answered in [places §9](places.md#9-joining-the-population-to-places): the registry's instances are pinned to a district through their spots. What remains is the quest-owned communities that the registry does not hold.
@@ -345,7 +349,7 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 8. **The units of crowd `density`** and how it combines with the marking regions' lane lengths.
 9. **Which blob the game prefers** when both exist, and whether TweakXL records are read the same way as the blob's.
 10. **Hostile pairs without a record.** What an attitude lookup returns when no `Attitude` links two groups.
-11. **The bridge reads** wanted by the population mirror: current district record, affiliation, entity template path and `savable` per NPC (row 16). Built offline in bridge 0.8.8: the district (`world.district`) and the affiliation with the type, rarity, archetype, attitude group and crowd flags (`scene.read` with `npc_detail`) [source]. Still open: the entity template path (a resource reference has no path or hash in script) and `savable`.
+11. **The bridge reads** wanted by the population mirror: current district record, affiliation, entity template path and `savable` per NPC (row 16). Built in bridge 0.8.8 and checked in session 15: the district (`world.district`) and the affiliation with the type, rarity, archetype, attitude group and crowd flags (`scene.read` with `npc_detail`) [runtime]. Still open: the entity template path (a resource reference has no path or hash in script) and `savable`.
 
 ## Related pages
 

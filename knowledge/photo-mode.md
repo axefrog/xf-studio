@@ -490,6 +490,20 @@ Run on the test profile at 3840 × 1600 (21:9), photo mode's lights off ([sessio
 | U1 | The question wraps at words; four 24-character answers fit on one line, so with `ui_message`'s 24-character cap an answer label is never shortened at normal widths |
 | P12 [14], P13 [17], P15 [20], P5b | Not run (time; P5b needs working clicks) |
 
+### Session 15 on bridge 0.8.8 (23 October 2026)
+
+The same machine and resolution ([session-15 checks](../research/runtime/runtime-bridge-test-card.md#a-the-photo-mode-panel-clicks-modal-its-place-14-min)); every result **[runtime]**:
+
+| Row (card) | Result |
+|---|---|
+| A1, A2 | **Clicks work**: the press is taken on its route (`answer`, `click`) and the answer arrives as `photo_click` |
+| A3, A3b | A drag from outside onto an answer doesn't answer (`release_ignored`); a press dragged off the panel until the camera turns is dropped |
+| A4, A4b | `ui_hud {modal}` holds photo mode's exit (`exit_held`), not the camera keys (as `modal_cannot_hold` says); the stop key lifts the hold at once, and after Reconnect `modal` is false |
+| A5 | `bottom_left` and `top_right` clear; **`bottom_right` failed**: the zone rule pushed the panel up above the menu, over the category icon (the "V" of POSE) left of the tab's title. The `top_bar_title` zone measured the word only (`[4071, 511, 135, 43]`), and no `top_bar` zone was recorded at all (the radio-button compound has no size of its own). 0.8.9 measures the whole title row (icon and word) and each tab button, and slides the panel along its anchor's own edge first, then to a free corner |
+| A6 | The panel kept its place at 4:5 and Fullscreen (there is no 1:1 frame; Fullscreen is the widest at 21:9) |
+| A7 | Inconclusive: changing the layer doesn't re-route while photo mode is open (needs a reopen) |
+| A8 | The pointer's `screen_px` ([33, 271]) agreed with the pointer in the capture (about [51, 285]) and `window` with the capture's size |
+
 ### Questions only the game can answer
 
 Session 14 answered rows 1 to 10, 12, 13, 18 and 19 for the panel bridge 0.8.6 built ([results above](#session-14-on-bridge-086-23-october-2026)); rows 9 and 10 showed that `ModalPopup` holds neither, and session 15 carries rows 14, 17 and 20 and the clicks. The rows were written before the build, against these proposed additions (all built in 0.8.6 under these names, except that the panel is the ink panel itself, not a demo): `ui_hud {layer: "photo_menu"}`, showing a demo XF panel built by §15.6's route; an `ink_tree` event logged at `OnShow` (the root's children in order with names, sizes, scales and `GetScreenPosition` rectangles, the probe's laid-out width, the controller's object id, and whether the layer was created or reused); `ink_pointer` events from the demo's hover and click handlers; and `ui_hud {modal: true/false}`, which pushes or pops one `ModalPopup` for the demo. Rows use the card's runner `ask "…" [answers]` for questions to the player, who is only ever told to do things inside the game. Run on the test profile with photo mode's lights off, on a 21:9 3840 × 1600 display unless a row says otherwise.

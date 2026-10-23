@@ -101,7 +101,7 @@ No mod code is copied into this design; AMM, NIF and InteractionUI are studied f
 - **Text only:** `scnDialogLineData { id, text, type, speaker, speakerName, isPersistent, duration }` posted to `UIGameData.ShowDialogLine` and hidden by id; types include `Regular` (bottom subtitle, speaker name shown), `OverHead`, `OverHeadAlwaysVisible`, `Holocall`, `Narrator` [source] `orphans.script:7396-7410, 44905-44926`, `cyberpunk/UI/subtitles/baseSubtitlesControllers.script:120-252`; Audioware ships the pattern [source] ([NPC reactions §4](../../knowledge/npc-reactions.md#4-text-only-barks-and-subtitles-source)). The player's subtitle and chatter settings still apply.
 - **Custom audio:** Audioware's `AudioSystemExt.Play(event, entityID, emitter, lineType, settings)` and emitters play a mod's sound from an NPC with a subtitle type [source] Audioware `r6/scripts/Audioware/Ext.reds:11-36`. It needs recorded audio from a consenting voice; out of scope for 0.8.
 - **Lip sync:** a vanilla voiceset line brings its own clip. A text-only line moves no mouth [hypothesis]; our lip-sync generator could later animate new lines ([lip sync §6-7](../../knowledge/lipsync.md#6-building-blocks-for-our-own-generator)), but that needs audio and a scene or a clip player on NPCs.
-- **Holocall-style lines:** the `Holocall` subtitle type renders a line in the holocall style [source]. A real holocall (ring, caller card, video feed) is phone machinery plus an ordinary scene played over it, started from a quest phase, with the player's answer returned as a fact [wiki] `custom-video-holocalls.md` (Summary; `holocall-phase-3-answer-wait.png`). Later work.
+- **Holocall-style lines:** the `Holocall` subtitle type renders a line in the holocall style [source]; with no call in progress it draws as a plain subtitle with the speaker's name [runtime: session 15, NB4], so the bridge's style is `call_subtitle` (0.8.9). A real holocall (ring, caller card, video feed) is phone machinery plus an ordinary scene played over it, started from a quest phase, with the player's answer returned as a fact [wiki] `custom-video-holocalls.md` (Summary; `holocall-phase-3-answer-wait.png`). Later work.
 
 ### 3.4 Dialogue choices with V
 
@@ -158,7 +158,7 @@ A write class **`write-npc`** (config name `npc`) gates every NPC write; like `s
 | `npc.turn {who, to}` | write-npc | `AIRotateToCommand` to V, a point or an actor | `npc.stop` | `not_ours` |
 | `npc.place {who, at, yaw}` | write-npc | `AITeleportCommand` (for staging, not for drama) | `npc.place` back to the earlier place | `not_ours`, `not_walkable` |
 | `npc.stop {who}` | write-npc | Cancels or stops the actor's XF commands, exits a gesture, holds position | — (nothing to undo) | — |
-| `npc.say {who, text?, trigger?, style, seconds}` | write-npc | A text line (`style`: `subtitle` with the speaker's name, `overhead`, `holocall`) and/or a voiceset trigger in the NPC's own voice (`greeting`, `bump`, `fear_foll`, …; allow-listed); `npc.said` event when the line's time ends | hide the line by id | `line_too_long` (200 characters), `trigger_unknown` |
+| `npc.say {who, text?, trigger?, style, seconds}` | write-npc | A text line (`style`: `subtitle` with the speaker's name, `overhead`, `call_subtitle` (0.8.9; `holocall` before)) and/or a voiceset trigger in the NPC's own voice (`greeting`, `bump`, `fear_foll`, …; allow-listed); `npc.said` event when the line's time ends | hide the line by id | `line_too_long` (200 characters), `trigger_unknown` |
 | `npc.look {who, at \| off}` | write-npc | Look-at on V, a point or an actor, optional head and chest weights | `npc.look {off}` or the earlier target | `npc_in_combat` |
 | `npc.face {who, expression \| off}` | write-npc | A facial reaction by label (joy, smile, sad, surprise, anger, disgust, fear, interested, neutral) | `npc.face {off}` | `expression_unknown` |
 | `npc.act {who, gesture \| off}` | write-npc | A body gesture from the XF gesture carrier's list (talk, wave, nod, shrug, lean, arms crossed), per rig; `npc.act_done` event | `npc.act {off}` | `not_ours`, `carrier_missing`, `rig_unsupported` |
@@ -300,7 +300,7 @@ The rows are in the test card's [group N of the session-15 checks](runtime-bridg
 |---|---|
 | P0: the class, registry, list, pick, spawn, release, status, the XF actor records, kill and load clean-up, events | Built offline |
 | P1: move, follow, turn (hold, away from), place, stop, arrival and failure events, `npc.blocked`, the automatic release on combat or a scene | Built offline |
-| P2: lines (subtitle, overhead, holocall, a voice with no body), voiceset triggers, look, face | Built offline |
+| P2: lines (subtitle, overhead, call_subtitle, a voice with no body), voiceset triggers, look, face | Built offline |
 | P3: dialogue choices in the game's own widget, `session.wait` kinds | Built offline |
 | P4: gestures | The command and its eight clip names are built; **the XF gesture carrier (a WolvenKit workspot entity) is not**, so `npc.act` answers `carrier_missing` in the game until a -writes package is made with `--npc-carrier` |
 | The scenario runner and "A stranger with a question" | Built offline |
@@ -320,15 +320,17 @@ Offline proof: the unit checks (`xfb_selftest --unit`, `UnitTestsNpc.cpp`), the 
 
 ## 11. Open questions
 
-1. Does a TweakXL clone of a crowd record with `isCrowd: false` take move commands like a named NPC (N4, N5)?
+Session 15 (bridge 0.8.8) answered 1, 2 (by distance), 3, 5, 6 and part of 9; [NPC direction §8](../../knowledge/npc-direction.md#8-session-15-on-bridge-088-23-october-2026) has the results and the reaction mechanism, and [design §3.17](runtime-bridge-design.md#317-bridge-089-session-15s-findings) what 0.8.9 changed.
+
+1. ~~Does a TweakXL clone of a crowd record with `isCrowd: false` take move commands like a named NPC (N4, N5)?~~ Yes.
 2. Is `AICommandState.Success` reported on arrival, or must arrival be judged by distance (N5)?
-3. Does a registered input listener receive `ChoiceScrollUp/Down` and `ChoiceApply` while the dialogue widget shows our hub, and does consuming them stop native handling (N8, N9)?
+3. ~~Does a registered input listener receive `ChoiceScrollUp/Down` and `ChoiceApply` while the dialogue widget shows our hub, and does consuming them stop native handling (N8, N9)?~~ Yes, and nothing else reacted; but a device's in-world screen takes the apply key first.
 4. Which reaction preset keeps an actor calm, silent to crime and still able to face and look (`Civilian_Passive`, `Civilian_NoReaction`, `NoReaction`)?
-5. Does a spawned actor's own proximity look-at and greeting (vanilla reaction) fight our look and lines, and does `NoReaction` suppress it?
-6. Does the `Holocall` subtitle style render without a call in progress?
+5. ~~Does a spawned actor's own proximity look-at and greeting (vanilla reaction) fight our look and lines?~~ Yes; 0.8.9 holds it back with five wraps. Does that hold in the game (session 16, N1 and N2)?
+6. ~~Does the `Holocall` subtitle style render without a call in progress?~~ As a plain subtitle (now `call_subtitle`).
 7. Can a workspot carrier play vanilla gesture clips on every rig we cast, and which clip names are generic enough (talk, wave, nod)?
 8. Do a vanilla voiceset line and our subtitle collide on screen, and should `npc.say` choose one or queue them?
-9. Does a civilian clone with a hostile attitude fight, flee or only stand, and does the game's reaction preset (`reactions: "game"`) bring the police when one is shot?
+9. Does a civilian clone with a hostile attitude fight, flee or only stand? (It died too fast to see; shooting it did bring the police.)
 10. Does the view test agree with what the player sees (the fov's axis), and does a dissolve ever remove an actor the player can still see?
 11. How can a mod hide someone else's NPC for a scene and show it again (V13), and does a crowd NPC hold its place while hidden?
 </content>

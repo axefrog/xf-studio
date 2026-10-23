@@ -1,6 +1,6 @@
 # Save identity and lineage
 
-**Maturity: Draft.** Consolidated on 22 October 2026 for the Story Engine's area G (saves and identity). It answers three questions: how a save can be identified and its lineage (a save made from a loaded save) followed, how existing mods tie their state to saves, and what happens to mod state on a new game, an older save and a deleted save. It ends with a proposal for the save key the Story Engine's world record would use, and a session card. **Nothing here is new runtime evidence.** Sources: the game's 2.31 scripts (`final.redscripts`, the same decompiled bundle as [events the game emits](game-events.md)); the `metadata.9.json` files of 167 private saves (copies, field names, types and counts only, no values kept); the scripts of the studied mods named in [Sources](#sources); the Codeware wiki; the Modding Docs. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or mod source; **[resource]** bytes of real saves; **[wiki]** Modding Docs; **[community]** a mod author's or framework wiki's statement, not read in engine source; **[offline]** measured by our own probes; **[runtime]** seen in the running game; **[hypothesis]** not established. The container, the node encodings and where mods keep data in a save are in [save files](save-files.md); the hooks that report a save or a load are in [events the game emits §9](game-events.md#9-save-and-load).
+**Maturity: Draft.** Consolidated on 22 October 2026 for the Story Engine's area G (saves and identity). It answers three questions: how a save can be identified and its lineage (a save made from a loaded save) followed, how existing mods tie their state to saves, and what happens to mod state on a new game, an older save and a deleted save. It ends with a proposal for the save key the Story Engine's world record would use, and a session card. Session 15 (23 October 2026, bridge 0.8.8) answered most of the card in the game ([results](#session-15-results)); the rest is [source] and [resource]. Sources: the game's 2.31 scripts (`final.redscripts`, the same decompiled bundle as [events the game emits](game-events.md)); the `metadata.9.json` files of 167 private saves (copies, field names, types and counts only, no values kept); the scripts of the studied mods named in [Sources](#sources); the Codeware wiki; the Modding Docs. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or mod source; **[resource]** bytes of real saves; **[wiki]** Modding Docs; **[community]** a mod author's or framework wiki's statement, not read in engine source; **[offline]** measured by our own probes; **[runtime]** seen in the running game; **[hypothesis]** not established. The container, the node encodings and where mods keep data in a save are in [save files](save-files.md); the hooks that report a save or a load are in [events the game emits §9](game-events.md#9-save-and-load).
 
 ## Short answers
 
@@ -138,16 +138,34 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 | 12 | C | **probe.** With the probe system from row 11, store arrays of 256 KiB, 1 MiB and 4 MiB; save and load each; note `fileSize`, save time and load time | A size and time curve | A hard limit or a long stall: a snapshot cannot ride in the save; *foreign* saves cost a rebuild |
 | 13 | C | Cross-check a pin: with the pin from row 3 set to a campaign, branch and sequence, run a save, a load and a second save; compare the pin read after the load with the one set | Equal; the check fact validates | The check fails after a load: facts are altered on restore; choose a different carrier |
 
+### Session 15 results
+
+On bridge 0.8.8's probe, at a street in Watson ([card](../research/runtime/runtime-bridge-test-card.md#session-15-checks-bridge-088)); every row [runtime]:
+
+- **Row 1:** two manual saves a minute apart kept the same `playthroughID` (`6a06…a1`) and `visitID`, with different `playTime` and timestamps and two new folders.
+- **Row 2:** a load within one game run kept `visitID`; after a relaunch the overwritten save carried a new one (row 8 below). `visitID` is per game run, not per load.
+- **Row 3:** facts are readable once the script gate opens: the first point with facts after a load, `player_attach`, read `xfs_probe_a` 11; every earlier point (`game_restored`, `Session/*`, `game_attached`, `take_control`) carries no facts because the probe reads no game system before the gate, so a read earlier than the gate needs a guarded reader of its own.
+- **Row 4:** `Session/BeforeSave` and `AfterSave` fired for a manual save, a quick save and two autosaves; loading each read back exactly the `xfs_probe_b` written before it (703212282, 12228493, 1037869404): a write in `BeforeSave` is serialised by every kind of save.
+- **Row 5:** a death reload (the police killed V) restarted the session (`Session/BeforeEnd`, detach with the facts already torn down, `End`, a fresh start) and read the checkpoint's `a`.
+- **Row 7:** a save from before the probe read 0 and `keyed` false.
+- **Row 8:** overwriting a manual slot kept its name, with a new `timestampString` and `playTime`.
+- **Row 9:** deleting a save in the Load menu gave a `session` record `load_menu_delete` with its index (18); the folder went and the next save moved up to index 18.
+- **Row 11:** a save carrying a 4 MiB persistent blob loaded with the probe's script removed: `persist.present` false, the facts intact, and the next save saved and loaded. Dropped persistent data does no harm.
+- **Row 12:** persistent blobs of 256 KiB, 1 MiB and 4 MiB grew `sav.dat` about one to one (2.20 MB, then 2.46, 3.25 and 6.41 MB; not compressed); the save call returned in about 270 ms each time (it returns before the write ends).
+- **Row 13:** the pin read back after a load with its check valid.
+
+Rows 6 (a new game) and 10 (`saveID` against a delete) are still open.
+
 ## Open questions
 
-1. Is `visitID` per launch or per load (rows 1 and 2), and does a load keep `playthroughID` and `pointOfNoReturnId` as described?
+1. ~~Is `visitID` per launch or per load?~~ Per game run (session 15). Does a load keep `pointOfNoReturnId`? per launch or per load (rows 1 and 2), and does a load keep `playthroughID` and `pointOfNoReturnId` as described?
 2. Does the facts table reset on a new game, and on New Game Plus-style mods (rows 6 and 7)?
-3. At which load point are facts readable (row 3), and does a death reload run the session events (row 5)?
-4. Which of the three save hooks fire for autosaves and quick-saves (row 4; open in [events the game emits](game-events.md))?
-5. What happens to a removed mod's persistent fields (row 11; also the third open question in [save files](save-files.md#open-questions))?
+3. ~~At which load point are facts readable (row 3), and does a death reload run the session events (row 5)?~~ From the gate's opening (`player_attach`); yes (session 15).
+4. ~~Which save hooks fire for autosaves and quick-saves (row 4)?~~ `BeforeSave` and `AfterSave` for every kind (session 15).
+5. ~~What happens to a removed mod's persistent fields (row 11)?~~ They are dropped harmlessly (session 15).
 6. Is the metadata `facts` list fixed by the engine, or can a mod's fact join it?
 7. What is `saveID` (row 10), and what is the gap `playthroughTime` minus `playTime`?
-8. Can the plugin wrap the delete and overwrite paths of the save menus (row 9)?
+8. ~~Can the plugin wrap the delete path of the save menus (row 9)?~~ Yes, the Load menu's (session 15); the overwrite path is still unwrapped.
 
 ## Sources
 

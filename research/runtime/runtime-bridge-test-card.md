@@ -1,6 +1,6 @@
 # Runtime bridge test card
 
-**Status: session 14 ran on 0.8.6 on 23 October 2026. The ink panel showed inside photo mode's menu, faded with it, kept the camera off the mouse over it and gave everything back on the stop key, on leaving and across a load (the controller is rebuilt per load); three readings settled the event feed's first questions ([game events](../../knowledge/game-events.md#questions-only-the-game-can-answer), rows 1 to 3). It failed on clicks in that panel (every release ignored), on `ui_hud {modal}` (the `ModalPopup` context held neither the camera keys nor Esc), on `bottom_left` covering photo mode's hints, on the CET line's inset, and it met a friction: the bridge's save lock refused the player's own save with only the game's notice ([photo mode §15](../../knowledge/photo-mode.md#session-14-on-bridge-086-23-october-2026)). 0.8.7 fixes those and adds three test probes; 0.8.8, built offline, is 0.8.7 with NPC direction and the Story Engine's read-only senses merged in (neither has run in the game), so session 15 is one card: the [session-15 checks](#session-15-checks-bridge-088) are next. Session 12 ran on 0.8.4 and session 11 on 0.8.3 ([write-up](../../experiments/042-session-11/README.md)).**
+**Status: session 15 ran on 0.8.8 on 23 October 2026: photo mode's panel took clicks and held the exit; the save lock, Save anyway and the probes worked; NPC direction spawned, walked, spoke and took choices in the game's own widget; the senses agreed with the screens; the event and save-identity probes answered most of their rows ([NPC direction §8](../../knowledge/npc-direction.md#8-session-15-on-bridge-088-23-october-2026), [game events](../../knowledge/game-events.md#questions-only-the-game-can-answer), [save identity](../../knowledge/save-identity.md#session-15-results)). It found the panel over the category icon, the pin mark low in the middle, our choices over a device's screen, the actor's own reactions winning over our faces and greetings, a scene that walked backwards and spoke before arriving, and two misread senses; the game froze and the watchdog ended it at 14:41 (no bridge code on the hung threads). 0.8.9 fixes those offline, so the [session-16 checks](#session-16-checks-bridge-089) are next. Session 14 ran on 0.8.6, session 12 on 0.8.4 and session 11 on 0.8.3 ([write-up](../../experiments/042-session-11/README.md)).**
 
 **Who does what.** The maintainer starts MO2 and the game, loads a save, keeps the game window in front, and opens the character creator when asked (a mirror, or F12 with Character Customization Anywhere). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2; only the coordinator stages, and only the `XF Runtime Bridge` entry in the test profile.
 
@@ -8,7 +8,8 @@
 |---|---|---|
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
 | [Finish showroom checks](#finish-showroom-checks-bridge-050) | 30-35 min | Only with the 0.5.0 -writes build, Codeware and XF Finish Showroom staged, and an XF Eye Artistry build of the same collection and commit; a dim interior at night with 4 m clear in front of V |
-| [Session 15 checks](#session-15-checks-bridge-088) | about 114 min (1 h 54 min), plus 6 optional | Only with the 0.8.8 -writes build (`--allow-inventory`), Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods (no restage of those); one restage (`answer_keys = IK_F6`, `[overlay] enabled = false`) and one relaunch at the end (F); a quiet street near Kabuki in daylight with open sky, then a walk through Kabuki and Little China, a car, a fight, a phone |
+| [Session 16 checks](#session-16-checks-bridge-089) | about 45 min | Only with the 0.8.9 -writes build (`--allow-inventory`), Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods (no restage of those); one restage (`answer_keys = IK_F6`, `[overlay] enabled = false`), no relaunch; a quiet street in Little China or Kabuki in daylight, a vending machine with an in-world screen, a car, a conversation, a phone |
+| [Session 15 checks](#session-15-checks-bridge-088) | ran 23 October on 0.8.8 | Only with the 0.8.8 -writes build (`--allow-inventory`), Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods (no restage of those); one restage (`answer_keys = IK_F6`, `[overlay] enabled = false`) and one relaunch at the end (F); a quiet street near Kabuki in daylight with open sky, then a walk through Kabuki and Little China, a car, a fight, a phone |
 | [Session 14 checks](#session-14-checks-bridge-086) | ran 23 October on 0.8.6 | Only with the 0.8.6 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); a street in bright daylight with open sky; one relaunch of the game (T) |
 | [Session 13 checks](#session-13-checks-bridge-085) | about 15 min | Only with the 0.8.5 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); a street in daylight; one relaunch of the game (T) |
 | [Session 12 checks](#session-12-checks-bridge-084) | ran 22 October on 0.8.4 | Only with the 0.8.4 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); a public place with open space, then a street; two terminals for E and L; one relaunch of the game (K5) |
@@ -91,6 +92,21 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
 
 8. **Tell the maintainer before the session:** use a save next to a mirror (V's apartment bathroom works); make a new manual save when asked, before the first change (this profile shares the save folder, and after the first change the bridge holds a save lock until a save is loaded; the kill switch does not release it); bind the kill hotkey once the game is at the main menu (first-session step 1); the game must run in **borderless windowed** or windowed mode for captures that include overlays, and the screenshot route is recorded either way.
 
+## Process notes for every session
+
+Standing rules for C's rows and tools, from the sessions' friction logs (session 15 the latest):
+
+- **Say where to look before triggering anything transient.** A line of 3 or 4 seconds, a bark or a face is missed otherwise: post the info line ("Watch her face now: …") first, then trigger it.
+- **Name places by the map's icons and labels** (the shopping cart of a vending machine, the ripperdoc's cross, a bar's glass), never by a landmark C supposes is there; when in doubt, name the nearest one from `scene_read` or the map.
+- **Pre-heist saves can't leave Watson** (it is locked down before the heist): put a row's travel inside Watson, or ask for a later save.
+- **Bars and shops close by the hour** (Lizzie's opens at 18:00): list the places open at the session's time, or skip time first.
+- **`ui_message` limits:** each choice at most 24 characters (`ask` refuses a longer one), `seconds` at most 600; check lengths before posting.
+- **`game_wait` has no `timeout_s`**; give a session-level deadline instead, and probe for reconnection rather than asking (`local/tools/wait-bridge.sh`).
+- **`session_wait` needs `after`** for an event that may land before the wait starts: pass the stream's `latest` from `session_events {limit: 1}`, read just before the command it waits on. Post asks only through the helper that records their id.
+- **Questions that the stop key ends** can't be answered until after Reconnect: phrase them "remember, then reconnect, then answer".
+- **A dialogue pick by M** is preceded by an info line, never an ask, so the answer key doesn't compete with the game's dialogue keys.
+- **The answer key** works on the ink panel and, from 0.8.9, on the CET line; a press within 0.5 s of a new question is ignored.
+
 ## Finish showroom checks (bridge 0.5.0)
 
 Only with the 0.5.0 -writes build and XF Finish Showroom staged ([pipeline guide](../authoring/studio-to-mod-pipeline.md#xf-finish-showroom-a-test-mod-of-mannequin-heads), [knowledge](../../knowledge/skin-on-spawned-objects.md)). **First the fidelity check**: one showroom head beside V, both wearing the same preset under the same light; only if the head is a fair stand-in does the lineup follow. C is the coordinator, M the maintainer; tool names are the MCP names. `<s2>` and `<gb>` stand for the two showroom build folders (session 2's collection and the Glitter board), as the coordinator's staging receipt names them.
@@ -120,6 +136,93 @@ Only with the 0.5.0 -writes build and XF Finish Showroom staged ([pipeline guide
 | K2 | C, M | `showroom_spawn {manifest: "<s2>", presets: ["Gloss A · as before"]}`, then M loads the save (or `game_load {latest: true, discard_unsaved: true}`); after the load, `showroom_state` | Nothing in the world after the load; `showroom_state` has no pieces | A head survives the load: record it (static entities should not persist) |
 
 Evidence: every answer's JSON (spawn plans, spill estimates, sweep frames), the captures (F3–F7 as a fidelity sheet, L1–L3 as a lineup sheet and per-preset strips, L4's burst manifest), the plugin log's `showroom` lines, the Codeware version, and the three archives' SHA-256.
+
+## Session 16 checks (bridge 0.8.9)
+
+Only with the 0.8.9 -writes build built with `--allow-inventory` ([build record](#build-record-bridge-089-branch-build-not-staged)); Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods staged as for session 15 (no restage of those). 0.8.9 is session 15's fixes ([design §3.17](runtime-bridge-design.md#317-bridge-089-session-15s-findings)); these rows check each one in the game and run the rows session 15 skipped (G3, G6, NC2, A7 with a reopen, and G9 if the memory rows allow). C is the coordinator, M the maintainer; tool names are the MCP names. **The MCP server must run 0.8.9's tools** (restart it after the restage): `npc_say` takes `near_m` and `style: "call_subtitle"`, `test_events` takes `kinds`.
+
+**One restage, no relaunch. Time: about 45 minutes.** The groups run in this order; if time runs short, drop from the bottom of the Drop column, never a group marked keep. Follow the [process notes](#process-notes-for-every-session) (where to look before a transient, map icons, places open at the hour, `ui_message`'s limits, `session_wait`'s `after`).
+
+| Group | What | Where | Min | Drop |
+|---|---|---|---|---|
+| [Z](#z16-the-launch-3-min) | The launch, the version, a memory baseline | The quiet street of session 15 (Little China or Kabuki, daylight, open sky) | 3 | keep |
+| [A](#a16-photo-mode-the-panels-place-and-a-reopen-6-min) | The panel's place, the reopen for A7 | The street, in photo mode | 6 | keep A5r; A7 can go |
+| [D](#d16-the-pin-at-the-edge-2-min) | The pin mark behind V | The street | 2 | keep |
+| [U](#u16-the-phone-the-window-and-the-answer-keys-5-min) | The phone hides the panel; the window's newest line; the key guard; the key with the CET line | The street | 5 | keep |
+| [N](#n16-npc-direction-17-min) | Reactions held back, the walk, the greeting, device screens, the scene twice, the release, `call_subtitle` | The street, then a vending machine with an in-world screen | 17 | keep N1 to N5; N6 and N7 can go |
+| [S](#s16-the-senses-and-the-event-feed-9-min) | The inventory count, the wanted bar, a stolen car and a passenger, a conversation, the stim tap | Little China | 9 | drop G9, then G6 |
+| [M](#m16-memory-throughout-3-min) | The game's memory over the session | Throughout | 3 | keep |
+
+**Restage first** (C, MO2 closed): in the **`XF Studio diagnostic`** profile, **replace** the `XF Runtime Bridge` entry's files with `xf-runtime-bridge-0.8.9-writes.zip` (manifest `"version": "0.8.9"`, the build record's `commit`, `write_classes` ending in `npc`, `test_probes` listing three). In the staged `config.ini` set `[ui] answer_keys = IK_F6` and `[overlay] enabled = false`, as in session 15. Note what MO2's overwrite folder holds for the bridge.
+
+### Z16. The launch (3 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| Z1 | M, C | M launches the game and loads the latest save (the quiet street, daylight); C: `bridge_info`; C reads the game's private bytes (`Get-Process Cyberpunk2077`, `PrivateMemorySize64`) and the machine's free commit | `plugin_version` 0.8.9, `build_commit` the build record's, `natives=26` in the plugin log, no redscript error naming `XFNpc`, `XFNpcHub`, `XFInkStyle`, `XFPhotoMenuPanel`, `XFSenses`, `XFInkPins` or `XFEventProbe`; the memory numbers noted as M0 | An old DLL or a redscript error: stop and copy the log |
+| Z2 | C | `game_save {}` | The session's own save (loaded again at the end of N) | — |
+
+### A16. Photo mode: the panel's place, and a reopen (6 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| A5r [A5] | C, M | `ask "Press the photo mode key, then click Done here." [Done]`; `game_wait {phase: "photo_mode"}`; `ui_hud {anchor: "bottom_right"}`; C captures (`s16-A5-bottom-right`, 1:1 crop of the top-right corner too); `session_log {kinds: ["ink_tree"], tail: 1}`; `ask "Is the panel clear of the menu, the tab buttons, the category's icon and title, and the hints?" [All clear, Something covered]` | All clear; the laid-out event's `zones` include **`top_bar`** and a **`top_bar_title`** that starts left of the word (the icon included); `zone_rule` `nudged` (the panel left of the menu, on the bottom row) or `corner:…`; never above the menu | Something covered: the capture with the zones; `zone_rule` `overlapping` means no free place was found |
+| A7r [A7] | C, M | `ui_hud {layer: "notifications"}`; `ask "Close photo mode and open it again, then click Done." [Done]`; C captures (`s16-A7a`); `ui_hud {layer: "top"}`; the same ask; C captures (`s16-A7b`); `ui_hud {reset: true}`; `photo_exit` | Records which of the two layers draw in photo mode after a reopen ([ink UI](../../knowledge/ink-ui.md#open-questions), 2) | Neither draws: the photo-menu route stays the only in-menu surface |
+
+### D16. The pin at the edge (2 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| D1r [D1] | C | As session 15's D1: a pin 15 m ahead and 8 m up; `player_look {at: p}`; then `player_look {yaw: 120, relative: true}`; C captures (`s16-D1-edge`); `ui_state`; then `player_look {yaw: -240, relative: true}` (the other side); C captures; `ui_state`; `world_pin_clear`; the look's undo | Turned away, the XF mark sits at the **side edge** in the pin's direction (right after the first turn, left after the second), beside the game's own edge marker; `ui_state`'s `pins` is a list (not null, no `pins_error`) with `xf_mark.at_edge` true and `drawn_by` naming plain views | `pins` null: the plugin log's `script.bad_json` line; the mark low in the middle: the capture |
+
+### U16. The phone, the window and the answer keys (5 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| U1 [phone] | C, M | `ui_message {level: "info", text: "Phone check: this line should hide while the phone is open."}`; `ask "Open the phone's messages and read one message, then close the phone and click Done." [Done]`; while M reads, C captures (`s16-U1-messages`) and reads `ui_state` | The ink panel is gone while the message reader shows (the text isn't covered); `ui_state.phone_open` true while it is open, false after; the panel back after | The panel over the reader: the capture; `phone_open` false while open: which phone screen it was |
+| U2 [window] | C, M | `ask "Open CET's overlay and look at the XF Runtime Bridge window, then click Ready." [Ready]`; then `ui_message {level: "info", text: "A newer line than the question."}`; `ask "Without closing CET: does the window's top slot now show the newer line, not 'Sent: Ready'?" [Newer line, Still Sent]` (answered with the mouse) | Newer line: the slot reads "From XF Studio" and the info line | Still Sent: record the window |
+| U3 [key guard] | C, M | `ask "Hold F6 down now and keep it held until the next question appears, then let go." [Done]`; as soon as M answers C posts `ask "Did F6 answer this question by itself?" [It did, It didn't]` (answered with the mouse); `session_log {kinds: ["answer"], tail: 2}` | It didn't: a key within 0.5 s of a question is ignored (the plugin log's `answer key … too_soon` line, if the key repeated) | It did: the guard's window; record the log |
+| U4 [F6, CET line] | C, M | `ui_hud {show: false}` (the CET line is the surface); `ask "Press F6 to answer this one." [Done]`; `ui_hud {show: true}` | The answer arrives `via: ink_key` while the CET line shows the question (its hint names F6) | Nothing: the key still needs the panel |
+
+### N16. NPC direction (17 min)
+
+The street from Z; **N1 to N4 use one actor**, released at the end of N4. Every `session_wait` for an `npc.*` event passes `after` (the process notes).
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| N1 [NB1] | C, M | `npc_spawn {cast: "woman_corpo", ahead_m: 6}`; wait `npc.spawned`; `npc_look {who, at: "v"}`; `npc_face {who, expression: "smile"}`; `ask "Walk right up to her, stand in front of her for twenty seconds, step around her once, then say: is she still smiling and quiet?" [Smiling and quiet, Got annoyed, Barked]` | **Smiling and quiet** through the whole twenty seconds (her look-at reaction, face resets and barks are held back) | Got annoyed or barked: the plugin log around it; reactions still win, record when |
+| N2 [NB2] | C, M | `ui_message {level: "info", text: "Watch her face now: she greets you."}`; `npc_face {who, off: true}`; `npc_say {who, trigger: "greeting"}`; C takes a series (`s16-N2-greeting`); `ask "Did she greet you with a smile? What did she say? (Free text.)"` | A smile with the greeting (the answer's `face` `smile`); the words are the voice's own: record them (whether a civilian's greeting can be warm is the open part) | No smile: the capture; the words are data either way |
+| N3 [NC1's walk] | C, M | `npc_place {who, at: <8 m ahead of V>}`; `ui_message {level: "info", text: "Watch her walk to you and away again."}`; `npc_move {who, to: "v"}`; wait `npc.arrived`; then `npc_release {who, how: "walk_away"}`; `ask "Did she walk forwards both ways, facing where she went?" [Forwards both ways, Backwards to me, Backwards away]` | Forwards both ways; on arrival she faces V or nearly (the facing target alone, [hypothesis]) | Backwards: which way; the reaction look-at or the strafing |
+| N4 [NB6, NB6b] | C, M | M walks to a vending machine with an in-world screen near the street (the map's shopping-cart icon; C names the nearest one from `scene_read`); `npc_spawn {cast: "woman_corpo", ahead_m: 2}` beside it, wait `npc.spawned`; `ask "Stand at the machine with the hand cursor over an item, then click Done with the mouse." [Done]`; `npc_choices {who, choices: ["Yes.", "No."]}`; then `ask "Step back from the machine so its screen loses the cursor, then click Done." [Done]`; `npc_choices {who, choices: ["Still here.", "Bye."], max_s: 60}`; `ask "Now put the hand cursor on the machine's screen again, then click Done." [Done]`; `session_log {kinds: ["npc.choice"], tail: 2}`; `npc_release {who: "all"}` | The first `npc_choices` is refused **`choices_busy`** (a device's screen); the second shows; when the cursor goes back on the screen our choices go (`npc.choice {withdrawn: true, reason: "choices_busy"}`) and F works the machine, not our hub | Shown over the screen, or not withdrawn: the plugin log's `npc-hub` lines and `ui_state` |
+| N5 [NC1, NC2] | C, M | `ui_message {level: "info", text: "Scene check: a passer-by walks up and asks you something. Answer with the FIRST line, using your usual dialogue keys. Watch her face."}`; `npc_scenario {name: "stranger_question"}`; C takes a series at arrival and at the choices; then the same with "…the SECOND line…" | Each run: she walks up forwards, arrives within 3 m, greets with a smile, her question stays up long enough to read (its own reading time), the choices wait up to two minutes; first run `answers.answer` `0` (joy, thanks, walks away), second `1` (disgust, her line, walks away); `outcome` `done` both times; nobody left behind | `failed` with "wasn't near V, so the scene stopped before the line": she never arrived (the why says how far); record it |
+| N6 [NB8] | C, M | `npc_list {radius_m: 20}`; pick a `pickable` passer-by; `npc_look {who: "<pick>", at: "v"}`; then `npc_release {who: "<pick>"}`; `ask "Did the passer-by walk on within a few seconds of letting go?" [Within seconds, Stood a while]` | Within seconds (the release tells a crowd member to walk on) | Stood a while: where (a crossing?) and how long |
+| N7 [NB4] | C, M | `npc_say {speaker: "Caller", text: "This is the caller's subtitle style.", style: "call_subtitle", seconds: 6}`; then `npc_say {speaker: "Caller", text: "x", style: "holocall"}` | The first shows as a plain subtitle "Caller: …" (as named now); the second is refused in plain words (renamed) | — |
+| N8 | C | `game_load {name: <Z2's save>, discard_unsaved: true}`; `game_wait {phase: "gameplay"}`; `npc_status {}` | Nothing of the bridge's left | Record |
+
+### S16. The senses and the event feed (9 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| SS5r [SS5] | C, M | `player_status {parts: ["inventory"]}`; `ask "Open the inventory's weapons: how many weapons does it list, and which are equipped? (Free text.)"` | `inventory.types`' weapon stacks equal the screen's count (1 handgun, not 3); `equipped` lists the equipped ones by type; `hidden_stacks` counts what the screen leaves out | A difference: the type list; which hidden item still counts |
+| SS4r [SS4] | C, M | During a one-star chase (as session 15's): `player_status {parts: ["heat"]}` at each change; M says solid, flashing or grey | `heat.bar.look` follows the bar: `solid` with Active **and** Searching (session 15: one solid star read Searching), `flashing` with Dropping, `none` with no stars; `bar.stars` the star count | `look` and the bar differ: record the pairs |
+| G3 [8] | C, M | `test_events {kinds: ["vehicle"]}` to set the cursor; `ask "Steal a car (not V's own): get in as the driver and drive off. Then ride as a passenger in a taxi or a friend's car if one is handy. Click Done." [Done, No passenger]`; `test_events {since, kinds: ["vehicle"]}` | `vehicle` mount with `seat_front_left` as driver, `vehicle.stolen` with `by_v` true and its `heat` records; a passenger mount in another slot | No theft record: the car didn't meet `ReevaluateStealing`; record the car |
+| G6 [13] | M | `ask "Hold a conversation with two choice hubs. After each choice, click which line you took, counting from the top." [First, Second, Third, Fourth]` (twice); `test_events {since, kinds: ["dialogue"]}` | `dialogue.hub` records and `dialogue.index` records (one per change now, no flood); the last index before the hub goes equals M's pick | It differs, or the hub goes before the index settles: the inference fails |
+| G9 [16] | C, M | **Only if M1 (below) shows no climb.** `test_events {stims: true}`; `ask "Walk this busy street for a minute. Did the frame rate drop?" [Same, Dropped]`; `test_events {stims: false}` | `stim.count` records in the thousands a minute at most; Same | Dropped: the stim tap stays out of the feed |
+
+### M16. Memory, throughout (3 min)
+
+Session 15 froze about 14:39 (a 120 s main-thread hang, the engine's watchdog at 14:41) with the game's private bytes at 19.8 GB and 4.8 GB of the machine's commit free. The dump shows the main thread waiting, with no time limit, for a job a worker never finished, and no bridge code on any busy thread ([design §3.17](runtime-bridge-design.md#317-bridge-089-session-15s-findings)); only a full-memory dump can name the job.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| M1 | C | After N8 and at the end: the game's private bytes and working set, the machine's free commit; beside M0 | Private bytes within a few hundred MB of M0 after the load (N8), and no steady climb through S | A climb of a GB or more: note when it started (which group) and skip G9 |
+| M2 | C, M | **If the game freezes** (the picture stops, sound loops): C at once runs Task Manager's "Create memory dump file" on `Cyberpunk2077.exe` (a full dump, 20 GB or so, to the scratch drive with room), before the watchdog's 120 s end it; then the session stops | A full dump to name the job the main thread waits on | — |
+
+**Friction log (throughout).** Every point of friction met in passing, with each surface by its name.
+
+**Afterwards:** C records each result in [NPC direction §8](../../knowledge/npc-direction.md#8-session-15-on-bridge-088-23-october-2026), [game events](../../knowledge/game-events.md#questions-only-the-game-can-answer), [photo mode §15](../../knowledge/photo-mode.md#session-15-on-bridge-088-23-october-2026) and the [runtime requirements](../story-engine/runtime-requirements.md) Status column, marking each source [runtime].
+
+Evidence: every answer's JSON, the captures named above (`local/reviews/ui-review-bridge-089/`), `session_log {tail: 500}` and `test_events {since: 0, limit: 500}` at the end, the plugin log, and the memory readings.
 
 ## Session 15 checks (bridge 0.8.8)
 

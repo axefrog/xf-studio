@@ -1,6 +1,6 @@
 # NPC direction: spawning, moving, speaking and choices from a mod
 
-**Maturity: Draft.** How a mod spawns or chooses an NPC, makes it walk, turn and follow through the game's AI commands, makes it speak (its own voice or text), gives it a face, a gaze and a gesture, offers V dialogue choices and receives the answer, and cleans up so nothing reaches a save. Consolidated on 30 September 2026 from the decompiled 2.31 script bundle (redscript-cli 0.5.31, `final.redscripts` SHA-256 `2119046f…ee86`), the game's REDmod TweakDB sources, Codeware (`v1.20.4`, `613a1cb8`), TweakXL (`v1.11.4`), ArchiveXL (`v1.27.3`), the Modding Docs at `a54b0873`, and installed mods read in place (Appearance Menu Mod 2.12.5 with its GitHub clone `5427235`, Native Interactions Framework f1.05b with its clone `041f17e`, keanuWheeze's InteractionUI module inside Immersive V Dialogue Expanded 1.1.0.0, Dark Future 2.0.3, Audioware 1.8.0, Immersive Food Vendors 1.2.2). **Nothing on this page has runtime evidence yet.** Grades follow the [knowledge rules](README.md). The bridge design built on it (offline, bridge 0.8.8), with provenance, commands, a first scenario and its in-game rows, is [NPC direction design](../research/runtime/npc-direction-design.md). Crowd reactions, voicesets and overhead barks are on [NPC reactions](npc-reactions.md).
+**Maturity: Draft.** How a mod spawns or chooses an NPC, makes it walk, turn and follow through the game's AI commands, makes it speak (its own voice or text), gives it a face, a gaze and a gesture, offers V dialogue choices and receives the answer, and cleans up so nothing reaches a save. Consolidated on 30 September 2026 from the decompiled 2.31 script bundle (redscript-cli 0.5.31, `final.redscripts` SHA-256 `2119046f…ee86`), the game's REDmod TweakDB sources, Codeware (`v1.20.4`, `613a1cb8`), TweakXL (`v1.11.4`), ArchiveXL (`v1.27.3`), the Modding Docs at `a54b0873`, and installed mods read in place (Appearance Menu Mod 2.12.5 with its GitHub clone `5427235`, Native Interactions Framework f1.05b with its clone `041f17e`, keanuWheeze's InteractionUI module inside Immersive V Dialogue Expanded 1.1.0.0, Dark Future 2.0.3, Audioware 1.8.0, Immersive Food Vendors 1.2.2). Session 15 (23 October 2026, bridge 0.8.8) gave the first [runtime] results, gathered in §8; the rest is still [source]. Grades follow the [knowledge rules](README.md). The bridge design built on it (bridge 0.8.8, with session 15's fixes in 0.8.9), with provenance, commands, a first scenario and its in-game rows, is [NPC direction design](../research/runtime/npc-direction-design.md). Crowd reactions, voicesets and overhead barks are on [NPC reactions](npc-reactions.md).
 
 Game-script citations are paths inside the decompiled bundle; installed-mod citations are paths inside the mod's folder in the mod manager (`mods/<mod name>/`).
 
@@ -9,11 +9,12 @@ Game-script citations are paths inside the decompiled bundle; installed-mod cita
 | Question | Answer | Grade |
 |---|---|---|
 | Can a mod spawn an NPC that never reaches a save? | Yes: Codeware's `DynamicEntitySystem` with `persistState` and `persistSpawn` off writes nothing at save time and clears everything at world detach | [source] |
-| Can it make an NPC walk somewhere? | Yes: `AIMoveToCommand` through the NPC's AI component, with Walk, Run or Sprint, a stop distance and a facing target | [source]; AMM ships it |
+| Can it make an NPC walk somewhere? | Yes: `AIMoveToCommand` through the NPC's AI component, with Walk, Run or Sprint, a stop distance and a facing target; a TweakXL clone of a crowd record with `isCrowd: false` walks, follows and turns on command | [runtime] session 15 (NA3 to NA5) |
 | Can it make an NPC say something? | In the NPC's own voice, only a line its voiceset has for a generic trigger; any text as a subtitle or overhead line | [source] |
-| Can it offer V dialogue choices and learn the answer? | Yes, without a scene: add a hub to the game's own dialogue widget and read the player's choice keys; or author a `.scene` with a choice node | [source] (a shipping CET module); [wiki] |
+| Can it offer V dialogue choices and learn the answer? | Yes, without a scene: add a hub to the game's own dialogue widget and read the player's choice keys (the pick arrived, scrolling worked, nothing else reacted); or author a `.scene` with a choice node | [runtime] session 15 (NB5); [wiki] |
 | Can it play a gesture? | A facial reaction yes; a body gesture through a workspot carrier entity | [source] |
-| Do crowd NPCs obey commands? | Unknown; crowd NPCs are driven by the crowd system and change AI role only once, per AMM | [hypothesis] |
+| Do crowd NPCs obey commands? | Unknown; crowd NPCs are driven by the crowd system and change AI role only once, per AMM. A picked passer-by looks and speaks on request, and stood about 20 s after its release before walking on | [hypothesis]; [runtime] session 15 (NB8) |
+| Does an NPC's own reaction system fight a mod's face and lines? | Yes: an NPC outside the crowd gives V the aggressive face and its voiceset's `greeting` bark whenever V comes close, stands in front of it or lingers, whatever its reaction preset unless the preset's type is NoReaction; its look-at twists the chest towards V and never ends by itself (§8) | [runtime] session 15 (NB1, NB2, NC1); [source] the mechanism |
 
 ## 2. Spawning and choosing
 
@@ -58,6 +59,7 @@ flowchart LR
 - **Own voice:** `GameObject.PlayVoiceOver(npc, trigger, …)` queues `SoundPlayVo { voContext }`; the voice's voiceset scene plays a random line for that trigger with audio, subtitle and lip sync [source] `core/entity/gameObject.script:743-770` ([NPC reactions §3](npc-reactions.md#3-how-an-npc-picks-and-plays-a-voice-line)). AMM's Director offers 26 triggers [source] AMM `init.lua:2792-2830`.
 - **Text:** `scnDialogLineData` on `UIGameData.ShowDialogLine`, types `Regular` (bottom subtitle with the speaker's name), `OverHead`, `OverHeadAlwaysVisible`, `Holocall`, `Narrator`, …; hidden by id [source] `orphans.script:7396-7410, 44905-44926` ([NPC reactions §4](npc-reactions.md#4-text-only-barks-and-subtitles-source)). No audio means no lip sync [hypothesis].
 - **Custom audio:** Audioware's `AudioSystemExt.Play(event, entityID, emitter, lineType, settings)` and emitters [source] Audioware `r6/scripts/Audioware/Ext.reds:11-36`; needs a consenting voice.
+- **The `Holocall` line type with no call** draws as a plain subtitle ("Caller: ...") without the holocall frame [runtime] session 15 (NB4); the frame belongs to the phone's call UI, so the bridge names that style `call_subtitle` (0.8.9).
 - **Holocalls** are phone machinery plus an ordinary scene over it, started from a quest phase; the answer comes back as a fact [wiki] `modding-guides/quest/custom-video-holocalls.md` (`holocall-phase-3-answer-wait.png`).
 
 ## 5. Dialogue choices
@@ -90,16 +92,37 @@ flowchart LR
 - Release: cancel or stop commands, hide lines, withdraw a hub, remove look-ats, reset faces, stop workspots, delete by tag (AMM teleports its actors behind V first) [source] AMM `Modules/director.lua:1051-1091`.
 - No facts or quest phases are needed for any of the runtime routes; the scene route adds both.
 
+## 8. Session 15 on bridge 0.8.8 (23 October 2026)
+
+The first run of NPC direction in the game, at a street in Little China and Kabuki ([card](../research/runtime/runtime-bridge-test-card.md#session-15-checks-bridge-088)). What it settled:
+
+- **Spawning, walking, following, turning** work on the TweakXL clones: spawned 8.25 m ahead facing V; walked to V and arrived 2.13 m away; followed V; turned away and turned again as V circled; a place 10 m below V was refused `not_streamed` [runtime] NA1 to NA5.
+- **Lines and choices:** the subtitle with the actor's name, the overhead bubble and the game's own dialogue widget with our hub all showed; the pick came back as `npc.choice` with its index and label; the hub went with `walked_away` when V left [runtime] NB2, NB3, NB5, NB6.
+- **An in-world device screen is not a prompt.** At a vending machine's screen, with the hand cursor over an item, the interaction-prompt check saw nothing: our choices showed and stayed, and F bought from the machine [runtime] NB6b. A device screen raises no `InteractionChoiceHub`; the player state machine's `IsInteractingWithDevice`, `IsUIZoomDevice` and `IsControllingDevice` and the targeting system's look-at object (`TargetingSystem.GetLookAtObject`, a `Device` within reach) are the readable signs [source] `deviceBase.script:1540-1560`, `blackboardDefinitions.script:64-76`. 0.8.9 treats any of them as busy (refuse, and withdraw a live hub) [hypothesis until session 16].
+- **The actor's own reactions win, and why.** With `reactions: quiet` (`ReactionPresets.Civilian_NoReaction`) the actor still turned "pissy", barked "whaddya want?" and "look, I'm waiting for a friend, okay?" over `npc.face`'s smile, and the `greeting` trigger played the same lines [runtime] NB1, NB2. The mechanism [source] `reactionComponent.script`:
+  - the look-at reaction `TriggerFacialLookAtReaction` (2835-2874) gives an NPC outside the crowd (`m_inCrowd` false, as every `isCrowd: false` clone is) the aggressive face (category 3, idle 1; compare `SelectFacialEmotion`, 3456-3500) and plays the voiceset's `greeting`, every time;
+  - it fires from the proximity look-at (`OnPlayerProximityStartEvent`, then `OnProximityLookatEvent` 2 s later, 5207-5260), the comfort zone (`OnDisturbingComfortZoneEvent`, V within 1 m in front, 3416-3433) and the repeat look-at (`OnRepeatLookatEvent`, 1005-1009, which checks no preset at all);
+  - the preset guard `CanTriggerExpressionLookAt` (2919-2960) stops it only for presets whose type is NoReaction or Follower, and `Civilian_NoReaction` evidently isn't of that type;
+  - its look-at (`ActivateReactionLookAt`, 3539-3600) twists the chest towards V at weight 2.0 within a 210-degree back limit, and for an NPC outside the crowd it starts without an end;
+  - a face set from outside is cleared again by `ResetFacial` and `OnResetFacialEvent`.
+
+  So a civilian's "greeting" is its curt line: the voiceset picks it, and nothing in the scripts asks for a friendlier one. 0.8.9 drives the system instead of fighting it: it wraps those five methods so they stand down for a quiet actor always and for any actor or pick while the bridge holds its face, look or a line, ends the reaction's look-at when it sends a walk, and pairs `greeting` with a held smile [hypothesis until session 16]. Whether a voiceset holds a warmer line under another trigger can't be read from the scripts; the voice data would say.
+- **Walking backwards** (she approached V and left again facing the wrong way, "like she was possessed") [runtime] NC1. Two causes in the source: the reaction's chest-twisting look-at above, still on during the walk away, and the move to V sent with `rotateEntityTowardsFacingTarget`, which makes V a strafing target for the whole walk (`aiMoveToCommandHandler.script:317-324`); the game's own move-to-V sets the facing target only (`quickhackEffectors.script:911-918`). 0.8.9 does the same [hypothesis until session 16].
+- **Speech before arrival:** in the scenario's second run her lines played while she was nowhere near V and the choices were refused `too_far` [runtime] NC1 redo: the arrival wait had passed. 0.8.9 refuses a line given `near_m` unless the NPC stands that close, and the scene stops early in plain words.
+- **Stand-ins:** a hostile mortal stand-in was handed back in the fight, died and kept its body; its death record said `civilian: true` (the clone's class), so the probe now also reports the attitude towards V [runtime] ND3. The police answered the shooting and killed V.
+- **Teardown:** the handover, the pause, the stop key and a load each left nothing behind [runtime] NE1 to NE4.
+- **A released pick** stood about 20 s at a crossing before walking on [runtime] NB8; 0.8.9 tells a released crowd member to walk at its normal pace (`CrowdMemberBaseComponent.ChangeMoveType(n"normal")`, as the reaction component does after its own reactions, `reactionComponent.script:3241-3243`) [hypothesis].
+
 ## Open questions
 
-1. Does a TweakXL clone of a crowd record with `isCrowd: false` take commands like a named NPC?
+1. ~~Does a TweakXL clone of a crowd record with `isCrowd: false` take commands like a named NPC?~~ Yes (§8).
 2. Is `AICommandState.Success` reported on arrival?
-3. Does a redscript input listener see and consume the choice actions while a dialogue hub is shown?
-4. Which reaction preset keeps a spawned actor calm and quiet to crime but still expressive?
-5. Does a spawned actor's own proximity reaction fight a mod's look-at and lines?
-6. Does the `Holocall` subtitle style render with no call in progress?
+3. ~~Does a redscript input listener see and consume the choice actions while a dialogue hub is shown?~~ Yes (§8); but an in-world device screen takes the apply key first.
+4. Which reaction preset keeps a spawned actor calm and quiet to crime but still expressive? `Civilian_NoReaction` doesn't silence the look-at reaction (§8); a preset of the NoReaction type would, at the cost of every look-at.
+5. ~~Does a spawned actor's own proximity reaction fight a mod's look-at and lines?~~ Yes, and the mechanism is known (§8); whether 0.8.9's wraps hold it back is session 16's.
+6. ~~Does the `Holocall` subtitle style render with no call in progress?~~ As a plain subtitle only (§4).
 7. Which workspot clips play on every rig, and what is the smallest carrier resource that plays them?
-8. What does a civilian clone do when made hostile and mortal, and does the civilian reaction preset bring the police when it is shot?
+8. What does a civilian clone do when made hostile and mortal? It died too fast to see (§8); shooting it did bring the police.
 9. Is there a reversible way to hide another NPC for a scene (its look, AI and collision), so a stand-in can take its place?
 
 ## Related pages
