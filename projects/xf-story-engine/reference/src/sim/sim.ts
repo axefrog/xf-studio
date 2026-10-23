@@ -31,7 +31,7 @@ import { stocksProcess } from './proc-stocks.ts';
 import { actsProcess } from './proc-acts.ts';
 import { Ledger, ledgerProcess } from './ledger.ts';
 import type { RingEntry } from './occ.ts';
-import { Policies } from './policies.ts';
+import { Policies, reconcileAll } from './policies.ts';
 import { TiePolicy } from './tie-policy.ts';
 import { VFrames } from './vframes.ts';
 import { Divergence } from './divergence.ts';
@@ -152,12 +152,15 @@ export class Sim {
     this.record = seed ? (structuredClone(seed.state) as S1Record) : emptyRecord();
     this.people.dropCaches();
     this.ties.dropCaches();
-    this.w.buildNodes();
-    this.policies.openWatch();
+    // The simulation data are pinned for the lineage (S1 1.4): another version of the pack, the data or the index opens the save read-only.
     const mine = (report.changedPacks ?? []).filter((x) => x.startsWith('xf.core.world@1@') || x.startsWith('xf.s1.sim@1@'));
     if (mine.length > 0) {
       this.k.readOnly = { message: `This save was made with other simulation data (${mine.join(', ')}). It opens read-only.` };
+      return;
     }
+    this.w.buildNodes();
+    this.policies.openWatch();
+    reconcileAll(this.policies);
     void rec;
   }
 

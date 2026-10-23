@@ -87,6 +87,34 @@ export function gapBand(cur: 0 | 1 | 2, gap: number, norm: NormDef): 0 | 1 | 2 {
   return cur;
 }
 
+/** The resident type of a person for a norm: their share and thresholds (S1 7.5). */
+export const residentType = (sim: Sim, norm: NormDef, res: Id): number => invCum(norm.share, sim.ids.ntype(norm.id, res));
+
+/** A resident complies if `qe >= taue[type]` and `qn >= taun[type]` (S1 7.5). */
+export const complies = (sim: Sim, norm: NormDef, res: Id, qe: number, qn: number): boolean => {
+  const j = residentType(sim, norm, res);
+  return qe >= norm.taue[j]! && qn >= norm.taun[j]!;
+};
+
+const classIndexOfAff = (aff: 'A1' | 'A2' | 'A3'): number => ({ A1: 2, A2: 3, A3: 4 })[aff];
+
+/** Cast an enforcement event: an enforcer of the enforcing affiliation and roles, a target among adult civilian non-compliers (S1 7.5). */
+export const castEnforcement = (sim: Sim, norm: NormDef, d: Descriptor, qe: number, qn: number, harm: boolean): CastEntry[] | 'no-cast' => {
+  const present = sim.people.presentAt(d.cell, d.time, sim.data.people.presentCap);
+  const eligibleE: Id[] = [];
+  const eligibleT: Id[] = [];
+  for (const r of present) {
+    const v = sim.people.view(r);
+    if (!v || v.ageClass !== 'adult') continue;
+    if (v.affc === classIndexOfAff(norm.enforcer.aff) && norm.enforcer.roles.includes(v.role)) eligibleE.push(r);
+    else if (v.affc === 0 && (norm.sector === null || norm.sector.includes(v.role)) && !complies(sim, norm, r, qe, qn) && !(harm && sim.people.protectedAt(r, d.time))) eligibleT.push(r);
+  }
+  if (eligibleE.length === 0 || eligibleT.length === 0) return 'no-cast';
+  const e = eligibleE[Math.floor(sim.ids.castWho(d.id, 'enforcer', 0) * eligibleE.length)]!;
+  const t = eligibleT[Math.floor(sim.ids.castWho(d.id, 'target', 0) * eligibleT.length)]!;
+  return [{ role: 'enforcer', who: e }, { role: 'target', who: t }];
+};
+
 export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
   const procId = 'order.norms';
   const proc = processCause(procId);
@@ -96,31 +124,6 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
   const norms = cfg.norms;
   const kindName = (n: string, r: string): string => `enf.${n}.${r}`;
   const rawKinds = norms.flatMap((n) => n.ladder.map((r) => kindName(n.id, r.rung)));
-
-  /** The resident type of a person for a norm: their share and thresholds (S1 7.5). */
-  const typeOf = (norm: NormDef, res: Id): number => invCum(norm.share, sim.ids.ntype(norm.id, res));
-  const complies = (norm: NormDef, res: Id, qe: number, qn: number): boolean => {
-    const j = typeOf(norm, res);
-    return qe >= norm.taue[j]! && qn >= norm.taun[j]!;
-  };
-  const classIndexOf = (aff: 'A1' | 'A2' | 'A3'): number => ({ A1: 2, A2: 3, A3: 4 })[aff];
-
-  /** Cast an enforcement event: an enforcer of the enforcing affiliation and roles, a target among adult civilian non-compliers (S1 7.5). */
-  const castEnforcement = (norm: NormDef, d: Descriptor, qe: number, qn: number, harm: boolean): CastEntry[] | 'no-cast' => {
-    const present = sim.people.presentAt(d.cell, d.time, sim.data.people.presentCap);
-    const eligibleE: Id[] = [];
-    const eligibleT: Id[] = [];
-    for (const r of present) {
-      const v = sim.people.view(r);
-      if (!v || v.ageClass !== 'adult') continue;
-      if (v.affc === classIndexOf(norm.enforcer.aff) && norm.enforcer.roles.includes(v.role)) eligibleE.push(r);
-      else if (v.affc === 0 && (norm.sector === null || norm.sector.includes(v.role)) && !complies(norm, r, qe, qn) && !(harm && sim.people.protectedAt(r, d.time))) eligibleT.push(r);
-    }
-    if (eligibleE.length === 0 || eligibleT.length === 0) return 'no-cast';
-    const e = eligibleE[Math.floor(sim.ids.castWho(d.id, 'enforcer', 0) * eligibleE.length)]!;
-    const t = eligibleT[Math.floor(sim.ids.castWho(d.id, 'target', 0) * eligibleT.length)]!;
-    return [{ role: 'enforcer', who: e }, { role: 'target', who: t }];
-  };
 
   return {
     id: procId, version: 1, tier: 1, coarseFine: { kind: 'distribution', tolerance: '10%' }, lag: 0,
@@ -178,7 +181,7 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
           // (b) enforce, from the behaviour as the snapshot held it
           const pending: Array<{ id: Id; time: GameTime }> = [];
           const share = (() => {
-            const aff = d.affOrder[classIndexOf(norm.enforcer.aff)]!;
+            const aff = d.affOrder[classIndexOfAff(norm.enforcer.aff)]!;
             return (d.entry.byAff.find((b) => b.aff === aff)?.q ?? 0) / d.entry.total;
           })();
           const mu = norm.enforcePerDay * (W / DAY) * (1 - s.beh) * Math.min(1, share / 0.05);
@@ -196,7 +199,7 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
             const rungDef = cfg.rungs.find((x) => x.name === rung)!;
             const harm = sim.data.gate.harmEffects.includes(rungDef.effect);
             const desc: Descriptor = { id, kind: kindN, size: 1, w, time, cell, gen: 0, chain: [], public: false, witnesses: 0 };
-            const cast = castEnforcement(norm, desc, s.qe, s.qn, harm);
+            const cast = castEnforcement(sim, norm, desc, s.qe, s.qn, harm);
             if (cast === 'no-cast') {
               c.log({ w, proc: procId, kind: 'admission', reason: 'no-cast', refs: [id] });
               continue;
@@ -215,7 +218,7 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
             st.ring.push({ id, w, time, cell, norm: norm.id, rung, qe: s.qe, qn: s.qn });
             facts.push({
               id, kind: kindN, size: 1, w, time, cell, district: d.id, public: desc.public, witnesses: desc.witnesses, policeChild: false, creator: 'norms',
-              norm: norm.id, rung, enforcer: classIndexOf(norm.enforcer.aff),
+              norm: norm.id, rung, enforcer: classIndexOfAff(norm.enforcer.aff),
             });
             if (desc.public) pending.push({ id, time });
           }

@@ -43,7 +43,7 @@ export class Policies {
   /** Beliefs formed, tellings made and items absorbed: counters for the tests and the evidence tools. */
   readonly stats = { witnessed: 0, absorbed: 0, told: 0, corrections: 0 };
 
-  constructor(private readonly sim: Sim) {
+  constructor(readonly sim: Sim) {
     this.watch = mintedId(sim.w.city, sim.w.city, 'frame:s1-watch');
   }
 
@@ -438,8 +438,9 @@ export class Policies {
     if (!rate) return cfg.diag[kind] ?? 1;
     let all = 0;
     for (const r of Object.values(this.sim.data.shape.rate)) all = all + r.reduce((a, b) => a + b, 0);
-    const p = rate.reduce((a, b) => a + b, 0) / all;
-    return clamp(-ln(p), cfg.diagMin, cfg.diagMax);
+    const mine = rate.reduce((a, b) => a + b, 0);
+    if (!(all > 0) || !(mine > 0)) return cfg.diag[kind] ?? 1;
+    return clamp(-ln(mine / all), cfg.diagMin, cfg.diagMax);
   }
 
   private sizeOf(ev: EventView): number {
@@ -562,7 +563,7 @@ export class Policies {
   }
 
   /** The game is ground truth (S1 8.8): end what the game now contradicts; beliefs are left, and the divergence is logged. */
-  reconcile(person: Id, slot: string, value: unknown, old: unknown): void {
+  reconcile(person: Id, slot: string, value: unknown, old: unknown, quiet = false): void {
     const k = this.k;
     const w = this.sim.windowNow();
     let corrected = false;
@@ -577,7 +578,7 @@ export class Policies {
         k.endEdge(e.id, k.now);
         corrected = true;
       }
-      this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-dead', refs: [person] });
+      if (!quiet || corrected) this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-dead', refs: [person] });
     } else if (slot === 'affiliation' && value !== old) {
       for (const e of k.groups.memberships(person)) {
         k.endEdge(e.id, k.now);
@@ -593,3 +594,13 @@ export class Policies {
 }
 
 export type { Kernel };
+
+/** After a load (S1 8.8): the kernel read the game's state into readings silently, so reconcile looks at every mirrored person once. */
+export function reconcileAll(p: Policies): void {
+  const sim = p.sim;
+  const k = sim.k;
+  for (const person of k.store.idsOfKind('xf:person')) {
+    const alive = k.value(person, 'alive');
+    if (alive === 'no') p.reconcile(person, 'alive', 'no', undefined, true);
+  }
+}

@@ -220,7 +220,10 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         }
         // (6) the intention lifecycle
         const it = g.intent;
+        // an intention that has just cooled is `none` for a window before another may start; one that has just ended cools
+        let mayStart = true;
         if (it.state === 'cooling') {
+          mayStart = false;
           if (w + 1 >= it.until) g.intent = { state: 'none' };
         } else if (it.state === 'active') {
           const idf = intentDef(it.id);
@@ -229,8 +232,9 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
             c.log({ w, proc: procId, kind: 'decision', reason: 'intent-end', key: `${id}|${it.id}|${stop && w + 1 < it.expires ? 'ended' : 'done'}`, refs: [id] });
             g.intent = { state: 'cooling', until: w + 1 + idf.cooling };
           }
+          mayStart = false;
         }
-        if (g.intent.state === 'none' || g.intent.state === 'idle') {
+        if (mayStart && (g.intent.state === 'none' || g.intent.state === 'idle')) {
           const cand = Object.keys(def.ethos).filter((d) => (op.w[d] ?? 0) >= cfg.thetaStart).sort((a, b) => (op.w[b]! - op.w[a]!) || cmp(a, b));
           if (cand.length === 0) {
             if (g.intent.state === 'idle' && !Object.keys(def.ethos).some((d) => (op.w[d] ?? 0) >= cfg.thetaStop)) g.intent = { state: 'none' };
