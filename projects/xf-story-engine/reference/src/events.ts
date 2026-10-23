@@ -44,6 +44,8 @@ export interface EventCanonRecord {
 
 export class Events {
   private canonRecords = new Map<Id, CanonEntry[]>();
+  /** Summary items published as events in this session (V4-47). Not persisted: the publishing layer keeps its own record. */
+  readonly published = new Set<Id>();
 
   constructor(private readonly k: Kernel) {}
 
@@ -102,8 +104,53 @@ export class Events {
       effects: effects.map((e) => ({ on: e.on, effect: e.effect })),
     };
     if (spec.place !== undefined) ch.place = spec.place;
-    k.emit(ch);
+    k.emit(ch, spec.time);
     return nid;
+  }
+
+  /**
+   * Publish a materialised summary item once, as one `event` change (S0 9.3, V4-47). An opened item carries its fields as
+   * silent contributions; this is the one semantic announcement of it, so a reader that hears events hears the item. A second
+   * call for the same item in a session does nothing (the layer that publishes keeps its own persisted record, which is what
+   * makes a reload quiet), and regeneration never calls it. Returns whether a change was emitted.
+   */
+  publishItem(item: Id): boolean {
+    const k = this.k;
+    k.assertWritable();
+    const h = k.store.header(item);
+    if (!h || h.origin.by !== 'minted' || h.origin.creator !== h.origin.cause || !/^item:\d+$/.test(h.origin.name)) {
+      throw new Error(`not a summary item: ${item}`);
+    }
+    if (this.published.has(item)) return false;
+    const t = k.now;
+    const kind = k.value(item, 'kind', t);
+    const time = k.value(item, 'time', t);
+    if (typeof kind !== 'string' || typeof time !== 'number') throw new Error(`the item has no kind or time yet: ${item}`);
+    const place = k.value(item, 'place', t);
+    const count = (key: 'participants' | 'effects'): number => {
+      const c = k.value(item, `${key}#count`, t);
+      return typeof c === 'number' ? c : 0;
+    };
+    const participants: Array<{ who: Id; role: string }> = [];
+    for (let n = 0; n < count('participants'); n++) {
+      const m = k.address(item, `participants[${n}]`);
+      const who = k.value(m, 'who', t);
+      const role = k.value(m, 'role', t);
+      if (typeof who === 'string' && typeof role === 'string') participants.push({ who, role });
+    }
+    const effects: Array<{ on: Id; effect: Effect }> = [];
+    for (let n = 0; n < count('effects'); n++) {
+      const m = k.address(item, `effects[${n}]`);
+      const on = k.value(m, 'on', t);
+      const effect = k.value(m, 'effect', t);
+      if (typeof on === 'string' && typeof effect === 'string') effects.push({ on, effect: effect as Effect });
+    }
+    this.published.add(item);
+    k.bump();
+    const ch: Parameters<Kernel['emit']>[0] = { c: 'event', event: item, kind, participants, effects };
+    if (typeof place === 'string') ch.place = place;
+    k.emit(ch, time);
+    return true;
   }
 
   // ---- canon ----

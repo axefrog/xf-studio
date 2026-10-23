@@ -517,6 +517,16 @@ export class Frames {
     return total;
   }
 
+  /**
+   * The nodes demand reaches at `tier` or finer (V4-37): each node an eligible frame focuses on at that tier or finer, with its
+   * demand tier and its claim (spec 10.6), in Id order.
+   */
+  demanded(tier: Tier): Array<{ node: Id; tier: Tier; claim: number }> {
+    const nodes = new Set<Id>();
+    for (const f of this.frames.values()) if (this.eligible(f) && f.focus.tier >= tier) for (const n of f.focus.nodes) nodes.add(n);
+    return [...nodes].sort(cmpId).map((node) => ({ node, tier: this.demandTier(node) as Tier, claim: this.claim(node) }));
+  }
+
   /** Whether a slot normally opens now: the node's demand tier reaches the slot's tier (spec 10.6). */
   shouldOpen(node: Id, slotTier: Tier): boolean {
     return this.demandTier(node) >= slotTier;

@@ -10,23 +10,58 @@ import { H, type HArg, id as hid, i as hi, rand, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
 import type { ContributionSpec, EdgeSpec, PinSpec } from './kernel.ts';
 import type { EventSpec } from './events.ts';
+import type { Belief, BeliefSpec } from './beliefs.ts';
+import type { FrameInterests, FrameSpec, FrameStatus, Goal } from './frames.ts';
+import type { Decision } from './groups.ts';
 import type { SummarySpec } from './summary.ts';
 import { newOpCtx } from './resolve.ts';
 import type { Form, GameTime, Id, Query, QueryOutcome, Region, ResolveResult, Selector, SlotPath, Tier, Value } from './types.ts';
 import { LimitExceeded } from './work.ts';
 
+/** How a told belief changes in the telling (S1 8.4): the operator the policy drew, or none. */
+export type TellOperator = 'level' | 'sharpen' | 'assimilate';
+
+/**
+ * The operations a process returns (S0 9.4, v4: V4-38, V4-43, V4-47). They are plain data, applied with the
+ * batch in the order returned, under the same rules as every other operation. Where S1 names an operation
+ * differently, this set is the reference model's.
+ */
 export type ProcessOp =
   | { op: 'pin'; node: Id; slot: SlotPath; value?: Value; region?: Region; valid?: { from?: GameTime; to?: GameTime } }
   | { op: 'withdraw'; pin: Id }
   | {
       op: 'contribute'; layer?: 'simulation' | 'procedural'; target: Selector; form: Form;
       mode: ContributionSpec['mode']; strength?: number; valid?: { from?: GameTime; to?: GameTime };
+      /** Restating a value (cache population after a load) publishes nothing (V4-48). */
+      silent?: boolean;
     }
   | { op: 'end-contribution'; id: Id }
   | { op: 'edge'; type: string; from: Id; to: Id; attrs?: Record<string, Value>; valid?: { from?: GameTime; to?: GameTime } }
   | { op: 'end-edge'; id: Id }
-  | { op: 'mint-event'; spec: Omit<EventSpec, 'creator' | 'cause'> }
-  | { op: 'mint-summary'; spec: Omit<SummarySpec, 'creator' | 'cause'> };
+  /** `creator` and `cause` default to the process's own Id, and name the node's identity (`H("mint", creator, cause, name)`). */
+  | { op: 'mint-event'; spec: Omit<EventSpec, 'creator' | 'cause'> & { creator?: Id; cause?: Id } }
+  | { op: 'mint-summary'; spec: Omit<SummarySpec, 'creator' | 'cause'> & { creator?: Id; cause?: Id } }
+  /** Publish a summary item once, as one `event` change (V4-47). Regeneration of the item stays silent. */
+  | { op: 'publish-item'; item: Id }
+  | { op: 'frame-open'; frame: FrameSpec }
+  | { op: 'frame-status'; frame: Id; status: FrameStatus; cause: Id }
+  | { op: 'frame-weight'; frame: Id; weight: number; cause: Id }
+  | { op: 'frame-interests'; frame: Id; own: Partial<FrameInterests>; cause: Id }
+  | { op: 'decide'; leader: Id; group: Id; decision: Decision }
+  | { op: 'order'; groupFrame: Id; member: Id; goal: Goal; pressure: number }
+  /** `observer` saw `node`'s `slot` as it stood at `at`: the value is pinned `observed`, cause the observer. */
+  | { op: 'observe'; observer: Id; node: Id; slot: SlotPath; at: GameTime; evidence?: Id }
+  /** `teller` tells `listener` its belief `belief`, in the telling event `event`, changed by `operator` (S1 8.4). */
+  | { op: 'tell'; teller: Id; listener: Id; belief: Id; event: Id; operator: TellOperator | null }
+  | { op: 'belief-set'; belief: BeliefSpec }
+  | { op: 'belief-drop'; believer: Id; belief: Id };
+
+/** A node demand reaches (V4-37): its demand tier and claim at the snapshot. */
+export interface DemandedNode {
+  node: Id;
+  tier: Tier;
+  claim: number;
+}
 
 export interface ProcessCtx {
   /** The window index this run starts at. */
@@ -38,9 +73,24 @@ export interface ProcessCtx {
   /** Resolve a slot (silent). `t` defaults to the start of the run's window. */
   read(node: Id, path: SlotPath, t?: GameTime): ResolveResult;
   value(node: Id, path: SlotPath, t?: GameTime): Value | undefined;
-  /** Process randomness: rand("proc", worldSeed, processId, k, ...key) (spec 9.4). */
+  /** Process randomness: rand("proc", worldSeed, processId, k, ...key) (spec 9.4). The run's own window. */
   rand(...key: HArg[]): number;
+  /** Process randomness for the window being computed, `w` (V4-41): rand("proc", worldSeed, processId, w, ...key). */
+  procRand(w: number, ...key: HArg[]): number;
   query(q: Query): QueryOutcome;
+  /** This process's own state as of the snapshot (V4-35). Undefined until the process has returned one. */
+  own<S = any>(): S | undefined;
+  /** Another process's last published digest as of the snapshot (V4-36), read-only. */
+  digest<D = any>(processId: string): D | undefined;
+  /** The nodes demand reaches at `tier` or finer, with their claims (V4-37). For a fine-tier process. */
+  demanded(tier: Tier): DemandedNode[];
+}
+
+/** What a run returns: the operations, and (V4-35) the process's next state and the digest it publishes with them. */
+export interface ProcessResult {
+  ops: ProcessOp[];
+  state?: unknown;
+  digest?: unknown;
 }
 
 export interface ProcessDef {
@@ -48,7 +98,15 @@ export interface ProcessDef {
   tier: Tier;
   /** n: the process runs when k mod n = 0, and computes windows k to k + n - 1. */
   period: number;
-  run(ctx: ProcessCtx, k: number): ProcessOp[];
+  /** The process's version: part of what a lineage pins (S1 1.4). Optional. */
+  version?: number;
+  /** The agreement it owes between coarse and fine (V4-24). Ignored by resolution. */
+  coarseFine?: { kind: 'exact' } | { kind: 'count' } | { kind: 'distribution'; tolerance: string };
+  /** Publication lag, in windows (S1 9.4). Recorded, not used by resolution. */
+  lag?: number;
+  /** The state of a new lineage (V4-35): what `own()` answers before the first batch with a state has applied. */
+  init?(ctx: { worldSeed: Id }): unknown;
+  run(ctx: ProcessCtx, k: number): ProcessOp[] | ProcessResult;
 }
 
 export interface OutstandingBatch {
@@ -57,12 +115,18 @@ export interface OutstandingBatch {
   /** The boundary index at which the batch applies. */
   spanEnd: number;
   ops: ProcessOp[];
+  /** The state the batch replaces the process's own with when it applies (V4-35). Absent: the state is left alone. */
+  state?: unknown;
+  /** The digest the batch publishes when it applies (V4-36). Absent: the digest is left alone. */
+  digest?: unknown;
 }
 
 export interface ProcessState {
   id: string;
   /** Plain data the process keeps between runs (S1's). */
   state: unknown;
+  /** The last published digest, persisted with the state so reads of it are identical after a load (V4-49). */
+  digest?: unknown;
   outstanding: OutstandingBatch[];
 }
 
@@ -98,6 +162,13 @@ export const processCause = (id: string): Id => H(hs('process'), hs(id));
 
 const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** A deep copy of a process state: the state, the digest and every outstanding batch, with the state and digest it carries. */
+function copyState(s: ProcessState): ProcessState {
+  const out: ProcessState = { id: s.id, state: structuredClone(s.state), outstanding: s.outstanding.map((b) => structuredClone(b)) };
+  if (s.digest !== undefined) out.digest = structuredClone(s.digest);
+  return out;
+}
+
 export class Evolution {
   readonly processes = new Map<string, ProcessDef>();
   readonly states = new Map<string, ProcessState>();
@@ -114,6 +185,23 @@ export class Evolution {
     if (this.processes.has(def.id)) throw new Error(`process already registered: ${def.id}`);
     this.processes.set(def.id, def);
     if (!this.states.has(def.id)) this.states.set(def.id, { id: def.id, state: null, outstanding: [] });
+  }
+
+  /** A process's own state as of the last applied boundary, or what `init` gives before any state has applied (V4-35). */
+  ownOf<S = any>(def: ProcessDef): S | undefined {
+    const st = this.states.get(def.id);
+    if (st && st.state !== null && st.state !== undefined) return structuredClone(st.state) as S;
+    if (def.init) return def.init({ worldSeed: this.k.worldSeed }) as S;
+    return undefined;
+  }
+
+  /**
+   * A process's last published digest, as of the last applied boundary (V4-36, V4-42). Registered reads and
+   * hooks read it here; it is the same after a load (V4-49). The answer is a copy: nothing can edit it.
+   */
+  digestOf<D = any>(processId: string): D | undefined {
+    const st = this.states.get(processId);
+    return st && st.digest !== undefined ? (structuredClone(st.digest) as D) : undefined;
   }
 
   stateOf(id: string): ProcessState {
@@ -192,6 +280,10 @@ export class Evolution {
         report.applied++;
         cost++;
       }
+      // The state and the digest the batch carries replace the process's own, atomically with its operations
+      // (V4-35, V4-36); a batch without one leaves it alone.
+      if ('state' in d.batch) d.state.state = structuredClone(d.batch.state);
+      if ('digest' in d.batch) d.state.digest = structuredClone(d.batch.digest);
       d.state.outstanding = d.state.outstanding.filter((x) => x !== d.batch);
     }
     // The Ids the outstanding batches name are retention roots (SPEC-NOTES 33), so a batch leaving them changes
@@ -232,18 +324,31 @@ export class Evolution {
           return r.status === 'ok' || r.status === 'contradiction' ? r.value : undefined;
         },
         rand: (...key) => rand(hs('proc'), hid(k.worldSeed), hs(def.id), hi(b), ...key),
+        procRand: (w, ...key) => rand(hs('proc'), hid(k.worldSeed), hs(def.id), hi(w), ...key),
         query: (q) => k.queries.run(q),
+        own: <S>() => this.ownOf<S>(def),
+        digest: <D>(processId: string) => this.digestOf<D>(processId),
+        demanded: (tier) => k.frames.demanded(tier),
       };
       let ops: ProcessOp[] = [];
+      let result: ProcessResult | null = null;
       try {
-        ops = def.run(pctx, b);
+        const out = def.run(pctx, b);
+        if (Array.isArray(out)) ops = out;
+        else {
+          ops = out.ops;
+          result = out;
+        }
       } catch (e) {
         if (!(e instanceof LimitExceeded)) throw e;
         k.defects.record({ kind: 'limit', detail: `process ${def.id}: ${e.message}` });
       }
       // Held back until every starting process has read the boundary snapshot (spec 9.4: one shared snapshot,
       // double buffered). Publishing a batch adds retention roots, which can move structural constraints.
-      started.push({ id: def.id, batch: { k: b, spanEnd: b + def.period, ops } });
+      const batch: OutstandingBatch = { k: b, spanEnd: b + def.period, ops };
+      if (result && result.state !== undefined) batch.state = result.state;
+      if (result && result.digest !== undefined) batch.digest = result.digest;
+      started.push({ id: def.id, batch });
       report.runs++;
       cost += 1 + ctx.allowance.used;
     }
@@ -283,6 +388,7 @@ export class Evolution {
         };
         if (op.strength !== undefined) spec.strength = op.strength;
         if (op.valid) spec.valid = op.valid;
+        if (op.silent) spec.silent = true;
         k.contribute(spec);
         break;
       }
@@ -300,10 +406,43 @@ export class Evolution {
         k.endEdge(op.id, T);
         break;
       case 'mint-event':
-        k.events.mintEvent({ ...op.spec, creator: cause, cause });
+        k.events.mintEvent({ ...op.spec, creator: op.spec.creator ?? cause, cause: op.spec.cause ?? cause });
         break;
       case 'mint-summary':
-        k.summaries.mintSummary({ ...op.spec, creator: cause, cause });
+        k.summaries.mintSummary({ ...op.spec, creator: op.spec.creator ?? cause, cause: op.spec.cause ?? cause });
+        break;
+      case 'publish-item':
+        k.events.publishItem(op.item);
+        break;
+      case 'frame-open':
+        k.frames.open(op.frame);
+        break;
+      case 'frame-status':
+        k.frames.setStatus(op.frame, op.status, op.cause);
+        break;
+      case 'frame-weight':
+        k.frames.setWeight(op.frame, op.weight, op.cause);
+        break;
+      case 'frame-interests':
+        k.frames.setInterests(op.frame, op.own, op.cause);
+        break;
+      case 'decide':
+        k.groups.decide(op.leader, op.group, op.decision);
+        break;
+      case 'order':
+        k.groups.issueOrder({ groupFrame: op.groupFrame, member: op.member, goal: op.goal, pressure: op.pressure, cause });
+        break;
+      case 'observe':
+        k.observeAs(op.observer, op.node, op.slot, op.at, op.evidence);
+        break;
+      case 'tell':
+        k.beliefs.tellAs(op.teller, op.listener, op.belief, op.event, op.operator);
+        break;
+      case 'belief-set':
+        k.beliefs.set(op.belief);
+        break;
+      case 'belief-drop':
+        k.beliefs.drop(op.believer, op.belief);
         break;
     }
   }
@@ -331,13 +470,13 @@ export class Evolution {
 
   restore(states: ProcessState[], cursor: number): void {
     this.states.clear();
-    for (const s of states) this.states.set(s.id, { id: s.id, state: s.state, outstanding: s.outstanding.map((b) => ({ ...b, ops: [...b.ops] })) });
+    for (const s of states) this.states.set(s.id, copyState(s));
     for (const def of this.processes.values()) if (!this.states.has(def.id)) this.states.set(def.id, { id: def.id, state: null, outstanding: [] });
     this.cursor = cursor;
     this.queue = [];
   }
 
   snapshotStates(): ProcessState[] {
-    return [...this.states.values()].sort((a, b) => (a.id < b.id ? -1 : 1)).map((s) => ({ id: s.id, state: s.state, outstanding: s.outstanding.map((b) => ({ ...b, ops: [...b.ops] })) }));
+    return [...this.states.values()].sort((a, b) => (a.id < b.id ? -1 : 1)).map(copyState);
   }
 }

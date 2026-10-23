@@ -41,6 +41,11 @@ export interface Config {
    * a `wants` interest on a focus node then matches (SPEC-NOTES 58).
    */
   frameChanges: boolean;
+  /**
+   * Whether the items of a summary whose scope has no place strictly under it take the scope as their place (S0 v4, V4-39).
+   * On by default.
+   */
+  itemScopePlace: boolean;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -63,6 +68,7 @@ export const DEFAULT_CONFIG: Config = {
   snapshotEvery: 10_000,
   summaryPlaceMax: 1024,
   frameChanges: true,
+  itemScopePlace: true,
 };
 
 export function makeConfig(over?: Partial<Config>): Config {

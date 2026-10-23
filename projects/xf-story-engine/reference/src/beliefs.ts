@@ -7,6 +7,7 @@
 
 import { canonicalEqual, hrec } from './canon.ts';
 import { H, id as hid, i as hi, s as hs } from './id.ts';
+import type { TellOperator } from './evolution.ts';
 import type { Kernel } from './kernel.ts';
 import type { DimId, Edge, GameTime, Id, Region, SlotPath, Value } from './types.ts';
 import { type Budget, Worklist } from './work.ts';
@@ -31,7 +32,16 @@ export interface Belief {
   formed: GameTime;
   refreshed: GameTime;
   memorable: boolean;
+  /**
+   * How much the belief mattered when it formed, 0 to 3 (S1 8.3; the one field of S0 V4-9 the simulation layer
+   * needs). Optional, and omitted when 0, so a record without one is what it was before. `uses` and `widened`, and the
+   * memory machinery, stay deferred (V4-30).
+   */
+  salience?: number;
 }
+
+/** A belief as an operation or a policy states it: the record without its Id, which the kernel derives unless one is given. */
+export type BeliefSpec = Omit<Belief, 'id'> & { id?: Id };
 
 export interface BeliefEntry {
   belief: Belief;
@@ -51,10 +61,10 @@ export interface BeliefPolicy {
   /** Beliefs an observer forms on witnessing an event. */
   onWitness(k: Kernel, event: Id, observer: Id): Array<Omit<Belief, 'id' | 'formed' | 'refreshed' | 'believer'>>;
   /** Overrides applied to a belief being told (confidence, memorability). Evidence is never overridden. */
-  onSocial(k: Kernel, belief: Belief, teller: Id, listener: Id): Partial<Pick<Belief, 'confidence' | 'memorable'>>;
+  onSocial(k: Kernel, belief: Belief, teller: Id, listener: Id, operator?: TellOperator | null): Partial<Pick<Belief, 'confidence' | 'memorable' | 'path' | 'value' | 'region' | 'salience'>>;
   /** A boundary passed: `at` is the boundary's time (spec 11.2, SPEC-NOTES 50). */
   onTick(k: Kernel, believer: Id, at: GameTime): void;
-  aggregate(k: Kernel, audience: Id[], subject: Id, path: SlotPath): { value?: Value; confidence: number } | undefined;
+  aggregate(k: Kernel, audience: Id[], subject: Id, path: SlotPath): { value?: Value; confidence: number; mass?: number; items?: number } | undefined;
   /** Whether a contradicting newcomer replaces the existing belief. */
   replaces(existing: Belief, incoming: Belief): boolean;
   /** Confidence after corroboration by independent evidence. */
@@ -265,18 +275,34 @@ export class Beliefs {
    * from one origin never corroborates itself (spec 11.2).
    */
   tell(teller: Id, listener: Id, beliefId: Id): SetOutcome | undefined {
+    return this.tellWith(teller, listener, beliefId, undefined, null);
+  }
+
+  /**
+   * A telling that happened in the event `event`, changed by the policy's `operator` (S1 8.4, V4-38). The listener's belief is
+   * sourced to that event; its evidence is the teller's, unchanged.
+   */
+  tellAs(teller: Id, listener: Id, beliefId: Id, event: Id, operator: TellOperator | null): SetOutcome | undefined {
+    return this.tellWith(teller, listener, beliefId, event, operator);
+  }
+
+  private tellWith(teller: Id, listener: Id, beliefId: Id, event: Id | undefined, operator: TellOperator | null): SetOutcome | undefined {
     const src = this.activeOf(teller).find((b) => b.id === beliefId);
     if (!src) return undefined;
     const now = this.k.now;
-    const over = this.policy.onSocial(this.k, src, teller, listener);
+    const over = this.policy.onSocial(this.k, src, teller, listener, operator);
     const told: Omit<Belief, 'id'> = {
-      believer: listener, subject: src.subject, path: src.path, confidence: over.confidence ?? src.confidence,
-      evidence: [...src.evidence], source: { by: 'told', teller, event: src.evidence[0] ?? src.subject },
+      believer: listener, subject: src.subject, path: over.path ?? src.path, confidence: over.confidence ?? src.confidence,
+      evidence: [...src.evidence], source: { by: 'told', teller, event: event ?? src.evidence[0] ?? src.subject },
       formed: now, refreshed: now, memorable: over.memorable ?? src.memorable,
     };
-    if (src.value !== undefined) told.value = src.value;
-    if (src.region !== undefined) told.region = src.region;
+    const value = over.value ?? (over.region === undefined ? src.value : undefined);
+    const region = over.region ?? (over.value === undefined ? src.region : undefined);
+    if (value !== undefined) told.value = value;
+    if (region !== undefined) told.region = region;
     if (src.at !== undefined) told.at = src.at;
+    const sal = over.salience ?? src.salience;
+    if (sal) told.salience = sal;
     return this.set(told);
   }
 
@@ -338,7 +364,7 @@ export class Beliefs {
     return { k: 'unknown' };
   }
 
-  aggregate(audience: Id[], subject: Id, path: SlotPath): { value?: Value; confidence: number } | undefined {
+  aggregate(audience: Id[], subject: Id, path: SlotPath): { value?: Value; confidence: number; mass?: number; items?: number } | undefined {
     return this.policy.aggregate(this.k, audience, subject, path);
   }
 }

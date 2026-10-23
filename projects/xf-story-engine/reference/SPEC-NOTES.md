@@ -655,3 +655,60 @@ The ones that need a decision, worst first:
   metadata, constructed traces and late causes. `test/s2/fixtures.test.ts` names the fixture each one blocks
   (50 of SF-1 to SF-64 have named tests, SF-18 in its count form only; 14 wait wholly for a later capability;
   the kernel's F-16 has its own test, and F-17 to F-20 wait for the deferred memory machinery).
+
+## The kernel's process additions and the simulation layer's core (entries 93 onward)
+
+These entries come from building S0 V4-35 to V4-49 and the core of S1 v0.2 (`src/sim/`). Numbers continue after 92 and
+are ordered worst first within each block. The block headed **Spec findings for the coordinator (S1)** lists the ones
+that most need a decision.
+
+### Kernel process additions (V4-35 to V4-49)
+
+93. **A run returns operations, or operations with a state and a digest; both ride in the batch. (new)** `ProcessDef.run`
+    may still return a bare `ProcessOp[]`, which every earlier process does and which changes nothing. A new form returns
+    `{ ops, state?, digest? }`. The state and the digest are stored on the outstanding batch and replace the process's own
+    `ProcessState.state` and `.digest` when the batch applies, after its operations and in the same step, so they are
+    double-buffered with the operations (V4-35, V4-36). A batch with neither leaves both alone. `ctx.own()` is a copy of
+    the applied state, or `def.init(...)` before any has applied; `ctx.digest(id)` is a copy of another process's applied
+    digest. Because every process of a boundary reads before any new batch is published, a reader sees the digest of the
+    window before its own, whatever the order of ids (V4-36). Digests are persisted with the `ProcessState` (V4-49) and read
+    outside a run by `Evolution.digestOf` (V4-42).
+94. **`ctx.rand` is `ctx.procRand(k, …)`; the window is always explicit. (new)** V4-41 keys a process draw by the window
+    being computed. For a run that computes one window, `ctx.rand(…)` is exactly `ctx.procRand(k, …)`, so the frozen digests'
+    processes (period 2 and 3 with `ctx.rand`) are unchanged. A multi-window run uses `procRand(w, …)` for each window, and a
+    test shows the draw for window `w` is the same from a run that starts earlier.
+95. **`demanded(tier)` lists the focus nodes of eligible frames whose focus tier is `tier` or finer. (new)** The spec says
+    "the nodes demand reaches at that tier, with the claim". The reference lists each node named in the focus of an active or
+    blocked frame whose focus tier is at least `tier`, with the node's demand tier and claim (S0 10.6), in `Id` order. So
+    `demanded(3)` includes persons focused at tier 4. Owned values of a focused node are not listed: a process that wants a
+    household's residents asks for them.
+96. **V4-39 and V4-40 are switchable or strict so the frozen digests stand. (new)** `Config.itemScopePlace` (default on)
+    gives the items of a summary with no place strictly under its scope the scope itself as their place; off, an item has
+    none, as before. V4-40 passes an unavailable derive input as `undefined` and lets a derive answer; every core derive
+    (`identity`, `concat`, `floor-div`, `sum`, `first-char`, `age-class`) is strict and answers `undefined` for an
+    `undefined` input, which makes the slot unavailable, exactly as before. A derive that returns `undefined` is
+    unavailable. Both digests pass unchanged.
+97. **An event minted late is announced at its own time (V4-45). (new)** `Kernel.emit` takes the occurrence's time and stamps the
+    change `min(time, now)`. The relevance emission and `Relevance.time` of an event minted at a boundary with an earlier
+    `time` carry that earlier time. The digests do not hash relevance times, and no other test reads them.
+98. **`publish-item` is `Events.publishItem`; the kernel keeps a session guard, the publishing layer keeps the record. (new)**
+    It resolves the item's kind, time, place, participants and effects as they stand and emits one `event` change stamped with
+    the item's time. A second call in the same session does nothing; the set is not persisted (S1's `ActsState.published` is
+    what survives a reload). It refuses a node that is not a summary item. The `contribute` operation takes `silent`, which
+    S1 sets when it regenerates an opened item's contributions after a load (V4-48).
+99. **The operation names and shapes. (new)** `frame-open`, `frame-status`, `frame-weight`, `frame-interests`, `decide`,
+    `order`, `observe`, `tell`, `belief-set`, `belief-drop` and `publish-item` join the earlier operations. `observe` pins
+    the node's slot as it stood at `at`, `observed`, with the observer as the cause (a mirrored slot's reading, any other
+    slot's resolved value). `tell` names the teller's belief by Id and the telling event, and the policy's `onSocial` hook now
+    also receives the operator and may override `path`, `value`, `region` and `salience` besides `confidence` and
+    `memorable`. `mint-event` and `mint-summary` may name a `creator` and a `cause`, which fix the node's identity
+    (`H("mint", creator, cause, name)`): S1 needs the mirror's `H("mint", proc(city.mirror), raw, "mir")` and a child's
+    `H("mint", proc, parent, "child/<i>")`.
+100. **`Belief.salience` is the one field of V4-9 the core needs; `aggregate` may return `mass` and `items`. (new)** Salience is
+    optional and omitted when zero. `uses`, `widened` and the memory machinery stay deferred (V4-30). The policy `aggregate`
+    result gains optional `mass` and `items` (S0 V4-19's contract) beside `confidence`, so the stub's result is unchanged.
+101. **`matchStrength` is a read over the same scan as dispatch. (new)** It takes the greatest `pullVia × m × s` over the
+    interests that reach the actor's eligible frames, optionally for some interest types, with no emission threshold and no
+    side effect; it ignores the frame worklist (it reads the frames as they stand).
+102. **The test runner's timeout is 30 s (`bunfig.toml`). (new)** Two digest tests re-run the 1,000-operation script several
+    times and sit near bun's 5 s default; on a loaded machine they time out. The tests are unchanged.

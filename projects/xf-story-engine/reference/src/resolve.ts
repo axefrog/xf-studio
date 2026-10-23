@@ -402,11 +402,16 @@ export class Resolver {
       this.k.defects.record({ kind: 'no-derive', detail: `derived slot "${path}" has no derive`, node, slot: path });
       return { status: 'unavailable' };
     }
-    const inputs: Value[] = [];
+    const inputs: Array<Value | undefined> = [];
     let status: ResolveStatus = 'ok';
     let missing: ResolveStatus | null = null;
     for (const inp of def.derive.inputs) {
       const r = this.readDep(ctx, node, inp, t);
+      if (r.value === undefined && r.status === 'unavailable') {
+        // An unavailable input reaches the derive as `undefined`; any other status propagates (V4-40).
+        inputs.push(undefined);
+        continue;
+      }
       status = worse(status, r.status);
       if (r.value === undefined) missing = missing === null ? r.status : worse(missing, r.status);
       else inputs.push(r.value);
@@ -415,6 +420,7 @@ export class Resolver {
     ctx.allowance.spend(1);
     const fn = this.schema.registry.get('derive', def.derive.fn);
     const value = fn(inputs, def.derive.fn.params ?? {}, t);
+    if (value === undefined) return { status: worse(status, 'unavailable') };
     // Pins on the derived slot (spec 5.1 step 1, SPEC-NOTES 7).
     const unaryNarrowed = def.derive.preimage !== undefined && def.derive.inputs.length === 1 && !def.derive.inputs[0]!.startsWith('^/');
     if (!unaryNarrowed) {

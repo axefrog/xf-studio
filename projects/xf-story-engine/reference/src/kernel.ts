@@ -16,7 +16,7 @@ import { Dispatcher, type Relevance } from './relevance.ts';
 import { Persistence } from './persistence.ts';
 import { Provenance } from './provenance.ts';
 import { Queries } from './query.ts';
-import { CONFLICT_TABLE, type Registry, coreRegistry } from './registry.ts';
+import { CONFLICT_TABLE, type InterestType, type Registry, coreRegistry } from './registry.ts';
 import { Resolver, type Trace } from './resolve.ts';
 import { Retention } from './retention.ts';
 import type { Schema } from './schema.ts';
@@ -113,6 +113,17 @@ export interface TickReport {
   done: boolean;
 }
 
+/**
+ * The Id of a contribution, a pure function of what it says (V4-43): its source, target, form, mode, strength and
+ * validity. It reads no epoch, revision or clock, so the same statement made again is the same contribution (V4-48).
+ */
+export function contributionId(spec: Pick<ContributionSpec, 'source' | 'target' | 'form' | 'mode'> & { strength?: number; valid?: ContributionSpec['valid'] }): Id {
+  return H(
+    hs('contrib'), hs(spec.source.layer), hs(spec.source.origin), hrec(spec.target), hrec(spec.form),
+    hs(spec.mode), hf(spec.strength ?? 1), hrec(spec.valid ?? {}),
+  );
+}
+
 export function splitWindowPath(raw: string): { path: SlotPath; window?: number } {
   const m = /^(.*)@w(-?\d+)$/.exec(raw);
   if (!m) return { path: raw };
@@ -203,9 +214,13 @@ export class Kernel {
     return ++this.revision;
   }
 
-  emit(change: Change): void {
+  /**
+   * Queue a semantic change. It is stamped with the engine time, or with `time` when the occurrence it reports is
+   * earlier than the boundary that applies it (an event minted late, V4-45).
+   */
+  emit(change: Change, time: GameTime = this.now): void {
     // A change is a snapshot of what happened: a later write, or a discarded batch's, must not reach it.
-    const pc: PendingChange = { change: structuredClone(change), time: this.now, revision: this.revision, epoch: this.epoch };
+    const pc: PendingChange = { change: structuredClone(change), time: Math.min(time, this.now), revision: this.revision, epoch: this.epoch };
     // An open staged batch is silent: its changes wait for the commit (spec 14.2a).
     if (this.batch) this.batch.changes.push(pc);
     else this.pending.push(pc);
@@ -507,6 +522,29 @@ export class Kernel {
     return this.pin(spec);
   }
 
+  /**
+   * An observer saw a node's slot as it stood at `at` (S0 9.4, V4-38): a mirrored slot's reading, or the resolved value
+   * of any other, pinned `observed`. The cause is the observer. Returns undefined when there is nothing to see.
+   */
+  observeAs(observer: Id, node: Id, slot: SlotPath, at: GameTime, evidence?: Id): Pin | undefined {
+    this.assertWritable();
+    const h = this.store.header(node);
+    if (!h) return undefined;
+    if (h.origin.by === 'mirrored') return this.observeReading(node, slot, at, observer, evidence);
+    const r = this.resolve(node, slot, at);
+    if (r.value === undefined || (r.status !== 'ok' && r.status !== 'contradiction')) return undefined;
+    const info = this.schema.slotInfo(h.kind, splitWindowPath(slot).path);
+    const key = info?.def.temporal && !/@w-?\d+$/.test(slot) ? `${slot}@w${Math.floor(at / info.def.temporal.window)}` : slot;
+    const spec: PinSpec = { node, slot: key, value: r.value, reason: 'observed', cause: observer, at };
+    if (evidence !== undefined) spec.evidence = evidence;
+    return this.pin(spec);
+  }
+
+  /** The greatest relevance a change has against an actor's eligible frames, optionally for some interest types only (S0 10.5, V4-44). */
+  matchStrength(actor: Id, change: Change, types?: readonly InterestType[], time: GameTime = this.now): number {
+    return this.dispatcher.matchStrength(actor, change, types, time);
+  }
+
   // ---- writes: contributions ----
 
   contribute(spec: ContributionSpec): Contribution {
@@ -518,10 +556,7 @@ export class Kernel {
     const strength = spec.strength ?? 1;
     if (!(strength > 0) || !Number.isFinite(strength)) throw new Error('a contribution strength is positive');
     const valid = spec.valid ?? {};
-    const cid = spec.id ?? H(
-      hs('contrib'), hs(spec.source.layer), hs(spec.source.origin), hrec(spec.target), hrec(spec.form),
-      hs(spec.mode), hf(strength), hrec(valid),
-    );
+    const cid = spec.id ?? contributionId({ ...spec, strength, valid });
     const existing = this.store.contribution(cid);
     if (existing) return existing;
     const c: Contribution = { id: cid, source: spec.source, target: spec.target, form: spec.form, mode: spec.mode, strength, valid };

@@ -196,6 +196,9 @@ export class Summaries {
         }
       });
       d.place = candidates[best]!;
+    } else if (this.k.config.itemScopePlace) {
+      // A scope with no place strictly under it is itself the place of its items (V4-39).
+      d.place = scope;
     }
     finish(d);
     return d;
