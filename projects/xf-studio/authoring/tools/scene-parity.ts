@@ -93,12 +93,17 @@ const sizes = [1024, 2048] as const;
 const { server } = await startServer(port);
 const page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1600, height: 900, scheme: "dark", debugPort: port + 5000 });
 const run = (action: object) => page.evaluate(`window.xfStudioShell.runtime.dispatch(${JSON.stringify(action)})`);
-const settle = async () => {
+/**
+ * Wait until every asynchronous input of the look has taken effect, in the order they arrive: the layers at the preview size; the lighting
+ * asked for drawn (a setup never drawn is prepared on the shown V first, with the setup before drawn meanwhile: experiment 043 §11, 4a-v-b);
+ * then, for the creator preset, its grade, which the stage asks the host for only once the setup is drawn (the neutral grade shows until
+ * then: a settle that read the grade before the takeover saw it still `idle`, §14); then the frames that show them all.
+ */
+const settle = async (preset: typeof presets[number]) => {
   await page.waitFor("window.xfStudioPresentation.previewReadiness.snapshot().phase === 'ready'", 120000);
-  // The creator preset's grade arrives from the host after the preset turns on; the neutral grade shows until then.
-  await page.waitFor("window.xfStudioPresentation.authoring.previewState().lighting?.lut.phase !== 'loading'", 60000);
-  // A setup never drawn is prepared on the shown V first, with the setup before drawn meanwhile (experiment 043 §11, 4a-v-b).
-  await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && !e.residency.preparation; })()", 600000);
+  await page.waitFor(`(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && !e.residency.preparation && !e.lighting.staged && e.lighting.preset === "${preset}"; })()`, 600000);
+  if (preset === "creator") await page.waitFor("window.xfStudioPresentation.authoring.previewState().lighting?.lut.phase === 'ready'", 60000);
+  await page.waitFor("window.xfStudioPresentation.previewReadiness.snapshot().phase === 'ready'", 120000);
   await page.wait(800);
   await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return e && !e.frames.running; })()", 30000);
   await page.wait(300);
@@ -127,7 +132,7 @@ try {
       for (const preset of presets) {
         await run({ kind: "preview.setLightingPreset", preset });
         await run({ kind: "camera.restore", camera });
-        await settle();
+        await settle(preset);
         const name = `${recipe}-${preset}-${size}`;
         await page.screenshot(resolve(out, `${name}.png`), rect);
         evidence[name] = await page.evaluate(`window.xfStudioSceneEvidence()?.plateBlend ?? null`);

@@ -486,6 +486,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     xfStudioSceneEvidence: () => { const scene = viewer(); return scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
       frames: scene.frameTiming(), plateBlend: (editors.edited && scene.feature(editors.edited)?.evidence?.()) ?? null,
       features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence(), mouth: scene.mouthEvidence(),
+      // The lighting drawn now (a setup asked for that isn't prepared yet is staged, and the one before stays drawn until it takes over).
+      lighting: { preset: scene.lighting.status().preset, staged: scene.lighting.staged !== null },
       residency: heads.snapshot() }) : null; },
     // Developer captures: hold the mouth interior's light at a fixed parting and floor (the earlier stand-in: 0.010, 0.3), null to follow the face.
     xfStudioPinMouthInterior: (pin: { parting: number; floor: number } | null) => { viewer()?.pinMouthInterior(pin); },

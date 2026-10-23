@@ -100,11 +100,13 @@ const RECORD = `(() => {
     const state = document.querySelector(".viewport-state:not([hidden])");
     const visibleLine = line && !line.hidden ? line.innerText.trim() : null;
     return [performance.now(), intern(shown?.key ?? null), e?.frames.frames ?? -1, intern(prep?.stage ?? null), prep ? Math.round(prep.fraction * 1000) / 1000 : -1,
-      intern(prep?.waiting ?? null), intern(visibleLine), intern(state ? state.innerText.trim() : null), intern(window.xfStudioPresentation.viewport.snapshot().head.phase), intern(prep?.detail ?? null), watching ? g2.canvasHash() : -2];
+      intern(prep?.waiting ?? null), intern(visibleLine), intern(state ? state.innerText.trim() : null), intern(window.xfStudioPresentation.viewport.snapshot().head.phase), intern(prep?.detail ?? null), watching ? g2.canvasHash() : -2,
+      intern(e ? (e.lighting.staged ? "staged:" : "") + e.lighting.preset : null)];
   };
   /** Dispatch \`action\`, sample every animation frame until \`done(sample)\` (or \`maxMs\`), then \`tailMs\` more. */
   g2.run = async (action, doneSource, minMs, tailMs, maxMs) => {
-    // \`seen\`: whether a preparation has been in flight since the request (a lighting change ends when its preparation does).
+    // \`seen\`: whether a preparation has been in flight since the request (evidence; a lighting change ends at its takeover, whether or
+    // not a preparation ran: a setup already prepared takes over at once).
     const done = new Function("s", "strings", "seen", "return (" + doneSource + ")");
     let seen = false;
     const before = sample(), ticks = [before];
@@ -162,7 +164,8 @@ const page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1280, h
 
 type Tick = (number | null)[];
 type Run = { t0: number; dispatchedAt: number; doneAt: number | null; timedOut: boolean; dispatch: string; ticks: Tick[]; strings: string[]; startKey: string | null };
-const T = { t: 0, key: 1, frames: 2, stage: 3, fraction: 4, waiting: 5, line: 6, pane: 7, phase: 8, detail: 9 } as const;
+/** A sample's fields (index 10 is the canvas hash, sampled while a scripted run watches; `display` is the lighting drawn: its preset, `staged:` first while a setup asked for waits beside it). */
+const T = { t: 0, key: 1, frames: 2, stage: 3, fraction: 4, waiting: 5, line: 6, pane: 7, phase: 8, detail: 9, display: 11 } as const;
 const round = (value: number, digits = 1) => Math.round(value * 10 ** digits) / 10 ** digits;
 
 /** What the page held in the GL probe and the long-task list at the end of a run, in the page's clock. */
@@ -179,10 +182,11 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
   const str = (tick: Tick, field: number) => (tick[field]! >= 0 ? strings[tick[field]!]! : null);
   const startKey = run.startKey;
   // The first tick that shows another runtime: the show happened after the tick before it. That tick's frames count the new runtime's. For
-  // a lighting change, the first tick after its preparation ended (the new setup takes over in that task), or the first tick if none ran.
-  const prepared = ticks.findIndex(tick => str(tick, T.stage) !== null);
+  // a lighting change, the first tick whose drawn lighting is another one than before the request: the takeover (after its preparation,
+  // or at once for a setup already prepared).
+  const startDisplay = str(ticks[0]!, T.display);
   const shownIndex = kind === "body" ? ticks.findIndex(tick => str(tick, T.key) !== null && str(tick, T.key) !== startKey)
-    : prepared < 0 ? Math.min(1, ticks.length - 1) : ticks.findIndex((tick, i) => i > prepared && str(tick, T.stage) === null);
+    : ticks.findIndex(tick => { const display = str(tick, T.display); return display !== null && display !== startDisplay && !display.startsWith("staged:"); });
   const shownTick = shownIndex > 0 ? ticks[shownIndex]! : null, beforeShown = shownIndex > 0 ? ticks[shownIndex - 1]![T.t]! : null;
   const t0 = run.t0, endAt = (run.doneAt ?? ticks[ticks.length - 1]![T.t]!) + 0;
   const showAt = shownTick ? shownTick[T.t]! : null;
@@ -363,11 +367,14 @@ try {
   log("start", { programsLinked: firstTasks.programs.length, longTasksSinceStart: firstTasks.long.map(([s, d]) => [Math.round(s), Math.round(d)]).slice(0, 12),
     firstFrameCpuMs: await page.evaluate(`window.xfStudioSceneEvidence().frames.cpuFrame`) });
 
+  /** A lighting change's end: the setup asked for is drawn (taken over, nothing staged) and no preparation is in flight. */
+  const lightingDone = (preset: string) => `s[${T.display}] >= 0 && strings[s[${T.display}]] === ${JSON.stringify(preset)} && s[3] < 0 && s[2] >= 1`;
   const runs: [string, "body" | "lighting", object, string, number, number, number][] = [
     // name, kind, action, done condition (on a sample [t, key, frames, stage, fraction, waiting, line, pane, phase, detail]), minimum ms, tail ms, give-up ms
     ["A.body", "body", { kind: "character.useDefault", bodyGender: "male" },
       `s[1] >= 0 && strings[s[1]].endsWith("|male") && s[3] < 0 && s[2] >= 1`, 300, 1000, 600_000],
-    ["B.lighting", "lighting", { kind: "preview.setLightingPreset", preset: "creator" }, `seen && s[3] < 0 && s[2] >= 1`, 300, 1000, 600_000],
+    // Ends at the takeover (the creator setup drawn, nothing staged, no preparation), whether or not a preparation ran first.
+    ["B.lighting", "lighting", { kind: "preview.setLightingPreset", preset: "creator" }, lightingDone("creator"), 300, 1000, 600_000],
     ["C.bodyAndLighting", "body", { kind: "character.useDefault", bodyGender: "female" },
       `s[1] >= 0 && strings[s[1]].endsWith("|female") && s[3] < 0 && s[2] >= 1`, 300, 1000, 600_000],
   ];
@@ -421,7 +428,7 @@ try {
   };
   /** Change the lighting preset and wait at least `minMs` and for the preparation to end. */
   const switchLighting = async (preset: string, minMs = 4000) => {
-    const run = await page.evaluate(`window.__g2.run(${JSON.stringify({ kind: "preview.setLightingPreset", preset })}, "s[3] < 0 && s[2] >= 1", ${minMs}, 500, 600000)`) as Run;
+    const run = await page.evaluate(`window.__g2.run(${JSON.stringify({ kind: "preview.setLightingPreset", preset })}, ${JSON.stringify(lightingDone(preset))}, ${minMs}, 500, 600000)`) as Run;
     return { run, analysis: analyse(run, await pageRecord(), "lighting") };
   };
   if (g3Rows) {
