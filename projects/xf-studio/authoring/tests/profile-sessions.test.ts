@@ -26,7 +26,7 @@ import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspa
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_SLOTS, type StoredNode, type ViewRecord } from "../src/platform/api/view-graph";
-import { createHistoryService, lookScope, viewScope } from "../src/platform/core/history-service";
+import { createHistoryService, lookScope, viewScope, type HistoryService } from "../src/platform/core/history-service";
 import { hostRandom } from "../src/platform/core/random";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
@@ -53,7 +53,7 @@ function startData(seed: number): ProfileSessionData {
   return profileSessionOf(structuredClone(s.session()))!;
 }
 /** A window opening that session: a fresh history over it. */
-const open = (seed: number) => openSession(startData(seed), { random: seededRandom(seed + 7919) });
+const open = (seed: number, history?: HistoryService) => openSession(startData(seed), { random: seededRandom(seed + 7919), ...(history ? { history } : {}) });
 
 /** New content: a view copied from `from` with fresh IDs (or naming `from`'s scene: a shared scene), and a Presets panel. */
 function contentFrom(s: ProfileSessions, from: string, share: boolean, name = "Made"): TabContent {
@@ -195,7 +195,7 @@ function made(run: Run, tab: string): number {
 /** One random forward operation, applied to the session and the model; false when none applies. */
 function step(run: Run, random: () => number, n: number): boolean {
   const { s } = run, tabs = s.tabList(), views = s.graph.viewIds(), kinds: string[] = ["newTab"];
-  if (tabs.length) kinds.push("rename", "close", "duplicate", "reset", "newTab");
+  if (tabs.length) kinds.push("rename", "close", "duplicate", "reset", "newTab", "emptyTab", "emptyTab");
   if (tabs.length > 1) kinds.push("move");
   if (s.closedTabs().length) kinds.push("reopen", "reopen");
   if (views.length) kinds.push("addView", "light");
@@ -216,14 +216,14 @@ function step(run: Run, random: () => number, n: number): boolean {
     next = model.insert(run.m, { id, name: source.name, ...(source.origin ? { origin: source.origin } : {}), content: made(run, id) }, at + 1,
       s.graph.viewIds().filter(view => s.graph.tabOf(view) === id));
     expect(s.graph.viewIds().filter(view => s.graph.tabOf(view) === id).length).toBe(views.filter(view => s.graph.tabOf(view) === source.id).length);
-  } else if (kind === "newTab") {
-    const content = views.length ? contentFrom(s, pick(random, views), random() < .5, `New ${n}`)
+  } else if (kind === "newTab" || kind === "emptyTab") {
+    const content = views.length && kind === "newTab" ? contentFrom(s, pick(random, views), random() < .5, `New ${n}`)
       : { name: `New ${n}`, dock: null, panels: [], views: [], nodes: [] };
     const id = s.newTab(content);
     next = model.insert(run.m, { id, name: content.name, ...(content.origin ? { origin: content.origin } : {}), content: made(run, id) }, tabs.length,
       content.views.map(view => view.id));
   } else if (kind === "reset") {
-    const tab = pick(random, tabs).id, content = views.length ? contentFrom(s, pick(random, views), random() < .5, "ignored")
+    const tab = pick(random, tabs).id, content = views.length && random() < .75 ? contentFrom(s, pick(random, views), random() < .5, "ignored")
       : { name: "ignored", origin: "eye-makeup/default", dock: null, panels: [], views: [], nodes: [] };
     s.reset(tab, content);
     next = model.reset(run.m, tab, content.origin!, content.views.map(view => view.id), made(run, tab));
@@ -241,10 +241,10 @@ function step(run: Run, random: () => number, n: number): boolean {
   return true;
 }
 /** Navigation, never a step: arranging a tab (its content's arrangement changes) or showing another look in a view's scene. */
-function navigate(run: Run, random: () => number, kind: "arrange" | "look") {
+function navigate(run: Run, random: () => number, kind: "arrange" | "look", place?: number) {
   const { s } = run, tabs = s.tabList(), views = s.graph.viewIds();
   if (kind === "arrange") {
-    const at = Math.floor(random() * tabs.length), tab = tabs[at]!.id;
+    const at = place ?? Math.floor(random() * tabs.length), tab = tabs[at]!.id;
     const own = views.filter(view => s.graph.tabOf(view) === tab).map(view => view === MAIN_VIEW ? "head" : `view.${view}`);
     s.arrange(tab, dockOf([...own, pick(random, ["presets", "layers", "history"])]));
     run.outside.contents.set(run.m.tabs[at]!.content, contentOf(s.tab(tab)!));
@@ -254,6 +254,41 @@ function navigate(run: Run, random: () => number, kind: "arrange" | "look") {
     s.setLook(scene, look);
     run.outside.looks.set(scene, before.look === look.look ? before : { look: look.look, gen: before.gen + 1 });
   }
+}
+/**
+ * An Undo (or Redo) during which a history listener asks for another (finding 2 of review P2-1-2): the second waits until the first has
+ * settled, so two steps move, each whole. Only when two steps are there to move.
+ */
+function nested(run: Run, history: HistoryService, direction: "undo" | "redo") {
+  const target = direction === "undo" ? run.at - 2 : run.at + 2;
+  if (target < 0 || target >= run.states.length) return;
+  let again = true;
+  const stop = history.subscribe(() => {
+    if (!again) return;
+    again = false;
+    expect(direction === "undo" ? run.s.graph.undo() : run.s.graph.redo()).toBe(true);
+  });
+  try { expect(direction === "undo" ? run.s.graph.undo() : run.s.graph.redo()).toBe(true); } finally { stop(); }
+  expect(again).toBe(false);
+  run.at = target; run.m = copy(run.states[target]!.model);
+  expect(json(run.s)).toBe(run.states[target]!.stored);
+}
+/**
+ * A replay around navigation: close a tab (empty ones too), Undo, arrange it again, Redo. The fragment the Redo brings back must hold the
+ * new arrangement (review P2-1 finding 3, and P2-1-2's empty content), which `holds` checks.
+ */
+function replayAround(run: Run, random: () => number) {
+  const { s } = run, tabs = s.tabList(), at = Math.floor(random() * tabs.length), tab = tabs[at]!.id;
+  s.close(tab);
+  run.m = model.close(run.m, tab);
+  run.states = [...run.states.slice(0, run.at + 1), { model: copy(run.m), stored: json(s) }];
+  run.at = run.states.length - 1;
+  // Navigation came before, so the states' stored bytes no longer apply: the model's account and `holds` check instead.
+  expect(s.graph.undo()).toBe(true);
+  run.at--; run.m = copy(run.states[run.at]!.model);
+  navigate(run, random, "arrange", at);
+  expect(s.graph.redo()).toBe(true);
+  run.at++; run.m = copy(run.states[run.at]!.model);
 }
 /** Undo or Redo, in the session and the model: the session must then be byte-identical to the state the model reached. */
 function move(run: Run, direction: "undo" | "redo") {
@@ -267,10 +302,12 @@ function move(run: Run, direction: "undo" | "redo") {
 describe("T1: seeded random runs against an independent model", () => {
   test("every operation matches the model; every Undo and Redo is byte-identical to the state it reaches; Undo to the start and Redo to the end are too", () => {
     for (let seed = 1; seed <= 40; seed++) {
-      const random = seededRandom(seed * 31), s = open(seed), run = startRun(s);
+      const random = seededRandom(seed * 31), history = createHistoryService(), s = open(seed, history), run = startRun(s);
       for (let n = 0; n < 40; n++) {
         const roll = random();
-        if (roll < .2) move(run, "undo");
+        if (roll < .04) nested(run, history, "undo");
+        else if (roll < .06) nested(run, history, "redo");
+        else if (roll < .2) move(run, "undo");
         else if (roll < .3) move(run, "redo");
         else step(run, random, n);
         holds(run);
@@ -289,7 +326,7 @@ describe("T1: seeded random runs against an independent model", () => {
   });
 
   test("with navigation between the operations (show, focus, arrange, another look), the model's account, what stays outside Undo and every invariant hold", () => {
-    for (let seed = 1; seed <= 25; seed++) {
+    for (let seed = 1; seed <= 40; seed++) {
       const random = seededRandom(seed * 131), s = open(seed), run = startRun(s);
       for (let n = 0; n < 45; n++) {
         const roll = random(), tabs = s.tabList(), views = s.graph.viewIds();
@@ -299,6 +336,7 @@ describe("T1: seeded random runs against an independent model", () => {
         else if (roll < .38 && views.length) s.focus.focusView(pick(random, views));
         else if (roll < .46 && tabs.length) navigate(run, random, "arrange");
         else if (roll < .52 && views.length) navigate(run, random, "look");
+        else if (roll < .56 && tabs.length) replayAround(run, random);
         else step(run, random, n);
         holds(run);
         invariants(s);
@@ -785,5 +823,64 @@ describe("the editing context (review P2-1, finding 5)", () => {
     expect(value).toBe(2);
     // The look's history is next once the session's has nothing left of it.
     expect(history.focus.recent()).toEqual([viewScope("p-1"), lookScope(LOOK)]);
+  });
+});
+
+describe("review P2-1-2: committed changes are always heard, one move at a time, empty content keeps its identity", () => {
+  test("a history listener that throws while an operation's step is published: the operation stands, recorded, and the session's listeners still hear", () => {
+    const history = createHistoryService(), s = open(89, history), tab = s.tabId();
+    s.rename(tab, "Once");
+    let heard = 0;
+    s.subscribe(() => heard++);
+    const depth = s.graph.history().depth;
+    const stop = history.subscribe(() => { throw Error("A broken history listener"); });
+    expect(() => s.rename(tab, "Twice")).toThrow("A broken history listener");
+    stop();
+    expect(s.tab(tab)!.name).toBe("Twice");
+    expect(s.graph.history()).toMatchObject({ depth: depth + 1, undo: "Rename tab" });
+    expect(heard).toBe(1);
+    invariants(s);
+  });
+
+  test("an Undo asked for by a history listener during an Undo waits until the first has settled: listeners never hear a view in a missing tab, and each move publishes its graph change", () => {
+    const history = createHistoryService(), s = open(97, history), issues = watch(s), [first, second] = s.tabList();
+    const before = json(s);
+    s.close(second!.id); s.close(first!.id);
+    const structures: string[][] = [];
+    s.graph.subscribe(change => { if (change.structure) structures.push([...change.views]); });
+    let again = true;
+    const stop = history.subscribe(() => { if (again) { again = false; expect(s.graph.undo()).toBe(true); } });
+    expect(s.graph.undo()).toBe(true);
+    stop();
+    expect(again).toBe(false);
+    expect(json(s)).toBe(before);
+    expect(structures).toHaveLength(2);
+    expect(issues).toEqual([]);
+    // Redo too: a listener's Redo waits for the Redo in progress.
+    again = true;
+    const redo = history.subscribe(() => { if (again) { again = false; expect(s.graph.redo()).toBe(true); } });
+    expect(s.graph.redo()).toBe(true);
+    redo();
+    expect(s.tabList()).toEqual([]);
+    expect(structures).toHaveLength(4);
+    expect(issues).toEqual([]);
+  });
+
+  test("a tab with no instances: close, Undo, arrange its first panel, Redo, Reopen brings it back as arranged, after a restart too", () => {
+    const s = open(101), tab = s.newTab({ name: "Empty", dock: null, panels: [], views: [], nodes: [] });
+    s.close(tab);
+    expect(s.graph.undo()).toBe(true);
+    s.arrange(tab, dockOf(["presets"]));
+    expect(s.tab(tab)!.panels).toHaveLength(1);
+    expect(s.graph.redo()).toBe(true);
+    expect(s.closedTabs().at(-1)!.tab.dock).not.toBeNull();
+    const restarted = openSession(profileSessionOf(JSON.parse(json(s)))!);
+    for (const session of [s, restarted]) {
+      session.reopen(tab);
+      expect(session.dock(tab)).toEqual(dockOf(["presets"]));
+    }
+    // Its identity is the session's own: nothing of it is stored or read out.
+    expect(json(s)).not.toContain("@content");
+    expect(JSON.stringify(s.tabList())).not.toContain("@content");
   });
 });

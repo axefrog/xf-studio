@@ -24,7 +24,11 @@
  * - **The drawn view stays** (until P2-iii makes the drawn view follow the shown tab): closing or resetting the tab that holds it, closing
  *   it, and an Undo or Redo that would remove it are refused with the reason, and the steps are kept.
  * - **Replays keep what Undo doesn't hold.** A step holds a tab's arrangement and instances, its scenes' targets and its views' focus
- *   numbers as they were when it was recorded; a tab or fragment an Undo or Redo brings in takes them from what it takes away instead.
+ *   numbers as they were when it was recorded; a tab or fragment an Undo or Redo brings in takes them from what it takes away instead,
+ *   matched by its content's identity (`@content`, session-only: never stored or read out, given afresh when the session opens).
+ * - **Committed changes are always heard.** The session's change is pending before a step is published, so a history listener that
+ *   throws can't keep it from its listeners; a replay that starts while another settles nests in its hold (the history service runs
+ *   one move at a time anyway).
  * - **IDs are never used twice** (§1.4): new tabs, views and nodes get IDs with over 128 bits of randomness (instances 62, the stored
  *   format's most), so no record of retired IDs is needed across a restart; within a run the session also never gives out one it holds,
  *   keeps in a closed fragment or gave out before.
@@ -81,10 +85,16 @@ export const viewPanel = (view: string) => view === MAIN_VIEW ? "head" : `view.$
 export class TabRefusal extends Error {
   constructor(readonly code: "missing_target" | "invalid_value" | "incompatible_mode", message: string) { super(message); }
 }
+/**
+ * A tab as the session holds it: with its content's identity (`@content`), which goes with the arrangement and instances when the tab
+ * closes, reopens or is reset, and through every history step. Session-only: never stored or read out (`bare`), and given afresh on open.
+ */
+type HeldTab = LayoutTab & { readonly [CONTENT_ID]: number };
+type HeldClosed = Omit<ClosedTab, "tab"> & { readonly tab: HeldTab };
 type Header = Omit<LayoutTab, "dock" | "panels">;
-type Content = Pick<LayoutTab, "dock" | "panels">;
-type Tabs = { readonly order: readonly TabId[]; readonly closed: readonly ClosedTab[]; readonly shown?: TabId };
-const TABS = "@tabs", HEADER = "@tab:", CONTENT = "@content:";
+type Content = Pick<HeldTab, "dock" | "panels" | typeof CONTENT_ID>;
+type Tabs = { readonly order: readonly TabId[]; readonly closed: readonly HeldClosed[]; readonly shown?: TabId };
+const TABS = "@tabs", HEADER = "@tab:", CONTENT = "@content:", CONTENT_ID = "@content";
 const sessionKey = (key: string) => key === TABS || key.startsWith(HEADER) || key.startsWith(CONTENT);
 const STRUCTURE = "@structure";
 const clone = <T>(value: T): T => structuredClone(value);
@@ -100,9 +110,11 @@ const targetOf = (node: StoredNode | SessionScene): SceneTarget => {
   const { subject, look, gen } = node as SessionScene;
   return { ...(subject ? { subject: { ...subject } } : {}), ...(look ? { look: { ...look } } : {}), gen: Number.isSafeInteger(gen) && gen >= 0 ? gen : 0 };
 };
-const headerOf = (tab: LayoutTab): Header => { const { dock: _d, panels: _p, ...header } = tab; return header; };
-/** Whether two contents share a panel instance: the same content (instance IDs are unique in a session and never move between contents). */
-const sameContent = (a: readonly PanelInstance[], b: readonly PanelInstance[]) => a.some(panel => b.some(other => other.id === panel.id));
+const headerOf = (tab: HeldTab): Header => { const { dock: _d, panels: _p, [CONTENT_ID]: _c, ...header } = tab; return header; };
+const contentOf = (tab: HeldTab): Content => ({ dock: tab.dock, panels: tab.panels, [CONTENT_ID]: tab[CONTENT_ID] });
+/** A tab or fragment as read out and stored: without its content's identity. */
+const bare = (tab: HeldTab): LayoutTab => { const { [CONTENT_ID]: _c, ...rest } = tab; return rest; };
+const bareClosed = (item: HeldClosed): ClosedTab => ({ ...item, tab: bare(item.tab) });
 /**
  * Characters of randomness in a new ID, base 36: over 128 bits for a tab, view or node, so one is never drawn twice in practice and no
  * record of retired IDs is needed (a restart keeps none); a panel instance's takes the stored format's most, 12 (over 60 bits).
@@ -131,8 +143,10 @@ export class ProfileSessions {
   readonly profile: string;
   readonly focus: FocusService;
   readonly graph: ViewGraph;
-  private tabs: LayoutTab[];
-  private closed: ClosedTab[];
+  private tabs: HeldTab[];
+  private closed: HeldClosed[];
+  /** The last content identity given (`@content`). */
+  private contents = 0;
   private readonly targets = new Map<string, SceneTarget>();
   /** Every ID the session holds, keeps in a closed fragment or gave out in this run: never given out again. */
   private readonly used = new Set<string>();
@@ -163,8 +177,8 @@ export class ProfileSessions {
     this.storedGraph = deps.stored ?? (graph => graph.data());
     const { schema: _schema, tabs: _tabs, views: _views, focus: _focus, closed: _closed, seq: _seq, ...extra } = data as ProfileSessionData & Record<string, unknown>;
     this.extra = extra;
-    this.tabs = clone([...data.tabs]);
-    this.closed = clone([...data.closed]);
+    this.tabs = clone([...data.tabs]).map(tab => this.held(tab));
+    this.closed = clone([...data.closed]).map(item => ({ ...item, tab: this.held(item.tab) }));
     for (const scene of data.views.scenes) this.targets.set(scene.id, targetOf(scene));
     for (const id of this.idsOf(data)) this.used.add(id);
     this.focus.restore({ ...data.focus, seq: data.seq });
@@ -179,7 +193,7 @@ export class ProfileSessions {
     if (!this.scope) throw Error("The session's view graph didn't record through the session.");
     // A graph whose views name no tab (the default stand-in for one that couldn't be read) joins the shown tab.
     if (this.graph.viewIds().some(view => !this.graph.tabOf(view))) {
-      if (!this.tabs.length) { this.tabs.push({ id: this.fresh("tab"), name: FIRST_TAB_NAME, dock: null, panels: [] }); this.focus.showTab(this.tabs[0]!.id); }
+      if (!this.tabs.length) { this.tabs.push(this.held({ id: this.fresh("tab"), name: FIRST_TAB_NAME, dock: null, panels: [] })); this.focus.showTab(this.tabs[0]!.id); }
       this.graph.adoptViews(this.tabId());
     }
     for (const view of this.graph.data().views) if (!this.graph.has(view.id) && typeof view.tab === "string") this.keptTabs.add(view.tab);
@@ -211,10 +225,10 @@ export class ProfileSessions {
   /** The shown tab (empty: an empty session). */
   tabId(): TabId { return this.focus.shownTab() ?? ""; }
   /** The tabs in order, detached. */
-  tabList(): readonly LayoutTab[] { return clone(this.tabs); }
-  tab(id: TabId): LayoutTab | undefined { const found = this.tabs.find(tab => tab.id === id); return found && clone(found); }
+  tabList(): readonly LayoutTab[] { return clone(this.tabs.map(bare)); }
+  tab(id: TabId): LayoutTab | undefined { const found = this.tabs.find(tab => tab.id === id); return found && clone(bare(found)); }
   /** The closed tabs, newest last, detached. */
-  closedTabs(): readonly ClosedTab[] { return clone(this.closed); }
+  closedTabs(): readonly ClosedTab[] { return clone(this.closed.map(bareClosed)); }
   /** The tab a view is in: the graph's (each view names its tab), else the shown tab. */
   viewTab(view: ViewId): TabId { return this.graph.tabOf(view) ?? this.tabId(); }
   /** A panel instance of any tab (instance IDs are unique in the session), with its tab. Read while painting: not detached (read-only). */
@@ -371,7 +385,7 @@ export class ProfileSessions {
         nodes: added.map(({ slot, node }) => ({ slot, node: slot === "scene" ? graphScene(node) : node })) }, { label: "Reset tab" });
       for (const { slot, node } of added) if (slot === "scene") this.targets.set(node.id, targetOf(node));
       const { origin: _origin, ...header } = headerOf(this.tabs[at]!);
-      this.tabs[at] = { ...header, ...(content.origin ? { origin: content.origin } : {}), dock: clone(content.dock), panels: clone([...content.panels]) };
+      this.tabs[at] = this.held({ ...header, ...(content.origin ? { origin: content.origin } : {}), dock: clone(content.dock), panels: clone([...content.panels]) });
       this.placed([...content.views.map(view => view.id), ...added.map(item => item.node.id), ...content.panels.map(panel => panel.id)]);
       this.closed = [...this.closed, fragment].slice(-CLOSED_TAB_LIMIT);
     });
@@ -445,8 +459,8 @@ export class ProfileSessions {
     const scenes: SessionScene[] = graph.scenes.map(scene => withTarget(scene, this.scene(scene.id)));
     const ids = new Set(graph.views.map(view => view.id)), { seq, views: order, ...rest } = this.focus.snapshot();
     const focus = { views: Object.fromEntries(Object.entries(order).filter(([view]) => ids.has(view))), ...rest };
-    return clone({ ...this.extra, schema: PROFILE_SESSION_SCHEMA, tabs: this.tabs, views: { ...graph, views: graph.views as SessionView[], scenes }, focus,
-      closed: this.closed, seq } as ProfileSessionData);
+    return clone({ ...this.extra, schema: PROFILE_SESSION_SCHEMA, tabs: this.tabs.map(bare), views: { ...graph, views: graph.views as SessionView[], scenes }, focus,
+      closed: this.closed.map(bareClosed), seq } as ProfileSessionData);
   }
 
   // ----- The operation step -----
@@ -466,6 +480,8 @@ export class ProfileSessions {
       const after = this.sessionValues();
       const keys = [...new Set([...before.keys(), ...after.keys()])].filter(key => !same(before.get(key), after.get(key)));
       const all = [...keys, ...collected.keys()];
+      // Pending before the step is published: whatever a history listener throws, the session's listeners hear (on release).
+      this.changed();
       if (all.length) {
         if (this.scope.recording) {
           // A recorded operation is an edit (§3.7): its history becomes the editing context, so global Undo reaches it.
@@ -476,7 +492,6 @@ export class ProfileSessions {
         // A change the history doesn't hold would leave its steps naming tabs and views that no longer exist (CORE-94).
         else this.scope.clear();
       }
-      this.changed();
       return result;
     } finally { release(); }
   }
@@ -493,7 +508,7 @@ export class ProfileSessions {
     }
     const id = key.startsWith(HEADER) ? key.slice(HEADER.length) : key.slice(CONTENT.length), tab = this.tabs.find(item => item.id === id);
     if (!tab) return undefined;
-    return clone(key.startsWith(HEADER) ? headerOf(tab) : { dock: tab.dock, panels: tab.panels } satisfies Content);
+    return clone(key.startsWith(HEADER) ? headerOf(tab) : contentOf(tab));
   }
   /** The scope the graph records into: its checkpoints join a running operation's step, and go to the session's scope otherwise. */
   private graphScope(): ViewHistoryScope {
@@ -528,7 +543,7 @@ export class ProfileSessions {
       apply: (values, cause) => {
         const keys = Object.keys(values), graphValues = Object.fromEntries(keys.filter(key => !sessionKey(key)).map(key => [key, values[key]]));
         const tabs = values[TABS] as Tabs | undefined, order = tabs ? tabs.order : this.tabs.map(tab => tab.id);
-        const headers = new Map(this.tabs.map(tab => [tab.id, headerOf(tab)])), contents = new Map(this.tabs.map(tab => [tab.id, { dock: tab.dock, panels: tab.panels } as Content]));
+        const headers = new Map(this.tabs.map(tab => [tab.id, headerOf(tab)])), contents = new Map(this.tabs.map(tab => [tab.id, contentOf(tab)]));
         for (const key of keys) {
           const value = values[key];
           if (key.startsWith(HEADER)) { const id = key.slice(HEADER.length); if (value) headers.set(id, value as Header); else headers.delete(id); }
@@ -545,11 +560,10 @@ export class ProfileSessions {
         const closed = this.replayedFragments(tabs ? tabs.closed : this.closed, order, contents, key => key in values);
         if (Object.keys(graphValues).length && !this.graphTarget.apply(graphValues, cause)) return false;
         // Settled whole (tabs, fragments and the shown tab) before anyone hears; listeners hear once the move has settled (`settled`).
-        this.releaseReplay?.();
-        this.releaseReplay = this.holdAll();
+        this.releaseReplay ??= this.holdAll();
         const removed = new Map(this.tabs.map((tab, at) => [tab.id, at] as const).filter(([id]) => !live.has(id)));
         const back = order.filter(id => !this.tabs.some(tab => tab.id === id));
-        this.tabs = order.map(id => clone({ ...headers.get(id)!, ...contents.get(id)! }) as LayoutTab);
+        this.tabs = order.map(id => clone({ ...headers.get(id)!, ...contents.get(id)! }) as HeldTab);
         this.closed = clone(closed);
         this.settleShown({ ...(tabs?.shown ? { shown: tabs.shown } : {}), back, removed });
         this.changed();
@@ -564,11 +578,11 @@ export class ProfileSessions {
   }
   /**
    * The closed fragments a replay leaves (`next`), and the contents of the tabs it brings in or replaces (changed in place), with the state
-   * outside Undo as it is now. A content keeps its instances, so the same instance in what the replay brings in and in what it takes away
-   * (a tab it closes, a fragment it reopens or replaces) is the same content: the arrangement and instances come from the one taken away.
+   * outside Undo as it is now. What the replay brings in and what it takes away (a tab it closes, a fragment it reopens or replaces) are
+   * the same content when their identities (`@content`) match, empty ones too: the arrangement and instances come from the one taken away.
    * Fragments brought in also show what their scenes show now and keep their views' focus numbers as they are now.
    */
-  private replayedFragments(next: readonly ClosedTab[], order: readonly TabId[], contents: Map<TabId, Content>, inStep: (key: string) => boolean): ClosedTab[] {
+  private replayedFragments(next: readonly HeldClosed[], order: readonly TabId[], contents: Map<TabId, Content>, inStep: (key: string) => boolean): HeldClosed[] {
     const pending = next.map(item => JSON.stringify(item)), kept = new Set<number>();
     const leaving = this.closed.filter(item => {
       const at = pending.findIndex((text, index) => !kept.has(index) && text === JSON.stringify(item));
@@ -579,16 +593,16 @@ export class ProfileSessions {
     const replaced = (id: TabId) => inStep(CONTENT + id);
     const live = new Set(order);
     // What the replay takes away, as it is now: tabs it closes or replaces the content of, and fragments it reopens or replaces.
-    const current: Content[] = [...this.tabs.filter(tab => !live.has(tab.id) || replaced(tab.id)), ...leaving.map(item => item.tab)];
-    const now = (panels: readonly PanelInstance[]) => current.find(content => sameContent(content.panels, panels));
+    const current: Content[] = [...this.tabs.filter(tab => !live.has(tab.id) || replaced(tab.id)), ...leaving.map(item => item.tab)].map(contentOf);
+    const now = (content: Content) => current.find(item => item[CONTENT_ID] === content[CONTENT_ID]);
     for (const id of order) if (!this.tabs.some(tab => tab.id === id) || replaced(id)) {
-      const from = now(contents.get(id)!.panels);
-      if (from) contents.set(id, { dock: from.dock, panels: from.panels });
+      const from = now(contents.get(id)!);
+      if (from) contents.set(id, { ...from });
     }
     const focus = this.focus.viewOrder();
     return next.map((fragment, index) => {
       if (kept.has(index)) return fragment;
-      const from = now(fragment.tab.panels);
+      const from = now(fragment.tab);
       return { ...fragment, tab: from ? { ...fragment.tab, dock: from.dock, panels: from.panels } : fragment.tab,
         nodes: fragment.nodes.map(item => {
           const target = item.slot === "scene" ? this.targets.get(item.node.id) : undefined;
@@ -618,7 +632,7 @@ export class ProfileSessions {
   }
   private existing(tab: TabId) { this.index(tab); }
   /** The closed fragment of tab `closed`, the newest when there are several (default: the most recently closed). */
-  private closedFragment(closed: TabId | undefined): ClosedTab | undefined {
+  private closedFragment(closed: TabId | undefined): HeldClosed | undefined {
     return closed === undefined ? this.closed.at(-1) : [...this.closed].reverse().find(item => item.tab.id === closed);
   }
   /** Refused (with the reason) when the tab's views can't go: one is a newer build's, or one is the view the window draws. */
@@ -628,12 +642,14 @@ export class ProfileSessions {
     if (drawn && this.graph.tabOf(drawn) === tab)
       throw new TabRefusal("incompatible_mode", `The 3D view draws a view in this tab, so the tab can't ${verb === "close" ? "close" : "be reset"} yet.`);
   }
+  /** A tab with a new content identity (a new, duplicated or reset tab's, or one read from storage). */
+  private held(tab: LayoutTab): HeldTab { return { ...tab, [CONTENT_ID]: ++this.contents }; }
   /** The view the window draws, while it is in the graph. */
   private drawnView(): ViewId | undefined { const view = this.drawn?.(); return view !== undefined && this.graph.has(view) ? view : undefined; }
   /** The tab beside place `at` once the tab there went: the next, else the last (undefined: none). */
   private neighbour(at: number): TabId | undefined { return (this.tabs[Math.min(at, this.tabs.length - 1)] ?? this.tabs.at(-1))?.id; }
   /** A tab as a closed fragment: it, its views and a value copy of every node they name (each with its place), and their focus numbers. */
-  private fragment(tab: LayoutTab, at: number): ClosedTab {
+  private fragment(tab: HeldTab, at: number): HeldClosed {
     const graph = this.storedGraph(this.graph), ids = this.graph.viewIds(), order = this.focus.viewOrder();
     const views = (graph.views as ViewRecord[]).filter(view => view.tab === tab.id && this.graph.has(view.id)).map(view => ({ view: view as SessionView & ViewRecord, at: ids.indexOf(view.id) }));
     const nodes: ClosedTab["nodes"][number][] = [], seen = new Set<string>();
@@ -655,7 +671,7 @@ export class ProfileSessions {
     return fragment.nodes.filter(({ node }) => !slotOf.has(node.id));
   }
   /** A tab's content copied with fresh IDs everywhere (views, every node they name, instances), pins and the arrangement following. */
-  private copyOf(tab: LayoutTab): TabContent {
+  private copyOf(tab: HeldTab): TabContent {
     const graph = this.storedGraph(this.graph), ids = new Map<string, string>(), nodes: TabContent["nodes"][number][] = [];
     const views = (graph.views as ViewRecord[]).filter(view => view.tab === tab.id && this.graph.has(view.id));
     for (const view of views) {
@@ -676,7 +692,7 @@ export class ProfileSessions {
       ids.set(panel.id, id);
       return { ...clone(panel), id, ...(binding ? { binding } : {}) };
     });
-    const { id: _id, dock, panels: _panels, ...header } = tab;
+    const { id: _id, dock, panels: _panels, [CONTENT_ID]: _content, ...header } = tab;
     return { ...clone(header), dock: dock ? rewriteDock(dock, remap) : null, panels,
       views: views.map(view => ({ ...view, id: remap(view.id), ...Object.fromEntries(VIEW_SLOTS.map(slot => [slot, remap(view[slot])])) }) as ViewRecord), nodes };
   }
@@ -694,7 +710,7 @@ export class ProfileSessions {
       nodes: nodes.map(({ slot, node }) => ({ slot, node: slot === "scene" ? graphScene(node) : node })) satisfies AddedNode[] }, { label: "New tab" });
     for (const { slot, node } of nodes) if (slot === "scene") this.targets.set(node.id, targetOf(node));
     const { views: _views, nodes: _nodes, dock, panels, ...header } = content;
-    this.tabs.splice(Math.max(0, Math.min(at, this.tabs.length)), 0, { id, ...clone(header), dock: clone(dock), panels: clone([...panels]) });
+    this.tabs.splice(Math.max(0, Math.min(at, this.tabs.length)), 0, this.held({ id, ...clone(header), dock: clone(dock), panels: clone([...panels]) }));
     this.placed([id, ...content.views.map(view => view.id), ...nodes.map(item => item.node.id), ...panels.map(panel => panel.id)]);
     this.focus.showTab(id);
   }

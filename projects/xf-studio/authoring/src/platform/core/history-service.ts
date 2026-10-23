@@ -20,6 +20,8 @@
  *   newest first, through `acting`: the first that can act now (an open scope, or a document its experiment offers). There is no other
  *   fallback: with none, Undo is unavailable. The View and lighting history has commands of its own (`view.undo`, `view.redo`); its
  *   owner, the profile session, makes it the editing context when it records a tab operation (`ProfileSessions`).
+ * - **One move at a time.** An Undo, Redo or jump asked for while a move is settling (from a listener) waits and runs once it has
+ *   settled, so each move applies and publishes whole.
  * - **Refusals for now.** A target may refuse a move that is sound but can't happen yet (`HistoryTarget.refusal`, read from the values
  *   the move would show before anything moves, `blocked`): the move changes nothing and every step stays.
  * - **Documents.** `documents` is the `DocumentHistory` API over the `doc:*` scopes: a step keeps the document's value after it
@@ -208,8 +210,25 @@ class Scope implements HistoryScope {
 
   canUndo() { return this.stack.canUndo; }
   canRedo() { return this.redoValid(); }
-  undo() { return this.stack.canUndo && this.move({ direction: "undo", count: 1 }); }
-  redo() { return this.move({ direction: "redo", count: 1 }); }
+  undo() { return this.settledFirst(() => this.stack.canUndo && this.move({ direction: "undo", count: 1 })); }
+  redo() { return this.settledFirst(() => this.move({ direction: "redo", count: 1 })); }
+  /**
+   * Run a move once any move in progress has settled. A move asked for while one is settling (a listener that undoes again) waits in
+   * order and runs after it, so each move applies and publishes whole; it answers true (accepted), and does nothing when it can't run then.
+   */
+  private settledFirst(run: () => boolean): boolean {
+    if (this.moving) { this.waiting.push(run); return true; }
+    this.moving = true;
+    try { return run(); }
+    finally {
+      this.moving = false;
+      // The next waiting move, in the order asked (each one's own finally runs the one after it).
+      const next = this.waiting.shift();
+      if (next) this.settledFirst(next);
+    }
+  }
+  private moving = false;
+  private readonly waiting: (() => boolean)[] = [];
   plan(stepId: string): HistoryJumpPlan | undefined {
     const timeline = this.timeline();
     const index = stepId === timeline.startId ? -1 : timeline.steps.findIndex(step => step.id === stepId);
@@ -218,8 +237,7 @@ class Scope implements HistoryScope {
     return { direction: delta < 0 ? "undo" : delta > 0 ? "redo" : "none", count: Math.abs(delta) };
   }
   jumpTo(stepId: string) {
-    const plan = this.plan(stepId);
-    return !!plan && plan.direction !== "none" && this.move(plan);
+    return this.settledFirst(() => { const plan = this.plan(stepId); return !!plan && plan.direction !== "none" && this.move(plan); });
   }
   command(action: HistoryMove): boolean {
     if (this.options.command) return this.options.command(action);
