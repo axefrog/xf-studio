@@ -11,6 +11,9 @@
  *   focus numbers, D13); an Undo can never put a view into a missing tab.
  * - **Persistence:** the session stores, with its tabs, closed fragments and shown tab, through the workspace's own serialisation and reads
  *   back byte-identical (sessions are workspace data, design §1.2; library documents go through the outbox).
+ * - **Review P2-1's findings**, one test or more each: the drawn view can't close and every refusal changes nothing; listeners hear a
+ *   settled session; replays keep what Undo doesn't hold; the dock relay; tab operations as the editing context; IDs across a restart.
+ *   The model's content identities, what it keeps outside Undo and its listener checks extend T1 to the same ground.
  */
 import { describe, expect, test } from "bun:test";
 import { PANEL_INSTANCE_ID, profileSessionOf, type LayoutTab, type ProfileSessionData } from "../src/app/profiles/profile-session";

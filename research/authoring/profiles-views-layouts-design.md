@@ -410,6 +410,7 @@ Undo reverses all of an operation, including pushing or popping a fragment. A se
 - **Never Undo:** focus with the shown tab, a tab's arrangement and the instances the dock makes there, and what a scene shows. A step holds a tab's arrangement and instances only when it makes, closes or resets the tab (experiment 044 D15). Add or remove a panel and change a binding become recorded operations with phase 3's picker and binding selector.
 - **The graph** has no required main view and no `MAX_VIEWS`; views carry their tab, and new IDs come from the session. Reset keeps the tab and pushes its content as a `reset` fragment (D16). Closed fragments keep their views' and nodes' places and the views' focus numbers, so close then Reopen is byte-identical.
 - **Actions:** `tabs.show`, `rename`, `move`, `close`, `reopen`, `duplicate` and `arrange` (Duplicate at the data level only until phase 6's menu entry).
+- **Settled before anyone hears; replays keep what Undo doesn't hold.** Notifications wait until an operation, Undo or Redo has settled, and each listener is isolated. A recorded tab operation makes `view:<profile>` the editing context. A tab or fragment an Undo or Redo brings in takes its arrangement, instances, scene targets and focus numbers from what it takes away. Until phase 2's per-view drawing, the view the window draws can't close (refused with the reason, steps kept).
 
 ### 4.2 Defaults are graph fragments
 

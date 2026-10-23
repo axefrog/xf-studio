@@ -18,8 +18,10 @@
  *   or a V's history (an edit, an Undo, a look shown again) makes that scope the editing context there, and an experiment's document
  *   takes it when it records or moves. Undo and Redo act on the scope they name; the input layer names it, from the editing contexts
  *   newest first, through `acting`: the first that can act now (an open scope, or a document its experiment offers). There is no other
- *   fallback: with none, Undo is unavailable. The View and lighting history has commands of its own (`view.undo`, `view.redo`) and
- *   never takes the editing context.
+ *   fallback: with none, Undo is unavailable. The View and lighting history has commands of its own (`view.undo`, `view.redo`); its
+ *   owner, the profile session, makes it the editing context when it records a tab operation (`ProfileSessions`).
+ * - **Refusals for now.** A target may refuse a move that is sound but can't happen yet (`HistoryTarget.refusal`, read from the values
+ *   the move would show before anything moves, `blocked`): the move changes nothing and every step stays.
  * - **Documents.** `documents` is the `DocumentHistory` API over the `doc:*` scopes: a step keeps the document's value after it
  *   by reference (no copy, whatever its size), and moving hands back the value to restore.
  */
