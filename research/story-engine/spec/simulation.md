@@ -1,6 +1,6 @@
 # S1. Simulation layer specification
 
-**Status:** v0.2, 23 October 2026. This is the specification stage of [P3](../p3-simulation-layer.md) (work package [WP-11](../plan.md#82-work-packages)). It is exact enough to build the first implementation of layer 1 in the TypeScript reference model from this page and the kernel specification [S0](kernel.md) (v4.10) alone.
+**Status:** v0.3, 23 October 2026. v0.3 rules on six questions from the first build: the fit's tolerance, the first window V stands in a cell, SF1-E3's wording, the protected set as of a time, V and the tie cap, and which group a changed affiliation joins. This is the specification stage of [P3](../p3-simulation-layer.md) (work package [WP-11](../plan.md#82-work-packages)). It is exact enough to build the first implementation of layer 1 in the TypeScript reference model from this page and the kernel specification [S0](kernel.md) (v4.10) alone.
 - **The core.** This version specifies the **core**: the processes, policies, data and reads that milestone M3 builds. That is one district (Kabuki) at coarse and medium detail, in its smallest useful form (§0.2). Everything else in P3 is a **later capability** (§0.3). The first implementation rejects it plainly rather than half-doing it.
 - **Reviews.** Round 1, GPT-6 Astra, on v0.1: 20 findings and the whole over-engineering section, all adopted (§18). v0.2 shrinks the core, runs every process one window at a time, and fixes the findings.
 - **What it reads and what reads it.** S1 fills the hooks of S0 (§9.4 processes, §11 beliefs, §10.8 the conflict table) and is read by the seeding layer [S2](seeding.md) (§2.16 and §2.17) and the procedural engine [S3](procedural.md) (v0.3, §1.2 and §6.1).
@@ -559,7 +559,7 @@ function where(person: Id, t: GameTime): Whereabouts {
   const day = dayIndex(t), p = periodOf(t), arch = archetypeOf(person);
   let cls = schedule(arch)[p][invCum(schedule(arch)[p], rand("sched", person, day, p))];       // 'home' | 'work' | 'out'
   let cause = 'none';
-  if (protectedSet(person)) return { cls, cell: placeOf(person, cls, day, p), cause: 'protected-present' };   // never removed
+  if (protectedAt(person, t)) return { cls, cell: placeOf(person, cls, day, p), cause: 'protected-present' };   // never removed
   if (stateAt(person, 'health', t).state === 1) { cls = 'away'; cause = 'ill'; }
   else if (cls === 'work' && stateAt(person, 'work', t).state === 1) { cls = 'home'; cause = 'between-jobs'; }
   else if (rand("absent", person, day) < absentP(arch)) { cls = 'away'; cause = closedCause(person, t) ?? 'none'; }
@@ -604,7 +604,7 @@ function pGeo(a: Id, b: Id): number { return data.ties.cGeo / (HN * rankOf(a, b)
 
 **`neighbours(a, layer, cap)`** enumerates `a`'s ties up to a layer, inner first (focus id, then ordinal), then outward blocks by `(graph distance, block Id)`, skipping duplicates, with caps `{1: 5, 2: 15, 3: 50, 4: 150}`. Each `tie` test costs 50 allowance units, each roster member 1, the call 5,000 at most. The caps bound how many ties are *opened* for one person, not how many exist.
 
-**Materialisation.** A tie becomes an edge `xf:tie`, `Id` `H("edge", "xf:tie", lo, hi)`, cause `sampled`, when V observes it, a belief about it is formed or told, or a seed casts through it. A person has at most 20 materialised ties **[tunable]**; a new one beyond that ends the weakest edge that neither V, a live frame nor a memorable belief depends on (ties by `Id`). **Position:** `bridge(p) = 1 − Σ_f s_f²` over the shares `s_f` of a person's expected contacts in each focus (`p_f × (n_f − 1)` over the sum). A fixer has `bridge ≥ 0.6` across at least three foci of different class; for a canon person the shares are pack-declared.
+**Materialisation.** A tie becomes an edge `xf:tie`, `Id` `H("edge", "xf:tie", lo, hi)`, cause `sampled`, when V observes it, a belief about it is formed or told, or a seed casts through it. A person has at most 20 materialised ties **[tunable]**; a new one beyond that ends the weakest edge that neither V, a live frame nor a memorable belief depends on (ties by `Id`). If none can be ended, the new tie isn't made and the refusal is logged `tie-cap`. **V is outside the cap:** the record of whom V knows is never trimmed, and a tie to V never counts as the weakest. **Position:** `bridge(p) = 1 − Σ_f s_f²` over the shares `s_f` of a person's expected contacts in each focus (`p_f × (n_f − 1)` over the sum). A fixer has `bridge ≥ 0.6` across at least three foci of different class; for a canon person the shares are pack-declared.
 
 ### 4.7 The tie record
 
@@ -784,7 +784,7 @@ type GateResult = { ok: true } | { ok: false; reason: GateReason };
 1. **Class exclusion.** If any class listed by the occurrence's kind has ceiling 0 or is in `classExclusions` in the settings in force (§3.3), the occurrence is refused: `excluded`. The same applies to everything that depends on it: its summary count, its items, its children.
 2. **The floors.** Roles `aggressor`, `victim`, `target` and `hostile` bind only persons whose `age-class` is `adult`. A missing or unavailable class counts as `minor`: `floor-minor`. A person marked real is never bound: `floor-real`. No occurrence carries a tag beginning `sex.`: `sex-tag`.
 3. **V-exclusion.** An effect in `{harm, kill, take, expose}` whose `on` is `v`, or a `victim` or `target` role bound to `v`: `v-target`. V may be an `aggressor` or `actor` only in a mirrored occurrence, which the gate does not see. **Informational roles are not harm.** The `subject` of a `tell` may be V or a protected person: a telling has no effect, so nothing here refuses it.
-4. **The protected set.** An effect in `{harm, kill, take, expose}` on a protected person (`protectedSet`, now), or a `victim` or `target` role bound to one: `protected`. An absence never removes a protected person (§4.5).
+4. **The protected set.** An effect in `{harm, kill, take, expose}` on a protected person (`protectedAt`, as of the occurrence's time), or a `victim` or `target` role bound to one: `protected`. An absence never removes a protected person (§4.5).
 
 **Lines are exclusion at production, not thinning.** A class at ceiling 0 gets a **zero rate** for its kinds, and the offspring matrix is renormalised without them, so the world holds none of it. The gate is the backstop. The `cityScale` dial scales the citywide rates and the offspring means together and is recorded in the settings op.
 
@@ -1487,7 +1487,7 @@ The pure functions `tie`, `neighbours` and `bridge`, the materialisation rule an
 The game is ground truth. `reconcile` runs when the watch frame hears a reading Change of a mirrored person's `alive`, `affiliation` or `quest-linked`. A load, a jump and a mirror correction are all just sources of such readings: after a load the kernel reads the game's state, which becomes `game` readings at the current time ([S0 §14.3](kernel.md#143-loading-is-replacement)), and where a reading differs it is a Change. **No policy reads the load class, a load count or the epoch.** `reconcile` does, in this order:
 
 1. **Diff** each assumption S1 holds about the changed person against the reading: a frame of a mirrored actor, a membership edge, a materialised tie edge.
-2. **Supersede what the game now contradicts.** If `alive` is no: `frame-status abandoned` (cause: the reading's change) on every active or blocked frame of the person; `end-edge` on their memberships and ties (the edge stays as history). If `affiliation` changed: end the old membership edge, add the new one if the group exists, cause `game`.
+2. **Supersede what the game now contradicts.** If `alive` is no: `frame-status abandoned` (cause: the reading's change) on every active or blocked frame of the person; `end-edge` on their memberships and ties (the edge stays as history). If `affiliation` changed (a move, not a first reading or a reading restated after a load): end the old membership edge, and add the new one if a group stands for the new affiliation, cause `game`. The group is the one of the person's current district, from the mirrored position, if that district lists the affiliation; otherwise the first simulated district, in `Id` order, that does. A person the game reads as dead joins nothing.
 3. **Leave beliefs alone.** A belief is not truth. People may still believe the dead person lives. That divergence is story material, not an error. It is logged as a `divLog` transition (§9.1).
 4. **Log** every correction with reason `game-dead`, `game-moved` or `game-fact`. The log never reaches V.
 
@@ -1569,6 +1569,8 @@ The roots are V, the director and live seeds. A root's focus reaches a node at a
 ### 10.2 Catch-up and the city's reply to V
 
 After an absence the coarse tiers replay every missed boundary in order, each within the hard limits, and read no demand. **When the work exceeds the budget, S1 lags and does not change a period.** The kernel stops between boundaries and resumes, and reads during catch-up answer as of the last processed boundary, flagged `catchingUp`. A jump reads the game's clock and is a session input, never a draw key. V's act at time `t` in window `k` is applied at boundary `k + 1`, processed in window `k + 1`, and its earliest child is due at `k + 2`: more than one and less than three windows after `t`.
+
+**The window V arrives in is covered.** A reading of V's cell applied at boundary `k + 1` puts that cell in the recorded focus **of window `k + 1`**, not only of later windows: the fine-tier processes of a window judge demand after the boundary's external operations have applied and their relevance has been dispatched. So the first window V stands in a cell has its items opened.
 
 ### 10.3 Budgets
 
@@ -1737,7 +1739,7 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 |---|---|---|
 | SF1-P-0 | **The schema.** Load `xf.core.world@1`; resolve 1,000 households | The schema audit finds no read of a later slot or of an owned value; no `cycle` and no defect on resolution; every resident's `age` lies in the band of its `profile`, and `age-class` agrees (band 0 is minor, the rest adult); a pin on a resident's `profile` narrows its household's slot |
 | SF1-P-1 | **IPF by hand.** Seed `[[2,1],[1,2]]`, rows `[0.7, 0.3]`, columns `[0.4, 0.6]`, 20 iterations | `[[0.34213, 0.35787], [0.05787, 0.24213]]`; the column marginals are exact and the row marginals within 1e-9 |
-| SF1-P-2 | **A district fit.** FX-3 marginals | After 20 iterations every marginal is within 1e-9; `w = t / max(t)` has maximum 1; the household table has 60 cells |
+| SF1-P-2 | **A district fit.** FX-3 marginals | After 20 iterations the dimension fitted last is within 1e-9 and every other marginal within 1e-6 (iterative proportional fitting converges at a finite rate; the iteration count, not the tolerance, is what makes the result deterministic); `w = t / max(t)` has maximum 1; the household table has 60 cells |
 | SF1-P-3 | **The recipe is fixed.** Alter the index marginals inside a lineage | The pinned fit and its hash are read; nothing refits; the pinned-version check refuses the altered index (§1.4) |
 | SF1-P-4 | **Rosters.** 10,000 sampled households | `none` for `j ≥ size`; no `family` child within one S1 band of member 0 or older; `crew` houses share an affiliation; `couple` members within one band |
 | SF1-P-5 | **Residents are regenerated.** Resolve 50 residents, forget the block, resolve again, reload, resolve | Identical profiles, ages, traits, names |
@@ -1850,7 +1852,7 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 | Check | Expected |
 |---|---|
 | Derived events | One `gang-clash` of size 1 for the combat (2 hostiles) and one `assault` of size 2 for the death (3 witnesses): each with its raw event as cause, creator `proc(city.mirror)`, the raw time, minted once, and never refused by admission (SF1-M-1, SF1-M-2) |
-| The game's reading wins | `resolve(mv, "alive")` is `no` and `mv.position` is the game's reading, whatever the `simulation` contribution says: the mirrored slot is never sampled (S0 §5.1 step 2). The contribution is rejected by arbitration (precedence 200 against 500) |
+| The game's reading wins | `resolve(mv, "alive")` is `no` and `mv.position` is the game's reading, whatever the `simulation` contribution says: the mirrored slot is never sampled (S0 §5.1 step 2). The game's reading is returned before any contribution is gathered, so the `simulation` statement stays in the store, inactive, and the slot's trace lists no constraint from it |
 | Simulated values corrected | The `city.events` run for window 156 reads the mirror digest's `cover`. Child **C** (same kind, cell `g3`) is thinned at 160 with reason `game-covers`, logged as a correction. **D** (a different kind) and **E** (two steps away) fire by the usual rules. `mv`'s frames are `abandoned` (cause: the reading's change), its memberships and tie edges are ended, its goal `pay-collector` is `abandoned`; the beliefs held about `mv` stand; **one** `game-dead` correction for `mv` is logged and no more |
 | Partition and reload | The same records in one call and in per-window calls, and after a save between the death and window 156 and a load under another epoch (S0 F-12, F-16, S1-I-17, S1-I-21) |
 
