@@ -390,6 +390,7 @@ export function createLightingSetupStage(options: {
     }
     return {
       steps,
+      programs: () => linkedPrograms(renderer, materials),
       result(): PreparedObject {
         const textures = new Set<THREE.Texture>();
         const collect = (value: unknown) => {
@@ -480,6 +481,15 @@ export function createLightingSetupStage(options: {
         state.toneMappingExposure = was.exposure; display.setExposure(was.gameExposure);
         environment.lights.forEach((probe, i) => { probe.visible = was.probes[i]!.visible; (probe as THREE.LightProbe).intensity = was.probes[i]!.intensity; });
       }
+    },
+    /**
+     * Whether `object` is drawn into the skin scatter's three targets too (its input variant). ANGLE on D3D11 links a program's pixel shader
+     * for its first output only and builds the three-output one at its first draw, on the GPU process's main thread, which presents no frame
+     * meanwhile (1–20 s for a skin under a cold cache, experiment 043 §11): a warm-up draws such an object in a piece of its own.
+     */
+    drawsMultiTarget(object: THREE.Object3D): boolean {
+      const mesh = object as THREE.Mesh;
+      return !!mesh.isMesh && display.scatterPossible && !Array.isArray(mesh.material) && scatter.variantOf(mesh.material) !== null;
     },
     /** The program state (`programState`) the scene would have lit by `next`, without lighting it. */
     programStateFor(next: LightingSource): string { return programStateOf(resolveLightingSource(next, sex, trial)); },
@@ -618,7 +628,10 @@ export type LightingSetupStage = ReturnType<typeof createLightingSetupStage>;
 /** What compiling an object ahead gives (`prepare`): when its programs are linked, the textures they sample, and the programs themselves. */
 export type PreparedObject = { ready: Promise<void>; textures: THREE.Texture[]; programs(): LinkedProgram[] };
 /** `prepare` in steps (`prepareSteps`): run every step (each synchronous), then take the result. */
-export type PreparationSteps = { steps: (() => void)[]; result(): PreparedObject };
+export type PreparationSteps = { steps: (() => void)[];
+  /** The programs the steps run so far made (to pace the driver's links). */
+  programs(): LinkedProgram[];
+  result(): PreparedObject };
 
 /** Every field `shadowDepthMaterial` sets on a depth material, as Three's shadow pass sets them. */
 const DEPTH_FIELDS = ["visible", "wireframe", "side", "alphaMap", "alphaTest", "map", "clipShadows", "clippingPlanes", "clipIntersection",

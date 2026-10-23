@@ -227,10 +227,23 @@ try {
     // G2_PROFILE=1: a sampled CPU profile of each switch beside the summary (`<out>-<name>.cpuprofile`), to see what a long task did.
     const profiling = process.env.G2_PROFILE === "1";
     if (profiling) { await page.send("Profiler.enable"); await page.send("Profiler.setSamplingInterval", { interval: 500 }); await page.send("Profiler.start"); }
+    // G2_TRACE=<switch name>: a Chrome trace of that switch (the GPU process's shader compiles and command buffer tasks, the page's tasks).
+    const tracing = process.env.G2_TRACE === name, events: unknown[] = [];
+    let traced: Promise<void> | undefined;
+    if (tracing) {
+      traced = new Promise<void>(complete => page.on("Tracing.tracingComplete", () => complete()));
+      page.on("Tracing.dataCollected", params => { events.push(...(params as { value: unknown[] }).value); });
+      await page.send("Tracing.start", { categories: "gpu.angle,gpu,devtools.timeline,disabled-by-default-devtools.timeline", transferMode: "ReportEvents" });
+    }
     const run = await page.evaluate(`window.__g2.run(${JSON.stringify(action)}, ${JSON.stringify(done)}, ${minMs}, ${tailMs}, ${maxMs})`) as Run;
     if (profiling) {
       const { profile } = await page.send<{ profile: unknown }>("Profiler.stop");
       writeFileSync(resolve(outArg).replace(/\.json$/, `-${name}.cpuprofile`), JSON.stringify(profile));
+    }
+    if (tracing) {
+      await page.send("Tracing.end");
+      await traced;
+      writeFileSync(resolve(outArg).replace(/\.json$/, `-${name}.trace.json`), JSON.stringify({ t0: run.t0, events }));
     }
     const record = await pageRecord();
     const analysis = analyse(run, record, kind);

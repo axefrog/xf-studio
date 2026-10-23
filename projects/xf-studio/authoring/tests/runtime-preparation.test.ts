@@ -107,7 +107,7 @@ test("a context lost while a V's programs link: the preparation drops them, star
     const born = generation;
     return { getUniforms: () => ({}), getAttributes: () => ({}), isReady: () => { entry.polls++; return born > 0; } };
   };
-  const lighting = { prepareSteps: () => { const linked = program(); return { steps: [], result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [linked] }) }; },
+  const lighting = { prepareSteps: () => { const linked = program(); return { steps: [], programs: () => [linked], result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [linked] }) }; },
     prepareDisplay: () => ({ ready: Promise.resolve(), programs: () => [] }) };
   const frame = () => new Promise<void>(resolve => setTimeout(resolve, 1));
   const shown: string[] = [];

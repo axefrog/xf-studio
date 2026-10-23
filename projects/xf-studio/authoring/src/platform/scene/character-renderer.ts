@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { linkPacer } from "./link-pacing";
 import { copyMaterialShading, extendSkin, fullSkinDepthMaterial, releaseFullSkinDepth } from "../../materials/render/skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../materials/render/eye-material";
 import type { ProfileEncoding } from "../../materials/hair-colour-model";
@@ -60,7 +61,7 @@ export type CharacterRenderer = ReturnType<typeof createCharacterRenderer>;
  * the textures those programs sample; `frame` waits for the next animation frame.
  */
 export type DetailPreparation = {
-  compile(object: THREE.Object3D): { steps: (() => void)[];
+  compile(object: THREE.Object3D): { steps: (() => void)[]; programs?(): readonly { isReady?(): boolean }[];
     result(): { ready: Promise<void>; textures: THREE.Texture[]; programs(): readonly { getUniforms(): unknown; getAttributes(): unknown }[] } };
   frame(): Promise<void>;
   signal?: AbortSignal;
@@ -245,18 +246,24 @@ export function createCharacterRenderer(input: {
     if (signal?.aborted) return;
     // Each part's programs, about one per step, a frame let through whenever a step used up its share (a whole part in one call was 306 ms).
     const compiled: ReturnType<ReturnType<DetailPreparation["compile"]>["result"]>[] = [];
+    // Only a few programs linking at once (link-pacing.ts): all of a V's at once took every core, and the page's thread with them.
+    const links = linkPacer({ parallel: renderer.extensions?.has("KHR_parallel_shader_compile") ?? false, frame: async () => { await preparation.frame(); started = performance.now(); } });
     for (const item of fresh) {
       const material = item === onHead ? item.meshes[0]!.material as THREE.MeshStandardMaterial : null;
       if (material) wearOnHead(material);
       const made = preparation.compile(material ? head : item.root);
       for (const step of made.steps) {
         await pace();
+        await links.admit();
         if (signal?.aborted) return;
-        if (!material) { step(); continue; }
-        // The head drawn with the skin's material, for each step only (it is synchronous: no frame draws the swap).
-        const shown = head.material;
-        head.material = material;
-        try { step(); } finally { head.material = shown; }
+        if (!material) step();
+        else {
+          // The head drawn with the skin's material, for each step only (it is synchronous: no frame draws the swap).
+          const shown = head.material;
+          head.material = material;
+          try { step(); } finally { head.material = shown; }
+        }
+        links.add(made.programs?.() ?? []);
       }
       compiled.push(made.result());
     }
