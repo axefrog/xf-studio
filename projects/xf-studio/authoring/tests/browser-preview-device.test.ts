@@ -154,3 +154,58 @@ for (const completed of [true, false]) test(`adopting a hold rerasterizes a ${co
   expect(sent).toHaveLength(requests + 1);
   device.releaseScene(scene);
 });
+
+test("a mask completed after a deferred edit is recorded with the inputs it was made for, so returning to the look re-rasters the edit", () => {
+  const authoring = new AuthoringDocument(freshWorkspace());
+  const sent: RasterRequest[] = [], frames: (() => void)[] = [];
+  const worker: RasterPort = { onmessage: null, onerror: null, terminate() {},
+    postMessage(message) { if (!("cancel" in message)) sent.push(message); } };
+  const answer = (request: RasterRequest) => worker.onmessage!({ data: { i: request.i, version: request.version, size: request.size, ms: 1,
+    data: new Uint8ClampedArray(request.size * request.size * 4) } } as MessageEvent);
+  const flush = () => { while (frames.length) frames.shift()!(); };
+  let look = "A", answered = 0;
+  const drain = () => { flush(); while (answered < sent.length) { answer(sent[answered++]!); flush(); } };
+  const device = createBrowserPreviewDevice({ region: EYE_RASTER_REGION,
+    document: authoring, look: () => look, initialSize: 512, makeWorker: () => worker,
+    // Frames are deferred, as requestAnimationFrame defers them.
+    frame: run => { frames.push(run); }, refresh() {}, refreshSelection() {}, refreshQuality() {}, drawUV() {}, report() {}, measurement() {},
+    createCanvas: size => ({ width: size, height: size, getContext: () => ({ putImageData() {} }) }) as unknown as HTMLCanvasElement,
+    createPixels: (data, size) => ({ data, width: size, height: size }) as ImageData,
+  });
+  for (let i = 0; i < authoring.recipe.layers.length; i++) {
+    const size = authoring.recipe.layers[i]!.enabled ? 512 : 1;
+    device.coordinator.publish({ i, size, version: 1, ms: 1, data: new Uint8ClampedArray(size * size * 4) });
+  }
+  const scene = { maxTextureSize: 4096, layers: {
+    needsOptics: () => false, needsAlbedo: () => false,
+    setCanvases() {}, setLayerCanvas() {}, updateLayer() {},
+  } } as unknown as LayeredMakeupSurface;
+  device.connectScene(scene); device.presentInitialLayers(); flush();
+  const first = structuredClone(authoring.recipe);
+  first.layers[0]!.points[0]!.u += 0.01;
+  authoring.publishLayer(first, 0); flush();
+  expect(sent).toHaveLength(1);
+  answered = 1;
+  // The second edit is a gesture: written in place, its mask asked for on the next frame.
+  authoring.recipe.layers[0]!.points[0]!.u += 0.01;
+  authoring.gestureChanged(0);
+  const second = structuredClone(authoring.recipe);
+  // The first edit's mask completes before the second edit's frame asks for its own: its pixels show the first edit, not the second.
+  answer(sent[0]!);
+  expect(device.queueDiagnostics().completed).toBe(1);
+  expect(sent).toHaveLength(1);
+  // Leave A before the second edit's mask is made, then come back.
+  device.disconnectScene(scene);
+  look = "B";
+  authoring.replaceRecipe({ ...second, layers: second.layers.map(layer => ({ ...layer, id: `b-${layer.id}` })) });
+  device.showLook();
+  drain();
+  look = "A";
+  authoring.replaceRecipe(second);
+  const requests = sent.length;
+  expect(device.showLook()).toBe(true);
+  flush();
+  expect(sent.slice(requests).map(request => request.i)).toEqual([0]);
+  expect(sent[requests]!.layer.points).toEqual(second.layers[0]!.points);
+  device.releaseScene(scene);
+});

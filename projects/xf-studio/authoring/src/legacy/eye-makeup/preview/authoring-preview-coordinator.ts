@@ -32,7 +32,8 @@ export type PreviewRenderPort = {
   releaseDisabled(index: number, layer: Layer): void;
   request(index: number, layer: Layer, priority: boolean, size: number, needsOptics: boolean): void;
   updateLayer(index: number, layer: Layer): void;
-  publish(result: CompleteRaster, layer: Layer): void;
+  /** `painted` is the layer the completed request was made for (what the pixels show), which a later edit may already have overtaken. */
+  publish(result: CompleteRaster, layer: Layer, painted: Layer): void;
   renderAll(order?: "stack" | "active-first"): void;
   refresh(): void;
   refreshQuality(): void;
@@ -112,10 +113,10 @@ export class AuthoringPreviewCoordinator {
     this.port.refresh();
   }
   /** RasterClient validates a complete bundle and its version first; this guards replacement tiers/slots. */
-  publish(result: CompleteRaster) {
+  publish(result: CompleteRaster, painted?: Layer) {
     const layer = this.document.recipe.layers[result.i];
     if (!layer || result.size !== (layer.enabled ? this.size : 1)) return false;
-    this.port.publish(result, layer);
+    this.port.publish(result, layer, painted ?? layer);
     this.lastRaster = result.ms;
     this.notify();
     this.port.refreshQuality();

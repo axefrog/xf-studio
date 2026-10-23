@@ -75,7 +75,7 @@ export function createBrowserPreviewDevice(options: {
   let coordinator: AuthoringPreviewCoordinator;
   let scheduler: AuthoringRenderScheduler;
   const client = createRasterClient(options.makeWorker,
-    result => coordinator.publish(result), reason => coordinator.fail(reason), options.region);
+    (result, requested) => coordinator.publish(result, requested), reason => coordinator.fail(reason), options.region);
   const opticalKey = (layer: ReadonlyDeep<Layer>, size: number) => previewOpticalKey(layer, size, options.region.fineGlitter);
   coordinator = new AuthoringPreviewCoordinator(authoring, options.initialSize, {
     maxTextureSize: () => viewer?.maxTextureSize ?? 4096,
@@ -119,13 +119,13 @@ export function createBrowserPreviewDevice(options: {
     },
     request: (i, layer, priority, size, needsOptics) => client.request(i, layer, priority, size, needsOptics),
     updateLayer: (i, layer) => { viewer?.layers.updateLayer(i, layer); },
-    publish: ({ i, data, size, optics: maps, albedo, glitterStats }, layer) => {
+    publish: ({ i, data, size, optics: maps, albedo, glitterStats }, layer, painted) => {
       // A surface not shown holds this canvas: the new mask goes on a canvas of its own (HeldLayers).
       if (canvases[i].width !== size || isHeld(canvases[i])) {
         canvases[i] = createCanvas(size);
       }
       canvases[i].getContext("2d")!.putImageData(createPixels(data, size), 0, 0);
-      rastered.set(canvases[i], JSON.stringify(layer));
+      rastered.set(canvases[i], JSON.stringify(painted));
       if (maps || albedo) {
         const key = opticalKey(layer, size), prior = optics[i];
         optics[i] = { key, data: maps ?? (prior?.key === key ? prior.data : undefined), albedo: albedo ?? (prior?.key === key ? prior.albedo : undefined) };
