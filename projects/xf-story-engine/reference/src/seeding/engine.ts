@@ -14,7 +14,7 @@ import * as ids from './ids.ts';
 import { handleDilemma } from './intersect.ts';
 import type { Instance, Layer2, SowOutcome, Trigger } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
-import { Arbiter } from './arbiter.ts';
+import { Arbiter, lapsesDue } from './arbiter.ts';
 import { compileSeed } from './compile.ts';
 import { addPredInterests, collectInterests, computeWakeups, reevaluate } from './run.ts';
 import { installRequirement, layerOfInstance, originOf } from './world.ts';
@@ -271,6 +271,7 @@ export function runWork(l2: Layer2, budget: Budget): number {
   let guard = 0;
   if (l2.boundaryDue !== undefined) {
     spend(runMaintenance(l2, l2.boundaryDue));
+    spend(lapsesDue(l2));
     l2.boundaryDue = undefined;
   }
   for (const pid of [...l2.sowQueue].sort()) {

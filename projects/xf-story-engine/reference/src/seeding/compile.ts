@@ -168,9 +168,18 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
     const fresh: Finding[] = [];
     const candidates: SeedInput[] = [seed, ...(v?.variants ?? []).map((x) => mergeParts(exp.seed, x.parts))];
     for (const cand of candidates) {
-      for (const x of laterFindings(cand, pack)) {
+      const add = (x: Finding): void => {
         const key = `${x.at}|${x.message}`;
         if (!seen.has(key)) { seen.add(key); fresh.push(x); }
+      };
+      for (const x of laterFindings(cand, pack)) add(x);
+      // The predicates a variant would run, and those of the fragments it plays, are checked as the chosen document's are.
+      try {
+        const compiledCand = resolvePreds(cand);
+        for (const x of hasLaterAtoms(predSites(compiledCand))) add(x);
+        for (const x of hasLaterAtoms(pack.closure(compiledCand).fragments.flatMap((fr) => fragmentSites(fr)))) add(x);
+      } catch (e) {
+        if (!(e instanceof PredSyntaxError)) throw e;
       }
     }
     if (fresh.length > 0) { findings.push(...fresh); return refuse(); }
@@ -232,18 +241,20 @@ function lintLadder(c: CompiledSeed, p: LadderParams, ctx: LintCtx): Finding[] {
     const frag = ctx.pack.fragment(lapse);
     const needs = frag?.needs as Pred | undefined;
     const lapseAfter = p.lapseAfter;
-    let hasSince = false;
-    const noActs = new Set<string>();
-    if (needs) {
-      walkPred(needs, (n) => {
-        if (typeof n === 'string') return;
-        if ('since' in n && 'atLeast' in n && 'beat' in n.since && n.since.beat === 'offer-1' && canonicalEqual(n.atLeast, lapseAfter)) hasSince = true;
-        if ('count' in n && n.since && 'beat' in n.since && n.since.beat === 'offer-1' && ((n.op === 'eq' && n.value === 0) || (n.op === 'le' && n.value === 0) || (n.op === 'lt' && n.value === 1))) {
-          noActs.add(canonicalKey(n.count));
-        }
-      });
-    }
-    const missingActs = (p.pacing?.acts ?? []).filter((a) => !noActs.has(canonicalKey({ participant: p.with, ...a })) && !noActs.has(canonicalKey(a)));
+    // Every way the fragment's `needs` can be yes has to imply the timing and the absence of each pacing act: an `all` is proved by any
+    // one part, an `any` by every part, and a `not` or a bare `yes` proves nothing.
+    const implies = (x: Pred | undefined, test: (atom: Pred) => boolean): boolean => {
+      if (x === undefined || typeof x === 'string') return false;
+      if ('all' in x) return x.all.some((y) => implies(y, test));
+      if ('any' in x) return x.any.length > 0 && x.any.every((y) => implies(y, test));
+      if ('not' in x) return false;
+      return test(x);
+    };
+    const isSince = (n: Pred): boolean => typeof n !== 'string' && 'since' in n && 'atLeast' in n && 'beat' in n.since && n.since.beat === 'offer-1' && canonicalEqual(n.atLeast, lapseAfter);
+    const hasSince = implies(needs, isSince);
+    const missingActs = (p.pacing?.acts ?? []).filter((a) => !implies(needs, (n) => typeof n !== 'string' && 'count' in n && !!n.since && 'beat' in n.since && n.since.beat === 'offer-1' &&
+      ((n.op === 'eq' && n.value === 0) || (n.op === 'le' && n.value === 0) || (n.op === 'lt' && n.value === 1)) &&
+      (canonicalKey(n.count) === canonicalKey({ participant: p.with, ...a }) || canonicalKey(n.count) === canonicalKey(a))));
     if (!frag || !hasSince || missingActs.length > 0) {
       e('L-10', `The lapse exit "${lapse}" has to be a fragment whose "needs" says when it is due: since the first offer (offer-1) at least ${lapseAfter.s} ${lapseAfter.clock === 'game' ? 'game ' : 'play '}seconds, and none of the pacing acts since then. The profile cannot put that condition on the fragment, so it checks it.`, 'profile.params.exits.lapse');
     }

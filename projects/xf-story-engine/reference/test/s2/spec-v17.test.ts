@@ -303,6 +303,8 @@ describe('S2 2.5: persistence defaults', () => {
   test('a game-fact write and a reward stay lasting by default', () => {
     const { w, inst } = stage();
     expect(apply(w, inst, [{ reward: { table: 't', tier: 'low' } }])).toBe(0);
+    expect(apply(w, inst, [{ game: { fact: 'x', set: 1 }, capability: 'story.write-vanilla' }])).toBe(0);
+    expect(w.port.gameWrites).toHaveLength(1);
   });
 });
 
@@ -412,9 +414,7 @@ describe('S2 8.3 in-scene offers (v1.7)', () => {
     expect(ask.stopped).not.toBe(true);
     expect(ask.state).toBe('released');
     expect(first.state).toBe('displayed');
-    // A push of the same kind is stopped by the same count.
-    const normal = inst.st.deliveries.find((d) => d.beat === 'meet')!;
-    expect(normal.stopped).not.toBe(true);
+    // (An ordinary push over the same count is stopped: round2.test.ts, "the named test gaps".)
   });
 
   test('a scene that ends takes its offer with it: queued, released or displayed, it is dropped and its beat skipped as rejected', () => {

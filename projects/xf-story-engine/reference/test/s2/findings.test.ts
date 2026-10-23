@@ -128,7 +128,7 @@ describe('L2-05 and L2-06: committing roles', () => {
     const age = w.k.value(guest.cast!, 'age') as number;
     expect(age).toBeGreaterThanOrEqual(41);
     expect(age).toBeLessThanOrEqual(43);
-    // A constraint outside the stand-in's construction requirements is checked for rejection too: a higher layer overriding it withdraws the seed.
+    // That the requirement is watched for rejection is tested in round2.test.ts (R2-08).
     expect(inst.st.state).not.toBe('withdrawn');
   });
 });

@@ -11,7 +11,7 @@ needed, each the most faithful reading found. Entries 52 to 57 are **new** since
 of the reference model (findings SR-01 to SR-14, fixed): readings that the fixes needed. Entries 31, 33,
 37, 39, 42 and 50 were amended by the same review and say so. A second review (SR2-01 to SR2-08, fixed)
 found that entries 54 to 57 claimed more than the code guaranteed; entries 33, 53, 54, 55, 56 and 57
-now state exactly what the code does, including what it leaves alone. Entries 58 to 91 are **new** from the v4 and layer 2 build and its fix round (the last section, with its findings for the
+now state exactly what the code does, including what it leaves alone. Entries 58 to 92 are **new** from the v4 and layer 2 build and its fix round (the last section, with its findings for the
 coordinator). Entry numbers are stable so messages and
 reviews can point at them; the sections below order them worst first, meaning the entries that change
 observable results come before presentation choices.
@@ -499,8 +499,10 @@ change observable behaviour or a frozen digest come before the ones that only fi
     (a function the save needs is gone) rebuilds the instance table and the arbiter for reading and writes nothing:
     no root, watcher, contribution, withdrawal, maintenance or lifecycle write (L2-12). A play-clock duration that was
     running restarts from the load (S2 2.12): a play-clock `since` stamp that has not yet elapsed, a timed `wait`, an
-    unattended plan and an aftermath on the play clock are re-stamped to the load's cumulative play time; a duration
-    that had already passed stays passed.
+    unattended plan and an aftermath on the play clock restart from the load's cumulative play time; a duration
+    that had already passed stays passed. The state and beat stamps are history and are never rewritten: a restart is
+    recorded for that one duration (`playRestarts`), so two durations on one stamp, one passed and one running, stay
+    apart (R2-02). A game-clock offer lapse is kept (`lapseGameAt`), not restarted.
 70. **A staged batch is a snapshot and a restore, with one shared allowance. (new)** V4-26 allows it. The batch holds the
     revision and captures of the store, frames, beliefs, events and groups; `discard` restores all of them and
     invalidates the query, summary, resolution and retention caches. A write outside the batch while it is open is
@@ -508,7 +510,8 @@ change observable behaviour or a frozen digest come before the ones that only fi
     inside the batch's own write callback too: its operations are not persisted). Discard also restores the settings log,
     the seed table, streaming and the summaries' canon sets (review R-1, R-2). A change is a snapshot of what happened:
     `emit` copies the payload, so a staged write that is discarded, or a later write, cannot alter a notification that was
-    already queued (L2-01). Every read made through a batch (`resolve`, `value`, `trace`, `query`) draws on **one**
+    already queued (L2-01). A batch whose reads ran out of the allowance is never committed: the release that staged it fails
+    softly and the batch is discarded, since a check that ran out proved nothing (R2-01). Every read made through a batch (`resolve`, `value`, `trace`, `query`) draws on **one**
     allowance, S0 14.2a's "shared work allowance", not a fresh one each; the batch exposes what it has used. The spec does
     not say what a failing commit does; the reference has none, so the failure path is a discard.
 71. **Redaction scrubs settings content and the director's beliefs about V; a new v4 lineage records its initial
@@ -586,7 +589,8 @@ change observable behaviour or a frozen digest come before the ones that only fi
 83. **Closure status and witnessing (S2 v1.6 6.4, L2-17).** `resolved` only after T12; every T13 is `abandoned` even if
     its plan makes `end` yes; forced closures (withered, withdrawn, T13) retire open promises. `witnessed` is derived
     from exposure: for T12, true when a delivery of one of the beats that completed last (the ending beats) has a
-    receipt of at least `presented`; for T13 and forced closures, false (the plan is not shown). A seed that reaches its
+    receipt of at least `presented` (the beat that completed last is found by the order of the record, `doneAt`, because two completions
+    in one pass share their stamps, R2-04); for T13 and forced closures, false (the plan is not shown). A seed that reaches its
     end with no display receipt (a channel-free completion) is therefore unwitnessed and queues the news.
 84. **Links (S2 v1.6 7.1).** `join` combines the chain links (`because`, `then`); `obstructedBy` is a guard that must
     always hold. A beat in `start` needs no chain links. A beat a `failure` leads to waits for that failure (the failing
@@ -619,6 +623,15 @@ change observable behaviour or a frozen digest come before the ones that only fi
     so the new state's wake-ups are installed (T10 gets its T13 wake-up).
 91. **The kernel's operation Id (L2-04).** An external operation's Id is `H("xop", stamp, op, ordinal)`: the epoch only
     refuses stale operations (I-16).
+
+92. **The second review's findings (R2-01 to R2-09).** The staged commit is bounded (R2-01, see 70). A canon event's exposure wakes the instances and
+    the sowing watcher that read it (`exposed` with an event pattern watches the event kind, R2-03). L-06 evaluates each link condition under
+    every answer to the offer, response atoms set by the answer and everything else unknown, so a grouped test (`is go or skip`) does not
+    tell two actions apart and a test of any action tells actions from a decline only (R2-05). The ladder's lapse contract must be implied by
+    every way the fragment's `needs` can be yes (R2-06). Predicates in the fragments and documents of an unchosen variant are checked for later
+    capabilities (R2-07). `commitRoles` first binds every role (a stand-in is minted), then installs goals, relationships and requirements, so
+    a role may name one that commits later in the order (R2-08). A game-clock offer lapse (`lapse.after.clock = game`) is kept as a game time,
+    falls due at the window boundary that ends the window it fell due in, and is not restarted by a load (R2-09).
 
 ### Spec findings for the coordinator
 

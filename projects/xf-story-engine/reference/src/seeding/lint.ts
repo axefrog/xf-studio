@@ -13,7 +13,8 @@ import { atoms, bound, effectSites, fragmentSites, playOf, predSites, type Effec
 import type { PackIndex } from './packs.ts';
 import { barredRoles } from './floors.ts';
 import { L2Registry, type PortReport } from './registries.ts';
-import { compare, walkPred } from './pred.ts';
+import { compare, kAll, kAny, kNot, walkPred } from './pred.ts';
+import { respMatches } from './eval.ts';
 import type {
   CompiledSeed, EffectDecl, Finding, FactsTable, Fragment, Pack, Pred, Role, RolePredicate, TextUnit,
 } from './types.ts';
@@ -86,6 +87,19 @@ export function reachableBeats(c: CompiledSeed): Set<string> {
     }
   }
   return reach;
+}
+
+/** A link condition under one answer to the offer in `beat`: its response atoms are set by the answer, every other atom is unknown (Kleene). */
+function answerVerdict(p: Pred, beat: string, answer: string): string {
+  const go = (x: Pred): 'yes' | 'no' | 'maybe' => {
+    if (x === 'yes' || x === 'no') return x;
+    if ('all' in x) return kAll(x.all.map(go));
+    if ('any' in x) return kAny(x.any.map(go));
+    if ('not' in x) return kNot(go(x.not));
+    if ('response' in x && x.response === beat) return respMatches(answer, x.is) ? 'yes' : 'no';
+    return 'maybe';
+  };
+  return go(p);
 }
 
 /** Every role a predicate argument names with `{ role }`. */
@@ -283,22 +297,20 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
     }
     return ps;
   };
-  // The responses the seed's links read, per offer beat: `action:<id>` names one action; `action` and `action:*` name them all ('*').
-  const namedResponses = (beat: string): Set<string> => {
-    const named = new Set<string>();
-    for (const b of Object.values(c.beats)) {
-      for (const l of b.links ?? []) {
+  // What the seed's links make of each answer to an offer (S2 section 2.9, L-06): every link condition that reads the offer's response is
+  // evaluated with the response atoms of that beat set by the answer and everything else unknown, so a grouped test
+  // ("is go or skip") is seen to treat the two alike, and a test of "any action" to tell actions from a decline only.
+  const linkVerdicts = (beat: string, answer: string): string[] => {
+    const out2: string[] = [];
+    for (const b2 of Object.values(c.beats)) {
+      for (const l of b2.links ?? []) {
         if (!('because' in l) || !l.on) continue;
-        walkPred(l.on, (n) => {
-          if (typeof n === 'string' || !('response' in n) || n.response !== beat) return;
-          for (const x of n.is) {
-            if (x === 'action' || x === 'action:*') named.add('*');
-            else if (x.startsWith('action:')) named.add(x);
-          }
-        });
+        let reads = false;
+        walkPred(l.on, (n) => { if (typeof n !== 'string' && 'response' in n && n.response === beat) reads = true; });
+        if (reads) out2.push(answerVerdict(l.on, beat, answer));
       }
     }
-    return named;
+    return out2;
   };
   const consumed = (fact: string): boolean => {
     const decl = c.facts?.[fact];
@@ -321,24 +333,27 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
     if (!o || o.choice !== 'consequential') continue;
     const at = `fragments.${frag.id}.offer`;
     // S2 section 2.9 (L-06): every action has a consequence that something reads, either a write to a seed fact with a consumer or a
-    // link whose `on` reads the response ({ response: beat, is: [action:<id>] }); and no two actions have the same consequence:
-    // their writes, as sets of fact = value pairs, differ, or a response link tells them apart.
-    const named = namedResponses(beat);
-    const writesOf = (a: (typeof o.actions)[number]): string[] => (a.writes ?? []).flatMap((w) => ('fact' in w ? [w.set !== undefined ? `${w.fact}=${w.set}` : `${w.fact}+=${w.add ?? 0}`] : []));
-    const readableOf = (a: (typeof o.actions)[number]): string[] => [
-      ...(a.writes ?? []).flatMap((w) => ('fact' in w && consumed(w.fact) ? [w.set !== undefined ? `${w.fact}=${w.set}` : `${w.fact}+=${w.add ?? 0}`] : [])),
-      ...(named.has(`action:${a.id}`) ? [`response:${a.id}`] : named.has('*') ? ['response:*'] : []),
-    ];
-    const withoutConsequence = o.actions.filter((a) => readableOf(a).length === 0).map((a) => a.id);
-    const fullKey = (a: (typeof o.actions)[number]): string => JSON.stringify([...new Set([...writesOf(a), ...(named.has(`action:${a.id}`) ? [`response:${a.id}`] : named.has('*') ? ['response:*'] : [])])].sort());
-    const keys = o.actions.map(fullKey);
-    const same = o.actions.filter((a, i) => keys.indexOf(keys[i]!) !== i || keys.lastIndexOf(keys[i]!) !== i).map((a) => a.id);
+    // link whose `on` reads the response; and no two actions have the same consequence: their writes, as sets of fact = value pairs,
+    // differ, or a response link tells them apart.
+    const answers = [...o.actions.map((a) => `action:${a.id}`), 'null', ...o.decline.map((d) => `decline:${d.id}`)];
+    const verdicts = new Map(answers.map((x) => [x, linkVerdicts(beat, x)] as const));
+    const differs = (x: string, y: string): boolean => JSON.stringify(verdicts.get(x)) !== JSON.stringify(verdicts.get(y));
+    const writesOf = (a: (typeof o.actions)[number]): string[] => [...new Set((a.writes ?? []).flatMap((w) => ('fact' in w ? [w.set !== undefined ? `${w.fact}=${w.set}` : `${w.fact}+=${w.add ?? 0}`] : [])))].sort();
+    const readsWrite = (a: (typeof o.actions)[number]): boolean => (a.writes ?? []).some((w) => 'fact' in w && consumed(w.fact));
+    const readsResponse = (a: (typeof o.actions)[number]): boolean => answers.some((x) => x !== `action:${a.id}` && differs(`action:${a.id}`, x));
+    const withoutConsequence = o.actions.filter((a) => !readsWrite(a) && !readsResponse(a)).map((a) => a.id);
+    const same = new Set<string>();
+    for (const [i, a1] of o.actions.entries()) {
+      for (const a2 of o.actions.slice(i + 1)) {
+        if (JSON.stringify(writesOf(a1)) === JSON.stringify(writesOf(a2)) && !differs(`action:${a1.id}`, `action:${a2.id}`)) { same.add(a1.id); same.add(a2.id); }
+      }
+    }
     if (o.actions.length < 2) {
       out.error('L-06', `The offer in "${beat}" is a consequential choice with fewer than two actions. A choice that changes nothing is flavour.`, at, { fix: 'Give it a second action, or mark the choice "flavour".' });
     } else if (withoutConsequence.length > 0) {
       out.error('L-06', `The offer in "${beat}" is a consequential choice, but ${withoutConsequence.map((x) => `"${x}"`).join(', ')} ${withoutConsequence.length === 1 ? 'has' : 'have'} no consequence anything reads. An action needs a write to a seed fact with a consumer, or a link whose "on" reads its response.`, at, { fix: 'Give each action a "set" on a seed fact with a consumer, or a link that reads its response; or mark the choice "flavour".' });
-    } else if (same.length > 0) {
-      out.error('L-06', `The offer in "${beat}" is a consequential choice, but ${same.map((x) => `"${x}"`).join(', ')} ${same.length === 1 ? 'has' : 'have'} the same consequence as another action. Their writes have to differ, or a response link has to tell them apart.`, at, { fix: 'Write different values, or read each action\'s response in a link.' });
+    } else if (same.size > 0) {
+      out.error('L-06', `The offer in "${beat}" is a consequential choice, but ${[...same].map((x) => `"${x}"`).join(', ')} ${same.size === 1 ? 'has' : 'have'} the same consequence as another action. Their writes have to differ, or a response link has to tell them apart.`, at, { fix: 'Write different values, or read each action\'s response in a link.' });
     }
   }
 

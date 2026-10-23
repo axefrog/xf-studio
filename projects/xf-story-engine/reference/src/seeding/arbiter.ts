@@ -411,6 +411,19 @@ function expirations(l2: Layer2, s: number): void {
   }
 }
 
+/** Game-clock lapses fall due at a window boundary (S2 section 4.3): the displayed offers whose time has come lapse now. Returns the units used. */
+export function lapsesDue(l2: Layer2): number {
+  let n = 0;
+  for (const { inst, d } of allDeliveries(l2)) {
+    if (d.state !== 'displayed' || d.what !== 'offer' || d.lapseGameAt === undefined || isTerminal(inst.st.state)) continue;
+    if (gameTick(l2) < d.lapseGameAt) continue;
+    lapse(l2, inst, d);
+    l2.queueReeval(inst, 'lapse');
+    n++;
+  }
+  return n;
+}
+
 function expireQueued(l2: Layer2, inst: Instance, d: Delivery): void {
   d.state = 'expired';
   l2.record(inst, 'expired', { delivery: d.id, why: 'waited its maxWait unreleased' });
@@ -499,7 +512,8 @@ function setBeatState(l2: Layer2, inst: Instance, beat: string, state: BeatRunti
     rt.finalAt = l2.k.now;
     rt.finalAtPlay = l2.playTotal();
   }
-  l2.record(inst, 'beat', { beat, to: state });
+  const entry = l2.record(inst, 'beat', { beat, to: state });
+  if (state === 'done') rt.doneAt = entry.n;
 }
 
 // ---- prepare, then confirm (S2 section 8.4) ----
@@ -692,6 +706,12 @@ function prepare(l2: Layer2, inst: Instance, d: Delivery): PrepareResult {
     const installed = batch.write(() => commitRoles(l2, inst, need, d.id, commits));
     // 5. The fixed-part watch on everything in the batch.
     const rejected = watchFixed(l2, inst, batch, installed);
+    // A check that ran out of work allowance proved nothing: the release is not made on it (spec 14.2a, R2-01).
+    if (batch.exhausted) {
+      batch.discard();
+      l2.record(inst, 'prepare-failed', { delivery: d.id, why: 'the batch ran out of its work allowance' });
+      return { ok: false, reason: 'the batch ran out of its work allowance', hard: false };
+    }
     if (rejected.length > 0) {
       batch.discard();
       l2.record(inst, 'prepare-failed', { delivery: d.id, why: 'a fixed part was rejected', parts: rejected.map((r) => r.index) });
@@ -815,7 +835,10 @@ function offerDisplayed(l2: Layer2, inst: Instance, d: Delivery, r: DisplayRepor
   k.events.makeCanon(ev, 'observed', inst.id);
   d.offerEvent = ev;
   const frag = d.fragment ? fragmentOf(inst, d.fragment) : undefined;
-  if (frag?.offer) d.lapseAt = l2.arbiter.play + frag.offer.lapse.after.s;
+  if (frag?.offer) {
+    if (frag.offer.lapse.after.clock === 'game') d.lapseGameAt = k.now + frag.offer.lapse.after.s;
+    else d.lapseAt = l2.arbiter.play + frag.offer.lapse.after.s;
+  }
   l2.record(inst, 'display', { offer: ev, class: d.timing.class, purpose: d.timing.purpose, pull: d.pull, authored: d.authored, features: { channel: d.provenance.channel }, atPlay: r.atPlay });
 }
 

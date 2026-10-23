@@ -8,7 +8,7 @@ import { castOrder, castRole, runLadder, standInRecipe, effective } from './cast
 import { atoms, fragmentSites, playOf, predSites } from './doc.ts';
 import { applyEffects } from './effects.ts';
 import { consumeEvent } from './consume.ts';
-import { beatSincePlay, evalPred, gameTick, roleVerdict, stateSince, stateSincePlay } from './eval.ts';
+import { evalPred, gameTick, planPlayFrom, roleVerdict, sincePlayFrom, stateSince } from './eval.ts';
 import * as ids from './ids.ts';
 import type { Instance, Layer2, Trigger } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
@@ -167,12 +167,11 @@ export function closeSeed(l2: Layer2, inst: Instance, to: SeedStateName, row: st
 function endingExposed(inst: Instance, row: string): boolean {
   if (row !== 'T12') return false;
   const st = inst.st;
-  const done = Object.entries(st.beats).filter(([, rt]) => rt.state === 'done' && rt.finalAt !== undefined);
+  // The beat that completed last, by the order of the record (the stamps of two completions in one pass can coincide).
+  const done = Object.entries(st.beats).filter(([, rt]) => rt.state === 'done' && rt.doneAt !== undefined);
   if (done.length === 0) return false;
-  const last = Math.max(...done.map(([, rt]) => rt.finalAtPlay ?? -1));
-  const lastGame = Math.max(...done.map(([, rt]) => rt.finalAt!));
-  const ending = done.filter(([, rt]) => (rt.finalAtPlay ?? -1) === last && rt.finalAt === lastGame).map(([key]) => key);
-  return st.receipts.some((r) => r.beat !== undefined && ending.includes(r.beat) && r.grade !== 'ambient');
+  const ending = done.reduce((a, b) => (b[1].doneAt! > a[1].doneAt! ? b : a))[0];
+  return st.receipts.some((r) => r.beat === ending && r.grade !== 'ambient');
 }
 
 /** The window whose close policy applies: the release window after a release, else the lowest-index window (S2 section 2.7). */
@@ -317,7 +316,7 @@ function step(l2: Layer2, inst: Instance): boolean {
     transition(l2, inst, 'resolved', 'T12', 'the end state was reached');
     return true;
   }
-  if (state === 'unattended' && durationElapsed(l2, st.entered.unattended, st.enteredPlay.unattended, doc.unattended.after)) {
+  if (state === 'unattended' && durationElapsed(l2, st.entered.unattended, planPlayFrom(inst), doc.unattended.after)) {
     applyEffects(l2, inst, doc.unattended.outcome, { origin: 'unattended', tag: 'unattended' });
     mintUnattendedEvents(l2, inst);
     transition(l2, inst, 'resolved', 'T13', 'the world settled it without V');
@@ -452,7 +451,7 @@ export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
       else if ('hour' in atom) { hours.add(atom.hour[0]); hours.add(atom.hour[1]); }
       else if ('since' in atom && 'atLeast' in atom) {
         if (atom.atLeast.clock === 'play') {
-          const from = 'beat' in atom.since ? inst.st.beats[atom.since.beat]?.finalAtPlay : stateSincePlay(inst, atom.since.state);
+          const from = sincePlayFrom(inst, atom.since, atom.atLeast.s);
           if (from !== undefined && from + atom.atLeast.s > l2.playTotal()) addPlay(from + atom.atLeast.s, 'since');
         } else {
           const from = 'beat' in atom.since ? inst.st.beats[atom.since.beat]?.finalAt : stateSince(inst, atom.since.state);
@@ -476,9 +475,10 @@ export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
   }
   if (st.state === 'unattended') {
     const after = doc.unattended.after;
-    if (after.clock === 'play') addPlay((st.enteredPlay.unattended ?? l2.playTotal()) + after.s, 'unattended');
+    if (after.clock === 'play') addPlay((planPlayFrom(inst) ?? l2.playTotal()) + after.s, 'unattended');
     else add((st.entered.unattended ?? now) + after.s, 'unattended');
   }
+  for (const d of st.deliveries) if (d.state === 'displayed' && d.what === 'offer' && d.lapseGameAt !== undefined) add(d.lapseGameAt, 'lapse');
   for (const [key, rt] of Object.entries(st.beats)) {
     const b = doc.beats[key]!;
     if (rt.state === 'available' && b.kind === 'aftermath' && b.aftermath && !rt.delayed) {
@@ -527,6 +527,10 @@ export function addPredInterests(l2: Layer2, p: Pred, inst: Instance | undefined
     else if ('count' in atom) {
       const w: Selector['where'] = atom.count.kind === undefined ? [] : [{ path: 'kind', op: 'eq', arg: atom.count.kind }];
       add({ kind: 'core:event', slot: '*', where: w });
+    } else if ('exposed' in atom) {
+      // Exposure to a canon event changes when such an event is minted or made canon (R2-03).
+      const ek = atom.exposed.event?.kind;
+      add({ kind: 'core:event', slot: '*', where: ek === undefined ? [] : [{ path: 'kind', op: 'eq', arg: ek }] });
     } else if ('fn' in atom) {
       for (const r of atom.reads) {
         if (r.fact) factInterest(r.fact);

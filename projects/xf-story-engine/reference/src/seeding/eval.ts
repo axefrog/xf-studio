@@ -161,6 +161,29 @@ export const stateSincePlay = (inst: Instance, state: string): number | undefine
 /** The cumulative play time of a beat's last move into a final or deferred state. */
 export const beatSincePlay = (inst: Instance, beat: string): number | undefined => inst.st.beats[beat]?.finalAtPlay;
 
+/** The key of a play-clock `since` duration, for its restart at a load. */
+export const sinceRestartKey = (since: { beat: string } | { state: string }, s: number): string => `since:${canonicalKey(since)}:${s}`;
+export const PLAN_RESTART_KEY = 'plan';
+
+/**
+ * The cumulative play time a play-clock `since` runs from: its state or beat's stamp, or the load it was restarted from if that is later.
+ * The stamp itself is history and is never rewritten, so another duration on the same stamp that had already passed stays passed.
+ */
+export function sincePlayFrom(inst: Instance, since: { beat: string } | { state: string }, s: number): number | undefined {
+  const base = 'beat' in since ? beatSincePlay(inst, since.beat) : stateSincePlay(inst, since.state);
+  if (base === undefined) return undefined;
+  const r = inst.st.playRestarts?.[sinceRestartKey(since, s)];
+  return r === undefined ? base : Math.max(base, r);
+}
+
+/** The cumulative play time the unattended plan's play-clock `after` runs from. */
+export function planPlayFrom(inst: Instance): number | undefined {
+  const base = inst.st.enteredPlay.unattended;
+  if (base === undefined) return undefined;
+  const r = inst.st.playRestarts?.[PLAN_RESTART_KEY];
+  return r === undefined ? base : Math.max(base, r);
+}
+
 /**
  * Game time as layer 2 reads a duration: the last simulation window boundary at or before `t`. A game-clock duration is
  * checked at window boundaries only (S2 section 4.3), so a result never depends on where the host's ticks fell.
@@ -248,7 +271,7 @@ function exposedMatches(l2: Layer2, ctx: EvalCtx, pat: ExposurePattern): boolean
 
 // ---- the evaluator ----
 
-const respMatches = (resp: string | undefined, pats: string[]): boolean => {
+export const respMatches = (resp: string | undefined, pats: string[]): boolean => {
   if (resp === undefined) return false;
   return pats.some((p) => p === resp || (p === 'action' && resp.startsWith('action:')) || (p === 'decline' && resp.startsWith('decline:')) || (p.endsWith(':*') && resp.startsWith(p.slice(0, -1))));
 };
@@ -395,7 +418,7 @@ function ex(l2: Layer2, ctx: EvalCtx, p: Pred, depth: number, explain: boolean):
   if ('since' in p && 'atLeast' in p) {
     if (!ctx.inst) return done('maybe', 'there is no instance to read');
     if (p.atLeast.clock === 'play') {
-      const fromPlay = 'beat' in p.since ? beatSincePlay(ctx.inst, p.since.beat) : stateSincePlay(ctx.inst, p.since.state);
+      const fromPlay = sincePlayFrom(ctx.inst, p.since, p.atLeast.s);
       if (fromPlay === undefined) return done('no');
       return done(verdictOf(l2.playTotal() - fromPlay >= p.atLeast.s));
     }

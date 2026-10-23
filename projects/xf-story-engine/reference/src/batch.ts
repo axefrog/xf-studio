@@ -78,6 +78,11 @@ export class StagedBatch {
     return this.allowance.used;
   }
 
+  /** The shared allowance ran out: a read made through the batch failed, so nothing it checked can be trusted (R2-01). */
+  get exhausted(): boolean {
+    return this.allowance.used > this.allowance.limit;
+  }
+
   /** A fresh operation context that draws on the batch's shared allowance. */
   private ctx(): OpCtx {
     return { allowance: this.allowance, stack: new Set(), depth: 0, peak: 0 };
@@ -108,6 +113,7 @@ export class StagedBatch {
   /** Keep the writes: they persist from now, the revision advances, and their changes are dispatched in order. */
   commit(): void {
     this.assertOpen();
+    if (this.exhausted) throw new Error('the staged batch ran out of its work allowance: it is discarded, not committed (spec 14.2a)');
     this.state = 'committed';
     this.k.batch = null;
     this.k.pending.push(...this.changes);

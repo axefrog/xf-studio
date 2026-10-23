@@ -49,19 +49,26 @@ export function commitRoles(l2: Layer2, inst: Instance, roles: string[], cause: 
   const first = !st.committed;
   const order = castOrder(inst).filter((r) => roles.includes(r));
   const nodes: Record<string, Id> = {};
+  const standIns = new Set<string>();
   const now = k.now;
+  // First every binding: a cast node, or a stand-in minted now. Goals, relationships and requirements may name a role that commits later in
+  // the order (a forward reference), so they are installed only once the whole staged map exists (R2-08).
   for (const r of order) {
     const rs = st.roles[r]!;
-    const role: Role = doc.roles[r]!;
     let node = rs.cast;
-    let standIn = false;
     if (node === undefined && rs.standIn) {
       node = k.mint(inst.id, inst.id, `role:${r}`, rs.standIn.kind);
       installStandIn(l2, inst, node, rs.standIn.constraints);
-      standIn = true;
+      standIns.add(r);
     }
+    if (node !== undefined) nodes[r] = node;
+  }
+  for (const r of order) {
+    const rs = st.roles[r]!;
+    const role: Role = doc.roles[r]!;
+    const node = nodes[r];
+    const standIn = standIns.has(r);
     if (node === undefined) continue;
-    nodes[r] = node;
     const edge = k.addEdge({ type: 'core:cast', from: inst.id, to: node, data: { role: r }, cause, id: ids.castEdgeId(inst.id, r, node, now, cause) });
     const roleFrame = st.frames.roles[r];
     if (roleFrame) k.frames.setFocus(roleFrame, { nodes: [node] }, inst.id);

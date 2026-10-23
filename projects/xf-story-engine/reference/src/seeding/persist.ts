@@ -8,6 +8,7 @@ import { canonicalKey } from '../canon.ts';
 import type { Id } from '../types.ts';
 import { Arbiter } from './arbiter.ts';
 import { atoms, fragmentSites, predSites } from './doc.ts';
+import { PLAN_RESTART_KEY, planPlayFrom, sincePlayFrom, sinceRestartKey } from './eval.ts';
 import { emptyGlobal } from './state.ts';
 import { runMaintenance } from './effects.ts';
 import * as ids from './ids.ts';
@@ -157,17 +158,15 @@ function restartPlayDurations(l2: Layer2, inst: Instance): void {
   for (const site of sites) {
     for (const { atom } of atoms(site.pred)) {
       if (!('since' in atom && 'atLeast' in atom) || atom.atLeast.clock !== 'play') continue;
-      if ('beat' in atom.since) {
-        const rt = st.beats[atom.since.beat];
-        if (rt && running(rt.finalAtPlay, atom.atLeast.s)) rt.finalAtPlay = now;
-      } else {
-        const state = atom.since.state;
-        if (running(st.enteredPlay[state], atom.atLeast.s)) st.enteredPlay[state] = now;
+      // The stamp is history and stays; the restart is recorded for this duration alone, so another duration on the same stamp that
+      // had already passed stays passed.
+      if (running(sincePlayFrom(inst, atom.since, atom.atLeast.s), atom.atLeast.s)) {
+        (st.playRestarts ??= {})[sinceRestartKey(atom.since, atom.atLeast.s)] = now;
       }
     }
   }
   const after = st.document.unattended.after;
-  if (after.clock === 'play' && running(st.enteredPlay.unattended, after.s)) st.enteredPlay.unattended = now;
+  if (after.clock === 'play' && running(planPlayFrom(inst), after.s)) (st.playRestarts ??= {})[PLAN_RESTART_KEY] = now;
   for (const [key, rs] of Object.entries(st.roles)) {
     const step = (st.document.roles[key]?.onUnfilled ?? ['wait', 'withdraw'])[rs.ladder.cursor];
     if (rs.ladder.waitUntilPlay !== undefined && typeof step === 'object' && 'wait' in step && step.wait !== 'window') rs.ladder.waitUntilPlay = now + step.wait.s;
@@ -221,7 +220,7 @@ function resetDelivery(l2: Layer2, inst: Instance, d: InstanceState['deliveries'
   } else if (d.state === 'displayed') {
     // The play-clock lapse restarts from the load (S2 section 2.12).
     const frag = d.fragment ? inst.st.closure.fragments.find((f) => f.id === d.fragment) : undefined;
-    if (frag?.offer) d.lapseAt = frag.offer.lapse.after.s;
+    if (frag?.offer && frag.offer.lapse.after.clock !== 'game') d.lapseAt = frag.offer.lapse.after.s;
     d.displayedAt = 0;
   }
 }

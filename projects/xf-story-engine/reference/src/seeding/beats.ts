@@ -239,7 +239,8 @@ function setBeat(l2: Layer2, inst: Instance, key: string, state: BeatState, extr
     rt.finalAt = l2.k.now;
     rt.finalAtPlay = l2.playTotal();
   }
-  l2.record(inst, 'beat', { beat: key, from: was, to: state });
+  const entry = l2.record(inst, 'beat', { beat: key, from: was, to: state });
+  if (state === 'done') rt.doneAt = entry.n;
 }
 
 export function skipBeat(l2: Layer2, inst: Instance, key: string, kind: 'omitted' | 'rejected', why: string): void {

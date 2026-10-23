@@ -32,7 +32,7 @@ kernel rules around them can be tested.
 - The layer 2 tests live in `reference/test/s2/`: the R1 acceptance tests and three crash-point sweeps, the
   lint matrix (each lint has a tripping seed and the passing base), casting, the lifecycle, the arbiter,
   predicates, pack lifecycle, property tests, and `fixtures.test.ts`, which indexes SF-1 to SF-64 (50 have
-  named tests; the rest name the later capability they wait for). The suite has 692 tests.
+  named tests; the rest name the later capability they wait for). The suite has 705 tests.
 
 - The **v4 core** of S0 (section 20): derives that get the query time, fact, seed and cast kinds with the offer,
   response and seed-outcome events, `outcome` and `served` on events, the `frame` change, routing to layer 2,

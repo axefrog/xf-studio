@@ -508,8 +508,10 @@ export interface Delivery {
   stopped?: boolean;
   /** An offer made inside a scene that is already running: released straight into it, past every gate (S2 section 8.3). */
   inScene?: boolean;
-  /** Play seconds, session-relative: the offer lapses at this play time. */
+  /** Play seconds, session-relative: the offer lapses at this play time (a play-clock lapse). */
   lapseAt?: number;
+  /** Game time: the offer lapses at the first window boundary at or after this (a game-clock lapse, which a load does not restart). */
+  lapseGameAt?: GameTime;
   /** Channels already tried for this logical delivery. */
   tried: ChannelId[];
   grade?: ExposureGrade;
@@ -564,6 +566,8 @@ export interface BeatRuntime {
   finalAt?: GameTime;
   /** The cumulative play time (`playTotal`) of the same move: the `since` point of a play-clock duration. */
   finalAtPlay?: number;
+  /** The record entry number of the move into `done`: orders completions exactly, where stamps can coincide. */
+  doneAt?: number;
   /** Which `failure` entry failed the beat (its index), for a `leadsTo` beat (S2 section 7.1). */
   failedBy?: number;
   releases: number;
@@ -611,6 +615,8 @@ export interface InstanceState {
   entered: Partial<Record<SeedStateName, GameTime>>;
   /** The cumulative play time at the same moments (the `since` point of a play-clock duration). */
   enteredPlay: Partial<Record<SeedStateName, number>>;
+  /** Play-clock durations that were running at a load restart from it: the cumulative play time they restart from, by duration (S2 section 2.12). */
+  playRestarts?: Record<string, number>;
   releaseWindow?: string;
   form?: string;
   latches: string[];
