@@ -45,6 +45,14 @@ export function createContactShadows(renderer: THREE.WebGLRenderer, contactShado
   const fallbackDepth = new THREE.MeshDepthMaterial();
   const size = new THREE.Vector2(), world = new THREE.Vector3(), towards = new THREE.Vector3();
   let drawn = 0;
+  /**
+   * Let this pass's target go, on a resize as on release. The uniforms are shared by every scene, so they let go of its depth texture only
+   * when they still point at it: otherwise a later sampler bind would recreate the disposed texture's storage.
+   */
+  function dropTarget() {
+    if (target && contactShadowUniforms.xfsContactDepth.value === target.depthTexture) contactShadowUniforms.xfsContactDepth.value = null;
+    target?.dispose(); target = null;
+  }
   function ensureTarget() {
     if (!target) {
       // Three counts every sampler of a program, the vertex stage's bone and morph textures included, against the fragment stage's limit
@@ -56,7 +64,7 @@ export function createContactShadows(renderer: THREE.WebGLRenderer, contactShado
     renderer.getDrawingBufferSize(size);
     const width = Math.max(1, Math.floor(size.x)), height = Math.max(1, Math.floor(size.y));
     if (target && target.width === width && target.height === height) return target;
-    target?.dispose();
+    dropTarget();
     target = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, generateMipmaps: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
       depthTexture: new THREE.DepthTexture(width, height, THREE.FloatType) });
     target.texture.name = "xfs-contact-colour"; target.depthTexture!.name = "xfs-contact-depth";
@@ -131,10 +139,7 @@ export function createContactShadows(renderer: THREE.WebGLRenderer, contactShado
      * Let the frame-sized target go (a hidden scene runtime holds none: experiment 043 §2.1). The uniforms are shared by every scene, so they
      * let go of it only when they still point at it; the shown scene's next frame points them at its own.
      */
-    releaseTarget() {
-      if (target && contactShadowUniforms.xfsContactDepth.value === target.depthTexture) contactShadowUniforms.xfsContactDepth.value = null;
-      target?.dispose(); target = null;
-    },
+    releaseTarget: dropTarget,
     /** Make the target at the drawing buffer's size, with its GPU storage, ahead of the frame that draws it, when the pass runs for `scene`. */
     allocate(scene: THREE.Scene) { if (wanted(scene)) renderer.initRenderTarget(ensureTarget()); },
     /** Developer evidence: how many flagged lights the last frame marched toward, and the target's size. */

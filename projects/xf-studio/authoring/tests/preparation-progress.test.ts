@@ -49,9 +49,11 @@ test("every stage has a plain line in both places, the host's own line wins whil
   expect(preparationLine({ stage: "programs", waiting: "driver" }, "pane")).toBe("Getting the look ready…");
 });
 
-test("the quiet line is one line at every stage: each `next` string fits the narrowest width, with or without the host's line", () => {
+test("the quiet line is one line at every stage: every string it can show fits the narrowest width, with or without the host's line", () => {
+  // Every kind of change the status line can name (a new V, or a lighting setup on the V shown), so a later kind can't slip past the cap.
+  for (const change of [undefined, "subject", "shown"] as const)
   for (const stage of PREPARATION_STAGES) for (const waiting of [null, "host", "files", "driver", "gpu"] as const) for (const detail of [undefined, "Preparing the masculine V's head from your Cyberpunk 2077 files… (step 3 of 9)"]) {
-    const line = preparationLine({ stage, waiting, ...(detail ? { detail } : {}) }, "next");
+    const line = preparationLine({ stage, waiting, ...(detail ? { detail } : {}), ...(change ? { change } : {}) }, "next");
     expect(line.length).toBeLessThanOrEqual(NEXT_LINE_MAX_CHARS);
     expect(line).not.toMatch(/step|masculine|\d/i);
   }
