@@ -12,15 +12,16 @@
  * origin, facing +Y. Vanilla meshes are referenced by path, never copied.
  */
 import { createHash } from "node:crypto";
-import { CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, coneFactor, falloff, type CreatorLight, type Vec3 } from "../creator-lighting";
-import { FINISH_SHOWROOM_MOD } from "../mod-branding";
+import { CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, coneFactor, falloff, type CreatorLight, type Vec3 } from "../preview/creator-lighting";
+import { FINISH_SHOWROOM_MOD } from "../legacy/eye-makeup/mod-branding";
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export const SHOWROOM_SCHEMA = "xfs/showroom-package-1";
 export const SHOWROOM_MOD_NAME = FINISH_SHOWROOM_MOD.modName;
 /** Bumped whenever the same inputs would build different bytes. */
-export const SHOWROOM_BUILDER_VERSION = "1";
+// 2 (runtime bridge 0.8.3): the manifest also ships beside the archive (shippedManifest).
+export const SHOWROOM_BUILDER_VERSION = "2";
 
 /** The player head's parts and face rig (feminine V, game 2.31), by path. [resource] */
 export const SHOWROOM_VANILLA = Object.freeze({

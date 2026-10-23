@@ -1,4 +1,4 @@
-import { hostDiagnosticsAt } from "../src/diagnostics/host-log";
+import { hostDiagnosticsAt } from "../src/diagnostics/host/host-log";
 
 /**
  * The desktop host's view of its structured diagnostics log (docs/diagnostics.md): JSON Lines in the app's data folder

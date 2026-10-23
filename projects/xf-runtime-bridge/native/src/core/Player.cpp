@@ -13,6 +13,30 @@ namespace
 constexpr double kDeg = 3.14159265358979323846 / 180.0;
 }
 
+uint64_t StopCount::Current() const
+{
+    return m_count.load();
+}
+
+void StopCount::Stop()
+{
+    m_count.fetch_add(1);
+}
+
+bool StopCount::StoppedSince(uint64_t aSeen) const
+{
+    return m_count.load() != aSeen;
+}
+
+void StopCount::Require(uint64_t aSeen, const std::string& aWhat) const
+{
+    if (StoppedSince(aSeen))
+    {
+        throw MethodError("stopped", aWhat + ": player.stop (or a handover, or the kill switch) came while this was running, so it "
+                                             "stopped here; what it had already done stays done");
+    }
+}
+
 TeleportRequest ParseTeleport(const json& aParams)
 {
     params::RequireOnly(aParams, {"position", "offset", "yaw", "turn", "ground", "far"});
@@ -52,6 +76,16 @@ TeleportRequest ParseTeleport(const json& aParams)
     }
     request.farOk = params::CheckBoolean(aParams, "far").value_or(false);
     return request;
+}
+
+json TeleportUndo(const Vec3& aBefore, double aYaw, const Vec3& aNow)
+{
+    json params{{"position", {aBefore[0], aBefore[1], aBefore[2]}}, {"yaw", aYaw}, {"ground", "exact"}};
+    if (std::hypot(aNow[0] - aBefore[0], aNow[1] - aBefore[1], aNow[2] - aBefore[2]) > kMaxTeleportM)
+    {
+        params["far"] = true;
+    }
+    return json{{"method", "player.teleport"}, {"params", params}};
 }
 
 std::pair<Vec3, std::optional<double>> Destination(const TeleportRequest& aRequest, const Vec3& aFrom, double aYaw)
@@ -218,4 +252,33 @@ void TeleportPacer::Take()
     oldest = now;
     m_next = (m_next + 1) % kTeleportsPerSecond;
 }
+Vec3 DirectionOf(double aYaw, double aPitch)
+{
+    return {-std::sin(aYaw * kDeg) * std::cos(aPitch * kDeg), std::cos(aYaw * kDeg) * std::cos(aPitch * kDeg), std::sin(aPitch * kDeg)};
+}
+
+Vec3 LookArc(const Vec3& aFrom, const Vec3& aTo, double aFraction)
+{
+    const double f = std::clamp(aFraction, 0.0, 1.0);
+    const double eased = f * f * (3.0 - 2.0 * f);
+    const double dot = std::clamp(aFrom[0] * aTo[0] + aFrom[1] * aTo[1] + aFrom[2] * aTo[2], -1.0, 1.0);
+    const double theta = std::acos(dot);
+    if (theta < 1e-6)
+    {
+        return aTo;
+    }
+    const double sinTheta = std::sin(theta);
+    if (sinTheta < 1e-6)
+    {
+        // Opposite: through the direction at right angles to aFrom in its horizontal plane.
+        const double h = std::hypot(aFrom[0], aFrom[1]);
+        const Vec3 side = h > 1e-6 ? Vec3{-aFrom[1] / h, aFrom[0] / h, 0.0} : Vec3{1.0, 0.0, 0.0};
+        const double half = theta * eased;
+        return {aFrom[0] * std::cos(half) + side[0] * std::sin(half), aFrom[1] * std::cos(half) + side[1] * std::sin(half),
+                aFrom[2] * std::cos(half) + side[2] * std::sin(half)};
+    }
+    const double a = std::sin((1.0 - eased) * theta) / sinTheta, b = std::sin(eased * theta) / sinTheta;
+    return {aFrom[0] * a + aTo[0] * b, aFrom[1] * a + aTo[1] * b, aFrom[2] * a + aTo[2] * b};
+}
+
 } // namespace xfb::player

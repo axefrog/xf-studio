@@ -9,8 +9,8 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { glslDeclarations, glslIssues } from "./fixtures/glsl-check";
-import { extendSkin, fullSkinDepthMaterial } from "../src/skin";
-import { createSkinMaterial, skinParameters, contactShadowUniforms } from "../src/skin-material";
+import { extendSkin, fullSkinDepthMaterial } from "../src/materials/render/skin";
+import { createSkinMaterial, skinParameters, contactShadowUniforms } from "../src/materials/render/skin-material";
 import { createSkinScatter } from "../src/platform/scene/skin-scatter";
 import { createContactShadows } from "../src/platform/scene/contact-shadow";
 import { createMakeupStack, initialRecipe } from "./fixtures/eye-region";

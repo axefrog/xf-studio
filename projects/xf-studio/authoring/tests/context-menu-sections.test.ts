@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { StudioContextHit } from "../src/studio-context-targets";
-import type { ViewportHit, ViewportHostKind } from "../src/viewport-attachment";
+import type { StudioContextHit } from "../src/app/studio-context-targets";
+import type { ViewportHit, ViewportHostKind } from "../src/app/viewport-attachment";
 import type { Feedback } from "../src/studio-ui/feedback";
 import { menuFromSections, menuSections, type MenuItem } from "../src/studio-ui/menu";
 import { StudioRuntime, type Port } from "../src/studio-ui/runtime";

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { contextCandidates, type StudioContextHit } from "../src/studio-context-targets";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { contextCandidates, type StudioContextHit } from "../src/app/studio-context-targets";
 import { convertToBezier } from "../src/engines/layered-makeup/bezier-path";
 import { matchCommands } from "../src/studio-ui/commands";
 import { libraryState } from "../src/studio-ui/panels/collection";
@@ -76,14 +76,17 @@ test("the library chip distinguishes unsaved, saved, newer-elsewhere and busy st
   const frame = (library: object, persistence?: object) => ({ library, persistence }) as unknown as Frame;
   const draft = { id: "c", name: "C", revision: 3, presets: [] };
   expect(libraryState(frame({ summaries: [] })).label).toBe("Loading library…");
-  expect(libraryState(frame({ summaries: [], draft: { ...draft, revision: undefined } })).label).toBe("Not saved yet");
+  // A read-only window (another one holds the workspace) makes no claim about saving.
+  expect(libraryState({ library: { summaries: [], draft: { ...draft, revision: undefined } }, status: { lease: { phase: "read-only", writable: false,
+    message: "This workspace is open in another window.", canTakeOver: true, refusal: "" } } } as unknown as Frame)).toMatchObject({ label: "Read-only", tone: "neutral" });
+  expect(libraryState(frame({ summaries: [], draft: { ...draft, revision: undefined } })).label).toBe("No version yet");
   expect(libraryState(frame({ summaries: [{ id: "c", revision: 5 }], draft })).label).toBe("Newer version saved");
   expect(libraryState(frame({ busy: true, progress: { phase: "working", message: "Saving" }, summaries: [], draft })).label).toBe("Working…");
   expect(libraryState(frame({ summaries: [], draft }, { baseline: "known", dirty: false, dirtyPresets: [] })).label).toBe("Saved");
   const dirty = libraryState(frame({ summaries: [], draft }, { baseline: "known", dirty: true, dirtyPresets: ["a", "b"], structureDirty: true }));
-  expect(dirty).toMatchObject({ label: "Unsaved changes", tone: "info" });
+  expect(dirty).toMatchObject({ label: "Changed since last version", tone: "info" });
   expect(dirty.detail).toContain("Changed since version 3");
-  expect(dirty.detail).toContain("Saving makes version 4.");
+  expect(dirty.detail).toContain("Save version makes version 4.");
   expect(dirty.detail).toContain("the collection's name or order and 2 presets");
   expect(libraryState(frame({ summaries: [], draft }, { baseline: "unknown", dirtyPresets: [] })).label).toBe("Autosaved draft");
 });

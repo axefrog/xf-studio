@@ -16,7 +16,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import { planCollection } from "../src/preset-collection";
+import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { compileFlatPreset } from "../src/engines/layered-makeup/preset-compiler";
 import { encodeFlatDds, flatMipChain, type FlatMapChannel } from "../src/engines/layered-makeup/flat-mip-chain";
 import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
@@ -118,7 +118,7 @@ function compareSupplied(args: string[]) {
 }
 
 async function compareInventory(args: string[]) {
-  const { archiveInventory } = await import("../src/archive-inventory-fs");
+  const { archiveInventory } = await import("../src/legacy/eye-makeup/export/host/archive-inventory-fs");
   const build = resolve(args[0] ?? "");
   const plan = JSON.parse(readFileSync(resolve(build, "build.json"), "utf8")).plan;
   const py = JSON.parse(runPython(`
@@ -190,7 +190,7 @@ for preset,record in zip(b['plan']['presets'],b['compiled']):
 print(json.dumps({'textures':checked,'inputPngEqualsRawAndExportPngEqualsDdsLevel0':same}))
 `, build));
   const { verifyBuild } = await import("../src/features/eye-makeup/verify/verify-build");
-  const { createWolvenKitVerifierTools } = await import("../src/verifier-wolvenkit");
+  const { createWolvenKitVerifierTools } = await import("../src/legacy/eye-makeup/export/host/verifier-wolvenkit");
   const workDir = resolve(build, "verify-ts");
   rmSync(workDir, { recursive: true, force: true });
   started = performance.now();

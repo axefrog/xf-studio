@@ -7,13 +7,13 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ExportRefusal, type ResourceTools } from "../../../platform/api";
-import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "../../../eye-plate-service";
-import { plateReachInput, readManifestPlateReach } from "../../../plate-uv-footprint-io";
+import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "../../../legacy/eye-makeup/plate/host/eye-plate-service";
+import { plateReachInput, readManifestPlateReach } from "../../../legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { plateUvFootprint } from "../../../engines/layered-makeup/plate-uv-window";
-import { PLATE_STEMS, plateStem } from "../../../package-resource-builder";
-import { PackageToolError } from "../../../package-build-wolvenkit";
-import type { PackagePlate } from "../../../package-action";
-import type { PlateReachInput } from "../../../plate-reach";
+import { PLATE_STEMS, plateStem } from "../../../legacy/eye-makeup/export/host/package-resource-builder";
+import { PackageToolError } from "../../../legacy/eye-makeup/export/host/package-build-wolvenkit";
+import type { PackagePlate } from "../../../legacy/eye-makeup/export/package-action";
+import type { PlateReachInput } from "../../../legacy/eye-makeup/export/plate-reach";
 
 /**
  * What the host hands the builder for the plate: the plate directory and, for the built-in plate, its cache manifest and
@@ -56,12 +56,17 @@ export function plateBuilderInput(value: unknown): PlateBuilderInput {
 export function plateProvenance(manifestPath: string | undefined, mesh: string, morph: string): { record: PackagePlate; morphTargets?: number } {
   const meshSha256 = fileHash(mesh), morphSha256 = fileHash(morph);
   if (!manifestPath) return { record: { source: "override", meshSha256, morphSha256 } };
-  const manifest = JSON.parse(readFileSync(existing(manifestPath, "Plate manifest"), "utf8"));
+  const path = existing(manifestPath, "Plate manifest");
+  // A truncated or unreadable manifest is a plate that doesn't match its files, a refusal like any other (never a raw parse error).
+  let manifest: any;
+  try { manifest = JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, "")); }
+  catch { return refuse("package_plate_mismatch", "The eye plate manifest can't be read."); }
   const files = manifest?.files ?? {};
   if (manifest?.schema !== EYE_PLATE_MANIFEST_SCHEMA || files.mesh?.sha256 !== meshSha256 || files.morph?.sha256 !== morphSha256 ||
       !Number.isSafeInteger(manifest?.verification?.morphTargets))
     refuse("package_plate_mismatch", "The eye plate manifest does not match the plate resources.");
-  return { record: packagePlateRecord(manifest), morphTargets: manifest.verification.morphTargets };
+  try { return { record: packagePlateRecord(manifest), morphTargets: manifest.verification.morphTargets }; }
+  catch { return refuse("package_plate_mismatch", "The eye plate manifest does not match the plate resources."); }
 }
 
 /** The UV footprint a plate manifest records; null when it records none (a plate cached before footprints were recorded). */

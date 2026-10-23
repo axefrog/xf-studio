@@ -1,4 +1,4 @@
-import type { EyeMakeupFacade } from "../../studio-presentation";
+import type { EyeMakeupFacade } from "../../app/studio-presentation";
 
 /** A finish as the port's finish catalogue publishes it. */
 type FinishDescriptor = ReturnType<EyeMakeupFacade["finishCatalogue"]>[number];

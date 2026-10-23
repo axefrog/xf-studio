@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { forwardDecal, gbufferColour, type Rgb } from "../../../face-decal-material";
+import { forwardDecal, gbufferColour, type Rgb } from "../../../materials/render/face-decal-material";
 import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "../finish-export";
 import { FRESNEL_TINT_TERM } from "./fresnel-tint";
-import { patchSkinLight, skinLightMapsChunk, skinLightUniforms } from "../../../skin-material";
+import { patchSkinLight, skinLightMapsChunk, skinLightUniforms } from "../../../materials/render/skin-material";
 import { declarePass, type SkinLight } from "../../../platform/api/scene";
 
 /**

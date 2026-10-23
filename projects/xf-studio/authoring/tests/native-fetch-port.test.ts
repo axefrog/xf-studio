@@ -3,14 +3,14 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MountedArchive } from "../src/archive-precedence";
-import { refFromPath } from "../src/depot-path";
+import type { MountedArchive } from "../src/game/archive-precedence";
+import { refFromPath } from "../src/game/depot-path";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { DEFAULT_LIMITS } from "../src/native/limits";
 import { type NativeDecoder, WorkerDecoder } from "../src/native/native-decode";
 import { classifyNativeFailure, NativeBudgetError, NativeDecompressError, NativeMalformedError, NativeUnsupportedError } from "../src/native/native-errors";
 import { inProcessDecoder, NATIVE_ROOTS, type NativeFetchedResource, NativeFirstFetcher, NativeInternalError, type NativeReader, nativeReaderIdentity } from "../src/native/native-fetch-port";
-import type { FetchedResource, ResourceFetchPort } from "../src/resource-graph";
+import type { FetchedResource, ResourceFetchPort } from "../src/game/resource-graph";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
 

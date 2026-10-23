@@ -99,6 +99,6 @@ flowchart LR
 
 ## Related pages
 
-[NPC reactions](npc-reactions.md) · [Quests and story](quests-and-story.md) · [Player control](player-control.md) · [Lip sync](lipsync.md) · [Facial expressions](facial-expressions.md) · [World and streaming](world-and-streaming.md) · [Runtime access](runtime-access.md) · [NPC direction design](../research/runtime/npc-direction-design.md)
+[NPC reactions](npc-reactions.md) · [Quests and story](quests-and-story.md) · [Player control](player-control.md) · [Lip sync](lipsync.md) · [Facial expressions](facial-expressions.md) · [World and streaming](world-and-streaming.md) · [Runtime access](runtime-access.md) · [NPC direction design](../research/runtime/npc-direction-design.md) · [Channels to the player](player-channels.md)
 </content>
-</invoke>
+</invoke> · [Population and affiliations](population-and-affiliations.md)

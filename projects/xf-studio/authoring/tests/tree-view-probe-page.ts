@@ -15,9 +15,11 @@ export type TreeProbe = { ok: boolean; failure?: string;
   empty: { frame: Rect; message: Rect; shown: boolean };
   grown: { viewHeight: number; rowsInView: number; drawnInView: number };
   status: { frame: Rect; status: Rect; scrollTop: number };
-  focus: { before: string | null; after: string | null } };
+  focus: { before: string | null; after: string | null };
+  disclosure: { cell: Rect; icon: Rect; hit: boolean; toggled: string[]; labels: Record<string, number> } };
 
 const rect = (element: Element): Rect => { const r = element.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+const h2 = (tag: string) => document.createElement(tag);
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 /** Wait (up to a second) for `done`, giving the page frames to deliver its ResizeObserver. */
 async function until(done: () => boolean) { for (let i = 0; i < 20 && !done(); i++) await wait(50); }
@@ -70,7 +72,28 @@ async function run(): Promise<Omit<TreeProbe, "ok">> {
   const before = document.activeElement?.getAttribute("data-id") ?? null;
   document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
   const after = document.activeElement === document.body ? null : document.activeElement?.getAttribute("data-id") ?? null;
-  return { empty, grown, status, focus: { before, after } };
+
+  // 5. A recursive branch's disclosure cell: a 24 px × full-row target; a click inside it but outside the 10 px icon toggles the
+  // branch; a swatch-less sibling's label lines up with its swatched siblings' labels.
+  host.remove();
+  const nested = h2("div"); nested.style.cssText = "position: absolute; left: 0; top: 0; width: 300px;"; document.body.append(nested);
+  const toggled: string[] = [], expanded = new Set<string>(["root"]);
+  const recursive = new TreeView({ label: "Structure", remember: false, onActivate() {},
+    onToggle: (id, on) => { toggled.push(`${id}:${on}`); if (on) expanded.add(id); else expanded.delete(id); draw(); } });
+  const draw = () => recursive.update({ expanded, nodes: [{ id: "root", label: "Root", children: [
+    { id: "front", label: "Front", swatch: "#aa7480", children: [{ id: "leaf", label: "Leaf" }] },
+    { id: "plain", label: "Plain" },
+  ] }] });
+  recursive.element.style.height = "200px"; nested.append(recursive.element); draw();
+  const row = (id: string) => recursive.element.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+  const cellElement = row("front").querySelector<HTMLElement>("[data-tree-disclosure]")!, cell = rect(cellElement);
+  const icon = rect(cellElement.querySelector("svg")!);
+  const x = cell.left + 2, y = cell.top + 2;
+  const target = document.elementFromPoint(x, y);
+  const hit = !!target && target.closest("[data-tree-disclosure]") === cellElement && !target.closest("svg");
+  target?.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+  const labels = Object.fromEntries(["front", "plain"].map(id => [id, rect(row(id).querySelector(".tree-label")!).left]));
+  return { empty, grown, status, focus: { before, after }, disclosure: { cell, icon, hit, toggled, labels } };
 }
 
 run().then(result => { (window as unknown as { probe: TreeProbe }).probe = { ok: true, ...result }; },

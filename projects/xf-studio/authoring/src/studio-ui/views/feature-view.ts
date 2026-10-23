@@ -10,11 +10,12 @@
  * Types and one pure helper only: the shell builds the contexts (`feature-context.ts`), and a feature's
  * view imports this module to bind its factories (`featureView`).
  */
-import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../studio-application";
+import type { NamedTargets, Unnamed } from "../../app/action-targets";
+import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../app/studio-application";
 import type { EasingId } from "../../platform/api/easing";
-import type { StudioContextHit } from "../../studio-context-targets";
-import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../studio-presentation";
-import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../../part-presets";
+import type { StudioContextHit } from "../../app/studio-context-targets";
+import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../app/studio-presentation";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../../library/part-presets";
 import type { ModuleService } from "../../platform/api";
 import type { Command } from "../commands";
 import type { Feedback, FeedbackAction } from "../feedback";
@@ -32,7 +33,7 @@ export type FacadeAction<F> = F extends { dispatch(action: infer A): unknown } ?
 /** A registered feature's facade by ID: typed where the port types it (`PresentationFeatures`), else generic. */
 export type FacadeOf<K extends string> = K extends keyof PresentationFeatures ? PresentationFeatures[K] : GenericFeatureFacade;
 /** The platform families' actions (history, collection, preview, camera …): never a feature's own kinds. */
-export type PlatformAction = StudioOwnerActions[Exclude<StudioOwnerId, keyof PresentationFeatures>];
+export type PlatformAction = Unnamed<StudioOwnerActions[Exclude<StudioOwnerId, keyof PresentationFeatures>]>;
 /** A target the application's context query and a feature's capability checks both accept (a layer, preset, point …). */
 export type MenuTarget = Extract<StudioTarget, StudioContextHit>;
 
@@ -177,6 +178,10 @@ export function featureView<V extends ViewContribution,
  */
 export type ModuleViewContext<F extends ModuleService = ModuleService> = {
   readonly facade: F;
+  /** A panel's instance (`<panel>--<base36>`, profiles design §1.1): what names its own session in the module's service. */
+  instance(panel: string): string;
+  /** What the shown tab's most recently focused view shows (its view, scene, V and look): the targets the module's actions name (§3.6). */
+  targets(): Readonly<NamedTargets>;
   /** The facade's dispatch, awaited, with the shell's feedback (a refusal or failure toasts its reason unless quiet). */
   dispatch(action: Parameters<F["dispatch"]>[0], options?: DispatchFeedback): Promise<boolean>;
   readonly feedback: Pick<Feedback, "toast" | "announce" | "record">;

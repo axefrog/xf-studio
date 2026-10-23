@@ -1,10 +1,10 @@
 // Asset-free creator fixtures: a small vanilla-shaped female creator resource and one CCXL-style mod that merges into a
 // named option, overlays an option anonymously by slot, adds a switcher choice with a new option, and ships texts.
-import { buildCatalogue, readCcoWithPresentation } from "../src/cc-catalogue";
-import type { CreatorPresentation } from "../src/cc-presentation";
-import { customLabel, loadMergedCco } from "../src/character-resolver";
-import type { CharacterSource } from "../src/character-context";
-import { TextTable } from "../src/game-text";
+import { buildCatalogue, readCcoWithPresentation } from "../src/character/cc-catalogue";
+import type { CreatorPresentation } from "../src/character/cc-presentation";
+import { customLabel, loadMergedCco } from "../src/character/character-resolver";
+import type { CharacterSource } from "../src/character/character-context";
+import { TextTable } from "../src/game/game-text";
 import { cn, cr2w, fixtureInstallation, handle, rp } from "./resolver-fixtures";
 
 type Def = { name: string; loc?: string; color?: [number, number, number, number]; icon?: string };

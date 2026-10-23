@@ -29,7 +29,7 @@ test("the closing message names the setup relative to the checkout, its hash, ho
 
 test("a disposable trial identity's setup is named as Electrobun names it, never as the real app's setup", async () => {
   const { artifactAppName } = await import("../release");
-  const { INSTALLER_NAME } = await import("../../src/desktop-app-host");
+  const { INSTALLER_NAME } = await import("../../src/setup/host/desktop-app-host");
   expect(artifactAppName("XF Studio")).toBe("XFStudio");
   expect(artifactAppName("XF Studio UI Trial")).toBe("XFStudioUITrial");
   expect(artifactAppName("XF Studio Build Trial")).toBe("XFStudioBuildTrial");

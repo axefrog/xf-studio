@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { Reader, decodeLz4, readSavedV } from "../src/save-reader";
+import { Reader, decodeLz4, readSavedV } from "../src/saves/save-reader";
 test("signed string lengths and UTF-16 are decoded without losing characters", () => {
   expect(new Reader(new Uint8Array([0x83, 65, 66, 67])).text()).toBe("ABC");
   expect(new Reader(new Uint8Array([1, 0xa9, 3])).text()).toBe("Ω");

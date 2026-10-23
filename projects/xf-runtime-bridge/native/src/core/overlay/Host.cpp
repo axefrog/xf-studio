@@ -1,4 +1,5 @@
 #include "core/overlay/Host.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -26,7 +27,7 @@ std::string RefusalFor(const DeviceFacts& aFacts)
     }
     if (!aFacts.sameDevice)
     {
-        return "the swap chain doesn't belong to the engine's device";
+        return "the swap chain doesn't belong to the engine's device (not even through Streamline's proxy)";
     }
     if (!aFacts.directQueue)
     {
@@ -57,6 +58,24 @@ std::string RefusalAfterResize(const DeviceFacts& aFirst, const DeviceFacts& aNo
     {
         return "after a resize the swap chain has " + std::to_string(aNow.bufferCount) + " back buffers, not " + std::to_string(aFirst.bufferCount) +
                " (the overlay's heaps and allocators were made for the first)";
+    }
+    return {};
+}
+
+DeviceMatch MatchDevices(const DeviceIdentity& aSwapChainDevice, const DeviceIdentity& aEngineDevice)
+{
+    if (aSwapChainDevice.given == 0 || aEngineDevice.given == 0)
+    {
+        return {};
+    }
+    if (aSwapChainDevice.given == aEngineDevice.given)
+    {
+        return {true, false};
+    }
+    const auto native = [](const DeviceIdentity& aId) { return aId.native != 0 ? aId.native : aId.given; };
+    if (native(aSwapChainDevice) == native(aEngineDevice))
+    {
+        return {true, true};
     }
     return {};
 }
@@ -122,7 +141,7 @@ std::string LimitToGlyphs(const std::string& aText)
         }
         if (!valid)
         {
-            put(out, 0xFFFD);
+            put(out, 0xA4);
             i += 1;
             continue;
         }
@@ -133,10 +152,53 @@ std::string LimitToGlyphs(const std::string& aText)
         }
         else
         {
-            put(out, baked(cp) ? cp : 0xFFFD);
+            put(out, baked(cp) && cp != 0xFFFD ? cp : 0xA4);
         }
     }
     return out;
+}
+
+std::pair<float, float> PanelOrigin(const std::string& aAnchor, double aX, double aY, float aScreenW, float aScreenH, float aBoxW, float aBoxH)
+{
+    // The floors of tools/overlay/ink-place.ts FLOORS and redscript XFInkStyle.Floor (session 10's capture at 3840 x 1600).
+    struct Floor
+    {
+        const char* anchor;
+        float x;
+        float y;
+    };
+    static constexpr Floor kFloors[] = {{"top_left", 0, 300},  {"top_center", 0, 140},     {"top_right", 860, 0},
+                                        {"center_left", 0, 0}, {"center", 0, 0},           {"center_right", 860, 0},
+                                        {"bottom_left", 0, 520}, {"bottom_center", 0, 480}, {"bottom_right", 860, 480}};
+    float fx = 0.0f;
+    float fy = 0.0f;
+    bool known = false;
+    for (const auto& floor : kFloors)
+    {
+        if (aAnchor == floor.anchor)
+        {
+            fx = floor.x;
+            fy = floor.y;
+            known = true;
+        }
+    }
+    const std::string anchor = known ? aAnchor : std::string("top_left");
+    const auto endsWith = [&anchor](const char* aSuffix) {
+        const std::string suffix(aSuffix);
+        return anchor.size() >= suffix.size() && anchor.compare(anchor.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+    const float px = endsWith("_right") ? 1.0f : (endsWith("_center") || anchor == "center") ? 0.5f : 0.0f;
+    const float py = anchor.rfind("bottom_", 0) == 0 ? 1.0f : anchor.rfind("center", 0) == 0 ? 0.5f : 0.0f;
+    const float unit = aScreenW > 0.0f ? aScreenW / 3840.0f : 1.0f;
+    const float hud = aScreenH > 0.0f ? aScreenH / 2160.0f : 1.0f;
+    const float ox = fx > 0.0f ? std::max(static_cast<float>(aX) * unit, fx * hud) : static_cast<float>(aX) * unit;
+    const float oy = fy > 0.0f ? std::max(static_cast<float>(aY) * unit, fy * hud) : static_cast<float>(aY) * unit;
+    float left = px * aScreenW + (px > 0.9f ? -ox : ox) - px * aBoxW;
+    float top = py * aScreenH + (py > 0.9f ? -oy : oy) - py * aBoxH;
+    const float margin = 8.0f * unit;
+    left = std::clamp(left, margin, std::max(margin, aScreenW - margin - aBoxW));
+    top = std::clamp(top, margin, std::max(margin, aScreenH - margin - aBoxH));
+    return {left, top};
 }
 
 const char* PhaseName(Phase aPhase)
@@ -233,6 +295,13 @@ void OverlayHost::NoteFrameGeneration(const std::vector<std::string>& aModules)
     m_frameGeneration = aModules;
 }
 
+bool OverlayHost::OffForFrameGeneration() const
+{
+    std::scoped_lock _(m_mutex);
+    const auto phase = m_phase.load();
+    return m_enabled.load() && (phase == Phase::Refused || phase == Phase::Failed) && !m_frameGeneration.empty();
+}
+
 bool OverlayHost::ShouldDraw(std::chrono::steady_clock::time_point aNow) const
 {
     return m_enabled.load() && !m_passThrough.load() && m_phase.load() == Phase::Drawing && !m_killed.load() && !m_cetOpen.load() &&
@@ -285,6 +354,8 @@ json OverlayHost::Snapshot(std::chrono::steady_clock::time_point aNow) const
     if (phase == Phase::Drawing || phase == Phase::Refused || phase == Phase::Failed)
     {
         out["back_buffer"] = {{"format", m_facts.format}, {"count", m_facts.bufferCount}, {"width", m_facts.width}, {"height", m_facts.height}};
+        // 0.8: "streamline" when the host draws (or refused) through Streamline's proxy swap chain (DLSS frame generation).
+        out["swap_chain_proxy"] = m_facts.proxy.empty() ? json(nullptr) : json(m_facts.proxy);
         out["hdr_mode"] = m_facts.hdrMode == 0 ? "disabled" : m_facts.hdrMode == 1 ? "pq" : "scrgb";
     }
     if (!m_enabled.load())

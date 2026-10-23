@@ -27,6 +27,16 @@ bool ScriptLayer::OnEvent(const std::string& aEvent, Clock::time_point aNow)
     {
         OnDetach(aNow);
     }
+    else if (aEvent == "puppet")
+    {
+        std::scoped_lock _(m_mutex);
+        if (m_state == State::Attached && !m_puppet)
+        {
+            m_puppet = true;
+            m_puppetAt = aNow;
+            log::Info("script_layer.puppet", "the player's puppet is in; waiting for the player (after a load: the press-any-key screen)");
+        }
+    }
     else
     {
         return false;
@@ -39,6 +49,7 @@ void ScriptLayer::OnAttach(Clock::time_point aNow)
     std::scoped_lock _(m_mutex);
     m_state = State::Attached;
     m_since = aNow;
+    m_puppet = false;
     ++m_attaches;
     log::Info("script_layer.attached", "calls=waiting_for_player attaches=" + std::to_string(m_attaches));
 }
@@ -57,6 +68,7 @@ void ScriptLayer::OnPlayerAttach(Clock::time_point aNow)
         m_state = State::Ready;
         m_since = aNow;
     }
+    m_puppet = false;
     log::Info("script_layer.ready", std::string("calls=on load_pending=") + (m_loadPending ? "true" : "false"));
 }
 
@@ -65,6 +77,7 @@ void ScriptLayer::OnDetach(Clock::time_point aNow)
     std::scoped_lock _(m_mutex);
     m_state = State::Detached;
     m_since = aNow;
+    m_puppet = false;
     m_loadPending = false; // the load the bridge asked for has started
     ++m_detaches;
     log::Info("script_layer.detached", "calls=off detaches=" + std::to_string(m_detaches));
@@ -145,9 +158,12 @@ nlohmann::json ScriptLayer::Describe(Clock::time_point aNow)
 {
     std::scoped_lock _(m_mutex);
     ExpireLoad(aNow);
+    const bool waiting = m_state == State::Attached && m_puppet;
     return nlohmann::json{{"state", StateName(m_state)},
                           {"ready", m_state == State::Ready && !m_loadPending},
                           {"load_pending", m_loadPending},
+                          {"waiting_for_input", waiting},
+                          {"waiting_ms", waiting ? MsBetween(m_puppetAt, aNow) : 0},
                           {"attaches", m_attaches},
                           {"detaches", m_detaches},
                           {"since_ms", MsBetween(m_since, aNow)}};

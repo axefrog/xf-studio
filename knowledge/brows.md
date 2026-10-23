@@ -83,9 +83,9 @@ Three installed routes, and ArchiveXL's own brow framework underneath them ([evi
 
 ## 5. What the Studio draws today
 
-Brows render from the resolver's output for any vanilla or CCXL choice (P0 of the [head CC render plan](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort)): the planner picks the chunk by the `eyebrows_color` slot and the `TPP` group, and the `doubleDiffuseDecal` adapter (`src/brow-material.ts`) reproduces the squared two-alpha coverage, the gradient colour and the square-root blend over the resolved skin through a per-vertex underlay [source]. Brows follow the facial morphs by `(target, region)` and join the idle rig. Not reproduced [source]:
+Brows render from the resolver's output for any vanilla or CCXL choice (P0 of the [head CC render plan](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort)): the planner picks the chunk by the `eyebrows_color` slot and the `TPP` group, and the `doubleDiffuseDecal` adapter (`src/materials/render/brow-material.ts`) reproduces the squared two-alpha coverage, the gradient colour and the square-root blend over the resolved skin through a per-vertex underlay [source]. Brows follow the facial morphs by `(target, region)` and join the idle rig. Not reproduced [source]:
 
-- the brow's **normal write** (0.4, mode 1) and **roughness write** (≈ 0.50): the adapter draws a fixed roughness 0.8, although the newer face-decal family (`src/face-decal-material.ts`) already implements both for the same template;
+- the brow's **normal write** (0.4, mode 1) and **roughness write** (≈ 0.50): the adapter draws a fixed roughness 0.8, although the newer face-decal family (`src/materials/render/face-decal-material.ts`) already implements both for the same template;
 - the game's authored mips (the browser builds its own; [mip gate](../research/eye-artistry/brow-lash-mip-gate.md));
 - brow wrinkle shading from the idle solver ([brow idle gap](../research/animation/brow-idle-gap.md)); the skin program's wrinkle driver (UV-rectangle regions × animation float tracks) is decoded in the [skin reference §5.6](../research/materials/shader-skin.md#56-the-wrinkle-driver-vertex-program), while which solver outputs feed its tracks is [hypothesis].
 

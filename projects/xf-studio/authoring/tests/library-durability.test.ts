@@ -9,13 +9,9 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Scheduler, simClock } from "strata/testing";
-import { checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog } from "../src/platform/graph-adapters/library-durability";
-import { LookLibrary } from "../src/library-store";
-import { CollectionLibrary } from "../src/collection-store";
-import { PartPresetLibrary } from "../src/part-preset-store";
-import { SqliteGraphStore } from "../src/platform/graph-adapters/sqlite-store";
-import { STUDIO_PARTS } from "../src/compose/studio-registry";
+import { checkpointDone, checkpointInWorker, checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog, WAL_AUTOCHECKPOINT_PAGES } from "../src/platform/persistence/library-durability";
+import { ManualClock } from "./fixtures/platform-doubles";
+import { openTestLibrary } from "./fixtures/library-file";
 import { initialRecipe } from "./fixtures/eye-region";
 
 const folders: string[] = [];
@@ -24,10 +20,10 @@ afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recur
 
 /** A durability on simulated time whose flushes are recorded (and fail while `fail` says so). */
 function simulated(options: { fail?: () => boolean; throws?: () => boolean } = {}) {
-  const scheduler = new Scheduler(), life = new AbortController(), flushes: number[] = [], reports: unknown[] = [];
-  const durability = new LibraryDurability("sim.sqlite", { clock: simClock(scheduler), signal: life.signal, report: error => reports.push(error),
+  const scheduler = new ManualClock(), life = new AbortController(), flushes: number[] = [], reports: unknown[] = [];
+  const durability = new LibraryDurability("sim.sqlite", { clock: scheduler, signal: life.signal, report: error => reports.push(error),
     sync: () => {
-      flushes.push(scheduler.now);
+      flushes.push(scheduler.time);
       if (options.throws?.()) throw new Error("disk unavailable");
       return !options.fail?.();
     } });
@@ -69,7 +65,7 @@ test("under steady writing a flush runs at least every maxMs, so nothing waits l
   let lastFlushed = 0, oldestUnflushed: number | undefined;
   for (let t = 0; t < 60_000; t += 250) {
     durability.wrote();
-    oldestUnflushed ??= scheduler.now;
+    oldestUnflushed ??= scheduler.time;
     const before = flushes.length;
     scheduler.advance(250);
     if (flushes.length > before) {
@@ -133,34 +129,49 @@ const walState = (path: string) => {
   try { return db.query("PRAGMA wal_checkpoint(NOOP)").get() as { log: number; checkpointed: number }; } finally { db.close(); }
 };
 
-test("every library store runs WAL with synchronous=NORMAL; a file that can't use WAL keeps FULL", () => {
-  const path = library(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: simClock(new Scheduler()), signal: life.signal });
-  const looks = new LookLibrary(path, durability), collections = new CollectionLibrary(path, STUDIO_PARTS, durability);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, durability), graph = new SqliteGraphStore(path, { writes: durability });
-  const stores = [looks, collections, presets, graph] as unknown as { db: Database }[];
+test("the library file's one connection, which every store writes through, runs WAL with synchronous=NORMAL; a file that can't use WAL keeps FULL", () => {
+  const path = library(), file = openTestLibrary(path, { clock: new ManualClock() });
   try {
-    for (const store of stores) {
-      expect(store.db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
-      expect(store.db.query("PRAGMA synchronous").get()).toEqual({ synchronous: 1 });
-    }
-  } finally { looks.close(); collections.close(); presets.close(); graph.close(); life.abort(); }
+    expect(file.database.read(db => db.query("PRAGMA journal_mode").get())).toEqual({ journal_mode: "wal" });
+    expect(file.database.read(db => db.query("PRAGMA synchronous").get())).toEqual({ synchronous: 1 });
+    expect(file.database.read(db => db.query("PRAGMA busy_timeout").get())).toEqual({ timeout: 5000 });
+  } finally { file.close(); }
   const memory = new Database(":memory:");
   expect(useWriteAheadLog(memory)).toBe(false);
   expect(memory.query("PRAGMA synchronous").get()).toEqual({ synchronous: 2 });
   memory.close();
 });
 
+test("the host's thread never checkpoints a run of look-sized commits: the flush does, and a crash before it loses nothing (§2.1)", () => {
+  const path = library(), file = openTestLibrary(path, { clock: new ManualClock(), writes: { wrote() {} } });
+  // Different content each commit (SQLite rewrites only the overflow pages that changed).
+  const look = () => Buffer.from(crypto.getRandomValues(new Uint8Array(160_000))).toString("hex");
+  try {
+    expect(file.database.read(db => db.query("PRAGMA wal_autocheckpoint").get())).toEqual({ wal_autocheckpoint: WAL_AUTOCHECKPOINT_PAGES });
+    // 40 commits of about 80 pages each: with SQLite's default (1,000 pages) the host's own connection would have checkpointed three times.
+    for (let i = 0; i < 40; i++) file.documents.put("look-working", "c/l", { look: look(), i }, i);
+    const state = walState(path);
+    expect(state.log).toBeGreaterThan(3_000);
+    expect(state.checkpointed).toBe(0);
+    // An app crash here (no flush yet): every commit is in the log, and the next open reads the last one.
+    const other = new Database(path, { readonly: true });
+    expect((JSON.parse((other.query("SELECT value FROM documents WHERE kind = 'look-working'").get() as { value: string }).value) as { i: number }).i).toBe(39);
+    other.close();
+    // The flush's checkpoint copies every frame (and syncs the log first).
+    expect(checkpointLibrary(path)).toBe(true);
+  } finally { file.close(); }
+});
+
 test("a library in rollback-journal mode moves to WAL when it opens, its rows intact", () => {
   const path = library(), recipe = initialRecipe();
-  const first = new LookLibrary(path), saved = first.save({ name: "Before", recipe });
+  const first = openTestLibrary(path), saved = first.looks.save({ name: "Before", recipe });
   first.close();
   const raw = new Database(path);
   expect(raw.query("PRAGMA journal_mode=DELETE").get()).toEqual({ journal_mode: "delete" });
   raw.close();
-  const reopened = new LookLibrary(path);
+  const reopened = openTestLibrary(path);
   try {
-    expect(reopened.get(saved.id).name).toBe("Before");
+    expect(reopened.looks.get(saved.id).name).toBe("Before");
     const check = new Database(path, { readonly: true });
     expect(check.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
     expect(check.query("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
@@ -168,10 +179,10 @@ test("a library in rollback-journal mode moves to WAL when it opens, its rows in
   } finally { reopened.close(); }
 });
 
-test("a flush checkpoints every committed frame; a reader holding the log makes it report unfinished until it lets go", () => {
-  const path = library(), scheduler = new Scheduler(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: simClock(scheduler), signal: life.signal });
-  const looks = new LookLibrary(path, durability), recipe = initialRecipe();
+test("a flush checkpoints every committed frame; a reader holding the log makes it report unfinished until it lets go", async () => {
+  const path = library(), scheduler = new ManualClock(), life = new AbortController();
+  const file = openTestLibrary(path, { clock: scheduler, signal: life.signal });
+  const durability = file.database.durability!, looks = file.looks, recipe = initialRecipe();
   try {
     expect(durability.flush()).toBe(true);     // the schema
     looks.save({ name: "One", recipe });
@@ -179,6 +190,7 @@ test("a flush checkpoints every committed frame; a reader holding the log makes 
     expect(before.checkpointed).toBeLessThan(before.log);
     expect(durability.pending).toBe(true);
     scheduler.advance(LIBRARY_FLUSH.quietMs);
+    await durability.idle();                   // the scheduled flush runs on the checkpoint worker (PIPE-137)
     expect(durability.pending).toBe(false);
     const after = walState(path);
     expect(after.checkpointed).toBe(after.log);
@@ -189,20 +201,21 @@ test("a flush checkpoints every committed frame; a reader holding the log makes 
     looks.save({ name: "Two", recipe });
     expect(checkpointLibrary(path)).toBe(false);
     scheduler.advance(LIBRARY_FLUSH.quietMs);
+    await durability.idle();
     expect(durability.pending).toBe(true);     // tried, not finished: retried later
     reader.exec("COMMIT"); reader.close();
     scheduler.advance(LIBRARY_FLUSH.retryMaxMs);
+    await durability.idle();
     expect(durability.pending).toBe(false);
     const done = walState(path);
     expect(done.checkpointed).toBe(done.log);
-  } finally { looks.close(); life.abort(); }
+  } finally { file.close(); life.abort(); }
 });
 
 test("closing the library (the host's stop, on quit) flushes what the last seconds wrote", () => {
-  const path = library(), scheduler = new Scheduler(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: simClock(scheduler), signal: life.signal });
-  const looks = new LookLibrary(path, durability), collections = new CollectionLibrary(path, STUDIO_PARTS, durability);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, durability), graph = new SqliteGraphStore(path, { writes: durability });
+  const path = library(), scheduler = new ManualClock(), life = new AbortController();
+  const file = openTestLibrary(path, { clock: scheduler, signal: life.signal });
+  const durability = file.database.durability!, looks = file.looks;
   const holder = new Database(path);   // another connection (a second window, a tool) keeps the log after the stores close
   try {
     durability.flush();
@@ -210,8 +223,7 @@ test("closing the library (the host's stop, on quit) flushes what the last secon
     expect(durability.pending).toBe(true);
     const unsynced = walState(path);
     expect(unsynced.checkpointed).toBeLessThan(unsynced.log);
-    looks.close(); collections.close(); presets.close(); graph.close();
-    life.abort();
+    file.close();
     expect(durability.pending).toBe(false);
     const synced = walState(path);
     expect(synced.checkpointed).toBe(synced.log);
@@ -219,11 +231,10 @@ test("closing the library (the host's stop, on quit) flushes what the last secon
 });
 
 test("each store tells the durability of its commits", async () => {
-  const path = library(), life = new AbortController();
+  const path = library();
   let writes = 0;
   const counter = { wrote: () => { writes++; } };
-  const looks = new LookLibrary(path, counter), collections = new CollectionLibrary(path, STUDIO_PARTS, counter);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, counter), graph = new SqliteGraphStore(path, { writes: counter });
+  const file = openTestLibrary(path, { writes: counter }), { looks, collections, partPresets: presets, documents } = file;
   try {
     let at = writes;
     const look = looks.save({ name: "A look", recipe: initialRecipe() });
@@ -237,10 +248,18 @@ test("each store tells the durability of its commits", async () => {
     const list = collections.list();
     expect(Array.isArray(list)).toBe(true);
     at = writes;
-    await graph.putSnapshot({ node: { type: "t", id: "n" }, seq: 1, pos: 1, schema: "1", state: { name: "n", own: {}, layers: [], trashed: false, retracted: false } });
-    await graph.dropSnapshots({ type: "t", id: "n" });
+    documents.put("sample", "n", { a: 1 }, 0);
+    documents.put("sample", "n", { a: 2 }, 1);
     expect(writes).toBe(at + 2);
-  } finally { looks.close(); collections.close(); presets.close(); graph.close(); life.abort(); }
+    expect(documents.put("sample", "n", { a: 3 }, 1).ok).toBe(false);
+    expect(writes).toBe(at + 2);   // stale: nothing committed
+    at = writes;
+    const preset = presets.save({ feature: "expressions", name: "Smile", part: { schema: "xfs/expression-part-1", body: { controls: { jaw_mid_open: 0.1 }, links: {} } } });
+    presets.rename(preset.id, { name: "Grin", revision: 1 });
+    expect(writes).toBe(at + 2);
+    expect(() => presets.rename(preset.id, { name: "Late", revision: 1 })).toThrow("another window");
+    expect(writes).toBe(at + 2);   // refused
+  } finally { file.close(); }
 });
 
 test("a process killed while it saves leaves a valid database holding every save it acknowledged", async () => {
@@ -271,7 +290,51 @@ test("a process killed while it saves leaves a valid database holding every save
       for (const id of acknowledged) expect(ids.has(id), `round ${round}: acknowledged ${id}`).toBe(true);
     } finally { db.close(); }
     // The stores open it again and read every look.
-    const reopened = new LookLibrary(path);
-    try { expect(reopened.list().length).toBeGreaterThanOrEqual(acknowledged.length); } finally { reopened.close(); }
+    const reopened = openTestLibrary(path);
+    try { expect(reopened.looks.list().length).toBeGreaterThanOrEqual(acknowledged.length); } finally { reopened.close(); }
   }
 }, 60_000);
+
+test("the scheduled flush runs off the host's thread; writes made meanwhile stay pending; the end of the lifetime flushes on it (PIPE-137)", async () => {
+  const scheduler = new ManualClock(), life = new AbortController(), onThread: number[] = [], background: (() => void)[] = [];
+  const durability = new LibraryDurability("sim.sqlite", { clock: scheduler, signal: life.signal,
+    sync: () => { onThread.push(scheduler.time); return true; },
+    syncInBackground: () => new Promise<boolean>(resolve => background.push(() => resolve(true))) });
+  durability.wrote();
+  scheduler.advance(LIBRARY_FLUSH.quietMs);
+  expect(onThread).toEqual([]);                // nothing ran on this thread
+  expect(background).toHaveLength(1);
+  // A write while the checkpoint is out isn't covered by it.
+  scheduler.advance(100); durability.wrote();
+  scheduler.advance(LIBRARY_FLUSH.maxMs);      // its timer fires while the first is still out: no second checkpoint
+  expect(background).toHaveLength(1);
+  background.shift()!(); await durability.idle();
+  expect(durability.pending).toBe(true);
+  scheduler.advance(LIBRARY_FLUSH.quietMs);
+  expect(background).toHaveLength(1);
+  background.shift()!(); await durability.idle();
+  expect(durability.pending).toBe(false);
+  // Quitting with a write pending flushes it at once, on this thread.
+  durability.wrote();
+  life.abort();
+  expect(onThread).toEqual([scheduler.time]);
+  expect(durability.pending).toBe(false);
+});
+
+test("the checkpoint worker makes a real library's commits durable on its own connection; a busy checkpoint is never done", async () => {
+  const path = library(), file = openTestLibrary(path, { writes: { wrote() {} } }), looks = file.looks;
+  try {
+    looks.save({ name: "One", recipe: initialRecipe() });
+    const before = walState(path);
+    expect(before.checkpointed).toBeLessThan(before.log);
+    expect(await checkpointInWorker(path)).toBe(true);
+    const after = walState(path);
+    expect(after.checkpointed).toBe(after.log);
+    const missing = await checkpointInWorker(join(path, "..", "missing.sqlite")).then(() => null, (error: Error) => error);
+    expect(missing?.message).toContain("unable to open");
+  } finally { file.close(); }
+  // SQLite reports -1 frames when another checkpoint held the lock: that is busy, not a file outside WAL.
+  expect(checkpointDone({ busy: 1, log: -1, checkpointed: -1 })).toBe(false);
+  expect(checkpointDone({ busy: 0, log: -1, checkpointed: -1 })).toBe(true);
+  expect(checkpointDone({ busy: 0, log: 4, checkpointed: 3 })).toBe(false);
+});

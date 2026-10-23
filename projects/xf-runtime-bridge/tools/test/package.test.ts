@@ -39,6 +39,7 @@ describe("packages", () => {
     expect(config).toMatch(/^allow_writes = false$/m);
     expect(config).toMatch(/^allow_creator_leave = false$/m);
     expect(config).toMatch(/^allow_live_pose = false$/m);
+    expect(config).toMatch(/^allow_test_hooks = false$/m);
     // Every permission switch is off. [ui] (0.5.3) holds display switches only (the ink panel, the CET label, nameplates),
     // which draw nothing while the bridge is off; they are checked separately.
     const [permissions, display = ""] = config.split(/^\[ui\]\s*$/m);
@@ -50,6 +51,7 @@ describe("packages", () => {
       allow_writes: false,
       allow_creator_leave: false,
       allow_live_pose: false,
+      allow_test_hooks: false,
       photo_mode_presets: null,
       cet_panel: false,
       write_classes: [],
@@ -64,8 +66,9 @@ describe("packages", () => {
     expect(config).toMatch(/^allow_writes = false$/m);
     expect(config).toMatch(/^allow_creator_leave = false$/m);
     expect(config).toMatch(/^allow_live_pose = false$/m);
+    expect(config).toMatch(/^allow_test_hooks = false$/m);
     expect(existsSync(join(stageDir, PANEL_FILE))).toBe(true);
-    expect(manifest).toMatchObject({ bridge_enabled: true, allow_writes: false, allow_creator_leave: false, allow_live_pose: false, cet_panel: true });
+    expect(manifest).toMatchObject({ bridge_enabled: true, allow_writes: false, allow_creator_leave: false, allow_live_pose: false, allow_test_hooks: false, cet_panel: true });
   });
 
   test("only the writes package allows writes and leaving the creator, and says so at the top", () => {
@@ -74,10 +77,11 @@ describe("packages", () => {
     expect(config).toMatch(/^allow_writes = true$/m);
     expect(config).toMatch(/^allow_creator_leave = true$/m);
     expect(config).toMatch(/^allow_live_pose = true$/m);
+    expect(config).toMatch(/^allow_test_hooks = true$/m); // 0.8.4: test.save.delay (card row L1), this package only
     expect(config).toContain("THIS COPY ALLOWS WRITES");
     expect(existsSync(join(stageDir, PANEL_FILE))).toBe(true);
     expect(manifest.files.some((f) => /\.archive/.test(f.path))).toBe(false); // the carrier is its own test package
-    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, cet_panel: true, write_classes: ["photo", "world", "character", "save", "showroom", "player", "npc"], inventory_writes: false });
+    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, allow_test_hooks: true, cet_panel: true, write_classes: ["photo", "world", "character", "save", "showroom", "player", "npc"], inventory_writes: false });
     // Bridge 0.4: saves and loading are allowed; V's inventory is not, until the maintainer approves it.
     expect(config).toMatch(/^allow_write_classes = photo, world, character, save, showroom, player, npc$/m);
   });
@@ -118,7 +122,8 @@ describe("packages", () => {
   });
 
   test("the project's own config.ini must keep every switch off", () => {
-    const base = readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8");
+    // LF as variantConfig reads it (a Windows checkout gives the file CRLF).
+    const base = readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8").replace(/\r\n/g, "\n");
     expect(() => variantConfig(base.replace("allow_creator_leave = false", "allow_creator_leave = true"), "default")).toThrow(/allow_creator_leave/);
     expect(() => variantConfig(base.replace("allow_writes = false", "allow_writes = true"), "default")).toThrow(/allow_writes/);
     expect(() => variantConfig(base.replace("enabled = false", "enabled = true"), "default")).toThrow(/enabled/);

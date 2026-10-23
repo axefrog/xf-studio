@@ -1,0 +1,127 @@
+import type * as THREE from "three";
+import { createSceneHost, type SceneHost } from "../../platform/scene/scene-host";
+import type { FeatureRendererFactory } from "../../platform/api/scene";
+import type { CoreBody } from "../../character/render-detail";
+import type { LayeredMakeupRegion } from "../../engines/layered-makeup/region";
+import { createSurfaceEditor } from "../../legacy/eye-makeup/browser/surface-editor";
+import { createUVEditor } from "../../legacy/eye-makeup/browser/uv-editor";
+import { modifiersOf, NO_MODIFIERS } from "../../app/input-bindings";
+import { ViewportAdapter } from "../../app/viewport-adapter";
+import { ViewportAttachment, type ViewportAttachmentPort, type ViewportHostKind } from "../../app/viewport-attachment";
+
+type Scene = SceneHost;
+type UVEditor = ReturnType<typeof createUVEditor>;
+type SurfaceEditor = ReturnType<typeof createSurfaceEditor>;
+
+/** Browser resource owner. The presentation receives only `attachment`, never these handles. */
+export function createBrowserViewportDevice(options: {
+  /** The live feature's region: the layer models its editors' shape edits validate with and the mirror their hit tests reflect across. */
+  region: Pick<LayeredMakeupRegion, "models" | "mirror">;
+  headHost: HTMLElement;
+  uvHost: HTMLElement;
+  queryContext: ViewportAttachmentPort<HTMLElement>["queryContext"];
+  /** The feature renderers each loaded head creates (the composition's list, handed down by the composition root). */
+  renderers?: readonly FeatureRendererFactory[];
+  optionalRenderers?: import("../../platform/api/experiments").ExperimentPort;
+  referenceTextures?: import("../../platform/api/scene").SceneHostPort["referenceTextures"];
+  sceneFactory?: typeof createSceneHost;
+  /** The head's WebGL context was lost or came back (the scene host reports it; the composition root logs it). */
+  onContext?: (event: "lost" | "restored") => void;
+  uvFactory?: typeof createUVEditor;
+  surfaceFactory?: typeof createSurfaceEditor;
+  /** Source of key, pointer, focus and visibility events for modifier tracking. */
+  window?: Pick<Window, "addEventListener"> & { document?: Pick<Document, "addEventListener" | "visibilityState"> };
+}) {
+  const editors = new ViewportAdapter();
+  let viewer: Scene | undefined;
+  let uvEditor: UVEditor | undefined;
+  let surfaceEditor: SurfaceEditor | undefined;
+  // Each registered viewport host's element and the editor slot its input and capture belong to.
+  const hosts: Record<ViewportHostKind, { element: HTMLElement; editor: string }> = {
+    head: { element: options.headHost, editor: "surface" }, uv: { element: options.uvHost, editor: "uv" } };
+  const host = (kind: ViewportHostKind) => hosts[kind].element;
+  const attachment = new ViewportAttachment<HTMLElement>({
+    moveHost: (kind, slot) => {
+      const node = host(kind);
+      if (slot === node || node.contains(slot)) throw Error("A viewport cannot be hosted inside itself.");
+      slot.append(node);
+    },
+    measure: kind => ({ width: host(kind).clientWidth, height: host(kind).clientHeight }),
+    resize: kind => {
+      if (kind === "head") viewer?.resize();
+      editors.resize(hosts[kind].editor);
+    },
+    cancelInput: kind => editors.cancelInput(hosts[kind].editor),
+    inputCapture: kind => editors.capture()[hosts[kind].editor] ?? false,
+    headView: () => viewer?.cameraState(),
+    uvView: () => uvEditor?.snapshot(),
+    uvSelection: () => uvEditor?.selection?.(),
+    uvCommand: command => uvEditor?.viewCommand(command) ?? false,
+    uvNavigate: command => uvEditor?.navigate?.(command) ?? false,
+    hitAt: (kind, x, y) => kind === "uv" ? uvEditor?.hitAt(x, y) : surfaceEditor?.hitAt(x, y),
+    queryContext: options.queryContext,
+  });
+  // Held modifiers for hints and cursors. Key and pointer events both carry the live state (a
+  // pointer event also resyncs after a key was released elsewhere); blur or a hidden page
+  // clears them, so no modifier can stay stuck after the window loses focus.
+  const events = options.window ?? (typeof window === "undefined" ? undefined : window);
+  if (events) {
+    const track = (event: Event) => attachment.reportModifiers(modifiersOf(event as KeyboardEvent));
+    for (const type of ["keydown", "keyup", "pointermove", "pointerdown"]) events.addEventListener(type, track, { capture: true, passive: true });
+    events.addEventListener("blur", () => attachment.reportModifiers(NO_MODIFIERS));
+    events.document?.addEventListener("visibilitychange", () => {
+      if (events.document?.visibilityState === "hidden") attachment.reportModifiers(NO_MODIFIERS);
+    });
+  }
+  function releaseHead() {
+    editors.detach("surface");
+    surfaceEditor = undefined;
+    const loaded = viewer;
+    viewer = undefined;
+    loaded?.dispose();
+  }
+  return {
+    attachment,
+    mountUV(canvas: HTMLCanvasElement, controls: Parameters<typeof createUVEditor>[1],
+      hooks: Omit<Parameters<typeof createUVEditor>[2], "region">, initial: Parameters<typeof createUVEditor>[3]) {
+      uvEditor = (options.uvFactory ?? createUVEditor)(canvas, controls,
+        { ...hooks, region: options.region, input: state => attachment.reportInput("uv", state) }, initial);
+      editors.attach("uv", uvEditor);
+      attachment.setReady("uv");
+      return uvEditor;
+    },
+    /** Load the head with a body's core (the feminine V's by default); the previous head is released first. */
+    async loadHead(body: CoreBody = "female") {
+      releaseHead();
+      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers, referenceTextures: options.referenceTextures, onContext: options.onContext });
+      return viewer;
+    },
+    /**
+     * Releases this head (its surface editor, then the scene's renderer and canvas) if it is still
+     * the loaded one. A stale release, for a head a later load already replaced, does nothing (UI-36).
+     */
+    unloadHead(scene: Scene) {
+      if (scene === viewer) releaseHead();
+    },
+    /** Mount the on-head editor over `surface` (the layered-makeup surface a feature renderer draws: eye makeup's plate). */
+    mountSurface(surface: THREE.SkinnedMesh, hooks: Omit<Parameters<typeof createSurfaceEditor>[1], "region">) {
+      if (!viewer) throw Error("The head scene must load before mounting surface controls.");
+      const { renderer, scene, camera, head, eyes, controls, cameraInput, onFrame, requestRender } = viewer;
+      surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)({ renderer, scene, camera, head, eyes, controls, cameraInput, onFrame,
+        requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) });
+      editors.attach("surface", surfaceEditor);
+      return surfaceEditor;
+    },
+    headReady() { attachment.setReady("head"); },
+    failHead(error: string) { attachment.setError("head", error); },
+    headPending(phase: "loading" | "preparing" | "unavailable", message: string, progress: number | null = null) {
+      attachment.setPending("head", phase, message, progress);
+    },
+    /** The recipe or selection changed: redraw the UV pane, and the head's next frame (its handles follow them). */
+    drawUV() { uvEditor?.draw(); viewer?.requestRender(); },
+    capture() { return editors.capture(); },
+    uvEditor() { return uvEditor; },
+    surfaceEditor() { return surfaceEditor; },
+    scene() { return viewer; },
+  };
+}

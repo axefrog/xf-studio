@@ -340,17 +340,26 @@ void Sim060::Register()
 
     // The handover.
     m_dispatcher.Register({"bridge.handover", Access::Control, RunOn::BridgeThread, "Hands over or resumes (simulated).", [self](const MethodContext& aContext) {
-                               params::RequireOnly(aContext.params, {"on", "note"});
+                               params::RequireOnly(aContext.params, {"on", "note", "lights"});
                                const auto on = params::CheckBoolean(aContext.params, "on");
                                if (!on)
                                {
                                    params::CheckFail("'on' is required: true hands the session over to the player, false resumes it");
                                }
                                const auto note = params::CheckText(aContext.params, "note", 200).value_or("");
+                               const auto lights = params::CheckText(aContext.params, "lights", 16).value_or("");
+                               if (!lights.empty() && (lights != "clear" || !*on))
+                               {
+                                   params::CheckFail("'lights' takes only \"clear\", with on: true (the showroom's rigs cleared once the handover refuses writes)");
+                               }
                                const bool was = self->m_dispatcher.HandedOver();
                                if (*on)
                                {
                                    self->m_behaviours.StopAll("handed_over");
+                               }
+                               if (*on)
+                               {
+                                   self->m_playerStops.Stop();
                                }
                                self->m_dispatcher.SetHandover(*on, note);
                                json released = nullptr;
@@ -370,7 +379,15 @@ void Sim060::Register()
                                        },
                                        "bridge.handover.player_stop");
                                }
+                               // 0.8.2: as the plugin, the rigs go after the write gate closed, in this same request.
+                               json lightsCleared = nullptr;
+                               if (lights == "clear" && self->m_hooks.clearShowroom)
+                               {
+                                   RestoreScope restoring;
+                                   lightsCleared = self->m_hooks.clearShowroom("lights");
+                               }
                                return json{{"simulated", true}, {"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released},
+                                           {"lights_cleared", lightsCleared},
                                            {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}}};
                            }});
 
@@ -522,8 +539,9 @@ void Sim060::Register()
     m_dispatcher.Register(marked("player.teleport", Access::WritePlayer, RunOn::BridgeThread, "Teleports V (simulated).", [self, busyNow](const MethodContext& aContext) {
         const auto request = player::ParseTeleport(aContext.params);
         pacer.Take();
-        return RunGameTask(
-            self->m_queue, std::chrono::milliseconds(1000),
+        // As the plugin: a changing step passes the write gate on the game thread (RB-122).
+        return self->m_dispatcher.RunWrite(
+            std::chrono::milliseconds(1000),
             [self, request, busyNow] {
                 std::scoped_lock _(self->m_state->mutex);
                 auto& s = *self->m_state;
@@ -567,7 +585,7 @@ void Sim060::Register()
                 }
                 return json{{"before", {{"position", Arr(before)}, {"yaw", yawBefore}}}, {"target", Arr(to)}, {"yaw", s.yaw}, {"snapped", snapped}, {"now", Arr(s.position)},
                             {"off_m", 0.0}, {"held", true},
-                            {"undo", {{"method", "player.teleport"}, {"params", {{"position", Arr(before)}, {"yaw", yawBefore}, {"ground", "exact"}}}}},
+                            {"undo", player::TeleportUndo(before, yawBefore, s.position)},
                             {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
             },
             "player.teleport");
@@ -576,6 +594,8 @@ void Sim060::Register()
         const auto request = player::ParseLook(aContext.params);
         json before;
         player::LookTarget target{};
+        // 0.8.2: as the plugin, a player.stop from here on ends the look at its next step.
+        const auto seen = self->m_playerStops.Current();
         RunGameTask(
             self->m_queue, std::chrono::milliseconds(1000),
             [&] {
@@ -585,6 +605,15 @@ void Sim060::Register()
                 const auto cam = camera();
                 before = {{"yaw", s.yaw}, {"pitch", s.pitch}};
                 target = player::LookTargetFor(request, cam.position, s.yaw, s.pitch);
+                return json();
+            },
+            "player.look.read");
+        w::WaitTicks(self->m_queue, 1, std::chrono::milliseconds(1000)); // the plugin's tick between its turn and its look-at
+        self->m_dispatcher.RunWrite(
+            std::chrono::milliseconds(1000),
+            [&] {
+                self->m_playerStops.Require(seen, "player.look");
+                std::scoped_lock _(self->m_state->mutex);
                 self->m_hooks.takeSaveLock();
                 lookAt(target.point, request.smooth || request.at ? request.duration : 0.05);
                 return json();
@@ -592,20 +621,22 @@ void Sim060::Register()
             "player.look");
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int>(request.duration * 1000.0) + 700);
         json reached;
+        bool stopped = false;
         for (;;)
         {
             w::WaitTicks(self->m_queue, 3, std::chrono::milliseconds(1000));
+            stopped = stopped || self->m_playerStops.StoppedSince(seen);
             {
                 std::scoped_lock _(self->m_state->mutex);
                 reached = {{"yaw", self->m_state->yaw}, {"pitch", self->m_state->pitch}};
-                if (!self->m_state->looking || std::chrono::steady_clock::now() > deadline)
+                if (stopped || !self->m_state->looking || std::chrono::steady_clock::now() > deadline)
                 {
                     break;
                 }
             }
         }
         const double ey = std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0), ep = reached.value("pitch", 0.0) - target.pitch;
-        return json{{"mode", request.smooth ? "smooth" : "instant"}, {"wanted", {{"yaw", target.yaw}, {"pitch", target.pitch}}}, {"reached", reached},
+        return json{{"mode", request.smooth ? "smooth" : "instant"}, {"wanted", {{"yaw", target.yaw}, {"pitch", target.pitch}}}, {"reached", reached}, {"stopped", stopped},
                     {"error_deg", {{"yaw", ey}, {"pitch", ep}}}, {"within_2_deg", std::abs(ey) <= 2.0 && std::abs(ep) <= 2.0},
                     {"undo", {{"method", "player.look"}, {"params", {{"yaw", before["yaw"]}, {"pitch", before["pitch"]}, {"mode", "instant"}}}}}};
     }));
@@ -617,6 +648,7 @@ void Sim060::Register()
     }));
     m_dispatcher.Register({"player.stop", Access::Control, RunOn::BridgeThread, "Stops every motion (simulated).", [self](const MethodContext& aContext) {
                                params::RequireOnly(aContext.params, {});
+                               self->m_playerStops.Stop();
                                self->m_behaviours.StopAll("player_stop");
                                return RunGameTask(
                                    self->m_queue, std::chrono::milliseconds(1000),
@@ -819,6 +851,12 @@ void Sim060::OnDetach()
     m_state->effects.clear();
     m_state->crouched = false;
     m_state->looking = false;
+}
+
+bool Sim060::WeaponDrawn()
+{
+    std::scoped_lock _(m_state->mutex);
+    return m_state->weaponDrawn;
 }
 
 json Sim060::Holds()

@@ -7,7 +7,7 @@ import type { ConsequenceOverride, FeatureActionSpec, FeatureTarget, FieldLimit,
 import { isIrregular } from "../../engines/layered-makeup/finish";
 import { FLAKE_LIMITS, REGION_FLAKE_STUDY_LIMITS } from "../../engines/layered-makeup/flake-field";
 import type { Recipe } from "../../engines/layered-makeup/recipe";
-import type { EyeMakeupAction, EyeMakeupEditorState } from "../../eye-makeup-model";
+import type { EyeMakeupAction, EyeMakeupEditorState } from "../../legacy/eye-makeup/eye-makeup-model";
 
 type Limits = NonNullable<FeatureActionSpec<Recipe, EyeMakeupEditorState, EyeMakeupAction>["limits"]>;
 

@@ -6,14 +6,14 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
-import { depotHash } from "../src/depot-path";
-import { depotPathRegex } from "../src/eye-plate-wolvenkit";
+import { depotHash } from "../src/game/depot-path";
+import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
 import { NativeArchive } from "../src/native/archive-reader";
 import { compareDocuments, isNameOnly } from "../src/native/document-diff";
 import { loadGameOodle } from "../src/native/oodle";
 import { readResourceJson } from "../src/native/resource-document";
-import { trimBuffers } from "../src/resolver-host";
-import { runWolvenKit } from "../src/wolvenkit-cli";
+import { trimBuffers } from "../src/game/host/resolver-host";
+import { runWolvenKit } from "../src/host/wolvenkit-cli";
 import { oracleDescribe } from "./optional-oracles";
 
 const env = process.env;

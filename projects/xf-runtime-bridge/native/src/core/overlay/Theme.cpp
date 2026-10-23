@@ -1,4 +1,5 @@
 #include "core/overlay/Theme.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <cstring>
 

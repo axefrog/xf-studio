@@ -2,17 +2,17 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCatalogue, readCcoWithPresentation } from "../src/cc-catalogue";
-import { type CcoResource } from "../src/cco-model";
-import { type CharacterChoice, type CharacterSource, deriveCharacter } from "../src/character-context";
-import { detailSlotOf, piercingLabel } from "../src/character-detail-plan";
-import { CharacterRequestVersionError, DEFAULT_CHARACTER, parseCharacterRequest, sameCharacter, savedOfRequest, type CharacterRequest } from "../src/character-detail-request";
-import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character-detail-service";
-import { loadMergedCco } from "../src/character-resolver";
-import { depotHash } from "../src/depot-path";
-import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter } from "../src/game-asset-export";
-import { encodePng } from "../src/png";
-import { parseCharacterDetail } from "../src/render-detail";
+import { buildCatalogue, readCcoWithPresentation } from "../src/character/cc-catalogue";
+import { type CcoResource } from "../src/character/cco-model";
+import { type CharacterChoice, type CharacterSource, deriveCharacter } from "../src/character/character-context";
+import { detailSlotOf, piercingLabel } from "../src/character/character-detail-plan";
+import { CharacterRequestVersionError, DEFAULT_CHARACTER, parseCharacterRequest, sameCharacter, savedOfRequest, type CharacterRequest } from "../src/character/character-detail-request";
+import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character/host/character-detail-service";
+import { loadMergedCco } from "../src/character/character-resolver";
+import { depotHash } from "../src/game/depot-path";
+import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter } from "../src/game/host/game-asset-export";
+import { encodePng } from "../src/formats/png";
+import { parseCharacterDetail } from "../src/character/render-detail";
 import { detailFixture, EARRING_MASK, P, PIERCING, piercingRequest, REQUEST_A } from "./character-detail-fixtures";
 
 // Piercings through the generic resolver, from an asset-free synthetic installation (character-detail-fixtures.ts): the creator's
@@ -190,7 +190,7 @@ describe("creator choices on the piercings", () => {
     // A v3 page's tried choice, or choices on an earlier version, is a page built apart from this host.
     expect(() => parseCharacterRequest({ ...DEFAULT_CHARACTER, schema: "xfs/character-request-3", override: { slot: "piercings", choice: "12", definition: PIERCING.black } })).toThrow();
     expect(() => parseCharacterRequest({ ...chosen, schema: "xfs/character-request-2" })).toThrow();
-    expect(() => parseCharacterRequest({ ...chosen, schema: "xfs/character-request-9" })).toThrow(CharacterRequestVersionError);
+    expect(() => parseCharacterRequest({ ...chosen, schema: "xfs/character-request-10" })).toThrow(CharacterRequestVersionError);
     expect(sameCharacter(REQUEST_A, chosen)).toBe(true);
     expect(sameCharacter(DEFAULT_CHARACTER, chosen)).toBe(false);
   });

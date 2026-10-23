@@ -1,15 +1,16 @@
 import { expect, test } from "bun:test";
-import { createTrustedPreviewServices } from "../src/trusted-preview-services";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import type { PreviewPort } from "../src/preview-actions";
-import type { MotionPort } from "../src/motion-actions";
-import type { SavedV } from "../src/save-reader";
-import { bodySexOf, SavedAppearanceActions } from "../src/saved-appearance-actions";
+import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import type { PreviewPort } from "../src/preview/preview-actions";
+import type { MotionPort } from "../src/animation/motion-actions";
+import type { SavedV } from "../src/saves/save-reader";
+import { bodySexOf, SavedAppearanceActions } from "../src/character/saved-appearance-actions";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore, type NamedTrustedCore } from "./fixtures/named-targets";
 test("preview bootstrap restores saved V, scene, motion and camera in order without controls", () => {
   const calls: string[] = [], workspace = freshWorkspace();
   const saved: SavedV = { schema: "eye-artistry/saved-v-1", saveVersion: 1, gameVersion: 2310,
@@ -66,9 +67,9 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   expect(motionActions.snapshot()).toMatchObject({ idle: true, idlePaused: true, idleTime: 2.5 });
   // File import uses the same saved-appearance dispatch after decoding. Recording its
   // suggested selector must not apply the eye morph a second time.
-  let core!: ReturnType<typeof createTrustedAuthoringCore>;
-  core = createTrustedAuthoringCore(workspace, { resetStack: () => {},
-    selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  let core!: NamedTrustedCore;
+  core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {},
+    selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   core.app.attach({ preview: actions, savedV: services.savedAppearance });
   const before = calls.filter(call => call.startsWith("eye:")).length;
   const imported = services.savedAppearance.dispatch({ kind: "savedV.restore", value: saved });
@@ -106,12 +107,12 @@ test("the creator rig's body follows the applied save, derived by the saved-appe
   expect(() => refusing.dispatch({ kind: "savedV.restore", value: savedV(true) })).toThrow("Male head");
   expect(calls.length).toBe(4);
   // The browser port only forwards the derived value to the lighting device; it decides nothing itself.
-  const source = readFileSync(resolve(import.meta.dir, "..", "src", "browser-scene-preview-ports.ts"), "utf8");
+  const source = readFileSync(resolve(import.meta.dir, "..", "src", "preview/browser/browser-scene-preview-ports.ts"), "utf8");
   expect(source).toContain("setBodySex: sex => scene.lighting.setBodySex(sex)");
   expect(source).not.toContain("isMale");
   // The studio rig is part of the scene preview port, not spread in by the head attachment (PREV-69).
   expect(source).toContain("setLighting: source => scene.setLighting(source)");
-  expect(readFileSync(resolve(import.meta.dir, "..", "src", "browser-head-attachment.ts"), "utf8")).not.toMatch(/setLighting|...scenePorts/);
+  expect(readFileSync(resolve(import.meta.dir, "..", "src", "preview/browser/browser-head-attachment.ts"), "utf8")).not.toMatch(/setLighting|...scenePorts/);
 });
 
 test("restoring the preview never changes the caller's workspace (CORE-25)", () => {
@@ -136,7 +137,7 @@ test("restoring the preview never changes the caller's workspace (CORE-25)", () 
   const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
   const services = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion });
   const { preview: actions } = services.finish();
-  actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 1.5 });
+  actions.dispatch({ kind: "preview.setCreatorLighting", view: "main", key: "exposure", value: 1.5 });
   // The restored state applied its fallbacks (brows off, base eye shape) to its own copy only. The tried piercing style is not a preview
   // preference: the character service reads and validates it (character-switch.test.ts).
   expect(actions.snapshot()).toMatchObject({ brows: false });
@@ -177,7 +178,7 @@ test("the eye's own roughness is on by default, also for a workspace that stored
   const actions = start(legacy);
   expect(values).toEqual([true]);
   expect("eyeOwnRoughness" in actions.snapshot()).toBe(false);
-  actions.dispatch({ kind: "preview.setEyeOptics", enabled: false });
+  actions.dispatch({ kind: "preview.setEyeOptics", view: "main", enabled: false });
   expect(values).toEqual([true, false]);
   expect(actions.snapshot().eyeOwnRoughness).toBe(false);
   // Stored off, it stays off.

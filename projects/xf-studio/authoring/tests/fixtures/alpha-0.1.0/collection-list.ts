@@ -1,7 +1,7 @@
 /**
  * The tagged (never published) 0.1.0-alpha.1's collection-library list and its collection reader, vendored from
- * the tagged commit `60a60e9` (`src/collection-store.ts` `CollectionLibrary.list()` and
- * `src/preset-collection.ts` `parseCollection()`), so tests can check what that release does with
+ * the tagged commit `60a60e9` (`src/library/host/collection-store.ts` `CollectionLibrary.list()` and
+ * `src/legacy/eye-makeup/export/preset-collection.ts` `parseCollection()`), so tests can check what that release does with
  * a library this build writes (CORE-30). The code is as released; only the recipe parser is
  * passed in (the release's own `parseRecipe` reads the same recipe files: its per-schema gates
  * were checked exhaustively against the current ones in step 3), and the class shell is reduced

@@ -1,5 +1,7 @@
 #include "core/Hooks070.hpp"
 
+#include <set>
+
 #include <algorithm>
 #include <cmath>
 
@@ -496,7 +498,7 @@ json RunPhotoScene(const PhotoSceneRequest& aRequest, const PhotoSceneOps& aOps)
 
 json RunSaves(const SavesRequest& aRequest, const SavesOps& aOps)
 {
-    aOps.request();
+    aOps.request(aRequest.limit);
     json answer;
     std::exception_ptr failure;
     try
@@ -512,7 +514,9 @@ json RunSaves(const SavesRequest& aRequest, const SavesOps& aOps)
             const auto names = answer.value("names", json::array()).size();
             stable = count == lastCount ? stable + 1 : 0;
             lastCount = count;
-            if (answer.value("ready", false) && (count >= names || stable >= 3))
+            // 0.8: done when every asked-for save's details are in (the newest `limit`), or nothing new came for a second.
+            const auto wanted = std::min(names, static_cast<size_t>(std::max(aRequest.limit, 1)));
+            if (answer.value("ready", false) && (count >= wanted || stable >= 5))
             {
                 break;
             }
@@ -557,7 +561,18 @@ SavesRequest ParseSaves(const json& aParams)
 json TrimSaves(const json& aAnswer, int32_t aLimit)
 {
     auto metadata = aAnswer.value("metadata", json::array());
-    std::vector<json> list(metadata.begin(), metadata.end());
+    // 0.8.2 (session 9's I1): the game can send one save's details twice (the newest came twice); one entry per save, by its
+    // list position and name.
+    std::vector<json> list;
+    std::set<std::pair<int64_t, std::string>> seen;
+    for (const auto& entry : metadata)
+    {
+        const auto key = std::make_pair(entry.value("index", int64_t{-1}), entry.value("name", std::string()));
+        if (seen.insert(key).second)
+        {
+            list.push_back(entry);
+        }
+    }
     std::stable_sort(list.begin(), list.end(), [](const json& a, const json& b) { return a.value("timestamp", 0.0) > b.value("timestamp", 0.0); });
     json saves = json::array();
     for (const auto& entry : list)
@@ -568,12 +583,25 @@ json TrimSaves(const json& aAnswer, int32_t aLimit)
         }
         saves.push_back(entry);
     }
+    // 0.8.2 (session 9's I1: all 152 names came back with limit 20): names are the newest `limit` too, in the game's order
+    // (newest first); count stays the whole list's length.
     const auto names = aAnswer.value("names", json::array());
+    json shown = json::array();
+    for (const auto& name : names)
+    {
+        if (static_cast<int32_t>(shown.size()) >= aLimit)
+        {
+            break;
+        }
+        shown.push_back(name);
+    }
     return json{{"ready", aAnswer.value("ready", false)},
                 {"count", names.size()},
-                {"with_metadata", metadata.size()},
+                {"with_metadata", list.size()},
                 {"saves", saves},
-                {"names", names},
-                {"note", metadata.size() < names.size() ? "the game sends each save's details a moment after the list; wait_ms waits longer for them" : ""}};
+                {"names", shown},
+                {"note", list.size() < std::min(names.size(), static_cast<size_t>(std::max(aLimit, 1)))
+                             ? "the game sends each save's details a moment after the list; wait_ms waits longer for them"
+                             : ""}};
 }
 } // namespace xfb::hooks

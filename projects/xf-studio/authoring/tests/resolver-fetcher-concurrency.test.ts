@@ -2,9 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MountedArchive } from "../src/archive-precedence";
-import { WolvenKitFetcher } from "../src/resolver-host";
-import { WolvenKitRunError } from "../src/wolvenkit-cli";
+import type { MountedArchive } from "../src/game/archive-precedence";
+import { WolvenKitFetcher } from "../src/game/host/resolver-host";
+import { WolvenKitRunError } from "../src/host/wolvenkit-cli";
 
 /**
  * PREV-29: the grading-LUT host and the character-detail host each open the installation, so two

@@ -75,6 +75,17 @@ describe("animation sets", () => {
     expect(decodeAnimClip(animSet(), "simd", noDecompress)!.frames).toBe(SIMD_FRAMES);
   });
 
+  test("a SIMD clip of zero frames is refused, and its constant outputs are bounded on their own (NATIVE-80)", () => {
+    // Zero frames made every per-frame bound zero, so the decode went ahead (and constant scales then allocated once per joint).
+    expect(() => decodeAnimClip(animSet({ simdFrames: 0 }), "simd", noDecompress)).toThrow(/declares 0 frames/);
+    // A tiny file declaring millions of joints, or of constant tracks, is refused before anything per joint or track is allocated.
+    expect(() => decodeAnimClip(animSet({ simdFrames: 0, simdJoints: 4_000_000 }), "simd", noDecompress)).toThrow(/declares 4000000 joints/);
+    expect(() => decodeAnimClip(animSet({ simdFrames: 0, simdTracks: 4_000_000, simdTrackConstant: true }), "simd", noDecompress)).toThrow(/and 4000000 tracks/);
+    expect(() => decodeAnimClip(animSet({ simdFrames: 1, simdJoints: 4_000_000 }), "simd", noDecompress)).toThrow(NativeMalformedError);
+    // One frame is a valid clip.
+    expect(decodeAnimClip(animSet({ simdFrames: 1, simdBlock: new Uint8Array(4096) }), "simd", noDecompress)!.frames).toBe(1);
+  });
+
   test("a rig whose parents form a cycle is refused as malformed (NATIVE-68)", () => {
     expect(() => readAnimRig(rig(["Root", "A", "B", "C"], { parents: [-1, 2, 3, 1] }))).toThrow(/cycle/);
     expect(() => readAnimRig(rig(["A", "B"], { parents: [1, 0] }))).toThrow(/cycle/);

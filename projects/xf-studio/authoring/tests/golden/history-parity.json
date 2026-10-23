@@ -1,0 +1,9008 @@
+{
+ "amended": {
+  "view": "Profiles phase 1e: focus left the view graph. A focus move is the session focus service's; it records nothing and the graph announces nothing."
+ },
+ "capturedFrom": "2e0708a6",
+ "documents": [
+  {
+   "a": {
+    "current": -1,
+    "documentLabel": null,
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [],
+    "trimmed": false
+   },
+   "b": {
+    "current": -1,
+    "documentLabel": null,
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [],
+    "trimmed": false
+   },
+   "heard": 0,
+   "result": null,
+   "selected": null,
+   "what": "empty"
+  },
+  {
+   "a": {
+    "current": 0,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": -1,
+    "documentLabel": null,
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [],
+    "trimmed": false
+   },
+   "heard": 1,
+   "result": null,
+   "selected": "hair:a",
+   "what": "record a"
+  },
+  {
+   "a": {
+    "current": 1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": -1,
+    "documentLabel": null,
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [],
+    "trimmed": false
+   },
+   "heard": 2,
+   "result": null,
+   "selected": "hair:a",
+   "what": "record a again"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair volume",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": -1,
+    "documentLabel": null,
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [],
+    "trimmed": false
+   },
+   "heard": 3,
+   "result": null,
+   "selected": "hair:a",
+   "what": "record a with a stale before"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair volume",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 4,
+   "result": null,
+   "selected": "hair:b",
+   "what": "record b"
+  },
+  {
+   "a": {
+    "current": 1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 1,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair volume",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 5,
+   "result": {
+    "v": 3
+   },
+   "selected": "hair:a",
+   "what": "move a back"
+  },
+  {
+   "a": {
+    "current": -1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 3,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "undone"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "undone"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair volume",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 6,
+   "result": {
+    "v": 1
+   },
+   "selected": "hair:a",
+   "what": "move a to start"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair volume",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 7,
+   "result": {
+    "v": 4
+   },
+   "selected": "hair:a",
+   "what": "move a beyond"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair volume",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 8,
+   "result": {
+    "v": 4
+   },
+   "selected": "hair:a",
+   "what": "move a to the same place"
+  },
+  {
+   "a": {
+    "current": 1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 1,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair volume",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 9,
+   "result": {
+    "v": 3
+   },
+   "selected": "hair:a",
+   "what": "move a back one"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 4,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 10,
+   "result": null,
+   "selected": "hair:a",
+   "what": "record a drops its redo"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 4,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 10,
+   "result": null,
+   "selected": "hair:a",
+   "what": "move unknown"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 4,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 11,
+   "result": null,
+   "selected": null,
+   "what": "focus null"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 4,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 11,
+   "result": null,
+   "selected": null,
+   "what": "focus null again"
+  },
+  {
+   "a": {
+    "current": 2,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:a:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 0,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair waves",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 4,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "b": {
+    "current": 0,
+    "documentLabel": "Other groom",
+    "redoCount": 0,
+    "start": "hair:b:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 3,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "heard": 12,
+   "result": null,
+   "selected": "hair:b",
+   "what": "focus b"
+  }
+ ],
+ "look": [
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 2,
+     "resets": 0
+    },
+    "history": {
+     "depth": 1,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "gesture.point.replace",
+      "label": "Move point",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 0,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "gesture.point.replace",
+       "at": "set",
+       "id": 0,
+       "label": "Move point",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": true,
+   "what": "gesture moved and back"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 2,
+     "resets": 1
+    },
+    "history": {
+     "depth": 1,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "gesture.point.replace",
+      "label": "Move point",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 0,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "gesture.point.replace",
+       "at": "set",
+       "id": 0,
+       "label": "Move point",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": true,
+   "what": "cancelled gesture"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 0
+    },
+    "history": {
+     "depth": 1,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "e3cea8a2dfe71f56ab4fec9e3e586c026a396488e2c3588cbccd6f55cbe6b087",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 0,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true
+   },
+   "what": "opacity"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 0,
+     "redo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     },
+     "redoDepth": 1
+    },
+    "others": {},
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 1,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "undo"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 2,
+     "resets": 1
+    },
+    "history": {
+     "depth": 0,
+     "redo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     },
+     "redoDepth": 1
+    },
+    "others": {},
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 1,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": true,
+   "what": "cancelled gesture after undo"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 1,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "e3cea8a2dfe71f56ab4fec9e3e586c026a396488e2c3588cbccd6f55cbe6b087",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 0,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "redo"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 1,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "e3cea8a2dfe71f56ab4fec9e3e586c026a396488e2c3588cbccd6f55cbe6b087",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 0,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": true,
+   "what": "empty gesture"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 0
+    },
+    "history": {
+     "depth": 2,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "0db0dd16d4f34bdb7dc20a5b97c4d365c0d318299b12d9bd02504a6293af2c57",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 1,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true
+   },
+   "what": "opacity 0.3"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 0
+    },
+    "history": {
+     "depth": 3,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "2025b53245e10435bbd0cc2b1f51aef8b045b9f7d0d16622025e417c9096539f",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 2,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true
+   },
+   "what": "opacity 0.5"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 0
+    },
+    "history": {
+     "depth": 4,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 3,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true
+   },
+   "what": "opacity 0.7"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 5,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#aa3300",
+      "strands": []
+     }
+    },
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 4,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "kind": "content"
+    }
+   },
+   "what": "hair colour"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 6,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.addStrand",
+      "label": "Add strand"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#aa3300",
+      "strands": [
+       2
+      ]
+     }
+    },
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 5,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "kind": "content"
+    }
+   },
+   "what": "hair strand"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 6,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.addStrand",
+      "label": "Add strand"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#aa3300",
+      "strands": [
+       2
+      ]
+     }
+    },
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 5,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "kind": "selection"
+    }
+   },
+   "what": "selection keeps Redo"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 0,
+     "redo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     },
+     "redoDepth": 6
+    },
+    "others": {},
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 6,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "jump to start"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 0,
+     "redo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     },
+     "redoDepth": 6
+    },
+    "others": {},
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 6,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": {
+    "code": "invalid_value",
+    "message": "This is already the current step.",
+    "ok": false
+   },
+   "what": "jump to the same place"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 3,
+     "redo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     },
+     "redoDepth": 3,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "2025b53245e10435bbd0cc2b1f51aef8b045b9f7d0d16622025e417c9096539f",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": 2,
+     "redoCount": 3,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "jump to the third step"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 6,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.addStrand",
+      "label": "Add strand"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#aa3300",
+      "strands": [
+       2
+      ]
+     }
+    },
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 5,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "jump to the last step"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 6,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.addStrand",
+      "label": "Add strand"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#aa3300",
+      "strands": [
+       2
+      ]
+     }
+    },
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 5,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "code": "missing_target",
+    "message": "That history step no longer exists.",
+    "ok": false
+   },
+   "what": "jump to an unknown step"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 4,
+     "redo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     },
+     "redoDepth": 2,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": 3,
+     "redoCount": 2,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": [
+    {
+     "ok": true,
+     "result": true
+    },
+    {
+     "ok": true,
+     "result": true
+    }
+   ],
+   "what": "undo twice"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 5,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "unknown",
+      "label": "Earlier change"
+     }
+    },
+    "others": {},
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    },
+    "timeline": {
+     "current": 4,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "unknown",
+       "at": "set",
+       "id": 6,
+       "label": "Earlier change",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    }
+   },
+   "result": true,
+   "what": "control begin"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 1,
+     "resets": 0
+    },
+    "history": {
+     "depth": 5,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "983e5af17b7f0ac46aa6e209080d96480af2e65e214e60314c1633e01f5edeae",
+    "redo": {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    },
+    "timeline": {
+     "current": 4,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 6,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "control edit"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 5,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "983e5af17b7f0ac46aa6e209080d96480af2e65e214e60314c1633e01f5edeae",
+    "redo": {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    },
+    "timeline": {
+     "current": 4,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 6,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    }
+   },
+   "result": {
+    "available": false,
+    "code": "busy",
+    "reason": "Finish or cancel the current adjustment first (Esc)."
+   },
+   "what": "busy undo"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 1,
+     "resets": 0
+    },
+    "history": {
+     "depth": 5,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "e4a6a5b9652b8b19ec5c051fefeefd284330aa6f1d769895cf34486470117381",
+    "redo": {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    },
+    "timeline": {
+     "current": 4,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 6,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "control edit 2"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 4,
+     "redo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     },
+     "redoDepth": 2,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": 3,
+     "redoCount": 2,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": null,
+   "what": "control cancel"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 2,
+     "resets": 0
+    },
+    "history": {
+     "depth": 4,
+     "redo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     },
+     "redoDepth": 2,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "231300ce7667c5044e0f9d3960c923660dd60552e74cec5a1a524c456d4117dd",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": 3,
+     "redoCount": 2,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 4,
+       "label": "Hair colour",
+       "state": "undone"
+      },
+      {
+       "actionKind": "hair.addStrand",
+       "at": "set",
+       "id": 5,
+       "label": "Add strand",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": null,
+   "what": "control back at start commits nothing"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 2,
+     "resets": 0
+    },
+    "history": {
+     "depth": 5,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "a22ccec83015c0cd90175af1dafdcc9385648842ea4b71fdee9cdfa7b55847c0",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 4,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": null,
+   "what": "control commit"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 0
+    },
+    "history": {
+     "depth": 6,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setColor",
+      "label": "Colour",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {},
+    "recipe": "c2b3ce168618a1d6e346411e725d7eaf9f5d0dbec4a47d4367cffe3aef279ea7",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 5,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "one-shot control edit"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 7,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#020202",
+      "strands": []
+     }
+    },
+    "recipe": "c2b3ce168618a1d6e346411e725d7eaf9f5d0dbec4a47d4367cffe3aef279ea7",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 6,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": [
+    true,
+    {
+     "ok": true,
+     "result": true
+    },
+    {
+     "ok": true,
+     "result": true
+    },
+    null
+   ],
+   "what": "feature control"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 7,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#020202",
+      "strands": []
+     }
+    },
+    "recipe": "c2b3ce168618a1d6e346411e725d7eaf9f5d0dbec4a47d4367cffe3aef279ea7",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 6,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": [
+    true,
+    {
+     "ok": true,
+     "result": true
+    },
+    null
+   ],
+   "what": "feature control cancel"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 0
+    },
+    "history": {
+     "depth": 8,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "look.reset",
+      "label": "Reset look"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#020202",
+      "strands": [
+       4
+      ]
+     }
+    },
+    "recipe": "ca18c99d4c6cf51bd30854dc224ad2f71d0c3ed38901651a1119735321588a9b",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 7,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "look.reset",
+       "at": "set",
+       "id": 10,
+       "label": "Reset look",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "ok": true,
+     "result": {
+      "kind": "content"
+     }
+    }
+   },
+   "what": "look transaction"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 8,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "look.reset",
+      "label": "Reset look"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#020202",
+      "strands": [
+       4
+      ]
+     }
+    },
+    "recipe": "ca18c99d4c6cf51bd30854dc224ad2f71d0c3ed38901651a1119735321588a9b",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 7,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "look.reset",
+       "at": "set",
+       "id": 10,
+       "label": "Reset look",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "ok": true
+    }
+   },
+   "what": "empty look transaction"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 8,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "look.reset",
+      "label": "Reset look"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#020202",
+      "strands": [
+       4
+      ]
+     }
+    },
+    "recipe": "ca18c99d4c6cf51bd30854dc224ad2f71d0c3ed38901651a1119735321588a9b",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 7,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "look.reset",
+       "at": "set",
+       "id": 10,
+       "label": "Reset look",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "code": "invalid_value",
+    "message": "No.",
+    "ok": false
+   },
+   "what": "failed look transaction"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 7,
+     "redo": {
+      "actionKind": "look.reset",
+      "label": "Reset look"
+     },
+     "redoDepth": 1,
+     "undo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#020202",
+      "strands": []
+     }
+    },
+    "recipe": "c2b3ce168618a1d6e346411e725d7eaf9f5d0dbec4a47d4367cffe3aef279ea7",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": 6,
+     "redoCount": 1,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "look.reset",
+       "at": "set",
+       "id": 10,
+       "label": "Reset look",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "undo the transaction"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 8,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "look.reset",
+      "label": "Reset look"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#020202",
+      "strands": [
+       4
+      ]
+     }
+    },
+    "recipe": "ca18c99d4c6cf51bd30854dc224ad2f71d0c3ed38901651a1119735321588a9b",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 7,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "look.reset",
+       "at": "set",
+       "id": 10,
+       "label": "Reset look",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "redo the transaction"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 8,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#0f0f0f",
+      "strands": []
+     }
+    },
+    "recipe": "c2b3ce168618a1d6e346411e725d7eaf9f5d0dbec4a47d4367cffe3aef279ea7",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 7,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 11,
+       "label": "Hair colour",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "kind": "content"
+    }
+   },
+   "what": "edit after undo"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 8,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "hair.setColour",
+      "label": "Hair colour"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#0f0f0f",
+      "strands": []
+     }
+    },
+    "recipe": "c2b3ce168618a1d6e346411e725d7eaf9f5d0dbec4a47d4367cffe3aef279ea7",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 7,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 0,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 1,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 2,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 3,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 7,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setColor",
+       "at": "set",
+       "id": 8,
+       "label": "Colour",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 9,
+       "label": "Hair colour",
+       "state": "done"
+      },
+      {
+       "actionKind": "hair.setColour",
+       "at": "set",
+       "id": 11,
+       "label": "Hair colour",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "code": "invalid_value",
+    "message": "There is no undone change to redo.",
+    "ok": false
+   },
+   "what": "redo after the edit"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 85,
+     "resets": 0
+    },
+    "history": {
+     "depth": 80,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#0f0f0f",
+      "strands": []
+     }
+    },
+    "recipe": "87fb684a17ef9e319560146ed47d912ec6a3c267c4a7ed80a6074009e6c76d5d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 79,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 12,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 13,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 14,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 15,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 16,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 17,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 18,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 19,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 20,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 21,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 22,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 23,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 24,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 25,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 26,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 27,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 28,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 29,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 30,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 31,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 32,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 33,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 34,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 35,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 36,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 37,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 38,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 39,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 40,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 41,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 42,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 43,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 44,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 45,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 46,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 47,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 48,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 49,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 50,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 51,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 52,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 53,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 54,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 55,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 56,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 57,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 58,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 59,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 60,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 61,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 62,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 63,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 64,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 65,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 66,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 67,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 68,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 69,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 70,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 71,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 72,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 73,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 74,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 75,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 76,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 77,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 78,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 79,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 80,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 81,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 82,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 83,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 84,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 85,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 86,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 87,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 88,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 89,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 90,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 91,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": true
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": null,
+   "what": "at the limit"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 80,
+     "redo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     },
+     "redoDepth": 1,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#0f0f0f",
+      "strands": []
+     }
+    },
+    "recipe": "57b929e10ccf5d411f214a7b4579c53a764060f3edd494fd82e6db0823692ace",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": 79,
+     "redoCount": 1,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 92,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 12,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 13,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 14,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 15,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 16,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 17,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 18,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 19,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 20,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 21,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 22,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 23,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 24,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 25,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 26,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 27,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 28,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 29,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 30,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 31,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 32,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 33,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 34,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 35,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 36,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 37,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 38,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 39,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 40,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 41,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 42,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 43,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 44,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 45,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 46,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 47,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 48,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 49,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 50,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 51,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 52,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 53,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 54,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 55,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 56,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 57,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 58,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 59,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 60,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 61,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 62,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 63,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 64,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 65,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 66,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 67,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 68,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 69,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 70,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 71,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 72,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 73,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 74,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 75,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 76,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 77,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 78,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 79,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 80,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 81,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 82,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 83,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 84,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 85,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 86,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 87,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 88,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 89,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 90,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 91,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "undone"
+      }
+     ],
+     "trimmed": true
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "undo at the limit"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 1,
+     "resets": 1
+    },
+    "history": {
+     "depth": 80,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "layer.setOpacity",
+      "label": "Opacity",
+      "layerId": "layer-1"
+     }
+    },
+    "others": {
+     "hair": {
+      "colour": "#0f0f0f",
+      "strands": []
+     }
+    },
+    "recipe": "87fb684a17ef9e319560146ed47d912ec6a3c267c4a7ed80a6074009e6c76d5d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 79,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 12,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 13,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 14,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 15,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 16,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 17,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 18,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 19,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 20,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 21,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 22,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 23,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 24,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 25,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 26,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 27,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 28,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 29,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 30,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 31,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 32,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 33,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 34,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 35,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 36,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 37,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 38,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 39,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 40,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 41,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 42,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 43,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 44,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 45,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 46,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 47,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 48,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 49,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 50,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 51,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 52,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 53,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 54,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 55,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 56,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 57,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 58,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 59,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 60,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 61,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 62,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 63,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 64,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 65,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 66,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 67,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 68,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 69,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 70,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 71,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 72,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 73,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 74,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 75,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 76,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 77,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 78,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 79,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 80,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 81,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 82,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 83,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 84,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 85,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 86,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 87,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 88,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 89,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 90,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      },
+      {
+       "actionKind": "layer.setOpacity",
+       "at": "set",
+       "id": 91,
+       "label": "Opacity",
+       "layerId": "layer-1",
+       "state": "done"
+      }
+     ],
+     "trimmed": true
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "redo at the limit"
+  }
+ ],
+ "persistence": [
+  {
+   "edited": "5c0a231ced839faf1fb68d0fcf5fe22761bb26673ec1a2596edb0c032dbc192a",
+   "first": {
+    "exported": "7a858bd43aa7e5ff2968d5aac4ebcd33587a5739f58a5ee309834efb9bd2e9ac",
+    "roundTrips": true,
+    "stored": "12994eb5d9a4f3513f0be57d9dcea5608b35c654e44dfc2fe96dfe6a835450b2"
+   },
+   "name": "small",
+   "redone": "5c0a231ced839faf1fb68d0fcf5fe22761bb26673ec1a2596edb0c032dbc192a",
+   "storedAfter": "12994eb5d9a4f3513f0be57d9dcea5608b35c654e44dfc2fe96dfe6a835450b2",
+   "undone": {
+    "back": true,
+    "exported": "7a858bd43aa7e5ff2968d5aac4ebcd33587a5739f58a5ee309834efb9bd2e9ac"
+   }
+  },
+  {
+   "edited": "92b97d497c3412a8fe0d9a1ea629290c39fb966bf6f007d9cdf7cf4f208456dc",
+   "first": {
+    "exported": "ac0c07289930ca4a3b86f62bdffc3b0fe2de78233977a631f9e3317cafc47673",
+    "roundTrips": true,
+    "stored": "9d3587745b8bef1995dcfb4355b864f57e91f27f72b821b0c44071dcb0c043c5"
+   },
+   "name": "loose",
+   "redone": "92b97d497c3412a8fe0d9a1ea629290c39fb966bf6f007d9cdf7cf4f208456dc",
+   "storedAfter": "2502df1153351855fab7a3f9e5333abb78907c9ea321bcfe37a38d9cb5827aa5",
+   "undone": {
+    "back": true,
+    "exported": "ac0c07289930ca4a3b86f62bdffc3b0fe2de78233977a631f9e3317cafc47673"
+   }
+  },
+  {
+   "edited": "40d1d5fb8c6b30b57358ad6b7ef6360d8143b273a49c7cb988c15ed5c2f6b382",
+   "first": {
+    "exported": "7478e911bd0d1ee104ee2681a0c6cd30f4b94581880604350fdb4b196c289e39",
+    "roundTrips": true,
+    "stored": "c84b50d026bd292d4ded911a6d6cb6d6d6818e7cd8f722ffefe32fee2f05d049"
+   },
+   "name": "large",
+   "redone": "40d1d5fb8c6b30b57358ad6b7ef6360d8143b273a49c7cb988c15ed5c2f6b382",
+   "storedAfter": "c84b50d026bd292d4ded911a6d6cb6d6d6818e7cd8f722ffefe32fee2f05d049",
+   "undone": {
+    "back": true,
+    "exported": "7478e911bd0d1ee104ee2681a0c6cd30f4b94581880604350fdb4b196c289e39"
+   }
+  }
+ ],
+ "redoValidity": [
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 1,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "tint.set",
+      "label": "tint.set"
+     }
+    },
+    "others": {
+     "tint": {
+      "colour": "#111111",
+      "strands": []
+     }
+    },
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 0,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "tint.set",
+       "at": "set",
+       "id": 0,
+       "label": "tint.set",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "kind": "content"
+    }
+   },
+   "what": "tint"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 0,
+     "redo": {
+      "actionKind": "tint.set",
+      "label": "tint.set"
+     },
+     "redoDepth": 1
+    },
+    "others": {},
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 1,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "tint.set",
+       "at": "set",
+       "id": 0,
+       "label": "tint.set",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "undo"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 0,
+     "redoDepth": 0
+    },
+    "others": {
+     "tint": {
+      "colour": "#222222",
+      "strands": []
+     }
+    },
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "kind": "content"
+    }
+   },
+   "what": "unrecorded tint"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 0,
+     "redoDepth": 0
+    },
+    "others": {
+     "tint": {
+      "colour": "#222222",
+      "strands": []
+     }
+    },
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": {
+    "code": "invalid_value",
+    "message": "There is no undone change to redo.",
+    "ok": false
+   },
+   "what": "redo refused"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 1,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "tint.set",
+      "label": "tint.set"
+     }
+    },
+    "others": {
+     "tint": {
+      "colour": "#333333",
+      "strands": []
+     }
+    },
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 0,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "tint.set",
+       "at": "set",
+       "id": 1,
+       "label": "tint.set",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "kind": "content"
+    }
+   },
+   "what": "tint again"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 0,
+     "redo": {
+      "actionKind": "tint.set",
+      "label": "tint.set"
+     },
+     "redoDepth": 1
+    },
+    "others": {
+     "tint": {
+      "colour": "#222222",
+      "strands": []
+     }
+    },
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 1,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "tint.set",
+       "at": "set",
+       "id": 1,
+       "label": "tint.set",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "undo again"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": false,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 0,
+     "redo": {
+      "actionKind": "tint.set",
+      "label": "tint.set"
+     },
+     "redoDepth": 1
+    },
+    "others": {
+     "tint": {
+      "colour": "#222222",
+      "strands": []
+     }
+    },
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": true
+    },
+    "timeline": {
+     "current": -1,
+     "redoCount": 1,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "tint.set",
+       "at": "set",
+       "id": 1,
+       "label": "tint.set",
+       "state": "undone"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no change to undo."
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": {
+     "kind": "content"
+    }
+   },
+   "what": "unrecorded tint back to the same"
+  },
+  {
+   "at": {
+    "active": 0,
+    "counts": {
+     "history": true,
+     "recipe": 0,
+     "resets": 0
+    },
+    "history": {
+     "depth": 1,
+     "redoDepth": 0,
+     "undo": {
+      "actionKind": "tint.set",
+      "label": "tint.set"
+     }
+    },
+    "others": {
+     "tint": {
+      "colour": "#333333",
+      "strands": []
+     }
+    },
+    "recipe": "74796e1780b9f130dcf82e783bcfa8290f8dc2487dbdc71c1770d82d792a422d",
+    "redo": {
+     "available": false,
+     "code": "invalid_value",
+     "reason": "There is no undone change to redo."
+    },
+    "timeline": {
+     "current": 0,
+     "redoCount": 0,
+     "start": "start",
+     "steps": [
+      {
+       "actionKind": "tint.set",
+       "at": "set",
+       "id": 1,
+       "label": "tint.set",
+       "state": "done"
+      }
+     ],
+     "trimmed": false
+    },
+    "undo": {
+     "available": true
+    }
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "what": "redo still there"
+  }
+ ],
+ "routed": [
+  {
+   "groom": 0,
+   "history": {
+    "depth": 1,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone change to redo."
+   },
+   "result": {
+    "ok": true
+   },
+   "selected": null,
+   "timeline": {
+    "current": 0,
+    "documentLabel": null,
+    "redoCount": 0,
+    "start": "start",
+    "steps": [
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 0,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "look edit"
+  },
+  {
+   "groom": 1,
+   "history": {
+    "depth": 1,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "hairLab.set",
+     "id": "g1",
+     "label": "Hair length",
+     "state": "done"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "result": null,
+   "selected": "hair:g",
+   "timeline": {
+    "current": 0,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "groom step"
+  },
+  {
+   "groom": 2,
+   "history": {
+    "depth": 2,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "hairLab.set",
+     "id": "g2",
+     "label": "Hair waves",
+     "state": "done"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "result": null,
+   "selected": "hair:g",
+   "timeline": {
+    "current": 1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair waves",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "groom step 2"
+  },
+  {
+   "groom": 1,
+   "history": {
+    "depth": 1,
+    "redo": {
+     "actionKind": "hairLab.set",
+     "id": "g2",
+     "label": "Hair waves",
+     "state": "undone"
+    },
+    "redoDepth": 1,
+    "undo": {
+     "actionKind": "hairLab.set",
+     "id": "g1",
+     "label": "Hair length",
+     "state": "done"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": true
+   },
+   "result": {
+    "ok": true
+   },
+   "selected": "hair:g",
+   "timeline": {
+    "current": 0,
+    "documentLabel": "Hair Lab",
+    "redoCount": 1,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair waves",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "undo goes to the groom"
+  },
+  {
+   "groom": 2,
+   "history": {
+    "depth": 2,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "hairLab.set",
+     "id": "g2",
+     "label": "Hair waves",
+     "state": "done"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "result": {
+    "ok": true
+   },
+   "selected": "hair:g",
+   "timeline": {
+    "current": 1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair length",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair waves",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "redo goes to the groom"
+  },
+  {
+   "groom": 0,
+   "history": {
+    "depth": 0,
+    "redo": {
+     "actionKind": "hairLab.set",
+     "id": "g1",
+     "label": "Hair length",
+     "state": "undone"
+    },
+    "redoDepth": 2
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": true
+   },
+   "result": {
+    "ok": true
+   },
+   "selected": "hair:g",
+   "timeline": {
+    "current": -1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 2,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair length",
+      "state": "undone"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair waves",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "what": "jump to the groom's start"
+  },
+  {
+   "groom": 0,
+   "history": {
+    "depth": 0,
+    "redo": {
+     "actionKind": "hairLab.set",
+     "id": "g1",
+     "label": "Hair length",
+     "state": "undone"
+    },
+    "redoDepth": 2
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": true
+   },
+   "result": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "selected": "hair:g",
+   "timeline": {
+    "current": -1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 2,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair length",
+      "state": "undone"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair waves",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "what": "jump to a step it doesn't hold is refused"
+  },
+  {
+   "groom": 0,
+   "history": {
+    "depth": 0,
+    "redo": {
+     "actionKind": "hairLab.set",
+     "id": "g1",
+     "label": "Hair length",
+     "state": "undone"
+    },
+    "redoDepth": 2
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "busy",
+    "reason": "Finish or cancel the current adjustment first (Esc)."
+   },
+   "result": [
+    true,
+    {
+     "available": false,
+     "code": "busy",
+     "reason": "Finish or cancel the current adjustment first (Esc)."
+    },
+    {
+     "code": "busy",
+     "message": "Finish or cancel the current adjustment first (Esc).",
+     "ok": false
+    }
+   ],
+   "selected": "hair:g",
+   "timeline": {
+    "current": -1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 2,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 1,
+      "label": "Hair length",
+      "state": "undone"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 2,
+      "label": "Hair waves",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": false,
+    "code": "busy",
+    "reason": "Finish or cancel the current adjustment first (Esc)."
+   },
+   "what": "busy while a control is open"
+  },
+  {
+   "groom": 0,
+   "history": {
+    "depth": 1,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone change to redo."
+   },
+   "result": null,
+   "selected": null,
+   "timeline": {
+    "current": 0,
+    "documentLabel": null,
+    "redoCount": 0,
+    "start": "start",
+    "steps": [
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 0,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "after the cancelled control"
+  },
+  {
+   "groom": 0,
+   "history": {
+    "depth": 2,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    }
+   },
+   "recipe": "0.5",
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone change to redo."
+   },
+   "result": {
+    "ok": true
+   },
+   "selected": null,
+   "timeline": {
+    "current": 1,
+    "documentLabel": null,
+    "redoCount": 0,
+    "start": "start",
+    "steps": [
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 0,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "done"
+     },
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 3,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "a look edit returns Undo to the look"
+  },
+  {
+   "groom": 0,
+   "history": {
+    "depth": 1,
+    "redo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    },
+    "redoDepth": 1,
+    "undo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": true
+   },
+   "result": {
+    "ok": true,
+    "result": true
+   },
+   "selected": null,
+   "timeline": {
+    "current": 0,
+    "documentLabel": null,
+    "redoCount": 1,
+    "start": "start",
+    "steps": [
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 0,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "done"
+     },
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 3,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "look undo"
+  },
+  {
+   "groom": 3,
+   "history": {
+    "depth": 1,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "hairLab.set",
+     "id": "g3",
+     "label": "Hair volume",
+     "state": "done"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "result": null,
+   "selected": "hair:g",
+   "timeline": {
+    "current": 0,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 4,
+      "label": "Hair volume",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "groom step 3"
+  },
+  {
+   "groom": 4,
+   "history": {
+    "depth": 2,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "hairLab.set",
+     "id": "g4",
+     "label": "Hair length",
+     "state": "done"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "result": null,
+   "selected": "hair:g",
+   "timeline": {
+    "current": 1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 4,
+      "label": "Hair volume",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 5,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "groom step 4"
+  },
+  {
+   "groom": 4,
+   "history": {
+    "depth": 1,
+    "redo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    },
+    "redoDepth": 1,
+    "undo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": true
+   },
+   "result": null,
+   "selected": "hair:g",
+   "timeline": {
+    "current": 0,
+    "documentLabel": null,
+    "redoCount": 1,
+    "start": "start",
+    "steps": [
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 0,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "done"
+     },
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 3,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "a groom no longer shown leaves Undo with the look"
+  },
+  {
+   "groom": 4,
+   "history": {
+    "depth": 2,
+    "redoDepth": 0,
+    "undo": {
+     "actionKind": "hairLab.set",
+     "id": "g4",
+     "label": "Hair length",
+     "state": "done"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": false,
+    "code": "unavailable",
+    "reason": "There is no matching change in this document."
+   },
+   "result": null,
+   "selected": "hair:g",
+   "timeline": {
+    "current": 1,
+    "documentLabel": "Hair Lab",
+    "redoCount": 0,
+    "start": "hair:g:start",
+    "steps": [
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 4,
+      "label": "Hair volume",
+      "state": "done"
+     },
+     {
+      "actionKind": "hairLab.set",
+      "at": "none",
+      "id": 5,
+      "label": "Hair length",
+      "state": "done"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "shown again"
+  },
+  {
+   "groom": 4,
+   "history": {
+    "depth": 1,
+    "redo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    },
+    "redoDepth": 1,
+    "undo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    }
+   },
+   "recipe": "0.4",
+   "redo": {
+    "available": true
+   },
+   "result": null,
+   "selected": null,
+   "timeline": {
+    "current": 0,
+    "documentLabel": null,
+    "redoCount": 1,
+    "start": "start",
+    "steps": [
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 0,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "done"
+     },
+     {
+      "actionKind": "layer.setOpacity",
+      "at": "set",
+      "id": 3,
+      "label": "Opacity",
+      "layerId": "layer-1",
+      "state": "undone"
+     }
+    ],
+    "trimmed": false
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "focus back to the look"
+  }
+ ],
+ "view": [
+  {
+   "data": "df78735dbdeaae1362c7c29e1373e3f8dce85a4e98a9a07e462190c364a6a47d",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 1,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.5,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": null,
+   "snapshot": {
+    "depth": 1,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "one drag"
+  },
+  {
+   "data": "df78735dbdeaae1362c7c29e1373e3f8dce85a4e98a9a07e462190c364a6a47d",
+   "events": [],
+   "history": {
+    "depth": 1,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.5,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 1,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "release"
+  },
+  {
+   "data": "cb0da02476a9a0e5e89cda889c79f8096ac3a5156d5434e29fd5167ca033bb1e",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 2,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.6,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 2,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "second drag"
+  },
+  {
+   "data": "4384da5197f8c5c5887aa079b4c8976a537344f729f916f7341c206ba81799c7",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 3,
+    "redoDepth": 0,
+    "undo": "Lighting: Key light"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.6,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 3,
+    "redoDepth": 0,
+    "undo": "Lighting: Key light"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "another edit ends the run"
+  },
+  {
+   "data": "7cec84657624fa7a8c1b3acb8bdfdc2faefc0ede224f7a6fb785b875b0888b40",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.7,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "same slider again"
+  },
+  {
+   "data": "4384da5197f8c5c5887aa079b4c8976a537344f729f916f7341c206ba81799c7",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "history",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 3,
+    "redo": "Exposure",
+    "redoDepth": 1,
+    "undo": "Lighting: Key light"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.6,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": true
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 3,
+    "redo": "Exposure",
+    "redoDepth": 1,
+    "undo": "Lighting: Key light"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "undo"
+  },
+  {
+   "data": "a5e945df22b69e954e7771453ac1ebd2c815250f9436f395a0bfc5b492c3b2cb",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.8,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "drag after undo"
+  },
+  {
+   "data": "ff63526df8d6a78af84b2f0c1aafd88707e2e4bf25016c80c1de61f78669a89d",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "drag after undo 2"
+  },
+  {
+   "data": "4384da5197f8c5c5887aa079b4c8976a537344f729f916f7341c206ba81799c7",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "history",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 3,
+    "redo": "Exposure",
+    "redoDepth": 1,
+    "undo": "Lighting: Key light"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.6,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": true
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 3,
+    "redo": "Exposure",
+    "redoDepth": 1,
+    "undo": "Lighting: Key light"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "undo 2"
+  },
+  {
+   "data": "ff63526df8d6a78af84b2f0c1aafd88707e2e4bf25016c80c1de61f78669a89d",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "history",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "redo"
+  },
+  {
+   "data": "5b2e6f67fd2ae848fd18091ef6d11f6548b7c558056ab10c5868c1dba00da27a",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "t1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 4,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "tool toggle records nothing"
+  },
+  {
+   "data": "4713f640fc22d2f4bc5f88959cc55588813132dabd86e5a4e33decaaf1a0fcd5",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "d1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Hide eyebrows"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Hide eyebrows"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "display edit"
+  },
+  {
+   "data": "61d5f3f9634f8220ea5a7817a95f825f8aac03e7bb4ad3b0a1b0e338082da41b",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "d1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Hide eyebrows"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Hide eyebrows"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "unlabelled edit"
+  },
+  {
+   "data": "4713f640fc22d2f4bc5f88959cc55588813132dabd86e5a4e33decaaf1a0fcd5",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "d1"
+     ],
+     "origin": "seed",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Hide eyebrows"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Hide eyebrows"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "seed"
+  },
+  {
+   "data": "5b2e6f67fd2ae848fd18091ef6d11f6548b7c558056ab10c5868c1dba00da27a",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "d1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Hide eyebrows"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Hide eyebrows"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "without history"
+  },
+  {
+   "data": "5b2e6f67fd2ae848fd18091ef6d11f6548b7c558056ab10c5868c1dba00da27a",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "d1"
+     ],
+     "origin": "history",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 4,
+    "redo": "Hide eyebrows",
+    "redoDepth": 1,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": true
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 4,
+    "redo": "Hide eyebrows",
+    "redoDepth": 1,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "undo display"
+  },
+  {
+   "data": "1feb337ec41823cf3a1c83eba94686b3bbe5972d832c9f9add8b741ff162a7cc",
+   "events": [
+    {
+     "applied": true,
+     "nodes": [
+      "c1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Front view"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": null,
+   "snapshot": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Front view"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "camera jump"
+  },
+  {
+   "data": "2269ca30e322609d34c6a49014cc19646391c9c43c780297a86079ee886f0448",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "c1"
+     ],
+     "origin": "history",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 4,
+    "redo": "Front view",
+    "redoDepth": 1,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": true
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 4,
+    "redo": "Front view",
+    "redoDepth": 1,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "undo the jump"
+  },
+  {
+   "data": "1feb337ec41823cf3a1c83eba94686b3bbe5972d832c9f9add8b741ff162a7cc",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "c1"
+     ],
+     "origin": "history",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Front view"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Front view"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "redo the jump"
+  },
+  {
+   "data": "2269ca30e322609d34c6a49014cc19646391c9c43c780297a86079ee886f0448",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "c1"
+     ],
+     "origin": "history",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Front view"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 5,
+    "redoDepth": 0,
+    "undo": "Front view"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "camera back"
+  },
+  {
+   "data": "cbc9345a36832b00cdc9c0cee00fe7c5ecb07b993f4f1fb39f0f3b7855027e84",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "c3",
+      "d4",
+      "t5"
+     ],
+     "origin": "edit",
+     "structure": true,
+     "views": [
+      "v2"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 6,
+    "redoDepth": 0,
+    "undo": "New 3D view"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.9,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": "v2",
+   "snapshot": {
+    "depth": 6,
+    "redoDepth": 0,
+    "undo": "New 3D view"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "add view"
+  },
+  {
+   "data": "d9da078af5fba58edf79b4f7a4e264e803dbbade8a977692a473485756ad3383",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main",
+      "v2"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 7,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 7,
+    "redoDepth": 0,
+    "undo": "Exposure"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "exposure in the new view"
+  },
+  {
+   "data": "14a9e57944f441ed96af50a46e17af882a0478eb2eb49290986cc8ab0040261f",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l6"
+     ],
+     "origin": "edit",
+     "structure": true,
+     "views": [
+      "v2"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 8,
+    "redoDepth": 0,
+    "undo": "Unlink lights"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 8,
+    "redoDepth": 0,
+    "undo": "Unlink lights"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "unlink lights"
+  },
+  {
+   "data": "82974eaa2dbd76878aa97dbfc3a6b183d1dbfc8012544ad963622b270c89faa4",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "c3"
+     ],
+     "origin": "edit",
+     "structure": true,
+     "views": [
+      "v2"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 9,
+    "redoDepth": 0,
+    "undo": "Link camera"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 9,
+    "redoDepth": 0,
+    "undo": "Link camera"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "link camera"
+  },
+  {
+   "data": "82974eaa2dbd76878aa97dbfc3a6b183d1dbfc8012544ad963622b270c89faa4",
+   "events": [],
+   "history": {
+    "depth": 9,
+    "redoDepth": 0,
+    "undo": "Link camera"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": null,
+   "snapshot": {
+    "depth": 9,
+    "redoDepth": 0,
+    "undo": "Link camera"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "focus records nothing"
+  },
+  {
+   "data": "236dab87c440b12d9208aec6af172418238b3c94b5301165a56b22e1bd9ea12f",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "d4",
+      "l6",
+      "t5"
+     ],
+     "origin": "edit",
+     "structure": true,
+     "views": [
+      "v2"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 10,
+    "redoDepth": 0,
+    "undo": "Close view"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": null,
+   "snapshot": {
+    "depth": 10,
+    "redoDepth": 0,
+    "undo": "Close view"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "close view"
+  },
+  {
+   "data": "82974eaa2dbd76878aa97dbfc3a6b183d1dbfc8012544ad963622b270c89faa4",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "d4",
+      "l6",
+      "t5"
+     ],
+     "origin": "history",
+     "structure": true,
+     "views": [
+      "v2"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 9,
+    "redo": "Close view",
+    "redoDepth": 1,
+    "undo": "Link camera"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": true
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 9,
+    "redo": "Close view",
+    "redoDepth": 1,
+    "undo": "Link camera"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "undo close"
+  },
+  {
+   "data": "14a9e57944f441ed96af50a46e17af882a0478eb2eb49290986cc8ab0040261f",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "c3"
+     ],
+     "origin": "history",
+     "structure": true,
+     "views": [
+      "v2"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 8,
+    "redo": "Link camera",
+    "redoDepth": 2,
+    "undo": "Unlink lights"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": true
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 8,
+    "redo": "Link camera",
+    "redoDepth": 2,
+    "undo": "Unlink lights"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "undo link"
+  },
+  {
+   "data": "82974eaa2dbd76878aa97dbfc3a6b183d1dbfc8012544ad963622b270c89faa4",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "c3"
+     ],
+     "origin": "history",
+     "structure": true,
+     "views": []
+    }
+   ],
+   "history": {
+    "depth": 9,
+    "redo": "Close view",
+    "redoDepth": 1,
+    "undo": "Link camera"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": true
+   },
+   "result": true,
+   "snapshot": {
+    "depth": 9,
+    "redo": "Close view",
+    "redoDepth": 1,
+    "undo": "Link camera"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "redo link"
+  },
+  {
+   "data": "236dab87c440b12d9208aec6af172418238b3c94b5301165a56b22e1bd9ea12f",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "d4",
+      "l6",
+      "t5"
+     ],
+     "origin": "edit",
+     "structure": true,
+     "views": [
+      "v2"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 0,
+    "redoDepth": 0
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": null,
+   "snapshot": {
+    "depth": 0,
+    "redoDepth": 0
+   },
+   "undo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no view or lighting change to undo."
+   },
+   "what": "unrecorded structure change clears"
+  },
+  {
+   "data": "236dab87c440b12d9208aec6af172418238b3c94b5301165a56b22e1bd9ea12f",
+   "events": [],
+   "history": {
+    "depth": 0,
+    "redoDepth": 0
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 3,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no view or lighting change to undo."
+   },
+   "snapshot": {
+    "depth": 0,
+    "redoDepth": 0
+   },
+   "undo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no view or lighting change to undo."
+   },
+   "what": "nothing to undo"
+  },
+  {
+   "data": "9ccf197fdeaadca4f61dd13dfe8f2d5a87824aa727602db20380cb86d826f7d5",
+   "events": [
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
+     "nodes": [
+      "l1"
+     ],
+     "origin": "edit",
+     "structure": false,
+     "views": [
+      "main"
+     ]
+    }
+   ],
+   "history": {
+    "depth": 50,
+    "redoDepth": 0,
+    "undo": "Exposure 54"
+   },
+   "lights": {
+    "cone": "full",
+    "exposure": 1.54,
+    "intensity": "isotropic",
+    "shadows": true
+   },
+   "redo": {
+    "available": false,
+    "code": "invalid_value",
+    "reason": "There is no undone view or lighting change to redo."
+   },
+   "result": null,
+   "snapshot": {
+    "depth": 50,
+    "redoDepth": 0,
+    "undo": "Exposure 54"
+   },
+   "undo": {
+    "available": true
+   },
+   "what": "at the limit"
+  }
+ ]
+}

@@ -12,10 +12,10 @@ import { COLLECTION_2, ExportRefusal } from "../../src/platform/api";
 import { EYE_MAKEUP_EXPORTER } from "../../src/features/eye-makeup/export";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE, EYE_MAKEUP_EXPORTER_ID } from "../../src/features/eye-makeup";
 import { VERIFICATION_LIMITS } from "../../src/features/eye-makeup/verify";
-import { derivePlateDocuments } from "../../src/eye-plate-cut";
+import { derivePlateDocuments } from "../../src/legacy/eye-makeup/plate/eye-plate-cut";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../eye-plate-fixture";
 import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-window";
-import { PLATE_UV_FILE, plateUvManifestRecord } from "../../src/plate-uv-footprint-io";
+import { PLATE_UV_FILE, plateUvManifestRecord } from "../../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 
 /** A synthetic plate over the fixture's lids (UVs like the built-in plate's rectangle), and its UV footprint. */
 export const PLATE = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
@@ -56,15 +56,15 @@ export function fakeTools(calls: string[], packed: Map<string, string>): Resourc
 /** The verifiers' WolvenKit stand-in: unbundle copies back the tree the fake pack remembered for that archive. */
 export function fakeVerifierTools(packed: Map<string, string>, calls: string[] = []): VerifierTools {
   return {
-    unbundle(archive, output) {
+    async unbundle(archive, output) {
       calls.push("unbundle");
       const tree = packed.get(sha(readFileSync(archive)));
       if (!tree) return { exitCode: 1, stdout: "", stderr: "unknown archive" };
       cpSync(tree, output, { recursive: true });
       return { exitCode: 0, stdout: "ok", stderr: "" };
     },
-    serialize: () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    exportTextures: () => ({ exitCode: 0, stdout: "", stderr: "" }),
+    serialize: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+    exportTextures: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
   };
 }
 
@@ -77,7 +77,7 @@ type EyeReport = { presetRoutes?: unknown; plateInputs?: { mesh: string; morph: 
 export function fakeEyeVerifier(seen: Parameters<FeatureVerifier["verify"]>[0][] = [], overrides: Partial<FeatureVerification> & { report?: EyeReport } = {}): FeatureVerifier {
   return {
     exporterId: EYE_MAKEUP_EXPORTER_ID,
-    verify(input) {
+    async verify(input) {
       seen.push(input);
       if (overrides.report === undefined && "throws" in overrides) throw Error(String((overrides as { throws: unknown }).throws));
       const build = JSON.parse(readFileSync(join(input.work, "build.json"), "utf8"));
@@ -151,5 +151,5 @@ export const LIPS_EXPORTER: FeatureExporter<LipsPlan> = {
   },
 };
 export const LIPS_VERIFIER: FeatureVerifier = { exporterId: "lips/stub",
-  verify: input => ({ presetCount: 0, verifiedFiles: input.unpacked.files.filter(file => file.path.includes("/lips/")).length, limits: [], report: {} }) };
+  verify: async input => ({ presetCount: 0, verifiedFiles: input.unpacked.files.filter(file => file.path.includes("/lips/")).length, limits: [], report: {} }) };
 export const LIPS_ENTRY: FeatureExporterEntry = { exporter: LIPS_EXPORTER as FeatureExporter<unknown>, verifier: LIPS_VERIFIER };

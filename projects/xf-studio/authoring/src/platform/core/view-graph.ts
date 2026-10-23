@@ -4,7 +4,7 @@
  * a view references it (an edit that leaves a node unreferenced removes it in the same commit), publishes detached reads and
  * tells subscribers what each commit changed, so the devices that draw a node follow it and nothing else redraws.
  *
- * Its edits flow through the View and lighting history (§3.6, revised 27 September): a session-only Undo history separate from
+ * Its edits flow through the View and lighting history (§3.6, revised 27 September; the history service's `view` scope): a session-only Undo history separate from
  * look history. A continuous edit (a slider drag) coalesces into one step until it is sealed (the slider was released, CORE-95).
  * Every structure edit records a step, and a replay that would leave a view naming a missing node is refused (CORE-94). Camera
  * navigation records nothing; a camera jump records a step and leaves a Back/Forward trail on its camera node, so a shared camera
@@ -16,6 +16,7 @@
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, validViewId, viewPanelId, type GraphNode, type KeptView, type SceneKind,
   type StoredNode, type ViewGraphChange, type ViewGraphData, type ViewGraphRules, type ViewGraphSnapshot, type ViewHistoryState,
   type ViewId, type ViewRecord, type ViewSlot } from "../api/view-graph";
+import { createHistoryService, LOCAL_VIEW_SCOPE, type HistoryScope, type HistoryService } from "./history-service";
 
 /** At most this many views (design §3.7: four visible, the rest as tabs) and nodes of one slot. */
 export const MAX_VIEWS = 16;
@@ -39,18 +40,12 @@ type NodeEntry = { id: string; slot: ViewSlot; kind?: string; state: Record<stri
 type KeptNode = { slot: ViewSlot; record: StoredNode };
 /** A view this build can't show, with its place in the stored list (so a round trip keeps the order). */
 type KeptEntry = { at: number; record: KeptView };
-type Structure = { views: ViewRecord[]; focused: ViewId };
-type Step = {
-  label: string;
-  /** The run this step coalesces (absent once sealed). */
-  coalesce?: string;
-  /** Each node the step touched, as it was before and after (undefined: it did not exist). */
-  nodes: Map<string, { before?: NodeEntry; after?: NodeEntry }>;
-  /** The views and focus before and after, when the step changed them. */
-  structure?: { before: Structure; after: Structure };
-};
+type Structure = { views: ViewRecord[] };
+/** The View and lighting history's key for the views: outside the node-ID grammar, so no node can take it. */
+export const VIEW_HISTORY_STRUCTURE = "@structure";
+const STRUCTURE = VIEW_HISTORY_STRUCTURE;
 type Trail = { back: Record<string, unknown>[]; forward: Record<string, unknown>[] };
-type Parsed = { views: ViewRecord[]; nodes: Map<string, NodeEntry>; focused: ViewId; keptViews: KeptEntry[]; keptNodes: Map<string, KeptNode> };
+type Parsed = { views: ViewRecord[]; nodes: Map<string, NodeEntry>; legacyFocus: ViewId; keptViews: KeptEntry[]; keptNodes: Map<string, KeptNode> };
 const clone = <T>(value: T): T => structuredClone(value);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -71,7 +66,7 @@ export class ViewGraphError extends Error {
  */
 export function parseViewGraph(value: unknown, rules: ViewGraphRules): ViewGraphData | undefined {
   const parsed = parseGraph(value, rules);
-  return parsed && writeData(parsed.views, parsed.nodes, parsed.focused, parsed.keptViews, parsed.keptNodes);
+  return parsed && writeData(parsed.views, parsed.nodes, parsed.legacyFocus, parsed.keptViews, parsed.keptNodes);
 }
 
 /** Whether a slot's node kind is one this build doesn't know (kept, not refused). */
@@ -120,14 +115,14 @@ function parseGraph(value: unknown, rules: ViewGraphRules): Parsed | undefined {
     }
     views.push({ id: view.id, kind: "3d", ...(view.title !== undefined ? { title: view.title as string } : {}), ...refs });
   }
-  if (!views.some(view => view.id === MAIN_VIEW) || typeof input.focused !== "string" || !ids.has(input.focused)) return;
+  // `focused` is no longer focus (that is the session's, platform/core/focus.ts): it is kept as stored for older builds, which need it.
+  if (!views.some(view => view.id === MAIN_VIEW) || (input.focused !== undefined && (typeof input.focused !== "string" || !ids.has(input.focused)))) return;
   for (const view of views) if (fitIssue(rules, view, nodes)) return;
-  // Focus on a kept view falls back to the main view: nothing here can draw it.
-  const focused = views.some(view => view.id === input.focused) ? input.focused : MAIN_VIEW;
+  const legacyFocus = typeof input.focused === "string" && views.some(view => view.id === input.focused) ? input.focused : MAIN_VIEW;
   const used = usedNodes(views, keptViews);
   for (const id of [...nodes.keys()]) if (!used.has(id)) nodes.delete(id);
   for (const id of [...keptNodes.keys()]) if (!used.has(id)) keptNodes.delete(id);
-  return { views, nodes, focused, keptViews, keptNodes };
+  return { views, nodes, legacyFocus, keptViews, keptNodes };
 }
 
 /** Every node a view references: the shown views' slots and whatever the kept views name. */
@@ -149,7 +144,8 @@ function fitIssue(rules: ViewGraphRules, view: ViewRecord, nodes: ReadonlyMap<st
   if (camera === undefined || !rule.cameras.includes(camera)) return `This camera can't look at a ${rule.kind} scene.`;
   if (rig === undefined || !rule.rigs.includes(rig)) return `These lights can't light a ${rule.kind} scene.`;
 }
-function writeData(views: readonly ViewRecord[], nodes: ReadonlyMap<string, NodeEntry>, focused: ViewId,
+/** `legacyFocus`: the stored `focused`, written back for older builds while it names a shown view (else the main view). */
+function writeData(views: readonly ViewRecord[], nodes: ReadonlyMap<string, NodeEntry>, legacyFocus: ViewId,
   keptViews: readonly KeptEntry[] = [], keptNodes: ReadonlyMap<string, KeptNode> = new Map()): ViewGraphData {
   const used = usedNodes(views, keptViews);
   const list = (slot: ViewSlot): StoredNode[] => [
@@ -160,55 +156,60 @@ function writeData(views: readonly ViewRecord[], nodes: ReadonlyMap<string, Node
   const all: (ViewRecord | KeptView)[] = clone([...views]);
   for (const kept of [...keptViews].sort((a, b) => a.at - b.at)) all.splice(Math.min(kept.at, all.length), 0, clone(kept.record));
   return { schema: VIEW_GRAPH_1, views: all, scenes: list("scene"), cameras: list("camera"), lights: list("lights"),
-    display: list("display"), tools: list("tools"), focused };
+    display: list("display"), tools: list("tools"), focused: views.some(view => view.id === legacyFocus) ? legacyFocus : MAIN_VIEW };
 }
 
 /** The graph service. One per workspace; devices and services act on the views it lists. */
 export class ViewGraph {
   private views: ViewRecord[];
   private nodes = new Map<string, NodeEntry>();
-  private focus: ViewId;
+  /** The stored `focused`, kept for older builds only: this graph has no focus (the session's focus service does). */
+  private readonly legacyFocus: ViewId;
   /** Views and nodes this build keeps unchanged (never drawn or edited); the nodes the kept views name stay alive. */
   private readonly keptViews: readonly KeptEntry[];
   private readonly keptNodes: ReadonlyMap<string, KeptNode>;
   private readonly keptRefs: ReadonlySet<string>;
   private listeners = new Set<(change: ViewGraphChange) => void>();
-  private undoSteps: Step[] = [];
-  private redoSteps: Step[] = [];
+  /** The View and lighting history: the history service's view scope over this graph (session-only). */
+  private readonly scope: HistoryScope;
   private trails = new Map<string, Trail>();
   /** Tools and view settings the presentation no longer offers (UI-102, UI-163): each view keeps its choice, and no device acts on them. */
   private withdrawnIds = new Set<string>();
-  private recording = true;
   private counter = 0;
 
-  constructor(data: ViewGraphData, private rules: ViewGraphRules) {
+  /**
+   * `history` is the session's history service (default: one of its own); the graph's edits record in its View and lighting scope, `scope`
+   * (`view:<profile>`, profiles design §3.7; default: a graph no session holds).
+   */
+  constructor(data: ViewGraphData, private rules: ViewGraphRules, history: HistoryService = createHistoryService(), scope: string = LOCAL_VIEW_SCOPE) {
     const parsed = parseGraph(data, rules);
     if (!parsed) throw new ViewGraphError("invalid_value", "The view graph is not valid.");
     this.views = parsed.views;
     this.nodes = parsed.nodes;
-    this.focus = parsed.focused;
+    this.legacyFocus = parsed.legacyFocus;
     this.keptViews = parsed.keptViews;
     this.keptNodes = parsed.keptNodes;
     this.keptRefs = usedNodes([], parsed.keptViews);
+    // Values are kept by reference (each step holds detached copies), so a drag costs no serialisation.
+    this.scope = history.open(scope, { read: key => this.readHistory(key), apply: values => this.applyHistory(values),
+      settled: () => this.publishHistory() },
+      { limit: VIEW_HISTORY_LIMIT });
   }
 
   // ----- Reads -----
   /** The stored form (`xfs/view-graph-1`), detached, with every kept view and node as it was stored. */
-  data(): ViewGraphData { return writeData(this.views, this.nodes, this.focus, this.keptViews, this.keptNodes); }
+  data(): ViewGraphData { return writeData(this.views, this.nodes, this.legacyFocus, this.keptViews, this.keptNodes); }
   snapshot(): ViewGraphSnapshot {
-    return { focused: this.focus, views: this.views.map(view => ({ ...clone(view),
+    return { views: this.views.map(view => ({ ...clone(view),
       shared: VIEW_SLOTS.filter(slot => this.views.some(other => other !== view && other[slot] === view[slot])),
       sceneKind: this.nodes.get(view.scene)!.kind as SceneKind, panel: viewPanelId(view.id) })) };
   }
   viewIds(): ViewId[] { return this.views.map(view => view.id); }
   has(view: ViewId) { return this.views.some(item => item.id === view); }
-  /** The focused view: the one a view-scoped command acts on when it names none (design §3.8). */
-  focused(): ViewId { return this.focus; }
-  /** The view a command means: the one it names, else the focused one. Throws for a view that does not exist. */
-  target(view?: ViewId): ViewId {
-    const id = view ?? this.focus;
-    if (!this.has(id)) throw new ViewGraphError("missing_target", "That view no longer exists.");
-    return id;
+  /** The view a command names, checked: throws `missing_target` for a view that does not exist. */
+  target(view: ViewId): ViewId {
+    if (!this.has(view)) throw new ViewGraphError("missing_target", "That view no longer exists.");
+    return view;
   }
   /** The node a view's slot references, detached. */
   node(view: ViewId, slot: ViewSlot): GraphNode {
@@ -344,7 +345,7 @@ export class ViewGraph {
       created.push(node); refs[slot] = node.id;
     }
     const view: ViewRecord = { id, kind: "3d", ...(options.title ? { title: options.title } : {}), ...refs };
-    this.commit(created, { views: [...this.views, view], focused: this.focus }, { label: "New view", ...options });
+    this.commit(created, { views: [...this.views, view] }, { label: "New view", ...options });
     return id;
   }
   /** Close a view. Its unshared nodes go with it (collected); the main view cannot be closed. */
@@ -352,7 +353,7 @@ export class ViewGraph {
     if (view === MAIN_VIEW) throw new ViewGraphError("invalid_value", "The main view can't be closed.");
     this.record(view);
     const views = this.views.filter(item => item.id !== view);
-    this.commit([], { views, focused: this.focus === view ? MAIN_VIEW : this.focus }, { label: "Close view", ...options });
+    this.commit([], { views }, { label: "Close view", ...options });
   }
   /** Point a view's slot at another view's node (design §3.4); its old node is collected if nothing else references it. */
   link(view: ViewId, slot: ViewSlot, to: ViewId, options: ViewEditOptions = {}): boolean {
@@ -361,7 +362,7 @@ export class ViewGraph {
     const relinked = { ...current, [slot]: target };
     const issue = fitIssue(this.rules, relinked, this.nodes);
     if (issue) throw new ViewGraphError("incompatible_mode", issue);
-    this.commit([], { views: this.views.map(item => item.id === view ? relinked : item), focused: this.focus },
+    this.commit([], { views: this.views.map(item => item.id === view ? relinked : item) },
       { label: `Link ${SLOT_NAMES[slot]}`, ...options });
     return true;
   }
@@ -370,16 +371,9 @@ export class ViewGraph {
     const current = this.record(view), node = this.nodes.get(current[slot])!;
     if (this.viewsOf(node.id).length < 2) return false;
     const copy: NodeEntry = { ...clone(node), id: this.freshNodeId(slot) };
-    this.commit([copy], { views: this.views.map(item => item.id === view ? { ...current, [slot]: copy.id } : item), focused: this.focus },
+    this.commit([copy], { views: this.views.map(item => item.id === view ? { ...current, [slot]: copy.id } : item) },
       { label: `Unlink ${SLOT_NAMES[slot]}`, ...options });
     return true;
-  }
-  /** Move the focus (the last view pressed or focused); records nothing. */
-  focusView(view: ViewId): void {
-    this.record(view);
-    if (this.focus === view) return;
-    this.focus = view;
-    this.emit([], true, "edit", false, [view]);
   }
   private takenView(id: string) { return this.has(id) || this.keptViews.some(kept => kept.record.id === id); }
   private freshViewId() { let id: string; do id = `v${++this.counter + 1}`; while (this.takenView(id)); return id; }
@@ -390,47 +384,47 @@ export class ViewGraph {
 
   // ----- History -----
   /** Run `apply` without recording View and lighting steps (restoring a workspace, replaying a saved state). */
-  withoutHistory<T>(apply: () => T): T {
-    const was = this.recording; this.recording = false;
-    try { return apply(); } finally { this.recording = was; }
-  }
+  withoutHistory<T>(apply: () => T): T { return this.scope.withoutHistory(apply); }
   history(): ViewHistoryState {
-    return { undo: this.undoSteps.at(-1)?.label, redo: this.redoSteps.at(-1)?.label, depth: this.undoSteps.length, redoDepth: this.redoSteps.length };
+    const state = this.scope.state();
+    return { undo: state.undo?.label, redo: state.redo?.label, depth: state.depth, redoDepth: state.redoDepth };
   }
   /** End the current coalescing run: the next edit starts a new step even with the same key (a slider was released, CORE-95). */
-  seal() { const top = this.undoSteps.at(-1); if (top) delete top.coalesce; }
-  undo(): boolean { return this.replay(this.undoSteps, this.redoSteps, "before"); }
-  redo(): boolean { return this.replay(this.redoSteps, this.undoSteps, "after"); }
+  seal() { this.scope.seal(); }
+  undo(): boolean { return this.scope.undo(); }
+  redo(): boolean { return this.scope.redo(); }
+  /** The View and lighting history's value of a node (by ID) or of the views (`structure`), detached. */
+  private readHistory(key: string): unknown {
+    if (key === STRUCTURE) return { views: clone(this.views) } satisfies Structure;
+    const node = this.nodes.get(key);
+    return node && clone(node);
+  }
   /**
-   * Replay one step. Before anything changes, the result is checked as a whole (CORE-94): the main view is there, view IDs are
-   * unique, every view names existing nodes of the right slot and its camera and rig suit its scene. A step that fails can never
-   * apply again, nor can the older steps behind it, so they are dropped and nothing changes.
+   * Show what an Undo or Redo reached. Before anything changes, the result is checked as a whole (CORE-94): the main view is
+   * there, view IDs are unique, every view names existing nodes of the right slot and its camera and rig suit its scene. A step
+   * that fails can never apply again, nor can the steps behind it, so the scope drops them and nothing changes.
    */
-  private replay(from: Step[], to: Step[], side: "before" | "after"): boolean {
-    this.seal();
-    const step = from.pop();
-    if (!step) return false;
-    const structure = step.structure?.[side];
+  private applyHistory(values: Readonly<Record<string, unknown>>): boolean {
+    const structure = values[STRUCTURE] as Structure | undefined;
+    const ids = Object.keys(values).filter(key => key !== STRUCTURE);
     const views = structure ? structure.views : this.views, nodes = new Map(this.nodes);
-    for (const [id, entry] of step.nodes) { const value = entry[side]; if (value) nodes.set(id, value); else nodes.delete(id); }
-    if (!this.consistent(views, nodes)) {
-      from.length = 0;
-      this.emit([], false, "history", false);
-      return false;
-    }
-    if (structure) { this.views = clone(structure.views); this.focus = this.has(structure.focused) ? structure.focused : MAIN_VIEW; }
-    const touched: string[] = [];
-    for (const [id, entry] of step.nodes) {
-      const value = entry[side];
-      if (value) this.nodes.set(id, clone(value)); else this.nodes.delete(id);
-      touched.push(id);
-    }
-    delete step.coalesce;
-    to.push(step);
+    for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) nodes.set(id, value); else nodes.delete(id); }
+    if (!this.consistent(views, nodes)) { this.emit([], false, "history", false); return false; }
+    if (structure) this.views = clone(structure.views);
+    for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) this.nodes.set(id, clone(value)); else this.nodes.delete(id); }
+    const touched = [...ids];
     this.collect(touched);
-    this.emit(touched, !!structure, "history", false);
+    // Published once the scope has settled (`publishHistory`), so subscribers read the history as it stands (Redo included).
+    this.settling = { touched, structure: !!structure };
     return true;
   }
+  /** Publish what the last Undo or Redo changed, now that the View and lighting history has settled. */
+  private publishHistory() {
+    const settled = this.settling;
+    this.settling = undefined;
+    if (settled) this.emit(settled.touched, settled.structure, "history", false);
+  }
+  private settling?: { touched: string[]; structure: boolean };
   /** Whether views over nodes form a graph this service can hold (the replay check, CORE-94). */
   private consistent(views: readonly ViewRecord[], nodes: ReadonlyMap<string, NodeEntry>): boolean {
     const ids = new Set(views.map(view => view.id));
@@ -442,36 +436,20 @@ export class ViewGraph {
   private commit(nodes: readonly NodeEntry[], structure: Structure | undefined, options: ViewEditOptions) {
     const before = new Map<string, NodeEntry | undefined>();
     for (const node of nodes) before.set(node.id, this.nodes.has(node.id) ? clone(this.nodes.get(node.id)!) : undefined);
-    const priorStructure = structure ? { views: clone(this.views), focused: this.focus } : undefined;
+    const priorStructure = structure ? { views: clone(this.views) } : undefined;
     for (const node of nodes) this.nodes.set(node.id, clone(node));
-    if (structure) { this.views = clone(structure.views); this.focus = structure.focused; }
+    if (structure) this.views = clone(structure.views);
     // Nodes no view references any more go in the same commit (design §3.3): no dangling nodes, no manual clean-up.
     for (const [id, node] of this.nodes) if (!this.referenced(id)) { if (!before.has(id)) before.set(id, clone(node)); this.nodes.delete(id); this.trails.delete(id); }
     const touched = [...before.keys()];
-    const records = !!options.label && this.recording && !options.seed;
-    if (records) this.pushStep({ label: options.label!, coalesce: options.coalesce,
-      nodes: new Map(touched.map(id => [id, { before: before.get(id), after: this.nodes.has(id) ? clone(this.nodes.get(id)!) : undefined }])),
-      ...(priorStructure ? { structure: { before: priorStructure, after: { views: clone(this.views), focused: this.focus } } } : {}) });
+    // The step holds what the commit touched as it was before (the graph already shows the change); a node edit with the same
+    // coalescing key as the unsealed top step joins it (CORE-95), a structure edit never does.
+    if (options.label && !options.seed && this.scope.recording)
+      this.scope.checkpoint(priorStructure ? [...touched, STRUCTURE] : touched, { label: options.label, actionKind: "view.edit" },
+        { read: key => key === STRUCTURE ? priorStructure : before.get(key), timed: false, ...(structure ? {} : { coalesce: options.coalesce }) });
     // A structure change the history doesn't hold would leave its steps naming views and nodes that no longer exist (CORE-94).
-    else if (structure && !same(priorStructure!.views, this.views)) { this.undoSteps = []; this.redoSteps = []; }
+    else if (structure && !same(priorStructure!.views, this.views)) this.scope.clear();
     this.emit(touched, !!structure, options.seed ? "seed" : "edit", !!options.applied, structure ? this.changedViews(priorStructure!.views) : []);
-  }
-  /** Record a step, or fold it into the top step while the same continuous edit is still running (unsealed, CORE-95). */
-  private pushStep(step: Step) {
-    const top = this.undoSteps.at(-1);
-    if (top && step.coalesce && top.coalesce === step.coalesce && !step.structure && !top.structure && !this.redoSteps.length) {
-      for (const [id, entry] of step.nodes) {
-        const kept = top.nodes.get(id);
-        top.nodes.set(id, { before: kept ? kept.before : entry.before, after: entry.after });
-      }
-      top.label = step.label;
-      return;
-    }
-    // A different edit ends the previous run.
-    if (top) delete top.coalesce;
-    this.undoSteps.push(step);
-    if (this.undoSteps.length > VIEW_HISTORY_LIMIT) this.undoSteps.shift();
-    this.redoSteps = [];
   }
   private collect(touched: string[]) {
     for (const [id] of this.nodes) if (!this.referenced(id)) { this.nodes.delete(id); this.trails.delete(id); if (!touched.includes(id)) touched.push(id); }

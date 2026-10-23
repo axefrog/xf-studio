@@ -13,7 +13,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { depotHash } from "../src/depot-path";
+import { depotHash } from "../src/game/depot-path";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { decodeAnimClip, type JointKey, readAnimRig, readAnimSetIndex } from "../src/native/anim-set";
 import { loadGameOodle } from "../src/native/oodle";

@@ -5,10 +5,10 @@
  *
  * bun tools/vortex-check.ts --game-root <absolute> [--files]
  */
-import { discoverSources } from "../src/source-discovery";
-import { defaultLocalSettings } from "../src/local-settings";
-import { compareWithDeployment } from "../src/vortex-deployment";
-import { inspectVortexSetup } from "../src/vortex-host";
+import { discoverSources } from "../src/game/host/source-discovery";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { compareWithDeployment } from "../src/installation/vortex-deployment";
+import { inspectVortexSetup } from "../src/installation/host/vortex-host";
 
 const args = process.argv.slice(2);
 const at = args.indexOf("--game-root");

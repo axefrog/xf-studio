@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { DANGLE_SPEC, type DangleConstraint, type DangleParticle, type DangleShape, type DangleSpec, type Transform } from "../src/dangle-spec";
-import { DangleSolver, POSE_STRIDE, referencePose, rigidChains, settleDangle, SETTLE } from "../src/dangle-solver";
+import { DANGLE_SPEC, type DangleConstraint, type DangleParticle, type DangleShape, type DangleSpec, type Transform } from "../src/animation/dangle-spec";
+import { DangleSolver, POSE_STRIDE, referencePose, rigidChains, settleDangle, SETTLE } from "../src/animation/dangle-solver";
 
 // The knowledge page's test vectors (knowledge/hair-physics.md §5.6), computed in single precision from the decoded rules; a solver in
 // doubles agrees to about 1e-6 relative.

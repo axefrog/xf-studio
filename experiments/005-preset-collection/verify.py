@@ -88,7 +88,7 @@ assert component['isEnabled']==1
 assert len(cc['headCustomizationOptions'])==1
 option=cc['headCustomizationOptions'][0]['Data']
 assert option['$type']=='gameuiAppearanceInfo' and option['enabled']==1 and option['hidden']==0
-# Branding is display text supplied by the Studio plan (src/mod-branding.ts), never an identity.
+# Branding is display text supplied by the Studio plan (src/legacy/eye-makeup/mod-branding.ts), never an identity.
 assert isinstance(plan['selectorLabel'],str) and (plan['selectorLabel']=='XF' or plan['selectorLabel'].startswith('XF '))
 assert option['localizedName']==plan['selectorLabel']
 # The component takes ArchiveXL's head-decal prefix so hide_Head hides it (naming.md); the rest of its name follows xfs_.

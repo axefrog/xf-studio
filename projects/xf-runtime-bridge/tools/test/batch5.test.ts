@@ -40,11 +40,12 @@ describe("ui.message and the session runner's echo", () => {
     for (let i = 1; i <= 4; i++) await api.run("ui.message", { text: `note ${i}` });
     // 0.7: the unanswered question stays pinned; the oldest other line made room.
     expect(await texts(api)).toEqual(["ask:Open the creator please", "info:note 2", "info:note 3", "info:note 4"]);
-    // RB-103 (0.7): a clear keeps the question that still waits for its answer; clear_asks takes it down too.
-    const cleared = await api.run("ui.message", { clear: true });
+    // RB-103: a capture's clear (keep_asks) keeps the question that still waits for its answer; 0.8.2 (session 9's B6): a
+    // plain clear takes it down too.
+    const cleared = await api.run("ui.message", { clear: true, keep_asks: true });
     expect(cleared.ok).toBe(true);
     expect(await texts(api)).toEqual(["ask:Open the creator please"]);
-    await api.run("ui.message", { clear: true, clear_asks: true });
+    await api.run("ui.message", { clear: true });
     expect(await texts(api)).toEqual([]);
     const refused = await api.run("ui.message", { text: "x", level: "shout" });
     expect(!refused.ok && refused.error.code).toBe("bad_input");
@@ -80,7 +81,7 @@ describe("ui.message and the session runner's echo", () => {
   });
 
   test("RB-64: an interrupted run takes its ask down; a paused run says where it waits", async () => {
-    await api.run("ui.message", { clear: true, clear_asks: true });
+    await api.run("ui.message", { clear: true });
     const controller = new AbortController();
     const script: SessionScript = { schema: SCRIPT_SCHEMA, name: "interrupted", steps: [{ do: "ask", label: "a1", text: "Press Confirm in the creator." }] };
     const interrupted = await runScript(script, {
@@ -98,7 +99,7 @@ describe("ui.message and the session runner's echo", () => {
     expect(afterInterrupt.some((t) => t.includes("Press Confirm"))).toBe(false);
     expect(afterInterrupt.some((t) => t.startsWith("warn:XF session stopped"))).toBe(true);
 
-    await api.run("ui.message", { clear: true, clear_asks: true });
+    await api.run("ui.message", { clear: true });
     const paused = await runScript(script, { api, outDir: tempDir("xfb-b5-pause-"), log: () => {} });
     expect(paused.outcome).toBe("paused");
     const afterPause = await texts(api);
@@ -106,7 +107,7 @@ describe("ui.message and the session runner's echo", () => {
   });
 
   test("--no-echo (echo: false) shows nothing", async () => {
-    await api.run("ui.message", { clear: true, clear_asks: true });
+    await api.run("ui.message", { clear: true });
     const result = await runScript(
       { schema: SCRIPT_SCHEMA, name: "quiet", steps: [{ do: "note", label: "n", text: "quiet" }] },
       { api, outDir: tempDir("xfb-b5-quiet-"), log: () => {}, echo: false },

@@ -58,18 +58,27 @@ export type CaptureRecord = {
 export class CaptureError extends Error {
   constructor(
     message: string,
-    readonly code: "no_window" | "minimized" | "blank" | "failed" | "bad_region" | "bad_file",
+    readonly code: "no_window" | "minimized" | "not_foreground" | "blank" | "failed" | "bad_region" | "bad_file",
   ) {
     super(message);
   }
 }
+
+/**
+ * The Windows calls a capture makes, swappable in tests (RB-120: a burst whose window loses the front mid-way can only be
+ * checked with a window that changes state on cue).
+ */
+export const CAPTURE_PORT: { describe: (hwnd: bigint) => WindowInfo | null; grab: (window: WindowInfo, route: Route) => Pixels | null } = {
+  describe: describeWindow,
+  grab,
+};
 
 const NAME_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 function findWindow(target: CaptureTarget): WindowInfo {
   if ("hwnd" in target) {
-    const info = describeWindow(target.hwnd);
+    const info = CAPTURE_PORT.describe(target.hwnd);
     if (!info) throw new CaptureError("That window no longer exists.", "no_window");
     return info;
   }
@@ -89,10 +98,43 @@ function findWindow(target: CaptureTarget): WindowInfo {
   throw new CaptureError(`No ${target.processName} window was found. Is the game running?`, "no_window");
 }
 
+const NOT_FRONT =
+  "The game isn't the front window, so a screen grab would show whatever covers it; nothing was captured. Bring the game to the front (or use the printwindow route, which reads the game's own picture) and try again.";
+
+/**
+ * The screen route copies the monitor's pixels over the window's client area, so it is only taken while the window is
+ * the front one (RB-120): the window's state is read again right before the grab (a burst's later frames, an Alt+Tab
+ * since the request) and right after it, and a grab during which the window lost the front or moved is discarded.
+ */
+function screenGrab(window: WindowInfo): Pixels {
+  const before = CAPTURE_PORT.describe(window.hwnd);
+  if (!before) throw new CaptureError("The game window closed during the capture.", "no_window");
+  if (before.minimized) throw new CaptureError("The game window is minimised. Restore it, then try again.", "minimized");
+  if (!before.foreground) throw new CaptureError(NOT_FRONT, "not_foreground");
+  if (before.width !== window.width || before.height !== window.height) {
+    throw new CaptureError("The game window changed size during the capture. Keep it still and try again.", "failed");
+  }
+  const pixels = CAPTURE_PORT.grab(before, "screen");
+  const after = CAPTURE_PORT.describe(window.hwnd);
+  if (!after || !after.foreground || after.minimized || after.screenX !== before.screenX || after.screenY !== before.screenY || after.width !== before.width || after.height !== before.height) {
+    throw new CaptureError(
+      "The game stopped being the front window (or moved) while the screen was read, so the picture was discarded. Keep the game in front and try again.",
+      "not_foreground",
+    );
+  }
+  if (!pixels) throw new CaptureError("Windows refused the screen capture.", "failed");
+  return pixels;
+}
+
 function grabWindow(window: WindowInfo, route: CaptureOptions["route"], isGame: boolean): { pixels: Pixels; route: Route } {
   if (window.minimized) throw new CaptureError("The game window is minimised. Restore it, then try again.", "minimized");
+  if (route === "screen") {
+    const pixels = screenGrab(window);
+    if (looksBlank(pixels)) throw new CaptureError("The captured picture is completely black. Is the game showing a loading screen?", "blank");
+    return { pixels, route };
+  }
   if (route && route !== "auto") {
-    const pixels = grab(window, route);
+    const pixels = CAPTURE_PORT.grab(window, route);
     if (!pixels) throw new CaptureError("Windows refused the capture.", "failed");
     if (looksBlank(pixels)) {
       throw new CaptureError("Windows returned an empty (black) picture for the game window. Borderless windowed mode captures most reliably.", "blank");
@@ -103,18 +145,19 @@ function grabWindow(window: WindowInfo, route: CaptureOptions["route"], isGame: 
   // tried only for non-game windows (tests, tools).
   const attempts: Route[] = isGame ? ["printwindow"] : ["printwindow", "printwindow-legacy"];
   for (const attempt of attempts) {
-    const pixels = grab(window, attempt);
+    const pixels = CAPTURE_PORT.grab(window, attempt);
     if (pixels && !looksBlank(pixels)) return { pixels, route: attempt };
   }
-  // Screen route: only meaningful while the window is on top, or we would capture whatever covers it.
-  if (!window.foreground) {
-    throw new CaptureError(
-      "Windows returned an empty picture for the game window, and the game is not the front window, so a screen grab would show something else. Bring the game to the front (or switch it to borderless windowed) and try again.",
-      "blank",
-    );
+  // Screen route: only meaningful while the window is on top, or we would capture whatever covers it (screenGrab checks).
+  let pixels: Pixels;
+  try {
+    pixels = screenGrab(window);
+  } catch (error) {
+    if (error instanceof CaptureError && error.code === "not_foreground") {
+      throw new CaptureError(`Windows returned an empty picture for the game window. ${error.message}`, "not_foreground");
+    }
+    throw error;
   }
-  const pixels = grab(window, "screen");
-  if (!pixels) throw new CaptureError("Windows refused the screen capture.", "failed");
   if (looksBlank(pixels)) throw new CaptureError("The captured picture is completely black. Is the game showing a loading screen?", "blank");
   return { pixels, route: "screen" };
 }
@@ -268,7 +311,7 @@ export async function captureBurst(options: CaptureOptions & { frames: number; i
   }
   const started = new Date();
   const startMs = performance.now();
-  const grabs: { pixels: Pixels; at: number; date: Date; route: Route }[] = [];
+  const grabs: { pixels: Pixels; at: number; date: Date; route: Route; window: WindowInfo }[] = [];
   for (let i = 0; i < options.frames; i++) {
     if (i > 0) {
       const due = startMs + i * options.intervalMs;
@@ -277,11 +320,17 @@ export async function captureBurst(options: CaptureOptions & { frames: number; i
       if (options.signal?.aborted) break;
     }
     const at = performance.now() - startMs;
-    const { pixels, route } = grabWindow(window, options.route ?? "auto", isGame);
+    // RB-120: the window as it is now (front or not, where it sits), not as it was for the first frame.
+    const current = i === 0 ? window : CAPTURE_PORT.describe(window.hwnd);
+    if (!current) throw new CaptureError("The game window closed during the burst.", "no_window");
+    if (current.width !== window.width || current.height !== window.height) {
+      throw new CaptureError("The game window changed size during the burst. Keep it still and try again.", "failed");
+    }
+    const { pixels, route } = grabWindow(current, options.route ?? "auto", isGame);
     if (pixels.width !== window.width || pixels.height !== window.height) {
       throw new CaptureError("The game window changed size during the burst. Keep it still and try again.", "failed");
     }
-    grabs.push({ pixels: crop(pixels, rect), at, date: new Date(), route });
+    grabs.push({ pixels: crop(pixels, rect), at, date: new Date(), route, window: current });
   }
   const stampText = stamp(started);
   const outDir = options.outDir ?? DEFAULT_CAPTURE_ROOT;
@@ -289,7 +338,7 @@ export async function captureBurst(options: CaptureOptions & { frames: number; i
   const views: Pixels[] = [];
   for (const [index, grab] of grabs.entries()) {
     const frameName = `${name}-${String(index + 1).padStart(3, "0")}`;
-    const record = finishCropped(grab.pixels, rect, { region: options.region, view: options.view, name: frameName, outDir, stamp: stampText }, sourceOf(window, imageName, grab.route), grab.date);
+    const record = finishCropped(grab.pixels, rect, { region: options.region, view: options.view, name: frameName, outDir, stamp: stampText }, sourceOf(grab.window, imageName, grab.route), grab.date);
     const view = decodePng(new Uint8Array(readFileSync(record.view.path)));
     const previous = views.at(-1);
     frames.push({ index: index + 1, at_ms: Math.round(grab.at), record, diff_previous: previous ? diffStats(previous, view) : null, diff_first: views[0] ? diffStats(views[0], view) : null });

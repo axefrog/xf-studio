@@ -4,10 +4,12 @@
 //
 // Supported: type (object, number, integer, string, boolean, array), properties, required,
 // additionalProperties: false, enum, minimum, maximum, minLength, maxLength, pattern, items,
-// minItems, maxItems, description, default (documentation only).
+// minItems, maxItems, description, default (documentation only); 0.8.2: anyOf (a value matching any one of its schemas,
+// for an input that takes one value or a list of them), whose schema carries no type of its own.
 
 export type JsonSchema = {
-  type: "object" | "number" | "integer" | "string" | "boolean" | "array";
+  type?: "object" | "number" | "integer" | "string" | "boolean" | "array";
+  anyOf?: JsonSchema[];
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
@@ -28,6 +30,14 @@ export type JsonSchema = {
 export function validate(schema: JsonSchema, value: unknown, path = "input"): string[] {
   const problems: string[] = [];
   const where = path === "input" ? "The input" : `"${path.replace(/^input\./, "")}"`;
+  if (schema.anyOf) {
+    const tried = schema.anyOf.map((branch) => validate(branch, value, path));
+    if (tried.some((list) => list.length === 0)) return [];
+    // The branch of the value's own kind says what is wrong (a list's items, a text's value); else the first.
+    const kind = Array.isArray(value) ? "array" : typeof value;
+    const index = Math.max(0, schema.anyOf.findIndex((branch) => branch.type === kind || (kind === "number" && branch.type === "integer")));
+    return tried[index]!;
+  }
   switch (schema.type) {
     case "object": {
       if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -68,7 +78,9 @@ export function validate(schema: JsonSchema, value: unknown, path = "input"): st
         break;
       }
       if (schema.minLength !== undefined && value.length < schema.minLength) problems.push(`${where} is too short.`);
-      if (schema.maxLength !== undefined && value.length > schema.maxLength) problems.push(`${where} is too long (at most ${schema.maxLength} characters).`);
+      // 0.8.2 (session 9): the error says how long the text is and what the limit is for (the schema's own description).
+      if (schema.maxLength !== undefined && value.length > schema.maxLength)
+        problems.push(`${where} is too long: ${value.length} characters, at most ${schema.maxLength}${schema.description ? ` (${schema.description.replace(/\.$/, "")})` : ""}.`);
       if (schema.pattern && !new RegExp(schema.pattern).test(value)) problems.push(`${where} has characters that aren't allowed.`);
       if (schema.enum && !schema.enum.includes(value)) problems.push(`${where} must be one of: ${schema.enum.join(", ")}.`);
       break;

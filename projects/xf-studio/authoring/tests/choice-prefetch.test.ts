@@ -5,22 +5,39 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ArchiveFile, buildMountPlan, DepotIndex } from "../src/archive-precedence";
-import { readArchiveXlConfig } from "../src/archivexl-config";
-import { DEFAULT_CHARACTER, type CharacterRequest } from "../src/character-detail-request";
-import { choiceKey, manifestHolds, manifestOf, readChoiceManifest, writeChoiceManifest, xlIdentity, type ManifestExport } from "../src/choice-manifest";
-import { ChoicePrefetcher, type PrefetchDeps, requestKey } from "../src/choice-prefetch";
-import { depotHash, refFromPath } from "../src/depot-path";
-import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game-asset-export";
-import { clearPrepared, evictPrepared, PREPARED_FS_CONCURRENCY, preparedBudgetFrom, preparedFsStats, preparedSize } from "../src/prepared-files";
-import { ChoicePreviewStore } from "../src/choice-preview-host";
-import { backgroundExtraction, foregroundExtraction, WolvenKitFetcher } from "../src/resolver-host";
-import { ResourceGraph, stoppableGraph } from "../src/resource-graph";
+import { type ArchiveFile, buildMountPlan, DepotIndex } from "../src/game/archive-precedence";
+import { readArchiveXlConfig } from "../src/game/archivexl-config";
+import { DEFAULT_CHARACTER, type CharacterRequest } from "../src/character/character-detail-request";
+import { choiceKey, manifestHolds, manifestOf, readChoiceManifest, writeChoiceManifest, xlIdentity, type ManifestExport } from "../src/character/host/choice-manifest";
+import { ChoicePrefetcher, type PrefetchDeps, requestKey } from "../src/character/choice-prefetch";
+import { depotHash, refFromPath } from "../src/game/depot-path";
+import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game/host/game-asset-export";
+import { PREPARED_FS_CONCURRENCY, PreparedFiles, preparedBudgetFrom, preparedFsStats, preparedSources, type PreparedRoots } from "../src/host/prepared-files";
+import { hostClock } from "../src/platform/core/clock";
+import { createJobScheduler } from "../src/platform/core/jobs";
+import { inLane } from "../src/host/host-jobs";
+import { ChoicePreviewStore } from "../src/character/host/choice-preview-host";
+import { WolvenKitFetcher } from "../src/game/host/resolver-host";
+import { ResourceGraph, stoppableGraph } from "../src/game/resource-graph";
 import { app, cr2w, fixtureInstallation, mesh, meshComponent } from "./resolver-fixtures";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-prefetch-")); roots.push(root); return root; };
+/** A scheduler on the host's clock that never waits for quiet (the prefetcher's tests drive time themselves). */
+const testJobs = () => createJobScheduler({ clock: hostClock(), quietMs: 0 });
+/** The prepared files of one host's layout, as one partition, within `budget`. */
+function filesFor(roots: PreparedRoots | readonly PreparedRoots[], budget = Infinity) {
+  const files = new PreparedFiles({ budget, scheduler: testJobs() });
+  ([] as PreparedRoots[]).concat(roots as PreparedRoots[]).forEach((root, index) => files.partition({ name: `route-${index}`, ...preparedSources(root) }));
+  return files;
+}
+test("ordinary and reference resolver routes share one combined disk budget", async () => {
+  const routes = [temporary(), temporary()].map(root => ({ exports: join(root, "exports"), resolver: join(root, "resolver"), store: join(root, "store"), manifests: join(root, "choices") }));
+  for (const root of routes) { mkdirSync(join(root.resolver, "json"), { recursive: true }); writeFileSync(join(root.resolver, "json", "cached.json"), "x".repeat(1000)); }
+  expect((await filesFor(routes[0]!, 1500).evict()).removed).toBe(0); expect((await filesFor(routes[1]!, 1500).evict()).removed).toBe(0);
+  const result = await filesFor(routes, 1500).evict(); expect(result.removed).toBe(1); expect(result.bytes).toBe(1000);
+});
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const settle = async () => { for (let i = 0; i < 20; i++) await sleep(1); };
 
@@ -28,20 +45,20 @@ const settle = async () => { for (let i = 0; i < 20; i++) await sleep(1); };
 
 const withChoice = (position: number): CharacterRequest => ({ ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "hair", choice: `c${position}` }] });
 function prefetcher(options: { ready?: Set<number>; warm?: PrefetchDeps["warm"]; limits?: Partial<{ batch: number; maxBatch: number; timeMs: number; bytes: number; unpolledMs: number }>; bytes?: () => number; now?: () => number;
-  settled?: () => Promise<void> } = {}) {
+} = {}) {
   const warmed: number[][] = [];
-  let foreground: Promise<void> = Promise.resolve();
+  const jobs = testJobs();
   const deps: PrefetchDeps = {
+    jobs,
     requestFor: async (_base, _option, position) => position >= 100 ? null : withChoice(position),
     readiness: async () => request => options.ready?.has(Number(request.choices![0]!.choice.slice(1))) ?? false,
     warm: options.warm ?? (async requests => { warmed.push(requests.map(request => Number(request.choices![0]!.choice.slice(1)))); return requests.map(() => ({ ready: true })); }),
-    foregroundIdle: () => foreground,
     preparedBytes: async () => options.bytes?.() ?? 0,
     now: options.now,
-    settled: options.settled,
   };
   const service = new ChoicePrefetcher(deps, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12, ...options.limits });
-  return { service, warmed, hold: (until: Promise<void>) => { foreground = until; } };
+  // A person's change being prepared until `until`: work prepared ahead waits for it.
+  return { service, warmed, hold: (until: Promise<void>) => { jobs.want("page/character", { key: "person", lane: "person", run: () => until }); } };
 }
 const ask = (service: ChoicePrefetcher, positions: number[], focus: number | null = null) =>
   service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions, focus });
@@ -75,7 +92,7 @@ describe("preparing a row's choices ahead", () => {
   test("a person's own change comes first: the batch in WolvenKit stops and is queued again, the queue waits, the change's choice shows as prepared", async () => {
     let release!: () => void;
     const signals: AbortSignal[] = [];
-    const { service, hold } = prefetcher({ warm: (requests, signal) => { signals.push(signal); return new Promise((resolve, reject) => {
+    const { service, hold } = prefetcher({ warm: (requests, { signal }) => { signals.push(signal); return new Promise((resolve, reject) => {
       signal.addEventListener("abort", () => reject(Error("cancelled")));
       if (signals.length > 1) resolve(requests.map(() => ({ ready: true })));
     }); } });
@@ -99,7 +116,7 @@ describe("preparing a row's choices ahead", () => {
 
   test("closing the row cancels the job: its batch's signal aborts and no batch starts after", async () => {
     const signals: AbortSignal[] = [];
-    const { service } = prefetcher({ warm: (requests, signal) => { signals.push(signal); return new Promise((_, reject) => signal.addEventListener("abort", () => reject(Error("cancelled")))); } });
+    const { service } = prefetcher({ warm: (requests, { signal }) => { signals.push(signal); return new Promise((_, reject) => signal.addEventListener("abort", () => reject(Error("cancelled")))); } });
     ask(service, [0, 1, 2, 3]);
     await settle();
     service.cancel();
@@ -129,14 +146,15 @@ describe("preparing a row's choices ahead", () => {
   });
 
   test("a stopped batch settles before the next starts, doesn't grow the next batch, and its pause isn't counted toward the time (PREV-120)", async () => {
-    // Like the host: a stopped batch answers at once while its reads let go in the background (`settled`).
+    // Like the host: a stopped batch answers at once while its reads let go in the background (`afterwards`).
     let clock = 0, background: Promise<void> = Promise.resolve(), release!: () => void;
     const sizes: number[] = [];
     let running = 0, most = 0;
-    const { service } = prefetcher({ limits: { batch: 2, maxBatch: 8, timeMs: 60_000 }, now: () => clock, settled: () => background,
-      warm: (requests, signal) => {
+    const { service } = prefetcher({ limits: { batch: 2, maxBatch: 8, timeMs: 60_000 }, now: () => clock,
+      warm: (requests, { signal, afterwards }) => {
         sizes.push(requests.length); running++; most = Math.max(most, running);
         background = new Promise(resolve => { release = () => { running--; resolve(); }; });
+        afterwards(background);
         return new Promise((resolve, reject) => {
           signal.addEventListener("abort", () => reject(Error("cancelled")));
           // Batches after the first finish at once.
@@ -163,9 +181,9 @@ describe("preparing a row's choices ahead", () => {
   test("a new row's job waits for the replaced job's batch to settle (PREV-120)", async () => {
     let background: Promise<void> = Promise.resolve(), release!: () => void;
     const signals: AbortSignal[] = [];
-    const { service } = prefetcher({ settled: () => background, warm: (requests, signal) => {
+    const { service } = prefetcher({ warm: (requests, { signal, afterwards }) => {
       signals.push(signal);
-      if (signals.length === 1) background = new Promise(resolve => { release = resolve; });
+      if (signals.length === 1) { background = new Promise(resolve => { release = resolve; }); afterwards(background); }
       return new Promise((resolve, reject) => {
         signal.addEventListener("abort", () => reject(Error("cancelled")));
         if (signals.length > 1) resolve(requests.map(() => ({ ready: true })));
@@ -193,6 +211,54 @@ describe("preparing a row's choices ahead", () => {
     await settle();
     expect(ask(service, [0, 1]).states).toBe("xr");
     expect(requestKey(withChoice(1))).toBe(requestKey(structuredClone(withChoice(1))));
+  });
+
+  test("more requesters than run at once wait their turn and take it fairly between units; nothing is cancelled (1b scenario 13)", async () => {
+    const { service, warmed } = prefetcher({ limits: { batch: 1, maxBatch: 1 } });
+    const requesters = Array.from({ length: 9 }, (_, index) => `c-${index}/panel`);
+    const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2], requester });
+    const end = Date.now() + 5000;
+    while (!requesters.every(requester => poll(requester).states === "rrr")) {
+      if (Date.now() > end) throw Error(`Timed out: ${requesters.map(requester => poll(requester).states).join(" ")}`);
+      await sleep(2);
+    }
+    expect(service.stats.cancelled).toBe(0);
+    expect(warmed).toHaveLength(27);
+  });
+
+  test("a cancelled and recreated requester keeps its new place: the old job's end never frees it, and at most 8 jobs ever run (1b scenario 13)", async () => {
+    const { service } = prefetcher({ limits: { batch: 1, maxBatch: 1 },
+      warm: async requests => { await sleep(10); return requests.map(() => ({ ready: true })); } });
+    const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2, 3], requester });
+    const eight = Array.from({ length: 8 }, (_, index) => `c-${index}/panel`);
+    for (const requester of eight) poll(requester);
+    await sleep(15);
+    service.cancel("c-3/panel");
+    poll("c-3/panel");
+    poll("c-8/panel");
+    const all = [...eight, "c-8/panel"], end = Date.now() + 8000;
+    while (!all.every(requester => poll(requester).states === "rrrr")) {
+      if (Date.now() > end) throw Error("Timed out.");
+      expect(service.stats.peak).toBeLessThanOrEqual(8);
+      await sleep(2);
+    }
+    expect(service.stats.peak).toBe(8);
+    expect(service.stats.cancelled).toBe(1);
+  });
+
+  test("the session's byte budget, spent by one requester's batch, stops every job before its next batch (1b scenario 14)", async () => {
+    let bytes = 0;
+    const { service, warmed } = prefetcher({ limits: { batch: 1, maxBatch: 1, bytes: 50 }, bytes: () => bytes,
+      warm: async requests => { warmed.push(requests.map(() => 0)); bytes += 100; await sleep(5); return requests.map(() => ({ ready: true })); } });
+    const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2, 3], requester });
+    poll("a"); poll("b");
+    const end = Date.now() + 5000;
+    while (poll("a").stopped !== "disk" || poll("b").stopped !== "disk") { if (Date.now() > end) throw Error("Timed out."); await sleep(2); }
+    await settle();
+    // One batch runs at a time: the one that spent the budget is the only one; the other job's batch, waiting to start, never does.
+    expect(warmed).toHaveLength(1);
+    expect(poll("a").states).toMatch(/n/);
+    expect(poll("b").states).toMatch(/n/);
   });
 });
 
@@ -525,24 +591,26 @@ describe("the prepared game files", () => {
     utimesSync(json, hour, hour);
     writeFileSync(join(roots.resolver, "json", "2-a-b.json.failed"), "{}");
     // Used by this session: kept whatever its age.
-    const { touchUsed } = await import("../src/game-asset-export");
+    const { touchUsed } = await import("../src/game/host/game-asset-export");
     const used = entry("used", 1000, 90_000);
     touchUsed(used);
     const old = new Date(Date.now() - 90_000);
     utimesSync(used, old, old);
     expect(usedThisSession(used)).toBe(true);
-    const evicted = await evictPrepared(roots, 2100);
+    const evicted = await filesFor(roots, 2100).evict();
     expect(evicted.removed).toBe(2);
     expect(readdirSync(join(roots.exports, "resources")).sort()).toEqual(["newer", "used"]);
     expect(existsSync(json)).toBe(false);
     mkdirSync(roots.store, { recursive: true }); writeFileSync(join(roots.store, "a.png"), "z".repeat(500));
     // Markers of resources the native reader answered (empty) go with Clear: the next preparation reads the game files again.
     mkdirSync(join(roots.resolver, "native"), { recursive: true }); writeFileSync(join(roots.resolver, "native", "3-a-b.ok"), "");
-    const before = await preparedSize(roots);
-    expect(before.store).toBe(500);
-    const cleared = await clearPrepared(roots);
+    const files = filesFor(roots);
+    const before = await files.size();
+    // The two export entries left (a file and its entry.json each) and the store.
+    expect(before.bytes).toBe(2 * 1002 + 500);
+    const cleared = await files.clear();
     expect(cleared.freed).toBe(before.bytes);
-    expect((await preparedSize(roots)).bytes).toBe(0);
+    expect((await files.size()).bytes).toBe(0);
     // Lasting failure markers are tiny and kept.
     expect(readdirSync(join(roots.resolver, "json"))).toEqual(["2-a-b.json.failed"]);
     expect(readdirSync(join(roots.resolver, "native"))).toEqual([]);
@@ -561,12 +629,12 @@ describe("the prepared game files", () => {
     for (const n of [1, 2]) { writeFileSync(join(roots.previews, "images", `${key(n)}.webp`), webp(1000)); age(join(roots.previews, "images", `${key(n)}.webp`), n * 60_000); }
     expect(store.putImage(key(3), webp(1000))).toBe(true);
     age(join(roots.previews, "images", `${key(3)}.webp`), 600_000);
-    const evicted = await evictPrepared(roots, 1500);
+    const evicted = await filesFor(roots, 1500).evict();
     expect(evicted.removed).toBe(2);
     expect(readdirSync(join(roots.previews, "images"))).toEqual([`${key(3)}.webp`]);
     // Without the previews root nothing of theirs is counted or removed (the size of the rest is under budget).
     writeFileSync(join(roots.previews, "images", `${key(4)}.webp`), webp(5000));
-    expect(await evictPrepared({ ...roots, previews: undefined }, 1500)).toEqual({ removed: 0, freed: 0, bytes: 0 });
+    expect(await filesFor({ ...roots, previews: undefined }, 1500).evict()).toEqual({ removed: 0, freed: 0, bytes: 0 });
   });
 
   test("the budget setting is read once: off, or a positive number of gigabytes; anything else is reported and ignored (CORE-113)", () => {
@@ -591,7 +659,8 @@ describe("the prepared game files", () => {
     mkdirSync(join(roots.resolver, "json"), { recursive: true });
     for (let i = 0; i < 60; i++) writeFileSync(join(roots.resolver, "json", `${i}.json`), "y".repeat(10));
     preparedFsStats.peak = 0;
-    const [a, b, evicted] = await Promise.all([preparedSize(roots), preparedSize(roots), evictPrepared(roots, 1e9)]);
+    const files = filesFor(roots, 1e9);
+    const [a, b, evicted] = await Promise.all([files.size(), files.size(), files.evict()]);
     expect(a.bytes).toBe(40 * 5 * 10 + 60 * 10);
     expect(b.bytes).toBe(a.bytes);
     // Under budget: counted, nothing removed (and no entry listed: these folders have no entry.json, which listing would need).
@@ -616,7 +685,7 @@ describe("the prepared game files", () => {
     mkdirSync(roots.store, { recursive: true });
     symlinkSync(outside, join(roots.store, "link"), "junction");
     preparedFsStats.peak = 0; preparedFsStats.calls = 0;
-    const cleared = await clearPrepared(roots);
+    const cleared = await filesFor(roots).clear();
     expect(cleared.freed).toBe(40 * (5 * 10 + 2));
     expect(readdirSync(roots.exports)).toEqual([]);
     expect(readdirSync(roots.store)).toEqual([]);
@@ -651,9 +720,9 @@ describe("the fetcher's lanes and the graph's reads", () => {
       if (args[0] === "convert") for (const name of readdirSync(args[2]!)) if (!name.endsWith(".json")) writeFileSync(join(args[2]!, `${name}.json`), JSON.stringify(cr2w({ $type: "x" })));
       return { exitCode: 0, stdout: "", stderr: "", output: "" };
     };
-    const slow = backgroundExtraction(cache, () => fetcher.fetch(archive as never, { hash: "1", path: null }, "app"));
+    const slow = inLane("ahead", () => fetcher.fetch(archive as never, { hash: "1", path: null }, "app"));
     await sleep(80);
-    const quick = await foregroundExtraction(cache, () => fetcher.fetch(archive as never, { hash: "2", path: null }, "app"));
+    const quick = await inLane("person", () => fetcher.fetch(archive as never, { hash: "2", path: null }, "app"));
     expect(quick).not.toBeNull();
     releaseBackground();
     expect(await slow).not.toBeNull();
@@ -722,7 +791,7 @@ describe("a background failure never ends the host (PREV-101)", () => {
       requestFor: async (_base, _option, position) => withChoice(position),
       readiness: async () => () => false,
       warm: async requests => requests.map(() => ({ ready: true })),
-      foregroundIdle: async () => {},
+      jobs: testJobs(),
       preparedBytes: async () => { throw Error("the prepared folder can't be listed"); },
       failed: error => { failures.push(error); },
     };
@@ -740,7 +809,7 @@ describe("a background failure never ends the host (PREV-101)", () => {
       requestFor: async (_base, _option, position) => { if (position === 3) throw Error("catalogue gone"); return withChoice(position); },
       readiness: async () => request => { const position = Number(request.choices![0]!.choice.slice(1)); if (position === 1) throw Error("damaged manifest"); return position === 0; },
       warm: async requests => { warmed.push(requests.map(request => Number(request.choices![0]!.choice.slice(1)))); return requests.map(() => ({ ready: true })); },
-      foregroundIdle: async () => {},
+      jobs: testJobs(),
       preparedBytes: async () => 0,
     };
     const service = new ChoicePrefetcher(deps, { batch: 8, timeMs: 60_000, bytes: 1e12 });
@@ -811,7 +880,7 @@ describe("settling, the budget and unpolled jobs (PREV-102, PREV-104, PREV-105)"
 
   test("a job nobody asks about is stopped, its batch in WolvenKit too; asking again starts it afresh", async () => {
     const signals: AbortSignal[] = [];
-    const { service } = prefetcher({ limits: { unpolledMs: 40 }, warm: (requests, signal) => { signals.push(signal); return new Promise((resolve, reject) => {
+    const { service } = prefetcher({ limits: { unpolledMs: 40 }, warm: (requests, { signal }) => { signals.push(signal); return new Promise((resolve, reject) => {
       signal.addEventListener("abort", () => reject(Error("stopped")));
       if (signals.length > 1) resolve(requests.map(() => ({ ready: true })));
     }); } });
@@ -850,12 +919,12 @@ describe("launch priority is decided as each launch starts (PIPE-96)", () => {
       return { exitCode: 0, stdout: "", stderr: "", output: "" };
     };
     // A background batch in WolvenKit, and a second one queued behind it while only background work runs.
-    const slow = backgroundExtraction(cache, () => fetcher.fetch(archive as never, { hash: "1", path: null }, "app"));
+    const slow = inLane("ahead", () => fetcher.fetch(archive as never, { hash: "1", path: null }, "app"));
     await sleep(80);
-    const queued = backgroundExtraction(cache, () => fetcher.fetch(archive as never, { hash: "3", path: null }, "app"));
+    const queued = inLane("ahead", () => fetcher.fetch(archive as never, { hash: "3", path: null }, "app"));
     await sleep(80);
     // A person's own change now needs the queued resource.
-    const waiting = foregroundExtraction(cache, () => queued);
+    const waiting = inLane("person", () => queued);
     releaseFirst();
     expect(await waiting).not.toBeNull();
     expect(await slow).not.toBeNull();
@@ -888,7 +957,7 @@ describe("preparing ahead without WolvenKit (NATIVE-48)", () => {
       requestFor: async (_base, _option, position) => withChoice(position),
       readiness: async () => request => request.choices![0]!.choice === "c0",
       warm: async requests => { warmed.push(requests.map(request => Number(request.choices![0]!.choice.slice(1)))); return requests.map(() => ({ ready: true })); },
-      foregroundIdle: async () => {},
+      jobs: testJobs(),
       preparedBytes: async () => 0,
       needsSetup: () => needsSetup,
       failed: error => { failures.push(error); },
@@ -906,4 +975,31 @@ describe("preparing ahead without WolvenKit (NATIVE-48)", () => {
     expect(ask(service, [0, 1, 2])).toMatchObject({ states: "rrr", stopped: null });
     expect(warmed).toEqual([[1, 2]]);
   });
+});
+
+test("a catalogue lookup under way never holds a person's change back, and its answer isn't written once the check was stopped (review 1)", async () => {
+  const jobs = testJobs();
+  let releaseLookup!: () => void, lookups = 0;
+  const lookup = new Promise<void>(resolve => { releaseLookup = resolve; });
+  const deps: PrefetchDeps = { jobs,
+    // The first lookup waits for the catalogue being built; later ones answer at once.
+    requestFor: async (_base, _option, position) => { if (lookups++ === 0) await lookup; return withChoice(position); },
+    readiness: async () => () => true,
+    warm: async requests => requests.map(() => ({ ready: true })),
+    preparedBytes: async () => 0 };
+  const service = new ChoicePrefetcher(deps, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12 });
+  ask(service, [0]);
+  await settle();
+  expect(lookups).toBe(1);
+  let started = 0;
+  const asked = performance.now();
+  const person = jobs.want("page/character", { key: "v", lane: "person", run: async () => { started = performance.now(); } });
+  expect((await person.settled).status).toBe("done");
+  expect(started - asked).toBeLessThan(50);
+  // The stopped check's lookup answers late: the choice isn't marked from it.
+  releaseLookup();
+  await settle();
+  expect(lookups).toBe(2);
+  expect(ask(service, [0]).states).toBe("r");
+  service.cancel();
 });

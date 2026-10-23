@@ -3,7 +3,7 @@ import { badge } from "../controls";
 
 /**
  * Record list (style guide "Record list"): things saved on this computer, one row each: the Library's saved collections and its recent
- * drafts (UI-162). A row is its name, one meta line of facts, a state badge where one applies ("This draft"), and one action.
+ * drafts (UI-162). A row is its name, one meta line of facts, a state badge where one applies ("Open now"), and one action.
  *
  * - **The name keeps its line:** it ends with an ellipsis (its full text as the row's tooltip) and the badge stays beside it, never
  *   pushed under it or cut off (C-30).
@@ -18,7 +18,7 @@ export type RecordRow = {
   id: string; name: string;
   /** The meta line's facts, in order ("2 presets", "version 3", "29 Sep 2026, 6:02 pm"). */
   meta: readonly string[];
-  /** A state from the fixed vocabulary, beside the name ("This draft"). */
+  /** A state from the fixed vocabulary, beside the name ("Open now"). */
   badge?: { text: string; tone: "neutral" | "accent" | "info" | "success" | "warning" | "error" };
   /** The row open now: the signal background. */
   current?: boolean;

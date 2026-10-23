@@ -21,7 +21,7 @@ import { compilePreset } from "../../projects/xf-studio/authoring/tests/fixtures
 import { plateUvWindow, type UvWindow } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/plate-uv-window";
 import { facetedMipChain } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/route-mip-chains";
 import { mipDimensions } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/flat-mip-chain";
-import { encodePng } from "../../projects/xf-studio/authoring/src/png";
+import { encodePng } from "../../projects/xf-studio/authoring/src/formats/png";
 
 const here = dirname(fileURLToPath(import.meta.url)), root = join(here, "../..");
 const png = process.argv.includes("--png"), out = join(here, "generated");

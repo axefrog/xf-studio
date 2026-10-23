@@ -2,10 +2,10 @@
 // colour, and the colour itself, derived the way the preview draws it. Asset-free: the fixture creator and synthetic inputs.
 import { describe, expect, test } from "bun:test";
 import { DECAL_TEXTURE_SIDE, encodeSwatch, gradientAt, irisColour, pickSwatchChunk, readSwatch, SWATCH_TEXTURE_SIDE, swatchColours, swatchNeeds, swatchPlan,
-  type SwatchReads } from "../src/cc-swatch";
-import { gradientColourAt, irisBaseColour } from "../src/eye-material";
-import { bakeHairProfileBytes } from "../src/hair-colour-model";
-import type { Provenance } from "../src/resource-graph";
+  type SwatchReads } from "../src/character/cc-swatch";
+import { gradientColourAt, irisBaseColour } from "../src/materials/render/eye-material";
+import { bakeHairProfileBytes } from "../src/materials/hair-colour-model";
+import type { Provenance } from "../src/game/resource-graph";
 import { fixtureSource } from "./cc-fixtures";
 
 const ref = (path: string) => ({ ref: { hash: path, path } }) as unknown as Provenance;

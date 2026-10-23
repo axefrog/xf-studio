@@ -1,16 +1,18 @@
+import { createHistoryService } from "../src/platform/core/history-service";
 import { describe, expect, test } from "bun:test";
-import { descriptorsFromUiState, type CcoResource } from "../src/cco-model";
-import { buildCatalogue, CatalogueIndex } from "../src/cc-catalogue";
+import { descriptorsFromUiState, type CcoResource } from "../src/character/cco-model";
+import { buildCatalogue, CatalogueIndex } from "../src/character/cc-catalogue";
 import { activeOptions, CHARACTER_CONTEXT_FAMILY, type CharacterChoice, type CharacterSource, choicesOfPreset, deriveCharacter, linkedChoice, presetOfChoices,
-  recoverSave, savedDescriptorsOf } from "../src/character-context";
-import { CharacterContextActions, type CreatorPort, initialBodyGender, storedCharacterOf } from "../src/character-context-actions";
-import { CC_PRESET_LIMITS, CC_PRESET_SCHEMA, parseCcPreset, readCcPreset, readPresetJson, serializeCcPreset, writeCcPreset } from "../src/cc-preset";
-import { catalogueCoverage } from "../src/cc-render-coverage";
-import { panelProjection } from "../src/cc-panel";
+  recoverSave, savedDescriptorsOf } from "../src/character/character-context";
+import { CharacterContextActions, type CreatorPort, initialBodyGender, storedCharacterOf } from "../src/character/character-context-actions";
+import { CC_PRESET_LIMITS, CC_PRESET_SCHEMA, parseCcPreset, readCcPreset, readPresetJson, serializeCcPreset, writeCcPreset } from "../src/character/cc-preset";
+import { catalogueCoverage } from "../src/character/cc-render-coverage";
+import { panelProjection } from "../src/character/cc-panel";
 import { Registry } from "../src/platform/core/registry";
 import { STUDIO_OWNERS } from "../src/compose/studio-registry";
-import type { SavedV } from "../src/save-reader";
+import type { SavedV } from "../src/saves/save-reader";
 import { fixtureSource, MOD_NAME } from "./cc-fixtures";
+import { vHistory } from "./fixtures/character-steps";
 
 /** A decoded save holding what R5 derives for a creator state (the save stores resolved output, per group). */
 function saveFor(derived: ReturnType<typeof descriptorsFromUiState>): SavedV {
@@ -236,7 +238,7 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
   async function port(withMod = true): Promise<CreatorPort & { views: number }> {
     const source = await fixtureSource(withMod);
     const { panel, mods } = panelProjection(source.catalogue, catalogueCoverage(source.catalogue), "fixture");
-    const { choicePage } = await import("../src/cc-panel");
+    const { choicePage } = await import("../src/character/cc-panel");
     const index = new CatalogueIndex(source.catalogue);
     const counter = { views: 0 };
     return Object.assign(counter, {
@@ -258,7 +260,7 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
 
   test("refuses changes as not_ready until the catalogue arrives (CORE-64); a change is one step with its own Undo and Redo (CORE-59)", async () => {
     const shown: (SavedV | null)[] = [];
-    const context = new CharacterContextActions({ creator: await port(), showSave: save => shown.push(save) });
+    const steps = vHistory(), context = new CharacterContextActions({ creator: await port(), showSave: save => shown.push(save), history: steps.home });
     expect(context.capability({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" })).toMatchObject({ available: false, code: "not_ready" });
     context.start();
     await settle();
@@ -267,9 +269,9 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
     context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
     context.dispatch({ kind: "character.setOptions", changes: [set("scars", ""), set("piercings", "Common-Off")], label: "Hide my V's own makeup" });
     expect(context.snapshot()).toMatchObject({ set: 3, undo: "Hide my V's own makeup", redo: null });
-    context.dispatch({ kind: "character.undo" });
+    steps.undo();
     expect(context.snapshot()).toMatchObject({ set: 1, undo: "Change Eye Color", redo: "Hide my V's own makeup" });
-    context.dispatch({ kind: "character.redo" });
+    steps.redo();
     expect(context.request().choices).toHaveLength(3);
     // Reset needs the option, and resets its family.
     expect(context.capability({ kind: "character.reset", part: "head", option: "teeth" })).toMatchObject({ available: false });
@@ -292,7 +294,7 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
     const saveA = saveFor(descriptorsFromUiState(source.cco, { eyes_color: "he__02_blue" }));
     const saveB = saveFor(descriptorsFromUiState(source.cco, { scars: "scar_01" }));
     const shown: (SavedV | null)[] = [];
-    const context = new CharacterContextActions({ creator: await port(), showSave: save => shown.push(save) }, { save: saveA });
+    const steps = vHistory(), context = new CharacterContextActions({ creator: await port(), showSave: save => shown.push(save), history: steps.home }, { save: saveA });
     context.start(); await settle();
     context.dispatch({ kind: "character.setOption", part: "head", option: "teeth", choice: "t_gold" });
     // The saved-V service shows another save (a file was loaded): the context follows as one step.
@@ -303,8 +305,8 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
     expect(context.snapshot().undo).toBe("Load a save");
     context.dispatch({ kind: "character.keepChanges" });
     expect(context.snapshot()).toMatchObject({ set: 1, keepable: 0, undo: "Keep my changes" });
-    context.dispatch({ kind: "character.undo" });
-    context.dispatch({ kind: "character.undo" });
+    steps.undo();
+    steps.undo();
     expect(shown.map(save => save?.groups.head.flatMap(g => g.appearances.map(a => a.definition)))).toEqual([saveA.groups.head.flatMap(g => g.appearances.map(a => a.definition))]);
     expect(context.request().choices).toEqual([set("teeth", "t_gold")]);
     // A malformed save is refused whole (CORE-52).
@@ -334,21 +336,22 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
     expect(initialBodyGender({ origin: "save", choices: [] }, { ...save, isMale: true })).toBe("male");
     expect(initialBodyGender({ origin: "preset", bodyGender: "female", choices: [] }, { ...save, isMale: true })).toBe("female");
     const shown: (SavedV | null)[] = [];
-    const context = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved) }, { save });
+    // Both heads' contexts are the one V's: its history home is the session's `character:<id>` scope.
+    const home = { service: createHistoryService(), id: "c-travel" };
+    const context = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved), history: home }, { save });
     context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
     expect(context.shownBody()).toBe("male");
     expect(context.stored()).toEqual({ origin: "default", bodyGender: "male", choices: [] });
     expect(context.detailRequest()).toMatchObject({ source: "default", bodyGender: "male" });
     // The next head's context starts from the stored masculine V with the same Undo: back to the save.
-    const next = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved) },
-      { stored: context.stored(), history: context.history() });
+    context.dispose();
+    const next = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved), history: home },
+      { stored: context.stored() });
     expect(next.shownBody()).toBe("male");
     expect(next.snapshot().undo).toBe("Show the default V");
-    next.dispatch({ kind: "character.undo" });
+    vHistory(home.id, home.service).undo();
     expect(next.snapshot()).toMatchObject({ origin: { kind: "save" }, bodyGender: "female", redo: "Show the default V" });
     expect(shown.at(-1)?.groups).toEqual(save.groups);
-    // A history of another kind is ignored.
-    expect(new CharacterContextActions({ creator: await port(), showSave: () => {} }, { history: { kind: "nope" } as never }).snapshot().undo).toBeNull();
   });
 
   test("the view follows the state; nothing is stored until something is set", async () => {
@@ -392,7 +395,7 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
 
   test("the action family has a descriptor per kind, records nothing in a look's history and is registered in the Studio", () => {
     expect(Object.keys(CHARACTER_CONTEXT_FAMILY.actions)).toEqual(["character.setOption", "character.setOptions", "character.setOwnMakeup", "character.reset",
-      "character.resetAll", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges", "character.retry", "character.clearPreparedFiles", "character.undo", "character.redo",
+      "character.resetAll", "character.setSource", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges", "character.retry", "character.clearPreparedFiles", "character.resolveConflict",
       "character.setClothing", "character.setClothingArea", "character.undoClothing", "character.redoClothing"]);
     for (const spec of Object.values(CHARACTER_CONTEXT_FAMILY.actions)) expect(spec.descriptor.undo).toBe("none");
     expect(STUDIO_OWNERS).toContain(CHARACTER_CONTEXT_FAMILY);

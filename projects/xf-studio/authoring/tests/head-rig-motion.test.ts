@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { withRigMotion, type RigMotionAssets } from "../src/platform/scene/head-rig";
-import { BUILT_IN_CATALOGUE, type IdleCatalogue } from "../src/idle-catalogue";
+import { BUILT_IN_CATALOGUE, type IdleCatalogue } from "../src/animation/idle-catalogue";
 
 // Installed desktop acceptance, 29 September: the idle's faces arrive after the head is built (PREV-174), and the eyes section joins the
 // catalogue only then. The rig kept a spread copy of the loader's motion, which froze the catalogue and faceError at build time, so the

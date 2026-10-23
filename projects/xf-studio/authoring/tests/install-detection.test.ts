@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { join, resolve, sep } from "node:path";
 import { decodeQSettingsValue, describeMo2Instance, parseMo2Modlist, parseNxmHandlerIni,
-  parseQSettingsIni } from "../src/mo2-instance";
+  parseQSettingsIni } from "../src/installation/mo2-instance";
 import { detectGameInstalls, detectMo2Instances, parseEpicInstallList, parseEpicManifest, parseGamingRoot,
   localDriveRoots, parseRegQuery, parseVdf, steamInstallDir, steamLibraryPaths, XBOX_UNSUPPORTED_MESSAGE,
-  type DetectionHostPort } from "../src/install-detection";
+  type DetectionHostPort } from "../src/installation/install-detection";
 
 // Synthetic, asset-free fixtures. Paths are placeholders under a fake drive, never a real machine.
 const root = resolve("/xfs-fixture");
@@ -267,4 +267,12 @@ test("MO2 detection finds global instances and portable instances named by the d
     ["global", "Skyrim", false]]);
   expect(result.instances.find(row => row.name === "portable")?.profiles).toEqual(["Main"]);
   expect(result.instances.find(row => row.name === "portable")?.selectedProfile).toBe("Main");
+});
+
+test("a Steam VDF key named __proto__ stays an ordinary key, never a node's prototype", () => {
+  const vdf = parseVdf(['"libraryfolders"', "{", ' "__proto__"', " {", '  "path" "X:/Elsewhere"', " }", ' "constructor" "c"', "}"].join(String.fromCharCode(10)));
+  const folders = vdf.libraryfolders as Record<string, unknown>;
+  expect(Object.getPrototypeOf(folders)).toBe(Object.prototype);
+  expect(Object.keys(folders)).toEqual(["__proto__", "constructor"]);
+  expect((folders as { path?: unknown }).path).toBeUndefined();
 });

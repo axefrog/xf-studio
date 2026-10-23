@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import * as THREE from "three";
-import { SurfaceMap, anchorPosition } from "../src/surface-map";
-import { extendSkin } from "../src/skin";
+import { SurfaceMap, anchorPosition } from "../src/legacy/eye-makeup/browser/surface-map";
+import { extendSkin } from "../src/materials/render/skin";
 
 function geometry() {
   const g = new THREE.BufferGeometry();

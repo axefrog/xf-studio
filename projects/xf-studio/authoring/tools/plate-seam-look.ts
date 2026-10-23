@@ -12,7 +12,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { decodePng, encodePng, type RgbaImage } from "../src/png";
+import { decodePng, encodePng, type RgbaImage } from "../src/formats/png";
 import { launch } from "./cdp";
 
 const argv = process.argv.slice(2), uiAt = argv.indexOf("--ui"), ui = uiAt >= 0 && !!argv.splice(uiAt, 1);

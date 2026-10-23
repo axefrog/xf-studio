@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { corneaNormal, EYE_AXIS_TURN, EYE_TEMPLATE_DEFAULTS, eyeAxes, eyeColourCoordinate, eyeDirectLight, eyeFresnel, eyeIrisWeight,
   eyeLightsBeginChunk, eyeOpticalAxis, eyeParameters, eyeTurnUniform, eyeVisibility, ensureEyeTangents, ggxDistribution, IRIS_PLANE_ORIENTATION, irisPlaneCoordinate,
-  patchEyeShader, prepareEyeballGeometry, refract, unpackNormalRG, type Vec3 } from "../src/eye-material";
+  patchEyeShader, prepareEyeballGeometry, refract, unpackNormalRG, type Vec3 } from "../src/materials/render/eye-material";
 
 /**
  * Eye plan ranks 4–5 (knowledge/eye-rendering.md §6.5): the refracted iris coordinate, the two normals and the Eye-class light,

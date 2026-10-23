@@ -26,6 +26,18 @@ json Game(const std::function<json()>& aTask, const std::string& aLabel)
     return RunGameTask(Get().queue, GameTimeout(), aTask, aLabel);
 }
 
+// RB-122 (0.8.1): a game-thread step that changes the game, checked against the kill switch, the pause and a handover on the
+// game thread right before it runs (Dispatcher::RunWrite).
+json GameWrite(const std::function<json()>& aTask, const std::string& aLabel)
+{
+    auto& state = Get();
+    if (!state.bridge)
+    {
+        throw MethodError("killed", "the bridge isn't running");
+    }
+    return state.bridge->GetDispatcher().RunWrite(GameTimeout(), aTask, aLabel);
+}
+
 void RequireOpen()
 {
     if (auto& state = Get(); state.bridge)
@@ -81,7 +93,7 @@ json CyberwareEquip(const MethodContext& aContext)
     RequireOpen();
     h::CyberwareEquipOps ops;
     ops.equip = [cid, request] {
-        return Game(
+        return GameWrite(
             [cid, request] {
                 RED4ext::CString item(request.item.c_str());
                 RED4ext::CString hash(request.id.c_str());
@@ -96,7 +108,7 @@ json CyberwareEquip(const MethodContext& aContext)
     };
     ops.removeAdded = [cid](const std::string& aItem) {
         RequireOpen();
-        return Game(
+        return GameWrite(
             [cid, aItem] {
                 RED4ext::CString item(aItem.c_str());
                 return ScriptCall("XFInventory", "RemoveAdded", {"String"}, {&item}, cid);
@@ -112,7 +124,7 @@ json CyberwareUnequip(const MethodContext& aContext)
     const auto request = h::ParseCyberwareUnequip(aContext.params);
     const auto cid = aContext.cid;
     RequireOpen();
-    const auto step = Game(
+    const auto step = GameWrite(
         [cid, request] {
             RED4ext::CString area(request.area.c_str());
             RED4ext::CString item(request.item.c_str());
@@ -129,7 +141,7 @@ json CyberwareUnequip(const MethodContext& aContext)
     if (request.removeAdded && out["emptied"].get<bool>())
     {
         RequireOpen();
-        const auto removal = Game(
+        const auto removal = GameWrite(
             [cid, request] {
                 RED4ext::CString item(request.item.c_str());
                 return ScriptCall("XFInventory", "RemoveAdded", {"String"}, {&item}, cid);
@@ -215,6 +227,16 @@ json UiState(const MethodContext& aContext)
         out["cet_overlay_note"] = "the CET layer hasn't reported its overlay yet (it does from bridge 0.7 when the overlay opens or closes)";
     }
     out["xf_panel"] = state.hud.Current().show;
+    // 0.8.2: the XF pins with the views that have drawn each (world.pin's drawn_by, read after the views ran).
+    try
+    {
+        out["pins"] = ScriptCall("XFInkPins", "Pins", {}, {}, aContext.cid).value("pins", json::array());
+    }
+    catch (const MethodError& e)
+    {
+        out["pins"] = nullptr;
+        out["pins_error"] = e.code;
+    }
     PendingAsk ask;
     out["pending_ask"] = state.messages.Pending(ask) ? json{{"id", ask.id}, {"text", ask.text}, {"choices", ask.choices}, {"remaining_ms", ask.remainingMs}} : json(nullptr);
     out["overlay_host"] = state.overlayHost.Snapshot();
@@ -241,7 +263,14 @@ json GameSaves(const MethodContext& aContext)
     const auto request = h::ParseSaves(aContext.params);
     const auto cid = aContext.cid;
     h::SavesOps ops;
-    ops.request = [cid] { Game([cid] { return ScriptCall("XFGame", "SavesRequest", {}, {}, cid); }, "game.saves.request"); };
+    ops.request = [cid](int32_t aLimit) {
+        Game(
+            [cid, aLimit] {
+                int32_t limit = aLimit;
+                return ScriptCall("XFGame", "SavesRequest", {"Int32"}, {&limit}, cid);
+            },
+            "game.saves.request");
+    };
     ops.read = [cid](bool aDone) {
         return Game(
             [cid, aDone] {
@@ -305,7 +334,7 @@ void RegisterMethods070(Dispatcher& aDispatcher)
     aDispatcher.Register({"world.state", Access::Read, RunOn::GameThread, "The clock, rain, weather state, quest facts and photo mode's scene rows.", &WorldState});
     aDispatcher.Register({"world.probe", Access::Read, RunOn::BridgeThread, "Streaming, walkable ground, ground and ceiling at points (observe only).", &WorldProbe});
     aDispatcher.Register(MarkedWrite("world.weather.set", Access::WriteWorld, RunOn::GameThread, "Holds a weather state or gives the weather back to the game.", &WorldWeather));
-    aDispatcher.Register({"ui.state", Access::Read, RunOn::GameThread, "Menus, popups, photo mode's UI, the prompt, the CET overlay and the XF panels.", &UiState});
+    aDispatcher.Register({"ui.state", Access::Read, RunOn::GameThread, "Menus, popups, photo mode's UI, the prompt, the CET overlay, the ink panel and the XF pins.", &UiState});
     aDispatcher.Register({"ui.ask.state", Access::Read, RunOn::BridgeThread, "What became of a question (pending, answered, gone).", &UiAskState});
     aDispatcher.Register({"game.saves", Access::Read, RunOn::BridgeThread, "The save list with each save's details.", &GameSaves});
     aDispatcher.Register(MarkedWrite("photo.scene.set", Access::WritePhoto, RunOn::GameThread, "Photo mode's surrounding NPCs, weather and game speed rows.", &PhotoScene));

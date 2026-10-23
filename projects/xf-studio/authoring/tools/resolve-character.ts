@@ -11,11 +11,11 @@
  * `--only <option,…>` keeps only those options' appearances (e.g. to inspect one piercing choice).
  */
 import { resolve } from "node:path";
-import { descriptorsFromUiState } from "../src/cco-model";
-import { type CharacterInput, inputFromSave, loadMergedCco, resolveCharacter, type ResolvedCharacter } from "../src/character-resolver";
-import { refLabel } from "../src/depot-path";
-import { openInstallation } from "../src/resolver-host";
-import { readSavedV } from "../src/save-reader";
+import { descriptorsFromUiState } from "../src/character/cco-model";
+import { type CharacterInput, inputFromSave, loadMergedCco, resolveCharacter, type ResolvedCharacter } from "../src/character/character-resolver";
+import { refLabel } from "../src/game/depot-path";
+import { openInstallation } from "../src/game/host/resolver-host";
+import { readSavedV } from "../src/saves/save-reader";
 
 const args = Bun.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] ?? null : null; };

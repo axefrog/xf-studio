@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
 import { desktopEyePlate, desktopExpressionsGame, desktopMasculineEyePlate, desktopPackageAdapter, type WolvenKitProbe } from "./build";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "../src/features/expressions/export/game";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { defaultLocalSettings } from "../src/local-settings";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { defaultLocalSettings } from "../src/setup/local-settings";
 import { DesktopWorkActivity } from "./work-activity";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";

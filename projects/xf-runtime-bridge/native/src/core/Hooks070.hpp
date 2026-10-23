@@ -10,7 +10,7 @@
 //   world.state (read)                the clock, rain, the weather state, named quest facts, photo mode's scene rows
 //   world.probe (read)                streaming, walkable ground, ground and ceiling at points (observe only)
 //   world.weather.set (write-world)   hold a weather state (Codeware), or give the weather back to the game's cycle
-//   ui.state (read)                   menus, popups, photo mode's UI, the prompt, the CET overlay, the XF panels
+//   ui.state (read)                   menus, popups, photo mode's UI, the prompt, the CET overlay, the ink panel and the XF pins
 //   game.saves (read)                 the save list with each save's metadata
 //   photo.scene.set (write-photo)     photo mode's surrounding NPCs, weather and game speed rows
 //   overlay.state (read)              the ImGui overlay host (core/overlay/Host.hpp)
@@ -143,7 +143,9 @@ SavesRequest ParseSaves(const json& aParams);
 // step that stops collecting (even when a read throws), so the load menu's callback never stays registered.
 struct SavesOps
 {
-    std::function<void()> request;
+    // 0.8 (session 8's H1): the request names how many of the newest saves' details to ask for (each one's screenshot
+    // request, as the Load menu makes; the game answers with the details).
+    std::function<void(int32_t aLimit)> request;
     std::function<json(bool)> read; // read(done): the names and metadata so far; done stops collecting
     std::function<void(std::chrono::milliseconds)> sleep;
     std::function<std::chrono::steady_clock::time_point()> now;

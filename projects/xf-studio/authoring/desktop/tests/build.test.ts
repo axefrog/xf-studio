@@ -1,24 +1,24 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
+import { copyFileSync, existsSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { defaultLocalSettings } from "../../src/local-settings";
-import { LocalSettingsStore } from "../../src/local-settings-store";
-import { BUILD_TOOLS_SCHEMA, builderEntry, cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
+import { defaultLocalSettings } from "../../src/setup/local-settings";
+import { LocalSettingsStore } from "../../src/setup/host/local-settings-store";
+import { BUILD_TOOLS_SCHEMA, bcnEntry, BUN_RETRY_MS, builderEntry, cachedBunProbe, privateBuildRootsIssue, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
   warmBuildProbes, type WolvenKitProbe } from "../build";
-import { probeWolvenKitCliAsync } from "../../src/wolvenkit-cli";
-import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/eye-plate-service";
+import { probeWolvenKitCliAsync } from "../../src/host/wolvenkit-cli";
+import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { runProductBuild, hostCollection, type HostPrerequisite, type PackageHostOutcome } from "../../src/platform/export/product-host";
 import { checkProducts } from "../../src/platform/export/product-check";
 import { STUDIO_EXPORTERS } from "../../src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "../../src/features/eye-makeup";
 import { PACKAGE_BUILD_2, type PackageBuildResult } from "../../src/platform/api";
-import type { LocalSettings } from "../../src/local-settings";
+import type { LocalSettings } from "../../src/setup/local-settings";
 import { createDesktopServer } from "../server";
-import { derivePlateDocuments } from "../../src/eye-plate-cut";
+import { derivePlateDocuments } from "../../src/legacy/eye-makeup/plate/eye-plate-cut";
 import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-window";
-import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src/plate-uv-footprint-io";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
 import { preparePackageCollection } from "../../tests/fixtures/eye-exporter";
@@ -109,6 +109,28 @@ test("Build readiness requires intact packaged tools, configured inputs and disj
   expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("integrity");
   // The earlier Python tool bundle is no longer accepted.
   writeFileSync(resolve(h.tools, "manifest.json"), JSON.stringify({ schema: "xfs/desktop-build-tools-1", files: {} }));
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("incomplete");
+});
+
+test("the packaged texture compressor is optional but, when listed and present, must be the listed bytes", () => {
+  const h = host();
+  const dll = resolve(h.tools, bcnEntry), hash = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+  mkdirSync(resolve(dll, ".."), { recursive: true });
+  writeFileSync(dll, "MZ compressor fixture");
+  const manifest = (files: Record<string, string>) => writeFileSync(resolve(h.tools, "manifest.json"), JSON.stringify({ schema: BUILD_TOOLS_SCHEMA, files }));
+  const builder = hash(resolve(h.tools, builderEntry));
+  manifest({ [builderEntry]: builder, [bcnEntry]: hash(dll) });
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toBeNull();
+  // Gone after install: the builder imports textures with WolvenKit instead, so Build stays ready.
+  rmSync(dll);
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toBeNull();
+  // Present but changed: never loaded, the install needs repairing.
+  writeFileSync(dll, "MZ tampered");
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("integrity");
+  // The builder itself stays required, and nothing else may be listed.
+  manifest({ [bcnEntry]: hash(dll) });
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("incomplete");
+  manifest({ [builderEntry]: builder, "app/native/other.dll": "0".repeat(64) });
   expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("incomplete");
 });
 
@@ -278,7 +300,7 @@ test("a matching staged result is promoted with partial-export identities and no
 
 test("Build readiness turns green once XF Studio's own WolvenKit is downloaded, and official pages open by name", async () => {
   const { makeZip } = await import("../../tests/zip-fixture");
-  const { WOLVENKIT_RELEASE } = await import("../../src/wolvenkit-release");
+  const { WOLVENKIT_RELEASE } = await import("../../src/setup/wolvenkit-release");
   const files = { "WolvenKit.CLI.exe": "MZ fixture launcher", "WolvenKit.CLI.dll": "MZ fixture entry",
     "WolvenKit.CLI.runtimeconfig.json": JSON.stringify({ runtimeOptions: { framework: { name: "Microsoft.NETCore.App", version: "10.0.0" } } }) };
   const zip = makeZip(Object.entries(files).map(([name, data]) => ({ name, data })));
@@ -364,4 +386,43 @@ test("a failed tool check keeps its answer: after the old 10 s expiry, readiness
     expect(cachedWolvenKitProbe(wolvenKit)).toBe(wolvenKitIssue);
     await probeWolvenKitCliAsync(wolvenKit);
   } finally { clock.mockRestore(); }
+});
+
+test("a Bun check that couldn't finish is not an answer: its reason shows while it is retried, and a later pass counts (DESK-17)", async () => {
+  // A new path to the real runtime (a hard link, or a copy across volumes), so no earlier answer is cached for it.
+  const bun = resolve(root, "slow-first-start-bun" + (process.platform === "win32" ? ".exe" : ""));
+  try { linkSync(process.execPath, bun); } catch { copyFileSync(process.execPath, bun); }
+  // The first start times out (antivirus scanning the file): not "Reinstall", and not cached as a failure.
+  await warmBuildProbes({ wolvenKitCli: null }, bun, async () => ({ exitCode: null, stdout: "", stderr: "", stopped: "timeout" }));
+  const unanswered = cachedBunProbe(bun);
+  expect(unanswered).toContain("keeps checking");
+  expect(unanswered).not.toContain("Reinstall");
+  // A start that failed is transient too.
+  await warmBuildProbes({ wolvenKitCli: null }, bun, async () => ({ exitCode: null, stdout: "", stderr: "", stopped: null,
+    error: Object.assign(Error("resource busy"), { code: "EBUSY" }) }));
+  expect(cachedBunProbe(bun)).toContain("couldn't be started");
+  // After the retry interval, readiness keeps the last reason while the real check runs; its pass is then the answer.
+  const now = Date.now(), clock = spyOn(Date, "now").mockReturnValue(now + BUN_RETRY_MS + 1);
+  try {
+    expect(cachedBunProbe(bun)).toContain("couldn't be started");
+    await warmBuildProbes({ wolvenKitCli: null }, bun);
+  } finally { clock.mockRestore(); }
+  expect(cachedBunProbe(bun)).toBeNull();
+  // A runtime that ran and answered wrongly is a definite failure, kept until the file changes.
+  const wrong = resolve(root, "wrong-bun" + (process.platform === "win32" ? ".exe" : ""));
+  try { linkSync(process.execPath, wrong); } catch { copyFileSync(process.execPath, wrong); }
+  await warmBuildProbes({ wolvenKitCli: null }, wrong, async () => ({ exitCode: 0, stdout: "something else", stderr: "", stopped: null }));
+  expect(cachedBunProbe(wrong)).toContain("Reinstall");
+}, 30_000);
+
+test("a private build folder that is a link whose target is gone is refused (PIPE-136)", () => {
+  const data = resolve(root, "dangling-data"), gone = resolve(root, "dangling-target");
+  mkdirSync(data, { recursive: true }); mkdirSync(gone, { recursive: true });
+  expect(privateBuildRootsIssue(data, [])).toBeNull();
+  try { symlinkSync(gone, resolve(data, "package-candidates"), process.platform === "win32" ? "junction" : "dir"); }
+  catch (error) { if (String(error).includes("EPERM")) return; throw error; }
+  rmSync(gone, { recursive: true, force: true });
+  // existsSync follows the link and finds nothing, so the old walk read it as a folder not created yet.
+  expect(existsSync(resolve(data, "package-candidates"))).toBe(false);
+  expect(privateBuildRootsIssue(data, [])).toContain("linked path");
 });

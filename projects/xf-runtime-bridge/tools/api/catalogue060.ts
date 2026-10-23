@@ -20,15 +20,30 @@ const planError = (code: string, message: string, detail?: unknown) =>
   Object.assign(new Error(message), { plain: { code, message, ...(detail !== undefined ? { detail: typeof detail === "string" ? detail : JSON.stringify(detail) } : {}) } });
 
 async function call(context: CommandContext, method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<Json> {
-  const response = await context.api.callBridge(method, params, context.cid, timeoutMs);
+  const response = await context.api.callBridge(method, params, context.cid, timeoutMs, context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Json;
 }
 
-/** A bridge call that may fail without failing the command: the answer, or {error}. */
+/** A bridge call that may fail without failing the command: the answer, or {error}. Sent even after a cancellation (cleanup). */
 async function attempt(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Json> {
   const response = await context.api.callBridge(method, params, context.cid);
   return response.ok ? (response.result as Json) : { error: response.error };
+}
+
+/**
+ * 0.8.2 (the re-check's fifth finding): a forward step that may fail without failing the command, sent only while the command
+ * hasn't been cancelled (an emergency control's signal); attempt() stays for the steps that put things back.
+ */
+async function forward(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Json> {
+  const response = await context.api.callBridge(method, params, context.cid, undefined, context.signal);
+  return response.ok ? (response.result as Json) : { error: response.error };
+}
+
+/** Throws the plain "interrupted" error once the command's signal has fired (0.8.2): no further capture is taken. */
+export function stopIfCancelled(context: CommandContext, what: string): void {
+  if (!context.signal?.aborted) return;
+  throw planError("interrupted", `Stopped before ${what}: an emergency control (or Ctrl+C) cancelled this command. Nothing more was captured.`);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -43,17 +58,22 @@ export const point3 = (description: string): JsonSchema => ({ type: "array", des
  * it away, ending the player's chance to answer); the panel is hidden, so it isn't in the picture either way. Without a
  * bridge (or a bridge too old for ui.hud) the capture just runs.
  */
-export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>): Promise<{ value: T; overlay: Json }> {
-  if (!context.api.session()) return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };
-  const cleared = await attempt(context, "ui.message", { clear: true });
-  const hud = await attempt(context, "ui.hud", { show: false, cet_label: false });
-  // 0.7: the XF ImGui overlay too (it lapses by itself after 5 s), and whether Cyber Engine Tweaks' overlay is open (its
-  // windows would be in the picture: session 4's teeth frames were lost to it).
-  const host = await attempt(context, "overlay.hide", { hidden: true, ms: 5000 });
-  const ui = await attempt(context, "ui.state", {});
+export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>, hideMs = 5000): Promise<{ value: T; overlay: Json }> {
+  if (!context.api.session()) {
+    stopIfCancelled(context, "the capture");
+    return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };
+  }
+  // 0.8.2: the preparation is forward work, so a cancelled command sends none of it; only the put-back below always runs.
+  const cleared = await forward(context, "ui.message", { clear: true, keep_asks: true });
+  const hud = await forward(context, "ui.hud", { show: false, cet_label: false });
+  // 0.7: the XF ImGui overlay too (it lapses by itself after hideMs, 5 s by default and at most 10 s), and whether Cyber
+  // Engine Tweaks' overlay is open (its windows would be in the picture: session 4's teeth frames were lost to it).
+  const host = await forward(context, "overlay.hide", { hidden: true, ms: Math.max(1000, Math.min(10000, Math.round(hideMs))) });
+  const ui = await forward(context, "ui.state", {});
   const restore = hud.error ? null : ((hud.undo as Json | undefined)?.params as Json | undefined) ?? null;
   if (!hud.error || !host.error) await sleep(120); // the panel's next frames (the overlay pulls every sixth tick)
   try {
+    stopIfCancelled(context, "the capture");
     return {
       value: await run(),
       overlay: {
@@ -194,10 +214,19 @@ async function runHandover(input: Json, context: CommandContext): Promise<Comman
   if (input.restore_ui !== false && status.phase === "photo_mode" && (status.photo_ui_hidden === true || status.cursor_hidden === true)) {
     await step("show photo mode's menu and cursor", "photo.hud.hide", { hidden: false, cursor: true });
   }
-  if (input.lights === "clear") await step("clear the showroom's rigs", "showroom.clear", { what: "lights" });
   // bridge.handover also gives V back (RB-82): the effects the bridge put on her lifted and any look ended, as player_stop
-  // does, in the same step that starts refusing writes.
-  const handed = await call(context, "bridge.handover", { on: true, ...(input.note ? { note: input.note } : {}) });
+  // does, in the same step that starts refusing writes. 0.8.2 (the re-check's third finding): the showroom's rigs are cleared
+  // inside that same step too, after the write gate has closed, so a showroom.lights still on its way can't add a rig after
+  // the clear.
+  const handed = await call(context, "bridge.handover", { on: true, ...(input.lights === "clear" ? { lights: "clear" } : {}), ...(input.note ? { note: input.note } : {}) });
+  const lights = handed.lights_cleared as Json | null | undefined;
+  if (input.lights === "clear") {
+    steps.push({
+      step: "clear the showroom's rigs",
+      ok: !!lights && !lights.error,
+      ...(lights && lights.error ? { why: lights.error } : {}),
+    });
+  }
   const released = handed.player_released as Json | null | undefined;
   if (released !== undefined) {
     steps.push({
@@ -243,14 +272,19 @@ async function runCaptureSheet(input: Json, context: CommandContext): Promise<Co
   const widest = maxCellWidth(cellsIn.length, { columns: input.columns as number | undefined, maxWidth: (input.max_width as number | undefined) ?? 2400 });
   try {
     for (const [i, cell] of cellsIn.entries()) {
+      // 0.8.2: a kill or a handover during a sheet stops it before the next picture, not after all of them.
+      if (!cell.path && context.signal?.aborted) {
+        throw planError("interrupted", `Stopped after ${cells.length} of ${cellsIn.length} cells: an emergency control (or Ctrl+C) cancelled the sheet, so no further picture was taken.`);
+      }
       if (cell.path) {
         cells.push(readCell(checkedCapturePath(root, cell.path), cell.label, widest));
         continue;
       }
       // No path: take the picture now (the XF overlay out of it).
-      const shot = await withOverlayCleared(context, () =>
-        captureWindow({ target: context.api.captureTarget(), region: input.region ? ({ name: input.region } as never) : undefined, name: `${(input.name as string | undefined) ?? "sheet"}-${String(i + 1).padStart(2, "0")}`, outDir: root, route: "auto" }),
-      );
+      const shot = await withOverlayCleared(context, () => {
+        stopIfCancelled(context, "the sheet's next picture");
+        return captureWindow({ target: context.api.captureTarget(), region: input.region ? ({ name: input.region } as never) : undefined, name: `${(input.name as string | undefined) ?? "sheet"}-${String(i + 1).padStart(2, "0")}`, outDir: root, route: "auto" });
+      });
       overlay = shot.overlay;
       cells.push({ label: cell.label, pixels: shrinkCell(decodePng(new Uint8Array(readFileSync(shot.value.full.path))), widest), source: shot.value.full.path });
     }
@@ -314,7 +348,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     input: obj({
       since: int("Only events after this sequence number (default 0: the oldest kept).", 0),
       limit: int("At most this many events, 1 to 500. Default 100.", 1, 500),
-      kinds: { type: "array", description: "Only these kinds (write, refused, kill, handover, resume, behaviour, note).", items: str("An event kind.", { maxLength: 32 }), maxItems: 16 },
+      kinds: { type: "array", description: "Only these kinds (write, refused, kill, handover, resume, behaviour, note; 0.8.6: ink_tree, ink_pointer, ink_input from the panel inside photo mode's menu).", items: str("An event kind.", { maxLength: 32 }), maxItems: 16 },
     }),
     bridge: { method: "session.events" },
   },
@@ -536,7 +570,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.state",
     title: "Read V's state",
     description:
-      "V in the world: position, facing (yaw), the camera's place, direction, yaw and pitch, the player state machine (locomotion, high level, scene tier, vehicle, combat), whether she is in combat, a vehicle, a scene or a dialogue, why the bridge wouldn't move her now (busy), what she is looking at (with whether it is an interaction target), the effects the bridge put on her and the behaviours running.",
+      "V in the world: position (her feet: the entity's origin on the ground; 0.8.4, session 11's L5), facing (yaw), the camera's place (camera.position: in first person her eyes, about 1.6 m above position), direction, yaw and pitch, the player state machine (locomotion, high level, scene tier, vehicle, combat), whether she is in combat, a vehicle, a scene or a dialogue, why the bridge wouldn't move her now (busy), what she is looking at (with whether it is an interaction target), the effects the bridge put on her and the behaviours running.",
     permission: "read",
     input: obj({}),
     bridge: { method: "player.state" },
@@ -545,7 +579,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.teleport",
     title: "Teleport V",
     description:
-      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). ${playerBusyNote}`,
+      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. ${playerBusyNote}`,
     permission: "write-player",
     input: obj({
       position: point3("The world point [x, y, z]."),
@@ -562,7 +596,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.look",
     title: "Turn V's view",
     description:
-      `Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (the game's own look-at, which the player's mouse or stick breaks). Answers the angles reached and whether they are within 2 degrees. Normal play only. ${playerBusyNote}`,
+      `Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (along the shortest arc, eased in and out, in short steps of the game's own look-at, so it takes duration_s; the player's mouse or stick ends it, took_over camera_drift). Answers the angles reached, whether they are within 2 degrees, took_s and whether player_stop stopped it. Normal play only. ${playerBusyNote}`,
     permission: "write-player",
     input: obj({
       yaw: num("Yaw, degrees (0 along the world's +Y, counter-clockwise).", -360, 360),
@@ -573,7 +607,8 @@ export const PLAYER_COMMANDS: CommandDef[] = [
       duration_s: num("A smooth look's time, 0.05 to 5 s. Default 1.", 0.05, 5),
     }),
     undo: "The result's undo turns the view back to the earlier angles.",
-    bridge: { method: "player.look", timeoutMs: () => 8000 },
+    // 0.8.3: a smooth look now takes its duration_s (up to 5 s), plus a moment to confirm.
+    bridge: { method: "player.look", timeoutMs: (p) => 5000 + 1000 * ((p.mode === "smooth" ? (p.duration_s as number | undefined) ?? 1 : 0)) },
   },
   {
     name: "player.look.stop",

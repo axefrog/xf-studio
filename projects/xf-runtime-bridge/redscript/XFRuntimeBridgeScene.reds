@@ -158,8 +158,13 @@ public abstract class XFScene {
       let up = new Vector4(center.X + u.X * 0.1, center.Y + u.Y * 0.1, center.Z + u.Z * 0.1, 1.0);
       let right = new Vector4(center.X + r.X * 0.1, center.Y + r.Y * 0.1, center.Z + r.Z * 0.1, 1.0);
       let far = new Vector4(camPos.X + f.X * 5.0, camPos.Y + f.Y * 5.0, camPos.Z + f.Z * 5.0, 1.0);
+      // 0.8 (session 8's G3): a point off the axis at 5 m, at the same angle as right (0.1 m at 1 m). The active camera's
+      // own projection puts both at the same screen x; photo mode's drone camera looking straight at V made center and far
+      // agree by chance through the gameplay camera, so the on-axis check alone passed a projection that wasn't the
+      // active camera's.
+      let farRight = new Vector4(far.X + r.X * 0.5, far.Y + r.Y * 0.5, far.Z + r.Z * 0.5, 1.0);
       out += ",\"calibration\":{\"center\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(center)) + ",\"up\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(up));
-      out += ",\"right\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(right)) + ",\"far\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(far)) + "}";
+      out += ",\"right\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(right)) + ",\"far\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(far)) + ",\"far_right\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(farRight)) + "}";
     }
     let player = GetPlayer(game);
     let registry = XFBridgeRegistry.Get();

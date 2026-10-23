@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.7.0
+  VERSION 0.8.6
   LANGUAGES CXX RC
 )
 
@@ -111,6 +111,14 @@ add_custom_target(xfb_build_info
   COMMENT "Recording the source commit"
   VERBATIM
 )
+# 0.8.2: the headers' stamp (cmake/HeaderStamp.cmake, core/LayoutGuard.hpp): a stale object can't be linked any more.
+add_custom_target(xfb_header_stamp
+  COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src" "-DOUTPUT=${XFB_GENERATED_DIR}/XfbHeaderStamp.hpp"
+          -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/HeaderStamp.cmake"
+  BYPRODUCTS "${XFB_GENERATED_DIR}/XfbHeaderStamp.hpp"
+  COMMENT "Stamping the headers"
+  VERBATIM
+)
 
 add_library(xfb_core STATIC
   src/core/Behaviours.cpp
@@ -124,6 +132,7 @@ add_library(xfb_core STATIC
   src/core/overlay/Host.cpp
   src/core/overlay/Theme.cpp
   src/core/InkUi.cpp
+  src/core/KillKey.cpp
   src/core/LivePose.cpp
   src/core/Log.cpp
   src/core/Messages.cpp
@@ -140,8 +149,8 @@ add_library(xfb_core STATIC
   src/core/Win32.cpp
   src/core/Writes.cpp
 )
-target_include_directories(xfb_core PUBLIC src PRIVATE "${XFB_GENERATED_DIR}")
-add_dependencies(xfb_core xfb_build_info)
+target_include_directories(xfb_core PUBLIC src "${XFB_GENERATED_DIR}")
+add_dependencies(xfb_core xfb_build_info xfb_header_stamp)
 target_compile_definitions(xfb_core PUBLIC ${XFB_DEFINITIONS})
 target_compile_options(xfb_core PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_core PUBLIC nlohmann_json::nlohmann_json bcrypt advapi32 version)
@@ -169,6 +178,7 @@ target_compile_definitions(XFRuntimeBridge PRIVATE ${XFB_DEFINITIONS})
 target_compile_options(XFRuntimeBridge PRIVATE ${XFB_OPTIONS})
 target_link_libraries(XFRuntimeBridge PRIVATE xfb_core RED4ext::SDK xfb_imgui)
 set_target_properties(XFRuntimeBridge PROPERTIES OUTPUT_NAME "XFRuntimeBridge")
+add_dependencies(XFRuntimeBridge xfb_header_stamp)
 
 # -----------------------------------------------------------------------------
 # Offline self-test host: runs the same bridge core with a simulated game thread.
@@ -176,3 +186,4 @@ set_target_properties(XFRuntimeBridge PROPERTIES OUTPUT_NAME "XFRuntimeBridge")
 add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/SimNpc.cpp src/selftest/UnitTests.cpp src/selftest/UnitTestsNpc.cpp)
 target_compile_options(xfb_selftest PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_selftest PRIVATE xfb_core)
+add_dependencies(xfb_selftest xfb_header_stamp)

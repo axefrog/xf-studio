@@ -1,28 +1,33 @@
 import * as THREE from "three";
-import { BODY_ENVELOPE, bodyClipPlanes, previewClipPlanes } from "../../camera-depth";
+import { BODY_ENVELOPE, bodyClipPlanes, previewClipPlanes } from "../../preview/camera-depth";
 import { BODY_FRAME, BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, frontCameraDistance, HEAD_SUBJECT, posedBodyFrame, posedBodySubject, surfaceAnchoredDistance,
-  type JointBox, type Subject } from "../../camera-framing";
-import type { PoseSample } from "../../pose-sample";
-import { poseClip, type PosePlacement } from "../../pose-clip";
-import { coreSceneEvidence, idleEvidence } from "../../scene-evidence";
-import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../render-scheduler";
-import { retainedViewportAspect, visibleViewportSize } from "../../viewport-size";
-import { loadCoreDetail, type LoadedCoreDetail } from "../../core-detail-loader";
-import type { CoreBody } from "../../render-detail";
-import { HeadLoadError } from "../../head-load-error";
-import { createViewportBackdrop } from "../../viewport-backdrop";
-import { attachHeadCameraInput } from "../../head-camera-input";
-import type { StageTheme } from "../../stage-backdrop";
-import { createLightingSetupStage, type GradingLutLoader } from "../../lighting-setup-stage";
-import { loadGradingLut } from "../../browser-grading-lut-device";
-import { viewportPixelRatio, watchDevicePixelRatio } from "../../device-pixel-ratio";
-import { linearTargetSupported } from "../../linear-display";
-import type { LightingSource } from "../../lighting-setups";
+  type JointBox, type Subject } from "../../preview/camera-framing";
+import type { PoseSample } from "../../animation/pose-sample";
+import { poseClip } from "../../animation/render/pose-clip";
+import type { PosePlacement } from "../../animation/pose-sample";
+import { coreSceneEvidence, idleEvidence } from "../../character/render/scene-evidence";
+import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../preview/render/render-scheduler";
+import { retainedViewportAspect, visibleViewportSize } from "../../preview/viewport-size";
+import { loadCoreDetail, type LoadedCoreDetail } from "../../character/render/core-detail-loader";
+import type { CoreBody } from "../../character/render-detail";
+import { HeadLoadError } from "../../preview/head-load-error";
+import { createViewportBackdrop } from "../../preview/render/viewport-backdrop";
+import { attachHeadCameraInput } from "../../preview/render/head-camera-input";
+import type { StageTheme } from "../../preview/stage-backdrop";
+import { createLightingSetupStage, type GradingLutLoader } from "../../preview/render/lighting-setup-stage";
+import { loadGradingLut } from "../../preview/render/browser-grading-lut-device";
+import { viewportPixelRatio, watchDevicePixelRatio } from "../../preview/render/device-pixel-ratio";
+import { linearTargetSupported } from "../../preview/render/linear-display";
+import type { LightingSource } from "../../preview/lighting-setups";
 import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
+import { characterGeometry } from "./character-geometry";
+import type { ExperimentPort } from "../api/experiments";
+import { followOptionalRenderers } from "./optional-renderers";
 import { createHeadRig, type MotionLoader } from "./head-rig";
 import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
+import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler";
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
 
 /**
@@ -41,6 +46,8 @@ export type SceneHostOptions = {
   stage?: StageTheme;
   /** The feature renderers to create once the head is ready (the composition's list, compose/renderers.ts). */
   renderers?: readonly FeatureRendererFactory[];
+  optionalRenderers?: Pick<ExperimentPort, "registrations" | "subscribe">;
+  referenceTextures?: import("../api/scene").SceneHostPort["referenceTextures"];
   /** Whose core head to load: the feminine V's (default) or the masculine V's; a V of the other body needs a new scene host. */
   body?: CoreBody;
   /** The core head record (default: the host's derived preview, core-detail-loader.ts). Probe pages inject a synthetic head. */
@@ -173,6 +180,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const { head, eyes, surfaces, albedo, motion } = rig;
   const { idle, blink, rig: rigMotion } = motion;
   const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => features?.superseded() ?? [] });
+  // The lips' aperture on the posed face, measured each drawn frame for the mouth interior's light (PREV-147 step A): the lip joints come
+  // from the face records' rest and regions (the idle's face, else the blink's), the posed bones are the core head's own.
+  const mouth = createMouthApertureSampler(() => headBones(head), () => [idle?.facial?.source, blink?.source]);
   // The orbit's distance limits follow the lens, the pane's aspect, the target and what shows: the farthest fits the head (and the
   // body while it shows) with a margin, the closest stops in front of the head's surface (camera-framing.ts, orbit-limits.ts).
   const shifted = (subject: Subject): Subject => ({ radius: subject.radius,
@@ -236,6 +246,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     animating: () => rigMotion.animating() || settle.settling,
     frame(dt) {
       rigMotion.advance(dt);
+      character.setMouthParting(mouth.sample());
       if (controls.enabled) controls.update();
       settle.step();
       // At long orbits, move the near plane in front of a conservative head
@@ -281,6 +292,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // The feature renderers, through their scene ports only (platform/api/scene.ts).
   features = createFeatureRenderers({ renderer, head, surfaces, skin: character.skin,
     character: character.view, subscribeCharacter: character.subscribe,
+    geometry: () => characterGeometry(head, character.resolvedSurfaces("hair"), character.resolvedSurfaces("body")),
+    resolvedSurfaces: character.resolvedSurfaces,
+    referenceTextures: options.referenceTextures,
     requestFrame: invalidate, onFrame, rig: { attach: bones => rigMotion.attach(bones), detach: bones => rigMotion.detach(bones) },
     compile: async object => {
       const prepared = lighting.prepare(object, camera);
@@ -290,6 +304,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     supersededChanged: () => { character.refreshVisibility(); invalidate(); },
     ...(options.onRendererError ? { report: options.onRendererError } : {}) }, options.renderers ?? []);
   releases.push(() => features?.dispose());
+  if (options.optionalRenderers) releases.push(followOptionalRenderers(options.optionalRenderers, (factory, signal) => features!.register(factory, signal)));
   // A renderer that replaces resolved parts hides them from the start.
   if (features.superseded().length) character.refreshVisibility();
   resize();
@@ -339,6 +354,10 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     featureBands: () => features?.bands() ?? {},
     /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. `display`: how frames reach the canvas. */
     frameTiming: () => ({ ...scheduler.stats(), display: lighting.display.info() }),
+    /** The mouth interior's light (developer evidence): the lip joints measured, the aperture now (metres) and the floor. */
+    mouthEvidence: () => ({ lips: mouth.lips, parting: character.mouthParting() }),
+    /** Developer comparisons: hold the mouth interior at a fixed parting and floor, or null to follow the face (character-renderer.ts). */
+    pinMouthInterior: (pin: { parting: number; floor: number } | null) => { character.pinMouthInterior(pin); invalidate(); },
     maxTextureSize: renderer.capabilities.maxTextureSize,
     eyeShape: rig.eyeShape,
     eyeShapeOptions: rig.eyeShapeOptions,

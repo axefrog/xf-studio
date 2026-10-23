@@ -13,8 +13,9 @@
 //                                                         brings in, clones of base-game civilians, 0.8)
 //   archive/pc/mod/xfs_bridge_npc_gestures.archive       (writes package only, when built: the XF gesture carrier for
 //                                                         npc.act, tools/npc/gesture-carrier.ts; 0.8)
-//   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
-//   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/panel.lua  (CET panel; diagnostic and writes packages only)
+//   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/init.lua   (CET; 0.8.2: the folder's name is CET's mod name,
+//                                                                          so its Bindings tab heads it "XF Runtime Bridge")
+//   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/panel.lua  (CET panel; diagnostic and writes packages only)
 // The live-pose carrier is a separate test package (tools/live-pose/build-carrier.ts), never in these.
 //   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json, RED4ext.SDK and Dear ImGui, MIT)
 //   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
@@ -48,7 +49,14 @@ export const STAGING_NOTES: readonly string[] = [
   `Replace the mod's files rather than copying over them, and make sure ${OLD_PRESETS_FILE} (0.3.x's name) is gone: with both present TweakXL still reads the new file last, but the leftover is confusing.`,
   `${PRESETS_FILE} is read after every other tweak file, so for the whole profile it overrides any other mod's photo_mode.std_preset_6..9 (Portrait Enhancer's among them); stage this package only in the dedicated test profile.`,
 ];
-export const CET_DIR = "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge";
+/**
+ * 0.8.2: CET names a mod after its folder and heads its Bindings group with that name, spaces for underscores and each word's
+ * first letter raised ("xf_runtime_bridge" read "Xf Runtime Bridge"; CET 1.37.1 src/overlay/widgets/Bindings.cpp
+ * UpdateAndDrawModBindings), so the folder is XF_Runtime_Bridge. CET keys a binding by mod name and hotkey ID
+ * (src/VKBindings.cpp), so a binding made under the old folder name has to be made once more.
+ */
+export const CET_MOD_NAME = "XF_Runtime_Bridge";
+export const CET_DIR = `bin/x64/plugins/cyber_engine_tweaks/mods/${CET_MOD_NAME}`;
 /** 0.8: the XF actor records (TweakXL), in the -writes package only. */
 export const NPC_ACTORS_FILE = "r6/tweaks/XFRuntimeBridge/xf_npc_actors.yaml";
 /** 0.8: the XF gesture carrier's archive (npc.act), in the -writes package only and only when it has been built. */
@@ -57,6 +65,26 @@ export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 export const THEME_FILE = `${CET_DIR}/theme.lua`;
 
 export const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+
+/**
+ * 0.8.2: the clean-build gate. 0.8.1's DLL linked an object file compiled before a header it depends on changed (MSBuild's
+ * include record for Main.cpp was missing), and the game's heap was corrupted at load. A package is made only from a build in
+ * which every object file is newer than every native source file, which a clean build (`cmake --build build --config Release
+ * --clean-first`) always gives. Answers the first object file older than the newest source, or null when the build is clean.
+ */
+export function staleObject(buildDir: string, sourceDir: string): { object: string; source: string } | null {
+  const sources = listFiles(sourceDir).filter((p) => /\.(c|cc|cpp|h|hpp|rc|cmake)$/i.test(p) || p.endsWith("CMakeLists.txt"));
+  if (!sources.length) return null;
+  let newest = sources[0]!;
+  for (const path of sources) if (statSync(path).mtimeMs > statSync(newest).mtimeMs) newest = path;
+  const newestMs = statSync(newest).mtimeMs;
+  const objects = listFiles(buildDir).filter((p) => p.toLowerCase().endsWith(".obj") && !/[\\/](_deps|CMakeFiles)[\\/]/.test(p));
+  if (!objects.length) return { object: "(no object files)", source: newest };
+  for (const object of objects) {
+    if (statSync(object).mtimeMs < newestMs) return { object, source: newest };
+  }
+  return null;
+}
 
 function listFiles(dir: string): string[] {
   const out: string[] = [];
@@ -84,19 +112,27 @@ export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
 const BRIDGE_ENABLED = (on: boolean) => new RegExp(`^\\[bridge\\]\\n(?:;.*\\n)*enabled = ${on}$`, "m");
 
 export function variantConfig(base: string, variant: Variant, options: { allowInventory?: boolean } = {}): string {
-  let config = base;
+  // A Windows checkout gives the file CRLF (text=auto, core.eol native); the checks and the package use LF either way.
+  let config = base.replace(/\r\n/g, "\n");
   if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
   if (/^allow_creator_leave = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_creator_leave = false");
   if (!/^allow_live_pose = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_live_pose = false");
+  if (!/^allow_test_hooks = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_test_hooks = false");
   // 0.7: two sections now have an "enabled" key, so both checks name their section.
   if (!BRIDGE_ENABLED(false).test(config)) throw new Error("native/config/config.ini must keep enabled = false");
   if (!/^\[overlay\]\n(?:;.*\n)*enabled = false$/m.test(config)) throw new Error("native/config/config.ini must keep [overlay] enabled = false");
+  if (!/^diagnostics = false$/m.test(config)) throw new Error("native/config/config.ini must keep [overlay] diagnostics = false");
   if (variant !== "default") {
     config = config.replace(BRIDGE_ENABLED(false), (line) => line.replace(/enabled = false$/, "enabled = true"));
     if (!BRIDGE_ENABLED(true).test(config)) throw new Error(`${variant} config did not enable the bridge`);
     // 0.7: the XF overlay host (P0, draw-only) is on in the test packages only; the distribution package keeps it off.
     config = config.replace(/^(\[overlay\]\n(?:;.*\n)*)enabled = false$/m, "$1enabled = true");
     if (!/^\[overlay\]\n(?:;.*\n)*enabled = true$/m.test(config)) throw new Error(`${variant} config did not switch the overlay host on`);
+  }
+  if (variant === "diagnostic") {
+    // 0.8 (the UI review): the XF box's diagnostic lines and moving bar in the diagnostic package only.
+    config = config.replace(/^diagnostics = false$/m, "diagnostics = true");
+    if (!/^diagnostics = true$/m.test(config)) throw new Error("diagnostic config did not switch the overlay's diagnostics on");
   }
   if (variant === "writes") {
     config = config.replace(/^allow_writes = false$/m, "allow_writes = true");
@@ -114,6 +150,9 @@ export function variantConfig(base: string, variant: Variant, options: { allowIn
     // writing the XF carrier clip's keys, in the test profile only, with the separate carrier test package.
     config = config.replace(/^allow_live_pose = false$/m, "allow_live_pose = true");
     if (!/^allow_live_pose = true$/m.test(config)) throw new Error("writes config did not allow the live-pose carrier");
+    // 0.8.4: the session checks' test hooks (test.save.delay, card row L1), in the test profile's package only.
+    config = config.replace(/^allow_test_hooks = false$/m, "allow_test_hooks = true");
+    if (!/^allow_test_hooks = true$/m.test(config)) throw new Error("writes config did not allow the test hooks");
     const warning = "; THIS COPY ALLOWS WRITES: stage it only in the dedicated XF test MO2 profile, never an everyday one.";
     config = config.replace(/^(\[bridge\])$/m, `${warning}\n$1`);
     if (!config.includes(warning)) throw new Error("writes config lost its warning");
@@ -148,6 +187,7 @@ export type Manifest = {
   inventory_writes: boolean;
   allow_creator_leave: boolean;
   allow_live_pose: boolean;
+  allow_test_hooks: boolean;
   photo_mode_presets: string | null;
   /** Steps and consequences for staging by hand (RB-65); empty for the default package, which carries no presets. */
   staging_notes: string[];
@@ -158,6 +198,8 @@ export type Manifest = {
   npc_actors: boolean;
   /** 0.8: whether the XF gesture carrier (npc.act) is in the package; without it gestures are refused carrier_missing. */
   npc_gesture_carrier: boolean;
+  /** 0.8: whether the XF box shows its diagnostic lines ([overlay] diagnostics): the diagnostic package only. */
+  overlay_diagnostics: boolean;
   commit: string;
   source_tree_clean: true;
   built_for: Record<string, string>;
@@ -213,12 +255,14 @@ export function stageVariant(options: StageOptions): Manifest {
     inventory_writes: variant === "writes" && options.allowInventory === true,
     allow_creator_leave: variant === "writes",
     allow_live_pose: variant === "writes",
+    allow_test_hooks: variant === "writes",
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",
     overlay_host: variant !== "default",
     npc_actors: variant === "writes",
     npc_gesture_carrier: carrier !== undefined,
+    overlay_diagnostics: variant === "diagnostic",
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
     built_for: {

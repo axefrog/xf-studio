@@ -8,7 +8,7 @@
  * Every change is a typed `character.*` action with its own Undo history (CORE-59); the rules live in the application service, so this
  * module only dispatches (the V's own makeup is a switch, `character.setOwnMakeup`: instant and undoable; CORE-71). One Undo rule covers the whole panel (UI-81): its
  * Undo and Redo, and Ctrl+Z / Ctrl+Y anywhere in it except a text box, step through the panel's changes (creator choices,
- * Clothing and the V's own makeup) in the order they were made; the header's Undo covers the makeup only and says so. Nothing here moves the layout on its own (UI-68):
+ * Clothing and the V's own makeup) in the order they were made; the header's Undo follows what was last edited (a preset or a V, HISTORY_SCOPE). Nothing here moves the layout on its own (UI-68):
  * one status line of fixed height carries what is on its way or failed, with Try again and Keep my changes inline, and a Details
  * disclosure for the plain lines about what couldn't be used; a row reserves its detail line when any of its options has one, and a
  * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72); files come last.
@@ -35,17 +35,17 @@
  * it takes a moment. Closing the row stops it. The prepared game files' size and "Clear prepared game files" sit with the 3D view's
  * own controls.
  */
-import { shortcutLabel } from "../../input-bindings";
-import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
+import { shortcutLabel } from "../../app/input-bindings";
+import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../character/cc-panel";
 import { applyCapability, button, setButtonLabel, note, section, Segmented, SelectField, Toggle } from "../controls";
-import type { ChoiceLayout, ChoiceSize } from "../../ui-preferences";
+import type { ChoiceLayout, ChoiceSize } from "../../app/ui-preferences";
 import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
 import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
-import { ChoiceList, propertyList, SearchField } from "../components";
+import { ChoiceList, ConflictNotice, propertyList, SearchField } from "../components";
 import { helpTip, setHelp } from "../help-tip";
 import type { Command } from "../commands";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
-  type CharacterToggle, type CharacterToggleState } from "../../character-panel-sections";
+  type CharacterToggle, type CharacterToggleState } from "../../character/character-panel-sections";
 import { icon } from "../icons";
 import { viewState } from "../view-state";
 import { VIEW_KEY } from "../scroll-anchor";
@@ -56,8 +56,9 @@ import { characterDetailLine, characterDetailRows } from "./preview";
 import { ChoiceList as CreatorChoiceList, swatchLook } from "./character-choices";
 import { attachSwatchCard, contrastMark, CONTRAST_WORDS, setContrastMark, type SwatchSample } from "../components";
 import { wolvenKitStepButton } from "../wolvenkit-step";
-import type { ClothingState } from "../../clothing-dressing";
-import type { ClothingArea } from "../../save-loadout";
+import type { ClothingState } from "../../character/clothing-dressing";
+import type { ClothingArea } from "../../saves/save-loadout";
+import { PARTLY_SHOWN, shownOutcome } from "../../character/cc-render-coverage";
 
 const NOT_SHOWN = "Not shown in the 3D view yet.";
 const CLOTHES_HELP = "Your V's clothes as your save records them. They are drawn without the game's garment fitting, so layers can clip at the edges.";
@@ -137,9 +138,12 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     variant: "quiet", title: `Show the character creator's default ${word} V (Undo shows your V again)`,
     onClick: () => dispatch({ kind: "character.useDefault", bodyGender }) });
   const useDefault = defaultButton("female", "feminine"), useDefaultMale = defaultButton("male", "masculine");
-  // The panel's one Undo and Redo (UI-81): creator choices and Clothing, in the order they were made.
-  const undo = button({ label: "Undo in the Character panel", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undo" }) });
-  const redo = button({ label: "Redo in the Character panel", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redo" }) });
+  // The panel's one Undo and Redo (UI-81): its V's history (`character:<id>`, creator choices and Clothing in the order they were made),
+  // stepped by history.undo and history.redo naming it (profiles design §3.7). With no V shown there is nothing to step.
+  const ownScope = () => port.panels.historyScope("character");
+  const step = (kind: "history.undo" | "history.redo") => { const scope = ownScope(); if (scope) dispatch({ kind, scope }); };
+  const undo = button({ label: "Undo in the Character panel", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => step("history.undo") });
+  const redo = button({ label: "Redo in the Character panel", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => step("history.redo") });
   // A switch, not a one-way action: the V's own makeup hides and shows again at once, and the panel's Undo steps it back.
   const ownMakeup = new Toggle({ label: "Show my V's own makeup", onChange: shown => dispatch({ kind: "character.setOwnMakeup", shown }),
     help: "Turn it off to see only the makeup you're making on your V. Your V's creator choices don't change, and the panel's Undo turns it back on." });
@@ -155,6 +159,10 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     onClick: () => { showMessages = !showMessages; rt.changed(); } });
   detailsToggle.setAttribute("aria-expanded", "false"); detailsToggle.setAttribute("aria-controls", "cc-messages");
   const status = h("div", { class: "cc-status" }, statusText, retry, setupWolvenKit.element, keep, detailsToggle);
+  // Changed in another window (t-conflict): first in "Your V" while a conflict waits, with the three ways out.
+  const conflictNotice = new ConflictNotice({ onResolve: keep => dispatch({ kind: "character.resolveConflict", keep }),
+    capability: keep => port.authoring.capability({ kind: "character.resolveConflict", keep }) });
+  const conflict = conflictNotice.element;
   const messages = h("div", { class: "cc-messages", id: "cc-messages", hidden: true });
   let showMessages = false;
   // The library's search field (icon, clear button, Escape clears; the same as Poses): the panel filters on its pause, and each paint
@@ -222,7 +230,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     // The V's source with the panel's history beside it, then two rows of buttons: which V (a save or a default V), then character
     // presets. Reset all sits with the V's own makeup above the rows (the style guide's Creator options), so at 300 px the buttons take
     // three lines, not four (C-26).
-    section("Your V", h("div", { class: "cc-source-line" }, source, h("span", { class: "cc-history" }, undo, redo)),
+    section("Your V", conflict, h("div", { class: "cc-source-line" }, source, h("span", { class: "cc-history" }, undo, redo)),
       h("div", { class: "row wrap gap-s" }, loadSave, useDefault, useDefaultMale),
       h("div", { class: "row wrap gap-s" }, loadPreset, savePreset), status, messages, detailNote, detailsBlock),
     h("section", { class: "section cc-quick" }, ownMakeup.element, h("div", { class: "row wrap gap-s" }, resetAll)),
@@ -233,13 +241,13 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     filesSection);
 
   // One rule (UI-81): inside this panel the Undo keys step through the panel's own changes (creator choices and Clothing), whatever has
-  // focus (a switch, a list, a button), never the makeup's history. Only a text box keeps its own text Undo.
+  // focus (a switch, a list, a button), never a look's history. Only a text box keeps its own text Undo.
   element.addEventListener("keydown", event => {
     if (isTextInput(event.target) && (event.target as Element).tagName.toLowerCase() !== "select") return;
     const key = event.key.toLowerCase(), mod = event.ctrlKey || event.metaKey;
     if (!mod || event.altKey || (key !== "z" && key !== "y")) return;
     event.preventDefault();
-    dispatch({ kind: key === "y" || event.shiftKey ? "character.redo" : "character.undo" });
+    step(key === "y" || event.shiftKey ? "history.redo" : "history.undo");
   });
 
   // ---- Rows ----
@@ -530,7 +538,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
     // The host searches every choice, not only those loaded (UI-72); rows matching by name show while it answers.
     const found = query ? port.authoring.characterSearch(query) : null;
     let stopped: "time" | "disk" | "setup" | null = null;
-    const details = frame.status.assets.characterDetails, drawn = new Set(details?.drawn ?? []);
+    const details = frame.status.assets.characterDetails, shown = { drawn: details?.drawn ?? [], partial: details?.partial ?? [] };
     const uncensoredOn = frame.preview.preview?.uncensored === true;
     let visibleRows = 0;
     for (const controls of panel ? built!.rows : []) {
@@ -568,13 +576,20 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       setExpanded(controls.main, controls.open);
       // Honest coverage: what the 3D view can't draw says so; a conditional option settles from what the shown V draws.
       const isOff = !!value && value.choice === option.off;
-      const conditionalHidden = option.coverage[0] === "conditional" && option.type === "appearance" && !!value && !isOff && details?.phase === "ready" && !drawn.has(option.name);
+      // A conditional option settles from what the shown V draws of it: all of it (drawn), only part of it (a beard whose cards are left
+      // out: marked, never read as drawn), or none of it (not shown).
+      const settles = option.coverage[0] === "conditional" && option.type === "appearance" && !!value && !isOff && details?.phase === "ready";
+      const outcome = settles ? shownOutcome(option.name, shown) : null;
+      const conditionalHidden = outcome === "none", conditionalPartial = outcome === "part";
       const from = option.mod >= 0 ? `From ${creator.mods[option.mod]}` : "From the game";
       const own = value && value.choice !== value.own ? `Your V's own: ${value.ownLabel}.` : "";
-      const describe = [from, own, conditionalHidden ? NOT_SHOWN : "", enhancedList ? CONTRAST_WORDS.mark : ""].filter(Boolean).join(". ").replace(/\.\./g, ".");
+      const describe = [from, own, conditionalHidden ? NOT_SHOWN : conditionalPartial ? PARTLY_SHOWN : "", enhancedList ? CONTRAST_WORDS.mark : ""]
+        .filter(Boolean).join(". ").replace(/\.\./g, ".");
       controls.main.title = `${option.label}: ${value?.label ?? ""} · ${describe}`;
       setAttr(controls.main, "aria-description", describe);
-      controls.notShown.classList.toggle("on", conditionalHidden);
+      // The row's marker says which: not shown, or shown only in part (the row itself dims only when nothing of it is drawn).
+      controls.notShown.classList.toggle("on", conditionalHidden || conditionalPartial);
+      setAttr(controls.notShown, "title", conditionalPartial ? PARTLY_SHOWN : NOT_SHOWN);
       // Off where the option has one; Reset once it differs from the V's own. Both keep their place when unavailable (no layout shift).
       controls.off.hidden = option.off === null;
       setAttr(controls.off, "aria-pressed", String(isOff));
@@ -740,9 +755,10 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       applyCapability(useDefault, port.authoring.capability({ kind: "character.useDefault", bodyGender: "female" }));
       applyCapability(useDefaultMale, port.authoring.capability({ kind: "character.useDefault", bodyGender: "male" }));
       const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo") };
-      applyCapability(undo, port.authoring.capability({ kind: "character.undo" }));
-      applyCapability(redo, port.authoring.capability({ kind: "character.redo" }));
-      undo.title = context?.undo ? `Undo: ${context.undo} (${keys.undo} in this panel). Covers creator options and Clothing; the header's Undo covers your makeup.`
+      const scope = ownScope(), none = { available: false, code: "unavailable", reason: "Your V appears once the 3D view is ready." } as const;
+      applyCapability(undo, scope ? port.authoring.capability({ kind: "history.undo", scope }) : none);
+      applyCapability(redo, scope ? port.authoring.capability({ kind: "history.redo", scope }) : none);
+      undo.title = context?.undo ? `Undo: ${context.undo} (${keys.undo} in this panel). Steps this V's changes (creator options and Clothing). The header's Undo follows what you last edited.`
         : "No change in this panel to undo.";
       redo.title = context?.redo ? `Redo: ${context.redo} (${keys.redo} in this panel)` : "No undone change in this panel to redo.";
       setAttr(undo, "aria-label", context?.undo ? `Undo in the Character panel: ${context.undo}` : "Undo in the Character panel");
@@ -758,11 +774,14 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         messages.dataset.key = messageKey;
         messages.replaceChildren(...lines.map(text => note(text, "warning")));
       }
-      // The one status line: what is on its way, what failed (with Try again), else the first of the Details lines.
+      // A conflict on this V (t-conflict): the notice and its three ways out, while it waits.
+      conflictNotice.update(context?.conflict ?? null);
+      // The one status line: what is on its way, what failed (with Try again), else the first of the Details lines, else that the V was
+      // just replaced by another window's version (its Undo starts there).
       const line = !context ? "" : context.phase === "preparing" ? context.message || "Reading your game's character-creator options…"
         : context.phase === "failed" ? context.message
           : details?.updating || context.viewing ? (details?.updating && context.firstTime ? FIRST_TIME : "Updating…")
-            : details?.updateError ?? (detailsNeed || (lines.length ? lines[0]! : ""));
+            : details?.updateError ?? (detailsNeed || (lines.length ? lines[0]! : context.elsewhere ?? ""));
       setText(statusText, line);
       statusText.title = line;
       // The status line keeps its height while there is a V whose state it can report (UI-68); before any V can load there is nothing

@@ -180,7 +180,8 @@ describe("bridge 0.4.1 review fixes (tools side)", () => {
     expect(saveClientTimeoutMs(20000)).toBeGreaterThanOrEqual(20000 + SAVE_UNLOCK_WAIT_MS + 5 * SERVER_STEP_MS);
     expect(loadClientTimeoutMs()).toBeGreaterThanOrEqual(SAVE_LIST_WAIT_MS + 3 * SERVER_STEP_MS);
     expect(findCommand("game.save")!.bridge!.timeoutMs!({ timeout_ms: 60000 })).toBe(saveClientTimeoutMs(60000));
-    expect(findCommand("game.load")!.bridge!.timeoutMs!({})).toBe(loadClientTimeoutMs());
+    // 0.8.2: game.load runs in the tools now (the load, then the press-any-key screen), its bridge call with this wait.
+    expect(readFileSync(join(projectDir, "tools", "api", "catalogue.ts"), "utf8")).toContain('callBridge("game.load", loadParams(rest), context.cid, loadClientTimeoutMs()');
   });
 
   test("RB-56: game.load's schema requires discard_unsaved", () => {

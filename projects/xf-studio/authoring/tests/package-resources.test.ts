@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { planCollection } from "../src/preset-collection";
+import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import {
   appearanceResource, archiveXlDeclaration, componentId, customizationResource, HandleCounter, resourceJson,
   rewritePlateMesh, rewritePlateMorph,
-} from "../src/package-resources";
+} from "../src/legacy/eye-makeup/export/package-resources";
 import { plateUvWindow, uvTransformConstants } from "../src/engines/layered-makeup/plate-uv-window";
 
 const plan = planCollection(JSON.parse(readFileSync(resolve(import.meta.dir,

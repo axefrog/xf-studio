@@ -2,19 +2,20 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
-  type PackageTools } from "../src/package-server";
+import { createPackageHandler, LOCAL_BUILD_ENV_REASONS, LOCAL_BUILD_REASONS, localBuildIssue, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
+  type PackageTools } from "../src/host/package-server";
 import type { BuilderRun, HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import type { PackageCheckResult } from "../src/platform/api";
+import { USER_FACING_JARGON } from "../src/app/alpha-availability";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { defaultLocalSettings } from "../src/local-settings";
-import { contentFingerprint, EyePlateCache } from "../src/eye-plate-cache";
-import { EYE_PLATE_MANIFEST_SCHEMA } from "../src/eye-plate-service";
-import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
-import { OFF_PLATE_REASON, PLATE_REACH_UNCHECKED_NOTE } from "../src/package-filter";
-import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { contentFingerprint, EyePlateCache } from "../src/legacy/eye-makeup/plate/host/eye-plate-cache";
+import { EYE_PLATE_MANIFEST_SCHEMA } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { OFF_PLATE_REASON, PLATE_REACH_UNCHECKED_NOTE } from "../src/legacy/eye-makeup/export/package-filter";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { withGlitterKnob } from "./glitter-knob-fixture";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 import { FOOTPRINT } from "./fixtures/product-fixture";
@@ -126,11 +127,56 @@ test("the package server resolves local settings for each request", async () => 
     const first = store.save({ ...defaultLocalSettings(), gameRoot: join(directory, "game-a") }, 0);
     const refused = await handler(request({ action: "build", collection: fixture }));
     expect(refused.status).toBe(503);
-    expect((await refused.json()).error).toContain("WolvenKit isn't set up yet");
+    expect((await refused.json()).error).toBe(LOCAL_BUILD_REASONS.wolvenKitUnset);
     expect(seen.at(-1)).toBe(first.gameRoot!);
     const second = store.save({ ...first, gameRoot: join(directory, "game-b") }, 1);
     await handler(request({ action: "build", collection: fixture }));
     expect(seen.at(-1)).toBe(second.gameRoot!);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("PIPE-134: Build's setup reasons are plain, with one next step, and never name a script, an override or a path", () => {
+  const directory = mkdtempSync(join(tmpdir(), "xfs-package-reasons-"));
+  try {
+    const wolvenkit = join(directory, "WolvenKit.CLI.exe"), game = join(directory, "game");
+    writeFileSync(wolvenkit, "");
+    const tools = (over: Partial<PackageTools>) => ({ ...localPackageTools(defaultLocalSettings(), {}), wolvenkit, gamepath: game, ...over });
+    expect(localBuildIssue(tools({ wolvenkit: "" }))).toBe(LOCAL_BUILD_REASONS.wolvenKitUnset);
+    expect(localBuildIssue(tools({ wolvenkit: join(directory, "gone.exe") }))).toBe(LOCAL_BUILD_REASONS.wolvenKitMissing);
+    expect(localBuildIssue(tools({ gamepath: "" }))).toBe(LOCAL_BUILD_REASONS.gameUnset);
+    expect(localBuildIssue(tools({}))).toBe(LOCAL_BUILD_REASONS.gameMissing);
+    mkdirSync(join(game, "bin", "x64"), { recursive: true });
+    expect(localBuildIssue(tools({}))).toBe(LOCAL_BUILD_REASONS.gameExecutableMissing);
+    writeFileSync(join(game, "bin", "x64", "Cyberpunk2077.exe"), "");
+    expect(localBuildIssue(tools({}))).toBe(LOCAL_BUILD_REASONS.gameArchivesMissing);
+    mkdirSync(join(game, "archive", "pc"), { recursive: true });
+    expect(localBuildIssue(tools({}))).toBeNull();
+    for (const reason of Object.values(LOCAL_BUILD_REASONS)) {
+      expect(reason).not.toMatch(/\bbun\b|tools\/|\.ts\b|XFS_|override|Game input|configured|unavailable/i);
+      expect(reason).toMatch(/Settings › (Game|Tools)|launcher|Restart XF Studio/);
+      expect(reason).not.toMatch(USER_FACING_JARGON);
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("PIPE-134: a path an environment variable supplied is named as such, since choosing or clearing the setting would not help", () => {
+  const directory = mkdtempSync(join(tmpdir(), "xfs-package-env-reasons-"));
+  try {
+    const wolvenkit = join(directory, "WolvenKit.CLI.exe"), game = join(directory, "game");
+    writeFileSync(wolvenkit, "");
+    const settings = { ...defaultLocalSettings(), wolvenKitCli: wolvenkit, gameRoot: game };
+    // The settings are fine, but the variables outrank them and name things that aren't there.
+    const bad = localPackageTools(settings, { XFS_PACKAGE_WOLVENKIT: join(directory, "gone.exe"), XFS_PACKAGE_GAMEPATH: game });
+    expect(bad.fromEnv).toEqual({ wolvenkit: true, gamepath: true });
+    expect(localBuildIssue(bad)).toBe(LOCAL_BUILD_ENV_REASONS.wolvenKitMissing);
+    expect(LOCAL_BUILD_ENV_REASONS.wolvenKitMissing).toContain("XFS_PACKAGE_WOLVENKIT");
+    expect(LOCAL_BUILD_ENV_REASONS.wolvenKitMissing).not.toMatch(/choose|Settings ›/i);
+    const badGame = localPackageTools(settings, { XFS_PACKAGE_WOLVENKIT: wolvenkit, XFS_PACKAGE_GAMEPATH: join(directory, "nowhere") });
+    expect(localBuildIssue(badGame)).toBe(LOCAL_BUILD_ENV_REASONS.gameMissing);
+    // Without the variables the person's own steps still apply.
+    expect(localPackageTools({ ...settings, wolvenKitCli: join(directory, "gone.exe") }, {}).fromEnv).toBeUndefined();
+    expect(localBuildIssue(localPackageTools({ ...settings, wolvenKitCli: join(directory, "gone.exe") }, {}))).toBe(LOCAL_BUILD_REASONS.wolvenKitMissing);
+    expect(localBuildIssue(localPackageTools(settings, {}))).toBe(LOCAL_BUILD_REASONS.gameMissing);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -195,7 +241,7 @@ test("PIPE-70: a posted collection's glitter knob gives no glitter route and no 
   expect((await building(request({ action: "build", collection: knob }))).status).toBe(422);
   expect(snapshot && Object.keys(snapshot)).not.toContain("diagnostics");
   expect(args).not.toContain("--diagnostics");
-  expect(readFileSync(resolve(import.meta.dir, "../src/package-server.ts"), "utf8")).not.toContain("--diagnostics");
+  expect(readFileSync(resolve(import.meta.dir, "../src/host/package-server.ts"), "utf8")).not.toContain("--diagnostics");
 });
 
 test("unreadable Local setup: Check still answers with the defaults, Build answers a plain JSON refusal (PIPE-94)", async () => {

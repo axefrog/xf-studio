@@ -1,0 +1,28 @@
+{
+ "purpose": "Research request \"Channels to the player\" (area E of the P2 game-substrate plan). The game's 2.31 scripts decompiled to text, for reading how the phone, holocalls, the scanner, shards, notifications, the journal and map pins are driven from script. Derived from game files: private, ignored by git, never packaged.",
+ "extractedOn": "2026-10-22",
+ "tool": {
+  "name": "redscript-cli",
+  "version": "0.5.31",
+  "command": "redscript-cli decompile -i SCRATCH/final.redscripts -o SCRATCH/scripts -f",
+  "whyThisVersion": "The version docs/toolchain.md records for decompiling the game's scripts; the same bundle the character-creator and quest pages cite."
+ },
+ "game": {
+  "productVersion": "2.31",
+  "inputs": {
+   "r6/cache/final.redscripts": "SHA-256 2119046f3f3466206d8a16a4803b0ef0f3c90926ab689f9abbd5b8e42e28ee86 (a copy was decompiled; the install was not touched)"
+  }
+ },
+ "scope": "Every script in the bundle (core, cyberpunk, exec, samples, tests and orphans.script), kept whole so that later areas (F: hooks, G: saves) can read the same tree.",
+ "counts": {
+  "files": 1755,
+  "bytes": 26214400,
+  "note": "bytes is approximate (25 MB on disk)"
+ },
+ "readInPlace": [
+  "REDmod tweak source under tools/redmod/tweaks (database/scanning/*.tweak, focus_clues/schema.tweak): read as text, not copied.",
+  "Record-type counts for the scanner families come from the TweakDB name-to-type maps produced for area C (records_tweakdb.json and records_tweakdb_ep1.json): npc_scanning_data 25 (ep1 85), device_scanning_data 299 (315), FocusClue 1470 (2085), ScannerModuleVisibilityPreset 5 (8), shard-named Items 531 (858)."
+ ],
+ "run": "redscript-cli ran under tools/memory_guard.py with a limit of 4 GB (peak 0.1 GB). The game was not running. Scratch output was built on drive C, moved to the corpus folder in one batch, and the scratch folder deleted.",
+ "location": "research/consumers/quest-corpus/json/scripts-2.31/ (ignored)"
+}

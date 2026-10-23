@@ -9,12 +9,13 @@ import { ValueTransition, weightBlend } from "../src/platform/core/value-transit
 import { DEFAULT_TRANSITION, parseTransitions, TransitionSettings } from "../src/platform/core/transition-settings";
 import { storedWeight } from "../src/engines/facial-rig/vector";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import { WorkspaceComposer } from "../src/workspace-composer";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { EASING_ICONS, iconPaths } from "../src/studio-ui/icons";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 const xs = Array.from({ length: 101 }, (_, i) => i / 100);
 
 test("every preset runs from 0 to 1 and never goes back; the four gentle curves are their exact forms as Béziers", () => {
@@ -165,7 +166,7 @@ test("the setting persists with the workspace (before the head loads too) and a 
 });
 
 test("through the Studio: transition.set is a platform action with no Undo step; a preset switch with it on is still one Undo step", () => {
-  const c = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const c = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   const settings = new TransitionSettings();
   c.app.attach({ transitions: settings });
   expect(c.app.capability({ kind: "transition.set", source: "expression", seconds: 4 })).toMatchObject({ available: false, code: "invalid_value" });
@@ -178,7 +179,7 @@ test("through the Studio: transition.set is a platform action with no Undo step;
   c.app.dispatch({ kind: "history.undo" });
   expect((c.app.featureState("expressions")?.part as { controls: object }).controls).toEqual({ lips_l_corner_up: 0.5 });
   // Without the service attached, the action says why.
-  const bare = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const bare = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   expect(bare.app.capability({ kind: "transition.set", source: "expression", enabled: true }).available).toBe(false);
 });
 

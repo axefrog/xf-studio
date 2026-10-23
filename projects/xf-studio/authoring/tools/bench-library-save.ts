@@ -10,12 +10,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Database } from "bun:sqlite";
-import { LookLibrary } from "../src/library-store";
-import { LibraryDurability } from "../src/platform/graph-adapters/library-durability";
-import { hostClock } from "../src/platform/graph-adapters/host-sources";
+import { LookLibrary } from "../src/library/host/library-store";
+import { openLibraryDatabase } from "../src/library/host/library-files";
+import { hostClock } from "../src/platform/core/clock";
 import { starterRecipe } from "../src/features/eye-makeup/region";
-import { recipeFile } from "../src/recipe-schema";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 
 const root = resolve(process.argv[2] ?? tmpdir()), saves = Number(process.argv[3] ?? 200);
 const recipe = recipeFile(starterRecipe());
@@ -26,10 +25,10 @@ for (const mode of ["full", "normal"] as const) {
   const life = new AbortController();
   try {
     const path = join(dir, "library.sqlite");
-    const durability = new LibraryDurability(path, { clock: hostClock(), signal: life.signal });
-    const library = new LookLibrary(path, durability);
+    const database = openLibraryDatabase(path, { clock: hostClock(), signal: life.signal }), durability = database.durability!;
+    const library = new LookLibrary(database);
     // The library as it was: every commit waits for the disk.
-    if (mode === "full") (library as unknown as { db: Database }).db.exec("PRAGMA synchronous=FULL;");
+    if (mode === "full") database.read(db => db.exec("PRAGMA synchronous=FULL;"));
     durability.flush();
     const times: number[] = [];
     const started = performance.now();
@@ -50,6 +49,6 @@ for (const mode of ["full", "normal"] as const) {
     times.sort((a, b) => a - b);
     console.log(JSON.stringify({ mode, folder: root, saves, totalMs: Math.round(total), medianMs: ms(times[Math.floor(saves / 2)]),
       p95Ms: ms(times[Math.floor(saves * 0.95)]), maxMs: ms(times[saves - 1]), flushAfterAllMs: ms(flush), flushAfterOneMs: ms(one) }));
-    library.close();
+    database.close();
   } finally { life.abort(); rmSync(dir, { recursive: true, force: true }); }
 }

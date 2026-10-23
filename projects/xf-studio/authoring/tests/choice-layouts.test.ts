@@ -2,8 +2,8 @@
 // with its large picture), which choice's turntable the list wants, the turntable's hover and drag (a drag never chooses, a click still
 // does at once), and the listbox's PageUp/PageDown and type-ahead.
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import type { CcPanelChoice } from "../src/cc-panel";
-import type { ChoicePreviewRow } from "../src/choice-preview-service";
+import type { CcPanelChoice } from "../src/character/cc-panel";
+import type { ChoicePreviewRow } from "../src/character/choice-preview-service";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());
@@ -53,7 +53,7 @@ describe("layouts", () => {
 
   test("a row's source shows only where its heading doesn't say it: the pooled 'Other mods', not under its maker's own heading", async () => {
     const { ChoiceList } = await import("../src/studio-ui/panels/character-choices");
-    const { BASE_GAME_GROUP } = await import("../src/cc-panel");
+    const { BASE_GAME_GROUP } = await import("../src/character/cc-panel");
     const view = new ChoiceList("g", () => {});
     lightDocument.body.append(view.element as unknown as LightElement);
     const grouped = { list: [BASE_GAME_GROUP, { label: "Sample Hair Pack", kind: "mod" as const }, { label: "Other Pack", kind: "mod" as const }], modGroups: [1, 2], pooled: [2] };
@@ -129,6 +129,40 @@ describe("the turntable", () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     item(3).click();
     expect(chosen.map(choice => choice.position)).toEqual([3]);
+  });
+
+  test("a drag turns the surface under the pointer with the hand: right moves the facing side right, left moves it left", async () => {
+    const { dragTurn, SPIN } = await import("../src/studio-ui/components/choice-preview");
+    const { previewCamera, PREVIEW_STYLES, turntableYaw, TURNTABLE } = await import("../src/character/choice-preview");
+    // The camera: a larger turn moves the facing surface left on screen (frame k's yaw), so a drag to the right must lower the turn.
+    const head = { min: [-0.1, 1.5, -0.12] as [number, number, number], max: [0.1, 1.8, 0.1] as [number, number, number] };
+    const eyes = { min: [-0.05, 1.7, 0.08] as [number, number, number], max: [0.05, 1.72, 0.1] as [number, number, number] };
+    const still = previewCamera(head, eyes, PREVIEW_STYLES.hair);
+    const toCamera = still.eye.map((v, i) => v - still.target[i]!), length = Math.hypot(...toCamera);
+    const facing = still.target.map((v, i) => v + (toCamera[i]! / length) * 0.1);
+    const screenX = (turn: number) => {
+      const view = previewCamera(head, eyes, PREVIEW_STYLES.hair, turn).view;
+      const x = view[0]! * facing[0]! + view[4]! * facing[1]! + view[8]! * facing[2]! + view[12]!;
+      const z = view[2]! * facing[0]! + view[6]! * facing[1]! + view[10]! * facing[2]! + view[14]!;
+      return x / -z;
+    };
+    expect(screenX(turntableYaw(1))).toBeLessThan(screenX(0));
+    expect(screenX(dragTurn(0, 20, 240))).toBeGreaterThan(screenX(0));
+    expect(screenX(dragTurn(0, -20, 240))).toBeLessThan(screenX(0));
+    expect(dragTurn(90, 240 * SPIN.dragWidths, 240)).toBeCloseTo(90 - 360, 9);
+    // The picture: a drag 30 px right across a 240 px frame turns back 30 degrees, to frame 22 of 24 (not frame 2).
+    const { item } = await list("grid", "l");
+    const frame = item(3).querySelector(".pv-frame")! as LightElement;
+    frame.clientWidth = 240;
+    pointer(frame, "pointerenter");
+    pointer(frame, "pointerdown", { clientX: 10 });
+    frame.querySelector(".pv-strip")!.dispatchEvent(lightEvent("load"));
+    pointer(frame, "pointermove", { clientX: 40 });
+    const step = 360 / TURNTABLE.frames, back = Math.round((360 - (30 * 360) / (240 * SPIN.dragWidths)) / step);
+    expect(back).toBe(22);
+    expect((frame.querySelector(".pv-strip") as unknown as { style: { transform: string } }).style.transform).toBe(`translateX(${(-back * 100) / TURNTABLE.frames}%)`);
+    pointer(frame, "pointerup", { clientX: 40 });
+    pointer(frame, "pointerleave");
   });
 
   test("resting the pointer turns it after the dwell, in every grid size; list rows never turn", async () => {

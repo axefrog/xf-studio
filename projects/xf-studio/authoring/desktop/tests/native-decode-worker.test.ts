@@ -46,9 +46,9 @@ test.skipIf(!gameRoot)("opt-in: the built worker reads a real resource from the 
   if (!opened.decoder) throw new Error(opened.reason);
   try {
     // The creator's base resource for female V (every installation has it).
-    const { depotHash } = await import("../../src/depot-path");
-    const { ccoPath } = await import("../../src/character-resolver");
-    const { readRdarIndexHashes } = await import("../../src/rdar-index-fs");
+    const { depotHash } = await import("../../src/game/depot-path");
+    const { ccoPath } = await import("../../src/character/character-resolver");
+    const { readRdarIndexHashes } = await import("../../src/game/host/rdar-index-fs");
     const hash = depotHash(ccoPath("female", false)), content = join(gameRoot!, "archive", "pc", "content");
     const archive = readdirSync(content).filter(name => name.endsWith(".archive")).map(name => join(content, name))
       .find(path => readRdarIndexHashes(path).includes(BigInt(hash)));

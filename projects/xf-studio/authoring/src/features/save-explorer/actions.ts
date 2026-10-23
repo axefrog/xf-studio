@@ -63,7 +63,7 @@ export type SaveExplorerState = {
   readonly revision: number;
 };
 
-/** The catalogue entries of the explorer's actions (research/authoring/ui-action-catalogue.md): all read-only, none recorded in Undo. */
+/** The explorer's actions (routed through its own service, a recorded boundary exception): all read-only, none recorded in Undo. */
 export const SAVE_EXPLORER_DESCRIPTORS = Object.freeze({
   "saves.refresh": { scope: "saves", effect: "read", async: true, undo: "none", payload: {} },
   "saves.open": { scope: "save", effect: "read", async: true, undo: "none", payload: { folder: "text" } },
@@ -99,18 +99,30 @@ export class SaveExplorerActions {
 
   constructor(private readonly device: SaveExplorerDevice | null,
     private readonly yieldToHost: () => Promise<void> = () => new Promise(done => setTimeout(done, 0)),
-    options: { retryDelays?: readonly number[]; wait?: (ms: number) => Promise<void>; now?: () => number } = {}) {
+    options: { retryDelays?: readonly number[]; wait?: (ms: number) => Promise<void>; now?: () => number;
+      /** The session's lifetime: once it aborts, the session follows no folder changes, and work still running publishes nothing. */
+      signal?: AbortSignal } = {}) {
     this.retryDelays = options.retryDelays ?? LISTING_RETRY_DELAYS;
     this.wait = options.wait ?? (ms => new Promise(done => setTimeout(done, ms)));
     this.now = options.now ?? (() => performance.now());
+    this.signal = options.signal;
+    if (this.signal?.aborted) return;
     // A saves folder chosen in Settings: a list already read is read again from the new folder.
-    device?.locationChanged?.(() => { if (this.state.listing.phase !== "idle") void this.refresh(); });
+    const unfollow = device?.locationChanged?.(() => { if (this.state.listing.phase !== "idle") void this.refresh(); });
+    this.signal?.addEventListener("abort", () => {
+      unfollow?.();
+      // Work still running (a listing, its retries, an open) finds a newer generation and stops.
+      this.generation++; this.listGeneration++;
+      this.listeners.clear();
+    }, { once: true });
   }
+  private readonly signal: AbortSignal | undefined;
 
   descriptors() { return structuredClone(SAVE_EXPLORER_DESCRIPTORS); }
   snapshot(): SaveExplorerState { return structuredClone(this.state); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private publish(next: Partial<SaveExplorerState>) {
+    if (this.signal?.aborted) return;
     this.state = { ...this.state, ...next };
     for (const listener of this.listeners) listener();
   }

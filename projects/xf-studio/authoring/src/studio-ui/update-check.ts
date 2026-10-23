@@ -1,4 +1,4 @@
-import type { UpdateCheckState } from "../update-check-actions";
+import type { UpdateCheckState } from "../setup/update-check-actions";
 import type { StudioRuntime } from "./runtime";
 import { h } from "./dom";
 

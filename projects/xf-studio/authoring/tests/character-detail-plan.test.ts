@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { descriptorsFromUiState } from "../src/cco-model";
-import type { CharacterChoice } from "../src/character-context";
-import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
-import { bodyOptionDraws, bodyRole, type BodyCensorship, censorRole, choiceLabel, detailSlotOf, hairLabels, parseVector, planCharacterDetails, requiredCovers, previewInput, skinLabel, teethLabel, type TemplateIdentities } from "../src/character-detail-plan";
-import { bodyScopeOf, templateIdentity } from "../src/character-detail-service";
-import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
-import { depotHash, refFromPath, refLabel } from "../src/depot-path";
-import { templateDefaults } from "../src/material-template";
-import { renderTemplate } from "../src/render-templates";
-import type { SavedV } from "../src/save-reader";
+import { descriptorsFromUiState } from "../src/character/cco-model";
+import type { CharacterChoice } from "../src/character/character-context";
+import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character/character-detail-request";
+import { bodyOptionDraws, bodyRole, type BodyCensorship, censorRole, choiceLabel, detailSlotOf, hairLabels, parseVector, planCharacterDetails, requiredCovers, previewInput, skinLabel, teethLabel, type TemplateIdentities } from "../src/character/character-detail-plan";
+import { bodyScopeOf, templateIdentity } from "../src/character/host/character-detail-service";
+import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character/character-resolver";
+import { depotHash, refFromPath, refLabel } from "../src/game/depot-path";
+import { templateDefaults } from "../src/game/material-template";
+import { renderTemplate } from "../src/materials/render-templates";
+import type { SavedV } from "../src/saves/save-reader";
 import { BODY, BODY_MASK, BODY_REQUEST, detailFixture, EYE_MASK, eyeRequest, FACE, MCH_REQUEST, P, REQUEST_A, REQUEST_B, TEETH, teethRequest, TONES } from "./character-detail-fixtures";
 
 async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture(), state: Record<string, string> = {}, censorship: BodyCensorship = "censored") {

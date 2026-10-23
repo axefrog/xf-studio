@@ -140,7 +140,7 @@ The question the backlog asks is whether mixed cosmetic finishes, or transparenc
 
 ## 9. How the Studio's layered adapter matches
 
-`projects/xf-studio/authoring/src/layered-material.ts` (with `layered-setup.ts`, wired through `render-templates.ts` and `character-material-adapters.ts`) bakes a chunk's stack once per material and lights it as a standard metal/rough surface ([evidence, what the Studio bakes](multilayered-shader-evidence.md#what-the-studio-bakes)):
+`projects/xf-studio/authoring/src/materials/render/layered-material.ts` (with `layered-setup.ts`, wired through `render-templates.ts` and `character-material-adapters.ts`) bakes a chunk's stack once per material and lights it as a standard metal/rough surface ([evidence, what the Studio bakes](multilayered-shader-evidence.md#what-the-studio-bakes)):
 
 | Step | Adapter | Status |
 |---|---|---|

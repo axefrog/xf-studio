@@ -12,6 +12,7 @@
 #include <RED4ext/Api/v1/Sdk.hpp>
 
 #include "core/Behaviours.hpp"
+#include "core/LayoutGuard.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
 #include "core/Player.hpp"
@@ -83,12 +84,16 @@ struct State
     // ui.message: the coordinator's short messages under the in-game label, read by the CET layer
     // (XFBridge_Messages). Cleared by the kill switch; a killed bridge shows none.
     MessageBoard messages;
+    // 0.8.5: which questions have had their sound ([ui] question_sound); the Running tick's only (game thread).
+    QuestionChime questionChime;
 
     // Bridge 0.6: the session event stream (session.events; XFBridge_Note adds notes from the game), the behaviour runner
     // (behave.*, ticked on the game thread from the Running update) and player.teleport's pacer (2 a second).
     EventLog events;
     behave::Runner behaviours;
     player::TeleportPacer teleports;
+    // 0.8.2: player.stop's count (core/Player.hpp StopCount), checked by player.look's and player.teleport's later steps.
+    player::StopCount playerStops;
 
     // Bridge 0.5.3, temporary test feature: the ink HUD panel's settings (ui.hud), read with the bridge's state and the
     // message lines by the redscript layer through XFBridge_Hud (core/InkUi.hpp). Defaults from [ui] in config.ini.
@@ -99,6 +104,35 @@ struct State
     std::atomic<bool> cetOverlayOpen{false};
     std::atomic<bool> cetOverlaySeen{false};
 
+    // 0.8 (the UI review: the question showed three times): the question the ink panel reports drawing on screen now
+    // (XFBridge_InkDrawn, about five times a second while it draws one) and when, in steady-clock milliseconds; stale after
+    // kInkShownMs. The CET label then shows only the status and the answer keys.
+    static constexpr int64_t kInkShownMs = 1500;
+    std::atomic<uint64_t> inkShownAsk{0};
+    std::atomic<int64_t> inkShownAtMs{0};
+    // 0.8.2: whether the ink panel reported itself on screen (its HUD shown), with the same staleness; and the status surface
+    // chosen this tick (core/InkUi.hpp ChooseStatusSurface).
+    std::atomic<bool> inkVisible{false};
+    std::atomic<int> statusSurface{static_cast<int>(inkui::StatusSurface::None)};
+    bool InkVisible() const;
+    // 0.8.2 (the review): the question the ink panel holds with its answer keys (reported whether or not it is on screen), so
+    // its keys answer it; 0 when stale or none.
+    std::atomic<uint64_t> inkKeysAsk{0};
+    uint64_t InkKeysAsk() const;
+    uint64_t InkShownAsk() const;
+
+    // 0.8.3: the bridge's own kill key's press detection (game thread only; Main.cpp PollKillKey).
+    killkey::Watch killKeyWatch;
+    // 0.8.4: the kill key can be changed from the XF Runtime Bridge window (XFBridge_KillKey) while the game runs, so after
+    // load config.killKey is read and written only under this lock, with what else may react to it (core FindConflicts).
+    std::mutex killKeyMutex;
+    killkey::Conflicts killKeyConflicts;
+    std::atomic<bool> killKeyChanged{false}; // the press detection starts afresh (a release first) after a change
+    killkey::Chord KillKey();
+
+    // 0.8.4, test hook (test.save.delay; the -writes package only): the next game.save's hold after prepare, in ms; taken once.
+    std::atomic<int32_t> saveHoldMs{0};
+
     // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].
     xfb::overlay::OverlayHost overlayHost;
 
@@ -108,7 +142,7 @@ struct State
     std::atomic<bool> rearmRequested{false};
     std::atomic<uint64_t> rearmRequestedAt{0}; // running tick of the request
     std::mutex rearmMutex;
-    nlohmann::json lastRearm; // {ok, message, at_tick} or null; guarded by rearmMutex
+    nlohmann::json lastRearm; // {ok, code (0.8.6), message, at_tick} or null; guarded by rearmMutex
 };
 
 State& Get();
@@ -116,4 +150,13 @@ std::string GameStateName(int aState);
 nlohmann::json InfoJson();
 // XFBridge_Hud's answer: the panel's settings, the bridge's state and the message lines as a text frame (core/InkUi.hpp).
 std::string HudFrame();
+// 0.8: the bridge's state as every panel's status line reads it (core/InkUi.hpp Summarize).
+inkui::BridgeView BridgeViewNow();
+// 0.8.4: what else may react to a kill key, from the game's input files and CET's hotkeys (read only).
+killkey::Conflicts ReadKillKeyConflicts(const killkey::Chord& aChord);
+// 0.8.4: bridge_info's kill_key: the key, its config.ini spelling, the default, and the warnings and notes about it.
+nlohmann::json KillKeyJson();
+// 0.8.4 (XFBridge_KillKey): sets the kill key from a chord's text (the window's Change..., or the default for Reset), saves it
+// to config.ini's [ui] kill_key, and answers {ok, kill_key, saved, save_error?, why?}. A refused text changes nothing.
+nlohmann::json SetKillKey(const std::string& aText, const std::string& aSource);
 } // namespace xfb::plugin

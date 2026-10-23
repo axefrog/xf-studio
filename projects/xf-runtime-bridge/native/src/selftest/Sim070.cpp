@@ -179,12 +179,15 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                               }
                               const auto arms = SlotsOf(state, "ArmsCW")[0];
                               const auto holster = arms.empty() ? std::string("holstered_default") : kHolster.count(arms) ? kHolster.at(arms) : std::string();
+                              // 0.8: drawn by XFCyberware.ArmsDrawn's rule (the weapon slot holds the arm cyberware).
+                              const bool drawn = !arms.empty() && hooks->weaponDrawn && hooks->weaponDrawn();
                               return json{{"simulated", true},
                                           {"areas", areas},
                                           {"arms", {{"item", arms}, {"holster_state", holster}, {"creator_group", holster.empty() ? "" : holster + "_tpp"},
                                                     {"holstered_item", arms.empty() ? "Items.HolsteredFists" : "Items.Holstered" + arms.substr(6)},
-                                                    {"right_arm_slot", {{"item", arms.empty() ? "Items.HolsteredFists" : "Items.Holstered" + arms.substr(6)}, {"appearance", holster}}},
-                                                    {"weapon_right_slot", nullptr}, {"no_arms_cw_effect", false}}},
+                                                    {"right_arm_slot", drawn ? json(nullptr) : json{{"item", arms.empty() ? "Items.HolsteredFists" : "Items.Holstered" + arms.substr(6)}, {"appearance", holster}}},
+                                                    {"weapon_right_slot", drawn ? json{{"item", arms}, {"appearance", "None"}} : json(nullptr)}, {"no_arms_cw_effect", false},
+                                                    {"drawn", drawn}}},
                                           {"capacity", {{"humanity_available", 40}, {"humanity_total", 60}}}};
                           }});
     aDispatcher.Register({"cyberware.equip", Access::WriteInventory, RunOn::BridgeThread, "Equips cyberware (simulated).", [hooks](const MethodContext& aContext) {
@@ -200,6 +203,11 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                                   if (found == kAreas.end())
                                   {
                                       throw MethodError("bad_params", "simulated: '" + request.item + "' isn't a cyberware item record");
+                                  }
+                                  // RB-112 / 0.8: arm cyberware isn't swapped while it is drawn.
+                                  if (found->second == "ArmsCW" && !SlotsOf(state, "ArmsCW")[0].empty() && hooks->weaponDrawn && hooks->weaponDrawn())
+                                  {
+                                      throw MethodError("arms_drawn", "simulated: V has her arm cyberware out (the right weapon slot holds " + SlotsOf(state, "ArmsCW")[0] + ")");
                                   }
                                   const bool had = state.inventory.count(request.item) != 0;
                                   if (!had && !request.addIfMissing)
@@ -460,7 +468,7 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                                                   {{"index", 1}, {"name", "AutoSave-12"}, {"type", "AutoSave"}, {"location", "Watson"}, {"timestamp", 400}, {"modded", true}},
                                                   {{"index", 2}, {"name", "ManualSave-2"}, {"type", "ManualSave"}, {"location", "Kabuki"}, {"timestamp", 100}, {"modded", true}}}}};
                               h::SavesOps ops;
-                              ops.request = [] {};
+                              ops.request = [](int32_t) {};
                               ops.read = [answer](bool) { return answer; };
                               ops.sleep = [](std::chrono::milliseconds) {};
                               ops.now = [] { return std::chrono::steady_clock::now(); };

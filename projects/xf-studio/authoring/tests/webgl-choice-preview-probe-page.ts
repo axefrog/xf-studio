@@ -1,15 +1,15 @@
 /**
  * Browser page for tests/webgl-choice-preview.test.ts (bundled there, run in headless Chrome with a real WebGL 2 context): the choice
- * preview renderer (src/choice-preview-render.ts) on a synthetic subject and feature, read back as its channel image. Nothing here reads
+ * preview renderer (src/character/browser/choice-preview-render.ts) on a synthetic subject and feature, read back as its channel image. Nothing here reads
  * game files.
  *
  * The subject is a flat "head" quad facing +Z (0.3 m tall) with small "eyes" in front of it (which way the face looks). The feature GLB
  * has three chunks: 0 covers the head's left half with full coverage, 1 its right half with half coverage (red 128 through a 0.0 cutoff,
  * no dither), and 2 sits below the head but is not in the source, so it must not draw.
  */
-import { GlbWriter } from "../src/glb";
-import { PREVIEW_STYLES, previewCamera, type ChoicePreviewSource, TURNTABLE, turntableYaw } from "../src/choice-preview";
-import { PreviewRenderer } from "../src/choice-preview-render";
+import { GlbWriter } from "../src/formats/glb";
+import { PREVIEW_STYLES, previewCamera, type ChoicePreviewSource, TURNTABLE, turntableYaw } from "../src/character/choice-preview";
+import { PreviewRenderer } from "../src/character/browser/choice-preview-render";
 
 export type PreviewProbe = { ok: boolean; failure?: string; size: number; webpBytes: number;
   /** Mean channels (0–255) inside each region: full-coverage half, half-coverage half, the unlisted chunk's place, and empty ground. */

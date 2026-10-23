@@ -1,88 +1,33 @@
 import { expect, test } from "bun:test";
 import { eyeCheck } from "./fixtures/package-results";
-import { BUILD_PROGRESS_INTERVAL_MS, CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
+import { BUILD_PROGRESS_INTERVAL_MS, CollectionServiceError, uniqueCollectionName } from "../src/library/collection-service";
 import type { PackageBuildProgress } from "../src/platform/api";
-import { collectionDraft, emptyMemory } from "../src/collection-workspace";
-import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import type { EditorSnapshot } from "../src/collection-session";
-import type { PresetCollection } from "../src/preset-collection";
-import type { LookCollection } from "../src/platform/api";
-import { historyRecipes, looks, memoryOf, recipeOf } from "./fixtures/looks";
-import { recipeFile } from "../src/recipe-schema";
-import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
+import { profileStudio } from "./fixtures/profile-studio";
 
-function fixture() {
-  const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
-    id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe: recipeFile(recipe)! }] };
-  let editor: EditorSnapshot = { recipe: structuredClone(recipe), ...emptyMemory() };
-  const saved = { collection: looks(collection), revision: 1, updatedAt: "now" };
-  let saves = 0, packageInput: PresetCollection | undefined;
-  const transport: CollectionTransport = {
-    list: async () => [{ id: collection.id, name: collection.name, count: 1, revision: 1, updatedAt: "now" }],
-    get: async () => saved,
-    save: async (value, revision) => { saves++; return { collection: structuredClone(value), revision: (revision ?? 0) + 1, updatedAt: "now" }; },
-    package: async (_action, input) => { const value = input as PresetCollection; packageInput = value;
-      return eyeCheck(value, { presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }); },
-  };
-  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS, 1), { selected: "", name: "" },
-    () => editor, value => editor = value, transport);
-  return { service, collection, saved, transport, editor: () => editor, saves: () => saves,
-    packageInput: () => packageInput };
+async function fixture() {
+  const studio = await profileStudio({ looks: [{ name: "Eye" }] });
+  await studio.collection.initialize();
+  return studio;
 }
-
-test("an empty library initializes a saveable starter draft from the loaded workspace", async () => {
-  const workspace = loadWorkspace({ getItem: () => null }, false, STUDIO_DOCUMENTS).state;
-  let editor: EditorSnapshot = { recipe: workspace.recipe, ...emptyMemory() };
-  let saved: LookCollection | undefined;
-  const transport: CollectionTransport = {
-    list: async () => [],
-    get: async () => { throw Error("No saved collection"); },
-    save: async value => { saved = structuredClone(value); return { collection: value, revision: 1, updatedAt: "now" }; },
-    package: async () => { throw Error("Unused"); },
-  };
-  const service = new CollectionService(STUDIO_DOCUMENTS, undefined, workspace.library, () => editor, value => editor = value, transport);
-  expect((await service.execute({ kind: "initialize" })).ok).toBe(true);
-  expect(service.snapshot()?.revision).toBeUndefined();
-  expect(service.snapshot()?.collection.presets).toHaveLength(1);
-  expect(recipeOf(service.snapshot()!.collection.presets[0])).toEqual(workspace.recipe);
-  editor.recipe.layers[0].color = "#abcdef";
-  expect((await service.execute({ kind: "save" })).ok).toBe(true);
-  expect(recipeOf(saved!.presets[0]).layers[0].color).toBe("#abcdef");
-});
-
-test("async collection service preserves an unsaved draft in package snapshots without a SQLite save", async () => {
-  const f = fixture();
-  await f.service.execute({ kind: "initialize" });
-  f.editor().recipe.layers[0].color = "#123456";
-  const before = f.service.snapshot()!;
-  const outcome = await f.service.execute({ kind: "package", action: "check" });
-  expect(outcome.ok && outcome.result.kind).toBe("packageCheck");
-  expect(f.packageInput()!.presets[0].recipe.layers[0].color).toBe("#123456");
-  expect(f.saves()).toBe(0);
-  expect(f.service.snapshot()!.revision).toBe(before.revision);
-  const detached = f.service.view() as any;
-  detached.draft.collection.presets[0].name = "Outside";
-  expect(f.service.view().draft!.collection.presets[0].name).toBe("Eye");
-});
+const layer = (studio: Awaited<ReturnType<typeof fixture>>) => studio.document.recipe.layers[0]!;
 
 test("a partial Check says so in one status line; the result card names what is left out (C-14)", async () => {
-  const f = fixture(); await f.service.execute({ kind: "initialize" });
-  f.transport.package = async (_action, input) => { const value = input as PresetCollection; return eyeCheck(value, { originalPresetCount: 2,
-    presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }],
+  const f = await fixture();
+  f.transport.package = async (_action, input) => { const value = input as { id: string; presets: { id: string }[] }; return eyeCheck(value, { originalPresetCount: 2,
+    presets: [{ id: value.presets[0]!.id, revision: 1, appearance: "xfs_test" }],
     omissions: [
-      { kind: "layer", presetId: value.presets[0].id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",
+      { kind: "layer", presetId: value.presets[0]!.id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",
         finish: "glitter", reason: "Active finish has no supported game-export adapter." },
       { kind: "preset", presetId: "other", presetName: "Glitter only", reason: "None of its shown layers can be built into your mod yet." },
     ] }); };
-  expect((await f.service.execute({ kind: "package", action: "check" })).ok).toBe(true);
-  const line = f.service.view().progress!.message;
+  expect((await f.collection.execute({ kind: "package", action: "check" })).ok).toBe(true);
+  const line = f.collection.view().progress!.message;
   expect(line).toBe("Check: 1 of 2 presets can become mod files, some left out.");
   expect(line.length).toBeLessThanOrEqual(70);
 });
 
 test("a Build's status line names the mod and never a folder path (UI-151)", async () => {
-  const { packageBuildLine } = await import("../src/package-filter");
+  const { packageBuildLine } = await import("../src/legacy/eye-makeup/export/package-filter");
   const product = { modName: "XF Eye Artistry", package: "C:\Data\package-candidates\c1", manifest: "C:\Data\package-candidates\c1\manifest.json",
     features: [{ presets: [{ id: "a" }, { id: "b" }], warnings: [] }] };
   const line = packageBuildLine({ originalPresetCount: 3, omissions: [], products: [product] } as never);
@@ -93,120 +38,79 @@ test("a Build's status line names the mod and never a folder path (UI-151)", asy
     .toBe("Built 2 mods for 2 of 2 presets. Not in your game yet.");
 });
 
-test("save reconciliation retains edits made while the immutable request is in flight", async () => {
-  const f = fixture(); await f.service.execute({ kind: "initialize" });
-  let release!: (value: any) => void;
-  f.transport.save = (collection) => new Promise(resolve => { release = resolve; });
-  const pending = f.service.execute({ kind: "save" });
-  expect(f.service.view().busy).toBe(true);
-  expect(f.service.capability({ kind: "package", action: "check" }).available).toBe(false);
-  f.editor().recipe.layers[0].color = "#abcdef";
-  release({ collection: looks(f.collection), revision: 2, updatedAt: "now" });
+test("edits made while a Check is in flight stay in the look; the request is busy meanwhile and refuses another", async () => {
+  const f = await fixture();
+  let release!: () => void;
+  const answer = f.transport.package;
+  f.transport.package = (action, input) => new Promise(resolve => { release = () => resolve(answer(action, input)); });
+  const pending = f.collection.execute({ kind: "package", action: "check" });
+  await Bun.sleep(20);
+  expect(f.collection.view().busy).toBe(true);
+  expect(f.app.requestCapability({ kind: "save" }).available).toBe(false);
+  f.app.dispatch({ kind: "layer.setColor", layerId: layer(f).id, color: "#abcdef" });
+  release();
   expect((await pending).ok).toBe(true);
-  expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].color).toBe("#abcdef");
-  expect(f.service.snapshot()!.revision).toBe(2);
+  expect(layer(f).color).toBe("#abcdef");
+  expect(await f.settle()).toBe(true);
+  expect(JSON.stringify(f.owner.look(f.scene.look()!)!.parts)).toContain("#abcdef");
 });
 
 test("no-exportable-content errors retain a stable code and an actionable message", async () => {
-  const f = fixture(); await f.service.execute({ kind: "initialize" });
-  f.editor().recipe.layers[0].finish = "glitter";
+  const f = await fixture();
   f.transport.package = async () => { throw new CollectionServiceError("no_exportable_content",
     "No mod files can be made: every preset has no active Matte, Satin or Metallic layer. Your collection is unchanged."); };
-  const outcome = await f.service.execute({ kind: "package", action: "check" });
+  const outcome = await f.collection.execute({ kind: "package", action: "check" });
   expect(outcome).toMatchObject({ ok: false, code: "no_exportable_content" });
-  expect(f.service.view().progress?.message).toContain("Your collection is unchanged");
-  expect(f.service.view().busy).toBe(false);
-  expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].finish).toBe("glitter");
+  expect(f.collection.view().progress?.message).toContain("Your collection is unchanged");
+  expect(f.collection.view().busy).toBe(false);
 });
 
-test("loading a saved list does not replace a restored local draft", async () => {
-  const f = fixture(); f.editor().recipe.layers[0].color = "#fedcba";
-  const result = await f.service.execute({ kind: "initialize" });
+test("opening the Studio reads the saved list without replacing the shown collection", async () => {
+  const f = await profileStudio({ looks: [{ name: "Eye" }] });
+  const result = await f.collection.initialize();
   expect(result.ok).toBe(true);
-  expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].color).toBe("#fedcba");
-  expect(f.service.view().progress?.message).toContain("your unsaved edits are kept");
+  expect(f.collection.summary().draft).toMatchObject({ name: "Current", presets: [{ name: "Eye" }] });
+  expect(f.collection.view().progress?.message).toBe("Your collection is back as you left it.");
 });
 
-test("opening two saved collections keeps the earlier unsaved draft recoverable after reload", async () => {
-  const source = fixture();
-  const draft = source.collection, a = { ...structuredClone(draft), id: crypto.randomUUID(), name: "A" },
-    b = { ...structuredClone(draft), id: crypto.randomUUID(), name: "B" };
-  const saved = [a, b].map(collection => ({ collection: looks(collection), revision: 3, updatedAt: "now" }));
-  source.transport.list = async () => saved.map(item => ({ id: item.collection.id,
-    name: item.collection.name, count: 1, revision: item.revision, updatedAt: item.updatedAt }));
-  source.transport.get = async id => saved.find(item => item.collection.id === id)!;
-  await source.service.execute({ kind: "initialize" });
-  source.editor().recipe.layers[0].color = "#fedcba";
-  source.editor().history = [structuredClone(initialRecipe())];
-  expect((await source.service.execute({ kind: "open", id: a.id })).ok).toBe(true);
-  expect((await source.service.execute({ kind: "open", id: b.id })).ok).toBe(true);
-  expect(source.service.summary().draft?.recoveryCount).toBe(2);
-
-  const workspace = freshWorkspace(); workspace.collections = source.service.snapshot();
-  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
-  let editor: EditorSnapshot = { recipe: restored.recipe, active: restored.active, selected: restored.selected,
-    history: restored.history };
-  const resumed = new CollectionService(STUDIO_DOCUMENTS, restored.collections, { selected: "", name: "" },
-    () => editor, value => editor = value, source.transport);
-  await resumed.execute({ kind: "initialize" });
-  resumed.dispatch({ kind: "collection.undoOpen" });
-  expect(resumed.summary().draft).toMatchObject({ id: a.id, revision: 3, recoveryCount: 2 });
-  resumed.dispatch({ kind: "collection.undoOpen" });
-  expect(resumed.summary().draft).toMatchObject({ id: draft.id, revision: 1, recoveryCount: 2 });
-  expect(editor.recipe.layers[0].color).toBe("#fedcba");
-  expect(historyRecipes(editor.history)).toHaveLength(1);
-  let savedColor: string | undefined, savedRevision: number | undefined;
-  source.transport.save = async (value, revision) => {
-    savedColor = recipeOf(value.presets[0]).layers[0].color; savedRevision = revision;
-    return { collection: structuredClone(value), revision: revision! + 1, updatedAt: "now" };
-  };
-  expect((await resumed.execute({ kind: "save" })).ok).toBe(true);
-  expect(savedColor).toBe("#fedcba"); expect(savedRevision).toBe(1);
-  expect(resumed.summary().draft?.revision).toBe(2);
-  resumed.dispatch({ kind: "collection.undoOpen" });
-  expect(resumed.summary().draft?.id).toBe(b.id); // The draft left during recovery remains reachable.
+test("a library with no collection gets a starter collection of one look, shown at once", async () => {
+  const f = await profileStudio({ looks: [] });
+  expect(f.collection.summary().draft).toBeUndefined();
+  expect((await f.collection.initialize()).ok).toBe(true);
+  expect(f.collection.summary().draft).toMatchObject({ name: "My collection", presets: [{ name: "Preset 1", layers: 1 }] });
+  expect(f.document.recipe.layers).toHaveLength(1);
 });
 
-test("a revision conflict reports its code without replacing the local draft", async () => {
-  const f = fixture(); await f.service.execute({ kind: "initialize" });
-  f.editor().recipe.layers[0].color = "#13579b";
-  f.transport.save = async () => { throw new CollectionServiceError("conflict",
-    "This collection changed in another window. Your draft is safe; save a copy or reopen the latest revision."); };
-  const outcome = await f.service.execute({ kind: "save" });
-  expect(outcome).toMatchObject({ ok: false, code: "conflict" });
-  expect(f.service.snapshot()!.revision).toBe(1);
-  expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].color).toBe("#13579b");
-});
-
-test("the first collection keeps every editor-memory field of the legacy workspace (historyTrimmed included)", async () => {
-  const f = fixture(), recipe = initialRecipe();
-  let editor: EditorSnapshot = { recipe, ...emptyMemory(), history: [structuredClone(recipe)], historyTrimmed: true };
-  const transport: CollectionTransport = { ...f.transport, list: async () => [] };
-  const service = new CollectionService(STUDIO_DOCUMENTS, undefined, { selected: "", name: "Look" }, () => editor, value => editor = value, transport);
-  expect((await service.execute({ kind: "initialize" })).ok).toBe(true);
-  const draft = service.view().draft!, memory = memoryOf(draft, draft.selected!);
-  expect(memory).toMatchObject({ historyTrimmed: true, active: 0, selected: 0 });
-  expect(memory.history).toHaveLength(1);
-  expect("recipe" in memory).toBe(false);
-  // The recipe is the look's eye-makeup part; the memory is that feature's editor state and the look's history.
-  expect(Object.keys(draft.memory[draft.selected!])).toEqual(["eye-makeup", "@look"]);
-  expect(recipeOf(draft.collection.presets[0])).toEqual(recipe);
+test("a Save version that fails reports its reason and keeps the working copy as it is", async () => {
+  const f = await fixture();
+  f.app.dispatch({ kind: "layer.setColor", layerId: layer(f).id, color: "#13579b" });
+  (f.owner as unknown as { deps: { versions: { save(): Promise<never> } } }).deps.versions = { save: async () => { throw Error("The version couldn't be saved right now. Your working copy is safe."); } };
+  const outcome = await f.collection.execute({ kind: "save" });
+  expect(outcome).toMatchObject({ ok: false, message: "The version couldn't be saved right now. Your working copy is safe." });
+  expect(f.collection.summary().draft!.revision).toBeUndefined();
+  expect(JSON.stringify(f.owner.look(f.scene.look()!)!.parts)).toContain("#13579b");
 });
 
 test("PIPE-131: while a Build runs, its progress line and bar follow the host's stage, and stop with its answer", async () => {
-  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  const f = await fixture();
   let current: PackageBuildProgress | null = { stage: "convert", step: 3, steps: 5, looks: 2 }, finish!: (error: Error) => void;
   f.transport.packageProgress = async () => current;
   f.transport.package = () => new Promise((_resolve, reject) => { finish = reject; });
-  const running = f.service.execute({ kind: "package", action: "build" });
-  await Bun.sleep(30);
-  expect(f.service.view().progress).toMatchObject({ phase: "working", code: "package", message: "Step 3 of 5: Converting 2 looks…", fraction: .5 });
+  const running = f.collection.execute({ kind: "package", action: "build" });
+  await Bun.sleep(60);
+  expect(f.collection.view().progress).toMatchObject({ phase: "working", code: "package", message: "Step 3 of 5: Converting 2 looks…", fraction: .5 });
   current = { stage: "verify", step: 5, steps: 5, looks: 2 };
   await Bun.sleep(BUILD_PROGRESS_INTERVAL_MS + 100);
-  expect(f.service.view().progress).toMatchObject({ message: "Step 5 of 5: Checking the mod files…", fraction: .9 });
+  expect(f.collection.view().progress).toMatchObject({ message: "Step 5 of 5: Checking the mod files…", fraction: .9 });
   finish(new CollectionServiceError("package_build_failed", "Package Build failed. Your draft is unchanged; nothing was installed."));
   await running;
   await Bun.sleep(BUILD_PROGRESS_INTERVAL_MS + 50);
   // Its answer is the last word: no later stage overwrites it.
-  expect(f.service.view().progress).toMatchObject({ phase: "error", code: "package_build_failed" });
+  expect(f.collection.view().progress).toMatchObject({ phase: "error", code: "package_build_failed" });
+});
+
+test("a copy's name is one no other collection has (CORE-124)", () => {
+  expect(uniqueCollectionName("Looks", ["Other"])).toBe("Looks");
+  expect(uniqueCollectionName("Looks", ["looks"])).toBe("Looks 2");
+  expect(uniqueCollectionName("Looks 2", ["Looks 2", "Looks 3"])).toBe("Looks 4");
 });

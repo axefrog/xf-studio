@@ -31,7 +31,14 @@ public abstract class XFInkHost {
     return true;
   }
 
+  // 0.8.6: the ink layer the overlay mounts on for ui.hud's layer: photo_menu is the HUD layer (photo mode's menu has its own
+  // panel, XFPhotoMenuPanel).
+  public static func HostLayer(layer: String) -> String {
+    return Equals(layer, "photo_menu") ? "hud" : layer;
+  }
+
   // The layer's root compound: "Root" under its virtual window where there is one (the HUD layer), else the window itself.
+  // 0.8.6: photo_menu is the HUD layer here; inside photo mode the panel lives under photo mode's menu (XFPhotoMenuPanel).
   public static func LayerRoot(layer: String) -> wref<inkCompoundWidget> {
     let name = n"inkHUDLayer";
     if Equals(layer, "notifications") {
@@ -76,6 +83,10 @@ public abstract class XFInkHost {
     return false;
   }
 
+  public static func HostLayer(layer: String) -> String {
+    return Equals(layer, "photo_menu") ? "hud" : layer;
+  }
+
   public static func LayerRoot(layer: String) -> wref<inkCompoundWidget> {
     return null;
   }
@@ -105,11 +116,16 @@ public class XFHudFrame {
   public let askId: Int32;
   public let askKeys: array<String>;
   public let askLabels: array<String>;
+  // 0.8 (the UI review): the answered ask (its answer shows where its keys were, until the next message).
+  public let answeredId: Int32;
+  public let answeredLabel: String;
+  // 0.8.6: ui.hud's modal: the panel inside photo mode's menu holds one ModalPopup game context while this is set.
+  public let modal: Bool;
 
   public static func Parse(text: String) -> ref<XFHudFrame> {
     let frame = new XFHudFrame();
     frame.layer = "hud";
-    frame.anchor = "top_right";
+    frame.anchor = "top_left";
     frame.scale = 1.0;
     for line in StrSplit(text, "\n") {
       frame.Read(StrSplit(line, "\t"));
@@ -167,6 +183,15 @@ public class XFHudFrame {
                                 ArrayPush(frame.askKeys, f[i]);
                                 ArrayPush(frame.askLabels, f[i + 1]);
                                 i += 2;
+                              }
+                            } else {
+                              if Equals(key, "answered") && ArraySize(f) >= 3 {
+                                frame.answeredId = StringToInt(f[1]);
+                                frame.answeredLabel = f[2];
+                              } else {
+                                if Equals(key, "modal") {
+                                  frame.modal = Equals(f[1], "1");
+                                }
                               }
                             }
                           }
@@ -238,49 +263,130 @@ public abstract class XFInkStyle {
     return n"MainColors.Blue";
   }
 
-  public static func Anchor(name: String) -> inkEAnchor {
-    if Equals(name, "top_left") {
-      return inkEAnchor.TopLeft;
-    }
-    if Equals(name, "bottom_left") {
-      return inkEAnchor.BottomLeft;
-    }
-    if Equals(name, "bottom_right") {
-      return inkEAnchor.BottomRight;
-    }
-    if Equals(name, "top_center") {
-      return inkEAnchor.TopCenter;
-    }
-    if Equals(name, "center_left") {
-      return inkEAnchor.CenterLeft;
-    }
-    if Equals(name, "center_right") {
-      return inkEAnchor.CenterRight;
-    }
-    return inkEAnchor.TopRight;
+  // 0.8: where an anchor sits on the visible screen, as fractions across and down (0, 0.5 or 1); the panel's own point at that
+  // place is the same fractions of its size, so it grows away from its corner or edge (and from the middle for center).
+  // 0.8.2: one edge of the panel along one axis of the visible screen (start, length): the anchor's fraction of it, moved by
+  // offset, less the same fraction of the panel's size (so top_right ends at the right edge, center sits in the middle).
+  // tools/test/ink-place.test.ts checks the same arithmetic for all nine anchors.
+  public static func PanelEdge(start: Float, length: Float, fraction: Float, offset: Float, size: Float) -> Float {
+    return start + fraction * length + offset - fraction * size;
   }
 
-  // The panel's own point that sits at the anchor, so it grows away from its corner.
-  public static func AnchorPoint(name: String) -> Vector2 {
+  // 0.8.3 (session 10's B1 and B2: every anchor sat 280 to 350 px too low at 3840 x 1600, bottom_left below the screen): the
+  // HUD layer's root does NOT show the middle of its 3840 x 2160 canvas. Its top-left corner is the screen's top-left corner
+  // and its width the screen's width (session 10: margins of 640 and 340 units landed at about 640 and 360 px on a 1600 px
+  // high screen, and top_right ended at the right edge), so the visible screen is the canvas's top 3840 / aspect units and
+  // the rest hangs below the screen (0.8 had assumed the middle, and pushed every panel 280 units down). This is the model,
+  // used until the overlay can measure: rootWidth x screenHeight * rootWidth / screenWidth from the root's top-left.
+  public static func ModelVisible(rootWidth: Float, rootHeight: Float, screen: Vector2) -> Vector4 {
+    if screen.X < 100.0 || screen.Y < 100.0 || rootWidth < 100.0 {
+      return new Vector4(0.0, 0.0, rootWidth, rootHeight);
+    }
+    return new Vector4(0.0, 0.0, rootWidth, screen.Y * rootWidth / screen.X);
+  }
+
+  // 0.8.3: the visible screen as the game's own layout measures it: the screen's corners (window pixels, as the game's menus
+  // compare a pointer's screen position with LocalToGlobal) mapped into the overlay's units by WidgetUtils.GlobalToLocal,
+  // the inverse of what the game's perks screen uses to place its tooltips. Accepted only when it is plausible (a finite
+  // area of the screen's own aspect, near the root); otherwise zero, and the model stands.
+  public static func Plausible(a: Vector2, b: Vector2, screen: Vector2, rootWidth: Float, rootHeight: Float) -> Vector4 {
+    let w = b.X - a.X;
+    let h = b.Y - a.Y;
+    if screen.X < 100.0 || screen.Y < 100.0 || !(w > 100.0) || !(h > 100.0) || w > rootWidth * 8.0 || h > rootHeight * 8.0 {
+      return new Vector4(0.0, 0.0, 0.0, 0.0);
+    }
+    if !(AbsF(a.X) < rootWidth * 4.0) || !(AbsF(a.Y) < rootHeight * 4.0) || AbsF(w / h - screen.X / screen.Y) > 0.02 * screen.X / screen.Y {
+      return new Vector4(0.0, 0.0, 0.0, 0.0);
+    }
+    return new Vector4(a.X, a.Y, w, h);
+  }
+
+  // The screen's size: 0.8.3, the game window's own size in pixels (UISystem.GetCurrentWindowSize, which the radial menu
+  // uses for the mouse); else the display settings' resolution (as Codeware's ScreenHelper reads it). 0.8.6: here, for both
+  // panels (it was XFInkOverlay's).
+  public static func ScreenSize() -> Vector2 {
+    let ui = GameInstance.GetUISystem(GetGameInstance());
+    if IsDefined(ui) {
+      let window = ui.GetCurrentWindowSize();
+      if window.X > 100.0 && window.Y > 100.0 {
+        return window;
+      }
+    }
+    let settings = GameInstance.GetSettingsSystem(GetGameInstance());
+    let variable: ref<ConfigVarListString>;
+    if IsDefined(settings) {
+      variable = settings.GetVar(n"/video/display", n"Resolution") as ConfigVarListString;
+    }
+    if IsDefined(variable) {
+      let parts = StrSplit(variable.GetValue(), "x");
+      if ArraySize(parts) == 2 {
+        return new Vector2(StringToFloat(parts[0]), StringToFloat(parts[1]));
+      }
+    }
+    return new Vector2(3840.0, 2160.0);
+  }
+
+  // 0.8.3: the visible screen in a laid-out widget's units, measured by the game's own layout (the window's corners through
+  // WidgetUtils.GlobalToLocal), when it is plausible (Plausible); else zero, and the caller keeps its model. 0.8.6: here, for
+  // both panels.
+  public static func MeasureVisible(local: ref<inkWidget>, screen: Vector2, width: Float, height: Float) -> Vector4 {
+    if !IsDefined(local) {
+      return new Vector4(0.0, 0.0, 0.0, 0.0);
+    }
+    let a = WidgetUtils.GlobalToLocal(local, new Vector2(0.0, 0.0));
+    let b = WidgetUtils.GlobalToLocal(local, new Vector2(screen.X, screen.Y));
+    return XFInkStyle.Plausible(a, b, screen, width, height);
+  }
+
+  // 0.8.3 (session 10: top_right overlapped the minimap and the quest tracker): how far in from its edges each anchor keeps
+  // the panel at least, in the HUD's design units (2160 per screen height: the game's HUD scales with the screen's height,
+  // its minimap 375 px wide on a 1600 px high screen), so it clears the game's own HUD blocks, measured on session 10's
+  // gameplay capture at 3840 x 1600: the minimap and the quest tracker at the top right (about 790 units wide, the tracker
+  // reaching about 930 units down with two objectives), the status and cyberware icons at the bottom left (about 570 wide,
+  // 440 high), the prompts and the weapon block at the bottom right, the status bars at the top left (the default 40, 360
+  // sits under them) and subtitles at the bottom centre. The right edge's free height between the quest tracker (which can
+  // grow to about 1250 units) and the weapon block is less than a panel, so bottom_right keeps left of both, as top_right and
+  // center_right do. x is the floor from a left or right edge, y from a top or bottom edge; a middle axis has none. tools/overlay/ink-place.ts has the same table and checks it at 16:9, 21:9 and 32:9.
+  public static func Floor(name: String) -> Vector2 {
     if Equals(name, "top_left") {
-      return new Vector2(0.0, 0.0);
-    }
-    if Equals(name, "bottom_left") {
-      return new Vector2(0.0, 1.0);
-    }
-    if Equals(name, "bottom_right") {
-      return new Vector2(1.0, 1.0);
+      return new Vector2(0.0, 300.0);
     }
     if Equals(name, "top_center") {
-      return new Vector2(0.5, 0.0);
+      return new Vector2(0.0, 140.0);
     }
-    if Equals(name, "center_left") {
-      return new Vector2(0.0, 0.5);
+    if Equals(name, "top_right") || Equals(name, "center_right") {
+      return new Vector2(860.0, 0.0);
     }
-    if Equals(name, "center_right") {
-      return new Vector2(1.0, 0.5);
+    if Equals(name, "bottom_left") {
+      return new Vector2(0.0, 520.0);
     }
-    return new Vector2(1.0, 0.0);
+    if Equals(name, "bottom_center") {
+      return new Vector2(0.0, 480.0);
+    }
+    if Equals(name, "bottom_right") {
+      return new Vector2(860.0, 480.0);
+    }
+    return new Vector2(0.0, 0.0);
+  }
+
+  public static func AnchorPoint(name: String) -> Vector2 {
+    let x = 0.0;
+    let y = 0.0;
+    if StrEndsWith(name, "_right") {
+      x = 1.0;
+    } else {
+      if StrEndsWith(name, "_center") || Equals(name, "center") {
+        x = 0.5;
+      }
+    }
+    if StrBeginsWith(name, "bottom_") {
+      y = 1.0;
+    } else {
+      if StrBeginsWith(name, "center") {
+        y = 0.5;
+      }
+    }
+    return new Vector2(x, y);
   }
 }
 
@@ -366,6 +472,279 @@ public class XFProjector {
   }
 }
 
+// ---- The panel's widgets (0.8.6: shared by the HUD overlay and the panel inside photo mode's menu) ----------------------
+
+// The ink panel itself: the game's dark plate with the red edge, the heading, the status line, up to four message lines and
+// the answers. 0.8.6: moved out of XFInkOverlay so that the panel inside photo mode's menu (XFPhotoMenuPanel) is the same
+// widgets filled from the same frame; the only change is the answers, now one text each (so a click in photo mode can tell
+// them apart) in a row where 0.8.5 had one text for all, spaced as its five spaces were.
+public class XFInkPanel {
+  public let canvas: ref<inkCanvas>;
+  // 0.8 (session 8: the plate wasn't drawn; a Fill rectangle in a fit-to-content canvas got no size): the plate and the red
+  // edge are sized from the body's own measured size on every frame read.
+  private let m_body: ref<inkVerticalPanel>;
+  private let m_plate: ref<inkRectangle>;
+  private let m_under: ref<inkRectangle>;
+  private let m_edge: ref<inkRectangle>;
+  private let m_diamond: ref<inkRectangle>;
+  private let m_status: ref<inkText>;
+  private let m_messages: array<ref<inkText>>;
+  private let m_row: ref<inkHorizontalPanel>;
+  private let m_answered: ref<inkText>;
+  private let m_chips: array<ref<inkText>>;
+  private let m_hovered: Int32;
+  // RB-114: the frame whose question and answer keys are on screen now (set when Apply draws them).
+  public let drawn: ref<XFHudFrame>;
+
+  public static func Create(parent: wref<inkCompoundWidget>, name: CName) -> ref<XFInkPanel> {
+    let view = new XFInkPanel();
+    view.m_hovered = -1;
+    let panel = new inkCanvas();
+    panel.SetName(name);
+    panel.SetAnchor(inkEAnchor.TopLeft);
+    panel.SetFitToContent(true);
+    panel.Reparent(parent);
+    view.canvas = panel;
+
+    // 0.8 (the UI review): the game's own dark plate (its settings dialog's, MainColors.Fullscreen_PrimaryBackgroundDarkest)
+    // so the panel reads over bright scenes, with the red edge; both sized from the body in SizePlate. 0.8.3 (session 10: hard
+    // to read over the minimap and the quest tracker): an opaque near-black underlay below it, and the plate itself at full
+    // opacity (the style's own colour may carry some transparency), so almost nothing shows through.
+    let under = new inkRectangle();
+    under.SetName(n"under");
+    under.SetAnchor(inkEAnchor.TopLeft);
+    under.SetSize(new Vector2(10.0, 10.0));
+    under.SetTintColor(new HDRColor(0.0, 0.0, 0.0, 1.0));
+    under.SetOpacity(0.88);
+    under.Reparent(panel);
+    view.m_under = under;
+    let back = new inkRectangle();
+    back.SetName(n"back");
+    back.SetAnchor(inkEAnchor.TopLeft);
+    back.SetSize(new Vector2(10.0, 10.0));
+    XFInkStyle.Bind(back, n"MainColors.Fullscreen_PrimaryBackgroundDarkest");
+    back.SetOpacity(1.0);
+    back.Reparent(panel);
+    view.m_plate = back;
+
+    let edge = new inkRectangle();
+    edge.SetName(n"edge");
+    edge.SetAnchor(inkEAnchor.TopLeft);
+    edge.SetSize(new Vector2(4.0, 10.0));
+    XFInkStyle.Bind(edge, n"MainColors.Red");
+    edge.Reparent(panel);
+    view.m_edge = edge;
+
+    let body = new inkVerticalPanel();
+    body.SetName(n"body");
+    body.SetAnchor(inkEAnchor.TopLeft);
+    body.SetFitToContent(true);
+    body.SetMargin(new inkMargin(28.0, 16.0, 0.0, 0.0));
+    body.Reparent(panel);
+    view.m_body = body;
+
+    let header = new inkHorizontalPanel();
+    header.SetName(n"header");
+    header.SetFitToContent(true);
+    header.Reparent(body);
+
+    let diamond = new inkRectangle();
+    diamond.SetName(n"state");
+    diamond.SetSize(new Vector2(14.0, 14.0));
+    diamond.SetRotation(45.0);
+    diamond.SetVAlign(inkEVerticalAlign.Center);
+    diamond.SetMargin(new inkMargin(2.0, 0.0, 18.0, 0.0));
+    diamond.Reparent(header);
+    view.m_diamond = diamond;
+
+    let title = XFInkStyle.Text(n"title", 32, n"Semi-Bold", n"MainColors.Red", true);
+    title.SetText("XF Runtime Bridge");
+    title.Reparent(header);
+
+    let tag = XFInkStyle.Text(n"tag", 22, n"Medium", n"MainColors.MildRed", true);
+    tag.SetText("test");
+    tag.SetVAlign(inkEVerticalAlign.Center);
+    tag.SetMargin(new inkMargin(16.0, 0.0, 0.0, 0.0));
+    tag.Reparent(header);
+
+    let status = XFInkStyle.Text(n"status", 26, n"Medium", n"MainColors.Grey", false);
+    status.SetMargin(new inkMargin(0.0, 6.0, 0.0, 4.0));
+    status.Reparent(body);
+    view.m_status = status;
+
+    let i = 0;
+    while i < 4 {
+      let line = XFInkStyle.Text(StringToName("message" + IntToString(i)), 26, n"Regular", n"MainColors.Blue", false);
+      line.SetMargin(new inkMargin(0.0, 4.0, 0.0, 0.0));
+      line.SetWrappingAtPosition(980.0);
+      line.SetVisible(false);
+      line.Reparent(body);
+      ArrayPush(view.m_messages, line);
+      i += 1;
+    }
+
+    // 0.7: the pending ask's answers and the keys that give them ("[F6] Ready   [F7] Yes   [F8] No"); 0.8.6: one text each.
+    let row = new inkHorizontalPanel();
+    row.SetName(n"choices");
+    row.SetFitToContent(true);
+    row.SetMargin(new inkMargin(0.0, 8.0, 0.0, 0.0));
+    row.SetVisible(false);
+    row.Reparent(body);
+    view.m_row = row;
+    let answered = XFInkStyle.Text(n"answered", 28, n"Semi-Bold", n"MainColors.Yellow", false);
+    answered.SetVisible(false);
+    answered.Reparent(row);
+    view.m_answered = answered;
+    let k = 0;
+    while k < 4 {
+      let chip = XFInkStyle.Text(StringToName("answer" + IntToString(k)), 28, n"Semi-Bold", n"MainColors.Yellow", false);
+      chip.SetMargin(new inkMargin(k > 0 ? 36.0 : 0.0, 0.0, 0.0, 0.0));
+      chip.SetVisible(false);
+      chip.Reparent(row);
+      ArrayPush(view.m_chips, chip);
+      k += 1;
+    }
+    return view;
+  }
+
+  public func Plate() -> ref<inkRectangle> {
+    return this.m_plate;
+  }
+
+  public func ChipCount() -> Int32 {
+    return ArraySize(this.m_chips);
+  }
+
+  public func Chip(index: Int32) -> ref<inkText> {
+    return index >= 0 && index < ArraySize(this.m_chips) ? this.m_chips[index] : null;
+  }
+
+  // Which answer a widget is, or -1.
+  public func ChipIndex(widget: ref<inkWidget>) -> Int32 {
+    let i = 0;
+    while i < ArraySize(this.m_chips) {
+      let chip: ref<inkWidget> = this.m_chips[i];
+      if chip == widget {
+        return i;
+      }
+      i += 1;
+    }
+    return -1;
+  }
+
+  // 0.8.6: the answer under the pointer in photo mode (the game's blue, as its menus mark what the pointer is on), or -1.
+  public func SetHovered(index: Int32) -> Void {
+    this.m_hovered = index;
+    let i = 0;
+    while i < ArraySize(this.m_chips) {
+      XFInkStyle.Bind(this.m_chips[i], i == index ? n"MainColors.Blue" : n"MainColors.Yellow");
+      i += 1;
+    }
+  }
+
+  // The frame's texts and tones. keys: the answers name their keys ("[F6] Done"); without Codeware no key answers, and the
+  // panel inside photo mode's menu shows the answers alone, to click.
+  public func Apply(frame: ref<XFHudFrame>, keys: Bool) -> Void {
+    XFInkStyle.Bind(this.m_diamond, XFInkStyle.ToneToken(frame.tone));
+    XFInkStyle.Bind(this.m_status, XFInkStyle.ToneToken(frame.tone));
+    this.m_status.SetText(frame.status);
+    let i = 0;
+    while i < ArraySize(this.m_messages) {
+      let line = this.m_messages[i];
+      if i < ArraySize(frame.texts) {
+        line.SetText(frame.texts[i]);
+        XFInkStyle.Bind(line, XFInkStyle.LevelToken(frame.levels[i]));
+        line.SetVisible(true);
+      } else {
+        line.SetVisible(false);
+      }
+      i += 1;
+    }
+    if frame.show && frame.askId > 0 && ArraySize(frame.askKeys) > 0 {
+      this.drawn = frame;
+    } else {
+      this.drawn = null;
+    }
+    let count = ArraySize(frame.askKeys);
+    let k = 0;
+    while k < ArraySize(this.m_chips) {
+      let chip = this.m_chips[k];
+      if k < count {
+        // 0.8.6 (the Sol review): every choice is in the frame; one beyond the configured keys has the key "-" and shows its label
+        // alone (on the HUD it is answered in the XF Runtime Bridge window, in photo mode by a click).
+        let key = StrBeginsWith(frame.askKeys[k], "IK_") ? StrAfterFirst(frame.askKeys[k], "IK_") : frame.askKeys[k];
+        let keyed = keys && NotEquals(frame.askKeys[k], "-") && NotEquals(frame.askKeys[k], "");
+        chip.SetText(keyed ? "[" + key + "] " + frame.askLabels[k] : frame.askLabels[k]);
+        chip.SetVisible(true);
+      } else {
+        chip.SetVisible(false);
+      }
+      k += 1;
+    }
+    if count == 0 && this.m_hovered >= 0 {
+      this.SetHovered(-1);
+    }
+    // 0.8 (the UI review): once answered, the same line, same place and size, says what was answered.
+    let answered = count == 0 && frame.answeredId > 0;
+    this.m_answered.SetVisible(answered);
+    if answered {
+      this.m_answered.SetText("Answered: " + frame.answeredLabel);
+    }
+    this.m_row.SetVisible(count > 0 || answered);
+  }
+
+  // 0.8: the plate and the edge at the body's measured size (its content plus the body's margins); nothing until measured.
+  public func SizePlate() -> Void {
+    let size = this.m_body.GetDesiredSize();
+    if size.X < 1.0 || size.Y < 1.0 {
+      // The arranged size where the measured one isn't there (yet).
+      size = this.canvas.GetChildSize(this.m_body);
+    }
+    if size.X < 1.0 || size.Y < 1.0 {
+      return;
+    }
+    let w = size.X + 56.0;
+    let h = size.Y + 36.0;
+    this.m_plate.SetSize(new Vector2(w, h));
+    this.m_under.SetSize(new Vector2(w, h));
+    this.m_edge.SetSize(new Vector2(4.0, h));
+  }
+
+  // 0.8.2 (session 9's B1 and B2): the panel's top-left corner, worked out here and set as a margin from the root's top
+  // left (session 10 proved the horizontal placement: top_right whole and right-aligned). The anchor's point of the visible
+  // screen v (in the root's units) is moved inwards by x and y (from the middle for center), at least by the anchor's floor
+  // where floors is set (0.8.3, XFInkStyle.Floor: clear of the game's own HUD blocks; 0.8.6: not in photo mode's menu, which
+  // has no HUD), the panel's own point there is the same fractions of its measured size (scaled), and the whole panel is kept
+  // inside the visible screen. An anchor other than top_left waits unseen until the panel has been measured, so it never
+  // shows in the wrong place.
+  public func Place(frame: ref<XFHudFrame>, scale: Float, v: Vector4, units: Float, floors: Bool) -> Void {
+    let point = XFInkStyle.AnchorPoint(frame.anchor);
+    let size = this.m_plate.GetSize();
+    let w = size.X * scale;
+    let h = size.Y * scale;
+    let measured = w > 20.0 && h > 20.0;
+    let floor = floors ? XFInkStyle.Floor(frame.anchor) : new Vector2(0.0, 0.0);
+    let hud = v.W / 2160.0;
+    let ox = floor.X > 0.0 ? MaxF(frame.x * units, floor.X * hud) : frame.x * units;
+    let oy = floor.Y > 0.0 ? MaxF(frame.y * units, floor.Y * hud) : frame.y * units;
+    let dx = point.X > 0.9 ? -ox : ox;
+    let dy = point.Y > 0.9 ? -oy : oy;
+    let left = XFInkStyle.PanelEdge(v.X, v.Z, point.X, dx, w);
+    let top = XFInkStyle.PanelEdge(v.Y, v.W, point.Y, dy, h);
+    if measured {
+      let margin = 8.0 * units;
+      left = ClampF(left, v.X + margin, MaxF(v.X + margin, v.X + v.Z - margin - w));
+      top = ClampF(top, v.Y + margin, MaxF(v.Y + margin, v.Y + v.W - margin - h));
+    }
+    this.canvas.SetAnchor(inkEAnchor.TopLeft);
+    this.canvas.SetAnchorPoint(new Vector2(0.0, 0.0));
+    this.canvas.SetRenderTransformPivot(new Vector2(0.0, 0.0));
+    this.canvas.SetTranslation(new Vector2(0.0, 0.0));
+    this.canvas.SetMargin(new inkMargin(left, top, 0.0, 0.0));
+    this.canvas.SetOpacity(measured || (point.X < 0.1 && point.Y < 0.1) ? 1.0 : 0.0);
+  }
+}
+
 // ---- The overlay --------------------------------------------------------------------------------------------------------
 
 public class XFInkMountCallback extends DelayCallback {
@@ -384,18 +763,22 @@ public class XFInkOverlay extends ScriptableSystem {
   private let m_parent: wref<inkCompoundWidget>;
   private let m_ticker: ref<inkRectangle>;
   private let m_proxy: ref<inkAnimProxy>;
-  private let m_panel: ref<inkCanvas>;
-  private let m_diamond: ref<inkRectangle>;
-  private let m_status: ref<inkText>;
-  private let m_messages: array<ref<inkText>>;
-  private let m_choices: ref<inkText>;
+  // 0.8.6: the panel's widgets (XFInkPanel, shared with the panel inside photo mode's menu).
+  private let m_view: ref<XFInkPanel>;
+  private let m_visible: Vector4; // the visible screen in the layer root's units: x, y, width, height
+  private let m_screen: Vector2;
+  private let m_reported: Bool;
+  // 0.8.3: where m_visible came from (measured: the game's own layout, GlobalToLocal; model: XFInkStyle.ModelVisible) and
+  // the geometry last announced, so a change (a measurement after the first layout, a new resolution) is announced again.
+  private let m_visibleFrom: String;
+  private let m_announced: String;
   private let m_units: Float;
   private let m_platesRoot: ref<inkCanvas>;
   private let m_plates: array<ref<inkText>>;
+  private let m_pinsRoot: ref<inkCanvas>;     // 0.8.2: the XF pins' marks in the world
+  private let m_pinMarks: array<ref<inkCanvas>>;
   private let m_frame: ref<XFHudFrame>;
-  // RB-114: the frame whose question and answer keys are on screen now (set when Apply draws them).
-  private let m_drawn: ref<XFHudFrame>;
-  private let m_layer: String;
+  private let m_layer: String; // the layer it is mounted on (0.8.6: hud for photo_menu too, XFInkHost.HostLayer)
   private let m_tries: Int32;
   private let m_ticks: Int32;
   private let m_width: Float;
@@ -438,7 +821,7 @@ public class XFInkOverlay extends ScriptableSystem {
   public func TryMount() -> Void {
     this.m_tries += 1;
     let frame = XFHudFrame.Parse(XFBridge_Hud());
-    let layer = frame.valid ? frame.layer : "hud";
+    let layer = XFInkHost.HostLayer(frame.valid ? frame.layer : "hud");
     let parent = XFInkHost.LayerRoot(layer);
     if !IsDefined(parent) {
       if this.m_tries < 30 {
@@ -479,28 +862,13 @@ public class XFInkOverlay extends ScriptableSystem {
       this.m_root = null;
       this.m_parent = null;
     }
-    ArrayClear(this.m_messages);
+    this.m_view = null;
     ArrayClear(this.m_plates);
+    ArrayClear(this.m_pinMarks);
     if this.m_mounted {
       XFBridgeLog.Debug("ink", "ink overlay unmounted (" + why + ")");
     }
     this.m_mounted = false;
-  }
-
-  // The screen's size from the display settings (as Codeware's ScreenHelper reads it), for the overlay's scale.
-  private func ScreenSize() -> Vector2 {
-    let settings = GameInstance.GetSettingsSystem(GetGameInstance());
-    let variable: ref<ConfigVarListString>;
-    if IsDefined(settings) {
-      variable = settings.GetVar(n"/video/display", n"Resolution") as ConfigVarListString;
-    }
-    if IsDefined(variable) {
-      let parts = StrSplit(variable.GetValue(), "x");
-      if ArraySize(parts) == 2 {
-        return new Vector2(StringToFloat(parts[0]), StringToFloat(parts[1]));
-      }
-    }
-    return new Vector2(3840.0, 2160.0);
   }
 
   // 0.7 (session 7: on a 3840x1600 screen the panel sat off-screen at the right edge, and at bottom left it didn't show at
@@ -508,21 +876,51 @@ public class XFInkOverlay extends ScriptableSystem {
   // units that root lays out in, so a panel anchored to a corner is at that corner of what the layer shows (21:9, 32:9 and
   // 16:9 alike), and its margins are clamped inside it. m_units converts the panel's design (2160 units per screen height)
   // into the root's units, from the root's own size where it reports one.
+  //
+  // Where the screen is in the root's units (m_visible; every anchor is a corner, edge or middle of it). 0.8 assumed the HUD's
+  // 3840 x 2160 canvas COVERED the screen centred, so on 21:9 its top and bottom 280 units were off screen; session 10
+  // showed that every anchor then sat about 280 units too low: the root's top-left corner is the screen's (XFInkStyle
+  // ModelVisible). 0.8.3 measures it from the game's own layout once the overlay has been laid out (WidgetUtils.GlobalToLocal
+  // of the window's corners, XFInkStyle.Plausible) and uses the corrected model until then. The root's size, the screen,
+  // the visible part and where it came from are announced whenever they change (layers.status and the plugin log's
+  // "panel geometry" line), so a session can check the arithmetic against a capture.
   private func Measure(parent: wref<inkCompoundWidget>) -> Void {
     let size = parent.GetSize();
     if size.X > 100.0 && size.Y > 100.0 {
       this.m_width = size.X;
       this.m_height = size.Y;
     } else {
-      let screen = this.ScreenSize();
+      this.m_width = 3840.0;
       this.m_height = 2160.0;
-      this.m_width = screen.Y > 100.0 ? 2160.0 * screen.X / screen.Y : 3840.0;
     }
     this.m_units = this.m_height > 100.0 ? this.m_height / 2160.0 : 1.0;
+    this.m_screen = XFInkStyle.ScreenSize();
+    let measured = XFInkStyle.MeasureVisible(this.m_root, this.m_screen, this.m_width, this.m_height);
+    if measured.Z > 0.0 {
+      this.m_visible = measured;
+      this.m_visibleFrom = "measured";
+    } else {
+      this.m_visible = XFInkStyle.ModelVisible(this.m_width, this.m_height, this.m_screen);
+      this.m_visibleFrom = "model";
+    }
+  }
+
+  public func GeometryText() -> String {
+    return "root=" + FloatToStringPrec(this.m_width, 0) + "x" + FloatToStringPrec(this.m_height, 0) + " screen=" + FloatToStringPrec(this.m_screen.X, 0) + "x" + FloatToStringPrec(this.m_screen.Y, 0)
+      + " visible=" + FloatToStringPrec(this.m_visible.Z, 0) + "x" + FloatToStringPrec(this.m_visible.W, 0) + " at " + FloatToStringPrec(this.m_visible.X, 0) + "," + FloatToStringPrec(this.m_visible.Y, 0)
+      + " from=" + this.m_visibleFrom + this.ModelText();
+  }
+
+  // 0.8.3: the model beside a measurement, so a session sees whether the two agree (the model is session 10's evidence).
+  private func ModelText() -> String {
+    if !Equals(this.m_visibleFrom, "measured") {
+      return "";
+    }
+    let m = XFInkStyle.ModelVisible(this.m_width, this.m_height, this.m_screen);
+    return " model=" + FloatToStringPrec(m.Z, 0) + "x" + FloatToStringPrec(m.W, 0) + " at " + FloatToStringPrec(m.X, 0) + "," + FloatToStringPrec(m.Y, 0);
   }
 
   private func Build(parent: wref<inkCompoundWidget>) -> Void {
-    this.Measure(parent);
     let root = new inkCanvas();
     root.SetName(n"xfs_overlay");
     root.SetAnchor(inkEAnchor.Fill);
@@ -530,6 +928,8 @@ public class XFInkOverlay extends ScriptableSystem {
     root.Reparent(parent);
     this.m_root = root;
     this.m_parent = parent;
+    this.m_announced = "";
+    this.Measure(parent);
 
     // Nameplates first, so the panel draws over them.
     let plates = new inkCanvas();
@@ -538,78 +938,14 @@ public class XFInkOverlay extends ScriptableSystem {
     plates.Reparent(root);
     this.m_platesRoot = plates;
 
-    let panel = new inkCanvas();
-    panel.SetName(n"xfs_hud_panel");
-    panel.SetFitToContent(true);
-    panel.Reparent(root);
-    this.m_panel = panel;
+    // 0.8.2: the XF pins' marks, under the panel too.
+    let pins = new inkCanvas();
+    pins.SetName(n"xfs_pin_marks");
+    pins.SetAnchor(inkEAnchor.Fill);
+    pins.Reparent(root);
+    this.m_pinsRoot = pins;
 
-    let back = new inkRectangle();
-    back.SetName(n"back");
-    back.SetAnchor(inkEAnchor.Fill);
-    back.SetTintColor(new HDRColor(0.035, 0.035, 0.06, 1.0));
-    back.SetOpacity(0.62);
-    back.Reparent(panel);
-
-    let edge = new inkRectangle();
-    edge.SetName(n"edge");
-    edge.SetAnchor(inkEAnchor.LeftFillVerticaly);
-    edge.SetSize(new Vector2(4.0, 10.0));
-    XFInkStyle.Bind(edge, n"MainColors.Red");
-    edge.Reparent(panel);
-
-    let body = new inkVerticalPanel();
-    body.SetName(n"body");
-    body.SetFitToContent(true);
-    body.SetMargin(new inkMargin(28.0, 16.0, 28.0, 20.0));
-    body.Reparent(panel);
-
-    let header = new inkHorizontalPanel();
-    header.SetName(n"header");
-    header.SetFitToContent(true);
-    header.Reparent(body);
-
-    let diamond = new inkRectangle();
-    diamond.SetName(n"state");
-    diamond.SetSize(new Vector2(14.0, 14.0));
-    diamond.SetRotation(45.0);
-    diamond.SetVAlign(inkEVerticalAlign.Center);
-    diamond.SetMargin(new inkMargin(2.0, 0.0, 18.0, 0.0));
-    diamond.Reparent(header);
-    this.m_diamond = diamond;
-
-    let title = XFInkStyle.Text(n"title", 32, n"Semi-Bold", n"MainColors.Red", true);
-    title.SetText("XF Runtime Bridge");
-    title.Reparent(header);
-
-    let tag = XFInkStyle.Text(n"tag", 22, n"Medium", n"MainColors.MildRed", true);
-    tag.SetText("test");
-    tag.SetVAlign(inkEVerticalAlign.Center);
-    tag.SetMargin(new inkMargin(16.0, 0.0, 0.0, 0.0));
-    tag.Reparent(header);
-
-    let status = XFInkStyle.Text(n"status", 26, n"Medium", n"MainColors.Grey", false);
-    status.SetMargin(new inkMargin(0.0, 6.0, 0.0, 4.0));
-    status.Reparent(body);
-    this.m_status = status;
-
-    let i = 0;
-    while i < 4 {
-      let line = XFInkStyle.Text(StringToName("message" + IntToString(i)), 26, n"Regular", n"MainColors.Blue", false);
-      line.SetMargin(new inkMargin(0.0, 4.0, 0.0, 0.0));
-      line.SetWrappingAtPosition(980.0);
-      line.SetVisible(false);
-      line.Reparent(body);
-      ArrayPush(this.m_messages, line);
-      i += 1;
-    }
-
-    // 0.7: the pending ask's answers and the keys that give them ("[F6] Ready   [F7] Yes   [F8] No").
-    let choices = XFInkStyle.Text(n"choices", 28, n"Semi-Bold", n"MainColors.Yellow", false);
-    choices.SetMargin(new inkMargin(0.0, 8.0, 0.0, 0.0));
-    choices.SetVisible(false);
-    choices.Reparent(body);
-    this.m_choices = choices;
+    this.m_view = XFInkPanel.Create(root, n"xfs_hud_panel");
 
     // The tick: a hidden widget's endless transparency animation on the UI's own clock.
     let ticker = new inkRectangle();
@@ -640,7 +976,7 @@ public class XFInkOverlay extends ScriptableSystem {
       let frame = XFHudFrame.Parse(XFBridge_Hud());
       if frame.valid {
         this.m_frame = frame;
-        if NotEquals(frame.layer, this.m_layer) && !this.m_remount {
+        if NotEquals(XFInkHost.HostLayer(frame.layer), this.m_layer) && !this.m_remount {
           // ui.hud moved the overlay to another layer: mount again from outside this callback.
           this.m_remount = true;
           this.m_tries = 0;
@@ -659,63 +995,76 @@ public class XFInkOverlay extends ScriptableSystem {
 
   private func Apply() -> Void {
     let frame = this.m_frame;
-    if !IsDefined(frame) || !IsDefined(this.m_panel) {
+    if !IsDefined(frame) || !IsDefined(this.m_view) {
       return;
     }
-    this.m_remount = this.m_remount && NotEquals(frame.layer, this.m_layer);
-    this.m_panel.SetVisible(frame.show);
-    this.m_panel.SetAnchor(XFInkStyle.Anchor(frame.anchor));
-    this.m_panel.SetAnchorPoint(XFInkStyle.AnchorPoint(frame.anchor));
-    this.m_panel.SetRenderTransformPivot(XFInkStyle.AnchorPoint(frame.anchor));
-    // Margins in the root's units, clamped so the panel's corner stays on screen (at most 40 % of the width or height in).
+    this.m_remount = this.m_remount && NotEquals(XFInkHost.HostLayer(frame.layer), this.m_layer);
+    this.m_view.canvas.SetVisible(frame.show);
     if IsDefined(this.m_parent) {
       this.Measure(this.m_parent);
     }
     let units = this.m_units > 0.0 ? this.m_units : 1.0;
-    let mx = ClampF(frame.x * units, 0.0, this.m_width * 0.4);
-    let my = ClampF(frame.y * units, 0.0, this.m_height * 0.4);
-    this.m_panel.SetMargin(new inkMargin(mx, my, mx, my));
     let scale = ClampF(frame.scale, 0.5, 3.0) * units;
-    this.m_panel.SetScale(new Vector2(scale, scale));
-    XFInkStyle.Bind(this.m_diamond, XFInkStyle.ToneToken(frame.tone));
-    XFInkStyle.Bind(this.m_status, XFInkStyle.ToneToken(frame.tone));
-    this.m_status.SetText(frame.status);
-    let i = 0;
-    while i < ArraySize(this.m_messages) {
-      let line = this.m_messages[i];
-      if i < ArraySize(frame.texts) {
-        line.SetText(frame.texts[i]);
-        XFInkStyle.Bind(line, XFInkStyle.LevelToken(frame.levels[i]));
-        line.SetVisible(true);
-      } else {
-        line.SetVisible(false);
-      }
-      i += 1;
+    this.m_view.canvas.SetScale(new Vector2(scale, scale));
+    this.m_view.SizePlate();
+    let v = this.m_visible;
+    if v.Z < 100.0 || v.W < 100.0 {
+      v = new Vector4(0.0, 0.0, this.m_width, this.m_height);
     }
-    if frame.show && frame.askId > 0 && ArraySize(frame.askKeys) > 0 {
-      this.m_drawn = frame;
-    } else {
-      this.m_drawn = null;
+    this.m_view.Place(frame, scale, v, units, true);
+    this.KeepOnTop();
+    // 0.8.3: announced whenever it changes (the first measurement replaces the model a moment after mounting), so a session
+    // can check the arithmetic against a capture.
+    let geometry = this.GeometryText();
+    if NotEquals(geometry, this.m_announced) {
+      this.m_announced = geometry;
+      this.m_reported = true;
+      XFBridge_Announce("ink", "panel geometry " + geometry);
     }
-    if ArraySize(frame.askKeys) > 0 {
-      let text = "";
-      let k = 0;
-      while k < ArraySize(frame.askKeys) {
-        let key = StrBeginsWith(frame.askKeys[k], "IK_") ? StrAfterFirst(frame.askKeys[k], "IK_") : frame.askKeys[k];
-        text += (k > 0 ? "     " : "") + "[" + key + "] " + frame.askLabels[k];
-        k += 1;
-      }
-      this.m_choices.SetText(text);
-      this.m_choices.SetVisible(true);
-    } else {
-      this.m_choices.SetVisible(false);
-    }
+    this.m_view.Apply(frame, true);
     this.m_platesRoot.SetVisible(frame.nameplates);
+    this.ReportDrawn(frame);
+  }
+
+  // 0.8 (the UI review: a quest marker drew over the answer keys): the overlay is the layer root's last child, so it draws
+  // over everything else there; widgets added after it (HUD entries spawning later) are passed again on the next read.
+  private func KeepOnTop() -> Void {
+    if !IsDefined(this.m_parent) || !IsDefined(this.m_root) {
+      return;
+    }
+    let count = this.m_parent.GetNumChildren();
+    let last = this.m_parent.GetWidgetByIndex(count - 1);
+    if count > 1 && (!IsDefined(last) || NotEquals(last.GetName(), n"xfs_overlay")) {
+      this.m_parent.ReorderChild(this.m_root, -1);
+    }
+  }
+
+  // 0.8 (the UI review: the question showed in three places): tells the plugin which question the panel shows on screen
+  // now. 0.8.2 (the surfaces' rule): and whether the panel is on screen at all, question or not: while it is, it is the one
+  // status surface and the XF box and the CET line stay off. The HUD layer is hidden outside normal play (menus,
+  // photo mode, the appearance screen), so there it counts as not shown; the world is only asked while the scripts are live.
+  // 0.8.6: while the panel inside photo mode's menu is showing, that panel reports instead (XFPhotoMenuPanel.Report).
+  private func ReportDrawn(frame: ref<XFHudFrame>) -> Void {
+    if XFPhotoMenuPanel.Live() {
+      return;
+    }
+    // 0.8.2 (the review): id is the question this panel holds with its answer keys (DrawnAsk, which the keys answer, on screen
+    // or not), else the answered one it shows; the plugin tells the other surfaces whether the keys work.
+    let keysAsk = 0;
+    if this.m_mounted && IsDefined(this.m_view) && IsDefined(this.m_view.drawn) {
+      keysAsk = this.m_view.drawn.askId;
+    }
+    let id = keysAsk > 0 ? keysAsk : frame.answeredId;
+    let shown = frame.show && this.m_mounted && frame.live;
+    if shown && Equals(this.m_layer, "hud") {
+      shown = Equals(XFBridgeActions.Phase(), "gameplay");
+    }
+    XFBridge_InkDrawn(id, shown);
   }
 
   // RB-114: the question the panel shows now with its keys, or null (nothing mounted, hidden, or no question drawn).
   public func DrawnAsk() -> ref<XFHudFrame> {
-    return this.m_mounted ? this.m_drawn : null;
+    return this.m_mounted && IsDefined(this.m_view) ? this.m_view.drawn : null;
   }
 
   private func Plate(index: Int32) -> ref<inkText> {
@@ -742,6 +1091,7 @@ public class XFInkOverlay extends ScriptableSystem {
   // Demo B: each spawned showroom head's preset name at the front of its pedestal, about 17 cm below the column's top
   // (the showroom build's column: 0.24 m wide, top 1.52 m above the entity's origin, centred 7 cm behind it).
   private func UpdatePlates() -> Void {
+    this.UpdatePinMarks();
     let frame = this.m_frame;
     if !IsDefined(frame) || !frame.nameplates || !frame.live || !IsDefined(this.m_platesRoot) {
       this.HidePlates(0);
@@ -784,11 +1134,130 @@ public class XFInkOverlay extends ScriptableSystem {
     }
     let plate = this.Plate(slot);
     plate.SetText(IntToString(item.index + 1) + "  " + item.label);
-    plate.SetTranslation(new Vector2((s.X + 1.0) * 0.5 * this.m_width, (s.Y + 1.0) * 0.5 * this.m_height));
+    plate.SetTranslation(this.ScreenPoint(s));
     let size = ClampF(3.0 / MaxF(s.W, 0.5), 0.55, 1.0);
     plate.SetScale(new Vector2(size, size));
     plate.SetOpacity(ClampF((15.0 - s.W) / 5.0, 0.0, 1.0));
     plate.SetVisible(true);
+    return true;
+  }
+
+
+  // ---- 0.8.2: the XF pins' marks in the world ----------------------------------------------------------------------------------
+
+  // 0.8.3 (session 10's F1: the plugin logged "drawn by xf_overlay", yet in the world only the game's marker showed): the mark
+  // is now a canvas of a fixed size (kMarkW x kMarkH design units) laid out from its own top-left corner, with every part
+  // placed by a margin inside it (the placement proven for the panel). 0.8.2 reused the map badge, built for the game's sized
+  // pin widgets: a 0 x 0 canvas whose parts were centred on it, and placed 280 units too low by the old visible-screen model.
+  private func PinMark(index: Int32) -> ref<inkCanvas> {
+    while ArraySize(this.m_pinMarks) <= index {
+      let mark = new inkCanvas();
+      mark.SetName(StringToName("pin" + IntToString(ArraySize(this.m_pinMarks))));
+      mark.SetAnchor(inkEAnchor.TopLeft);
+      mark.SetAnchorPoint(new Vector2(0.0, 0.0));
+      mark.SetRenderTransformPivot(new Vector2(0.0, 0.0));
+      mark.SetSize(new Vector2(XFInkPins.MarkWidth(), XFInkPins.MarkHeight()));
+      mark.SetInteractive(false);
+      mark.SetVisible(false);
+      XFInkPins.BuildMark(mark);
+      mark.Reparent(this.m_pinsRoot);
+      ArrayPush(this.m_pinMarks, mark);
+    }
+    return this.m_pinMarks[index];
+  }
+
+  // A projected point (the projector's -1..1 across and down the screen) in the root's units: the screen is the visible part
+  // of the root (m_visible), not the whole 2160-high canvas (0.8.2; the pedestal labels used the canvas before).
+  private func ScreenPoint(s: Vector4) -> Vector2 {
+    let v = this.m_visible;
+    if v.Z < 100.0 || v.W < 100.0 {
+      v = new Vector4(0.0, 0.0, this.m_width, this.m_height);
+    }
+    return new Vector2(v.X + (s.X + 1.0) * 0.5 * v.Z, v.Y + (s.Y + 1.0) * 0.5 * v.W);
+  }
+
+  // 0.8.2 (session 9's F1: in the world only the game's own marker showed, with no XF diamond and no label, although the
+  // world view's controller ran): each XF pin's diamond, "XF" and label drawn by the bridge's own overlay above the pin's
+  // world point, projected every tick as the pedestal labels are, while the scripts are live. The map and the minimap keep
+  // their controller badges. drawn_by gains "xf_overlay" the first time a pin's mark is on screen.
+  private func UpdatePinMarks() -> Void {
+    let frame = this.m_frame;
+    let used = 0;
+    if IsDefined(frame) && frame.show && frame.live && IsDefined(this.m_pinsRoot) {
+      let registry = XFPinRegistry.Get();
+      if IsDefined(registry) && registry.Count() > 0 {
+        let projector = XFProjector.Create();
+        if projector.ok {
+          for entry in registry.Pins() {
+            if this.PlacePinMark(entry, projector, used) {
+              used += 1;
+            }
+          }
+        }
+      }
+    }
+    let i = used;
+    while i < ArraySize(this.m_pinMarks) {
+      this.m_pinMarks[i].SetVisible(false);
+      i += 1;
+    }
+    // 0.8.3: a pin whose mark wasn't placed this tick (behind the camera, too far, off the screen) says so in ui.state. Only
+    // while the scripts are live (the review: the registry is a scriptable system of the session, and no game system is asked
+    // once a load has begun); otherwise only this overlay's own widgets were touched above (hidden).
+    if IsDefined(frame) && frame.live {
+      let registry = XFPinRegistry.Get();
+      if IsDefined(registry) {
+        for entry in registry.Pins() {
+          if !entry.markPlacedNow {
+            entry.markShown = false;
+          }
+          entry.markPlacedNow = false;
+        }
+      }
+    }
+  }
+
+  private func PlacePinMark(entry: ref<XFPinEntry>, projector: ref<XFProjector>, slot: Int32) -> Bool {
+    let point = entry.position;
+    if entry.bound && entry.piece >= 0 {
+      let registry = XFShowroomRegistry.Get();
+      if IsDefined(registry) {
+        let item = registry.Piece(entry.piece);
+        if IsDefined(item) {
+          let entity = XFInkHost.Entity(item.id);
+          if IsDefined(entity) {
+            let at = entity.GetWorldPosition();
+            point = new Vector4(at.X, at.Y, entry.position.Z, 1.0);
+          }
+        }
+      }
+    }
+    let s = projector.Project(new Vector4(point.X, point.Y, point.Z, 1.0));
+    if s.W <= 0.0 || s.W > 200.0 || AbsF(s.X) > 1.1 || AbsF(s.Y) > 1.1 {
+      return false;
+    }
+    let mark = this.PinMark(slot);
+    XFInkPins.MarkLabel(mark, entry.label);
+    let units = this.m_units > 0.0 ? this.m_units : 1.0;
+    let at = this.ScreenPoint(s);
+    let size = ClampF(8.0 / MaxF(s.W, 1.0), 0.55, 1.0) * units;
+    // The mark's bottom centre 64 design units above the point (above the game's own marker, about 60 units tall there).
+    let left = at.X - XFInkPins.MarkWidth() * 0.5 * size;
+    let top = at.Y - 64.0 * units - XFInkPins.MarkHeight() * size;
+    mark.SetScale(new Vector2(size, size));
+    mark.SetMargin(new inkMargin(left, top, 0.0, 0.0));
+    mark.SetVisible(true);
+    // 0.8.3: the agent's own view of it (ui.state's pins[].xf_mark): where the overlay put it, in the root's units and, by the
+    // game's own layout, in window pixels (WidgetUtils.LocalToGlobal of its top-left corner), and whether that is on screen.
+    let px = WidgetUtils.LocalToGlobal(mark, new Vector2(0.0, 0.0));
+    entry.markShown = true;
+    entry.markAt = new Vector2(left, top);
+    entry.markPx = px;
+    entry.markOnScreen = px.X > -10.0 && px.Y > -10.0 && px.X < this.m_screen.X && px.Y < this.m_screen.Y;
+    // 0.8.4: the pin's point itself in window pixels (the projector's -1..1 across and down the window).
+    entry.pointPx = new Vector2((s.X + 1.0) * 0.5 * this.m_screen.X, (s.Y + 1.0) * 0.5 * this.m_screen.Y);
+    entry.markPlacedNow = true;
+    XFInkPins.NoteDrawn(entry, "xf_overlay");
     return true;
   }
 }
@@ -813,11 +1282,14 @@ public class XFAnswerKeys extends ScriptableSystem {
     if NotEquals(event.GetAction(), EInputAction.IACT_Press) {
       return;
     }
-    let overlay = XFInkOverlay.Get();
-    if !IsDefined(overlay) {
-      return;
+    // 0.8.6: in photo mode, the question the panel inside its menu shows; else the HUD overlay's.
+    let frame = XFPhotoMenuPanel.DrawnAsk();
+    if !IsDefined(frame) {
+      let overlay = XFInkOverlay.Get();
+      if IsDefined(overlay) {
+        frame = overlay.DrawnAsk();
+      }
     }
-    let frame = overlay.DrawnAsk();
     if !IsDefined(frame) || !frame.valid || frame.askId <= 0 {
       return;
     }

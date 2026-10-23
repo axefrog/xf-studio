@@ -1,6 +1,6 @@
 // Independent checks of the diagnostic Glitter route's supplied chains. Pure: no IO.
 //
-// Nothing here imports the builder (src/glitter-route.ts, src/glitter-region.ts). The route's nested levels are *drawn*
+// Nothing here imports the builder (src/legacy/eye-makeup/export/glitter-route.ts, src/legacy/eye-makeup/export/glitter-region.ts). The route's nested levels are *drawn*
 // from a flake catalogue, so they cannot be re-derived from level 0 the way the flat chains are; instead this module
 // restates the published properties every level must have, from the preset's own recipe and glitter knob:
 //

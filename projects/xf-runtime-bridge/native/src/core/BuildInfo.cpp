@@ -1,4 +1,5 @@
 #include "core/BuildInfo.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include "XfbBuildInfo.hpp" // generated in the build folder
 

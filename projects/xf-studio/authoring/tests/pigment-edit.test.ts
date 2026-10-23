@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { editPigment } from "../src/engines/layered-makeup/pigment-edit";
 import { DEFAULT_STRENGTH_BLEND } from "../src/engines/layered-makeup/recipe";
-import { parseWorkspace } from "../src/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, freshWorkspace, editLayers } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 
 test("explicit smooth upgrade and pigment edits preserve old draft/history through reload", () => {
   const old = { ...initialRecipe(), schema: "xfs/recipe-3",

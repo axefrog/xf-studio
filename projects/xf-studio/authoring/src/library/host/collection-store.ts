@@ -1,0 +1,180 @@
+import { LibraryError } from "./library-store";
+import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection } from "../../platform/api";
+import { NEWER_LOOKS_LIBRARY_MESSAGE } from "../../app/workspace/collection-workspace";
+import type { PartRegistry } from "../../platform/core/document";
+import { hostFailure } from "../../diagnostics/host/host-log";
+import type { LibraryDatabase } from "../../platform/persistence/library-database";
+import type { CollectionSummary, StoredCollection } from "../collection-actions";
+import { collectionRef, collectionWorkingOf, lookRef, lookWorkingOf } from "../collection-documents";
+import { documentKey } from "../../platform/api/document-commands";
+import { parseFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../platform/api/document-store";
+import { INCOMPLETE } from "../collection-owner";
+import type { DocumentStore } from "../../platform/persistence/document-store";
+
+/**
+ * The local collection library (SQLite v2; no DDL change for the look model). Rows describe their
+ * own schema: rows written before the look model hold `xfas/collection-1` JSON and are never
+ * rewritten. A save writes each new row in the oldest schema that holds it exactly:
+ * `xfas/collection-1` while every look is eye makeup alone, else `xfs/collection-2` (a look with an
+ * expression, say). Rows of either schema read (feature-module platform §2), here and in
+ * 0.1.0-alpha.2, the oldest published release, which opens the same library. (0.1.0-alpha.1 read
+ * collection-1 only, and a save that needed collection-2 was refused for it (CORE-30); it was never
+ * published, so that gate is retired (CORE-123).) The part registry is injected by the server roots. Its tables are the library file's
+ * `collections-2` step (library-migrations.ts); the file's owner (`LibraryDatabase`) holds the connection.
+ */
+export class CollectionLibrary {
+  constructor(private readonly db: LibraryDatabase, private parts: PartRegistry) {}
+  list(): CollectionSummary[] {
+    // Oldest first; collections made in the same millisecond keep the order they were made in (their rowid; LIB-01), never their random IDs'.
+    return (this.db.read(db => db.query(`SELECT r.collection_json, r.revision, r.created_at AS updatedAt FROM collection_revisions r
+      JOIN collections c ON c.id=r.collection_id
+      WHERE r.revision=(SELECT MAX(revision) FROM collection_revisions WHERE collection_id=r.collection_id)
+      ORDER BY c.created_at, c.rowid`).all() as
+      { collection_json: string; revision: number; updatedAt: string }[])).map(row => {
+        // Identity only: listing never parses parts, so a collection with a newer build's parts still lists.
+        const collection = this.parts.readIdentity(JSON.parse(row.collection_json));
+        return { id: collection.id, name: collection.name, count: collection.count, revision: row.revision, updatedAt: row.updatedAt };
+      });
+  }
+  get(id: string, revision?: number): StoredCollection {
+    const row = this.db.read(db => db.query(`SELECT collection_json, revision, created_at AS updatedAt FROM collection_revisions
+      WHERE collection_id=? AND (? IS NULL OR revision=?) ORDER BY revision DESC LIMIT 1`).get(id, revision ?? null, revision ?? null) as
+      { collection_json: string; revision: number; updatedAt: string } | null);
+    if (!row) throw new LibraryError("Collection not found.", 404);
+    return { collection: this.parts.readCollection(JSON.parse(row.collection_json), true), revision: row.revision, updatedAt: row.updatedAt };
+  }
+  /** One stored preset row of either schema, as a look. */
+  private readPresetRow(json: string): Look {
+    const value = JSON.parse(json) as { parts?: unknown };
+    return this.parts.readPreset(value, value && typeof value === "object" && "parts" in value ? COLLECTION_2 : COLLECTION_1);
+  }
+  /**
+   * Save a new revision. A preset gets a new version only when its name or content changed;
+   * content is compared canonically (parsed and serialized by its codecs, keys sorted), so a
+   * row stored in an older schema or key order never counts as a change.
+   */
+  /**
+   * Each part is parsed once: the input when it is read, an older preset row when it is compared.
+   * Parsed parts are compared and written as they are (CORE-35); the previous revision is looked up
+   * by number only.
+   */
+  save(value: unknown): StoredCollection {
+    const input = value as { collection?: unknown; revision?: number };
+    let collection: LookCollection;
+    try { collection = this.parts.readCollection(input?.collection, true); }
+    catch (error) {
+      if (isNewerData(error)) throw new LibraryError(NEWER_LOOKS_LIBRARY_MESSAGE, 422);
+      throw new LibraryError("Invalid collection; nothing was saved.");
+    }
+    // The oldest schema that holds it: rows 0.1.0-alpha.2 reads either way (CORE-123).
+    const stored = this.parts.writeMinimal(collection);
+    return this.db.write(db => {
+      const latest = db.query("SELECT MAX(revision) AS revision FROM collection_revisions WHERE collection_id=?")
+        .get(collection.id) as { revision: number | null } | null;
+      const exists = db.query("SELECT id FROM collections WHERE id=?").get(collection.id);
+      const previous = exists && latest?.revision ? latest.revision : undefined;
+      if (previous !== undefined && previous !== input.revision)
+        throw new LibraryError("This collection changed in another window. Open the saved version or save a separate copy.", 409);
+      if (previous === undefined && input.revision !== undefined) throw new LibraryError("Collection revision does not exist.", 409);
+      const revision = (previous ?? 0) + 1, updatedAt = new Date().toISOString();
+      if (!exists) db.query("INSERT INTO collections VALUES (?, ?)").run(collection.id, updatedAt);
+      collection.presets = collection.presets.map(p => {
+        const row = db.query(`SELECT preset_json FROM collection_preset_versions WHERE collection_id=? AND preset_id=?
+          ORDER BY revision DESC LIMIT 1`).get(collection.id, p.id) as { preset_json: string } | null;
+        const old = row ? this.readPresetRow(row.preset_json) : undefined;
+        const changed = old && (old.name !== p.name || this.parts.canonicalParts(old.parts) !== this.parts.canonicalParts(p.parts));
+        const preset = { ...p, revision: old ? old.revision + (changed ? 1 : 0) : p.revision };
+        if (!old || changed) db.query("INSERT INTO collection_preset_versions VALUES (?, ?, ?, ?)")
+          .run(collection.id, preset.id, preset.revision, JSON.stringify(this.parts.writePresetMinimal(preset)));
+        return preset;
+      });
+      db.query("INSERT INTO collection_revisions VALUES (?, ?, ?, ?)")
+        .run(collection.id, revision, JSON.stringify({ ...stored, presets: stored.presets.map((preset, index) =>
+          ({ ...preset, revision: collection.presets[index].revision })) }), updatedAt);
+      return { collection, revision, updatedAt };
+    });
+  }
+}
+
+export async function collectionRequest(request: Request, library: CollectionLibrary, prefix: string): Promise<Response> {
+  const url = new URL(request.url), origin = request.headers.get("Origin"), suffix = url.pathname.slice(prefix.length);
+  const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
+  if (url.hostname !== "127.0.0.1" || (origin && origin !== url.origin)) return json({ error: "Local studio requests only." }, 403);
+  if (suffix && !/^\/[0-9a-f-]{36}$/.test(suffix)) return json({ error: "Not found." }, 404);
+  try {
+    if (request.method === "GET") return json(suffix ? library.get(suffix.slice(1)) : library.list());
+    if (request.method !== "POST" || suffix) return json({ error: "Method not allowed." }, 405);
+    if (origin !== url.origin || request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
+      return json({ error: "Use the local studio to save collections." }, 403);
+    const body = await request.text();
+    if (body.length > 16_000_000) return json({ error: "Collection source exceeds the current 16 MB storage request budget." }, 413);
+    let value: unknown;
+    try { value = JSON.parse(body); } catch { return json({ error: "Invalid JSON." }, 400); }
+    return json(library.save(value), 200);
+  } catch (e) {
+    if (e instanceof LibraryError) return json({ error: e.message }, e.status);
+    hostFailure("library", "collection_request_failed", "The collection library couldn't be read or written.", e);
+    return json({ error: "Collection unavailable; your browser draft is still available." }, 500);
+  }
+}
+
+/**
+ * Save version (profiles design §2.1): a named version of a collection's working copies, in the released tables older builds read,
+ * from one snapshot taken inside the same host transaction: the collection working copy and every live look it lists. The page flushes
+ * its outbox for the collection first. Every save is a new version over the latest (two windows saving the same working copy both
+ * succeed); the working copies are what conflicts are kept on. Answers the version and the working copies' revisions it was made from.
+ */
+export function saveCollectionVersion(collections: CollectionLibrary, documents: DocumentStore, database: LibraryDatabase, id: string,
+  fence?: WorkspaceFence | null): { revision: number; updatedAt: string; documents: Record<string, number> } {
+  return database.write(db => {
+    // The lease is checked inside the saving transaction: one issued while the request was arriving refuses it.
+    if (fence && fence.generation < documents.leaseGeneration(fence.workspace)) throw new SupersededSave();
+    const key = documentKey(collectionRef(id));
+    const head = documents.read([collectionRef(id)])[key];
+    const working = collectionWorkingOf(head?.value);
+    if (!head || !working) throw new LibraryError("That collection doesn't exist any more.", 404);
+    const refs = working.looks.map(look => lookRef({ collection: id, look }));
+    const read = documents.read(refs);
+    const looks = refs.flatMap(ref => { const look = lookWorkingOf(read[documentKey(ref)]?.value); return look?.state === "live" ? [look] : []; });
+    // Never a version with a listed look silently left out.
+    if (looks.length !== refs.length) throw new LibraryError(INCOMPLETE, 409);
+    const latest = db.query("SELECT MAX(revision) AS revision FROM collection_revisions WHERE collection_id=?").get(id) as { revision: number | null } | null;
+    const collection = { schema: COLLECTION_2, id, name: working.name,
+      presets: looks.map(look => ({ id: look.id, name: look.name, revision: 1, parts: look.parts })),
+      ...(working.packagePlan !== undefined ? { packagePlan: working.packagePlan } : {}) };
+    const saved = collections.save({ collection, ...(latest?.revision ? { revision: latest.revision } : {}) });
+    return { revision: saved.revision, updatedAt: saved.updatedAt,
+      documents: { [key]: head.revision, ...Object.fromEntries(refs.map(ref => [documentKey(ref), read[documentKey(ref)]?.revision ?? 0])) } };
+  });
+}
+
+/** Save version from a page whose workspace lease is no longer the newest. */
+class SupersededSave extends Error {}
+
+/**
+ * `POST <path>` with `{ collection }`: Save version, answering `{ revision, updatedAt, documents }`. Local, same-origin pages only; a page
+ * whose workspace lease is older than the newest is refused (409 `superseded`), as its document commands are.
+ */
+export function collectionVersionsHandler(collections: CollectionLibrary, documents: DocumentStore, database: LibraryDatabase, path: string): (request: Request) => Promise<Response> {
+  const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
+  return async request => {
+    const url = new URL(request.url), origin = request.headers.get("Origin");
+    if (url.pathname !== path) return json({ error: "Not found." }, 404);
+    if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || origin !== url.origin) return json({ error: "Local studio requests only." }, 403);
+    if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+    const fence = parseFence(request.headers.get(WORKSPACE_FENCE_HEADER));
+    if (fence === "invalid") return json({ error: "That isn't a workspace lease." }, 400);
+    const superseded = () => json({ code: "superseded", error: "This workspace is now open elsewhere, so this version wasn't saved here." }, 409);
+    if (fence && fence.generation < documents.leaseGeneration(fence.workspace)) return superseded();
+    let body: { collection?: unknown };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON." }, 400); }
+    if (typeof body?.collection !== "string" || !/^[0-9a-f-]{36}$/.test(body.collection)) return json({ error: "That isn't a collection." }, 400);
+    try { return json(saveCollectionVersion(collections, documents, database, body.collection, fence)); }
+    catch (error) {
+      if (error instanceof SupersededSave) return superseded();
+      if (error instanceof LibraryError) return json({ error: error.message }, error.status);
+      hostFailure("library", "collection_version_failed", "A collection version couldn't be saved.", error);
+      return json({ error: "The version couldn't be saved right now. Your working copy is safe." }, 500);
+    }
+  };
+}

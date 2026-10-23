@@ -4,9 +4,9 @@
  */
 import { expect, test } from "bun:test";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { parseUIPreferences } from "../src/ui-preferences";
-import { encodeWorkspaceAt, WORKSPACE_LEVELS } from "../src/workspace-budget";
-import { parseWorkspace } from "../src/workspace-state";
+import { parseUIPreferences } from "../src/app/ui-preferences";
+import { encodeWorkspaceAt, WORKSPACE_LEVELS } from "../src/app/workspace/workspace-budget";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { restore } from "./fixtures/workspace-observable";
 import { looseWorkspaceV1, smallWorkspaceV1, withPreferences } from "./fixtures/workspace-v1-fixtures";
 

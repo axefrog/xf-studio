@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { HISTORY_START_ID, type HistorySnapshot } from "../src/authoring-history";
-import { shortcutLabel } from "../src/input-bindings";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
+import { HISTORY_START_ID, type HistorySnapshot } from "../src/platform/api/history";
+import { shortcutLabel } from "../src/app/input-bindings";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle, historyRows, historySummary, HISTORY_TRIMMED_NOTE, jumpable,
   jumpAnnouncement } from "../src/studio-ui/history-model";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
@@ -42,10 +43,11 @@ test("history wording: summary, announcements and Undo/Redo titles that name the
   expect(jumpAnnouncement(rows[1])).toBe("Went back to: Colour");
   expect(jumpAnnouncement(rows[3])).toBe("Redid up to: Opacity");
   const redo = shortcutLabel("shell.redo"), undo = shortcutLabel("shell.undo");
-  // Each title also says what the header's Undo covers: the makeup, not the Character panel's changes (UI-81).
+  // Each title also says what the header's Undo covers: with nothing named, what was last edited (profiles design §3.7).
   expect(historyCommandTitle("redo", { available: true }, "Move point", redo)).toBe(`Redo: Move point (${redo})\n${HISTORY_SCOPE}`);
   expect(historyCommandTitle("undo", { available: true }, "Opacity", undo)).toBe(`Undo: Opacity (${undo})\n${HISTORY_SCOPE}`);
-  expect(HISTORY_SCOPE).toContain("Character panel");
+  expect(HISTORY_SCOPE).toBe("Undo follows what you last edited: a preset or a V. View and lighting changes have their own Undo.");
+  expect(historyCommandTitle("undo", { available: true }, "Hair length", undo, "Hair Lab")).toBe(`Undo: Hair length (${undo})\nChanges to Hair Lab.`);
   // Unavailable commands still show their shortcut, so Redo is discoverable before it can be used.
   expect(historyCommandTitle("redo", { available: false, reason: "There is no undone change to redo." }, undefined, redo))
     .toBe(`Redo (${redo}) — There is no undone change to redo.\n${HISTORY_SCOPE}`);
@@ -65,8 +67,8 @@ test("history.jumpTo is a catalogued workspace action and the History panel is r
     expect(at.group.panels).toContain("layers");
     expect(at.group.active).toBe("layers");
   }
-  const catalogue = readFileSync(resolve(root, "../../../research/authoring/ui-action-catalogue.md"), "utf8");
-  for (const name of ["history.jumpTo", "historyTimeline()"]) expect(catalogue).toContain(name);
+  // Registered by the history family (the registry is the action catalogue).
+  expect(STUDIO_REGISTRY.route("history.jumpTo")).toMatchObject({ ok: true, qualified: "history/history.jumpTo" });
   // The panel reaches the core only through the port: one typed action, read-only snapshots.
   const panel = readFileSync(resolve(root, "src/studio-ui/panels/history.ts"), "utf8");
   expect(panel).toContain(`kind: "history.jumpTo"`);
@@ -74,4 +76,39 @@ test("history.jumpTo is a catalogued workspace action and the History panel is r
   // The shell's view contribution binds it (views/panels.ts); the shell mounts every contributed panel.
   const factories = readFileSync(resolve(root, "src/studio-ui/views/panels.ts"), "utf8");
   expect(factories).toContain("history: historyPanel");
+});
+
+test("the History panel names whose history it lists in its visible summary (H6); with nothing named it says what comes next", async () => {
+  const { historyHeading } = await import("../src/studio-ui/history-model");
+  expect(historyHeading("Smoky", timeline({ steps: timeline().steps.slice(0, 1), current: 0, redoCount: 0 })))
+    .toEqual({ name: "Smoky", count: "1 step", text: "Smoky · 1 step" });
+  expect(historyHeading("V · Valerie", timeline()).text).toBe("V · Valerie · 3 steps · 1 undone");
+  expect(historyHeading("Smoky", timeline({ steps: [], current: -1, redoCount: 0 })).text).toBe("Smoky · no changes yet");
+  expect(historyHeading(undefined, timeline()).text).toBe("3 steps · 1 undone");
+  const { installLightDom, uninstallLightDom } = await import("./light-dom");
+  installLightDom();
+  try {
+    const { historyPanel } = await import("../src/studio-ui/panels/history");
+    let editing: string | undefined = "Smoky", label: string | undefined;
+    const port = { authoring: { capability: () => ({ available: true }), history: () => ({}) }, focus: { editing: () => editing ? { name: editing } : undefined } };
+    const rt = { port, anchors: { register() {} }, dispatch: () => true, feedback: { announce() {} } };
+    const panel = historyPanel(rt as never);
+    const element = panel.spec.element as unknown as import("./light-dom").LightElement;
+    const paint = (snapshot: HistorySnapshot, selected: string | null = "a") =>
+      panel.update({ history: { ...snapshot, ...(label ? { documentLabel: label } : {}) }, library: { draft: { selected } } } as never);
+    const summary = () => element.querySelector(".history-context")!;
+    paint(timeline({ steps: timeline().steps.slice(0, 1), current: 0, redoCount: 0 }));
+    expect(summary().textContent).toBe("Smoky · 1 step");
+    expect(summary().getAttribute("title")).toBe("Smoky · 1 step");
+    // After a Character edit the editing context is the V: the summary says so.
+    editing = undefined; label = "V · Valerie";
+    paint(timeline());
+    expect(summary().getAttribute("title")).toBe("V · Valerie · 3 steps · 1 undone");
+    // Nothing named and no preset selected: the empty state says what to do, in the one model (a preset or a V).
+    label = undefined;
+    paint(timeline({ steps: [], current: -1, redoCount: 0 }), null);
+    expect(summary().textContent).toBe("Nothing edited");
+    expect(element.querySelectorAll(".empty-title").filter(node => !node.parentNode || !(node.parentNode as { hidden?: boolean }).hidden).map(node => node.textContent))
+      .toEqual(["Select a preset or change your V"]);
+  } finally { uninstallLightDom(); }
 });

@@ -28,7 +28,7 @@
 // running "restore", and prints the --from label that continues after it; the report folder
 // (--out) collects every part's run in one manifest.json.
 //
-// Notes and asks are also shown to the player in the game (ui.message, under the bridge's status label),
+// Notes and asks are also shown to the player in the game (ui.message, on the bridge's status surface),
 // so the maintainer can follow the session without leaving the game: a note for 20 s, an ask until it is
 // answered (then the messages are cleared), plus a line when the run starts and ends. Best effort: a
 // bridge that isn't there, or a build without ui.message, changes nothing (the record says echoed: false).
@@ -268,7 +268,7 @@ export async function runScript(
       if (options.ask) {
         await untilAborted(options.ask(planned.text!, planned.label), stepSignal);
         if (askShown && !stepSignal?.aborted) {
-          await echo({ clear: true, clear_asks: true });
+          await echo({ clear: true });
           askShown = false;
         }
       } else {
@@ -344,7 +344,7 @@ export async function runScript(
     // An ask still on screen (interrupted while waiting, a crash, or a pause at an ask) is taken down
     // first; a paused run shows its own closing line below instead (RB-64).
     if (askShown) {
-      await echo({ clear: true, clear_asks: true });
+      await echo({ clear: true });
       askShown = false;
     }
     // Restore runs exactly once, after a finished, failed, interrupted or crashed run, and never

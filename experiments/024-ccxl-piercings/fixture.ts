@@ -17,8 +17,8 @@
 // vanilla banks do; nothing is redistributed. The creator side is two new rows per area (ears, nose) after the
 // vanilla Piercings row, joining the `face` and `character_customization` groups.
 import { createHash } from "node:crypto";
-import { vertexElements, type VertexElement, type WkJson } from "../../projects/xf-studio/authoring/src/eye-plate-cut";
-import { cname, componentId, HandleCounter, resourceRef } from "../../projects/xf-studio/authoring/src/package-resources";
+import { vertexElements, type VertexElement, type WkJson } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/plate/eye-plate-cut";
+import { cname, componentId, HandleCounter, resourceRef } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/package-resources";
 import { archiveXlText } from "../../projects/xf-studio/authoring/src/platform/api";
 
 // ---------------------------------------------------------------------------------------------------------------

@@ -6,15 +6,15 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { descriptorsFromUiState } from "../src/cco-model";
-import { CatalogueIndex, userFacing } from "../src/cc-catalogue";
-import { loadCreatorCatalogue } from "../src/cc-catalogue-host";
-import { type CharacterChoice, choicesOfPreset, deriveCharacter, presetOfChoices, recoverSave, savedDescriptorsOf } from "../src/character-context";
-import { readCcPreset, writeCcPreset } from "../src/cc-preset";
-import { catalogueCoverage } from "../src/cc-render-coverage";
-import { panelProjection } from "../src/cc-panel";
-import { openInstallation } from "../src/resolver-host";
-import { readSavedV } from "../src/save-reader";
+import { descriptorsFromUiState } from "../src/character/cco-model";
+import { CatalogueIndex, userFacing } from "../src/character/cc-catalogue";
+import { loadCreatorCatalogue } from "../src/character/host/cc-catalogue-host";
+import { type CharacterChoice, choicesOfPreset, deriveCharacter, presetOfChoices, recoverSave, savedDescriptorsOf } from "../src/character/character-context";
+import { readCcPreset, writeCcPreset } from "../src/character/cc-preset";
+import { catalogueCoverage } from "../src/character/cc-render-coverage";
+import { panelProjection } from "../src/character/cc-panel";
+import { openInstallation } from "../src/game/host/resolver-host";
+import { readSavedV } from "../src/saves/save-reader";
 import { oracleDescribe } from "./optional-oracles";
 
 const env = process.env;

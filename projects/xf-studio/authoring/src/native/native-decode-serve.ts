@@ -5,7 +5,7 @@
  * every outcome carries the id of the decode message it answers, so the parent can drop an answer that is not for the resource it
  * is waiting on.
  */
-import { depotHash } from "../depot-path";
+import { depotHash } from "../game/depot-path";
 import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
 import { decodeGeometryFromPool } from "./mesh-decode";

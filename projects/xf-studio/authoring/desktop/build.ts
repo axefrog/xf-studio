@@ -3,23 +3,30 @@ import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { canonicalPath, isWithin, isWithinReal, overlaps } from "../src/platform/api/path-containment";
+import { HOST_REAL_PATHS } from "../src/platform/export/host-real-paths";
 
 /** The host's file-system reads for the containment checks. */
-const HOST_PATHS = { exists: existsSync, realpath: realpathSync.native };
-import type { LocalSettings } from "../src/local-settings";
-import { eyePlateHeadOverride, type EyePlateTools } from "../src/eye-plate-service";
-import { eyePlatePrerequisite, masculineEyePlatePrerequisite } from "../src/eye-plate-prerequisite";
-import { expressionsGamePrerequisite } from "../src/expressions-game-prerequisite";
-import { runProcessTree } from "../src/process-tree";
-import { hostFailure } from "../src/diagnostics/host-log";
+const HOST_PATHS = HOST_REAL_PATHS;
+import type { LocalSettings } from "../src/setup/local-settings";
+import { eyePlateHeadOverride, type EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { eyePlatePrerequisite, masculineEyePlatePrerequisite } from "../src/legacy/eye-makeup/plate/host/eye-plate-prerequisite";
+import { expressionsGamePrerequisite } from "../src/animation/host/expressions-game-prerequisite";
+import { runProcessTree } from "../src/host/process-tree";
+import { hostFailure } from "../src/diagnostics/host/host-log";
 import type { FeatureExporterEntry } from "../src/platform/api";
 import type { HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
-import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/wolvenkit-cli";
+import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/host/wolvenkit-cli";
 
-/** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. */
-export const BUILD_TOOLS_SCHEMA = "xfs/desktop-build-tools-2";
-export const builderEntry = "app/tools/build.js";
+/**
+ * The packaged tools (src/legacy/eye-makeup/export/host/packaged-build-tools.ts): the TypeScript builder, one Bun bundle of tools/build_collection_package.ts (no
+ * Python), and XF Studio's texture compressor (native/bcn over DirectXTex, PIPE-130). The compressor is optional: without it (or when it
+ * won't load) the builder imports textures with WolvenKit and says so in the manifest's `resourceWriters`. When the manifest lists it, it
+ * must be the listed bytes (checked here before a Build, and again by the builder before it loads it).
+ */
+export { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/legacy/eye-makeup/export/host/packaged-build-tools";
+import { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/legacy/eye-makeup/export/host/packaged-build-tools";
 const toolNames = [builderEntry];
+const optionalToolNames = [bcnEntry];
 const file = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
 const directory = (path: string) => { try { return statSync(path).isDirectory(); } catch { return false; } };
 const signature = (path: string, expected: string) => {
@@ -36,11 +43,34 @@ export type BunProbe = (path: string) => string | null;
 /** Shown while the first tool check runs in the background; readiness requests never wait for it. It promises nothing (DESK-15). */
 export const PROBE_PENDING = "XF Studio is checking its build tools…";
 /**
- * The Bun probe's answer per file stamp (path, size, modification time), kept until the file changes: a failure too (DESK-15), since
- * XF Studio's own runtime doesn't mend itself, and re-checking every few seconds only made Build's reason flicker between checking and
- * the failure.
+ * The Bun probe's definite answers per file stamp (path, size, modification time), kept until the file changes: a pass, or a failure
+ * from a runtime that ran and answered wrongly (DESK-15), since XF Studio's own runtime doesn't mend itself. A check that couldn't finish
+ * (a timeout, as on a slow first start while antivirus scans the file, or a start that failed) is not an answer: it is kept apart, shown
+ * as the last reason while the check is retried in the background, at most every `BUN_RETRY_MS` (DESK-17).
  */
 const bunCache = new Map<string, string | null>();
+const bunTransient = new Map<string, { issue: string; at: number }>();
+export const BUN_RETRY_MS = 10_000;
+const BUN_BROKEN = "XF Studio's build runtime cannot run the packaged build tools. Reinstall XF Studio to repair it.";
+const BUN_UNANSWERED = "XF Studio's build runtime didn't answer its check in time. XF Studio keeps checking in the background.";
+const BUN_UNSTARTED = "XF Studio's build runtime couldn't be started for its check. XF Studio keeps checking in the background.";
+/**
+ * Start failures that say the file isn't a program (Bun on Windows reports EUNKNOWN for one); other start failures (a file locked
+ * while it is scanned, too many processes) may pass on a retry.
+ */
+const NOT_A_PROGRAM = new Set(["ENOEXEC", "EUNKNOWN", "EFTYPE", ...process.platform === "win32" ? [] : ["EACCES"]]);
+/** Judge one run of the probe: a definite answer (null or the failure) or a transient one that doesn't count. */
+function judgeBunProbe(run: { exitCode: number | null; stdout: string; timedOut: boolean; error?: Error }): { issue: string | null; definite: boolean } {
+  if (run.timedOut) return { issue: BUN_UNANSWERED, definite: false };
+  if (run.error && NOT_A_PROGRAM.has((run.error as NodeJS.ErrnoException).code ?? "")) return { issue: BUN_BROKEN, definite: true };
+  if (run.error || run.exitCode === null) return { issue: BUN_UNSTARTED, definite: false };
+  return { issue: run.exitCode === 0 && /^XFS_BUN_OK:\d+\.\d+\.\d+/.test(run.stdout) ? null : BUN_BROKEN, definite: true };
+}
+function keepBunAnswer(key: string, answer: { issue: string | null; definite: boolean }): string | null {
+  if (answer.definite) { bunCache.set(key, answer.issue); bunTransient.delete(key); }
+  else bunTransient.set(key, { issue: answer.issue!, at: Date.now() });
+  return answer.issue;
+}
 /** Execute code, rather than trusting a filename or the Electrobun main path. */
 export function probeBun(path: string): string | null {
   try {
@@ -49,10 +79,8 @@ export function probeBun(path: string): string | null {
     if (bunCache.has(key)) return bunCache.get(key) ?? null;
     const run = spawnSync(path, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"],
       { encoding: "utf8", timeout: 5000, windowsHide: true, maxBuffer: 4096 });
-    const issue = run.error || run.status !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(run.stdout || "")
-      ? "XF Studio's build runtime cannot run the packaged build tools. Reinstall XF Studio to repair it." : null;
-    bunCache.set(key, issue);
-    return issue;
+    const timedOut = (run.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
+    return keepBunAnswer(key, judgeBunProbe({ exitCode: run.status, stdout: run.stdout || "", timedOut, error: timedOut ? undefined : run.error }));
   } catch { return "XF Studio's build runtime could not be checked. Restart XF Studio and try again."; }
 }
 /** Run the CLI's version and command checks through the shared WolvenKit runner; a failure is retried after a short interval. */
@@ -76,20 +104,19 @@ export function useBuilderBun(path: string | null) { builderBunOverride = path; 
 export const builderBun = () => builderBunOverride ?? process.execPath;
 
 /** The same checks as probeWolvenKit/probeBun without blocking the event loop; one shared run per tool. */
-export async function warmBuildProbes(settings: Pick<LocalSettings, "wolvenKitCli">, bun = builderBun()): Promise<void> {
+export async function warmBuildProbes(settings: Pick<LocalSettings, "wolvenKitCli">, bun = builderBun(),
+  run: typeof runProcessTree = runProcessTree): Promise<void> {
   const jobs: Promise<void>[] = [];
   // WolvenKit is checked by the shared runner, which keeps one cache and one run per file.
   if (settings.wolvenKitCli && file(settings.wolvenKitCli)) jobs.push(probeWolvenKitCliAsync(settings.wolvenKitCli).then(() => {}));
   if (file(bun)) {
     const key = stampKey(bun);
     if (!bunCache.has(key)) jobs.push(once(`bun:${key}`, async () => {
-      let issue: string | null = null;
       try {
         // The shared process runner stops the whole tree when the probe overruns.
-        const result = await runProcessTree(bun, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"], { timeoutMs: 5000, keep: 4096 });
-        if (result.exitCode !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(result.stdout)) issue = "XF Studio's build runtime cannot run the packaged build tools. Reinstall XF Studio to repair it.";
-      } catch { issue = "XF Studio's build runtime could not be checked. Restart XF Studio and try again."; }
-      bunCache.set(key, issue);
+        const result = await run(bun, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"], { timeoutMs: 5000, keep: 4096 });
+        keepBunAnswer(key, judgeBunProbe({ exitCode: result.exitCode, stdout: result.stdout, timedOut: result.stopped === "timeout", error: result.error }));
+      } catch { keepBunAnswer(key, { issue: BUN_UNSTARTED, definite: false }); }
     }));
   }
   await Promise.all(jobs);
@@ -111,11 +138,13 @@ export const cachedWolvenKitProbe: WolvenKitProbe = path => {
   void probeWolvenKitCliAsync(path).then(result => { if (result.ok) wolvenKitFailures.delete(key); else wolvenKitFailures.set(key, result.issue); }, () => {});
   return wolvenKitFailures.get(key) ?? PROBE_PENDING;
 };
+/** The Bun probe for readiness: a definite answer, else the last transient reason (or checking) while a check runs in the background. */
 export const cachedBunProbe: BunProbe = path => {
   const key = stampKey(path);
   if (bunCache.has(key)) return bunCache.get(key) ?? null;
-  void warmBuildProbes({ wolvenKitCli: null }, path).catch(() => {});
-  return PROBE_PENDING;
+  const last = bunTransient.get(key);
+  if (!last || Date.now() - last.at >= BUN_RETRY_MS) void warmBuildProbes({ wolvenKitCli: null }, path).catch(() => {});
+  return last?.issue ?? PROBE_PENDING;
 };
 const toolHashes = new Map<string, string>();
 /** The packaged tool's SHA-256, recomputed only when its size or modification time changes. */
@@ -129,10 +158,13 @@ function toolHash(path: string): string {
 function privatePath(root: string, target: string): void {
   const base = resolve(root), path = resolve(target);
   if (!isWithin(path, base) || lstatSync(base).isSymbolicLink() || !isWithinReal(path, base, HOST_PATHS)) throw Error("Private build root uses a linked path.");
+  // Every component is lstat'ed, so a link whose target is gone is refused too (PIPE-136).
   let current = base;
   for (const part of path.slice(base.length).split(sep).filter(Boolean)) {
     current = resolve(current, part);
-    if (existsSync(current) && lstatSync(current).isSymbolicLink()) throw Error("Private build root uses a linked path.");
+    let linked = false;
+    try { linked = lstatSync(current).isSymbolicLink(); } catch { break; } // Not there: nor is anything below it.
+    if (linked) throw Error("Private build root uses a linked path.");
   }
 }
 
@@ -169,11 +201,13 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
   wolvenKitProbe: WolvenKitProbe = probeWolvenKit, bunProbe: BunProbe = probeBun): string | null {
   try {
     const manifest = JSON.parse(readFileSync(resolve(toolsRoot, "manifest.json"), "utf8"));
-    if (manifest.schema !== BUILD_TOOLS_SCHEMA || !manifest.files ||
-      JSON.stringify(Object.keys(manifest.files).sort()) !== JSON.stringify([...toolNames].sort()))
+    const listed = manifest.schema === BUILD_TOOLS_SCHEMA && manifest.files && typeof manifest.files === "object" ? Object.keys(manifest.files) : null;
+    if (!listed || toolNames.some(name => !listed.includes(name)) || listed.some(name => !toolNames.includes(name) && !optionalToolNames.includes(name)))
       return "The packaged build tools are incomplete.";
-    for (const name of toolNames) {
+    for (const name of listed) {
       const path = resolve(toolsRoot, name);
+      // A listed optional tool that is gone only costs speed: the builder falls back to WolvenKit for its files.
+      if (optionalToolNames.includes(name) && !existsSync(path)) continue;
       if (!file(path) || !isWithinReal(path, toolsRoot, HOST_PATHS) ||
         toolHash(path) !== manifest.files[name])
         return "The packaged build tools failed integrity checks.";

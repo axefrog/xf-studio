@@ -10,14 +10,14 @@ Evidence grades as in the knowledge base: **[source]** compiled programs or tool
 
 ## What was built
 
-- **The route** ([`glitter-route.ts`](../../projects/xf-studio/authoring/src/glitter-route.ts)): knowledge §3's primary route. One `@glitter` `mesh_decal` entry with the plate window's UV transform, `NormalAlphaTex` flake mask, `UseNormalAlphaTex` 1 and `NormalsBlendingMode` 1. Five 4096 × 1024 maps (diffuse, roughness, metalness, normal, flakes) carry full 13-level non-square chains, drawn per level as nested flake mips.
-- **Glitter flakes 2** (optional fields of a region's flakes; [`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/export-diagnostics.ts)):
+- **The route** ([`glitter-route.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/glitter-route.ts)): knowledge §3's primary route. One `@glitter` `mesh_decal` entry with the plate window's UV transform, `NormalAlphaTex` flake mask, `UseNormalAlphaTex` 1 and `NormalsBlendingMode` 1. Five 4096 × 1024 maps (diffuse, roughness, metalness, normal, flakes) carry full 13-level non-square chains, drawn per level as nested flake mips.
+- **Glitter flakes 2** (optional fields of a region's flakes; [`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/export-diagnostics.ts)):
   - a tilt floor (`tiltMinDeg`);
   - per-flake roughness and metalness ranges (`roughnessMax`, `metalnessMin`);
   - a large population (`largeShare`, `largeSizeMm`);
   - a cluster envelope (`clusterMm`, `clusterFloor`).
 
-  [`glitter-studio-flakes.ts`](../../projects/xf-studio/authoring/src/glitter-studio-flakes.ts) derives them from a Studio glint layer's settings. A region without them draws exactly board 1's catalogue.
+  [`glitter-studio-flakes.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/glitter-studio-flakes.ts) derives them from a Studio glint layer's settings. A region without them draws exactly board 1's catalogue.
 - **The accent** (knowledge §4): a second plate render chunk at the same 0.4 mm lift, bound to an `@accent_<preset>` entry on `mesh_decal_emissive_subsurface.mt`. It carries a 2048² head-UV mask of the lowest-key 8 % of the left lid's flakes at `EmissiveEV` 1. Every other preset binds that chunk to `xfs_hidden`.
 - **The way in:** the diagnostic `glitter` knob in `xfs/export-diagnostics-1`, on presets whose layers are flat-finish pigment (here Satin patches).
   - Each region names one pigment layer and gives its flake statistics, or mirrors another region's flakes. `mips: "box"` gives a region plain BOX mips below level 0.

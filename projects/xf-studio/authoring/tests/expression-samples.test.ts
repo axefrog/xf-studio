@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expressionPart } from "../src/features/expressions";
 import { controlGroup, isDirectionPair, mirrorName, pairKey } from "../src/engines/facial-rig/vocabulary";
-import { EXPRESSION_SAMPLES, SAMPLE_FILES } from "../src/expression-samples";
+import { EXPRESSION_SAMPLES, SAMPLE_FILES } from "../src/animation/expression-samples";
 
 const folder = resolve(import.meta.dir, "..", "data", "expression-samples");
 const files = readdirSync(folder).filter(name => name.endsWith(".json")).sort();

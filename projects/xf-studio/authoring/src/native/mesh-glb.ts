@@ -26,7 +26,7 @@
  * The arithmetic is single precision at every step, so the vertex data is bit-identical to WolvenKit's; the joints' transforms and
  * inverse bind matrices are computed in double precision and differ from WolvenKit's by float rounding (oracle: §12.4).
  */
-import { GlbWriter, type GltfJson } from "../glb";
+import { GlbWriter, type GltfJson } from "../formats/glb";
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "./native-errors";
 import { arrayOf, decodeChunk, DEFAULT_MESH_LIMITS, fieldOf, meshBlob, type DecodedChunk, type MeshBlob, type MeshChunk, type MeshLimits, nameText, objectAt, vector4 } from "./mesh-blob";
 import { chunkDeltas, morphTargetLayout } from "./morph-blob";

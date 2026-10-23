@@ -3,8 +3,8 @@
 // installation's creator data. Nothing here imports the piece generator's encoders; it re-reads the bytes itself and compares
 // them with the head's. Offline checks prove structure and additivity only, never game rendering.
 import { isDeepStrictEqual } from "node:util";
-import { type CcoOption, type CcoResource, mergeCustomizations, readCco } from "../../projects/xf-studio/authoring/src/cco-model";
-import type { XlFix } from "../../projects/xf-studio/authoring/src/archivexl-config";
+import { type CcoOption, type CcoResource, mergeCustomizations, readCco } from "../../projects/xf-studio/authoring/src/character/cco-model";
+import type { XlFix } from "../../projects/xf-studio/authoring/src/game/archivexl-config";
 import {
   CUSTOMIZATION, DEPOT, FINISHES, GROUPS, MATERIALS, MORPHS, NEUTRAL_DELTA_WORD, ROWS,
   meshPath, morphPath, plannedPaths, xlText, type SolvedPiece,

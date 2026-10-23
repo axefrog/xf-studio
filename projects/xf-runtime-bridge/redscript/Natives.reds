@@ -13,7 +13,7 @@ public static native func XFBridge_Kill(reason: String) -> Bool
 // The CET layer answers game.options.read's render options through these two (core/OptionsExchange.hpp).
 public static native func XFBridge_OptionsWanted() -> String
 public static native func XFBridge_OptionsReport(values: String) -> Bool
-// The CET layer draws ui.message's lines under the status label from this one (core/Messages.hpp).
+// The CET layer draws ui.message's lines under the CET line from this one (core/Messages.hpp).
 public static native func XFBridge_Messages() -> String
 // cc.open's pause-menu redirect asks the plugin what to do (core/Writes.hpp CreatorRedirect): "redirect",
 // "foreign", "expired", "refused", "withdrawn", "none", or "" when it can't say (the pause menu then opens).
@@ -39,3 +39,14 @@ public static native func XFBridge_Answer(id: Int32, choice: Int32, source: Stri
 public static native func XFBridge_Comment(text: String) -> Bool
 // The CET layer reports its overlay opening and closing (ui.state, the capture pre-check, the overlay host's yield rule).
 public static native func XFBridge_CetOverlay(open: Bool) -> Bool
+// Bridge 0.8 (the UI review): the ink panel reports the question it draws and whether it is on screen now, about five times a
+// second, so the CET label shows only the status and the answer keys instead of the question a third time.
+public static native func XFBridge_InkDrawn(id: Int32, shown: Bool) -> Bool
+// 0.8.4: the kill key chosen in the XF Runtime Bridge window (CET): action get, set (key: a chord such as Ctrl+Shift+End) or
+// reset; answers JSON with the key and what else may react to it. Saved to config.ini's [ui] kill_key.
+public static native func XFBridge_KillKey(action: String, key: String) -> String
+// Bridge 0.8.6: the panel inside photo mode's menu (XFRuntimeBridgePhotoPanel.reds). An event into the session's stream
+// (kind ink_tree, ink_pointer or ink_input; data a JSON object as text); and whether a mouse button is held now (its hover
+// guard: no hover is taken from photo mode's camera mid-drag).
+public static native func XFBridge_InkEvent(kind: String, text: String, data: String) -> Bool
+public static native func XFBridge_MouseHeld() -> Bool

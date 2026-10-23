@@ -2,7 +2,7 @@
 // remembered as the element at the container's top edge plus its clip offset, and restored once the content is there, over a light DOM
 // with a small stacking layout (light-dom.ts has no layout of its own).
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { parseUIPreferences, UIPreferenceActions, type ScrollAnchor } from "../src/ui-preferences";
+import { parseUIPreferences, UIPreferenceActions, type ScrollAnchor } from "../src/app/ui-preferences";
 import { installLightDom, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());

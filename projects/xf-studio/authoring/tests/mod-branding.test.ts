@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { EYE_MAKEUP_MOD, isEyeMakeupModFolder } from "../src/mod-branding";
-import { planCollection } from "../src/preset-collection";
-import { createModInstallTransport } from "../src/mod-install-transport";
-import { defaultLocalSettings } from "../src/local-settings";
+import { EYE_MAKEUP_MOD, isEyeMakeupModFolder } from "../src/legacy/eye-makeup/mod-branding";
+import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
+import { createModInstallTransport } from "../src/installation/host/mod-install-transport";
+import { defaultLocalSettings } from "../src/setup/local-settings";
 import { preflightPackageCollection } from "./fixtures/eye-exporter";
 import { sourceFiles, sourceText } from "./fixtures/source-files";
 
@@ -65,7 +65,7 @@ test("the builders, service and verifiers read branding from the plan instead of
     build: readFileSync(resolve(hq, "experiments/005-preset-collection/build.py"), "utf8"),
     verify: readFileSync(resolve(hq, "experiments/005-preset-collection/verify.py"), "utf8"),
     shimmer: readFileSync(resolve(hq, "experiments/011-shimmer-plate-comparison/build.py"), "utf8"),
-    resources: readFileSync(resolve(authoring, "src/package-resources.ts"), "utf8"),
+    resources: readFileSync(resolve(authoring, "src/legacy/eye-makeup/export/package-resources.ts"), "utf8"),
     info: readFileSync(resolve(authoring, "src/features/eye-makeup/export-info.ts"), "utf8"),
     builder: readFileSync(resolve(authoring, "src/platform/export/product-builder.ts"), "utf8"),
   };

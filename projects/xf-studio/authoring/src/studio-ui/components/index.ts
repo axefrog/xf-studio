@@ -31,11 +31,12 @@ export { blockSection, codeBlock, PageHeader, propertyList, stack, type Gap, typ
 export { SplitView, type SplitViewOptions } from "./split-view";
 export { Splitter, type SplitterOptions } from "./splitter";
 export { chooseHeight, clampHeight, panelLimit, SizeBar, SIZE_BAR_STEP, SIZE_BAR_TITLE, rowWords, snapHeight, type SizeBarOptions } from "./size-bar";
-export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, treeHeightWords, type TreeBadge, type TreeGroupData, type TreeItemRef, type TreeRowData, type TreeViewOptions } from "./tree-view";
+export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, treeHeightWords, type TreeBadge, type TreeGroupData, type TreeItemRef, type TreeNodeData, type TreeRowData, type TreeViewOptions, type TreeViewState } from "./tree-view";
 export { progressBar, type ProgressBar } from "./progress";
 export { attachSwatchCard, ChoiceList, choiceItem, swatchCard, type ChoiceListOptions, type ChoiceOption } from "./choice-list";
 export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
 export { RecordList, recordTime, type RecordListOptions, type RecordRow } from "./record-list";
+export { ConflictNotice, type ConflictKeep, type ConflictNoticeOptions, type ConflictNoticeState } from "./conflict-notice";
 // Feature-specific: mod packaging (the Mod package and Expression sets panels).
 export { modLine, type ModLineOptions } from "./mod-line";
 export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, SwatchCard, type SwatchCardOptions, type SwatchSample } from "./swatch-card";

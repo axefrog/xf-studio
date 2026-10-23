@@ -1,5 +1,5 @@
-import type { FolderField } from "../../local-setup-actions";
-import type { LocalSetupFields } from "../../local-settings-server";
+import type { FolderField } from "../../setup/local-setup-actions";
+import type { LocalSetupFields } from "../../setup/local-settings";
 import { applyCapability, button, note, Segmented } from "../controls";
 import { ChoiceList, FolderSetting, type FolderChoice, type FolderOutcome } from "../components";
 import { h, setAttr, setText, setValue, uid } from "../dom";

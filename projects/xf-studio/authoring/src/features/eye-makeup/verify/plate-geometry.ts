@@ -1,6 +1,6 @@
 // Independent check of the packaged eye plate's geometry against the plate input. Pure.
 //
-// Restated on purpose instead of imported from the builder (src/plate-lift.ts): the packaged plate
+// Restated on purpose instead of imported from the builder (src/legacy/eye-makeup/export/plate-lift.ts): the packaged plate
 // must be the input plate with one render chunk per planned lift, where each chunk's positions are
 // the input positions moved `lift` along the input's own shading normals, and each morph row's
 // position delta gains lift·(normalize(n + Δn) − n). Everything else must be the input's bytes:

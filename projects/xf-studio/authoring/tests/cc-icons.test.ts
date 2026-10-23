@@ -1,6 +1,6 @@
 // The creator's choice icons (cc-icons.ts) on a synthetic atlas: which texture and parts are read, and a sheet cut from known rectangles.
 import { describe, expect, test } from "bun:test";
-import { buildSheet, iconTarget, readAtlas } from "../src/cc-icons";
+import { buildSheet, iconTarget, readAtlas } from "../src/character/cc-icons";
 
 const res = (hash: string) => ({ DepotPath: { $type: "ResourcePath", $storage: "uint64", $value: hash }, Flags: "Soft" });
 const part = (name: string, left: number, top: number, right: number, bottom: number) => ({ $type: "inkTextureAtlasMapper", partName: { $type: "CName", $storage: "string", $value: name },

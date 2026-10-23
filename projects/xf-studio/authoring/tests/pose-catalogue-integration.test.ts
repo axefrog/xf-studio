@@ -4,8 +4,8 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { installations } from "../src/installation-registry";
-import { loadPoseCatalogue, PoseCatalogueHost } from "../src/pose-catalogue-host";
+import { installations } from "../src/game/host/installation-registry";
+import { loadPoseCatalogue, PoseCatalogueHost } from "../src/animation/host/pose-catalogue-host";
 import { oracleDescribe } from "./optional-oracles";
 
 const env = process.env;

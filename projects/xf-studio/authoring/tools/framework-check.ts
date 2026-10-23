@@ -4,10 +4,10 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkFrameworkVersions, frameworkModNames } from "../src/framework-versions";
-import { createWindowsDetectionHost, readConfiguredMo2Instance } from "../src/install-detection-host";
-import { planMo2Placement } from "../src/mo2-placement";
-import { EYE_MAKEUP_MOD, eyeMakeupRelatedEntries } from "../src/mod-branding";
+import { checkFrameworkVersions, frameworkModNames } from "../src/installation/framework-versions";
+import { createWindowsDetectionHost, readConfiguredMo2Instance } from "../src/installation/host/install-detection-host";
+import { planMo2Placement } from "../src/installation/mo2-placement";
+import { EYE_MAKEUP_MOD, eyeMakeupRelatedEntries } from "../src/legacy/eye-makeup/mod-branding";
 
 function usage(): never {
   throw Error("Usage: bun tools/framework-check.ts --game-root <absolute> [--mo2-root <absolute> --profile <name> ...]");

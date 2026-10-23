@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
-import { createUVEditor } from "../src/uv-editor";
+import { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
-import { defaultUVView, panUVView, parseUVView, pixelToUV, uvAspect, uvRegion, uvToPixel, zoomUVView } from "../src/uv-view";
+import { defaultUVView, panUVView, parseUVView, pixelToUV, uvAspect, uvRegion, uvToPixel, zoomUVView } from "../src/legacy/eye-makeup/uv-view";
 import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 test("UV navigation preserves anchor/aspect, round trips and stays inside persisted view bounds", () => {

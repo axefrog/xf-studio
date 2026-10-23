@@ -7,8 +7,10 @@
 // as the teleportation facility and Codeware's spawn orientation take it [hypothesis until the first spawn is seen: the
 // test card's first step checks that the heads face the camera].
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 export const SHOWROOM_SCHEMA = "xfs/showroom-package-1";
 export type Vec3 = [number, number, number];
@@ -50,6 +52,141 @@ export const planError = (code: string, message: string) => new PlanError(code, 
 const depot = (path: string) => path.replaceAll("/", "\\");
 const isVec = (v: unknown): v is Vec3 => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number" && Number.isFinite(n));
 
+/**
+ * 0.8.3: the folders that may hold XF Finish Showroom builds on this machine: XFS_SHOWROOM_DIST (one folder, or several
+ * separated by semicolons), this checkout's projects/xf-studio/dist, and the primary checkout's (session 10: the tools ran
+ * from a worktree, whose dist is empty, while the builds sat in the primary checkout). Existing folders only, each once.
+ */
+export function showroomDists(): string[] {
+  const own = resolve(import.meta.dir, "..", "..", "..", "xf-studio", "dist");
+  const out = (process.env.XFS_SHOWROOM_DIST ?? "").split(";").map((d) => d.trim()).filter(Boolean).map((d) => resolve(d));
+  out.push(own);
+  try {
+    const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: import.meta.dir, encoding: "utf8", windowsHide: true });
+    const dir = common.status === 0 ? common.stdout.trim() : "";
+    if (dir) out.push(resolve(dirname(dir), "projects", "xf-studio", "dist"));
+  } catch {
+    // no git: this checkout's dist only
+  }
+  return [...new Set(out)].filter((d) => existsSync(d));
+}
+
+/**
+ * 0.8.2: XF Finish Showroom's builds on this machine, newest first: each folder of the given dist folders (0.8.3: by default
+ * showroomDists()) holding a showroom manifest, with its archive's name and when it was built. Unreadable folders are
+ * skipped.
+ */
+export function showroomBuilds(distDirs: string | readonly string[] = showroomDists()): { manifest: string; archive: string; builtMs: number }[] {
+  const out: { manifest: string; archive: string; builtMs: number }[] = [];
+  for (const distDir of typeof distDirs === "string" ? [distDirs] : distDirs) out.push(...buildsIn(distDir));
+  return out.sort((a, b) => b.builtMs - a.builtMs);
+}
+
+function buildsIn(distDir: string): { manifest: string; archive: string; builtMs: number }[] {
+  if (!existsSync(distDir)) return [];
+  const out: { manifest: string; archive: string; builtMs: number }[] = [];
+  for (const name of readdirSync(distDir)) {
+    if (!name.startsWith("xfs_showroom_")) continue;
+    const manifest = join(distDir, name, "manifest.json");
+    try {
+      const value = JSON.parse(readFileSync(manifest, "utf8").replace(/^\uFEFF/, ""));
+      if (value?.schema !== SHOWROOM_SCHEMA || typeof value.archive !== "string" || !/^xfs_showroom_[0-9a-f]{32}$/.test(value.archive)) continue;
+      out.push({ manifest, archive: value.archive, builtMs: statSync(manifest).mtimeMs });
+    } catch {
+      // not a readable build
+    }
+  }
+  return out;
+}
+
+/** A staged showroom archive as the bridge's showroom.staged reports it (the game's own archive/pc/mod). */
+export type StagedArchive = { archive: string; sha256?: string | null; bytes?: number; manifest?: unknown; manifest_error?: string };
+export type ResolvedShowroom = { archive: string; showroom: Showroom; by: "shipped_manifest" | "matched_build"; manifest?: string };
+
+/** A shipped manifest's record of its own archive (its file list's archive/pc/mod/<archive>.archive), or null. */
+function shippedRecord(manifest: unknown, archive: string): { sha256: string; bytes: number } | null {
+  const files = (manifest as { files?: unknown }).files;
+  if (!Array.isArray(files)) return null;
+  const record = files.find((f) => f && typeof f === "object" && (f as { path?: unknown }).path === `archive/pc/mod/${archive}.archive`) as { sha256?: unknown; bytes?: unknown } | undefined;
+  return record && typeof record.sha256 === "string" && typeof record.bytes === "number" ? { sha256: record.sha256, bytes: record.bytes } : null;
+}
+
+/** A file's SHA-256 (lowercase hex), or null when it can't be read. */
+export function sha256File(path: string): string | null {
+  try {
+    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 0.8.3 (session 10's G1): each archive the game sees, resolved to its showroom manifest: the one a self-describing build
+ * ships inside the mod (showroom.staged's manifest), else the build on this machine whose archive is byte for byte the
+ * staged one (same SHA-256), newest first. What can't be resolved is answered with the reason, never guessed: a build of
+ * the same archive name with other bytes is another compile.
+ */
+export function resolveStaged(staged: readonly StagedArchive[], builds: ReturnType<typeof showroomBuilds>, hash: (path: string) => string | null = sha256File): {
+  resolved: ResolvedShowroom[];
+  unresolved: { archive: string; why: string }[];
+} {
+  const resolved: ResolvedShowroom[] = [];
+  const unresolved: { archive: string; why: string }[] = [];
+  for (const entry of staged) {
+    // 0.8.3 (the review): a shipped manifest counts only when it describes these very bytes: its file list's record of the
+    // archive has the staged archive's SHA-256 and size (an archive replaced under an older sidecar keeps its name). Otherwise
+    // this machine's builds are tried as for a build without one.
+    let shippedWhy = "";
+    if (entry.manifest && typeof entry.manifest === "object") {
+      const record = shippedRecord(entry.manifest, entry.archive);
+      if (!entry.sha256) shippedWhy = "the game couldn't hash the staged archive to check the manifest it ships";
+      else if (!record) shippedWhy = "the manifest it ships records no hash for its archive";
+      else if (record.sha256 !== entry.sha256 || (typeof entry.bytes === "number" && record.bytes !== entry.bytes)) shippedWhy = "the manifest it ships describes another build of the archive";
+      else {
+        try {
+          resolved.push({ archive: entry.archive, showroom: readShowroomValue(entry.manifest, `${entry.archive}.showroom.json (shipped in the staged mod)`), by: "shipped_manifest" });
+          continue;
+        } catch (error) {
+          shippedWhy = `the manifest it ships is unusable: ${(error as Error).message}`;
+        }
+      }
+    }
+    const same = builds.filter((b) => b.archive === entry.archive);
+    const match = entry.sha256 ? same.find((b) => hash(join(dirname(b.manifest), "archive", "pc", "mod", `${b.archive}.archive`)) === entry.sha256) : undefined;
+    if (match) {
+      resolved.push({ archive: entry.archive, showroom: readShowroom(match.manifest), by: "matched_build", manifest: match.manifest });
+    } else {
+      const local = !same.length
+        ? "no build of it is on this machine"
+        : !entry.sha256
+          ? "the game couldn't hash the staged archive to compare it with this machine's builds"
+          : `it matches none of this machine's ${same.length} build(s) of it byte for byte (built again since it was staged?)`;
+      unresolved.push({ archive: entry.archive, why: shippedWhy ? `${shippedWhy}, and ${local}` : `the staged mod ships no manifest, and ${local}` });
+    }
+  }
+  return { resolved, unresolved };
+}
+
+/**
+ * 0.8.2 (session 9: the card said "showroom_spawn {manifest}" but named no manifest): with no manifest given, the newest build
+ * of each showroom archive on this machine is a candidate, the game says which archives it loaded, and the newest loaded
+ * one is used. Answers the chosen build and why; refuses plainly when none is built or none is staged.
+ */
+export function chooseStagedShowroom(builds: ReturnType<typeof showroomBuilds>, loaded: Record<string, boolean>, distDir?: string): { manifest: string; archive: string; also_staged: string[] } {
+  if (!builds.length) {
+    throw planError("showroom_manifest_missing", `No XF Finish Showroom build was found${distDir ? ` in ${distDir}` : ""}. Build one (projects/xf-studio/authoring/tools/build_showroom_package.ts), stage it, or give manifest: the build's folder or its manifest.json.`);
+  }
+  const newestPerArchive = builds.filter((b, i) => builds.findIndex((o) => o.archive === b.archive) === i);
+  const staged = newestPerArchive.filter((b) => loaded[b.archive] === true);
+  if (!staged.length) {
+    throw planError(
+      "showroom_not_staged",
+      `None of this machine's XF Finish Showroom builds is loaded in the game (${newestPerArchive.map((b) => b.archive).join(", ")}). Stage one in the test profile and restart the game, or give manifest.`,
+    );
+  }
+  return { manifest: staged[0]!.manifest, archive: staged[0]!.archive, also_staged: staged.slice(1).map((b) => b.archive) };
+}
+
 /** Reads a showroom build's manifest (the file, or the build folder holding it) and checks what the bridge relies on. */
 export function readShowroom(path: string): Showroom {
   const file = existsSync(path) && statSync(path).isDirectory() ? join(path, "manifest.json") : path;
@@ -60,6 +197,11 @@ export function readShowroom(path: string): Showroom {
   } catch {
     throw planError("showroom_manifest_bad", `The showroom manifest at ${file} isn't JSON.`);
   }
+  return readShowroomValue(value, file);
+}
+
+/** 0.8.3: checks a showroom manifest already read (a file's, or one a staged mod ships); file names where it came from. */
+export function readShowroomValue(value: any, file: string): Showroom {
   const bad = (what: string) => planError("showroom_manifest_bad", `The showroom manifest at ${file} ${what}; build the showroom again.`);
   if (value?.schema !== SHOWROOM_SCHEMA) throw bad(`is not ${SHOWROOM_SCHEMA}`);
   if (typeof value.archive !== "string" || !/^xfs_showroom_[0-9a-f]{32}$/.test(value.archive)) throw bad("names no showroom archive");

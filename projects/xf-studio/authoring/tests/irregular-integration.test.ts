@@ -3,15 +3,15 @@ import * as THREE from "three";
 import {defaultFlakes,type FlakeMaps} from "../src/engines/layered-makeup/finish";
 import {defaultIrregularFlakes,defaultStudioIrregularFlakes} from "../src/engines/layered-makeup/flake-field";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
-import {assessPreviewQuality} from "../src/preview-quality";
-import { parseWorkspace } from "../src/workspace-state";
-import {parseCollection} from "../src/preset-collection";
-import {LookLibrary} from "../src/library-store";
+import {assessPreviewQuality} from "../src/legacy/eye-makeup/preview/preview-quality";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import {parseCollection} from "../src/legacy/eye-makeup/export/preset-collection";
+import {openTestLibrary} from "./fixtures/library-file";
 import { UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, raster, freshWorkspace, compileFlatPreset, EYE_RASTER_REGION } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { createMakeupStack } from "./fixtures/eye-region";
 
 test("recipe-7 opt-in is strict while recipe-6 glitter preserves its legacy model",()=>{
@@ -39,9 +39,9 @@ test("new settings survive workspace, collection and SQLite while game export st
   const collection=parseCollection({schema:"xfas/collection-1",id:crypto.randomUUID(),name:"Study",
     presets:[{id:crypto.randomUUID(),name:"Gold over purple",revision:1,recipe}]});
   expect(collection.presets[0].recipe.layers[0].flakes).toEqual(recipe.layers[0].flakes);
-  const db=new LookLibrary(":memory:");
+  const file=openTestLibrary(),db=file.looks;
   try {const saved=db.save({name:"Study",recipe});expect(db.get(saved.id).recipe.layers[0].flakes).toEqual(recipe.layers[0].flakes);}
-  finally {db.close();}
+  finally {file.close();}
   expect(()=>compileFlatPreset(recipe,32)).toThrow(UnsupportedMaterialError);
 });
 

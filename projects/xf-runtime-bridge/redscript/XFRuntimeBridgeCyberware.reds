@@ -178,7 +178,8 @@ public abstract class XFCyberware {
     out += ",\"chain\":" + XFJson.Str(chain) + ",\"active_item\":" + XFJson.Str(XFCyberware.Record(active));
     out += ",\"right_arm_slot\":" + XFCyberware.SlotJson(player, t"AttachmentSlots.RightArm") + ",\"weapon_right_slot\":" + XFCyberware.SlotJson(player, t"AttachmentSlots.WeaponRight");
     let blocked = StatusEffectSystem.ObjectHasStatusEffectWithTag(player, n"NoArmsCW");
-    out += ",\"no_arms_cw_effect\":" + XFJson.Flag(blocked) + "}";
+    // 0.8 (session 8's E4): drawn by the same rule as the arms_drawn guard, so an agent sees why a change is refused.
+    out += ",\"no_arms_cw_effect\":" + XFJson.Flag(blocked) + ",\"drawn\":" + XFJson.Flag(XFCyberware.ArmsDrawn(player)) + "}";
     return out;
   }
 
@@ -235,7 +236,15 @@ public abstract class XFCyberware {
     return XFInventory.Refusal();
   }
 
-  // RB-112: whether V has an arm cyberware weapon out (the right weapon slot holds an ArmsCW item).
+  // RB-112: whether V has an arm cyberware weapon out (the right weapon slot holds an ArmsCW item). Session 8's E4: after
+  // photo mode the slot still held the Gorilla Arms (and the right arm's holstered item was off), the game's own drawn
+  // state (EquipmentSystemPlayerData.UpdateArmSlot swaps the two), so the guard was right; the tools now holster first
+  // (cyberware_equip and cyberware_unequip, holster_first) instead of leaving that step to the caller.
+  public static func WeaponRightItem(player: ref<PlayerPuppet>) -> ItemID {
+    let object = GameInstance.GetTransactionSystem(GetGameInstance()).GetItemInSlot(player, t"AttachmentSlots.WeaponRight");
+    return IsDefined(object) ? object.GetItemID() : ItemID.None();
+  }
+
   public static func ArmsDrawn(player: ref<PlayerPuppet>) -> Bool {
     let object = GameInstance.GetTransactionSystem(GetGameInstance()).GetItemInSlot(player, t"AttachmentSlots.WeaponRight");
     if !IsDefined(object) {
@@ -432,7 +441,7 @@ public abstract class XFCyberware {
     }
     let previous = data.GetItemInEquipSlot(area, index);
     if Equals(area, gamedataEquipmentArea.ArmsCW) && ItemID.IsValid(previous) && XFCyberware.ArmsDrawn(player) {
-      return XFJson.Fail("arms_drawn", "V has her arm cyberware out; holster it first (player_action weapon.holster), then swap it");
+      return XFJson.Fail("arms_drawn", "V has her arm cyberware out (the right weapon slot holds " + XFCyberware.Record(XFCyberware.WeaponRightItem(player)) + "); holster it first (player_action weapon.holster), then swap it");
     }
     let system = GameInstance.GetTransactionSystem(GetGameInstance());
     let id = StrLen(hash) > 0 ? XFInventory.ExactItem(player, tdbid, hash) : XFInventory.FindItem(player, tdbid);
@@ -510,7 +519,7 @@ public abstract class XFCyberware {
       return XFJson.Fail("bad_params", XFCyberware.AreaName(type) + " has " + IntToString(slots) + " unlocked slot(s); slot " + IntToString(index) + " doesn't exist");
     }
     if Equals(type, gamedataEquipmentArea.ArmsCW) && XFCyberware.ArmsDrawn(player) {
-      return XFJson.Fail("arms_drawn", "V has her arm cyberware out; holster it first (player_action weapon.holster), then take it off");
+      return XFJson.Fail("arms_drawn", "V has her arm cyberware out (the right weapon slot holds " + XFCyberware.Record(XFCyberware.WeaponRightItem(player)) + "); holster it first (player_action weapon.holster), then take it off");
     }
     if StrLen(item) > 0 && slot < 0 {
       let s = 0;

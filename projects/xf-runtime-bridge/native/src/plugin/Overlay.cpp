@@ -31,6 +31,20 @@
 //     host and lets go of the old one.
 //   * RB-106 (Low 11): the lock is taken outside the structured-exception frame, so an exception can't leave it held; the
 //     resize skips the lock once the host has given up.
+//
+// 0.8:
+//   * Session 8's I5c: with DLSS frame generation the engine's swap chain (and possibly its device) is one of Streamline's
+//     proxies, so "the swap chain belongs to the engine's device" failed and the host refused. Both are now resolved to
+//     their native objects through Streamline's documented base-interface ID before they are compared (core MatchDevices).
+//     The host makes its own objects on the native device and submits on the native direct queue (Streamline's rule for
+//     third-party overlays: never use its proxies), and still takes the back buffers and their index from the engine's own
+//     swap-chain object, as the engine and CET do: with frame generation on those are Streamline's buffers, the ones the
+//     engine renders into and the frame generator reads. Cyber Engine Tweaks draws the same way and worked in session 8
+//     with frame generation on. The panel is drawn before the interpolation, so it may ghost in generated frames.
+//   * The UI review: the panel sits right of the CET label (x 700 px, unscaled like the label's wrap), its title is
+//     "XF Runtime Bridge", the status line is the one every surface shows (core/InkUi.cpp Summarize), the question is left
+//     to the ink panel and the CET window, and the diagnostic lines (with the moving bar) show only with
+//     [overlay] diagnostics.
 
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/GpuApi/DeviceData.hpp>
@@ -116,6 +130,9 @@ namespace xfb::plugin::overlay
 namespace
 {
 using Microsoft::WRL::ComPtr;
+
+// 0.8.4 (the UI review's fix 4): the panel's place is the ink panel's (core PanelOrigin), no longer a fixed 700, 12.
+float gPanelHeight = 0.0f; // the panel's height last frame (render thread), for anchors measured from the bottom or centre
 using xfb::overlay::DeviceFacts;
 using xfb::overlay::OverlayHost;
 using xfb::overlay::PanelData;
@@ -237,16 +254,56 @@ RED4ext::GpuApi::SSwapChainData* SwapChainData(int32_t aDeviceIndex)
     return &dd->swapChains.GetData(id);
 }
 
-bool SameObject(IUnknown* aA, IUnknown* aB)
+// Streamline's interface ID for "the native object behind this proxy" (StreamlineRetrieveBaseInterface): a proxy answers
+// its base object (with a reference), anything else answers E_NOINTERFACE [source] Streamline 2.14.1
+// docs/ProgrammingGuide.md §5.3, source/core/sl.interposer/dxgi/dxgiSwapchain.cpp:117-128.
+constexpr GUID kStreamlineBase = {0xADEC44E2, 0x61F0, 0x45C3, {0xAD, 0x9F, 0x1B, 0x37, 0x37, 0x92, 0x84, 0xFF}};
+
+// The native object behind a Streamline proxy, or null when aObject isn't one.
+ComPtr<IUnknown> StreamlineNative(IUnknown* aObject)
 {
-    if (!aA || !aB)
+    ComPtr<IUnknown> base;
+    if (aObject && SUCCEEDED(aObject->QueryInterface(kStreamlineBase, reinterpret_cast<void**>(base.GetAddressOf()))) && base)
     {
-        return false;
+        ComPtr<IUnknown> identity;
+        base->QueryInterface(IID_PPV_ARGS(&identity));
+        return identity ? identity : base;
     }
-    ComPtr<IUnknown> a, b;
-    aA->QueryInterface(IID_PPV_ARGS(&a));
-    aB->QueryInterface(IID_PPV_ARGS(&b));
-    return a && b && a.Get() == b.Get();
+    return nullptr;
+}
+
+// An object's identity for MatchDevices: its IUnknown and, for a Streamline proxy, the native object's.
+xfb::overlay::DeviceIdentity IdentityOf(IUnknown* aObject)
+{
+    xfb::overlay::DeviceIdentity id;
+    if (!aObject)
+    {
+        return id;
+    }
+    ComPtr<IUnknown> unknown;
+    aObject->QueryInterface(IID_PPV_ARGS(&unknown));
+    id.given = reinterpret_cast<uintptr_t>(unknown.Get());
+    if (const auto native = StreamlineNative(aObject))
+    {
+        id.native = reinterpret_cast<uintptr_t>(native.Get());
+    }
+    return id;
+}
+
+// The native interface behind a possible Streamline proxy, as type T (the object itself when it isn't a proxy).
+template<typename T>
+ComPtr<T> NativeOf(T* aObject)
+{
+    ComPtr<T> out;
+    if (const auto native = StreamlineNative(aObject))
+    {
+        native.As(&out);
+    }
+    if (!out)
+    {
+        out = aObject;
+    }
+    return out;
 }
 
 std::vector<std::string> FrameGenerationModules()
@@ -295,7 +352,11 @@ RED4ext::GpuApi::SSwapChainData* ReadFacts(int32_t aDeviceIndex, DeviceFacts& aF
     }
     ComPtr<ID3D12Device> scDevice;
     sc->swapChain->GetDevice(IID_PPV_ARGS(&scDevice));
-    aFacts.sameDevice = SameObject(scDevice.Get(), dd->device.Get());
+    // 0.8: through Streamline's proxies where the engine has them (session 8's I5c).
+    const auto swapChainId = IdentityOf(sc->swapChain.Get());
+    const auto match = xfb::overlay::MatchDevices(IdentityOf(scDevice.Get()), IdentityOf(dd->device.Get()));
+    aFacts.sameDevice = match.same;
+    aFacts.proxy = match.throughProxy || swapChainId.native != 0 ? "streamline" : "";
     aFacts.directQueue = dd->directCommandQueue && dd->directCommandQueue->GetDesc().Type == D3D12_COMMAND_LIST_TYPE_DIRECT;
     return sc;
 }
@@ -479,8 +540,10 @@ bool Initialise(int32_t aDeviceIndex)
     gR.deviceIndex = aDeviceIndex;
     gR.firstFacts = facts;
     gR.engineSwapChain = sc->swapChain.Get();
-    gR.device = dd->device;
-    gR.queue = dd->directCommandQueue;
+    // 0.8: our own objects on the native device and the native direct queue (the same objects when there is no proxy); the
+    // back buffers still come from the engine's own swap-chain object below.
+    gR.device = NativeOf(dd->device.Get());
+    gR.queue = NativeOf(dd->directCommandQueue.Get());
     sc->swapChain.As(&gR.swapChain);
     gR.format = desc.Format;
     gR.bufferCount = desc.BufferCount;
@@ -554,7 +617,8 @@ bool Initialise(int32_t aDeviceIndex)
     gR.initialised = true;
     gHost->NoteInit(facts, "");
     log::Info("overlay.init", "ok=true format=" + facts.format + " buffers=" + std::to_string(facts.bufferCount) + " size=" + std::to_string(facts.width) + "x" +
-                                  std::to_string(facts.height) + " hdr=" + std::to_string(facts.hdrMode) + " theme=" + xfb::overlay::ThemeName(gHost->Theme()));
+                                  std::to_string(facts.height) + " hdr=" + std::to_string(facts.hdrMode) + " theme=" + xfb::overlay::ThemeName(gHost->Theme()) +
+                                  " proxy=" + (facts.proxy.empty() ? std::string("none") : facts.proxy));
     return true;
 }
 
@@ -612,39 +676,60 @@ ImVec4 ThemeColour(const char* aName)
     return ImVec4(rgba[0], rgba[1], rgba[2], rgba[3]);
 }
 
-// The one diagnostic panel (P0): no input, top left under the CET label's place, a moving bar so flicker and ghosting show.
-// Its text is limited to the baked glyphs when the game thread publishes it (Publish); the figures come from atomics.
+// The panel (P0): no input. 0.8 (the UI review): right of the CET label, its widest extent being the label's 640 px wrap
+// from x 12 (unscaled, as the label's wrap is); the status line every surface shows; the diagnostics (with the moving bar,
+// one sweep a second so flicker and ghosting show) only with [overlay] diagnostics. Its text is limited to the baked
+// glyphs when the game thread publishes it (Publish); the figures come from atomics.
 void DrawPanel(double aSeconds)
 {
     if (gPanel.Take())
     {
         gR.panel = gPanel.Front();
     }
+    // 0.8.2: one status surface at a time; while the ink panel is on screen (or the CET line is the fallback) this
+    // panel doesn't draw.
+    if (!gR.panel.show)
+    {
+        return;
+    }
     const auto scale = static_cast<float>(gR.height) / 1080.0f * gHost->Scale();
-    ImGui::SetNextWindowPos(ImVec2(12.0f * scale, 120.0f * scale), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(360.0f * scale, 0.0f), ImGuiCond_Always);
+    const float width = 360.0f * scale;
+    const auto [left, top] = xfb::overlay::PanelOrigin(gR.panel.anchor, gR.panel.x, gR.panel.y, static_cast<float>(gR.width), static_cast<float>(gR.height), width, gPanelHeight);
+    ImGui::SetNextWindowPos(ImVec2(left, top), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f), ImGuiCond_Always);
     const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                        ImGuiWindowFlags_NoNav;
-    if (ImGui::Begin("XF overlay##xf_overlay_diag", nullptr, flags))
+    if (ImGui::Begin("XF Runtime Bridge##xf_overlay_panel", nullptr, flags))
     {
+        gPanelHeight = ImGui::GetWindowSize().y; // its auto-fitted height (from last frame's content), for the next placement
         if (gR.display)
         {
             ImGui::PushFont(gR.display, gR.display->LegacySize);
         }
-        ImGui::TextColored(ThemeColour("XfAccentText"), "XF RUNTIME BRIDGE");
+        ImGui::TextColored(ThemeColour("XfAccentText"), "XF Runtime Bridge");
         if (gR.display)
         {
             ImGui::PopFont();
         }
-        ImGui::SameLine();
-        ImGui::TextDisabled("overlay P0");
         const char* tone = gR.panel.tone == "ok" ? "XfSuccess" : gR.panel.tone == "killed" ? "XfDanger" : gR.panel.tone == "write" || gR.panel.tone == "paused" ? "XfWarning" : "TextDisabled";
-        ImGui::TextColored(ThemeColour(tone), "%s", gR.panel.bridgeStatus.empty() ? "Waiting for the bridge..." : gR.panel.bridgeStatus.c_str());
-        if (!gR.panel.pendingAsk.empty())
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextColored(ThemeColour(tone), "%s", gR.panel.bridgeStatus.empty() ? "Not ready yet." : gR.panel.bridgeStatus.c_str());
+        // 0.8.2: as the status surface, the coordinator's lines and the question too (the ink panel's content), each level in
+        // the theme's colour, the question in the text colour with its answer keys under it.
+        for (const auto& [level, text] : gR.panel.lines)
         {
-            ImGui::PushTextWrapPos(0.0f);
-            ImGui::TextColored(ThemeColour("XfAccentText"), "Question: %s", gR.panel.pendingAsk.c_str());
-            ImGui::PopTextWrapPos();
+            const char* colour = level == "warn" ? "XfWarning" : level == "done" ? "XfSuccess" : "Text";
+            ImGui::TextColored(ThemeColour(colour), "%s", text.c_str());
+        }
+        if (!gR.panel.askHint.empty())
+        {
+            ImGui::TextColored(ThemeColour("XfAccentText"), "%s", gR.panel.askHint.c_str());
+        }
+        ImGui::PopTextWrapPos();
+        if (!gR.panel.diagnostics)
+        {
+            ImGui::End();
+            return;
         }
         ImGui::Separator();
         ImGui::TextDisabled("frames %llu   cpu %.3f ms (max %.3f)", static_cast<unsigned long long>(gHost->Frames()), gHost->CpuMs(), gHost->CpuMsMax());
@@ -969,6 +1054,11 @@ void Publish(const PanelData& aData)
     back = aData;
     back.bridgeStatus = xfb::overlay::LimitToGlyphs(aData.bridgeStatus);
     back.pendingAsk = xfb::overlay::LimitToGlyphs(aData.pendingAsk);
+    for (auto& [level, text] : back.lines)
+    {
+        text = xfb::overlay::LimitToGlyphs(text);
+    }
+    back.askHint = xfb::overlay::LimitToGlyphs(aData.askHint);
     gPanel.Publish();
 }
 } // namespace xfb::plugin::overlay

@@ -1,60 +1,57 @@
+import { createReferenceCharacterRoutes } from "./src/character/host/reference-character-server";
 import { resolve, sep } from "node:path";
 import { isBelow } from "./src/platform/api/path-containment";
 import { existsSync, mkdirSync } from "node:fs";
-import { LookLibrary, libraryRequest } from "./src/library-store";
-import { CollectionLibrary, collectionRequest } from "./src/collection-store";
-import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
-// The graph (XF Strata): its store and backups in the library files, its host transport and inspector feed (profiles and
-// graph design, G1). Nothing in the page uses it yet; later slices move V, presets and profiles onto it.
-import { createGraphHandler, GraphLibrary } from "./src/platform/graph-adapters/graph-host";
-import { hostClock, hostRandom } from "./src/platform/graph-adapters/host-sources";
-import { LibraryDurability } from "./src/platform/graph-adapters/library-durability";
-import { STUDIO_GRAPH_RULES, STUDIO_GRAPH_TYPES } from "./src/compose/graph";
+// The library files: one owner per file, its stores, durability, daily backups and routes (src/library/host/library-files.ts).
+import { hostClock } from "./src/platform/core/clock";
+import { openLibraryFiles } from "./src/library/host/library-files";
+import { EXPERIMENT_FLAGS, type ExperimentFlagsDocument } from "./src/platform/api/experiments";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "./src/features/expressions/export/game";
-import { createPackageHandler, localCandidateStore, localEyePlate, localExpressionsGame, localMasculineEyePlate, testMasculineEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
-import { createModInstallHandler, explorerReveal, ModInstallHost, READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION, systemAnsiCodePage, windowsRunningApps } from "./src/mod-install-host";
-import { localHostState, verificationInstallReceipts, verificationSettingsDirectory } from "./src/host-state";
+import { createPackageHandler, localCandidateStore, localEyePlate, localExpressionsGame, localMasculineEyePlate, testMasculineEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/host/package-server";
+import { createModInstallHandler, explorerReveal, ModInstallHost, READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION, systemAnsiCodePage, windowsRunningApps } from "./src/installation/host/mod-install-host";
+import { localHostState, verificationInstallReceipts, verificationSettingsDirectory } from "./src/setup/host/host-state";
 import { STUDIO_EXPORTERS } from "./src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "./src/features/eye-makeup";
-import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
-import { createWolvenKitSetupHandler } from "./src/wolvenkit-setup-server";
-import { eyePlateReadiness } from "./src/eye-plate-cache";
-import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
-import { createLocalSettingsHandler } from "./src/local-settings-server";
-import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/install-detection-server";
+import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/setup/host/wolvenkit-setup-host";
+import { createWolvenKitSetupHandler } from "./src/setup/host/wolvenkit-setup-server";
+import { eyePlateReadiness } from "./src/legacy/eye-makeup/plate/host/eye-plate-cache";
+import { EYE_PLATE_RECIPE } from "./src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { createLocalSettingsHandler } from "./src/setup/host/local-settings-server";
+import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/installation/host/install-detection-server";
 import { createSavesHandler } from "./src/features/save-explorer/host/saves-server";
-import { savesFolderProbe, savesHostSources } from "./src/saves-host-sources";
-import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "./src/update-check-host";
-import { textFileAt } from "./src/derived-cache";
-import { gitHubReleases, SIMULATED_RELEASE_KINDS, type SimulatedReleaseKind, simulatedReleases } from "./src/update-check-github";
+import { savesFolderProbe, savesHostSources } from "./src/saves/host/saves-host-sources";
+import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "./src/setup/host/update-check-host";
+import { textFileAt } from "./src/host/derived-cache";
+import { gitHubReleases, SIMULATED_RELEASE_KINDS, type SimulatedReleaseKind, simulatedReleases } from "./src/setup/host/update-check-github";
 import desktopPackage from "./desktop/package.json";
-import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/desktop-app-host";
-import { packageToolPaths } from "./src/local-settings-readiness";
-import { LocalSettingsStore } from "./src/local-settings-store";
-import type { LocalSettings } from "./src/local-settings";
+import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/setup/host/desktop-app-host";
+import { packageToolPaths } from "./src/setup/host/local-settings-readiness";
+import { LocalSettingsStore } from "./src/setup/host/local-settings-store";
+import type { LocalSettings } from "./src/setup/local-settings";
 import { buildBrowser } from "./browser-build";
-import { PreviewCoreHost } from "./src/preview-core-host";
-import { createPreviewCoreHandler } from "./src/preview-core-server";
-import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview-core-recipe";
-import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character-detail-host";
-import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
-import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "./src/choice-preview-server";
-import { preparedBudgetFrom } from "./src/prepared-files";
-import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
-import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
-import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
-import { IdleHost, idlePrepared } from "./src/idle-host";
-import { createIdleHandler, IDLES_ENDPOINT } from "./src/idle-server";
+import { PreviewCoreHost } from "./src/preview/host/preview-core-host";
+import { createPreviewCoreHandler } from "./src/preview/host/preview-core-server";
+import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview/preview-core-recipe";
+import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character/host/character-detail-host";
+import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character/host/character-detail-server";
+import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "./src/character/host/choice-preview-server";
+import { PreparedFiles, preparedBudgetFrom } from "./src/host/prepared-files";
+import { hostJobs } from "./src/host/host-jobs";
+import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/character/host/cc-catalogue-server";
+import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/animation/host/facial-host";
+import { createPoseHandler, POSES_ENDPOINT } from "./src/animation/host/pose-catalogue-server";
+import { IdleHost, idlePrepared } from "./src/animation/host/idle-host";
+import { createIdleHandler, IDLES_ENDPOINT } from "./src/animation/host/idle-server";
 import { createPosePreferencesHandler, PosePreferencesStore } from "./src/features/poses/host/preferences-store";
-import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "./src/pose-endpoint";
-import { PoseCatalogueHost } from "./src/pose-catalogue-host";
-import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
-import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
-import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host-endpoint";
+import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "./src/animation/pose-endpoint";
+import { PoseCatalogueHost } from "./src/animation/host/pose-catalogue-host";
+import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/preview/host/grading-lut-host";
+import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host/host-log";
+import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host/host-endpoint";
 // Settings and install receipts follow an isolated data folder (XFAS_DATA_DIR, XFS_SETTINGS_DIR); an isolated server never reads or
-// writes the person's real settings and doesn't add mods (src/host-state.ts, INSTALL-01).
+// writes the person's real settings and doesn't add mods (src/setup/host/host-state.ts, INSTALL-01).
 const state = localHostState(resolve(import.meta.dir, "data"));
 const dataRoot = state.dataRoot;
 mkdirSync(dataRoot, { recursive: true });
@@ -63,26 +60,13 @@ const diagnostics = hostDiagnosticsAt(dataRoot, { echo: consoleEcho });
 setProcessDiagnostics(diagnostics);
 // A background failure nobody caught is logged; it never ends the dev server (PREV-101).
 logUnhandledRejections();
-const graphOptions = { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: hostClock(), random: hostRandom() };
-// Each library file's durability (library-durability.ts): commits don't wait for the disk, and a flush a few seconds after the last
-// one makes them durable, so a power cut loses at most those seconds. Open for the process's lifetime (a kill loses nothing: the commits are already with the OS).
-const libraryLife = new AbortController();
-const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock: graphOptions.clock, signal: libraryLife.signal,
-  report: error => hostFailure("library", "flush_failed", "The library couldn't be flushed to disk yet; it will try again.", error, "warn") });
-const libraryFile = durable("library.sqlite"), verificationFile = durable("verification.sqlite");
-const library = new LookLibrary(resolve(dataRoot, "library.sqlite"), libraryFile);
-const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"), verificationFile);
-const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, libraryFile);
-const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, verificationFile);
-// Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
-const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, undefined, libraryFile);
-const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, undefined, verificationFile);
-const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), { ...graphOptions, writes: libraryFile });
-const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), { ...graphOptions, writes: verificationFile });
-const graphRequests = [["/api/graph", createGraphHandler(graphLibrary, "/api/graph")],
-  ["/api/verification/graph", createGraphHandler(verificationGraphLibrary, "/api/verification/graph")]] as const;
-// The library's daily backup, a moment after starting (never for an isolated server's own library).
-if (!state.isolated) setTimeout(() => graphLibrary.dailyBackup(), 2000);
+const clock = hostClock();
+// The library files (library.sqlite and verification.sqlite), each with one owner: migrations, transactions and durability
+// (commits don't wait for the disk; a flush a few seconds after the last makes them durable). Open for the process's lifetime: a kill
+// loses nothing, the commits are already with the OS. The main file is backed up daily, never for an isolated server's own library.
+const libraries = openLibraryFiles(dataRoot, { clock, parts: STUDIO_PARTS, isolated: state.isolated,
+  log: message => diagnostics.log.info("library", "legacy_import", message) });
+const documents = libraries.main.documents;
 const localSettings = new LocalSettingsStore(state.settingsDirectory);
 // A verification workspace (?verify) edits its own copy of the settings, starting from these (UI-98).
 const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => localSettings.load().settings });
@@ -155,9 +139,12 @@ const previewCoreRequest = createPreviewCoreHandler(previewCore);
 // The resolver's JSON cache is shared with `tools/resolve-character.ts`; `XFS_RESOLVER_CACHE` relocates it.
 // Choice previews live in `choice-previews/` beside it; `XFS_CHOICE_PREVIEW_CACHE` relocates them (a verification server keeps its own).
 // `XFS_PREPARED_BUDGET_GB` sets the prepared files' disk budget (prepared-files.ts `preparedBudgetFrom`; `off` never evicts): a verification server borrowing
-// another server's warm caches turns eviction off so it never trims them.
-const preparedBudget = preparedBudgetFrom(process.env.XFS_PREPARED_BUDGET_GB, message => { hostFailure("character", "prepared_budget_setting", message, undefined, "warn"); });
-const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, ...(preparedBudget !== undefined ? { preparedBudget } : {}),
+// another server's warm caches turns eviction off so it never trims them. One owner keeps every host's prepared files within it, the
+// baseline reference characters within their own small share (they never evict the user's prepared V); one scheduler runs the work.
+const jobs = hostJobs();
+const prepared = new PreparedFiles({ scheduler: jobs, log: diagnostics.log.logger("character"),
+  budget: preparedBudgetFrom(process.env.XFS_PREPARED_BUDGET_GB, message => { hostFailure("character", "prepared_budget_setting", message, undefined, "warn"); }) });
+const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, jobs, prepared,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   settings: () => {
     const settings = localSettings.load().settings;
@@ -167,6 +154,13 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, 
   ...(process.env.XFS_CHOICE_PREVIEW_CACHE ? { previewRoot: resolve(process.env.XFS_CHOICE_PREVIEW_CACHE) } : {}),
   log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
+const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: previewCacheRoot, prepared,
+  enabled: async request => {
+    if (request.headers.get("X-XFS-Verification") === "1") return true;
+    return documents.get<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id)?.value.flags?.["hair-lab"] === true;
+  },
+  settings: () => ({ gameRoot: packageToolPaths(localSettings.load().settings).gamepath, launchRoute: "direct", mo2Root: null,
+    mo2ProfileId: null, manualModRoot: null, wolvenKitCli: wolvenKit.usable() }), log: diagnostics.log.logger("reference-character") });
 const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
 const choicePreviewRequest = createChoicePreviewHandler(characterDetails);
 // Photo-mode poses (pose-library-design.md P1): listed from the same launch route and resolver cache as the creator options.
@@ -214,9 +208,9 @@ const facial = new FacialHost({ cacheRoot: previewCacheRoot,
     script: resolve(import.meta.dir, "tools", "facial_solver_server.py"), pythonDefault: "python" }),
   log: diagnostics.log.logger("facial") });
 const facialRequest = createFacialHandler(facial);
-// "Clear prepared game files" clears the face data too, and the size counts it (CORE-102).
-characterDetails.attachPrepared({ bytes: () => facial.preparedBytes(), clear: () => facial.clearPrepared() });
-characterDetails.attachPrepared(idlePrepared(idles, idleResolverCache));
+// "Clear prepared game files" clears the face data and the idles too, and the size counts them (CORE-102).
+prepared.partition(facial.preparedPartition());
+prepared.partition(idlePrepared(idles, idleResolverCache));
 // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
 const commit = (() => {
   try { const run = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: import.meta.dir, stdout: "pipe", stderr: "ignore" });
@@ -229,6 +223,7 @@ const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
   roots: () => [{ label: "<data>", path: dataRoot }, { label: "<tools>", path: localToolsRoot() }, { label: "<preview-cache>", path: previewCacheRoot },
     { label: "<studio>", path: import.meta.dir }],
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
+  resources: (refs, progress) => characterDetails.reportResources(refs, progress),
   installReceipts: () => [state.installReceipts, ...state.legacyInstallReceipts],
   testHook: process.env.XFS_DIAGNOSTICS_TEST_HOOK === "1",
 });
@@ -280,6 +275,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/verification/desktop-app") return verificationDesktopAppRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
+    if (referenceCharacters.accepts(url.pathname)) return referenceCharacters.handle(request);
     if (url.pathname === CHOICE_PREVIEW_ENDPOINT || url.pathname.startsWith(`${CHOICE_PREVIEW_ENDPOINT}/`)) return choicePreviewRequest(request);
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
     if (url.pathname === POSES_ENDPOINT) return poseRequest(request);
@@ -289,14 +285,8 @@ const server = Bun.serve({
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
-    for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
-      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
-    for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
-      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(request, store, prefix);
-    for (const [prefix, handle] of graphRequests) if (url.pathname.startsWith(prefix + "/")) return handle(request);
-    for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
-      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/"))
-        return libraryRequest(request, store, prefix);
+    const libraryAnswer = libraries.handle(request, url);
+    if (libraryAnswer) return libraryAnswer;
     if (request.method !== "GET" && request.method !== "HEAD")
       return new Response("Method not allowed", { status: 405 });
     if (url.pathname === "/health")

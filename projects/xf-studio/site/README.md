@@ -15,7 +15,7 @@ Run from this folder with Bun 1.4.2 (the repository's toolchain version):
 | `bun test` | Build/check unit tests, including negative tests proving each guard fires. |
 | `bun run verify` | Build, check and test: the same gates CI runs. |
 | `bun run preview` | Build, then serve at `http://127.0.0.1:4400/xf-studio/` with the Pages base path and 404 behaviour. |
-| `bun run qa` | Build, then browser QA in headless Chrome (local; set `CHROME` if it is not in a standard location). |
+| `bun run qa` | Build, then browser QA in headless Chrome (local; set `CHROME` if it is not in a standard location). `bun tools/qa.ts --pages index,mcp` checks only the named pages. |
 
 ## Layout
 

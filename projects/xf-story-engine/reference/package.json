@@ -1,0 +1,18 @@
+{
+  "name": "xf-story-engine-reference",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript reference model (the oracle) for the Story Engine kernel, specification S0 v3",
+  "scripts": {
+    "test": "bun test",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  }
+}

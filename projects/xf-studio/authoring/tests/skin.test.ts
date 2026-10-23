@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import * as THREE from "three";
-import { extendSkin, restoreFirstWeights } from "../src/skin";
+import { extendSkin, restoreFirstWeights } from "../src/materials/render/skin";
 import { derivedCharacterRecords, derivedCharacterTest, derivedPreviewFile, derivedPreviewTest } from "./private-assets";
 test("CPU surface picking retains contributions beyond the first four", () => {
   const g = new THREE.BufferGeometry();

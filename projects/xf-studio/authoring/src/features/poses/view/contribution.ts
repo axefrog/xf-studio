@@ -7,7 +7,7 @@ import { panelMeta, type ViewContribution } from "../../../studio-ui/views/contr
 export const POSES_VIEW = {
   owner: "poses",
   panels: [
-    { id: "poses.library", title: "Poses", icon: "body", order: 125, slot: "inspect",
+    { id: "poses.library", context: { kind: "scene", scenes: ["character"] }, title: "Poses", icon: "body", order: 125, slot: "inspect",
       description: "Every photo-mode pose from your game and mods: search, star favourites, one click poses V." },
   ],
   activity: [{ pattern: /^pose\./, label: "Poses" }],

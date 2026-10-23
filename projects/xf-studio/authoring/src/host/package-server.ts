@@ -1,0 +1,224 @@
+/**
+ * The localhost package route: HTTP checks (loopback, same origin, JSON, size) in front of the package host
+ * service both hosts share (platform/export/product-host, PIPE-03). This module is only localhost's adapter:
+ * its tool paths and developer overrides, its private roots in the project's ignored `build/` and `dist/`, the
+ * builder run from the source tree, and the server log.
+ */
+import { randomUUID } from "node:crypto";
+import { statSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { defaultLocalSettings, type LocalSettings } from "../setup/local-settings";
+import { packageToolPaths } from "../setup/host/local-settings-readiness";
+import { eyePlateHeadOverride } from "../legacy/eye-makeup/plate/host/eye-plate-service";
+import { eyePlatePrerequisite, eyePlateRouteKeyFor, masculineEyePlatePrerequisite, masculineUnavailable } from "../legacy/eye-makeup/plate/host/eye-plate-prerequisite";
+import { expressionsGamePrerequisite } from "../animation/host/expressions-game-prerequisite";
+import { runProcessTree } from "./process-tree";
+import { hostFailure } from "../diagnostics/host/host-log";
+import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, type HostPrerequisite, type PackageAction, type PackageHostAdapter } from "../platform/export/product-host";
+import type { FeatureExporterEntry } from "../platform/api";
+
+/** The authoring app folder (this module sits in `src/host/`). */
+const app = resolve(import.meta.dir, "../..");
+const project = resolve(app, "..");
+/** The TypeScript builder CLI; Bun runs it as a child so compiling and verifying never block this server. */
+const script = resolve(app, "tools/build_collection_package.ts");
+/** The Check worker entry, from the source tree. */
+export const localCheckWorker = resolve(app, "tools/package_check_worker.ts");
+const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
+/**
+ * `plate` is empty unless the hidden `XFS_PACKAGE_PLATE` developer override names a plate directory;
+ * otherwise Build derives the built-in eye plate into `plateCache` (host-owned, ignored storage) from the
+ * head that `route` loads. `headOverride` comes from the Local setup choice `eyePlateHead` (or the
+ * `XFS_EYE_PLATE_HEAD=base-game` developer override).
+ */
+export type PackageTools = { bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string;
+  /** Which of these a developer's `XFS_PACKAGE_*` environment variable set, which outranks the person's own settings (for the right next step). */
+  fromEnv?: { wolvenkit?: true; gamepath?: true };
+  route?: Pick<LocalSettings, "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">; headOverride?: "base-game" };
+/** Localhost private cache for the derived eye plate; `XFS_PACKAGE_PLATE_CACHE` relocates it for isolated runs. */
+export const localPlateCache = (env: Record<string, string | undefined> = process.env) =>
+  resolve(env.XFS_PACKAGE_PLATE_CACHE || resolve(app, "data", "eye-plate-cache"));
+/** Localhost's verified builds (the project's ignored `dist/`), which "Add to my mod manager" installs from. */
+export const localCandidateStore = () => resolve(project, "dist");
+/** Localhost folder for tools XF Studio downloads with consent (WolvenKit CLI); `XFS_TOOLS_DIR` relocates it. */
+export const localToolsRoot = (env: Record<string, string | undefined> = process.env) =>
+  resolve(env.XFS_TOOLS_DIR || resolve(app, "data", "tools"));
+export function localPackageTools(settings: LocalSettings = defaultLocalSettings(), env = process.env,
+  managedWolvenKit: string | null = null): PackageTools {
+  const configured = packageToolPaths(settings, env, managedWolvenKit);
+  return {
+    bun: configured.bun || process.execPath,
+    plate: configured.plate || "",
+    plateCache: localPlateCache(env),
+    wolvenkit: configured.wolvenkit || "",
+    gamepath: configured.gamepath || "",
+    ...(env.XFS_PACKAGE_WOLVENKIT || env.XFS_PACKAGE_GAMEPATH ? { fromEnv: {
+      ...(env.XFS_PACKAGE_WOLVENKIT ? { wolvenkit: true as const } : {}), ...(env.XFS_PACKAGE_GAMEPATH ? { gamepath: true as const } : {}) } } : {}),
+    route: { launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId,
+      manualModRoot: settings.manualModRoot },
+    headOverride: eyePlateHeadOverride(env, settings.eyePlateHead),
+  };
+}
+
+const localRoute = (tools: PackageTools) => ({ gameRoot: tools.gamepath,
+  ...(tools.route ?? { launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null }) });
+/** The route and head choice a plate prepared for these tools is recorded under (PIPE-36). */
+export const localPlateRouteKey = (tools: PackageTools) => eyePlateRouteKeyFor({ route: localRoute(tools), headOverride: tools.headOverride });
+
+/** Eye makeup's plate prerequisite for these localhost tools: the developer override, or the verified built-in plate. */
+export const localEyePlate = (tools: PackageTools, plateTools?: Parameters<typeof eyePlatePrerequisite>[0]["tools"]): HostPrerequisite =>
+  eyePlatePrerequisite({ route: localRoute(tools), cacheRoot: tools.plateCache, wolvenKitCli: tools.wolvenkit, headOverride: tools.headOverride,
+    ...(tools.plate ? { override: tools.plate } : {}), ...(plateTools ? { tools: plateTools } : {}) });
+
+/** Eye makeup's optional masculine plate for these localhost tools: cut from the male head the route loads (none with the override). */
+export const localMasculineEyePlate = (tools: PackageTools, plateTools?: Parameters<typeof eyePlatePrerequisite>[0]["tools"]): HostPrerequisite =>
+  masculineEyePlatePrerequisite({ route: localRoute(tools), cacheRoot: tools.plateCache, wolvenKitCli: tools.wolvenkit, headOverride: tools.headOverride,
+    ...(tools.plate ? { override: tools.plate } : {}), ...(plateTools ? { tools: plateTools } : {}) });
+/**
+ * An isolated test server's stand-in for the masculine plate (`XFS_TEST_MASCULINE_PLATE=<plate code>`, e.g. `plate_source_modded`):
+ * every preparation and Check gives that outcome, so a UI check can show a real feminine-only Build without a broken head.
+ * Null for any other value; the server offers it only when isolated.
+ */
+export function testMasculineEyePlate(code: string | undefined): HostPrerequisite | null {
+  if (!code || !/^plate_[a-z_]+$/.test(code)) return null;
+  const value = masculineUnavailable(code);
+  return { cached: () => value, prepare: async () => ({ builder: value, plan: value }), discard: () => {} };
+}
+
+/**
+ * Expressions' game inputs for these localhost tools (photo mode's table and V's face rigs, read from the route's winning files): private,
+ * in the project's ignored `data/` (`XFS_EXPRESSIONS_GAME_CACHE` relocates it), beside the resolver cache the facial preview uses.
+ */
+export const localExpressionsGame = (tools: PackageTools, env: Record<string, string | undefined> = process.env): HostPrerequisite =>
+  expressionsGamePrerequisite({ route: localRoute(tools), wolvenKitCli: tools.wolvenkit,
+    cacheRoot: resolve(env.XFS_EXPRESSIONS_GAME_CACHE || resolve(app, "data", "expressions-game-cache")),
+    resolverCache: resolve(env.XFS_RESOLVER_CACHE || resolve(app, "data", "resolver-cache")) });
+
+/**
+ * Why localhost's Build can't start, in plain words with the one next step (PIPE-134; the "It just works" policy), or null. The words
+ * name only what the person sees: the Set up WolvenKit… button beside the setup line (Settings › Game and the Mod panel's Game
+ * section), their own WolvenKit in Settings › Tools, and the game folder in Settings › Game; never a script, a server override or a path.
+ */
+export const LOCAL_BUILD_REASONS = Object.freeze({
+  wolvenKitUnset: "Build needs WolvenKit, which isn't set up yet. Choose Set up WolvenKit… in Settings › Game and XF Studio downloads it for you.",
+  wolvenKitMissing: "The WolvenKit chosen in Settings › Tools can't be found. Choose it again, or clear that field so XF Studio sets up its own.",
+  gameUnset: "Build needs your Cyberpunk 2077 folder. Choose it in Settings › Game, then build again.",
+  gameMissing: "XF Studio can't find your Cyberpunk 2077 folder. Choose it again in Settings › Game, then build again.",
+  gameExecutableMissing: "That folder isn't your Cyberpunk 2077 folder (it has no bin\\x64\\Cyberpunk2077.exe). Choose the folder the game is installed in, in Settings › Game.",
+  gameArchivesMissing: "Your Cyberpunk 2077 folder is missing its archive\\pc folder. Repair the game in its launcher, then build again.",
+  /** Only a developer's runner override can name a runner that isn't there. */
+  builderMissing: "XF Studio's build helper is missing. Restart XF Studio; if it keeps happening, reinstall XF Studio.",
+});
+/**
+ * The same reasons when a developer's environment variable supplied the path, which outranks Settings: choosing or clearing the setting
+ * wouldn't help, so these name the variable to correct or remove. Developer-only; a person's own setup never shows them.
+ */
+export const LOCAL_BUILD_ENV_REASONS = Object.freeze({
+  wolvenKitMissing: "The WolvenKit path comes from the XFS_PACKAGE_WOLVENKIT environment variable, which outranks Settings, and it names a file that isn't there. Correct or remove that variable, then restart XF Studio.",
+  gameMissing: "The game folder comes from the XFS_PACKAGE_GAMEPATH environment variable, which outranks Settings, and it names a folder that isn't there. Correct or remove that variable, then restart XF Studio.",
+  gameNotTheGame: "The game folder comes from the XFS_PACKAGE_GAMEPATH environment variable, which outranks Settings, and it isn't a Cyberpunk 2077 folder. Correct or remove that variable, then restart XF Studio.",
+});
+export function localBuildIssue(tools: PackageTools): string | null {
+  const is = (path: string, kind: "file" | "directory") => {
+    try { const stat = statSync(path); return kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { return false; /* Missing. */ }
+  };
+  if (!tools.wolvenkit) return LOCAL_BUILD_REASONS.wolvenKitUnset;
+  if (!is(tools.wolvenkit, "file")) return tools.fromEnv?.wolvenkit ? LOCAL_BUILD_ENV_REASONS.wolvenKitMissing : LOCAL_BUILD_REASONS.wolvenKitMissing;
+  if (!tools.gamepath) return LOCAL_BUILD_REASONS.gameUnset;
+  const gameFromEnv = tools.fromEnv?.gamepath === true;
+  if (!is(tools.gamepath, "directory")) return gameFromEnv ? LOCAL_BUILD_ENV_REASONS.gameMissing : LOCAL_BUILD_REASONS.gameMissing;
+  if (!is(join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe"), "file"))
+    return gameFromEnv ? LOCAL_BUILD_ENV_REASONS.gameNotTheGame : LOCAL_BUILD_REASONS.gameExecutableMissing;
+  if (!is(join(tools.gamepath, "archive", "pc"), "directory"))
+    return gameFromEnv ? LOCAL_BUILD_ENV_REASONS.gameNotTheGame : LOCAL_BUILD_REASONS.gameArchivesMissing;
+  if (tools.bun.includes("/") || tools.bun.includes("\\")) { // A bare host PATH command is checked by spawn.
+    let valid = false;
+    try { valid = statSync(tools.bun).isFile(); } catch { /* Missing executable. */ }
+    if (!valid) return LOCAL_BUILD_REASONS.builderMissing;
+  }
+  return null;
+}
+
+/**
+ * Localhost's package host adapter: `prerequisites` makes each feature's host prerequisites for these tools
+ * (the root binds eye makeup's plate to its prerequisite ID). Private roots live in the project's ignored
+ * `build/` (one snapshot, work and stage folder per Build) and verified candidates in its ignored `dist/`.
+ */
+export function localPackageAdapter(options: { exporters: readonly FeatureExporterEntry[]; tools: PackageTools;
+  prerequisites: (tools: PackageTools) => Readonly<Record<string, HostPrerequisite>>; roots?: { build: string; dist: string } }): PackageHostAdapter {
+  const { tools } = options, build = options.roots?.build ?? resolve(project, "build"), dist = options.roots?.dist ?? localCandidateStore();
+  return {
+    exporters: options.exporters,
+    prerequisites: options.prerequisites(tools),
+    checkWorker: localCheckWorker,
+    buildIssue: () => localBuildIssue(tools),
+    buildSetup: () => {
+      const id = randomUUID();
+      return { snapshot: resolve(build, "package-snapshots", id), work: resolve(build, "package-work", id),
+        stage: resolve(build, "package-stage", id), candidates: dist, wolvenkit: tools.wolvenkit, gamepath: tools.gamepath };
+    },
+    runBuilder: (args, run) => runProcessTree(tools.bun, [script, ...args], { cwd: run.cwd, signal: run.signal, timeoutMs: run.timeoutMs,
+      onStdoutLine: run.onLine }),
+    log: (scope, code, message, detail) => hostFailure("package", code, `Package ${scope}: ${message}`, detail,
+      code === "invalid_collection" || code === "no_exportable_content" ? "warn" : "error"),
+  };
+}
+
+/** Why a Build can't start when the Local setup and its backup are unreadable (PIPE-94), in plain words. */
+export const SETUP_UNREADABLE_MESSAGE = "XF Studio couldn't read your settings, so it can't build mod files. Open Settings › Game, " +
+  "check your choices and save them again, then try once more. Your collection is unchanged.";
+/**
+ * The Local setup a package request uses (PIPE-94), as the desktop host reads it: when the saved settings and their
+ * backup are unreadable, Check plans with the defaults (it needs no tools) and Build is refused in plain words.
+ */
+export function packageRequestSettings(load: () => LocalSettings, action: PackageAction): LocalSettings {
+  try { return load(); }
+  catch (error) {
+    if (action === "check") return defaultLocalSettings();
+    throw Object.assign(Error(SETUP_UNREADABLE_MESSAGE), { code: "package_setup_unreadable", cause: error });
+  }
+}
+
+/**
+ * The localhost package route: requests carry only `{ action, collection }` (the server decides every path and
+ * tool), and one Check and one Build run at a time. `adapter` makes the host adapter for each request, so
+ * Local setup changes apply to the next Build; when it can't (the Local setup is unreadable), the answer is a JSON
+ * refusal with plain words, never a bare server error (PIPE-94).
+ */
+export function createPackageHandler(adapter: (action: PackageAction) => PackageHostAdapter) {
+  const service = new PackageHostService();
+  return Object.assign(async (request: Request): Promise<Response> => {
+    const url = new URL(request.url);
+    if (url.hostname !== "127.0.0.1" || request.headers.get("Origin") !== url.origin ||
+        request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
+      return json({ error: "Use the local studio to build packages." }, 403);
+    if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+    if (Number(request.headers.get("Content-Length")) > MAX_PACKAGE_REQUEST_BYTES) return json({ error: "Collection exceeds 16 MB." }, 413);
+    let body: string;
+    try { body = await request.text(); } catch { return json({ error: "Could not read collection snapshot." }, 400); }
+    if (Buffer.byteLength(body) > MAX_PACKAGE_REQUEST_BYTES) return json({ error: "Collection exceeds 16 MB." }, 413);
+    let input: { action?: unknown; collection?: unknown };
+    try { input = JSON.parse(body); } catch { return json({ error: "Expected a package action and collection only." }, 400); }
+    if (!input || typeof input !== "object" || Array.isArray(input) || (input.action !== "check" && input.action !== "build") ||
+        Object.keys(input).some(key => key !== "action" && key !== "collection") || !("collection" in input))
+      return json({ error: "Expected a package action and collection only." }, 400);
+    const action = input.action as PackageAction;
+    if (service.busy(action)) return json({ code: `package_${action}_busy`, error: action === "build"
+      ? "A local package build is already running. Wait for its result before starting another."
+      : "A package Check is already running. Wait for its result before starting another." }, 409);
+    let host: PackageHostAdapter;
+    try { host = adapter(action); }
+    catch (error) {
+      const code = (error as { code?: unknown }).code === "package_setup_unreadable" ? "package_setup_unreadable" : "package_setup_unavailable";
+      hostFailure("package", code, `Package ${action}: the host adapter could not be made.`, error);
+      return json({ code, error: code === "package_setup_unreadable" ? SETUP_UNREADABLE_MESSAGE
+        : "XF Studio couldn't prepare mod files right now. Restart XF Studio and try again. Your collection is unchanged." }, 503);
+    }
+    const outcome = await service.run(host, action, input.collection, request.signal);
+    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message, ...(outcome.omissions ? { omissions: outcome.omissions } : {}) }, outcome.status);
+  }, {
+    /** `GET /api/package/progress`: the running Build's stage (PIPE-131); codes and counts only, no paths. */
+    progress: (request: Request): Response => new URL(request.url).hostname !== "127.0.0.1" ? json({ error: "Use the local studio." }, 403)
+      : request.method !== "GET" ? json({ error: "Method not allowed." }, 405) : json({ build: service.buildProgress() }),
+  });
+}

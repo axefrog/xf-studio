@@ -15,6 +15,10 @@
 | Works in game | XF Eye Artistry's shipped finishes verified in game; install and uninstall clean | In-game sessions ([next sessions plan](../research/runtime/next-sessions-plan.md)); the desktop acceptance |
 | Beta scope | Clear beta labelling, easy problem reports, a way to learn about updates | The release notes and the in-app Report a problem flow; the update notifier |
 
+## Beta blockers
+
+What must be done before the beta ships is the **Beta blockers** lane of the [work queue](../research/backlog/README.md#beta-blockers). This page holds the bar and its evidence, and the queue holds the open work.
+
 ## Known open items (29 September 2026)
 
 The first full [readiness audit](../research/authoring/release-readiness-audit.md) (29 September 2026) inventories every visible feature by export status, lists the consistency, speed and first-run gaps, and ranks the closing work by track.
@@ -23,4 +27,4 @@ The first full [readiness audit](../research/authoring/release-readiness-audit.m
 - **Finishes:** Glitter and Shimmer reworked offline and waiting for in-game verdicts; Glossy and Colour-shifting still experimental.
 - **Clutter:** audited and cleared from the default path (audit items 5–8): Shimmer and Glitter, the rendering and display studies and the raw exports sit behind research tools until they pass in game or are needed.
 - **Beta scope:** a Beta badge, the beta's What's new tour, Help's limitations and Report a problem in the first-run texts are in place; XF Studio checks its GitHub releases when it starts (a quiet notice when a newer version is out; **Settings › Updates** turns it off) and whenever the person chooses **Check for updates** (audit item 22). Installing a new version is still manual, from the releases page.
-- **Consistency:** the layout and spacing pass (audit item 19, C-26 to C-33) is done, with the findings it covered (UI-139..162, DESK-06), and so are copy, terminology and states (items 15–18 and 20: finish names, "3D view", plain units and words, one place per state, quiet reasons). Still open: UI-142's build steps and layer names repeating after a removal (CORE-125).
+- **Consistency:** the layout and spacing pass (audit item 19, C-26 to C-33) is done, with the findings it covered (UI-139..162, DESK-06), and so are copy, terminology and states (items 15–18 and 20: finish names, "3D view", plain units and words, one place per state, quiet reasons). Still open: UI-142's build steps.

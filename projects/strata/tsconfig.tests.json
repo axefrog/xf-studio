@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "types": ["bun"],
-    "noUnusedLocals": false,
-    "paths": { "strata": ["./index.ts"], "strata/testing": ["./testing.ts"] }
-  },
-  "include": ["index.ts", "testing.ts", "src", "tests", "examples", "tools"]
-}

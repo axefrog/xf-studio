@@ -14,6 +14,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "core/Behaviours.hpp"
@@ -57,6 +58,13 @@ Dispatcher& TheDispatcher()
     return state.bridge->GetDispatcher();
 }
 
+// RB-122 (0.8.1): a game-thread step that changes the game, checked against the kill switch, the pause and a handover on the
+// game thread right before it runs (Dispatcher::RunWrite); reads and the stops use Game.
+json GameWrite(const std::function<json()>& aTask, const std::string& aLabel)
+{
+    return TheDispatcher().RunWrite(GameTimeout(), aTask, aLabel);
+}
+
 // --- scene.read ---------------------------------------------------------------------------------
 
 json SceneRead(const MethodContext& aContext)
@@ -87,18 +95,24 @@ json SceneRead(const MethodContext& aContext)
 
 json BridgeHandover(const MethodContext& aContext)
 {
-    params::RequireOnly(aContext.params, {"on", "note"});
+    params::RequireOnly(aContext.params, {"on", "note", "lights"});
     const auto on = params::CheckBoolean(aContext.params, "on");
     if (!on)
     {
         params::CheckFail("'on' is required: true hands the session over to the player, false resumes it");
     }
     const auto note = params::CheckText(aContext.params, "note", 200).value_or("");
+    const auto lights = params::CheckText(aContext.params, "lights", 16).value_or("");
+    if (!lights.empty() && (lights != "clear" || !*on))
+    {
+        params::CheckFail("'lights' takes only \"clear\", with on: true (the showroom's rigs cleared once the handover refuses writes)");
+    }
     auto& dispatcher = TheDispatcher();
     const bool was = dispatcher.HandedOver();
     json released = nullptr;
     if (*on)
     {
+        Get().playerStops.Stop(); // 0.8.2: a look or teleport between its steps stops too
         Get().behaviours.StopAll("handed_over");
     }
     dispatcher.SetHandover(*on, note);
@@ -119,7 +133,23 @@ json BridgeHandover(const MethodContext& aContext)
             released = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
         }
     }
-    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released},
+    json lightsCleared = nullptr;
+    if (lights == "clear")
+    {
+        // 0.8.2 (the re-check's third finding): the rigs go after the write gate has closed, in this same request, so a
+        // showroom.lights still on its way (its spawn step refused on the game thread from here on) can't add one after the
+        // clear. Clearing puts the scene back, so it runs inside a RestoreScope.
+        try
+        {
+            RestoreScope restoring;
+            lightsCleared = ClearShowroomForHandover("lights", aContext.cid);
+        }
+        catch (const MethodError& e)
+        {
+            lightsCleared = json{{"error", e.code}, {"message", e.what()}};
+        }
+    }
+    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released}, {"lights_cleared", lightsCleared},
                 {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}},
                 {"undo_note", *on ? "bridge.handover {on: false} (session.resume) gives the bridge its writes back; what the handover lifted from V stays lifted" : "bridge.handover {on: true} hands over again"}};
 }
@@ -232,13 +262,15 @@ json PlayerTeleport(const MethodContext& aContext)
     const auto request = player::ParseTeleport(aContext.params);
     Get().teleports.Take();
     const auto cid = aContext.cid;
+    const auto seen = Get().playerStops.Current(); // 0.8.2: a player.stop from here on ends the teleport before it moves V
     const auto where = Game([cid] { return ScriptCall("XFPlayer", "Where", {}, {}, cid); }, "player.where");
     const auto from = VecOf(where.at("position"));
     const double yawBefore = where.value("yaw", 0.0);
     const auto [to, yaw] = player::Destination(request, from, yawBefore);
     TheDispatcher().RequireWritesOpen();
-    const auto done = Game(
-        [cid, to = to, yaw = yaw, request] {
+    const auto done = GameWrite(
+        [cid, to = to, yaw = yaw, request, seen] {
+            Get().playerStops.Require(seen, "player.teleport");
             float x = static_cast<float>(to[0]), y = static_cast<float>(to[1]), z = static_cast<float>(to[2]);
             float wanted = static_cast<float>(yaw.value_or(0.0));
             bool hasYaw = yaw.has_value();
@@ -258,7 +290,7 @@ json PlayerTeleport(const MethodContext& aContext)
     return json{{"before", done.value("before", json())}, {"target", done.at("target")}, {"yaw", done.value("yaw", yawBefore)},
                 {"snapped", done.value("snapped", false)}, {"now", after.at("position")}, {"off_m", std::round(off * 1000.0) / 1000.0},
                 {"held", off < 0.3},
-                {"undo", {{"method", "player.teleport"}, {"params", {{"position", where.at("position")}, {"yaw", yawBefore}, {"ground", "exact"}}}}},
+                {"undo", player::TeleportUndo(from, yawBefore, now)},
                 {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
 }
 
@@ -266,6 +298,10 @@ json PlayerLook(const MethodContext& aContext)
 {
     const auto request = player::ParseLook(aContext.params);
     const auto cid = aContext.cid;
+    // 0.8.2 (the re-check's second finding): a player.stop on the control pipe during this look ends it at its next step, so a
+    // stop during the one-tick wait below doesn't see the look-at start again afterwards.
+    auto& stops = Get().playerStops;
+    const auto seen = stops.Current();
     const auto state = Game([cid] { return ScriptCall("XFPlayer", "State", {}, {}, cid); }, "player.state");
     const auto& camera = state.at("camera");
     if (camera.is_null())
@@ -281,8 +317,9 @@ json PlayerLook(const MethodContext& aContext)
         // Instant: V's yaw by a teleport in place (her yaw is the first-person camera's), then the pitch by a very short look-at.
         Get().teleports.Take();
         const auto position = state.at("position");
-        Game(
-            [cid, position, yaw = target.yaw] {
+        GameWrite(
+            [cid, position, yaw = target.yaw, seen] {
+                Get().playerStops.Require(seen, "player.look");
                 float x = position[0].get<float>(), y = position[1].get<float>(), z = position[2].get<float>();
                 float wanted = static_cast<float>(yaw);
                 bool hasYaw = true;
@@ -293,31 +330,154 @@ json PlayerLook(const MethodContext& aContext)
             "player.look.yaw");
         writes::WaitTicks(Get().queue, 1, GameTimeout());
     }
-    // Aim at the wanted point from where the camera is after any turn (the camera moves with V's head slightly).
-    Game(
-        [cid, point = target.point, duration = request.duration] {
-            float x = static_cast<float>(point[0]), y = static_cast<float>(point[1]), z = static_cast<float>(point[2]);
-            float d = static_cast<float>(duration);
-            return ScriptCall("XFPlayer", "LookAt", {"Float", "Float", "Float", "Float"}, {&x, &y, &z, &d}, cid);
-        },
-        "player.look");
-    // Wait for it: the look-at runs natively; read the camera until it stops moving or the time is up.
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int>(request.duration * 1000.0) + 700);
+    const auto lookAt = [&cid, &seen](const Vec3& aPoint, double aDuration, const char* aLabel) {
+        GameWrite(
+            [cid, point = aPoint, duration = aDuration, seen] {
+                Get().playerStops.Require(seen, "player.look");
+                float x = static_cast<float>(point[0]), y = static_cast<float>(point[1]), z = static_cast<float>(point[2]);
+                float d = static_cast<float>(duration);
+                return ScriptCall("XFPlayer", "LookAt", {"Float", "Float", "Float", "Float"}, {&x, &y, &z, &d}, cid);
+            },
+            aLabel);
+    };
+    const auto readCamera = [&cid] { return Game([cid] { return ScriptCall("XFPlayer", "State", {}, {}, cid); }, "player.state").at("camera"); };
+    const auto angleTo = [](const json& aCamera, const Vec3& aPoint) {
+        const auto pos = VecOf(aCamera.at("position"));
+        const auto fwd = player::DirectionOf(aCamera.value("yaw", 0.0), aCamera.value("pitch", 0.0));
+        Vec3 d{aPoint[0] - pos[0], aPoint[1] - pos[1], aPoint[2] - pos[2]};
+        const double n = std::hypot(d[0], d[1], d[2]);
+        if (n < 1e-6)
+        {
+            return 0.0;
+        }
+        const double c = std::clamp((fwd[0] * d[0] + fwd[1] * d[1] + fwd[2] * d[2]) / n, -1.0, 1.0);
+        return std::acos(c) * 180.0 / 3.14159265358979323846;
+    };
     json reached = camera;
-    while (std::chrono::steady_clock::now() < deadline)
+    bool stopped = false;
+    std::string tookOver;
+    const auto started = std::chrono::steady_clock::now();
+    // 0.8.3 (the review: mouse movement broke one short look-at, and the next step started another): a smooth look watches
+    // the player's own input with the same watch a glide and behave.look use (XFPlayer.WatchInput, read by XFPlayer.Where),
+    // checks it before every step and while it waits, and switches it off on every way out.
+    struct InputWatch
+    {
+        std::string cid;
+        bool on = false;
+        ~InputWatch()
+        {
+            if (!on)
+            {
+                return;
+            }
+            try
+            {
+                const auto id = cid;
+                Game([id] {
+                    bool off = false;
+                    return ScriptCall("XFPlayer", "WatchInput", {"Bool"}, {&off}, id);
+                }, "player.look.unwatch");
+            }
+            catch (...)
+            {
+                // the queue closed (the kill switch, which removes the watch itself) or the game didn't answer
+            }
+        }
+    } watch{cid};
+    const auto inputSeen = [&cid]() -> std::string {
+        return Game([cid] { return ScriptCall("XFPlayer", "Where", {}, {}, cid); }, "player.where").value("took_over", std::string());
+    };
+    if (request.smooth)
+    {
+        Game([cid] {
+            bool on = true;
+            return ScriptCall("XFPlayer", "WatchInput", {"Bool"}, {&on}, cid);
+        }, "player.look.watch");
+        watch.on = true;
+        // 0.8.3 (session 10's L2a: a five-second look took 1.5 s; the game's own look-at keeps its own pace): steered along the
+        // eased great-circle arc with a short look-at to the next place every kLookArcStepS, as behave.look is (0.8.2), so it
+        // takes duration_s. Before every step after the first: player.stop, the player's own input (took_over: the action),
+        // and the camera's drift (more than 4 degrees wider than the closest it came: camera_drift) each end it there.
+        const Vec3 from = player::DirectionOf(yaw0, pitch0);
+        Vec3 to{target.point[0] - camPos[0], target.point[1] - camPos[1], target.point[2] - camPos[2]};
+        const double n = std::max(1e-6, std::hypot(to[0], to[1], to[2]));
+        to = {to[0] / n, to[1] / n, to[2] / n};
+        double closest = -1.0;
+        for (int step = 1;; ++step)
+        {
+            if (step > 1)
+            {
+                std::this_thread::sleep_until(started + std::chrono::milliseconds(static_cast<int>((step - 1) * player::kLookArcStepS * 1000.0)));
+                if (stops.StoppedSince(seen))
+                {
+                    stopped = true; // player.stop broke the look-at; nothing here starts it again
+                    break;
+                }
+                tookOver = inputSeen();
+                if (!tookOver.empty())
+                {
+                    break;
+                }
+                reached = readCamera();
+                const double angle = angleTo(reached, target.point);
+                if (closest < 0.0 || angle < closest)
+                {
+                    closest = angle;
+                }
+                else if (step * player::kLookArcStepS > 0.3 && angle > closest + 4.0)
+                {
+                    tookOver = "camera_drift";
+                    break;
+                }
+            }
+            const double next = std::min(1.0, step * player::kLookArcStepS / request.duration);
+            const auto d = player::LookArc(from, to, next);
+            lookAt({camPos[0] + d[0] * 10.0, camPos[1] + d[1] * 10.0, camPos[2] + d[2] * 10.0}, next >= 1.0 ? 0.25 : player::kLookArcStepS * 1.5,
+                   next >= 1.0 ? "player.look" : "player.look.step");
+            if (next >= 1.0)
+            {
+                break;
+            }
+        }
+    }
+    else
+    {
+        // Aim at the wanted point from where the camera is after any turn (the camera moves with V's head slightly).
+        lookAt(target.point, request.duration, "player.look");
+    }
+    // Wait for it: the last look-at runs natively; read the camera until it is there or the time is up.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(request.smooth ? 700 : static_cast<int>(request.duration * 1000.0) + 700);
+    while (!stopped && tookOver.empty() && std::chrono::steady_clock::now() < deadline)
     {
         writes::WaitTicks(Get().queue, 3, GameTimeout());
-        reached = Game([cid] { return ScriptCall("XFPlayer", "State", {}, {}, cid); }, "player.state").at("camera");
+        if (stops.StoppedSince(seen))
+        {
+            stopped = true;
+        }
+        if (watch.on)
+        {
+            tookOver = inputSeen();
+            if (!tookOver.empty())
+            {
+                break;
+            }
+        }
+        reached = readCamera();
         const double dy = std::abs(std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0));
         const double dp = std::abs(reached.value("pitch", 0.0) - target.pitch);
-        if (dy < 1.0 && dp < 1.0)
+        if (stopped || (dy < 1.0 && dp < 1.0))
         {
             break;
         }
     }
+    const double tookS = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
     const double errYaw = std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0);
     const double errPitch = reached.value("pitch", 0.0) - target.pitch;
     return json{{"mode", request.smooth ? "smooth" : "instant"}, {"wanted", {{"yaw", target.yaw}, {"pitch", target.pitch}}},
+                {"stopped", stopped},
+                {"took_s", std::round(tookS * 100.0) / 100.0},
+                {"duration_s", request.smooth ? request.duration : 0.0},
+                {"took_over", tookOver.empty() ? json(nullptr) : json(tookOver)},
                 {"reached", {{"yaw", reached.value("yaw", 0.0)}, {"pitch", reached.value("pitch", 0.0)}}},
                 {"error_deg", {{"yaw", std::round(errYaw * 100.0) / 100.0}, {"pitch", std::round(errPitch * 100.0) / 100.0}}},
                 {"within_2_deg", std::abs(errYaw) <= 2.0 && std::abs(errPitch) <= 2.0},
@@ -335,6 +495,7 @@ json PlayerLookStop(const MethodContext& aContext)
 json PlayerStop(const MethodContext& aContext)
 {
     params::RequireOnly(aContext.params, {});
+    Get().playerStops.Stop(); // 0.8.2: before the game step, so a look or teleport waiting between its steps never goes on
     Get().behaviours.StopAll("player_stop");
     const auto cid = aContext.cid;
     auto out = Game([cid] { return ScriptCall("XFPlayer", "Stop", {}, {}, cid); }, "player.stop");
@@ -402,7 +563,7 @@ json PhotoCameraPreset(const MethodContext& aContext)
     {
         TheDispatcher().RequireWritesOpen();
         NotePresetOriginals(preset, before.value("flats", json::object()), request.values);
-        Game(
+        GameWrite(
             [cid, preset, values = request.values] {
                 for (const auto& [name, value] : values)
                 {
@@ -425,7 +586,7 @@ json PhotoCameraPreset(const MethodContext& aContext)
     if (choose >= 0)
     {
         TheDispatcher().RequireWritesOpen();
-        selected = Game(
+        selected = GameWrite(
             [cid, choose] {
                 int32_t key = params::key::kCameraPreset;
                 float none = 0.0f;

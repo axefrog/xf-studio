@@ -367,12 +367,14 @@ MessageRequest ParseMessage(const json& aParams);
 std::vector<std::string> ClothingSlots();
 
 // inventory.equip: {item: a TweakDB item record (Items.Helmet_01_basic_01), slot (one of ClothingSlots,
-// checked against the item's own), add_if_missing (default false: an item V doesn't have is refused)}.
+// checked against the item's own), add_if_missing (default false: an item V doesn't have is refused), id (0.8.1, RB-125:
+// the exact copy to equip, as an undo names it: the decimal identity the game's answer gave; any copy without it)}.
 struct InventoryEquipRequest
 {
     std::string item;
     std::string slot;
     bool addIfMissing = false;
+    std::string id;
 };
 InventoryEquipRequest ParseInventoryEquip(const json& aParams);
 
@@ -385,6 +387,15 @@ struct InventoryUnequipRequest
     bool removeAdded = false;
 };
 InventoryUnequipRequest ParseInventoryUnequip(const json& aParams);
+
+// inventory.list (0.8.3, read; session 10's L1 and L4 needed a jacket V owns): {slot (one of ClothingSlots; none: every
+// clothing slot), limit (1-200, default 100)}. Clothing V owns, from her own inventory, with each copy's exact identity.
+struct InventoryListRequest
+{
+    std::string slot;
+    int32_t limit = 100;
+};
+InventoryListRequest ParseInventoryList(const json& aParams);
 
 // photo.camera.place (0.5.2, research): {position: [x, y, z], look_at: [x, y, z]} in world metres, at least 5 cm apart.
 struct CameraPlaceRequest

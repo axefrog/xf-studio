@@ -76,7 +76,7 @@ export function simdBlock(bits: number) {
 
 /** A set (depot rig path `rigPath`) with a clip keyed in a data chunk, a second clip keyed inline, a keyless clip, a SIMD clip and a record the generic reader refuses. */
 export function animSet(options: { chunkIndex?: number; counts?: Partial<ReturnType<typeof keyBlock>["counts"]>; channel3?: boolean; names?: readonly string[];
-  rigPath?: string; simdBits?: number; simdBlock?: Uint8Array; simdFrames?: number; simdJoints?: number } = {}) {
+  rigPath?: string; simdBits?: number; simdBlock?: Uint8Array; simdFrames?: number; simdJoints?: number; simdTracks?: number; simdTrackConstant?: boolean } = {}) {
   const duration = 1;
   const block = keyBlock(duration);
   const counts = { ...block.counts, ...options.counts };
@@ -94,11 +94,13 @@ export function animSet(options: { chunkIndex?: number; counts?: Partial<ReturnT
   const bufferB = f.export("animAnimationBufferCompressed", [...numbers(block.counts, 2),
     prop("inplaceCompressedBuffer", "DataBuffer", w => { w.u32(block.bytes.length).bytes(block.bytes); })]);
   const bufferC = f.export("animAnimationBufferCompressed", [prop("duration", "Float", v.f32(0.5)), prop("numFrames", "Uint32", v.u32(2))]);
+  const count = (name: string, n: number) => n > 0xffff ? prop(name, "Uint32", v.u32(n)) : prop(name, "Uint16", v.u16(n));
   const simdBits = options.simdBits ?? 16, simdBytes = options.simdBlock ?? simdBlock(simdBits);
   const bufferD = f.export("animAnimationBufferSimd", [prop("duration", "Float", v.f32(duration)), prop("numFrames", "Uint32", v.u32(options.simdFrames ?? SIMD_FRAMES)),
-    prop("numJoints", "Uint16", v.u16(options.simdJoints ?? 2)), prop("numTracks", "Uint16", v.u16(2)), prop("numTranslationsToCopy", "Uint16", v.u16(1)),
+    // A count past 16 bits is written as Uint32, as a hostile file may (the reader accepts any integer record).
+    count("numJoints", options.simdJoints ?? 2), count("numTracks", options.simdTracks ?? 2), prop("numTranslationsToCopy", "Uint16", v.u16(1)),
     prop("numTranslationsToEvalAlignedToSimd", "Uint16", v.u16(4)), prop("quantizationBits", "Uint16", v.u16(simdBits)),
-    prop("isScaleConstant", "Bool", v.bool(true)), prop("inplaceCompressedBuffer", "DataBuffer", w => { w.u32(simdBytes.length).bytes(simdBytes); })]);
+    prop("isScaleConstant", "Bool", v.bool(true)), ...(options.simdTrackConstant ? [prop("isTrackConstant", "Bool", v.bool(true))] : []), prop("inplaceCompressedBuffer", "DataBuffer", w => { w.u32(simdBytes.length).bytes(simdBytes); })]);
   const animation = (name: string, buffer: number, extra: ReturnType<typeof prop>[] = []) => f.export("animAnimation",
     [prop("name", "CName", v.cname(name)), prop("duration", "Float", v.f32(duration)), prop("animBuffer", "handle:animIAnimationBuffer", v.handle(buffer)), ...extra]);
   // Curve data the generic reader refuses: skipped, since the decoder reads only the records it needs.

@@ -3,26 +3,28 @@ import { FRESNEL_PRESET_RULE, planPresetExport } from "../src/engines/layered-ma
 import { DEFAULT_GLITTER_MODEL, glitterModel, glitterModels, parseGlitterChoices } from "../src/engines/layered-makeup/glitter-model";
 import { defaultFlakes } from "../src/engines/layered-makeup/finish";
 import { defaultDirectGlintFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
-import { historyLabel } from "../src/history-labels";
+import { historyLabel } from "../src/legacy/eye-makeup/history-labels";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
-import { recipeFile } from "../src/recipe-schema";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 
 /** The schema the recipe is written in: the in-memory recipe has none (part-2), so no action can change one. */
 const written = (recipe: Recipe) => { expect(recipe).not.toHaveProperty("schema"); return recipeFile(recipe)!.schema; };
-import { StudioApplication, type StudioAction } from "../src/studio-application";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { StudioApplication, type StudioAction } from "../src/app/studio-application";
+import type { TestAction } from "./fixtures/named-targets";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 import { finenessState } from "../src/features/eye-makeup/view/actions";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 
+import { namedCore } from "./fixtures/named-targets";
 // Finish, game-optics and Glitter-model actions through the application (CORE-16/17/18/21).
 
 function fixture(recipe: Recipe = initialRecipe()) {
   const workspace = freshWorkspace(recipe);
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION));
   const layer = (index: number) => core.document.recipe.layers[index];
-  const ok = (action: StudioAction) => {
+  const ok = (action: TestAction) => {
     const capability = core.app.capability(action);
     expect(capability).toMatchObject({ available: true });
     const result = core.app.dispatch(action);
@@ -86,11 +88,11 @@ test("every finish and Glitter model the application offers is also applied", ()
     f.ok({ kind: "layer.setFinish", layerId: f.layer(0).id, finish: neighbour });
     if (neighbour === "glitter") f.ok({ kind: "glitter.selectModel", layerId: f.layer(0).id, model: "fine" });
     for (const finish of finishes) {
-      const action: StudioAction = { kind: "layer.setFinish", layerId: f.layer(1).id, finish };
+      const action: TestAction = { kind: "layer.setFinish", layerId: f.layer(1).id, finish };
       if (f.app.capability(action).available) expect(f.app.dispatch(action)).toMatchObject({ ok: true });
       if (finish !== "glitter") continue;
       for (const model of glitterModels) {
-        const choose: StudioAction = { kind: "glitter.selectModel", layerId: f.layer(1).id, model };
+        const choose: TestAction = { kind: "glitter.selectModel", layerId: f.layer(1).id, model };
         if (f.app.capability(choose).available) expect(f.app.dispatch(choose)).toMatchObject({ ok: true });
       }
     }
@@ -205,14 +207,15 @@ test("shift edits are labelled by what they change", () => {
   expect(f.app.history().undo).toMatchObject({ label: "Shift strength", actionKind: "layer.setShift", layerId: id });
 });
 
-test("a host without user-level history reads the same timeline mapper", () => {
+test("history reads act on the scope they name; one naming none reads nothing (there is no fallback scope)", () => {
   const f = fixture(), id = f.layer(0).id;
   f.ok({ kind: "layer.setOpacity", layerId: id, opacity: .4 });
-  const { history: _history, ...services } = { document: f.document, eyeMakeup: f.eyeMakeup,
-    undo: f.undo, history: f.history, gestures: f.gestures, controls: f.controls };
+  const services = { document: f.document, eyeMakeup: f.eyeMakeup, gestures: f.gestures, controls: f.controls, history: f.history };
   const bare = new StudioApplication(services, STUDIO_REGISTRY);
-  expect(bare.historyTimeline()).toEqual({ ...f.app.historyTimeline(), redoCount: 0 });
-  expect(bare.historyTimeline().steps.map(step => step.label)).toEqual(["Opacity"]);
+  expect(bare.historyTimeline(f.document.scopeId)).toEqual(f.app.historyTimeline());
+  expect(bare.historyTimeline(f.document.scopeId).steps.map(step => step.label)).toEqual(["Opacity"]);
+  expect(bare.historyTimeline().steps).toEqual([]);
+  expect(bare.capability({ kind: "history.undo" } as never)).toMatchObject({ available: false, code: "missing_target", reason: "Nothing to undo here yet." });
 });
 
 test("game-matched Shimmer takes flake density and spread but refuses fineness; the earlier study and classic Glitter keep it", () => {

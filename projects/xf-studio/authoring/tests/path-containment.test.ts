@@ -5,12 +5,14 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { HOST_REAL_PATHS } from "../src/platform/export/host-real-paths";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalPath as canonicalWith, containmentKey, isBelow, isBelowReal as belowReal, isWithin, isWithinReal as withinReal, overlaps } from "../src/platform/api/path-containment";
 
 const W = "win32" as const, P = "posix" as const;
-const FS = { exists: existsSync, realpath: realpathSync.native };
+// The host's own reads (PIPE-136: existence by lstat, so a link whose target is gone is seen).
+const FS = HOST_REAL_PATHS;
 const canonicalPath = (path: string) => canonicalWith(path, FS);
 const isBelowReal = (child: string, root: string) => belowReal(child, root, FS);
 const isWithinReal = (child: string, root: string) => withinReal(child, root, FS);
@@ -151,6 +153,25 @@ test("real checks: an outside path that reaches in through a link is refused (PI
   } finally { cleanup(); }
 });
 
+test("real checks: a link whose target is gone is refused, never read as a folder not created yet (PIPE-136)", () => {
+  const dir = scratch();
+  try {
+    const root = join(dir, "root"), outside = join(dir, "outside");
+    mkdirSync(root); mkdirSync(outside);
+    link(outside, join(root, "door"));
+    rmSync(outside, { recursive: true, force: true });
+    // existsSync follows the link and finds nothing: a check built on it read the dangling link as a folder to create (reproduced).
+    expect(existsSync(join(root, "door"))).toBe(false);
+    expect(withinReal(join(root, "door", "new", "file"), root, { exists: existsSync, realpath: realpathSync.native })).toBe(true);
+    // The host's reads see the link, and its real path fails, so it is refused.
+    expect(isBelowReal(join(root, "door", "new", "file"), root)).toBe(false);
+    expect(isWithinReal(join(root, "door"), root)).toBe(false);
+    expect(() => canonicalPath(join(root, "door", "new"))).toThrow("leads nowhere");
+    expect(isBelowReal(join(root, "new", "file"), root)).toBe(true);
+    rmSync(join(root, "door"), { recursive: false, force: true });
+  } finally { cleanup(); }
+});
+
 /** The 8.3 short form of an existing path, or null where the volume has none. */
 function shortName(path: string): string | null {
   if (process.platform !== "win32") return null;
@@ -170,5 +191,29 @@ test("real checks: a Windows 8.3 short-named root matches its long-form paths", 
     expect(isBelowReal(join(root, "inside"), short)).toBe(true);
     expect(isBelowReal(join(short, "inside"), short)).toBe(true);
     expect(isBelowReal(join(dir, "elsewhere"), short)).toBe(false);
+  } finally { cleanup(); }
+});
+
+test("real checks: under a short-named folder (a long user name's temporary folder), links are judged as under a long one", () => {
+  const top = scratch();
+  try {
+    const base = join(top, "a long user name");
+    mkdirSync(base);
+    const short = shortName(base);
+    if (!short) return;   // this volume keeps no short names
+    const root = join(short, "root"), outside = join(short, "outside");
+    mkdirSync(join(root, "inner"), { recursive: true }); mkdirSync(outside);
+    writeFileSync(join(root, "inner", "file.txt"), "x");
+    link(root, join(outside, "back"));
+    link(outside, join(root, "door"));
+    // A root given as a link, with the paths below the real root written through the short folder.
+    expect(isBelowReal(join(root, "inner", "file.txt"), join(outside, "back"))).toBe(true);
+    expect(isBelowReal(join(outside, "back", "inner", "file.txt"), join(outside, "back"))).toBe(true);
+    // Still refused: an outside path reaching in through a link, and a link inside the root that leads out.
+    expect(isBelowReal(join(outside, "back", "inner", "file.txt"), root)).toBe(false);
+    expect(isBelowReal(join(root, "door", "x"), root)).toBe(false);
+    // The long form of the shared folder is the same folder.
+    expect(isBelowReal(join(base, "root", "inner", "file.txt"), root)).toBe(true);
+    expect(isBelowReal(join(base, "outside", "back", "inner", "file.txt"), root)).toBe(false);
   } finally { cleanup(); }
 });

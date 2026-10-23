@@ -1,9 +1,10 @@
 /**
  * The one action registry (feature-module platform §4). Kind sets, descriptors, Undo policy
  * and routing are derived from the registered owners; nothing is hand-kept beside it and no
- * kind falls through to a default owner. DOM-free; imports only the platform API.
+ * kind falls through to a default owner. Every feature action's payload names the look it edits
+ * (`look`, profiles design §3.6). DOM-free; imports only the platform API.
  */
-import { undoPolicyOf, type ActionDescriptor, type ActionSpec, type UndoPolicy } from "../api/actions";
+import { LOOK_TARGET, undoPolicyOf, type ActionDescriptor, type ActionSpec, type UndoPolicy } from "../api/actions";
 import type { ActionOwner, AsyncDescriptor, AsyncSystemFamily } from "../api/feature";
 
 /** Any owner the registry takes: synchronous families and features, and asynchronous families. */
@@ -52,7 +53,9 @@ export class Registry<O extends AnyOwner = ActionOwner> {
           this.byAsyncKind.set(kind, { owner: owner as AsyncOwner<O>, descriptor });
           continue;
         }
-        const spec = (owner.actions as Record<string, ActionSpec>)[kind];
+        const own = (owner.actions as Record<string, ActionSpec>)[kind];
+        // A feature's action edits one look's part, so it names that look (profiles design §3.6).
+        const spec = owner.owner === "feature" ? { ...own, descriptor: { ...own.descriptor, payload: { ...own.descriptor.payload, look: LOOK_TARGET } } } : own;
         this.byKind.set(kind, { owner: owner as SyncOwner<O>, spec });
         table[kind] = spec.descriptor;
       }

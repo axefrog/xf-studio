@@ -7,7 +7,7 @@ import { WEBVIEW2_BOOTSTRAPPER, verifyMicrosoftSignature, webView2Folder } from 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { builtVersions, licencePath, noticeIssues, noticesPath, packagedLicence, packagedNotices } from "./notices";
-import { BUILD_TOOLS_SCHEMA, builderEntry } from "./build";
+import { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "./build";
 import { contentIssues, describeContentIssues, SCANNED_TEXT } from "./package-content-scan";
 import { payloadMembers, singleInstallerWrapper, WRAPPER_BUDGET, wrapperTexts } from "./single-installer";
 
@@ -81,7 +81,7 @@ if (issues.length) throw Error(`THIRD_PARTY_NOTICES.md is out of date:\n${issues
 const toolPrefix = `${bundle}/Resources/app/build-tools/`;
 const toolFiles = members.filter(name => name.startsWith(toolPrefix) && !name.endsWith("/"))
   .map(name => name.slice(toolPrefix.length));
-sameMembers(toolFiles, ["manifest.json", builderEntry], "Packaged build tools");
+sameMembers(toolFiles, ["manifest.json", builderEntry, bcnEntry], "Packaged build tools");
 const toolManifest = JSON.parse(tar(["-xOf", archive, toolPrefix + "manifest.json"]));
 if (toolManifest.schema !== BUILD_TOOLS_SCHEMA ||
     JSON.stringify(Object.keys(toolManifest.files).sort()) !== JSON.stringify(toolFiles.filter(name => name !== "manifest.json").sort()))
@@ -90,6 +90,20 @@ for (const name of toolFiles.filter(name => name !== "manifest.json")) {
   if (createHash("sha256").update(tarBytes(["-xOf", archive, toolPrefix + name])).digest("hex") !== toolManifest.files[name])
     throw Error(`Packaged build tool changed: ${name}`);
 }
+// The texture compressor as packaged: its bytes load, report the contract the builder expects and compress a block (on the CPU, so
+// a runner without a GPU checks it too). Its strings are scanned like the text files (no build machine's user path).
+const packagedBcn = tarBytes(["-xOf", archive, toolPrefix + bcnEntry]);
+const bcnScratch = mkdtempSync(resolve(tmpdir(), "xfs-bcn-check-"));
+try {
+  const path = resolve(bcnScratch, "xfs_bcn.dll");
+  writeFileSync(path, packagedBcn);
+  // In a process of its own, so the DLL's file is free to delete afterwards.
+  const check = spawnSync(process.execPath, [resolve(root, "bcn-check.ts"), path], { encoding: "utf8", windowsHide: true, timeout: 60_000 });
+  if (check.status !== 0 || !check.stdout.includes("XFS_BCN_OK"))
+    throw Error(`The packaged texture compressor does not load or compress: ${(check.stderr || check.stdout || check.error?.message || "").slice(-2000)}`);
+} finally { rmSync(bcnScratch, { recursive: true, force: true }); }
+const bcnIssues = contentIssues(toolPrefix + bcnEntry, packagedBcn.toString("latin1"));
+if (bcnIssues.length) throw Error(["The packaged texture compressor contains personal paths or addresses:", ...describeContentIssues(bcnIssues)].join("\n"));
 // Exactly one extra resource: Microsoft's WebView2 bootstrapper, unmodified and Microsoft-signed.
 const extraPrefix = `${bundle}/Resources/app/webview2/`;
 sameMembers(members.filter(name => name.startsWith(extraPrefix) && !name.endsWith("/")).map(name => name.slice(extraPrefix.length)),
@@ -142,5 +156,5 @@ console.log(`${config.app.version} ${channel} build ${update.hash}; single setup
   `carries the three verified payload files byte for byte, once each, plus ${wrapper.length} bytes of Inno Setup's own wrapper ` +
   `(budget ${WRAPPER_BUDGET}). The wrapper's setup data is stored uncompressed; its Latin-1 and UTF-16 strings hold no user paths or ` +
   `email addresses (its program code is not text, and is not scanned), and its script checks the install for build ${update.hash}.`);
-console.log("Eleven allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
+console.log("Eleven allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and two hashed asset-free build tools (the package builder, and the texture compressor, which loads and compresses); no private preview assets or update feed.");
 console.log(`Scanned ${scanned.length} packaged text files: no absolute user paths or email addresses.`);

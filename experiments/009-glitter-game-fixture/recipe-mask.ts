@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultFineSpeckleFlakes } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/direct-glint-settings";
 import { raster } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/recipe";
-import { readRecipeFile } from "../../projects/xf-studio/authoring/src/recipe-schema";
+import { readRecipeFile } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/recipe-schema";
 import { EYE_MAKEUP_REGION, initialRecipe } from "../../projects/xf-studio/authoring/src/features/eye-makeup/region";
 
 const [source, layerId, sizeArg, output] = process.argv.slice(2);

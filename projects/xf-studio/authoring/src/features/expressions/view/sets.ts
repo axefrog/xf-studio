@@ -19,12 +19,12 @@ import { applyCapability, badge, button, setButtonLabel, emptyState, GroupSectio
   section, Segmented, modLine as modLineItem, type MenuItem } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
-import { MOD_NAME_HINT } from "../../../mod-branding";
+import { MOD_NAME_HINT } from "../../../legacy/eye-makeup/mod-branding";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
-import type { GenericFeatureFacade } from "../../../studio-presentation";
-import type { PartPreset, PartPresetSet, PartPresetSetTable, SetExportResult } from "../../../part-presets";
-import { defaultSetModName, setExportKey, setMembers, setModName } from "../../../part-preset-sets";
+import type { GenericFeatureFacade } from "../../../app/studio-presentation";
+import type { PartPreset, PartPresetSet, PartPresetSetTable, SetExportResult } from "../../../library/part-presets";
+import { defaultSetModName, setExportKey, setMembers, setModName } from "../../../library/part-preset-sets";
 import type { ExportOmission, PackageBuildResult, PackageCheckResult } from "../../../platform/api";
 import type { ExpressionAction } from "../core";
 import type { ExpressionPart } from "../part";
