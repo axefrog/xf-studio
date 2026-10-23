@@ -98,7 +98,7 @@ export class Queries {
     let exact = 0;
 
     // The tests a query makes on `kind` and `time` reject most minted events without resolving them: they are the same tests, made on what the event was minted with.
-    const pre = this.k.schema.hasKind('core:event') && findKinds.has('core:event') ? itemPrefilter(q.must) : undefined;
+    const pre = this.k.schema.hasKind('core:event') && findKinds.has('core:event') && !this.k.store.generalTouches(['kind', 'time', 'from', 'length']) ? itemPrefilter(q.must) : undefined;
     const check = (id: Id): void => {
       if (checked.has(id)) return;
       checked.add(id);

@@ -47,10 +47,15 @@ export class Events {
   /** Summary items published as events in this session (V4-47). Not persisted: the publishing layer keeps its own record. */
   readonly published = new Set<Id>();
   /** The kind and time each event was minted with: a cache for queries to reject a candidate before resolving it. Not persisted. */
-  private minted = new Map<Id, { kind: string; time: number }>();
+  private minted = new Map<Id, { kind: string; time: number; local: number }>();
 
+  /**
+   * The kind and time an event was minted with, while nothing local has touched it since: a pin or a contribution that names the event
+   * may restate either, and then the resolved value is the one a query must test (S0 8.3).
+   */
   mintedFacts(id: Id): { kind: string; time: number } | undefined {
-    return this.minted.get(id);
+    const f = this.minted.get(id);
+    return f !== undefined && this.k.store.localState(id) === f.local ? f : undefined;
   }
 
   constructor(private readonly k: Kernel) {}
@@ -69,7 +74,8 @@ export class Events {
     const have = k.store.header(nid) !== undefined;
     if (have && k.store.contributionsOrigin(nid).length > 0) return nid;
     if (!have) k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
-    this.minted.set(nid, { kind: spec.kind, time: spec.time });
+    // a pin that survived a load may already restate the kind or the time: then what the event was minted with is not what it resolves to, and nothing is cached
+    const untouched = k.store.localState(nid) === 0;
     const put = (node: Id, slot: SlotPath, value: Value): void => {
       k.contribute({
         source: { layer: 'simulation', origin: nid },
@@ -107,6 +113,8 @@ export class Events {
     if (spec.place !== undefined && k.store.header(spec.place)) {
       k.addEdge({ type: 'core:located-in', from: nid, to: spec.place, cause: nid, valid: { from: spec.time }, silent: true });
     }
+    if (untouched) this.minted.set(nid, { kind: spec.kind, time: spec.time, local: k.store.localState(nid) });
+    else this.minted.delete(nid);
     k.bump();
     if (have) return nid;
     const ch: Parameters<Kernel['emit']>[0] = {
@@ -264,17 +272,25 @@ export class Events {
     this.canonRecords.set(rec.event, rec.entries.map((x) => ({ ...x, fields: [...x.fields], pins: [...x.pins] })));
   }
 
+  /** A replacement load: the canon records go, and so do this session's publications and the minting cache (S0 14.3). */
   clear(): void {
     this.canonRecords.clear();
     this.minted.clear();
+    this.published.clear();
   }
 
+  /** The state a staged batch can discard (S0 14.2a): the canon records and what has been published in this session. */
   capture(): unknown {
-    return structuredClone(this.canonRecords);
+    return structuredClone({ canon: this.canonRecords, published: this.published });
   }
 
   restoreFrom(cap: unknown): void {
-    this.canonRecords = structuredClone(cap) as Map<Id, CanonEntry[]>;
+    const c = structuredClone(cap) as { canon: Map<Id, CanonEntry[]>; published: Set<Id> };
+    this.canonRecords = c.canon;
+    this.published.clear();
+    for (const id of c.published) this.published.add(id);
+    // events minted in the discarded stage are gone from the store: the cache of what they were minted with goes too
+    this.minted.clear();
   }
 
   /** Known events whose `time` resolves to exactly `t` (used by `knows`, SPEC-NOTES 21). */

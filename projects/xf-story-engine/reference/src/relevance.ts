@@ -209,8 +209,6 @@ export class Dispatcher {
     const own = ownValueOf(change);
     const includeEdge = change.c === 'edge' && change.ended ? change.edge : undefined;
     const ctx = newOpCtx(k.config.allowance);
-    const memo = new Map<Id, number>();
-    const full = new Map<Id, number>();
     let best = 0;
     for (const e of fr.scanList()) {
       if (types && !types.includes(e.type)) continue;
@@ -232,6 +230,9 @@ export class Dispatcher {
       }
       if (bestS < 0) continue;
       const m = k.config.matchWeight[e.type];
+      // the pull of a frame through one source is not the pull through another: the memo is per source, as in `examine`
+      const memo = new Map<Id, number>();
+      const full = new Map<Id, number>();
       for (const d of targets) best = Math.max(best, fr.pullVia(d, e.frame, memo, full) * m * bestS);
     }
     return best;

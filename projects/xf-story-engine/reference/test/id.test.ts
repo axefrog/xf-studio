@@ -30,6 +30,19 @@ describe('identifiers and hashing (spec 1.1, 1.2)', () => {
     expect(hex(encodeArgs([val(Uint8Array.of(7, 8))]))).toBe('06' + '0708' + '00');
   });
 
+  test('a string is its UTF-8 bytes whatever its surrogates: a pair is four bytes, a lone surrogate three (Sol 10)', () => {
+    const enc = new TextEncoder();
+    for (const str of ['\ud800\u00e9', '\udc00x', 'a\ud800', '\ud83d\ude00', '\ud800\ud800\udc00', '\ud800', '\u00e9\udfff\u00e9', '']) {
+      const bytes = enc.encode(str);
+      const out = encodeArgs([s(str)]);
+      expect(out.length).toBe(5 + bytes.length);
+      expect(new DataView(out.buffer).getUint32(1, true)).toBe(bytes.length);
+      expect([...out.subarray(5)]).toEqual([...bytes]);
+    }
+    // two distinct strings no longer share an encoding
+    expect(H(s('\ud800\u00e9'))).not.toBe(H(s('\ud800\u00e8')));
+  });
+
   test('negative zero becomes positive zero, NaN is forbidden', () => {
     expect(bytesToHex(f64Bytes(-0))).toBe(bytesToHex(f64Bytes(0)));
     expect(() => f64Bytes(NaN)).toThrow();

@@ -398,6 +398,31 @@ describe('V4-44: matchStrength(actor, change, types?)', () => {
     expect(Math.max(...got)).toBeCloseTo(m, 12);
   });
 
+  test('a frame that inherits from two sources that both match is pulled by each source on its own, as dispatch pulls it (Sol 11)', () => {
+    const k = coreKernel('V4-44-two', pinDefs);
+    const alice = k.root('alice', 'core:person');
+    const bob = k.root('bob', 'core:person');
+    const place = k.root('place', 'fx:cell');
+    // the sources belong to other actors (two groups); the one frame of alice's inherits from both
+    const mkParent = (name: string, weight: number) => k.frames.open({
+      actor: k.root(`group-${name}`, 'core:group'), level: 'drive', origin: H(hs('parent'), hs(name)), weight, own: { protects: [{ slot: '*', scope: { nodes: [bob] } }] }, cause,
+    });
+    const weak = mkParent('weak', 0.1);
+    const strong = mkParent('strong', 1);
+    k.frames.open({ actor: alice, level: 'situation', origin: H(hs('child')), weight: 1, parents: [{ frame: weak.id, weight: 1 }, { frame: strong.id, weight: 1 }], cause });
+    k.settle();
+    const got: number[] = [];
+    k.dispatcher.onRelevance((r) => { if (r.actor === alice) got.push(r.r); });
+    const ch = event(bob, place);
+    const m = k.matchStrength(alice, ch);
+    k.emit(ch);
+    k.settle();
+    expect(got.length).toBeGreaterThan(0);
+    expect(m).toBeCloseTo(Math.max(...got), 12);
+    // the strong source alone pulls the child at its weight: 1 x 1.0 (protects) x 1.0
+    expect(m).toBeCloseTo(1, 12);
+  });
+
   test('an actor with no eligible frame, or a change nothing matches, scores 0', () => {
     const { k, alice, bob, place, f } = setup();
     expect(k.matchStrength(bob, event(bob, place))).toBe(0);
@@ -485,6 +510,30 @@ describe('V4-47: publish-item', () => {
     expect(ev.participants).toEqual([{ who: victim, role: 'victim' }]);
     // The silent contributions announced nothing of their own.
     expect(changes.filter((c) => c.c === 'contribution').length).toBe(0);
+  });
+
+  test('publication belongs to the session: a load that rewinds, and a discarded stage, forget it (Sol 2)', () => {
+    const { k, item } = setup();
+    k.root('v', 'core:person');
+    const published = (): boolean => {
+      k.contribute({ source: { layer: 'simulation', origin: 'p' }, target: { slot: 'participants#count', scope: { nodes: [item] } }, form: { f: 'const', value: 0 }, mode: 'constrain', silent: true });
+      return k.events.publishItem(item);
+    };
+    // a save before the publication, then the publication, then a load of that save in the same kernel: the item may be published again
+    k.persistence.save('before');
+    expect(published()).toBe(true);
+    expect(published()).toBe(false);
+    k.persistence.load('before');
+    k.summaries.materialise(k.store.idsOfKind('core:summary')[0]!, 0);
+    expect(published()).toBe(true);
+    // a staged batch that publishes and is discarded leaves the item unpublished
+    const k2 = setup();
+    k2.k.root('v', 'core:person');
+    const stage = k2.k.stage();
+    expect(stage.write((kk) => kk.events.publishItem(k2.item))).toBe(true);
+    stage.discard();
+    expect(k2.k.events.published.has(k2.item)).toBe(false);
+    expect(k2.k.events.publishItem(k2.item)).toBe(true);
   });
 
   test('a node that is not a summary item is refused', () => {

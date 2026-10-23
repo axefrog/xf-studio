@@ -183,6 +183,15 @@ export class Store {
     return (this.pinsByNode.get(node)?.length ?? 0) + (this.contribByNode.get(node)?.length ?? 0);
   }
 
+  /** Whether a contribution that names no node (a rule over a kind, or over everything) could touch one of these slots. */
+  generalTouches(slots: readonly string[]): boolean {
+    for (const i of this.contribGeneral) {
+      const c = this.contribs.get(i);
+      if (c && (c.target.slot === '*' || slots.includes(c.target.slot))) return true;
+    }
+    return false;
+  }
+
   pin(id: Id): Pin | undefined {
     return this.pinsById.get(id);
   }

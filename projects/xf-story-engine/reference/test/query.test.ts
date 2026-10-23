@@ -218,3 +218,60 @@ describe('ref slots draw among the complete candidate set (spec 2.4)', () => {
     expect(roomy.resolve(roomy.root('c', 'fx:chooser'), 'pick').status).toBe('ok');
   });
 });
+
+describe('a query tests what a node resolves to, not what it was minted with (Sol 3)', () => {
+  const eventIn = (k: Kernel, name: string) => {
+    const place = k.root('place', 'core:place');
+    const alice = k.root('alice', 'core:person');
+    const spec = { creator: alice, cause, name, time: 77, kind: 'assault', place, participants: [{ who: alice, role: 'victim' }] };
+    const e = k.events.mintEvent(spec);
+    const find = (kindName: string, lo = 0, hi = 1000) =>
+      k.query({ find: 'core:event', scope: { under: place }, at: 1000, must: [{ path: 'kind', op: 'eq', arg: kindName }, { path: 'time', op: 'range', arg: [lo, hi] }], limit: 'all' });
+    const ids = (kindName: string, lo?: number, hi?: number): Id[] => {
+      const out = find(kindName, lo, hi);
+      return out.status === 'ok' ? out.items.map((x) => x.id) : [];
+    };
+    return { place, alice, e, ids, spec };
+  };
+
+  test('a pin that restates the kind of a minted event is seen, with and without the cache, and after a save and load', () => {
+    const k = coreKernel('Sol-3a');
+    const { e, ids, spec } = eventIn(k, 'e');
+    expect(ids('assault')).toEqual([e]);
+    expect(ids('sale')).toEqual([]);
+    k.pin({ node: e, slot: 'kind', value: 'sale', reason: 'observed', cause });
+    expect(k.value(e, 'kind')).toBe('sale');
+    expect(ids('sale')).toEqual([e]);
+    expect(ids('assault')).toEqual([]);
+    k.persistence.save('A');
+    k.persistence.load('A');
+    // the pin is what survives; the event is minted again by whoever holds its record, and the pin still decides its kind
+    expect(k.value(e, 'kind')).toBe('sale');
+    k.root('place', 'core:place');
+    k.root('alice', 'core:person');
+    expect(k.events.mintEvent(spec)).toBe(e);
+    expect(k.value(e, 'kind')).toBe('sale');
+    expect(ids('sale')).toEqual([e]);
+    expect(ids('assault')).toEqual([]);
+  });
+
+  test('a contribution that moves the time of a minted event is seen', () => {
+    const k = coreKernel('Sol-3b');
+    const { e, ids } = eventIn(k, 'e2');
+    expect(ids('assault', 0, 100)).toEqual([e]);
+    k.pin({ node: e, slot: 'time', value: 500, reason: 'observed', cause });
+    expect(k.value(e, 'time')).toBe(500);
+    expect(ids('assault', 0, 100)).toEqual([]);
+    expect(ids('assault', 400, 600)).toEqual([e]);
+  });
+
+  test('a rule over a kind that touches kind switches the shortcut off, and the answer is the resolved one', () => {
+    const k = coreKernel('Sol-3c');
+    const { e, ids } = eventIn(k, 'e3');
+    expect(ids('assault')).toEqual([e]);
+    k.contribute({ source: { layer: 'authored', origin: cause }, target: { kind: 'core:event', slot: 'kind' }, form: { f: 'const', value: 'sale' }, mode: 'constrain' });
+    expect(k.value(e, 'kind')).toBe('sale');
+    expect(ids('sale')).toEqual([e]);
+    expect(ids('assault')).toEqual([]);
+  });
+});

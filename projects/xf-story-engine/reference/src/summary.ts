@@ -46,7 +46,7 @@ export class Summaries {
   private descCache = new Map<string, { d: ItemDescriptor | null; cost: number; height: number }>();
   private descRevision = -1;
   /** The kind, start and length of each summary, which are committed at minting and do not change: a cache that a query's time bound prunes by. */
-  private spans = new Map<Id, { kind: Value | undefined; from: number; length: number } | null>();
+  private spans = new Map<Id, { span: { kind: Value | undefined; from: number; length: number } | null; local: number }>();
   private descNow = Number.NaN;
   private warmList = new Worklist<{ summary: Id; next: number }>();
 
@@ -61,6 +61,8 @@ export class Summaries {
   mintSummary(spec: SummarySpec): Id {
     const k = this.k;
     const nid = k.mint(spec.creator, spec.cause, spec.name, 'core:summary');
+    // a pin that was there before this mint may restate a field: then the span is resolved when it is first read, not taken from the spec
+    const untouched = k.store.localState(nid) === 0;
     const pin = (slot: SlotPath, value: Value): void => {
       k.pin({ node: nid, slot, value, reason: 'committed', cause: spec.cause, silent: true });
     };
@@ -69,7 +71,8 @@ export class Summaries {
     pin('length', spec.length);
     pin('scope', spec.scope);
     if (spec.count !== undefined) pin('count', spec.count);
-    this.spans.set(nid, { kind: spec.kind, from: spec.from, length: spec.length });
+    if (untouched) this.spans.set(nid, { span: { kind: spec.kind, from: spec.from, length: spec.length }, local: this.k.store.localState(nid) });
+    else this.spans.delete(nid);
     return nid;
   }
 
@@ -82,7 +85,7 @@ export class Summaries {
   /** The kind, start and length of a summary, from the cache or resolved once. */
   spanOf(ctx: OpCtx, summary: Id, t: GameTime): { kind: Value | undefined; from: number; length: number } | null {
     const have = this.spans.get(summary);
-    if (have !== undefined) return have;
+    if (have !== undefined && have.local === this.k.store.localState(summary)) return have.span;
     const read = (slot: string): Value | undefined => {
       const r = this.k.resolver.resolveWithin(ctx, summary, slot, t);
       failIfFailed(r.status, `${slot} of ${summary}`);
@@ -91,7 +94,7 @@ export class Summaries {
     const from = read('from');
     const length = read('length');
     const span = typeof from === 'number' && typeof length === 'number' ? { kind: read('kind'), from, length } : null;
-    this.spans.set(summary, span);
+    this.spans.set(summary, { span, local: this.k.store.localState(summary) });
     return span;
   }
 
