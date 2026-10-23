@@ -663,12 +663,31 @@ public class XFProjector {
   }
 }
 
+// 0.8.11 (session 17: the tag read "TEST - LAYER PHOTO_MENU" in normal play, the configured layer's raw name and not where it
+// draws): the surface the panel is on, in plain words, and only when the layer was moved off the default (ui_hud's layer
+// check); the default layer (photo_menu: the HUD in play, photo mode's menu inside it) shows just "test".
+public abstract class XFInkWhere {
+  public static func Of(layer: String) -> String {
+    if Equals(layer, "hud") {
+      return "HUD";
+    }
+    if Equals(layer, "notifications") {
+      return "notifications layer";
+    }
+    if Equals(layer, "top") {
+      return "top layer";
+    }
+    return "";
+  }
+}
+
 // ---- The panel's widgets (0.8.6: shared by the HUD overlay and the panel inside photo mode's menu) ----------------------
 
 // The ink panel itself: the game's dark plate with the red edge, the heading, the status line, up to four message lines and
 // the answers. 0.8.6: moved out of XFInkOverlay so that the panel inside photo mode's menu (XFPhotoMenuPanel) is the same
 // widgets filled from the same frame; the only change is the answers, now one text each (so a click in photo mode can tell
 // them apart) in a row where 0.8.5 had one text for all, spaced as its five spaces were.
+
 public class XFInkPanel {
   public let canvas: ref<inkCanvas>;
   // 0.8 (session 8: the plate wasn't drawn; a Fill rectangle in a fit-to-content canvas got no size): the plate and the red
@@ -805,7 +824,7 @@ public class XFInkPanel {
   }
 
   // 0.8.10 (session 16's A7r: after a reopen the HUD-layer panel could not be told from the one inside photo mode's menu): the
-  // tag beside the heading names where this panel is drawn, "test" alone on the HUD layer.
+  // tag beside the heading names where this panel is drawn, in plain words (XFInkWhere); "test" alone for the default layer.
   public func SetWhere(place: String) -> Void {
     this.m_tag.SetText(StrLen(place) > 0 ? "test - " + place : "test");
   }
@@ -1240,7 +1259,7 @@ public class XFInkOverlay extends ScriptableSystem {
       this.m_reported = true;
       XFBridge_Announce("ink", "panel geometry " + geometry);
     }
-    this.m_view.SetWhere(Equals(this.m_layer, "hud") && Equals(frame.layer, "hud") ? "" : "layer " + frame.layer);
+    this.m_view.SetWhere(XFInkWhere.Of(frame.layer));
     this.m_view.Apply(frame, true);
     this.m_platesRoot.SetVisible(frame.nameplates);
     this.ReportDrawn(frame);

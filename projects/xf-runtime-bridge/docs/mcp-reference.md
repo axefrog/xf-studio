@@ -1420,7 +1420,7 @@ No parameters.
 
 ### `npc_move`
 
-**Walk an actor somewhere.** Sends one of the bridge's actors walking (or running) to V ("v"), to another NPC (its handle) or to a world point (to_point), stopping stop_m metres short (default 1.6) and turning to face V at the end when going to V (face_v). It uses the game's own walking along walkable ground. npc.arrived follows when it gets there; npc.blocked when it makes no headway for 4 seconds (it keeps trying) or can't go on; npc.move_failed with the reason (no path, interrupted, or max_s passed, default 60). A new move replaces the last one. Picked NPCs aren't moved.
+**Walk an actor somewhere.** Sends one of the bridge's actors walking (or running) to V ("v"), to another NPC (its handle) or to a world point (to_point), stopping stop_m metres short (default 1.6); face_v sends V as the walk's facing target, off by default because the game keeps a facing target after the walk and a later walk then faces V (npc_turn after arriving faces her to V). It uses the game's own walking along walkable ground. npc.arrived follows when it gets there; npc.blocked when it makes no headway for 4 seconds (it keeps trying) or can't go on; npc.move_failed with the reason (no path, interrupted, or max_s passed, default 60). A new move replaces the last one. Picked NPCs aren't moved.
 
 - **Command:** `npc.move`, the bridge method `npc.move`
 - **Permission:** Direct NPCs (`write-npc`)
@@ -1435,7 +1435,7 @@ No parameters.
 | `to_point` | array of number | exactly 3 items | A world point instead. |
 | `gait` | string | `walk`, `run`, `sprint` | How it moves: walk (default), run or sprint. |
 | `stop_m` | number | 0.3 to 10 | Stop this far short of the target, 0.3 to 10 m. Default 1.6. |
-| `face_v` | boolean | `true`, `false` | Turn to face V on arrival (default true when going to V). |
+| `face_v` | boolean | `true`, `false` | Send V as the walk's facing target (default false: the game keeps it after the walk; npc_turn faces her to V on arrival). |
 | `max_s` | number | 1 to 60 | Give up after this many seconds, 1 to 60. Default 60. |
 
 ### `npc_follow`

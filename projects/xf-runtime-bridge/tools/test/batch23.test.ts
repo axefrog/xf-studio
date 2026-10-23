@@ -78,12 +78,14 @@ describe("0.8.10 D1: the pin mark at a side edge keeps clear of the minimap, the
   });
 });
 
-describe("0.8.10 A7: each layer's panel says where it is drawn", () => {
-  test("the tag beside the heading names the layer (or the photo menu); the HUD layer keeps plain 'test'", () => {
+describe("0.8.10 A7: each layer's panel says where it is drawn (0.8.11: in plain words, and only off the default layer)", () => {
+  test("the tag beside the heading names the surface in words when the layer was moved; the default layer keeps plain 'test'", () => {
     const ink = read("redscript", "XFRuntimeBridgeInk.reds");
     expect(ink).toContain("public func SetWhere(place: String) -> Void {");
-    expect(ink).toContain('"layer " + frame.layer');
-    expect(read("redscript", "XFRuntimeBridgePhotoPanel.reds")).toContain('this.m_view.SetWhere("photo menu");');
+    expect(ink).toContain("this.m_view.SetWhere(XFInkWhere.Of(frame.layer));");
+    expect(ink).not.toContain('"layer " + frame.layer');
+    for (const words of ['return "HUD";', 'return "notifications layer";', 'return "top layer";']) expect(ink).toContain(words);
+    expect(read("redscript", "XFRuntimeBridgePhotoPanel.reds")).toContain('this.m_view.SetWhere("");');
   });
 });
 

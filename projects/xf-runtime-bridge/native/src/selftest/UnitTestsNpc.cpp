@@ -91,7 +91,7 @@ struct Fake
             return json{{"entity", "E-" + aWho}, {"position", {aAt[0], aAt[1], aAt[2]}}};
         };
         ops.command = [this](const std::string& aWho, const n::Command& aCommand) {
-            calls.push_back("command " + aWho + " " + aCommand.kind);
+            calls.push_back("command " + aWho + " " + aCommand.kind + (aCommand.faceV ? " face_v" : ""));
             return json{{"sent", true}, {"before", {{"position", {1.0, 2.0, 0.0}}, {"yaw", 45.0}}}};
         };
         ops.say = [this](const std::string& aWho, const n::Line& aLine) {
@@ -859,6 +859,98 @@ void TurnFirstTests()
     }
 }
 
+// 0.8.11 (session 17): V is no longer the facing target of a move to V unless asked, a facing target a move did set is cleared
+// when the move ends, and a held face is sent again on a schedule.
+void FacingAndFaceTests()
+{
+    const auto make = [](Fake& aFake, n::Service& aService, const n::Ops& aOps) {
+        aService.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 6}}}}, aOps);
+        aFake.npcs["a1"]["exists"] = true;
+        aFake.npcs["a1"]["spawned"] = true;
+        aFake.npcs["a1"]["prepared"] = true;
+        aFake.npcs["a1"]["position"] = {0.0, 6.0, 0.0};
+        aFake.npcs["a1"]["yaw"] = 180.0;
+        Poll(aService, aFake, aOps);
+    };
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        make(fake, service, ops);
+        fake.calls.clear();
+        service.Move(json{{"who", "a1"}, {"to", "v"}}, ops);
+        service.Tick(n::kTurnFirstMaxS + 0.2, {}, ops);
+        Check("0.8.11 move to V: V is not sent as the facing target by default (the engine would keep it for every later walk)",
+              fake.Called("command a1 move") && !fake.Called("command a1 move face_v"));
+    }
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        make(fake, service, ops);
+        fake.npcs["a1"]["yaw"] = 180.0;
+        fake.calls.clear();
+        service.Move(json{{"who", "a1"}, {"to", "v"}, {"face_v", true}}, ops);
+        service.Tick(n::kTurnFirstMaxS + 0.2, {}, ops);
+        Check("0.8.11 move to V with face_v: V is the facing target when asked", fake.Called("command a1 move face_v"));
+        fake.npcs["a1"]["position"] = {0.0, 1.5, 0.0};
+        fake.npcs["a1"]["command_state"] = "Success";
+        Poll(service, fake, ops);
+        fake.calls.clear();
+        Poll(service, fake, ops);
+        Check("0.8.11 a move that set a facing target ends with a stop that clears it", fake.Called("command a1 stop"));
+        fake.calls.clear();
+        Poll(service, fake, ops);
+        Poll(service, fake, ops);
+        Check("0.8.11 ... once, not on every poll", !fake.Called("command a1 stop"));
+    }
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        make(fake, service, ops);
+        service.Face(json{{"who", "a1"}, {"expression", "smile"}}, ops);
+        fake.calls.clear();
+        service.Tick(0.5, {}, ops);
+        Check("0.8.11 a held face is not sent again at once", !fake.Called("face a1"));
+        service.Tick(0.4, {}, ops);
+        service.Tick(n::kPollSeconds + 0.01, {}, ops);
+        Check("0.8.11 a held face is sent again after kFaceFirstS", fake.Called("face a1 3/6"));
+        fake.calls.clear();
+        service.Tick(n::kFaceSecondS + 0.3, {}, ops);
+        Check("0.8.11 ... again after kFaceSecondS", fake.Called("face a1 3/6"));
+        fake.calls.clear();
+        service.Tick(n::kFaceSteadyS + 0.3, {}, ops);
+        Check("0.8.11 ... and then every kFaceSteadyS", fake.Called("face a1 3/6"));
+        service.Face(json{{"who", "a1"}, {"off", true}}, ops);
+        fake.calls.clear();
+        service.Tick(n::kFaceSteadyS + 0.3, {}, ops);
+        Check("0.8.11 a face turned off is not sent again", !fake.Called("face a1 3"));
+    }
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        make(fake, service, ops);
+        fake.npcs["a1"]["prepared"] = false;
+        service.Face(json{{"who", "a1"}, {"expression", "smile"}}, ops);
+        fake.calls.clear();
+        service.Tick(2.0, {}, ops);
+        Check("0.8.11 an actor not yet prepared (still loading) has its face held back until it is", !fake.Called("face a1 3"));
+        fake.npcs["a1"]["prepared"] = true;
+        service.Tick(n::kPollSeconds + 0.01, {}, ops);
+        Check("0.8.11 ... and sent once it is", fake.Called("face a1 3/6"));
+    }
+}
+
 // 0.8.10 (session 16's N4: an actor asked for 2 m ahead of V at a vending machine stood where V could not see her): a spawn asked
 // for relative to V needs a sight line from V's head; otherwise the nearest visible walkable spot is used.
 void SightTests()
@@ -925,6 +1017,7 @@ int RunNpcUnitTests()
     StagingTests();
     ReviewTests();
     TurnFirstTests();
+    FacingAndFaceTests();
     SightTests();
     return gNpcFailures;
 }

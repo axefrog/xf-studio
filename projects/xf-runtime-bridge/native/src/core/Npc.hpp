@@ -78,6 +78,11 @@ inline constexpr int32_t kHubIdBase = 58460000;    // the dialogue hub ids the b
 inline constexpr double kFacingToleranceDeg = 25.0; // a held facing is turned back when it drifts further than this
 inline constexpr double kTurnedToleranceDeg = 15.0; // a turn has arrived (npc.turned) within this of its goal
 inline constexpr double kFacingReissueS = 1.0;      // a held facing re-turns at most once a second
+// 0.8.11 (session 17's N3: the smile did not show): a held face is sent again, since nothing says the first send took (an actor
+// still loading its animation graph, a graph that dropped it): after 0.8 s, after 2.5 s more, then every 5 s.
+inline constexpr double kFaceFirstS = 0.8;
+inline constexpr double kFaceSecondS = 2.5;
+inline constexpr double kFaceSteadyS = 5.0;
 inline constexpr double kBlockedAfterS = 4.0;       // a walk that gains less than kProgressM for this long is blocked
 inline constexpr double kProgressM = 0.3;
 // V16: an out-of-sight spawn (npc.spawn at "out_of_sight") and the dissolve release.
@@ -215,7 +220,7 @@ struct Command
     double distance = 1.6; // move: desiredDistanceFromTarget; follow: desiredDistance
     double yaw = 0.0;      // place: the facing (hasYaw)
     bool hasYaw = false;
-    bool faceV = false;    // move: face V on arrival
+    bool faceV = false;    // move: V as the facing target (0.8.11: off unless asked; the engine keeps it after the move ends)
 };
 
 struct Line
@@ -410,6 +415,9 @@ private:
         std::vector<LineHeld> lines;
         std::optional<Target> look;
         std::string face;
+        double sinceFace = 0.0;   // 0.8.11: since the held face was last sent
+        int faceSends = 0;        // 0.8.11: how many times it was sent again
+        bool facingSet = false;   // 0.8.11: a move was sent with V (or another) as its facing target: cleared when it ends or the next command goes out
         std::string gesture;
         double gestureLeft = 0.0;
         std::string releasing; // walk_away while it walks off; dissolve until it is out of sight

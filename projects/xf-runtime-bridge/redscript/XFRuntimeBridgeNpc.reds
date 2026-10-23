@@ -37,6 +37,9 @@ public class XFNpcEntry {
   public let command: ref<AICommand>;
   public let look: ref<LookAtAddEvent>;
   public let faced: Bool;
+  public let facingSet: Bool; // 0.8.11: a move was sent with a facing target (the behaviour keeps it until something clears it)
+  public let facingLogged: Int32;
+  public let faceLogged: Int32;
   public let held: Int32; // 0.8.10: how many of the game's own reactions were held back on it (npc-reactions in the plugin log)
   public let lines: array<Int32>;
   public let carrier: EntityID;
@@ -899,6 +902,33 @@ public abstract class XFNpc {
     entry.prepared = true;
   }
 
+  // 0.8.11 (session 17's N1 and N3: she turned the right way, then swivelled back to V and walked away backwards): the move
+  // command handler writes its facing target into the behaviour's argument only when there is one, and never clears it
+  // (aiMoveToCommandHandler.script:47-51; the spline handler writes null, 131), so a move to V left V as the facing target
+  // for every later walk. Cleared the way the game clears its own behaviour arguments (SetBehaviorArgument with null:
+  // aiRole.script:229, targetTrackingComponent.script:514). The argument's name is the tree's own and not in the scripts;
+  // "FacingTarget" is the mapping's name by analogy with MovementTarget [hypothesis], so the first few clears log what the
+  // argument held before and after, and Command also stops sending V as the facing target unless asked.
+  public static func ClearFacing(entry: ref<XFNpcEntry>, puppet: ref<ScriptedPuppet>, cid: String, why: String) -> Void {
+    let ai = puppet.GetAIControllerComponent();
+    if !IsDefined(ai) {
+      return;
+    }
+    let before = FromVariant<wref<GameObject>>(ai.GetBehaviorArgument(n"FacingTarget"));
+    // A crowd member the bridge picked keeps whatever its own AI holds; only a target our own move set is cleared there.
+    if !entry.facingSet && (Equals(entry.kind, "pick") || !IsDefined(before)) {
+      return;
+    }
+    let none: wref<GameObject>;
+    ai.SetBehaviorArgument(n"FacingTarget", ToVariant(none));
+    if entry.facingLogged < 4 {
+      entry.facingLogged += 1;
+      let after = FromVariant<wref<GameObject>>(ai.GetBehaviorArgument(n"FacingTarget"));
+      XFBridgeLog.Info(cid, "npc " + entry.who + " facing target cleared (" + why + "): held " + (IsDefined(before) ? "an entity" : "nothing") + " before, " + (IsDefined(after) ? "an entity" : "nothing") + " after");
+    }
+    entry.facingSet = false;
+  }
+
   public static func Command(cid: String, who: String, kind: String, targetKind: String, targetWho: String, x: Float, y: Float, z: Float, gait: Int32, distance: Float, yaw: Float, hasYaw: Bool, faceV: Bool) -> String {
     let registry = XFNpcRegistry.Get();
     let entry = IsDefined(registry) ? registry.Entry(who) : null;
@@ -918,6 +948,10 @@ public abstract class XFNpc {
     let facing = puppet.GetWorldYaw();
     let before = "{\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(facing) + "}";
     XFNpc.CancelCommand(entry, puppet);
+    // 0.8.11: whatever facing target an earlier move left goes before the next command, unless this move sets its own.
+    if !(Equals(kind, "move") && faceV) {
+      XFNpc.ClearFacing(entry, puppet, cid, kind);
+    }
     if Equals(kind, "stop") {
       return "{\"ok\":true,\"sent\":true,\"before\":" + before + "}";
     }
@@ -940,6 +974,7 @@ public abstract class XFNpc {
       // session 16's to see [hypothesis]; the scenario turns it with npc.turn after arriving either way.
       if faceV {
         AIPositionSpec.SetEntity(move.facingTarget, GetPlayer(GetGameInstance()));
+        entry.facingSet = true;
       }
       move.movementType = IntEnum<moveMovementType>(gait);
       move.desiredDistanceFromTarget = distance;
@@ -1145,6 +1180,12 @@ public abstract class XFNpc {
     feature.idle = idle;
     AnimationControllerComponent.ApplyFeatureToReplicate(npc, n"FacialReaction", feature);
     entry.faced = category != 0;
+    // 0.8.11: the plugin sends a held face again on a schedule; the first few sends per actor are logged with whether the actor
+    // was prepared, so the log shows whether an early send was lost.
+    if category != 0 && entry.faceLogged < 6 {
+      entry.faceLogged += 1;
+      XFBridgeLog.Info(cid, "npc " + entry.who + " face " + IntToString(category) + "/" + IntToString(idle) + " sent (" + IntToString(entry.faceLogged) + "), prepared " + XFJson.Flag(entry.prepared));
+    }
     return "{\"ok\":true,\"category\":" + IntToString(category) + ",\"idle\":" + IntToString(idle) + "}";
   }
 

@@ -1122,7 +1122,10 @@ json Service::Move(const json& aParams, const Ops& aOps)
     command.target = to;
     command.gait = ParseGait(aParams);
     command.distance = params::CheckNumber(aParams, "stop_m", 0.3, 10.0).value_or(1.6);
-    command.faceV = params::CheckBoolean(aParams, "face_v").value_or(to.kind == Target::Kind::V);
+    // 0.8.11 (session 17's N1 and N3: she walked away backwards): the move handler writes its facing target into the behaviour's
+    // argument only when there is one and never clears it (aiMoveToCommandHandler.script:47-51), so V as the facing target stuck
+    // and steered every later walk. Off unless asked; if it is asked, it is cleared when the move ends or the next command goes out.
+    command.faceV = params::CheckBoolean(aParams, "face_v").value_or(false);
     const double maxS = params::CheckNumber(aParams, "max_s", 1.0, kMoveMaxS).value_or(kMoveMaxS);
     const auto v = RequireV(aOps);
     Vec3 point{};
@@ -1152,6 +1155,7 @@ json Service::Move(const json& aParams, const Ops& aOps)
     motion.maxS = maxS;
     BeginWalk(npc, command, point, motion, aOps);
     npc.motion = motion;
+    npc.facingSet = command.faceV;
     json out{{"who", who}, {"to", TargetJson(to)}, {"gait", GaitName(command.gait)}, {"stop_m", command.distance}, {"max_s", maxS}, {"replaced", replaced}};
     if (motion.pending)
     {
@@ -1552,6 +1556,8 @@ json Service::Say(const json& aParams, const Ops& aOps)
         if (npc.face.empty())
         {
             npc.face = "smile";
+            npc.sinceFace = 0.0;
+            npc.faceSends = 0;
             smiled = true;
         }
     }
@@ -1673,6 +1679,8 @@ json Service::Face(const json& aParams, const Ops& aOps)
     std::scoped_lock _(m_mutex);
     auto& npc = Ours(who, false);
     npc.face = off ? std::string() : expression->name;
+    npc.sinceFace = 0.0;
+    npc.faceSends = 0;
     json out{{"who", who}, {"expression", off ? json(nullptr) : json(expression->name)}};
     out["undo"] = before.empty() ? (off ? json(nullptr) : Undo("npc.face", {{"who", who}, {"off", true}})) : Undo("npc.face", {{"who", who}, {"expression", before}});
     out["undo_note"] = out["undo"].is_null() ? "nothing to undo" : "the undo gives the face back";
@@ -2402,6 +2410,10 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
             {
                 npc.facing->sinceIssue += aDt;
             }
+            if (!npc.face.empty())
+            {
+                npc.sinceFace += aDt;
+            }
             if (!npc.spawned)
             {
                 npc.sinceSpawn += aDt;
@@ -2580,6 +2592,8 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
     std::vector<std::pair<std::string, std::string>> failed, followEnded;
     std::vector<json> blocked, turned;
     std::vector<std::pair<std::string, Command>> holdTurns, startWalks;
+    std::vector<std::pair<std::string, std::string>> refaces; // 0.8.11: who and the held face to send again
+    std::vector<std::string> clearFacings;                    // 0.8.11: who is idle with a facing target left from a move
     {
         std::scoped_lock _(m_mutex);
         for (const auto& entry : aReading.value("npcs", json::array()))
@@ -2665,8 +2679,24 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             {
                 toStartAct.push_back(who);
             }
+            // 0.8.11: a held face is sent again on a schedule (an actor not yet prepared is still loading).
+            if (!npc.face.empty() && !npc.handedBack && exists && (npc.kind != "actor" || entry.value("prepared", true)))
+            {
+                const double due = npc.faceSends == 0 ? kFaceFirstS : npc.faceSends == 1 ? kFaceSecondS : kFaceSteadyS;
+                if (npc.sinceFace >= due)
+                {
+                    npc.sinceFace = 0.0;
+                    ++npc.faceSends;
+                    refaces.emplace_back(who, npc.face);
+                }
+            }
             if (!npc.motion)
             {
+                if (npc.facingSet)
+                {
+                    npc.facingSet = false;
+                    clearFacings.push_back(who);
+                }
                 // A held facing (npc.turn hold): turned back when it drifts, including after a walk ends.
                 if (npc.facing && npc.known && npc.yawKnown && npc.facing->sinceIssue >= kFacingReissueS)
                 {
@@ -2851,6 +2881,48 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
     for (const auto& [who, why] : picksEnded)
     {
         ReleaseOne(who, "leave", why, aOps);
+    }
+    for (const auto& who : clearFacings)
+    {
+        // 0.8.11: the move ended with a facing target set; a stop command clears it (the script side clears it with every command).
+        try
+        {
+            if (aInput.writesOpen && !aInput.writesOpen())
+            {
+                throw MethodError("writes_closed", "the write gate closed before the facing target was cleared");
+            }
+            Command stop;
+            stop.kind = "stop";
+            aOps.command(who, stop);
+        }
+        catch (const std::exception&)
+        {
+            std::scoped_lock _(m_mutex);
+            const auto it = m_npcs.find(who);
+            if (it != m_npcs.end())
+            {
+                it->second.facingSet = true; // asked again on the next poll
+            }
+        }
+    }
+    for (const auto& [who, name] : refaces)
+    {
+        const auto* expression = FindExpression(name);
+        if (!expression || !aOps.face)
+        {
+            continue;
+        }
+        try
+        {
+            if (aInput.writesOpen && !aInput.writesOpen())
+            {
+                throw MethodError("writes_closed", "the write gate closed before the face was sent again");
+            }
+            aOps.face(who, expression->category, expression->idle);
+        }
+        catch (const std::exception&)
+        {
+        }
     }
     for (const auto& [who, turn] : holdTurns)
     {

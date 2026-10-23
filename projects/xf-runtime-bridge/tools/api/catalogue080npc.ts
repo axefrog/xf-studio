@@ -163,7 +163,7 @@ const DEFINITIONS: CommandDef[] = [
     name: "npc.move",
     title: "Walk an actor somewhere",
     description:
-      "Sends one of the bridge's actors walking (or running) to V (\"v\"), to another NPC (its handle) or to a world point (to_point), stopping stop_m metres short (default 1.6) and turning to face V at the end when going to V (face_v). It uses the game's own walking along walkable ground. npc.arrived follows when it gets there; npc.blocked when it makes no headway for 4 seconds (it keeps trying) or can't go on; npc.move_failed with the reason (no path, interrupted, or max_s passed, default 60). A new move replaces the last one. Picked NPCs aren't moved.",
+      "Sends one of the bridge's actors walking (or running) to V (\"v\"), to another NPC (its handle) or to a world point (to_point), stopping stop_m metres short (default 1.6); face_v sends V as the walk's facing target, off by default because the game keeps a facing target after the walk and a later walk then faces V (npc_turn after arriving faces her to V). It uses the game's own walking along walkable ground. npc.arrived follows when it gets there; npc.blocked when it makes no headway for 4 seconds (it keeps trying) or can't go on; npc.move_failed with the reason (no path, interrupted, or max_s passed, default 60). A new move replaces the last one. Picked NPCs aren't moved.",
     permission: "write-npc",
     input: obj(
       {
@@ -172,7 +172,7 @@ const DEFINITIONS: CommandDef[] = [
         to_point: point3("A world point instead."),
         gait,
         stop_m: num("Stop this far short of the target, 0.3 to 10 m. Default 1.6.", 0.3, 10),
-        face_v: bool("Turn to face V on arrival (default true when going to V)."),
+        face_v: bool("Send V as the walk's facing target (default false: the game keeps it after the walk; npc_turn faces her to V on arrival)."),
         max_s: num("Give up after this many seconds, 1 to 60. Default 60.", 1, 60),
       },
       ["who"],
