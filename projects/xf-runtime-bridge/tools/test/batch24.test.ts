@@ -18,9 +18,7 @@ describe("0.8.11 N1: a move's facing target is cleared, not left to steer later 
     expect(npc).toContain("entry.facingSet = true;");
   });
   test("only a target our own move set is cleared (an actor handed back, or a pick, keeps what its own AI holds)", () => {
-    expect(npc).toContain("if !entry.facingSet {
-      return;
-    }");
+    expect(npc).toContain("if !entry.facingSet {\n      return;\n    }");
   });
   test("V is not the facing target of a move unless face_v is asked", () => {
     expect(read("native", "src", "core", "Npc.cpp")).toContain('params::CheckBoolean(aParams, "face_v").value_or(false)');
@@ -52,9 +50,7 @@ describe("0.8.11 review fixes: the held Esc says so, and only while a question w
   const panel = read("redscript", "XFRuntimeBridgePhotoPanel.reds");
   const ink = read("redscript", "XFRuntimeBridgeInk.reds");
   test("Esc is held only with a question pending, and then the answers flash and the line under them says why", () => {
-    expect(panel).toContain("if now.askId <= 0 || ArraySize(now.askKeys) == 0 {
-      return false;
-    }");
+    expect(panel).toContain("if now.askId <= 0 || ArraySize(now.askKeys) == 0 {\n      return false;\n    }");
     expect(panel).toContain("this.m_view.Flash();");
     expect(panel).toContain("this.m_view.ShowHint(this.HeldText());");
     expect(panel).toContain('"Answer first, or press " + label + " to stop the bridge"');
