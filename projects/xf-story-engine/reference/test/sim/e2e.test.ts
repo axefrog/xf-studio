@@ -4,7 +4,6 @@
 import { describe, expect, test } from 'bun:test';
 import { processCause } from '../../src/evolution.ts';
 import { H, id as hid, mintedId, s as hs } from '../../src/id.ts';
-import type { SaveRecord } from '../../src/persistence.ts';
 import type { Change, Id } from '../../src/types.ts';
 import { defaultData, type S1Data } from '../../src/sim/data.ts';
 import type { PendingChild, RingEntry } from '../../src/sim/occ.ts';
@@ -18,31 +17,12 @@ import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
 import { itemTime } from '../../src/summary.ts';
 import { eventsState, fxData, occurrences, seedOf } from './helpers.ts';
+import { lcg, restate, transfer } from './feed.ts';
 import { differing, recordOf } from './records.ts';
 
 const W = 600;
 const FULL = process.env.S1_FULL === '1';
 const eventsProc = processCause('city.events');
-
-/** A small deterministic generator for the fixtures' "random boundary". */
-function lcg(seed: number): () => number {
-  let x = seed >>> 0;
-  return () => {
-    x = (Math.imul(x, 1664525) + 1013904223) >>> 0;
-    return x / 4294967296;
-  };
-}
-
-const chainOf = (sim: Sim): Map<string, SaveRecord> => (sim.k.persistence as unknown as { chain: Map<string, SaveRecord> }).chain;
-
-/** A fresh process of the same lineage: a new sim that holds the save chain of `from`, under another epoch, loaded at `key`. */
-function transfer(from: Sim, key: string, make: () => Sim, epochs = 7): Sim {
-  const fresh = make();
-  for (const [k, r] of chainOf(from)) chainOf(fresh).set(k, structuredClone(r));
-  for (let i = 0; i < epochs; i++) fresh.k.newEpoch();
-  fresh.k.persistence.load(key);
-  return fresh;
-}
 
 /** Count the runs of every process, by window, from now on. */
 function countRuns(sim: Sim): Map<string, number[]> {
@@ -438,20 +418,6 @@ describe('SF1-E1: a Kabuki week, in one call, in many calls and with reloads', (
       ? [{ t: privateW * W + 100, op: 'event' as const, kind: 'enf.fee.word', place: 'g2', participants: [{ who: 'claw', role: 'enforcer' }, { who: 'vendor', role: 'target' }], witnesses: 3 }]
       : []),
   ];
-
-  /** What the game states again after a load: the latest of every reading, and the events that have not happened yet. */
-  const restate = (sim: Sim, lines: ReplayLine[]): void => {
-    const now = sim.k.now;
-    const latest = new Map<string, ReplayLine>();
-    const out: ReplayLine[] = [];
-    for (const l of lines) {
-      if (l.op === 'event') {
-        if (l.t >= now) out.push(l);
-      } else if (l.op === 'reading') latest.set(`${l.node}|${l.slot}`, { ...l, t: now });
-      else if (l.op === 'person') latest.set(`person|${l.key}`, { ...l, t: now });
-    }
-    new ReplayPort(sim).submit([...latest.values(), ...out]);
-  };
 
   /** Build a sim fed the script, let `how` drive it, and give back the sim it ends with (which `how` may have replaced by a reload). */
   const run = (vCell: string, events: 'both' | 'private' | 'none', how: (sim: Sim) => Sim | void, only?: string[]): Sim => {

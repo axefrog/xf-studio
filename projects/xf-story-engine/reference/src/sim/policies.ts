@@ -264,7 +264,9 @@ export class Policies {
         const out: ReturnType<BeliefPolicy['onWitness']> = [];
         const origin = self.origin(ev);
         const salience = self.salienceOf(observer, ev);
-        const memorable = self.memorableByRule(observer, ev, salience);
+        let memorable = self.memorableByRule(observer, ev, salience);
+        // the cap of memorable beliefs a person holds is kept by not promoting further low-salience beliefs (S1 8.5)
+        if (memorable && salience < sim.data.minds.salienceMemorable && k.beliefs.activeOf(observer).filter((b) => b.memorable).length >= sim.data.minds.memorableCap) memorable = false;
         const actor = ev.participants.find((p) => ACTOR_ROLES.includes(p.role) && p.who !== observer);
         const base = { at: ev.time, confidence: 1, evidence: [origin], source: { by: 'observed' as const, event: ev.id }, memorable, ...(salience ? { salience } : {}) };
         if (actor === undefined || ev.kind === 'accident') {
