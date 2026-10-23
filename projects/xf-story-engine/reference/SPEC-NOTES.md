@@ -714,12 +714,13 @@ that most need a decision.
     the 1,000-operation script several times and sit near bun's 5 s default; on a loaded machine they time out. The tests
     are unchanged. bun ignores a `timeout` key in `bunfig.toml`, so the preload sets the default; a run of several files
     resets it, so the slow tests carry an explicit timeout as their third argument.
-116. **`Events.mintEvent` restates an event whose header survived and whose fields did not. (new)** A load keeps the header of
-    an event that a memorable belief cites as evidence (it is a retention root) and none of its fields: they are
-    simulation-layer contributions, which a save does not hold. `mintEvent` returned at once for a node it knew, so the
-    event stayed bare and a telling about it scored 0. It now sees that the node has no contributions of its own origin,
-    puts them back, bumps the revision and emits nothing, because the occurrence was announced when it happened.
-    `test/retention.test.ts` has the case.
+116. **An event kept as the evidence of a memorable belief is restored, silently, from the record. (amended, R1 SIM-03)** A load keeps
+    the header of an event that a memorable belief cites as evidence (it is a retention root) and none of its fields: they are
+    simulation-layer contributions, which a save does not hold. The kernel's `mintEvent` puts them back for a node that has the
+    header and no contributions of its own origin, without emitting anything. That left the caller to know what the event was,
+    and S1 does not: the first version relied on the ring, which holds seven days, and on the callers minting by hand. S1 now
+    writes the facts of such events into its record at each save and restores them at the load (144), so a telling about the
+    event scores what it did before the save, with the ring long past. `test/retention.test.ts` has the kernel case.
 117. **Queries prune before they resolve. (new)** The mirror and the norms process find raw events with a query over every event
     under the city, which materialised every item of every summary (S0 8.3 step 9) and grew with the world: 48 ms a window
     at window 600. A query's `must` clauses on `kind` and `time` (`eq`, `in`, `not-in`, `range`, the field bounds) are now
@@ -727,13 +728,14 @@ that most need a decision.
     `Summaries.spans`, cleared with the summaries), an item's time (`itemTime`, the same keyed draw the descriptor uses) and
     an event's minted kind and time (`Events.mintedFacts`). Anything that cannot pass is neither resolved nor materialised.
     A query still tests what a node resolves to (S0 8.3), so each shortcut holds only while it is proved equal to
-    resolution: a cached fact is used only for a node nothing local touches (`Store.localState` is the number it was cached
-    at, and it is not cached at all for a node that already had a pin or a contribution when it was minted), and the whole
-    prefilter is off while a rule over a kind could touch `kind`, `time`, `from` or `length` (`Store.generalTouches`). An item
-    that already exists (canon, or in focus) is always left to the exact check. The same run still costs 3 ms. Review R1
-    (finding 3) found the first version unsafe for a pinned kind; `test/query.test.ts` has the cases, with and without the
-    cache and after a save and a load.
-
+    resolution. A fact cached at minting is used only for a node nothing local touches (`Store.localState` is the number it was
+    cached at, and it is not cached at all for a node that already had a pin or a contribution when it was minted). A span
+    resolved later, while something local names the summary, is good only at the time it was resolved, because a contribution's
+    validity is a window that opens and closes without moving that number (R1 SIM-06; the first version of this note said the
+    stamp was enough). The whole prefilter is off while a rule over a kind could touch `kind`, `time`, `from` or `length`
+    (`Store.generalTouches`). An item that already exists (canon, or in focus) is always left to the exact check. The same run
+    still costs 3 ms. `test/query.test.ts` and `test/review-fixes.test.ts` have the cases, with and without the cache and after
+    a save and a load.
 ### The simulation layer's core (S1 v0.2, `src/sim/`)
 
 Numbers are identifiers: 116 and 117 above belong to the kernel block and are not repeated here.
@@ -745,11 +747,11 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
 104. **Slot keys are lower-case, so the group slots are `grp-a1` to `grp-a3`. (new)** The kernel's slot-key rule is
     `[a-z0-9-]+`; S1 writes `grp-A1`. The public names of the groups (`A1`, `A2`, `A3`) are unchanged; only the slot key is
     lower-case.
-105. **Iterative proportional fitting: the dimension fitted last is exact, the others are within 1e-6 after 20 iterations. (new)**
-    SF1-P-2 asks for every marginal within 1e-9 after 20 iterations. For the person table (four dimensions, 2,304 cells) that
-    holds for the last dimension and for the two-dimension hand case of SF1-P-1, and not for the others (about 1e-6). The
-    floor (`cellFloor`, 2^-30) then moves a marginal by up to about 2e-6. The tests check the iterations alone against 1e-9 for
-    the last dimension and 1e-6 for the others, and the fit against 5e-6. See the findings below.
+105. **Iterative proportional fitting: the dimension fitted last is within 1e-9, the others within 1e-6 after 20 iterations. (ruled, S1 v0.3)**
+    SF1-P-2 now says this: iterative proportional fitting converges at a finite rate, so the iteration count, not the tolerance, is
+    what makes the result deterministic. For the person table (four dimensions, 2,304 cells) it holds for the last dimension and
+    for the two-dimension hand case of SF1-P-1. The floor (`cellFloor`, 2^-30) then moves a marginal by up to about 2e-6, so the
+    test also checks the fit against 5e-6.
 106. **FX-3 is a line, so "two steps away" in SF1-I-13 is two steps from `c1`. (new)** The slice has `c1`, `c2`, `c3` in a line;
     `c3` is one step from `c2`, so with the cover at `c2` there is no cell two steps away. The tests cover at `c1` for the
     two-steps case (`c3`), and at `c2` for the case where both neighbours are thinned. The cover rule is as written: the same
@@ -760,11 +762,13 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
 108. **An injected child is consumed by the run that starts at its due boundary. (new)** The run for window `w` starts at
     boundary `w` and consumes the children due at `w`; a child injected after that boundary with `due = w` waits for ever. The
     fixtures that inject window by window use `due = w + 1`.
-109. **The recorded focus lags a reading by two windows, not one. (new)** An external operation stamped in window `k` is applied
-    at boundary `k + 1` and (S1 10.2) "processed in window `k + 1`". V's mirrored cell is such a reading, and `v.frames` opens
-    the situation frame when the relevance for the reading is dispatched, which is after the boundary has started the
-    processes. The first run to see the new cell as demand is the run for `k + 2`, so the first window V stands in a cell is
-    never in the recorded focus and its items are never opened. See the findings below.
+109. **The window V arrives in is covered. (ruled, S1 v0.3 10.2)** A reading of V's cell applied at boundary `k + 1` puts that cell
+    in the recorded focus of window `k + 1`, and the items of that window are opened. The kernel does it: between the external
+    operations of a boundary and the snapshot the processes take, `Kernel.settleInputs` runs the frame work and the relevance
+    dispatch they queued, to their end and with no budget, so `v.frames` has opened the situation frame by the time a fine-tier
+    process judges demand. The work is the same whichever tick takes the boundary (SPEC-NOTES 56). S0 9.4 lists three steps of a
+    boundary; this is a fourth between the second and the third, and the spec of the kernel should say so (see the findings below).
+    `test/sim/review-fixes.test.ts` has the first-window case, in one call and in many.
 110. **`place` is optional on an `event` line. (new)** The port's `ReplayLine` gives `place` as required. The raw heat and district
     kinds carry none, and a death or a combat event may be placeless; a placeless event gets the city as its place, and the
     mirror takes V's district for the police response to a rise in heat. The name of a raw event is `raw/<t>/<n>` with `n`
@@ -773,11 +777,14 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
     original aggressor as its target. The pending child carries them (`inherit`), so firing it needs neither the parent's
     cast nor the ring (SF1-E4). The same list rides on the ring's item `meta`.
 112. **The ring remembers how an event was minted, and `Sim.remint` and `Sim.why` read it. (new)** A ring entry for an event
-    carries its `mint` name and cause, so `Sim.remint(id)` mints it again under the same Id (its cast being a pure function of
+    carries its `mint` name and cause, so `Sim.remint(id)` puts it back under the same Id (its cast being a pure function of
     the descriptor and the recorded history), and an event or a summary within seven days regenerates identically
-    (SF1-I-10). `Sim.why(id)` returns the occurrence and its ancestors, nearest first, at most `genMax` after it; an ancestor
-    the ring no longer holds is returned as an Id marked `beyondRing`. An item's `why` needs the item's header (materialise
-    it first): an Id cannot be inverted to its summary.
+    (SF1-I-10). Restoring an occurrence is silent whether or not its header survived a load (`Events.restoreEvent`, 140): it was
+    announced when it first happened, and the review found the first version announcing it again (SIM-02). `Sim.why(id)`
+    returns the occurrence and its ancestors, nearest first, at most `genMax` after it; an ancestor the ring no longer holds is
+    returned as an Id marked `beyondRing`. An item's `why` needs the item's header (materialise it first): an Id cannot be
+    inverted to its summary. Regeneration from the ring covers what the ring holds; the facts of the events behind memorable
+    beliefs are kept by the record instead (144).
 113. **`scene.acts` materialises an item before it addresses the item's members, and its published list carries the summary and
     the index. (new)** `Kernel.address` needs the node's header. The first run of the fine tier after a reload could not find
     an item's summary from its Id alone, so each entry of `ActsState.published` now holds `summary` and `index`.
@@ -790,14 +797,17 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
     ... kept by not promoting further low-salience beliefs". A belief that is memorable by rule but has salience under 3 is
     formed as texture (not memorable) when its observer already holds `memorableCap` memorable beliefs; a salience-3 belief
     is still promoted.
-118. **A mirrored slot with a reading gathers no contributions, so nothing is "rejected by arbitration". (new)** SF1-E3 says the
-    `simulation`-layer statement that `mv` is alive "is rejected by arbitration (precedence 200 against 500)". S0 5.1 step 2
-    returns the game's reading before any contribution is collected, so the statement is still in the store, inactive, and
-    the trace of the slot lists no constraint. The test checks the value, the `game` pin and that the statement remains.
-119. **Ended edges and abandoned frames are history a save does not keep, so they are not part of the compared records after a
-    reload. (new)** SF1-E3 compares the records after a reload with those of the run that did not reload. An abandoned frame is
-    not a retention root and an ended edge not referenced by a canon event is dropped, so the `frames`, `edges` and `headers`
+118. **A mirrored slot with a reading gathers no contributions. (ruled, S1 v0.3 SF1-E3)** S0 5.1 step 2 returns the game's reading
+    before any contribution is gathered, so the `simulation`-layer statement that `mv` is alive stays in the store, inactive,
+    and the trace of the slot lists no constraint from it. SF1-E3 says this now; the test checks the value, the `game` pin, that
+    the statement remains, and that the trace has a reading and no constraints.
+119. **Ended edges and abandoned frames are history a save does not keep, so the `edges`, `frames` and `headers` sections are not compared
+    after a reload. (amended, R1 SIM-04, SIM-07)** SF1-E3 compares the records after a reload with those of the run that did not
+    reload. An abandoned frame is not a retention root and an ended edge not referenced by a canon event is dropped, so those
     sections differ; the fixture asserts instead that in every run the frames of `mv` are abandoned and its edges ended or gone.
+    That is only right of history nothing reads. Two things read the past of edges, and the first version lost both: the
+    protected set of a past time (a cast edge ended before the save), and the interval of a tie that ended. S1's record keeps
+    them (143, 145), and the S1 record and the seeds are compared, so a run that reloaded and one that did not agree on them.
 120. **"The same totals" of the metamorphic relation are the effective ones. (new)** Moving a district's opportunity out of
     `rest` into a new simulated district changes no other district's draws only if `rest` falls by the district's effective
     `a` (the cell weights less what the game covers, times the propensity), not by its static `staticTotalA`: the share of a
@@ -814,35 +824,50 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
     (3 seeds of 90 windows). `S1_FULL=1` runs the spec's figures (a 1,008-window Kabuki week, 100 game days, 20 seeds of 30 days,
     1,000 roots, 2,600 windows, 10,000 casts, 12 seeds of 240 windows); SF1-E1 at that scale takes under a minute. SF1-S-2
     runs its 20 seeds of 30 days always.
-123. **Layer 2 asks the simulation layer through `SimReadPort`; the reads it builds are the `city` and `social` atoms. (new)** The
-    port (`builds`, `eval`, `deps`) is layer 2's own type (`seeding/registries.ts`); `Reads.port()` implements it, and
-    `attachLayer2` builds layer 2 on a sim's kernel with it and with S1's spine. Eleven of the sixteen reads of S2 2.16 and
-    2.17 are built (`band`, `regime`, `regimeIs`, `presence`, `priceLevel`, `refuge`, `label`, `bridge`, `normGap`, `tied`,
-    `divergence`). `heatRank`, `tension`, `reach`, `protected` and `contract` are registered, answer `maybe`, and are refused at
-    compile as "not supported yet", as is every read when no port is attached. A read's `deps` become the instance's
+123. **Layer 2 asks the simulation layer through `SimReadPort`; the reads it builds are the `city` and `social` atoms. (amended, R1 SIM-01)** The
+    port (`builds`, `eval`, `transitions`, `deps`) is layer 2's own type (`seeding/registries.ts`); `Reads.port()` implements it, and
+    `attachLayer2` builds layer 2 on a sim's kernel with it and with S1's spine. `eval` at a time gives the last value the time passed
+    through; `transitions` gives the value at `from` and then every change in `(from, to]`, those at one time in the order they were
+    made (S1 9.1), and layer 2 evaluates a window's closing condition at each of them (S2-4): the first version had no
+    `transitions` in the port and latched on the last value of a second in which a regime ended and another began. Eleven of the
+    sixteen reads of S2 2.16 and 2.17 are built (`band`, `regime`, `regimeIs`, `presence`, `priceLevel`, `refuge`, `label`, `bridge`,
+    `normGap`, `tied`, `divergence`). `heatRank`, `tension`, `reach`, `protected` and `contract` are registered, answer `maybe`, and are
+    refused at compile as "not supported yet", as is every read when no port is attached. A read's `deps` become the instance's
     interests; a dependency that names no kind is scoped to the nodes the read is made of (`tied`), and a read marked
     `boundary` (`divergence`) is looked at again at every boundary, like `believes`. The invalidation of `priceLevel` is the
-    regime events, which the table says and the first version of the read did not declare.
-124. **The audits are pure functions over structure, so a test can hand them a fault. (new)** `audit.ts` (in the simulation layer's source directory) has the source
-    lint (comments and the contents of strings removed), the kind and read audits, the writers audit over a declared table
-    (`PROCESS_WRITES`) and the writes a run observes, the gate audit, the cursor audit and the schema audit (which asks the
-    kernel's loader to validate and lists every slot a derive reads). The heritage lint applies to S1's own kinds: the
-    kernel's `core:name` draws given and family names by an `origin` slot, which is display and no decision.
-125. **`gameOwnedNow` is not a name in the reference; the lint looks for it all the same. (new)** S1 12 forbids a coarse process to
-    read it. The reference has no such read, so the audit cannot rely on its absence being checked elsewhere: the lint fails on
-    the name, on the demand reads and on V's cell or position in the files of tiers 0 to 2.
-
+    regime events, which the table says and the first version of the read did not declare. S2 should add `transitions` to the
+    port it names (see the findings below).
+124. **The audits are pure functions over structure, so a test can hand them a fault. (amended, R1)** `audit.ts` (in the simulation layer's
+    source directory) has the source lint, the kind and read audits, the writers audit over a declared table (`PROCESS_WRITES`) and
+    the writes a run observes, the gate audit, the cursor audit and the schema audit (which asks the kernel's loader to validate and
+    lists every slot a derive reads). The lint reads a file with its comments removed, and with the contents of strings blanked
+    for the rules that look for a word, so a word in a message is not a finding; the rules that need a literal (a slot named in a
+    string) read it with the strings kept. The first version blanked strings for every rule, and the rule for V's cell could never
+    match the literal it looked for: a read of `sim.w.vState` with `'cell'` in a tier 0 to 2 file was not found. The heritage
+    lint applies to S1's own kinds: the kernel's `core:name` draws given and family names by an `origin` slot, which is display
+    and no decision. A read of a believer's beliefs must test `memorable` within three lines, at each read.
+125. **`gameOwnedNow` is not a name in the reference; the lint looks for it all the same. (amended, R1)** S1 12 forbids a coarse
+    process to read it, and to read V's cell or position. The reference has no such read, so the audit cannot rely on its absence
+    being checked elsewhere. In the files of tiers 0 to 2 the lint fails on the name, on the demand reads, on a string `'cell'` or
+    `'position'` anywhere, and on any use of `vState` that is not a read of its `district` or its `wanted` level (the mirror takes V's
+    district for the police response to a rise in heat). Written any other way, with a variable slot name among them, the read is
+    still found, because `vState` itself is the thing looked for. The tests hand the lint the review's line in the real file.
 ### Review round R1: the independent review of the core (entries 126 onward)
 
 One read-only review of the branch by GPT-6.1 Sol at xhigh effort found 17 problems (10 High, 7 Medium). Each is fixed with a
 regression test. The decisions the fixes needed:
 
-126. **`Store.localState` moves on every local change, and a cache made from touched state is good only at its own time. (new)**
-    It is the number of pins and contributions that name a node, and a withdrawn pin and an ended contribution count twice,
-    so a withdrawal or an end moves it as an addition does. The resident views and blocks, the minted facts of an event and the
-    spans of a summary are stamped with it. A household nothing local touches has the same view at any time; a touched one
-    is good only at the time it was resolved, because a contribution's validity is a window. A forgotten withdrawal had let a
-    generated minor keep an adult age in the gate's cache (finding 1).
+126. **`Store.localState` moves on every local change, and a cache made from touched state is good only at its own time; so is one made
+    under a rule that has a window. (amended, R1 SIM-05)** `localState` is the number of pins and contributions that name a node,
+    and a withdrawn pin and an ended contribution count twice, so a withdrawal or an end moves it as an addition does. The resident
+    views and blocks and the minted facts of an event are stamped with it. A household nothing local touches has the same view at
+    any time; a touched one is good only at the time it was resolved, because a contribution's validity is a window. That is not
+    enough for a resident, whose values also depend on the rules that name no node: the pack's, and any an author adds over a kind
+    or over everything. `People.general()` keys them (their Ids and windows, once per revision): a change of the rules starts the
+    caches again, one with a window makes a cache good only at its own time, and the shared memo of untouched households is used
+    only by worlds with the same rules. The first version assumed zero local state meant the resident was unchanged, and an
+    authored kind-wide age constraint left a warm view saying 36 where the kernel said 17. The gate is told the age class the
+    kernel resolves (`age-class`), not one worked out from the age. The spells of a resident are keyed by their age band.
 127. **The order a record lists its properties in is not part of the model. (new)** The matrix rows of a kind are taken in the
     order of the kind registry, the rates and the presence of a cell are summed in the order of their names, districts are
     walked by Id and a person's slots are read in name order. Two records that mean the same, and hash the same, give the same
@@ -853,15 +878,15 @@ regression test. The decisions the fixes needed:
 129. **A decision that persists reads only memorable beliefs. (new)** The attribution multiplier of a trust loss and the reason
     belief that travels with a telling both ignore texture beliefs, which a load drops (S1 8.3, S1-I-15). A reload no longer
     changes the regard (finding 6).
-130. **`where` reads the protected set as of the time asked. (new)** A person V observed at 1200 was not present at 0 because of it.
-    S1 4.5's pseudocode says `protectedSet`, S1 5.4 says casting is from recorded history as of the occurrence's own time; the
-    reference follows 5.4 (`protectedAt(res, t)`), which equals the set now for a time at or after now (finding 7).
-131. **The cap of materialised ties is hard, V is under it, and a thread V retracted is closed. (new)** `materialise` asks both ends for
-    room before it ends or makes anything: under the cap, the weakest tie that no live frame and no memorable belief depends
-    on, or none, in which case it makes nothing, ends nothing and logs `tie-cap` (the caller carries on without the tie). An
-    NPC never gives up a tie to V; V's own ties are given up weakest first like anyone's, unless the other end has a frame or
-    remembers V. A retract sets the status `ended` and closes the thread: `bid` and the five tie events for it are refused and
-    logged `excluded-thread`; the thread stays visible (finding 8, finding 16).
+130. **`where` reads the protected set as of the time asked. (ruled, S1 v0.3 4.5)** A person V observed at 1200 was not present at 0
+    because of it. S1 4.5 and 6 say `protectedAt(person, t)`, which equals the set now for a time at or after now. For a time
+    before now it is the set as of that time, from what the kernel still holds and what the record kept (143).
+131. **V is outside the cap of materialised ties, and a thread V retracted is closed. (ruled, S1 v0.3 4.6)** `materialise` asks both ends for
+    room before it ends or makes anything. V has no cap: the record of whom V knows is never trimmed, and a tie to V never counts
+    as the weakest. Any other person is under the cap: the weakest tie that no live frame and no memorable belief depends on is
+    ended, or, if there is none, nothing is ended, the new tie is not made and the refusal is logged `tie-cap` (the caller carries
+    on without the tie). A retract sets the status `ended` and closes the thread: `bid` and the five tie events for it are
+    refused and logged `excluded-thread`; the thread stays visible. A tie that ended is opened again under its stable Id (145).
 132. **A telling passes the gate before it is minted or takes volume. (new)** The occurrence is `tell`, origin `policy`, with the
     roles teller, listener and subject (informational, so the gate lets it through); a refusal is logged with its reason and
     leaves the hourly allowance alone (finding 9).
@@ -874,12 +899,15 @@ regression test. The decisions the fixes needed:
     `modBirth` (S1 7.1, 7.2; finding 13).
 135. **A group's pulse is replaced by the stronger urgency now. (new)** `pulseReplaces` compares both at the snapshot time `T`, not at
     the time of the new fact; a mirrored fact older than a city fact already counted must not displace it (finding 14).
-136. **A changed affiliation joins the group of the new one. (new)** `reconcile` ends the memberships that are not to it and adds a
-    `core:member-of` edge caused by the port (the game's own node) when a group stands for the affiliation: the A1 to A3 of the
-    first simulated district, in Id order, that lists it. Only a move joins: a first reading, or one the game restates after a
-    load, is not a change (a load keeps live memberships and drops ended ones, so a restated reading that joined would make a
-    dead person's membership again), and a person the game says is dead joins nothing. A membership already held is kept
-    (finding 15; the partition test of `properties.test.ts` caught the first version).
+136. **A changed affiliation joins the group of the person's district. (ruled, S1 v0.3 8.8)** `reconcile` ends the memberships that are
+    not to it and adds a `core:member-of` edge caused by the port (the game's own node) when a group stands for the affiliation.
+    Only a move joins: a first reading, or one the game restates after a load, is not a change (a load keeps live memberships and
+    drops ended ones, so a restated reading that joined would make a dead person's membership again), and a person the game says
+    is dead joins nothing. The group is the A1 to A3 of the district the mirrored position is in, when that district lists the
+    affiliation; otherwise the first simulated district, in `Id` order, that does. A membership already held is kept. The slice
+    has to say which district a position is in: the real slice has polygons, the stand-ins none, so `DistrictIndex.polygon` is an
+    optional outline in the game's x and y, and a slice without outlines (or a person with no position) takes the second rule.
+    `test/sim/review-fixes.test.ts` has two districts with outlines.
 137. **A process version is pinned with its id. (new)** `PROCESS_VERSIONS` (in `s1ctx.ts`) is the one table; every process takes
     its version from it, and the lineage pack hashes the ids and versions of all seven whether or not an instance runs them.
     A save made under another version of any opens read-only (finding 17).
@@ -888,35 +916,83 @@ regression test. The decisions the fixes needed:
 139. **`matchStrength` keeps its memo per interest source. (new, kernel)** A frame that inherits from two matching sources is pulled
     by each on its own, as dispatch pulls it; the shared memo returned the weaker (finding 11).
 
+### Fix round 1: the independent review of the simulation layer (entries 140 onward)
+
+An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 problems, SIM-01 to SIM-15, seven of them High; all are fixed, each with a regression test that fails on the code the review was made against (`test/sim/review-fixes.test.ts`, `test/review-fixes.test.ts`). The review also disputed what entries 112, 116, 117, 119, 123, 124, 125 and 126 claimed; they are rewritten to say what the code now does. S1 v0.3 ruled on 105, 109, 118, 130, 131 and 136, and those entries say so.
+
+140. **`Events.restoreEvent` is a silent mint. (new, kernel, R1 SIM-02)** It puts an event's fields back under its Id and emits no change,
+    whether or not the header survived; `mintEvent` is the same call that announces a node it did not know. `Sim.remint` and the
+    load's restoration use it.
+141. **`Kernel.reopenEdge` opens an ended edge again under its own Id. (new, kernel, R1 SIM-07)** An edge has one interval and `addEdge`
+    returns an ended edge unchanged, which is right for an edge whose Id includes its time and wrong for the stable Id of a
+    materialised tie. The edge is live from the time given, with the attributes given; it emits an edge change and a save holds it
+    as a live edge. The interval that ended is the caller's to keep (145).
+142. **A boundary settles its inputs before the snapshot. (new, kernel, S1 v0.3)** See 109. `Kernel.settleInputs` is called by the evolution
+    when the boundary applied anything (a batch or an external operation). It changes no frozen digest.
+143. **The record keeps the spans of protection. (new, R1 SIM-04)** S1 4.4 and 5.4 cast an occurrence from the protected set as of its own time,
+    and an occurrence within the ring regenerates. The kernel drops an ended `core:cast` edge, an old reading of a quest link and a
+    withdrawn pin when it saves, so S1 writes the spans (a cast edge's interval, an observed pin from `at`, a quest-linked reading's
+    validity) into its record at each save, as their union per node, and drops the ones that ended before the oldest occurrence
+    that can regenerate (a week and a window). A game that restates a quest link after a load makes a reading inside a span already
+    held, so the union is what makes the record the same for a run that reloaded and one that did not. For a time before now the
+    protected set is the kernel's state and the spans together. A cast edge counts for the interval it was live in: the first
+    version also asked that its seed still be live, which made the past change when a seed closed. The mirrored canon person, the
+    spine and the essential set are read as they are (they are configuration, not history).
+144. **The record keeps the facts of the events behind memorable beliefs. (new, R1 SIM-03)** At each save S1 reads, from the kernel, the events a
+    memorable belief is read back through (the source of an observed belief, the first evidence, the cause of an inference; a
+    ledger item reads none) and keeps what each was minted with: creator, cause, name, time, kind, place, participants, effects,
+    witnesses, causes and outcome. At the load it restores them silently (140). An item nobody has opened is not kept: it has no
+    people to record, and restoring one would stop the scene from regenerating its people (128). The set is cut to the events a
+    belief still cites at each save.
+145. **A tie that ended is opened again under its Id, and the past of `tied` is not rewritten. (new, R1 SIM-07, SIM-11)** `materialise` of a pair
+    whose edge ended reopens it (141) with fresh attributes, and the interval that ended goes to the tie's record (`spans`, the newest
+    16); a save writes the intervals of the ended edges it is about to drop. `tied(a, b, type)` at a time before now is `yes` if the
+    implicit tie (a pure function of the pair) holds or any interval of the materialised tie covers the time, and `no` otherwise
+    (`maybe` where the implicit tie is unknown); its transitions are the openings and closings of the intervals. Only `xf:tie`
+    is built; another type answers `maybe`.
+146. **The divergence log is written when a belief changes. (new, R1 SIM-08)** `Beliefs.onChange` tells S1 when a belief is added, replaced or
+    dropped, by anyone, and S1 logs the divergence of that believer from the game at that time. The boundary hook finds nothing new
+    to write. The value at a time before now is the last log entry at or before it; when the oldest transitions have been dropped
+    (the log keeps eight) the record keeps the time they reached back to, and an earlier time is `maybe`.
+147. **`groupGap` is the band the group maintains. (new, R1 SIM-09)** The digest carries the band `group.decide` keeps with its hysteresis, and
+    the read and the transitions both give it. The first version worked a band out from the enter thresholds alone.
+148. **`label` takes a carrier's node as well as its name. (new, R1 SIM-10)** S2 2.17 says an audience is a role or an Id; a cast role resolves to a
+    node, which is the carrier's. A name in the configuration stands for that carrier in the first simulated district.
+149. **The ledger counts carriers in Id order. (new, R1 SIM-13)** Of two items of one origin with the same reach the one of the smaller carrier is
+    counted, so the aggregate does not depend on the order an audience was written in.
+150. **Assimilation recovers the act and the listener's expectation. (new, R1 SIM-14)** S1 8.4 says the `reason` region is replaced by "the listener's
+    default reasons for the actor's group" and defines neither. The reference takes the act's effect from the event the belief cites
+    (its inference's cause, then its first evidence, then the class its reasons name) and gives the listener the attribution of
+    `attr@1` with no constraint visible, tilted by the listener's attitude to the actor's class: dispositional when `wD >= 0.5`,
+    otherwise situational. With the defaults (`wD` 0.65, tilt 0.1) that is dispositional for everyone; the test sets `wD` to 0.5 to
+    show a listener of the actor's own group excusing them. A belief that is not about reasons is not bent.
+151. **A kind outside the core is refused at load. (new, R1 SIM-15)** The role specifications and the producers of the core's kinds are code,
+    not data, so a city kind named in `data.kinds` that the core does not list would have the core's producers and no roles and pass
+    for a supported one. `lintKinds` names it and says it is not supported yet.
+152. **A save the kernel opened read-only is not written by S1's load hook. (new, R1 SIM-12)** The hook restores the record and stops; it builds
+    nothing, restores nothing and reconciles nothing, and `flush` writes nothing while the world is read-only.
+
 ### Spec findings for the coordinator (S1)
 
-The ones that need a decision, worst first:
+The ones that need a decision, worst first. The six questions of the first build are ruled in S1 v0.3 (105, 109, 118, 130, 131, 136 above).
 
-- **109 (the first window V stands in a cell).** With demand coming from frames that `v.frames` opens on a relevance, the first
-  window V is in a cell is never in the recorded focus, so its items are never opened (S1 10.2 and SF1-A-3 say V's act is
-  processed in window `k + 1`). The fix is in the order of a boundary (dispatch the relevance before the snapshot is taken), or
-  in `scene.acts` (take V's mirrored cell as of the window as the focus). The reference keeps the order as it is and the
-  fixture states the fact.
-- **105 (SF1-P-2).** "Every marginal within 1e-9 after 20 iterations" is not true of the person table, only of its last
-  dimension. Either the iterations rise or the tolerance is 1e-6.
-- **118 (SF1-E3).** "Rejected by arbitration (precedence 200 against 500)" does not describe what the kernel does for a mirrored
-  slot, which gathers no contribution (S0 5.1 step 2). The fixture's claim is about the value.
+- **S0 9.4 (the order of a boundary).** S1 10.2 relies on a step the kernel specification does not list: between the external operations
+  and the snapshot, the frame work and the relevance dispatch they queued run to their end (109, 142). S0 should say so.
+- **S2 4.2 and the read port.** S2-4 asks layer 2 to evaluate a closing condition at each entry of a read's transitions. Layer 2 holds
+  none of S1's code and is handed a `SimReadPort`; the port S2 names should carry `transitions` (123).
+- **S1 8.4 (assimilate).** "The listener's default reasons for the actor's group" is not defined. The reference uses `attr@1` from the
+  listener's side with no constraint visible, which makes everyone dispositional at the default data (150). Is that meant, or is the
+  default a table?
+- **S1 8.8 (a position's district).** The slice has to place a mirrored position in a district. The real slice has polygons; the
+  stand-ins do not, and the reference reads an optional outline (136).
+- **S1 2.2 (the record).** The record now holds spans of protection, the facts of the events behind memorable beliefs, the intervals of
+  ended ties and the time the divergence log reaches back to (143 to 146); S1 2.2 lists none of them.
+- **S1 4.7 (reopening a tie).** The spec is silent on a tie that ended and is wanted again. The reference opens it under its Id with
+  fresh attributes and keeps the history for reads (145).
 - **106 (SF1-I-13).** FX-3 has no cell two steps from `c2`.
-- **114 (restated readings).** The spec is silent on whether a reading the game restates after a load is a correction. The
-  reference says it is not, unless it changes something or moves from an earlier value.
+- **114 (restated readings).** The spec is silent on whether a reading the game restates after a load is a correction. The reference says
+  it is not, unless it changes something or moves from an earlier value.
 - **120 (the metamorphic relation).** The totals that must match are the effective ones.
-- **116 (a kernel gap).** An event kept as the evidence of a memorable belief was a bare header after a load and could not be
-  minted again; S0 11.2 and 14.3 do not say who restores its fields. Minting it again does, silently.
-- **117 (queries).** S0 8.3 step 9 enumerates every item of every summary in scope for a query. A world that has run a week made
-  the mirror's and the norms process's queries the dearest thing in a window. The pruning keeps the result: it is used only
-  where it is proved equal to resolution (review R1 made it so; a pin on a minted event's kind is seen).
-- **130 (casting from history).** S1 4.5's pseudocode for `where` uses `protectedSet` (now); S1 5.4 says casting reads recorded
-  history as of the occurrence's own time. The reference follows 5.4. If 4.5 was meant, a person observed later is
-  retroactively present in every earlier scene and the same cast cannot be regenerated.
-- **131 (V and the cap).** S1 4.6 caps "a person" at 20 materialised ties and says the tie to evict is one that "neither V, a
-  live frame nor a memorable belief depends on". Every tie of V's is one V depends on, so read literally V's list could
-  never make room. The reference puts V under the cap and ends V's weakest tie that the other end neither has a frame about
-  nor remembers V by; a refused tie is logged `tie-cap`.
-- **136 (which group).** S1 8.8 says to add the new membership "if the group exists". A mirrored person has no district, so the
-  reference takes the first simulated district, in Id order, whose A1 to A3 stands for the affiliation. With two districts
-  that list the same gang this is arbitrary.
+- **117 (queries).** S0 8.3 step 9 enumerates every item of every summary in scope for a query. A world that has run a week made the
+  mirror's and the norms process's queries the dearest thing in a window. The pruning keeps the result: it is used only where it is
+  proved equal to resolution (review R1 made it so; the independent review found a span resolved under a window).
