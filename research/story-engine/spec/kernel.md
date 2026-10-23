@@ -1,7 +1,7 @@
 # S0. Kernel specification
 
 **Status:** v4.12, 23 October 2026.
-- v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (from the reference model's first v4 build, [notes](../../../projects/xf-story-engine/reference/SPEC-NOTES.md) 58 and 62).
+- v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (found while building v4 in the reference model).
 - v4.11 adds three clarifications from S1 v0.2 (V4-47 to V4-49).
 - v4.10 adds eight clarifications from writing [S1](simulation.md) (V4-39 to V4-46).
 - v4.9 completes the process interface for S1 (V4-35 to V4-38), from the [P3](../p3-simulation-layer.md) design.
