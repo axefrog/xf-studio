@@ -339,8 +339,8 @@ describe("0.8.2 against the self-test host", () => {
     client.close();
   }, 20_000);
 
-  test("the tools' version is 0.8.7", () => {
-    expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.7");
+  test("the tools' version is 0.8.8", () => {
+    expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.8");
   });
 });
 
