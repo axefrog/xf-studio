@@ -24,6 +24,9 @@ interface Mark {
   beliefs: unknown;
   events: unknown;
   groups: unknown;
+  retention: unknown;
+  summaries: unknown;
+  settings: unknown;
   defects: number;
 }
 
@@ -41,6 +44,9 @@ export class StagedBatch {
       beliefs: k.beliefs.capture(),
       events: k.events.capture(),
       groups: k.groups.capture(),
+      retention: k.retention.capture(),
+      summaries: k.summaries.capture(),
+      settings: k.settings.capture(),
       defects: k.defects.items.length,
     };
   }
@@ -105,6 +111,9 @@ export class StagedBatch {
     k.beliefs.restoreFrom(this.mark.beliefs);
     k.events.restoreFrom(this.mark.events);
     k.groups.restoreFrom(this.mark.groups);
+    k.retention.restoreFrom(this.mark.retention);
+    k.summaries.restoreFrom(this.mark.summaries);
+    k.settings.restoreFrom(this.mark.settings);
     k.defects.items.length = this.mark.defects;
     k.revision = this.mark.revision;
     k.invalidateCaches();

@@ -75,6 +75,7 @@ export function transition(l2: Layer2, inst: Instance, to: SeedStateName, row: s
   st.since = l2.k.now;
   st.entered[to] = l2.k.now;
   l2.record(inst, 'transition', { row, from, to, why });
+  l2.notifyReaders('seeds', inst);
   if (row === 'T6') {
     withdrawPending(l2, inst);
     for (const [key, rt] of Object.entries(st.beats)) {

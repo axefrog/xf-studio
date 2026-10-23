@@ -397,6 +397,8 @@ export class Persistence {
   /** Write a save record for the current state, as a child of the save last written or loaded (spec 14.2). */
   save(saveKey: string): SaveRecord {
     this.k.assertWritable();
+    // A staged batch's operations are not persisted (spec 14.2a): not even from inside its own write callback.
+    if (this.k.batch) throw new Error('a staged batch is open: it is committed or discarded before a save (spec 14.2a)');
     // The seeding layer writes its records to the seed table first (spec 14.1).
     this.k.layer2?.flush();
     if (this.chain.has(saveKey)) throw new Error(`save key already used: ${saveKey}`);

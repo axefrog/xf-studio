@@ -19,6 +19,7 @@ import { PredSyntaxError, parsePred } from './pred.ts';
 import { PackIndex } from './packs.ts';
 import { lintPack, type LintCtx } from './lint.ts';
 import { compileSeed } from './compile.ts';
+import { atoms, fragmentSites, predSites } from './doc.ts';
 import { L2Registry } from './registries.ts';
 import * as ids from './ids.ts';
 import type { DisplayReport, Layer2Port } from './port.ts';
@@ -232,6 +233,10 @@ export class Layer2 implements Layer2Hook {
     onBoundary(this, boundary, at);
   }
   run(budget: Budget): number {
+    if (this.k.settings.length !== this.settingsSeen) {
+      this.settingsSeen = this.k.settings.length;
+      this.notifyReaders('settings');
+    }
     return runWork(this, budget);
   }
   flush(): void {
@@ -241,7 +246,47 @@ export class Layer2 implements Layer2Hook {
     onLoad(this);
   }
   get pending(): number {
-    return this.queue.size + this.sowQueue.size + this.dilemmaQueue.length + (this.boundaryDue !== undefined ? 1 : 0);
+    return this.queue.size + this.sowQueue.size + this.dilemmaQueue.length + (this.boundaryDue !== undefined ? 1 : 0) +
+      (this.k.settings.length !== this.settingsSeen ? 1 : 0);
+  }
+
+  // ---- reverse invalidation (S2 section 4.1) ----
+
+  private settingsSeen = 0;
+  /** After a load the settings log is whatever the save held: nothing is new. */
+  syncSettingsSeen(): void {
+    this.settingsSeen = this.k.settings.length;
+  }
+  private readsCache = new Map<string, { settings: boolean; seeds: boolean; exposure: boolean }>();
+
+  /** What layer-2 state an instance's predicates and fragments read besides its own (the reverse index). */
+  readsOf(inst: Instance): { settings: boolean; seeds: boolean; exposure: boolean } {
+    const key = `${inst.id}|${inst.st.structureHash}`;
+    let r = this.readsCache.get(key);
+    if (!r) {
+      r = { settings: false, seeds: false, exposure: false };
+      const frags = inst.st.closure.fragments;
+      if (frags.some((f) => (f.content ?? []).length > 0)) r.settings = true;
+      for (const s of [...predSites(inst.st.document), ...frags.flatMap((f) => fragmentSites(f))]) {
+        for (const { atom } of atoms(s.pred)) {
+          if ('setting' in atom) r.settings = true;
+          else if ('seed' in atom) r.seeds = true;
+          else if ('exposed' in atom) r.exposure = true;
+        }
+      }
+      this.readsCache.set(key, r);
+    }
+    return r;
+  }
+
+  /** A setting changed, a seed changed state, or something was exposed: queue the live instances that read it. */
+  notifyReaders(kind: 'settings' | 'seeds' | 'exposure', except?: Instance): void {
+    for (const i of this.live()) {
+      if (i === except) continue;
+      const r = this.readsOf(i);
+      const reads = kind === 'settings' ? r.settings : kind === 'seeds' ? r.seeds : r.exposure;
+      if (reads) this.queueReeval(i, kind);
+    }
   }
 
   openWatcher(packId: string): void {
@@ -301,17 +346,22 @@ export class Layer2 implements Layer2Hook {
     this.packs.set(pack.id, index);
     // A live instance runs on its stored closure, so a newer version changes nothing for it, unless the template's `migrate`
     // entry for the instance's version says `withdraw` (S2 section 12.3).
-    for (const inst of this.live()) {
-      if (inst.st.template.pack !== pack.id) continue;
-      const t = pack.seeds.find((x) => x.id === inst.st.template.id);
-      const m = t?.migrate?.find((e) => e.from.includes(inst.st.template.version));
-      if (m?.policy === 'withdraw') this.withdraw(inst, `the pack was updated and the template's migration withdraws version ${inst.st.template.version}`);
-    }
+    for (const inst of this.live()) if (inst.st.template.pack === pack.id) this.applyMigration(inst);
     this.k.root(`pack:${pack.id}`, 'core:seed');
     this.registerPackRoot(pack.id);
     this.sowQueue.add(pack.id);
     this.openWatcher(pack.id);
     return findings;
+  }
+
+  /** The installed template's `migrate` entry for the instance's version: `withdraw` ends it (S2 section 12.3, T1). */
+  applyMigration(inst: Instance): boolean {
+    const pack = inst.st.template.pack !== undefined ? this.packs.get(inst.st.template.pack)?.pack : undefined;
+    const t = pack?.seeds.find((x) => x.id === inst.st.template.id);
+    const m = t?.migrate?.find((e) => e.from.includes(inst.st.template.version));
+    if (m?.policy !== 'withdraw') return false;
+    this.withdraw(inst, `the pack was updated and the template's migration withdraws version ${inst.st.template.version}`);
+    return true;
   }
 
   /** A removed pack withdraws its live instances, because their content can no longer resolve (S2 section 12.3). */

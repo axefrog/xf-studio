@@ -68,6 +68,21 @@ export class Retention {
     this.cache = null;
   }
 
+  /** A deep copy of the seeds, streaming and sweep state, for a staged batch's discard (spec 14.2a). */
+  capture(): unknown {
+    return structuredClone({ seeds: this.seeds, streamed: this.streamed, sweep: this.sweepList.snapshot() });
+  }
+
+  restoreFrom(cap: unknown): void {
+    const c = structuredClone(cap) as { seeds: Map<Id, SeedRecord>; streamed: Set<Id>; sweep: Array<{ id: Id }> };
+    this.seeds.clear();
+    for (const [k, v] of c.seeds) this.seeds.set(k, v);
+    this.streamed.clear();
+    for (const i of c.streamed) this.streamed.add(i);
+    this.sweepList.restore(c.sweep);
+    this.cache = null;
+  }
+
   clear(): void {
     this.seeds.clear();
     this.streamed.clear();

@@ -628,6 +628,8 @@ export interface InstanceState {
   retired?: boolean;
   /** Settled news: a seed that ended before it could be reported. */
   released: boolean;
+  /** The delivery id of the offer whose release committed the seed (T7): T9 to T11 answer to it alone, not to a follow-up. */
+  firstOffer?: Id;
   /** The fragment uses already counted into the global record at release (kept for compaction). */
   stuck?: boolean;
 }

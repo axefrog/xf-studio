@@ -50,9 +50,13 @@ export function applyEffects(l2: Layer2, inst: Instance, effects: EffectDecl[] |
   (effects ?? []).forEach((e, i) => {
     const cls = persistClassOf(inst, e);
     if ('fact' in e) {
-      const cur = readSeedFact(l2, inst, e.fact);
-      const value = e.set !== undefined ? e.set : cur + (e.add ?? 0);
-      writeSeedFact(l2, inst, e.fact, value, cls);
+      // A cosmetic effect is the canon event and its carrier, and no pin (S2 section 2.5): nothing reads it back.
+      if (cls === 'cosmetic') l2.record(inst, 'beat', { effect: 'seed-fact', fact: e.fact, class: cls, pin: false });
+      else {
+        const cur = readSeedFact(l2, inst, e.fact);
+        const value = e.set !== undefined ? e.set : cur + (e.add ?? 0);
+        writeSeedFact(l2, inst, e.fact, value, cls);
+      }
     } else if ('game' in e) {
       if (!l2.port.capabilities().has('story.write-vanilla')) {
         l2.record(inst, 'unfilled', { effect: 'game-write', skipped: e.game.fact, why: 'the game port does not offer story.write-vanilla' });
@@ -114,8 +118,24 @@ export function marksAt(l2: Layer2, carrier: Id, t: GameTime): CosmeticMark[] {
 /** Run the maintenance queue's due jobs, in time order (S2 section 8.6). Returns the units used. */
 export function runMaintenance(l2: Layer2, now: GameTime): number {
   const k = l2.k;
+  // Closing deliveries live until they are shown or `closeExpiry` passes; then their job, and with it the references
+  // it kept as retention roots, goes (S2 section 8.6).
+  let retired = 0;
+  for (const j of [...l2.global.maintenance]) {
+    if (j.kind !== 'closing') continue;
+    const inst = l2.insts.get(j.seed);
+    const d = inst?.st.deliveries.find((x) => x.id === j.delivery);
+    const outstanding = d !== undefined && (d.state === 'queued' || d.state === 'released');
+    if (outstanding && j.until > now) continue;
+    if (outstanding && inst) {
+      d!.state = 'expired';
+      l2.record(inst, 'expired', { delivery: d!.id, why: 'closeExpiry' });
+    }
+    l2.global.maintenance.splice(l2.global.maintenance.indexOf(j), 1);
+    retired++;
+  }
   const due = l2.global.maintenance.filter((j) => j.kind !== 'closing' && j.at <= now);
-  if (due.length === 0) return 0;
+  if (due.length === 0) return retired;
   due.sort((a, b) => (a as { at: number }).at - (b as { at: number }).at || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || ((a as { seed: Id }).seed < (b as { seed: Id }).seed ? -1 : 1));
   for (const j of due) {
     if (j.kind === 'reset') {
@@ -132,7 +152,7 @@ export function runMaintenance(l2: Layer2, now: GameTime): number {
     }
     l2.global.maintenance.splice(l2.global.maintenance.indexOf(j), 1);
   }
-  return due.length;
+  return due.length + retired;
 }
 
 void ceilingOf;

@@ -290,11 +290,13 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
     const o = frag.offer;
     if (!o || o.choice !== 'consequential') continue;
     const at = `fragments.${frag.id}.offer`;
-    const writes = o.actions.map((a) => (a.writes ?? []).flatMap((w) => ('fact' in w && w.set !== undefined ? [`${w.fact}=${w.set}`] : [])));
-    const bad = writes.some((w) => w.length === 0) || writes.flat().length !== new Set(writes.flat()).size;
+    // S2 section 11.1 (L-06): each action writes a distinct value of a seed fact that something reads. Writes the actions
+    // share, or to facts nothing reads, are side effects and do not count towards that, nor against it.
     const facts = new Set(o.actions.flatMap((a) => (a.writes ?? []).flatMap((w) => ('fact' in w ? [w.fact] : []))));
     const unconsumed = [...facts].filter((f) => !consumed(f));
-    if (o.actions.length < 2 || bad || unconsumed.length > 0) {
+    const pairs = o.actions.map((a) => new Set((a.writes ?? []).flatMap((w) => ('fact' in w && w.set !== undefined && consumed(w.fact) ? [`${w.fact}=${w.set}`] : []))));
+    const ok = pairs.every((mine, i) => [...mine].some((p) => pairs.every((other, j) => j === i || !other.has(p))));
+    if (o.actions.length < 2 || !ok) {
       out.error('L-06', `The offer in "${beat}" is a consequential choice, but its actions do not each write a different value of a fact something reads${unconsumed.length ? ` (nothing reads: ${unconsumed.join(', ')})` : ''}. A choice that changes nothing is flavour.`, at, { fix: 'Give each action a "set" on a seed fact with a consumer, or mark the choice "flavour".' });
     }
   }

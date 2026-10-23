@@ -14,7 +14,7 @@ import * as ids from './ids.ts';
 import type { Instance, Layer2 } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
 import type { DisplayReport } from './port.ts';
-import { fragmentOf, gateFragment, isFinal, skipBeat } from './beats.ts';
+import { fragmentOf, gateFragment, isFinal, sceneRunning, skipBeat } from './beats.ts';
 import { transition, onRoleLost, closeSeed, applyRejection } from './run.ts';
 import type {
   AttentionAspect, BeatRuntime, ChannelId, ContentRef, Delivery, ExposureGrade, Fragment, Pred, Receipt, TimingRequest,
@@ -146,7 +146,11 @@ export function submitDelivery(l2: Layer2, inst: Instance, beat: string | undefi
   const bd = beat ? st.document.beats[beat] : undefined;
   if (bd?.kind === 'aftermath') d.timing.purpose = 'escalate';
   if (opts.what === 'warning') d.timing.importance = 'high';
-  st.deliveries.push(d);
+  // One delivery object per id: a request that expired unreleased keeps its id (no release happened), so its retry
+  // takes its place; the record keeps the history (S2 section 6.2).
+  const stale = st.deliveries.findIndex((x) => x.id === id);
+  if (stale >= 0) st.deliveries[stale] = d;
+  else st.deliveries.push(d);
   l2.record(inst, 'beat', { delivery: id, queued: what, beat });
   return d;
 }
@@ -154,7 +158,8 @@ export function submitDelivery(l2: Layer2, inst: Instance, beat: string | undefi
 /** Withdraw every pending (queued, never released) delivery of an instance; a cancellation, sending nothing to V. */
 export function withdrawPending(l2: Layer2, inst: Instance, keepClosing = true): void {
   for (const d of inst.st.deliveries) {
-    if (d.state === 'queued' && !(keepClosing && (d.what === 'closing' || d.what === 'coda' || d.what === 'news' || d.what === 'notice'))) {
+    // A closing delivery, and a reply to something V did (a retract's `retractQuietly`, a lapse's line), outlive the seed's pending requests.
+    if (d.state === 'queued' && !(keepClosing && (d.what === 'closing' || d.what === 'coda' || d.what === 'news' || d.what === 'notice' || d.what === 'reply'))) {
       d.state = 'withdrawn';
       l2.record(inst, 'expired', { delivery: d.id, why: 'withdrawn' });
     }
@@ -238,6 +243,15 @@ export function arbiterStep(l2: Layer2, s: number): void {
     const closing = d.what === 'closing' || d.what === 'coda' || d.what === 'news';
     // An offer made inside a running scene is part of that scene's content, not a new push: it skips every gate (S2 section 8.3).
     if (d.inScene) {
+      // ...but only while the scene it belongs to is still running: a scene that ended takes its offer with it.
+      if (d.beat && !sceneRunning(inst, d.beat)) {
+        d.state = 'withdrawn';
+        l2.record(inst, 'expired', { delivery: d.id, why: 'the scene ended' });
+        const rtS = inst.st.beats[d.beat];
+        if (rtS && rtS.state === 'available') skipBeat(l2, inst, d.beat, 'omitted', 'the scene ended');
+        l2.queueReeval(inst, 'scene ended');
+        continue;
+      }
       const ch0 = l2.reg.channels.get(channel);
       cands.push({ inst, d, frag, channel, cls: ch0?.class ?? d.timing.class, score: Number.POSITIVE_INFINITY, tie: ids.arbTie(l2.worldSeed, d.id) });
       continue;
@@ -363,6 +377,8 @@ function expireQueued(l2: Layer2, inst: Instance, d: Delivery): void {
   if (how === 'retry') {
     if (rt && rt.state === 'available') {
       rt.attempt++;
+      // A timeout counts towards the one bound per logical offer (S2 section 8.5).
+      if (d.what === 'offer') d.attempts++;
       resubmit(l2, inst, d);
     }
   } else if (how === 'unattended') {
@@ -397,7 +413,7 @@ function missed(l2: Layer2, inst: Instance, d: Delivery, why: string): void {
     rt.attempt++;
     const nd = resubmit(l2, inst, d);
     // T11: the first offer, never seen, within the total attempt bound: the seed goes back to cast.
-    if (d.what === 'offer' && inst.st.state === 'offered') transition(l2, inst, 'cast', 'T11', 'the first offer was missed');
+    if (d.what === 'offer' && isFirstOffer(inst, d)) transition(l2, inst, 'cast', 'T11', 'the first offer was missed');
     void nd;
   }
 }
@@ -413,7 +429,7 @@ function lapse(l2: Layer2, inst: Instance, d: Delivery): void {
   l2.record(inst, 'lapse', { delivery: d.id });
   if (o?.lapse.content !== undefined) submitDelivery(l2, inst, beat, undefined, { what: 'reply', suffix: `lapse${d.n}`, content: o.lapse.content, pull: true, purpose: 'callback' });
   const then = o?.lapse.then ?? 'reoffer';
-  const first = inst.st.state === 'offered';
+  const first = isFirstOffer(inst, d);
   if (then === 'withdraw') {
     l2.withdraw(inst, 'a lapse with then: withdraw');
     return;
@@ -533,7 +549,10 @@ function prepareAndRelease(l2: Layer2, inst: Instance, d: Delivery, channel: Cha
   l2.hooks.onRelease?.(hookInputs(l2, inst, d, cls));
   // T7 / T8: the first release commits the seed.
   if (st.state === 'cast' && !closing) {
-    if (d.what === 'offer') transition(l2, inst, 'offered', 'T7', 'the first offer was released');
+    if (d.what === 'offer') {
+      st.firstOffer = d.id;
+      transition(l2, inst, 'offered', 'T7', 'the first offer was released');
+    }
     else transition(l2, inst, 'running', 'T8', 'the first beat was released');
   }
   l2.queueReeval(inst, 'release');
@@ -561,7 +580,10 @@ export function startDirect(l2: Layer2, inst: Instance, beat: string): void {
   rt.releases++;
   l2.record(inst, 'release', { delivery: d.id, direct: true });
   if (st.state === 'cast') transition(l2, inst, 'running', 'T8', 'the first beat started without a channel');
-  l2.completeNow(inst, beat);
+  // A beat without an objective is done when its content is (S2 section 7.3); one with an objective keeps running
+  // until the objective, a failure or a lapse ends it, through the normal running pass.
+  if (!st.document.beats[beat]!.objective) l2.completeNow(inst, beat);
+  else l2.queueReeval(inst, 'beat started');
 }
 
 type PrepareResult = { ok: true; prepared: Prepared } | { ok: false; reason: string; hard: boolean };
@@ -651,6 +673,11 @@ import { commitRoles } from './commit.ts';
 
 // ---- display and exposure (S2 section 8.5) ----
 
+/** Whether a delivery is the offer that committed the seed, still awaiting its first answer (T9 to T11). */
+function isFirstOffer(inst: Instance, d: Delivery): boolean {
+  return inst.st.state === 'offered' && inst.st.firstOffer === d.id;
+}
+
 export function findDelivery(l2: Layer2, id: Id): { inst: Instance; d: Delivery } | undefined {
   for (const inst of l2.all()) {
     const d = inst.st.deliveries.find((x) => x.id === id);
@@ -705,6 +732,7 @@ export function displayReport(l2: Layer2, r: DisplayReport): void {
     } else missed(l2, inst, d, 'transient and not seen properly');
   }
   l2.queueReeval(inst, 'display');
+  l2.notifyReaders('exposure', inst);
   void st;
 }
 
@@ -757,7 +785,7 @@ export function respondTo(l2: Layer2, id: Id, resp: Response): boolean {
   const frag = fragmentOf(inst, d.fragment!)!;
   const o = frag.offer!;
   const doc = st.document.beats[beat]!;
-  const first = st.state === 'offered';
+  const first = isFirstOffer(inst, d);
 
   if (resp.kind === 'retract') {
     // One input, within the retract window, for a push of class 2 or above (S2 section 8.3): quiet.
@@ -772,6 +800,12 @@ export function respondTo(l2: Layer2, id: Id, resp: Response): boolean {
     withdrawPending(l2, inst);
     transition(l2, inst, 'withdrawn', 'T10a', 'V retracted the offer', { quiet: true });
     return true;
+  }
+  // Answering is `confirmed` engagement (S2 section 8.5): an answer to an offer not yet reported displayed first confirms it,
+  // so the offer event, the grade and the receipt exist before the response that cites them.
+  if (d.state === 'released') {
+    displayReport(l2, { delivery: d.id, channel: d.provenance.channel, grade: 'confirmed', atPlay: l2.arbiter.play });
+    if (d.state === 'released' || !findDelivery(l2, id)) return false;
   }
   // A response is recorded once; a second answer to the same offer is ignored (S2 section 7.4).
   if (rt.response !== undefined && rt.responseDelivery === d.id) return false;

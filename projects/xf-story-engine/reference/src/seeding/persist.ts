@@ -67,6 +67,7 @@ export function flush(l2: Layer2): void {
 
 export function onLoad(l2: Layer2): void {
   const k = l2.k;
+  l2.syncSettingsSeen();
   l2.insts.clear();
   l2.queue.clear();
   l2.sowQueue.clear();
@@ -123,7 +124,8 @@ export function onLoad(l2: Layer2): void {
     // The sowing contributions are rebuilt from the stored document (S2 section 12.1).
     reinstall(l2, inst);
     for (const d of st.deliveries) resetDelivery(l2, inst, d);
-    for (const rt of Object.values(st.beats)) void rt;
+    // A pack installed before this load may withdraw the saved version (S2 section 12.3).
+    if (l2.applyMigration(inst)) continue;
     // Fire the wake-ups already past, in time order, and re-evaluate in Id order.
     l2.queueReeval(inst, 'load', { time: k.now, reason: 'load' });
   }
@@ -163,7 +165,8 @@ function reinstall(l2: Layer2, inst: Instance): void {
 function resetDelivery(l2: Layer2, inst: Instance, d: InstanceState['deliveries'][number]): void {
   const rt = d.beat ? inst.st.beats[d.beat] : undefined;
   d.submitted = 0;
-  d.submittedGame = l2.k.now;
+  // A game-clock duration does not restart at a load (S2 section 2.12); a save made later than the world now cannot wait negatively.
+  d.submittedGame = Math.min(d.submittedGame, l2.k.now);
   delete d.retractUntil;
   if (d.state === 'released') {
     d.state = 'queued';

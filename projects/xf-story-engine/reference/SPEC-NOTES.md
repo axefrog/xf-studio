@@ -11,7 +11,7 @@ needed, each the most faithful reading found. Entries 52 to 57 are **new** since
 of the reference model (findings SR-01 to SR-14, fixed): readings that the fixes needed. Entries 31, 33,
 37, 39, 42 and 50 were amended by the same review and say so. A second review (SR2-01 to SR2-08, fixed)
 found that entries 54 to 57 claimed more than the code guaranteed; entries 33, 53, 54, 55, 56 and 57
-now state exactly what the code does, including what it leaves alone. Entries 58 to 74 are **new** from the v4 and layer 2 build (the last section, with its findings for the
+now state exactly what the code does, including what it leaves alone. Entries 58 to 82 are **new** from the v4 and layer 2 build (the last section, with its findings for the
 coordinator). Entry numbers are stable so messages and
 reviews can point at them; the sections below order them worst first, meaning the entries that change
 observable results come before presentation choices.
@@ -441,11 +441,15 @@ coordinator** at the end lists the ones that most need a decision.
     offer across channels and reloads. Replies and beats are not offers and do not count. When the bound is
     reached the delivery is `expired` ("waits for pull") and the offer is `stopped` until V pulls (a recap or a
     deliberate approach), which lifts it. The bound is checked at candidate selection as well as at release, or
-    a fifth push could be queued (SF-62).
+    a fifth push could be queued (SF-62). A request that expires unreleased (a busy UI throughout its `maxWait`)
+    is a timeout and counts as an attempt (S2 8.5: "retries, misses and timeouts all count"); its retry takes
+    the place of the expired delivery under the same id, so there is one delivery object per id (review R-4, R-8).
 61. **In-scene offers bypass the arbiter's gates but not its tempo. (new)** An offer inside a scene V is already
     in (S2 0.3) is released at the beat's moment: the attention, region and pacing gates do not apply, because
     the scene is the context. Display grades, receipts and the joint latch still apply. Without this a scene
-    could stall mid-line behind its own pacing gate.
+    could stall mid-line behind its own pacing gate. The offer needs the beats it follows to be `running`: a
+    final predecessor means the scene is over, the link can never be satisfied, and a waiting follow-up is
+    dropped with `why: the scene ended` (review R-12).
 62. **A seed fact counts as changeable only if something writes it (`writtenFacts`). (new)** L-05, L-06 and the
     SF-24 and SF-60 checks ask whether a fact "can change". Counting every declared seed fact made constants look
     changeable and hid dead choices. The lint and `canChange` use the set of facts that an effect, outcome,
@@ -478,8 +482,10 @@ coordinator** at the end lists the ones that most need a decision.
 70. **A staged batch is a snapshot and a restore. (new)** V4-26 allows it. The batch holds the revision and
     captures of the store, frames, beliefs, events and groups; `discard` restores all of them and invalidates the
     query, summary, resolution and retention caches. A write outside the batch while it is open is refused with a
-    plain error, and `Persistence.load` is refused with a batch open. The spec does not say what a failing commit
-    does; the reference has none, so the failure path is a discard.
+    plain error, and `Persistence.load` and `Persistence.save` are refused with a batch open (a save from inside
+    the batch's own write callback too: its operations are not persisted). Discard also restores the settings
+    log, the seed table, streaming and the summaries' canon sets (review R-1, R-2). The spec does not say what a
+    failing commit does; the reference has none, so the failure path is a discard.
 71. **Redaction scrubs settings content and the director's beliefs about V. (new)** V4-21 says sensitive
     material is dropped by default from an export. `redactSensitive` removes `BeliefSet` ops whose believer is
     the director and subject is V and replaces a `SettingsSet` content block with a `redacted` preset with empty
@@ -498,6 +504,39 @@ coordinator** at the end lists the ones that most need a decision.
     and the instance only. Its weight is clamped to plus or minus `fitCap` before it enters the Gumbel-max draw
     as a bonus (S2 3.4), and the trace records both. The draw is `rand("seed-draw", ...)` with `H("tie", ...)` for
     exact ties.
+
+75. **T9 to T11 answer to the offer that committed the seed, by id. (new)** The state `offered` alone does not
+    say which delivery is the first offer: an in-scene follow-up answered while the first offer is open would
+    fire T9. The instance records `firstOffer` (the delivery id released at T7) and T9 to T11 apply only to an
+    answer, lapse or miss of that delivery (review R-5).
+76. **Reverse invalidation is by kind. (new)** S2 4.1 asks that readers of settings and of other seeds be
+    re-evaluated when those change. The reference tags each instance with what it reads beyond its own state
+    (a `setting` atom or a fragment with content tags; a `seed` atom; an `exposed` atom) and queues the readers
+    when a setting is set (seen at the next layer-2 step), when any seed changes state, and when a display report
+    changes the exposure ledger. The tags derive from the stored document, so nothing needs rebuilding at a load,
+    which queues every instance anyway (review R-6).
+77. **Migration applies at load as well as at install. (new)** A pack installed before a load may carry
+    `migrate: withdraw` for the saved version; `onLoad` applies it before the instance is reinstalled (T1). A
+    game-clock duration is not restarted by a load: `submittedGame` is kept (clamped to the world's time),
+    while play-clock stamps restart (review R-9, R-10).
+78. **Answering is confirmation. (new)** An answer to an offer that is released but not yet reported displayed
+    first processes a `confirmed` display report, so the offer event, the grade and the receipt exist before the
+    response event that cites them (review R-11).
+79. **Cosmetic effects write no pin; replies and closing deliveries outlive a seed's pending requests. (new)** S2
+    2.5: a cosmetic effect is the canon event and its carrier and no pin, so a predicate cannot read it back. A
+    `reply` (a retract's `retractQuietly`, a lapse's line) is not cancelled when the seed ends, as a closing
+    delivery is not; closing deliveries are retired, with the references their job held, when shown or at
+    `closeExpiry` (review R-13 to R-15).
+80. **L-06 reads "distinct value" per action. (new)** Each action must write a (fact, value) pair, of a fact
+    something reads, that no other action writes. Writes the actions share, and writes to facts nothing reads, are
+    side effects and neither count nor fail the check. R1's actions write different facts (`rung` and `exit`), so
+    "distinct values of one fact" read as a single shared fact would reject the spec's own scenario (review R-16).
+81. **Later capabilities are checked in every variant, and in fragments. (new)** A variant's parts merge over the
+    seed, so a clock in an unchosen variant is refused at compile time as well, and the predicates of the
+    fragments a seed plays are scanned for `clock`, `city` and `social` reads (review R-7).
+82. **A channel-free beat with an objective stays running. (new)** S2 7.3 completes a beat on its content only
+    when it has no objective; one with an objective starts at once (no channel to wait for) and is left to the
+    running pass (review R-3).
 
 ### Spec findings for the coordinator
 

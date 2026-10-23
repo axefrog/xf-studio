@@ -3,7 +3,7 @@
 // "not supported yet", never half-built.
 
 import { PredSyntaxError, walkPred } from './pred.ts';
-import { atoms, bound, playOf, predSites, resolvePreds } from './doc.ts';
+import { atoms, bound, fragmentSites, playOf, predSites, resolvePreds, type PredSite } from './doc.ts';
 import { lintSeed, type LintCtx } from './lint.ts';
 import { PackIndex, stripWords, structureHash } from './packs.ts';
 import { LADDER_ID, expandProfile, type LadderParams } from './profile.ts';
@@ -90,9 +90,9 @@ export function laterFindings(input: SeedInput, pack: PackIndex): Finding[] {
   return out;
 }
 
-const hasLaterAtoms = (c: CompiledSeed): Finding[] => {
+const hasLaterAtoms = (sites: PredSite[]): Finding[] => {
   const out: Finding[] = [];
-  for (const s of predSites(c)) {
+  for (const s of sites) {
     for (const { atom, at } of atoms(s.pred)) {
       if ('clock' in atom) out.push(later('A "clock" predicate', `${s.at}${at}`));
       else if ('city' in atom) out.push(later('A "city" read (S1 produces them)', `${s.at}${at}`));
@@ -147,6 +147,21 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
 
   if (opts.afterExpand) seed = opts.afterExpand(seed);
 
+  // Later capabilities are refused in the document that will run, and in every variant that could be drawn: a variant's
+  // parts are merged over the seed, so a clock in one is a clock in the seed (S2 section 0.3).
+  {
+    const seen = new Set<string>();
+    const fresh: Finding[] = [];
+    const candidates: SeedInput[] = [seed, ...(v?.variants ?? []).map((x) => mergeParts(exp.seed, x.parts))];
+    for (const cand of candidates) {
+      for (const x of laterFindings(cand, pack)) {
+        const key = `${x.at}|${x.message}`;
+        if (!seen.has(key)) { seen.add(key); fresh.push(x); }
+      }
+    }
+    if (fresh.length > 0) { findings.push(...fresh); return refuse(); }
+  }
+
   // 3. Parse the text form of every predicate.
   let compiled: CompiledSeed;
   try {
@@ -158,7 +173,10 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
     }
     throw e;
   }
-  findings.push(...hasLaterAtoms(compiled));
+  findings.push(...hasLaterAtoms(predSites(compiled)));
+  // The fragments the document plays are part of it: their predicates are checked too.
+  const closed = pack.closure(compiled);
+  findings.push(...hasLaterAtoms(closed.fragments.flatMap((fr) => fragmentSites(fr))));
   if (findings.some((f) => f.level === 'error')) return refuse();
 
   // 4. Lint, at the template's maturity (S2 section 11.1).
@@ -168,7 +186,7 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
   if (blocking.length > 0) return refuse();
 
   // 5. The closure, frozen with the document.
-  const full = pack.closure(compiled);
+  const full = closed;
   const closure = { fragments: full.fragments, texts: stripWords(full.texts) };
   return { ok: true, seed: compiled, closure, structureHash: structureHash(compiled, closure), findings, draws, sourceMap: exp.sourceMap };
 }

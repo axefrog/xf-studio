@@ -61,6 +61,12 @@ interface LinkState {
   never: boolean;
 }
 
+/** Whether every beat an in-scene beat follows is still running: its scene is still on (S2 section 8.3). */
+export function sceneRunning(inst: Instance, key: string): boolean {
+  const links = (inst.st.document.beats[key]?.links ?? []).filter((l) => 'because' in l) as Array<{ because: string }>;
+  return links.length > 0 && links.every((l) => inst.st.beats[l.because]?.state === 'running');
+}
+
 export function linkState(l2: Layer2, inst: Instance, key: string, t: GameTime): LinkState {
   const b = inst.st.document.beats[key]!;
   const links = b.links ?? [];
@@ -77,8 +83,17 @@ export function linkState(l2: Layer2, inst: Instance, key: string, t: GameTime):
     } else {
       const src = inst.st.beats[l.because];
       // An in-scene offer follows a beat whose scene is still running (S2 section 8.3): its source need not be final.
-      const sceneRunning = b.inScene === true && src?.state === 'running';
-      if (!src || (!isFinal(src.state) && !sceneRunning)) flow.push({ sat: false, never: false });
+      // It follows a *running* beat of the scene and no other: a final predecessor means the scene is over (L-131a).
+      if (b.inScene === true) {
+        if (!src || src.state === 'locked' || src.state === 'available') flow.push({ sat: false, never: false });
+        else if (src.state !== 'running') flow.push({ sat: false, never: true });
+        else {
+          const v = evalPred(l2, ctx, l.on ?? 'yes');
+          flow.push({ sat: v === 'yes', never: false });
+        }
+        continue;
+      }
+      if (!src || !isFinal(src.state)) flow.push({ sat: false, never: false });
       else if (src.state === 'skipped' && src.skip === 'rejected') flow.push({ sat: false, never: true });
       else {
         // The condition is always evaluated, whether the source was done or omitted (S2 section 7.1, SF-60).

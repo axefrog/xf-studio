@@ -270,6 +270,8 @@ describe('later capabilities are refused plainly (S2 section 0.3)', () => {
     ['recall in a response', (p) => { frag(p, 'f-meet').responses = [{ to: { participant: 'v' }, because: 'x', content: 'pack:t-no', recalls: {} }]; }],
     ['a clock predicate', (_p, s) => { s.context = 'clock(c) >= 1'; }],
     ['a city read', (_p, s) => { s.context = 'city({band: {cell: x}}) in {hot}'; }],
+    ['a clock inside a variant (review R-7)', (_p, s) => { s.variation = { variants: [{ id: 'v1', weight: 1, parts: { clocks: { c: { segments: 4, ticks: [], signs: [], onFull: 'finish' } } as never } }] }; }],
+    ['a city read in a fragment (review R-7)', (p) => { (frag(p, 'f-finish') as { needs?: unknown }).needs = 'city({band: {cell: x}}) in {hot}'; }],
     ['another profile', (_p, s) => { s.profile = { id: 'heist', params: {} }; }],
   ];
   for (const [name, mutate] of later) {

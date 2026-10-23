@@ -84,12 +84,26 @@ export class Settings {
     return clone(next);
   }
 
+  /** The number of entries in the log: it changes whenever a setting is set. */
+  get length(): number {
+    return this.entries.length;
+  }
+
   all(): SettingsEntry[] {
     return clone(this.entries);
   }
 
   restore(entries: SettingsEntry[]): void {
     this.entries = clone(entries);
+  }
+
+  /** A copy of the log, for a staged batch's discard (spec 14.2a). */
+  capture(): unknown {
+    return clone(this.entries);
+  }
+
+  restoreFrom(cap: unknown): void {
+    this.entries = clone(cap as SettingsEntry[]);
   }
 
   clear(): void {

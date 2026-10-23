@@ -336,6 +336,41 @@ describe('V4-26: staged batches', () => {
     expect(unconstrained).toBeDefined();
   });
 
+  test('a save is refused with a batch open, even from inside its own write callback (review R-1)', () => {
+    const { k, n } = world();
+    const batch = k.stage();
+    batch.write((kk) => kk.pin({ node: n, slot: 'x', value: 'b', reason: 'committed', cause }));
+    expect(() => batch.write((kk) => kk.persistence.save('inside'))).toThrow(/staged batch/);
+    expect(k.persistence.chain.has('inside')).toBe(false);
+    batch.discard();
+    expect(k.persistence.chain.has('inside')).toBe(false);
+  });
+
+  test('discard also restores settings, seed records, streaming and canon sets (review R-2)', () => {
+    const { k, n } = world();
+    const v = k.root('v', 'core:person');
+    k.settings.set({ tempo: 'calm' });
+    k.retention.setSeed({ id: n, state: { keep: 1 }, nodes: [] });
+    const rev = k.revision;
+    const settingsBefore = JSON.stringify(k.settings.all());
+    const seedsBefore = JSON.stringify([...k.retention.seeds.values()]);
+    const batch = k.stage();
+    batch.write((kk) => {
+      kk.settings.set({ tempo: 'off' });
+      kk.retention.setSeed({ id: v, state: { added: 1 }, nodes: [], actor: v });
+      kk.retention.setSeed({ id: n, state: { keep: 2 }, nodes: [] });
+      kk.retention.streamIn([n]);
+    });
+    expect(k.settings.current().tempo).toBe('off');
+    batch.discard();
+    expect(k.revision).toBe(rev);
+    expect(JSON.stringify(k.settings.all())).toBe(settingsBefore);
+    expect(JSON.stringify([...k.retention.seeds.values()])).toBe(seedsBefore);
+    expect(k.retention.streamed.size).toBe(0);
+    expect(k.frames.demandRoots.has(v)).toBe(true); // v was added by world(), not by the batch
+    expect(k.settings.current().tempo).toBe('calm');
+  });
+
   test('a load refuses to run with a batch open', () => {
     const { k } = world();
     k.persistence.save('A');
