@@ -96,7 +96,7 @@ Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 202
 | P2 | **Restage after load:** bring back whatever should be present | M5 | **planned (C3):** restage hooks; an asynchronous restaging state is a review item |
 | P3 | **A store quota sized for a world record** (megabytes, compressed) | M6 | **planned (C3):** save-scope store with quotas; large records need streaming |
 | P4 | **Story writes without the save lock:** a save-safe route for everything the Story Engine changes ([DS-39](design-seeds.md)) | M5 | **planned (C3):** play mode takes no save lock |
-| P5 | **Saves at a tick boundary:** the host takes the Story Engine's checkpoint only between ticks, so a save never splits one of its operations (a sow and its bookkeeping) ([S3 §9.4](spec/procedural.md)) | M4 | want: to settle with the bridge's save-scope store (C3) |
+| P5 | **Saves at a tick boundary:** the host takes the Story Engine's checkpoint only between ticks, so a save never splits one of its operations (a sow and its bookkeeping) ([S3 §9.4](spec/procedural.md)) | M4 | **route found:** Codeware's `Session/BeforeSave` runs callbacks synchronously before the save step returns, so it is the commit point. The checkpoint commits the record as of the last completed tick ([save identity](../../knowledge/save-identity.md#the-story-engines-save-key)). Still open: whether autosaves and quick-saves run that step (session card row 4) |
 
 ## Safety and coexistence
 
