@@ -155,6 +155,12 @@ describe("the plate material", () => {
       expect(f.indexOf("xfsDecal += xfsShiftColor")).toBeLessThan(f.indexOf("vec3 xfsRoot"));
       expect(f).not.toContain("XFS_PLATE_FRESNEL");
       expect(f.slice(0, f.indexOf("xfsDecal += xfsShiftColor"))).toContain("if ( xfsShiftIntensity > 0.0 ) {");
+      // Lit as skin, the S1 and S2 scatter variants write after that tint and before any light, so they carry none (experiment 043 §12).
+      const early = f.indexOf("xfsScatterWrite( vec4( 0.0 ), vec4( clamp( xfsSqrtDecal, 0.0, 1.0 ), xfsCoverage )");
+      if (skinLight) {
+        expect(early).toBeGreaterThan(f.indexOf("xfsDecal += xfsShiftColor"));
+        expect(early).toBeLessThan(f.indexOf("#include <lights_physical_fragment>"));
+      } else expect(early).toBe(-1);
     }
   });
 
