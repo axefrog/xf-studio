@@ -432,6 +432,32 @@ describe("0.8 npc against the self-test host's street", () => {
     expect((await ok(api, "npc.status")).npcs).toEqual([]);
   }, 30_000);
 
+  test("0.8.9 (the Sol review's finding 2): a scene stopped during a line's reading time sends no further step, and still releases its actor", async () => {
+    const scenario: Scenario = {
+      scenario: "xfs_test_stop",
+      actors: { talker: { cast: "woman_corpo" } },
+      steps: [
+        { do: "npc.spawn", who: "talker", ahead_m: 2 },
+        { wait: "npc.spawned", who: "talker", max_s: 5 },
+        { do: "npc.say", who: "talker", text: "A first line that takes its time.", seconds: 10 },
+        { do: "npc.say", who: "talker", text: "A second line that must never play." },
+      ],
+    };
+    const stop = new AbortController();
+    const running = runScenario(scenario, { api, cid: "t-stop", captureRoot: "", signal: stop.signal });
+    for (let i = 0; i < 100; i++) {
+      const status = await ok(api, "npc.status");
+      if ((status.npcs as Any[]).some((n) => (n.lines as Any[]).length > 0)) break;
+      await sleep(50);
+    }
+    await sleep(300);
+    stop.abort();
+    const report = await running;
+    expect(report).toMatchObject({ ok: false, outcome: "stopped", released: ["talker"] });
+    expect(report.steps.filter((s: Any) => s.do === "npc.say").length).toBe(1);
+    expect((await ok(api, "npc.status")).npcs).toEqual([]);
+  }, 30_000);
+
   test("0.8.9: the stranger scene gates its lines on arrival (near_m 3), leaves its lines their reading time, and uses the default choice timeout", () => {
     const scene = loadScenario(join(SCENARIO_DIR, "stranger_question.json"));
     const says = scene.steps.filter((s) => s.do === "npc.say" && (s.trigger === "greeting" || typeof s.text === "string") && !("on" in s));

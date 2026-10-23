@@ -80,9 +80,11 @@ describe("0.8.9 D1: the pin mark at the edge, and ui.state's pins", () => {
   });
 
   test("drawn_by is a bit set the UI's worker threads can't corrupt (0.8.8's shared array gave '????????ay' and pins_error failed)", () => {
-    expect(pins).toContain("public let drawnBits: Int32;");
+    expect(pins).not.toContain("drawnBits");
+    expect(pins).toContain("let before = XFBridge_PinDrawn(entry.id, bit);");
+    expect(pins).toContain("XFBridge_PinDrawn(entry.id, -1);");
+    expect(read("redscript", "Natives.reds")).toContain("public static native func XFBridge_PinDrawn(pin: Int32, bits: Int32) -> Int32");
     expect(pins).not.toContain("ArrayPush(entry.drawnBy");
-    expect(pins).toContain("entry.drawnBits = entry.drawnBits | bit;");
   });
 });
 
@@ -126,6 +128,25 @@ describe("0.8.9 NPC direction: device screens, the actor's own reactions, the wa
   });
 });
 
+describe("0.8.9, the Sol review's finding 1: the new helpers ask no game system while the scripts aren't live", () => {
+  test("the reaction wraps, the device check and the probe's attitude check the gate before any lookup", () => {
+    const npc = read("redscript", "XFRuntimeBridgeNpc.reds");
+    for (const fn of ["public static func HoldsReactionsOf(", "public static func DeviceFocus("]) {
+      const body = npc.slice(npc.indexOf(fn), npc.indexOf(fn) + 700);
+      const gate = body.indexOf("XFBridge_Live()");
+      expect(gate, fn).toBeGreaterThan(0);
+      for (const lookup of ["XFNpcRegistry.Get()", "XFPlayer.Player()", "GetBlackboardSystem", "GetTargetingSystem"]) {
+        const at = body.indexOf(lookup);
+        if (at >= 0) expect(at, `${fn} ${lookup}`).toBeGreaterThan(gate);
+      }
+    }
+    const probe = read("redscript-probes", "XFRuntimeBridgeProbeEvents.reds");
+    const attitude = probe.slice(probe.indexOf("public static func Attitude("), probe.indexOf("public static func Attitude(") + 600);
+    expect(attitude.indexOf("XFBridge_Live()")).toBeGreaterThan(0);
+    expect(attitude.indexOf("XFBridge_Live()")).toBeLessThan(attitude.indexOf("GetPlayer("));
+  });
+});
+
 describe("0.8.9 the senses, the surfaces, the answer keys and the probes", () => {
   test("player.status counts what the inventory screen shows, equipped apart, and heat reads the wanted bar's own blackboard", () => {
     const senses = read("redscript", "XFRuntimeBridgeSenses.reds");
@@ -144,6 +165,10 @@ describe("0.8.9 the senses, the surfaces, the answer keys and the probes", () =>
 
   test("the answer keys work while the CET line shows the question (the panel switched off); keys wait out 0.5 s after a question", () => {
     const ink = read("redscript", "XFRuntimeBridgeInk.reds");
+    // The Sol review of 0.8.9, finding 4: never while the phone hides the question.
+    const drawn = ink.slice(ink.indexOf("public func DrawnAsk() -> ref<XFHudFrame> {"), ink.indexOf("public func DrawnAsk() -> ref<XFHudFrame> {") + 900);
+    expect(drawn).toContain("if !this.m_mounted || this.m_phoneOpen {");
+    expect(ink).toContain("let held = this.DrawnAsk();");
     expect(ink).toContain("if IsDefined(frame) && frame.valid && !frame.show && frame.live && frame.askId > 0 && ArraySize(frame.askKeys) > 0 {");
     const natives = read("native", "src", "plugin", "Natives.cpp");
     expect(natives).toContain('const bool byKey = via.size() >= 4 && via.compare(via.size() - 4, 4, "_key") == 0;');

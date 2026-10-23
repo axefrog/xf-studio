@@ -60,3 +60,6 @@ public static native func XFBridge_SaveAnyway(source: String) -> String
 // 1 the hooks on, 2 the stim tap, 4 the save-identity probe's BeforeSave write armed).
 public static native func XFBridge_Event(kind: String, data: String) -> Bool
 public static native func XFBridge_ProbeFlags() -> Int32
+// Bridge 0.8.9 (the Sol review, finding 3): world.pin's drawn_by, OR-ed natively under one lock: ORs bits into the pin's views
+// and answers those before; bits 0 reads them, below 0 clears them (a new pin under a used id).
+public static native func XFBridge_PinDrawn(pin: Int32, bits: Int32) -> Int32

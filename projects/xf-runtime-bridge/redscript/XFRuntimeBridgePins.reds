@@ -38,9 +38,8 @@ public class XFPinEntry {
   public let bound: Bool;
   // 0.8: the views that have drawn this pin so far, for world.pin's answer and the log. 0.8.9 (session 15's D1: ui.state's
   // pins came back "failed" because one name read "????????ay"): the mappin controllers' UpdateIcon runs on the UI's worker
-  // threads, several at once, and they all pushed into one script array; now each view sets one bit of a plain integer (a
-  // lost bit is set again on the next update; nothing is reallocated under another thread).
-  public let drawnBits: Int32;
+  // threads, several at once, and they all pushed into one script array. The views are now bits the plugin ORs under one
+  // lock (XFBridge_PinDrawn; the Sol review's finding 3: a script-side OR was still a read-modify-write); nothing here.
   // 0.8.3: the bridge's own mark in the world (XFRuntimeBridgeInk.reds PlacePinMark) as the overlay last placed it: shown
   // this tick, its top-left corner in the overlay's units and in window pixels (the game's own layout), on screen or not.
   public let markShown: Bool;
@@ -77,6 +76,7 @@ public class XFPinRegistry extends ScriptableSystem {
   }
 
   public func Add(entry: ref<XFPinEntry>) -> Void {
+    XFBridge_PinDrawn(entry.id, -1); // a new session restarts the ids: no views from an older pin
     ArrayPush(this.m_pins, entry);
   }
 
@@ -149,11 +149,14 @@ public abstract class XFInkPins {
   // 0.8: records the first time a view draws an XF pin (the plugin log and world.pin's drawn_by).
   public static func NoteDrawn(entry: ref<XFPinEntry>, view: String) -> Void {
     let bit = XFInkPins.ViewBit(view);
-    if !IsDefined(entry) || bit == 0 || (entry.drawnBits & bit) != 0 {
+    if !IsDefined(entry) || bit == 0 {
       return;
     }
-    entry.drawnBits = entry.drawnBits | bit;
-    XFBridgeLog.Info("pins", "world.pin " + IntToString(entry.id) + " drawn by " + view);
+    // The plugin ORs the bit under its lock and answers the views before; only the caller that set it logs.
+    let before = XFBridge_PinDrawn(entry.id, bit);
+    if (before & bit) == 0 {
+      XFBridgeLog.Info("pins", "world.pin " + IntToString(entry.id) + " drawn by " + view);
+    }
   }
 
   // The views in drawn_by's order, one bit each.
@@ -194,10 +197,11 @@ public abstract class XFInkPins {
 
   public static func Json(entry: ref<XFPinEntry>) -> String {
     let drawn = "";
+    let views = XFBridge_PinDrawn(entry.id, 0);
     let i = 0;
     let bit = 1;
     while i < 5 {
-      if (entry.drawnBits & bit) != 0 {
+      if (views & bit) != 0 {
         drawn += (StrLen(drawn) > 0 ? "," : "") + XFJson.Str(XFInkPins.ViewName(i));
       }
       bit = bit * 2;

@@ -260,7 +260,8 @@ describe("0.8.6 the panel inside photo mode's menu (knowledge/photo-mode.md §15
   test("natives: XFBridge_InkEvent and XFBridge_MouseHeld are declared as the plugin registers them", () => {
     expect(natives).toContain("public static native func XFBridge_InkEvent(kind: String, text: String, data: String) -> Bool");
     expect(natives).toContain("public static native func XFBridge_MouseHeld() -> Bool");
-    // 0.8.7: four more (XFBridge_SaveRefused, XFBridge_SaveAnyway, XFBridge_Event, XFBridge_ProbeFlags; batch21).
-    expect(read("native", "src", "plugin", "Natives.cpp")).toContain('log::Info("rtti.register_types", "phase=post_register natives=26");');
+    // 0.8.7: four more (XFBridge_SaveRefused, XFBridge_SaveAnyway, XFBridge_Event, XFBridge_ProbeFlags; batch21); 0.8.9:
+    // XFBridge_PinDrawn (batch22).
+    expect(read("native", "src", "plugin", "Natives.cpp")).toContain('log::Info("rtti.register_types", "phase=post_register natives=27");');
   });
 });

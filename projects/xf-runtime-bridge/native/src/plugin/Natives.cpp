@@ -789,6 +789,32 @@ void ProbeEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut,
     });
 }
 
+// XFBridge_PinDrawn(pin: Int32, bits: Int32) -> Int32   (0.8.9, the Sol review's finding 3: world.pin's drawn_by from the mappin
+// controllers on the UI's worker threads): ORs bits into the pin's set of views and answers the set before; bits 0 reads it,
+// bits below 0 clears it (a new pin under a used id). Bookkeeping only, one lock, no game call.
+void PinDrawn(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aOut, int64_t)
+{
+    int32_t pin = 0;
+    int32_t bits = 0;
+    RED4ext::GetParameter(aFrame, &pin);
+    RED4ext::GetParameter(aFrame, &bits);
+    aFrame->code++; // skip ParamEnd
+    int32_t before = 0;
+    Guarded("XFBridge_PinDrawn", [&] {
+        auto& state = Get();
+        if (bits < 0)
+        {
+            state.pinViews.Reset(pin);
+            return;
+        }
+        before = static_cast<int32_t>(state.pinViews.Or(pin, static_cast<uint32_t>(bits)));
+    });
+    if (aOut)
+    {
+        *aOut = before;
+    }
+}
+
 // XFBridge_ProbeFlags() -> Int32   (0.8.7, test probes: 1 the hooks are on ([bridge] allow_test_hooks), 2 the stim tap, 4 the
 // save-identity probe's BeforeSave write armed; 0 without the test hooks).
 void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aOut, int64_t)
@@ -884,7 +910,9 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_SaveAnyway", &SaveAnyway, "String", {"source"});
         RegisterGlobal(rtti, "XFBridge_Event", &ProbeEvent, "Bool", {"kind", "data"});
         RegisterGlobal(rtti, "XFBridge_ProbeFlags", &ProbeFlags, "Int32", {});
-        log::Info("rtti.register_types", "phase=post_register natives=26");
+        // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
+        RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
+        log::Info("rtti.register_types", "phase=post_register natives=27");
     }
     catch (const std::exception& e)
     {

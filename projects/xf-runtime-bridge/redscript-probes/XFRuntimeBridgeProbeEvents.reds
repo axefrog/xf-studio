@@ -22,6 +22,10 @@ public abstract class XFProbeOut {
   // 0.8.9 (session 15: a hostile stand-in's death came with civilian true, a reactive civilian clone's class): how the victim
   // stood towards V (EAIAttitude: AIA_Friendly, AIA_Neutral, AIA_Hostile), "" when V isn't there.
   public static func Attitude(puppet: ref<ScriptedPuppet>) -> String {
+    // The Sol review of 0.8.9, finding 1: the hooks' switch stays on through a load, so the gate is checked here first.
+    if !XFBridge_Live() {
+      return "";
+    }
     let player = GetPlayer(GetGameInstance());
     if !IsDefined(player) || !IsDefined(puppet) {
       return "";

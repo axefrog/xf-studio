@@ -130,7 +130,9 @@ public class XFNpcRegistry extends ScriptableSystem {
   }
 
   public static func HoldsReactionsOf(owner: ref<GameObject>) -> Bool {
-    if !IsDefined(owner) {
+    // The Sol review of 0.8.9, finding 1: these wraps run from the game's own reaction callbacks, outside ScriptCall's gate,
+    // so while the scripts aren't live they pass straight through without asking any system.
+    if !XFBridge_Live() || !IsDefined(owner) {
       return false;
     }
     let registry = XFNpcRegistry.Get();
@@ -335,6 +337,10 @@ public abstract class XFNpcHub {
   // check missed it. V is busy with a device while the player state machine says she interacts with, zooms into or controls
   // one, or while she looks at a device within 3.5 m (the distance its screen takes the cursor from).
   public static func DeviceFocus() -> Bool {
+    // Also reached from PlayerPuppet.OnAction's wrap, outside ScriptCall's gate (the Sol review of 0.8.9, finding 1).
+    if !XFBridge_Live() {
+      return false;
+    }
     let player = XFPlayer.Player();
     if !IsDefined(player) {
       return false;

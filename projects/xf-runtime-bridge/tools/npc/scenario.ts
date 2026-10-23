@@ -165,7 +165,9 @@ async function execute(context: CommandContext, name: string, input: Json): Prom
   const problems = validate(def.input, input);
   if (problems.length) return { ok: false, error: { code: "bad_input", message: problems.join(" ") } };
   const params = def.bridge!.params ? def.bridge!.params(input) : input;
-  const response = await context.api.callBridge(def.bridge!.method, params, context.cid, def.bridge!.timeoutMs?.(input));
+  // The Sol review of 0.8.9, finding 2: a scene's own steps carry its signal, so a stopped scene sends nothing more; the
+  // clean-up's releases (runScenario's finally) call the bridge without it.
+  const response = await context.api.callBridge(def.bridge!.method, params, context.cid, def.bridge!.timeoutMs?.(input), context.signal);
   return response.ok ? { ok: true, result: response.result as Json } : { ok: false, error: response.error as { code: string; message: string } };
 }
 
@@ -300,8 +302,10 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
             await idle(pollMs);
           }
           delete readingUntil[speaker];
+          if (context.signal?.aborted) throw new ScenarioError("the scene was stopped", "stopped");
         }
         const out = await execute(context, step.do, input);
+        if (!out.ok && context.signal?.aborted) throw new ScenarioError("the scene was stopped", "stopped");
         const entry: Json = { do: step.do, who: step.who, at_s: began, ok: out.ok, took_s: Math.round((seconds() - began) * 10) / 10 };
         if (out.ok) {
           if (step.do === "npc.spawn") {

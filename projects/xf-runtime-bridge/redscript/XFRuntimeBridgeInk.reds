@@ -1221,7 +1221,9 @@ public class XFInkOverlay extends ScriptableSystem {
 
   // RB-114: the question the panel shows now with its keys, or null (nothing mounted, hidden, or no question drawn).
   public func DrawnAsk() -> ref<XFHudFrame> {
-    if !this.m_mounted {
+    // The Sol review of 0.8.9, finding 4: while a phone screen has the panel step aside its question is hidden, so the keys
+    // answer nothing and the panel reports them disarmed (ReportDrawn reads this).
+    if !this.m_mounted || this.m_phoneOpen {
       return null;
     }
     if IsDefined(this.m_view) && IsDefined(this.m_view.drawn) {

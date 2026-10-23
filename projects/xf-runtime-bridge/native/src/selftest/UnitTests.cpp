@@ -26,6 +26,7 @@
 #include "core/Behaviours.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
+#include "core/PinViews.hpp"
 #include "core/Hooks070.hpp"
 #include "core/overlay/Host.hpp"
 #include "core/Player.hpp"
@@ -5182,6 +5183,35 @@ void Bridge087Tests()
           read.dump());
     const auto later = ring.Read(read["next"].get<uint64_t>(), 100);
     Check("0.8.7 the probe ring reads on from a cursor", later["events"].empty() && later["next"] == read["next"], later.dump());
+
+    // 0.8.9 (the Sol review of 0.8.9, finding 3): world.pin's drawn_by from many threads at once: each view's bit is set
+    // once, reported new exactly once, and none is lost.
+    {
+        xfb::PinViews views;
+        std::atomic<int> firsts{0};
+        std::vector<std::thread> workers;
+        for (int t = 0; t < 8; ++t)
+        {
+            workers.emplace_back([&views, &firsts, t] {
+                for (int i = 0; i < 4000; ++i)
+                {
+                    const uint32_t bit = 1u << ((t + i) % 8);
+                    if ((views.Or(7, bit) & bit) == 0)
+                    {
+                        ++firsts;
+                    }
+                }
+            });
+        }
+        for (auto& w : workers)
+        {
+            w.join();
+        }
+        const auto all = views.Or(7, 0);
+        views.Reset(7);
+        Check("0.8.9 the pins' views from eight threads: every bit set, each reported new exactly once; a reset clears the pin",
+              all == 0xFFu && firsts.load() == 8 && views.Or(7, 0) == 0 && views.Or(8, 0) == 0);
+    }
 
     // 0.8.9: kinds keeps only those kinds or families, and the cursor still moves past what it skipped.
     pr::ProbeRing mixed(64, 100);

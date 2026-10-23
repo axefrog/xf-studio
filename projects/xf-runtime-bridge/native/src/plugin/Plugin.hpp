@@ -14,6 +14,7 @@
 
 #include "core/Behaviours.hpp"
 #include "core/LayoutGuard.hpp"
+#include "core/PinViews.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
 #include "core/Player.hpp"
@@ -161,6 +162,9 @@ struct State
     // (XFBridge_Event, test.events), and their switches (XFBridge_ProbeFlags: 2 the stim tap, 4 the BeforeSave write armed).
     probes::ProbeRing probeEvents;
     std::atomic<int32_t> probeSwitches{0};
+
+    // 0.8.9 (the Sol review, finding 3): the views that have drawn each XF pin, OR-ed under one lock (XFBridge_PinDrawn).
+    PinViews pinViews;
 };
 
 State& Get();
