@@ -29,6 +29,22 @@ kernel rules around them can be tested.
   (read-only loads, fine-tier processes, `explain`, region scopes, the policy hooks beyond the stub) is
   listed in [`reference/SPEC-NOTES.md`](reference/SPEC-NOTES.md#cross-implementation-check) and left to
   the fixtures and unit tests.
+- The layer 2 tests live in `reference/test/s2/`: the R1 acceptance tests and three crash-point sweeps, the
+  lint matrix (each lint has a tripping seed and the passing base), casting, the lifecycle, the arbiter,
+  predicates, pack lifecycle, property tests, and `fixtures.test.ts`, which indexes SF-1 to SF-64 (50 have
+  named tests; the rest name the later capability they wait for). The suite has 595 tests.
+
+- The **v4 core** of S0 (section 20): derives that get the query time, fact, seed and cast kinds with the offer,
+  response and seed-outcome events, `outcome` and `served` on events, the `frame` change, routing to layer 2,
+  typed `SettingsSet` content, `age-class`, and staged batches. The frozen v3 digest runs unchanged with the
+  v4 additions switched off; a second frozen digest covers the run with them on.
+- **Layer 2** ([`reference/src/seeding/`](reference/src/seeding/)): the core of S2 v1.5 (section 0.3). Seed
+  documents and the text form of predicates, the ladder profile, compilation and the core lints, casting with
+  claims, the lifecycle and beats, offers and responses, the arbiter (gates, tempo, session states, prepare and
+  confirm through a staged batch, display grades, receipts), the exposure ledger, the fit report, and
+  persistence through the kernel's seed records. Later capabilities (clocks, short and full forms, plants,
+  language-model fields, city reads, the tone, dread and stage lints and the rest of S2 section 0.3's
+  "later" list) are refused at compile time with "not supported yet". The R1 scenario (S2 Appendix A) runs end to end through a save and a load.
 
 The one runtime dependency is `@noble/hashes` (BLAKE3). Everything else is ours.
 
@@ -50,5 +66,6 @@ under the memory guard (`python tools/memory_guard.py --limit 2 -- bun test`), a
 | Path | Contents |
 |---|---|
 | `reference/src/` | The kernel, one module per subsystem. `kernel.ts` composes them; `index.ts` exports the public surface. |
-| `reference/test/` | One test file per subject; `fixtures.test.ts` indexes the acceptance fixtures; `synthetic.ts` is the schema and operation script behind the invariant and digest tests. |
+| `reference/src/seeding/` | Layer 2: seed documents, predicates, compile and lint, casting, lifecycle, arbiter, effects, persistence. `layer2.ts` composes them. |
+| `reference/test/`, `reference/test/s2/` | One test file per subject; `fixtures.test.ts` indexes the acceptance fixtures; `synthetic.ts` is the schema and operation script behind the invariant and digest tests. |
 | `reference/SPEC-NOTES.md` | Interpretations of the specification, for its owner to confirm. |

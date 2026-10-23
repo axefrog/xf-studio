@@ -1,7 +1,7 @@
 # Spec notes for the reference model
 
-Interpretations made while building the TypeScript reference model of S0 v3
-(`research/story-engine/spec/kernel.md`). Each entry gives the section, the issue, the reading chosen and
+Interpretations made while building the TypeScript reference model of S0 (v3, then the v4 core) and of the
+core of S2 v1.5 (`research/story-engine/spec/kernel.md`, `seeding.md`). Each entry gives the section, the issue, the reading chosen and
 why. The coordinator decides afterwards and updates the spec.
 
 **Status.** The coordinator has decided entries 1 to 29: entries 1 to 4 and 6 to 29 are accepted as
@@ -11,7 +11,8 @@ needed, each the most faithful reading found. Entries 52 to 57 are **new** since
 of the reference model (findings SR-01 to SR-14, fixed): readings that the fixes needed. Entries 31, 33,
 37, 39, 42 and 50 were amended by the same review and say so. A second review (SR2-01 to SR2-08, fixed)
 found that entries 54 to 57 claimed more than the code guaranteed; entries 33, 53, 54, 55, 56 and 57
-now state exactly what the code does, including what it leaves alone. Entry numbers are stable so messages and
+now state exactly what the code does, including what it leaves alone. Entries 58 to 74 are **new** from the v4 and layer 2 build (the last section, with its findings for the
+coordinator). Entry numbers are stable so messages and
 reviews can point at them; the sections below order them worst first, meaning the entries that change
 observable results come before presentation choices.
 
@@ -417,3 +418,105 @@ budget (the script's ticks use the default one); relevance matching of changes t
 temporal slots; a load whose game time is several boundaries ahead of the save; and every failure and
 refusal defect. The unit tests of `test/sr2.test.ts` cover the resumed ticks, the catch-up after a load and the
 temporal matching.
+
+## Kernel v4 core and layer 2 core (entries 58 onward)
+
+These entries come from building the S0 v4 core (section 20) and the S2 v1.5 core (section 0.3) in a second,
+independent run. Numbers continue after 57. They are ordered worst first: the readings that change observable
+behaviour or a frozen digest come before the ones that only fill a gap. The block headed **Spec findings for the
+coordinator** at the end lists the ones that most need a decision.
+
+58. **The v4 changes move the frozen v3 digest; both are switchable. (new)** The `frame` change (V4-4) adds two
+    emissions to the v3 run, and the v4 schema (V4-2, V4-3, V4-22) changes function versions and so the schema
+    hash. The frozen v3 digest `d534e0dcef3f85d27cefa552217152ec` therefore runs with `frameChanges: false` and
+    `coreDefs({ v4: false })`, and is unchanged. A second frozen digest, `da48cabc405ed361ce6ad5f3b895a822` over
+    1,069 entries, covers the same script with both on (`test/digest-v4.test.ts`). A native core must reproduce
+    both. The defaults of the kernel are v4 on.
+59. **A ladder ends when an exit beat has been played, not when the exit is written. (new)** S2 A.2 step 7 reads
+    "any exit beat is `done`". Reading it as "an exit fact is set" would end the seed the moment a decline was
+    recorded, before the decline's exit content could play, and SF-7's `abandoned` could not be told from a played
+    exit. The expansion's `end` is `any[top rung done, all[exit fact > 0, any exit beat done]]`. If the exit
+    content can never complete, the seed ends `abandoned`, which is what SF-7 asks for.
+60. **The attempt bound counts offers only, and a pull lifts it. (new)** S2 8.5 bounds attempts per logical
+    offer across channels and reloads. Replies and beats are not offers and do not count. When the bound is
+    reached the delivery is `expired` ("waits for pull") and the offer is `stopped` until V pulls (a recap or a
+    deliberate approach), which lifts it. The bound is checked at candidate selection as well as at release, or
+    a fifth push could be queued (SF-62).
+61. **In-scene offers bypass the arbiter's gates but not its tempo. (new)** An offer inside a scene V is already
+    in (S2 0.3) is released at the beat's moment: the attention, region and pacing gates do not apply, because
+    the scene is the context. Display grades, receipts and the joint latch still apply. Without this a scene
+    could stall mid-line behind its own pacing gate.
+62. **A seed fact counts as changeable only if something writes it (`writtenFacts`). (new)** L-05, L-06 and the
+    SF-24 and SF-60 checks ask whether a fact "can change". Counting every declared seed fact made constants look
+    changeable and hid dead choices. The lint and `canChange` use the set of facts that an effect, outcome,
+    ladder or profile writes. A fact nobody writes is a constant.
+63. **The fit report casts first and ignores the live instance's own claim. (new)** S2's fit report builds a
+    throwaway instance. It casts before windows are computed (a template that cannot cast reports `waits`, not a
+    window), and a live instance of the same template is not counted as a claimant against the throwaway one.
+64. **Offer identity counts offer and beat deliveries only. (new)** The id of an offer hashes the number of
+    earlier releases of that offer. Reply deliveries are another kind and must not shift an offer's identity, or
+    the same offer would get a new id after V answers (SF-64). `missed` ignores replies for the same reason.
+65. **A hard prepare failure re-evaluates the seed at once. (new)** S2 8.4: if prepare finds a hard condition no
+    longer holds, the delivery is dropped and the seed queued for re-evaluation in the same pass (SF-23), not at
+    the next change that happens to touch it.
+66. **Content gates run before prepare, at release. (new)** A delivery whose fragment is above a content ceiling
+    in force at release is `expired` ("above the content ceiling") and its beat omitted (SF-51); a delivery
+    whose content is missing from the pack (and has no implied form) is `expired` ("missing-content"). Both
+    happen before prepare, which would otherwise stage and discard a batch for a result already known.
+67. **Predicate text extensions. (new)** The grammar of S2 2.6 leaves open: `all()` and `any()` for an empty or
+    one-member group, the other role operators (`in {..}`, `not in {..}`, `in [a, b]`, `has-edge(..)`), `@role`
+    as an argument, durations `<seconds>g` (game time) and `<seconds>p` (play time), and generic `{key: value}`
+    patterns. The printer and parser round-trip every form (tested with generated predicates).
+68. **`since` for a beat is its last move into a final or deferred state. (new)** `finalAt` is written each time
+    a beat becomes `done`, `skipped`, `failed` or `deferred`; `since(beat)` and a count since a beat read it. A
+    beat that has never been final has no `since` and a count since it is 0.
+69. **Layer 2 state loads in a fixed order and starts a new session. (new)** `onLoad` rebuilds instances from
+    the kernel's `SeedRecord` roots and layer 2's global record, resets deliveries, reinstalls each seed's
+    contributions with origin `pack:seed/<id>`, and starts a new arbiter in `settling` (S2 8.6). Play-clock
+    stamps are relative to the session (`playBase`, `baseTotal`) so a save means the same in the next session.
+    A save flushes layer 2 first (`layer2.flush()`), so the file holds the committed state.
+70. **A staged batch is a snapshot and a restore. (new)** V4-26 allows it. The batch holds the revision and
+    captures of the store, frames, beliefs, events and groups; `discard` restores all of them and invalidates the
+    query, summary, resolution and retention caches. A write outside the batch while it is open is refused with a
+    plain error, and `Persistence.load` is refused with a batch open. The spec does not say what a failing commit
+    does; the reference has none, so the failure path is a discard.
+71. **Redaction scrubs settings content and the director's beliefs about V. (new)** V4-21 says sensitive
+    material is dropped by default from an export. `redactSensitive` removes `BeliefSet` ops whose believer is
+    the director and subject is V and replaces a `SettingsSet` content block with a `redacted` preset with empty
+    ceilings; the same for a snapshot. `PersistedView.settings` is omitted when empty so v3 records are byte
+    identical.
+72. **Reply selection and attribution. (new)** S2 8.8 says an NPC's template reply can correct a telling. The
+    templates offered with a delivery are chosen at release (`selectResponses`): those whose `needs` holds and
+    whose `to` pattern matches a confirmed event V has acted on. V using one (`reply`) writes an observed
+    telling (an event with V and the NPC as witnesses) and sets the NPC's belief from V's own words, so the
+    belief really revises and the line no longer applies (SF-25, SF-36).
+73. **Effects by persistence class. (new)** A seed-fact write rewrites the single pin it owns; maintenance
+    writes go through a queue that a reset empties; cosmetic marks live on the instance and are never read by a
+    predicate. The accept, decline and not-now crash-point sweeps show a reset at any point leaves no partial
+    state.
+74. **The fit hook is clamped and recorded raw and clamped. (new)** The `fit` hook sees the choice id, the option
+    and the instance only. Its weight is clamped to plus or minus `fitCap` before it enters the Gumbel-max draw
+    as a bonus (S2 3.4), and the trace records both. The draw is `rand("seed-draw", ...)` with `H("tie", ...)` for
+    exact ties.
+
+### Spec findings for the coordinator
+
+The ones that need a decision, worst first:
+
+- **58 (digests).** Native cores must carry two frozen digests, one for v3 and one for v4, and the v4 run's frame
+  emissions are part of its meaning. If one digest is preferred, the v3 script should retire when v4 is accepted.
+- **59 (ladder end).** The text of A.2 step 7 and the text of SF-7 can be read to disagree. The reading chosen
+  makes the exit content part of the seed's life. If that is not intended, SF-7 needs rewording.
+- **60 and 61 (attempt bound and in-scene).** The bound says nothing of what counts as an attempt, or whether
+  in-scene offers are subject to it. In the reference they are not (they are released in the scene's own moment).
+- **62 (changeable facts).** L-05 and L-06 should state their "can change" test; the reference uses written
+  facts, which makes a pack's unwritten seed fact a constant rather than a decision.
+- **64 (offer identity).** The id of an offer depends on the releases of that offer only. If reply deliveries are
+  meant to bump it, SF-64's expected id changes.
+- **70 (staged batch).** V4-26 says nothing about a failing commit; see the entry.
+- **Later capabilities refused.** Each later construct is rejected at compile time with "X is not supported yet"
+  and the spec's instead-text where one exists: clocks and projections, short and full forms, plants,
+  language-model fields, city reads, the tone, dread, setting, stage, words and model lint blocks, scale
+  metadata, constructed traces and late causes. `test/s2/fixtures.test.ts` names the fixture each one blocks
+  (50 of SF-1 to SF-64 have named tests, SF-18 in its count form only; 14 wait wholly for a later capability;
+  the kernel's F-16 has its own test, and F-17 to F-20 wait for the deferred memory machinery).
