@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import { ViewportAttachment, type PreparationState } from "../src/app/viewport-attachment";
-import { preparationLine } from "../src/studio-ui/preparation-text";
+import { NEXT_LINE_MAX_CHARS, PREPARATION_LINE_MIN_VISIBLE_MS, PreparationLineGate, preparationLine } from "../src/studio-ui/preparation-text";
 import { PREPARATION_STAGES } from "../src/preview/scene-residency";
 
 const port = { moveHost: () => {}, measure: () => ({ width: 300, height: 200 }), resize: () => {}, cancelInput: () => {}, inputCapture: () => false,
@@ -37,9 +37,42 @@ test("every stage has a plain line in both places, the host's own line wins whil
     // No developer words reach the person.
     expect(line).not.toMatch(/shader|program|runtime|GPU|compile|warm-up/i);
   }
-  const core = { stage: "core" as const, waiting: "host" as const, detail: "Preparing the masculine V's head… (step 3 of 9)" };
-  expect(preparationLine(core, "pane")).toBe(core.detail);
-  expect(preparationLine(core, "next")).toBe("Next V: preparing the masculine V's head… (step 3 of 9)");
-  expect(preparationLine({ stage: "details", waiting: "host" }, "next")).toBe("Next V: preparing skin, hair and clothes…");
-  expect(preparationLine({ stage: "details", waiting: "files" }, "next")).toBe("Next V: loading skin, hair and clothes…");
+  // The host's own line wins in the pane while it prepares a core, and a step count never shows beside the bar.
+  const host = "Preparing the masculine V's head from your Cyberpunk 2077 files…";
+  expect(preparationLine({ stage: "core", waiting: "host", detail: host }, "pane")).toBe(host);
+  expect(preparationLine({ stage: "core", waiting: "host", detail: `${host} (step 3 of 9)` }, "pane")).toBe(host);
+  expect(preparationLine({ stage: "core", waiting: "host", detail: "Preparing the head (step 3 of 9)…" }, "pane")).toBe("Preparing the head…");
+  // The same head wording in both places: the pane without a host line says what the host says.
+  expect(preparationLine({ stage: "core", waiting: null }, "pane")).toBe(host);
+  expect(preparationLine({ stage: "details", waiting: "host" }, "pane")).toBe("Preparing your V's skin, hair and clothes…");
+  expect(preparationLine({ stage: "details", waiting: "files" }, "pane")).toBe("Loading your V's skin, hair and clothes…");
+  expect(preparationLine({ stage: "programs", waiting: "driver" }, "pane")).toBe("Getting the look ready…");
+});
+
+test("the quiet line is one line at every stage: each `next` string fits the narrowest width, with or without the host's line", () => {
+  for (const stage of PREPARATION_STAGES) for (const waiting of [null, "host", "files", "driver", "gpu"] as const) for (const detail of [undefined, "Preparing the masculine V's head from your Cyberpunk 2077 files… (step 3 of 9)"]) {
+    const line = preparationLine({ stage, waiting, ...(detail ? { detail } : {}) }, "next");
+    expect(line.length).toBeLessThanOrEqual(NEXT_LINE_MAX_CHARS);
+    expect(line).not.toMatch(/step|masculine|\d/i);
+  }
+  expect(preparationLine({ stage: "details", waiting: "host" }, "next")).toBe("Next V: hair and clothes…");
+  expect(preparationLine({ stage: "programs", waiting: null }, "next")).toBe("Next V: readying the look…");
+});
+
+test("the status line stays visible for a short minimum once it has appeared, then goes", () => {
+  const gate = new PreparationLineGate();
+  // Never wanted: never shown.
+  expect(gate.step(0, false)).toEqual({ show: false, holdMs: null });
+  // It appears at t=1000 and the preparation ends 40 ms later: the line stays for the rest of 300 ms.
+  expect(gate.step(1000, true)).toEqual({ show: true, holdMs: null });
+  expect(gate.step(1040, false)).toEqual({ show: true, holdMs: PREPARATION_LINE_MIN_VISIBLE_MS - 40 });
+  expect(gate.step(1299, false).show).toBe(true);
+  expect(gate.step(1300, false)).toEqual({ show: false, holdMs: null });
+  // A line shown for longer than the minimum goes at once when the preparation ends.
+  gate.step(2000, true); gate.step(2500, true);
+  expect(gate.step(2501, false)).toEqual({ show: false, holdMs: null });
+  // The pane no longer showing a V drops a held line at once.
+  gate.step(3000, true);
+  gate.reset();
+  expect(gate.step(3010, false)).toEqual({ show: false, holdMs: null });
 });

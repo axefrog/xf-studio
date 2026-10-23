@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
-import { EYE_SHAPE_FALLBACK, type PreviewPort } from "../src/preview/preview-actions";
+import { eyeShapeFallback, type PreviewPort } from "../src/preview/preview-actions";
 import type { MotionPort } from "../src/animation/motion-actions";
 import type { SavedV } from "../src/saves/save-reader";
 import { bodySexOf, SavedAppearanceActions } from "../src/character/saved-appearance-actions";
@@ -207,7 +207,9 @@ test("a head that lacks the scene's eye shape shows its base shape and leaves th
   expect(shapes).toEqual([0]);
   expect(graph.state<{ eyeShape: number }>("main", "scene").eyeShape).toBe(5);
   // The status says what the head shows and why; the scene's choice is still the one stored (and mirrored).
-  expect(head.preview.eyeShapeOptions()).toMatchObject({ shown: 0, fallback: EYE_SHAPE_FALLBACK });
+  expect(head.preview.eyeShapeOptions()).toMatchObject({ shown: 0, fallback: eyeShapeFallback(5, 0) });
+  // One sentence naming both shapes, by the numbers the selector shows.
+  expect(eyeShapeFallback(23, 0)).toBe("This head has no shape 24, so it shows shape 1; your choice comes back on a head that has it.");
   expect(head.preview.snapshot().eyeShape).toBe(5);
   // Another runtime of the scene choosing a shape this head lacks: this head shows its base shape again, never the missing one.
   graph.edit("main", "scene", { state: { eyeShape: 7 } }, { label: "Eye shape" });

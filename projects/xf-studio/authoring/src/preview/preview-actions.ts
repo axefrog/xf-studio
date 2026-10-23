@@ -82,8 +82,12 @@ export type EyeShapeOptions = { choices: FaceMorphChoice[]; eyesFollow: boolean;
    * `fallback`, the plain reason. The scene keeps the choice either way (a head of the other body may have it: experiment 043 §10).
    */
   shown?: number; fallback?: string };
-/** Why a head shows its base eye shape instead of the scene's choice. */
-export const EYE_SHAPE_FALLBACK = "This head doesn't have the eye shape you chose, so it shows its base shape. Your choice stays for a head that has it.";
+/**
+ * Why a head shows another eye shape than the scene's choice: one sentence naming both, by the numbers the selector shows (the indices
+ * plus one). The selector highlights the shape drawn, so without this nothing on screen says which shape was chosen.
+ */
+export const eyeShapeFallback = (chosen: number, shown: number) =>
+  `This head has no shape ${chosen + 1}, so it shows shape ${shown + 1}; your choice comes back on a head that has it.`;
 /** The lighting device's read-only report: which rig is shown and where its colour grading came from. */
 export type LightingStatus = { preset: LightingPreset; sex: BodySex; defaultExposure: number;
   lut: { phase: "idle" | "loading" | "ready"; source: GradingLutSource | null } };
@@ -222,7 +226,7 @@ export class PreviewActions {
   eyeShapeOptions(): Readonly<EyeShapeOptions> {
     const options = this.port.eyeShapeOptions?.() ?? { choices: [], eyesFollow: false, eyeSource: null };
     const chosen = this.fields().scene.eyeShape, shown = this.shownEyeShape(chosen);
-    return structuredClone({ ...options, shown, ...(shown !== chosen ? { fallback: EYE_SHAPE_FALLBACK } : {}) });
+    return structuredClone({ ...options, shown, ...(shown !== chosen ? { fallback: eyeShapeFallback(chosen, shown) } : {}) });
   }
   /** The eye shape this head shows for a scene's choice: the choice when the head has it, else its base shape. */
   private shownEyeShape(index: number): number {
