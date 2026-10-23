@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import { ViewportAttachment, type PreparationState } from "../src/app/viewport-attachment";
-import { NEXT_LINE_MAX_CHARS, preparationLine } from "../src/studio-ui/preparation-text";
+import { LIGHTING_LINES, NEXT_LINE_MAX_CHARS, preparationLine } from "../src/studio-ui/preparation-text";
 import { PREPARATION_STAGES } from "../src/preview/scene-residency";
 
 const port = { moveHost: () => {}, measure: () => ({ width: 300, height: 200 }), resize: () => {}, cancelInput: () => {}, inputCapture: () => false,
@@ -17,7 +17,7 @@ test("the attachment carries the preparation beside the phase, publishes each ch
   let published = 0;
   attachment.subscribe(() => { published++; });
   attachment.setReady("head");
-  const state: PreparationState = { scene: "s1", key: "s1|v1|male", stage: "programs", fraction: 0.4, waiting: "driver", warm: false };
+  const state: PreparationState = { scene: "s1", key: "s1|v1|male", stage: "programs", fraction: 0.4, waiting: "driver", warm: false, change: "subject" };
   attachment.setPreparation("head", state);
   attachment.setPreparation("head", { ...state });
   expect(published).toBe(2);
@@ -57,4 +57,18 @@ test("the quiet line is one line at every stage: each `next` string fits the nar
   }
   expect(preparationLine({ stage: "details", waiting: "host" }, "next")).toBe("Next V: hair and clothes…");
   expect(preparationLine({ stage: "programs", waiting: null }, "next")).toBe("Next V: readying the look…");
+});
+
+test("a lighting setup made ready on the V shown says so in the same place and form, within the same one-line budget (4a-v-b)", () => {
+  for (const stage of ["programs", "textures", "warm-up"] as const) for (const place of ["pane", "next"] as const) {
+    const line = preparationLine({ stage, waiting: "driver", change: "shown" }, place);
+    expect(LIGHTING_LINES).toContain(line);
+    expect(line.startsWith("Lighting: ")).toBe(true);
+    expect(line.length).toBeLessThanOrEqual(NEXT_LINE_MAX_CHARS);
+    expect(line).not.toMatch(/shader|program|runtime|GPU|compile|warm-up|\d/i);
+  }
+  expect(preparationLine({ stage: "programs", waiting: "driver", change: "shown" }, "next")).toBe("Lighting: getting ready…");
+  expect(preparationLine({ stage: "warm-up", waiting: "gpu", change: "shown" }, "next")).toBe("Lighting: almost ready…");
+  // A subject change keeps its own words.
+  expect(preparationLine({ stage: "programs", waiting: "driver", change: "subject" }, "next")).toBe("Next V: readying the look…");
 });

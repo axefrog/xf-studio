@@ -235,7 +235,7 @@ test("new parts are made ready ahead of their first frame: maps a few per frame,
   const preparation = { frame: async () => { frames++; }, compile: (object: THREE.Object3D) => {
     compiled++;
     expect(object).toBe(hair.root);
-    return { ready: Promise.resolve(), textures: [map("uniform-only")], programs: () => [program] };
+    return { steps: [() => {}], result: () => ({ ready: Promise.resolve(), textures: [map("uniform-only")], programs: () => [program] }) };
   } };
   await character.prepareDetails(v("a", [hair]), preparation);
   // Every map, the ones only the compiled programs sample included, one frame at a time; the program's first use taken ahead.
@@ -265,10 +265,10 @@ test("a skin the core head wears is prepared as the head drawn with its material
   const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => [] });
   const wearable = skinned(quad(), "skin chunk"), material = wearable.material as THREE.MeshStandardMaterial;
   const compiled: { object: THREE.Object3D; material: THREE.Material | THREE.Material[] }[] = [];
-  const preparation = { frame: async () => {}, compile: (object: THREE.Object3D) => {
-    compiled.push({ object, material: (object as THREE.Mesh).material });
-    return { ready: Promise.resolve(), textures: [], programs: () => [] };
-  } };
+  // What each step compiles is read as the step runs (the head wears the skin's material for the step only).
+  const preparation = { frame: async () => {}, compile: (object: THREE.Object3D) => ({
+    steps: [() => { compiled.push({ object, material: (object as THREE.Mesh).material }); }],
+    result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) }) };
   const details = v("a", [skinComponent([wearable])]);
   await character.prepareDetails(details, preparation);
   // The head, drawn with the skin's material (extended for the head's skin sets), was compiled; the never-drawn chunk was not touched.
@@ -296,7 +296,7 @@ test("a stopped preparation doesn't wait for the driver's links, and leaves its 
   const preparation = { frame: async () => {}, signal: controller.signal, compile: () => {
     compiled++;
     // A link that never finishes while the change is waited for.
-    return { ready: new Promise<void>(() => {}), textures: [], programs: () => [{ getUniforms: () => { used++; }, getAttributes() {} }] };
+    return { steps: [], result: () => ({ ready: new Promise<void>(() => {}), textures: [], programs: () => [{ getUniforms: () => { used++; }, getAttributes() {} }] }) };
   } };
   const preparing = character.prepareDetails(v("a", [hair]), preparation);
   await new Promise(resolve => setTimeout(resolve, 10));
@@ -305,7 +305,7 @@ test("a stopped preparation doesn't wait for the driver's links, and leaves its 
   expect([compiled, used]).toEqual([1, 0]);
   // A later change prepares it again (its programs, already linking, are Three's cached ones).
   await character.prepareDetails(v("b", [hair]), { ...preparation, signal: undefined, compile: () => {
-    compiled++; return { ready: Promise.resolve(), textures: [], programs: () => [] };
+    compiled++; return { steps: [], result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) };
   } });
   expect(compiled).toBe(2);
 });

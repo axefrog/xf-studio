@@ -156,16 +156,18 @@ export function createRendererDevice(host: HTMLElement, options: RendererDeviceO
      * A hidden runtime's warm-up (profiles phase 4a-v): draw it once, exactly as a shown frame would (the same targets, passes and
      * variants, at the pane's size), so whatever only a draw makes (Three's draw-time programs, the driver's input layouts, the frame-sized
      * targets, the last uploads) is made now, then draw the shown runtime again in the same task: the canvas keeps the shown runtime's
-     * pixels, and nothing of the hidden one ever reaches the screen. Counts in the slot's `warmUps`, never in its `frames`. False (and
-     * nothing drawn) for a runtime shown already or not on this device.
+     * pixels, and nothing of the hidden one ever reaches the screen. Counts in the slot's `warmUps`, never in its `frames`. `draw` replaces
+     * the runtime's own frame (a piece of it, or the shown runtime as it will draw once a change it prepares is in place: profiles phase
+     * 4a-v-b); only with one may the shown runtime warm up, and its own frame is drawn after it as for any other. False (and nothing drawn)
+     * for the shown runtime without `draw`, or a runtime not on this device.
      */
-    warmUp(slot: DeviceSlot): boolean {
+    warmUp(slot: DeviceSlot, draw?: () => void): boolean {
       const entry = slots.get(slot);
-      if (disposed || !entry || !entries.has(entry) || entry === shown) return false;
+      if (disposed || !entry || !entries.has(entry) || (entry === shown && !draw)) return false;
       resize();
       if (width && height) entry.scene.resized(width, height);
       entry.warmUps++;
-      try { entry.scene.draw(0); }
+      try { if (draw) draw(); else entry.scene.draw(0); }
       finally { if (shown) { shown.frames++; shown.scene.draw(0); } }
       return true;
     },

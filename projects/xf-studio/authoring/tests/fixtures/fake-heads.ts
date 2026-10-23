@@ -25,7 +25,7 @@ const noop = () => {};
 /** A built scene: a counted resource in the head host, a camera-controls event target and a camera, and a dispose that releases it. */
 export function fakeScene(host: { canvases: number }, log: string[], body: "female" | "male" = "female", id = 0) {
   host.canvases++;
-  const controls = new Set<Listener>();
+  const controls = new Set<Listener>(), unprepared = new Set<Listener>();
   let camera: CameraState = { position: [0, 1.67, -1], target: [0, 1.67, 0], fov: 30 };
   const known: Record<string, unknown> = {
     body, id, slot: { id, body },
@@ -39,13 +39,18 @@ export function fakeScene(host: { canvases: number }, log: string[], body: "fema
       removeEventListener: (_type: string, listener: Listener) => controls.delete(listener),
     },
     dispose: () => { host.canvases--; log.push(`scene:dispose:${id}`); },
+    onUnprepared: (listener: Listener) => { unprepared.add(listener); return () => { unprepared.delete(listener); }; },
     lighting: { setPreset: noop, setCreatorOptions: noop, setBodySex: noop, subscribe: () => noop,
       camera: () => ({ position: [0, 1.62, -1.2], target: [0, 1.62, 0], fov: 15 }),
       status: () => ({ preset: "studio", sex: "female", defaultExposure: 1, lut: { phase: "idle", source: null } }) },
   };
   // Every other scene method is a no-op; `then` stays undefined so the scene isn't mistaken for a promise.
   const scene = new Proxy(known, { get: (target, key) => key in target ? target[key as string] : key === "then" ? undefined : noop });
-  return { scene: scene as unknown as Awaited<ReturnType<typeof createSceneRuntime>>, controls, orbit(fov: number) { camera = { ...camera, fov }; } };
+  return { scene: scene as unknown as Awaited<ReturnType<typeof createSceneRuntime>>, controls, orbit(fov: number) { camera = { ...camera, fov }; },
+    /** The scene's own members (a test replaces `prepare` or `prepared` here). */
+    known,
+    /** The scene says it needs preparing (a lighting setup staged while shown, scene-host.ts `onUnprepared`). */
+    unprepare() { for (const listener of [...unprepared]) listener(); } };
 }
 
 export function harness(plan: { failBuild?: number[]; failPresent?: number[]; build?: (body: "female" | "male", signal?: AbortSignal) => Promise<void> } = {}) {

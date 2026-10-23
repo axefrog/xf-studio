@@ -356,3 +356,37 @@ test("4a-v: show(view) wants the head of that view's scene like any subject chan
   await expect(o.heads.show("gone")).rejects.toThrow("no longer exists");
   o.heads.dispose();
 });
+
+test("4a-v-b: a shown head asked for a lighting setup it isn't prepared for is prepared again while it stays shown, with its progress, and a want for another V supersedes it", async () => {
+  const o = owner({ v1: "female" });
+  await o.heads.load();
+  const head = o.heads.shown()!, made = o.h.scenes.at(-1)!;
+  let ready = true, release!: () => void;
+  const prepares: unknown[] = [];
+  made.known.prepared = () => ready;
+  made.known.prepare = (options: { signal: AbortSignal; setups?: unknown }) => {
+    prepares.push(options.setups);
+    return new Promise<void>((resolve, reject) => { release = () => { ready = true; resolve(); }; options.signal.addEventListener("abort", () => reject(options.signal.reason)); });
+  };
+  const before = o.preparations.length;
+  ready = false;
+  made.unprepare();
+  await settle();
+  // The shown head's scene alone is prepared again (no details, no other setups), and it stays the one shown.
+  expect(prepares).toEqual([undefined]);
+  expect(o.heads.shown()).toBe(head);
+  expect(o.heads.preparation()).toMatchObject({ key: "s1|v1|female", change: "shown", warm: true });
+  release();
+  for (let i = 0; i < 20 && o.heads.preparation(); i++) await settle();
+  expect(o.heads.preparation()).toBeNull();
+  expect(o.preparations.slice(before).filter(Boolean).every(state => state!.change === "shown")).toBe(true);
+  expect(o.heads.shown()).toBe(head);
+  // Asked again, then the V changes body: the new head's want supersedes the shown head's preparation.
+  ready = false;
+  made.unprepare();
+  await settle();
+  head.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+  for (let i = 0; i < 40 && o.heads.shown() === head; i++) await settle();
+  expect(o.heads.shown()?.body).toBe("male");
+  o.heads.dispose();
+});

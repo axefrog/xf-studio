@@ -4,7 +4,7 @@ import { createRendererDevice, type RendererDevice, type RendererDeviceOptions }
 import type { FeatureRendererFactory } from "../../platform/api/scene";
 import type { CoreBody } from "../../character/render-detail";
 import type { LayeredMakeupRegion } from "../../engines/layered-makeup/region";
-import { createSurfaceEditor } from "../../legacy/eye-makeup/browser/surface-editor";
+import { createSurfaceEditor, surfaceEditorParts, surfaceGuideStandIns, type SurfaceEditorParts } from "../../legacy/eye-makeup/browser/surface-editor";
 import { createUVEditor } from "../../legacy/eye-makeup/browser/uv-editor";
 import { modifiersOf, NO_MODIFIERS } from "../../app/input-bindings";
 import { ViewportAdapter } from "../../app/viewport-adapter";
@@ -44,6 +44,15 @@ export function createBrowserViewportDevice(options: {
   const contextListeners = new Set<(event: "lost" | "restored") => void>();
   let uvEditor: UVEditor | undefined;
   let surfaceEditor: SurfaceEditor | undefined;
+  /** Each head's stand-ins for the on-head editor's guides, compiled with it before it is shown (`surfaceGuides`); they go with the head. */
+  const guides = new Map<Scene, ReturnType<typeof surfaceGuideStandIns>>();
+  /** Each head's on-head editor parts (its surface map and occlusion trees), made before it is shown (`surfaceSteps`); they go with the head. */
+  const editorParts = new Map<Scene, { surface: THREE.SkinnedMesh; parts: SurfaceEditorParts }>();
+  const partsFor = (scene: Scene, surface: THREE.SkinnedMesh) => {
+    let made = editorParts.get(scene);
+    if (!made || made.surface !== surface) editorParts.set(scene, made = { surface, parts: surfaceEditorParts(scene.head, scene.eyes, surface) });
+    return made.parts;
+  };
   // Each registered viewport host's element and the editor slot its input and capture belong to.
   const hosts: Record<ViewportHostKind, { element: HTMLElement; editor: string }> = {
     head: { element: options.headHost, editor: "surface" }, uv: { element: options.uvHost, editor: "uv" } };
@@ -124,8 +133,23 @@ export function createBrowserViewportDevice(options: {
     /** Dispose a head (shown or not); the renderer device stays. A head shown now is hidden first. */
     disposeHead(scene: Scene) {
       if (viewer === scene) { releaseEditor(); viewer = undefined; }
+      guides.get(scene)?.dispose(); guides.delete(scene); editorParts.delete(scene);
       scene.dispose();
     },
+    /**
+     * What the on-head editor will add to `scene` once mounted on it (its guides), as stand-ins to compile with the head before it is shown,
+     * so its first shown frame links nothing of theirs (profiles phase 4a-v-b). They live as long as the head, keeping those programs.
+     */
+    surfaceGuides(scene: Scene): readonly THREE.Object3D[] {
+      let made = guides.get(scene);
+      if (!made) guides.set(scene, made = surfaceGuideStandIns());
+      return made.objects;
+    },
+    /**
+     * The steps that make the on-head editor's parts for `surface` on `scene` ahead (its surface map and occlusion trees, tens of milliseconds
+     * each), for a head prepared before it is shown: the editor mounted at show takes them made (profiles phase 4a-v-b).
+     */
+    surfaceSteps(scene: Scene, surface: THREE.SkinnedMesh): readonly (() => void)[] { return partsFor(scene, surface).steps; },
     /** Hear the head pane's context being lost and coming back. Returns the unsubscribe. */
     onContext(listener: (event: "lost" | "restored") => void) { contextListeners.add(listener); return () => { contextListeners.delete(listener); }; },
     /** Mount the on-head editor over `surface` (the layered-makeup surface a feature renderer draws: eye makeup's plate), on the shown head. */
@@ -133,7 +157,7 @@ export function createBrowserViewportDevice(options: {
       if (!viewer) throw Error("The head scene must be shown before mounting surface controls.");
       const { renderer, scene, camera, head, eyes, controls, cameraInput, onFrame, requestRender } = viewer;
       surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)({ renderer, scene, camera, head, eyes, controls, cameraInput, onFrame,
-        requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) });
+        requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) }, partsFor(viewer, surface));
       editors.attach("surface", surfaceEditor);
       return surfaceEditor;
     },

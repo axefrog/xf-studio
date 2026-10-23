@@ -16,6 +16,7 @@ import { DEFAULT_STUDIO_STAGE } from "../studio-lighting";
 import { resolveLightingSource, studioStageSetup, type LightingSetup, type LightingSource, type SetupLight } from "../lighting-setups";
 import { applyRendererState, SCENE_RENDERER_STATE, type RendererState } from "../../platform/scene/renderer-state";
 import { linkedPrograms, releaseShadersWithPrograms, type LinkedProgram } from "../../materials/render/linked-programs";
+import { isDrawable } from "../../platform/scene/drawables";
 
 /** What the lighting device reports (read-only; the presentation turns it into plain text). `preset` is the shown setup's display. */
 export type LightingStageStatus = {
@@ -154,6 +155,11 @@ export type LightListRig = ReturnType<typeof createLightListRig>;
  * The renderer may be shared with other scenes (the renderer device's, profiles phase 4a-ii), so the stage never leaves its own state on
  * it: its exposure, shadow switches and the rest are its renderer-state record (platform/scene/renderer-state.ts), applied at the start
  * of every draw and of every compile ahead, and the shadow maps' pending redraw is its own flag, set on every draw.
+ *
+ * **A staged setup** (profiles phase 4a-v-b). A setup whose programs aren't linked yet can be staged beside the one drawn (`stage`): it gets
+ * a light rig of its own, outside the drawn scene, and is put in place only for the length of a synchronous call (`withStaged`), so the
+ * scene's programs can be compiled ahead and warmed up for it while every drawn frame still shows the setup before. `setSource` with the
+ * staged setup then adopts it: its rig, with the lights and shadow maps its warm-up made, becomes the drawn one, and nothing is rebuilt.
  */
 export function createLightingSetupStage(options: {
   scene: THREE.Scene;
@@ -169,10 +175,15 @@ export function createLightingSetupStage(options: {
   const environment = (options.createEnvironment ?? createStudioEnvironment)(renderer, scene);
   // The prefiltered room (null with the light probe instead); a setup with room light shows it, one without has no environment.
   const room = scene.environment;
-  const rig = createLightListRig(), display = createLinearDisplay(renderer), scatter = createSkinScatter(renderer);
+  const display = createLinearDisplay(renderer), scatter = createSkinScatter(renderer);
+  // The drawn setup's light rig; a staged setup's rig takes its place in the holder only inside `withStaged`, or for good once adopted.
+  let rig = createLightListRig();
   const contact = createContactShadows(renderer, contactShadowUniforms);
   let contactOn = true;
-  scene.add(rig.group);
+  const lightsHolder = new THREE.Group();
+  lightsHolder.name = "xfs-lighting";
+  lightsHolder.add(rig.group);
+  scene.add(lightsHolder);
   // Shadow maps render only for lights that cast; soft PCF with a per-light radius (the record's shadow switches). They are drawn again
   // only when what casts or lights them changed (`shadowState`), not for a camera move: a static V orbited keeps its maps.
   installShadowFilter();
@@ -219,22 +230,40 @@ export function createLightingSetupStage(options: {
       if (game()) lutTimer = setTimeout(requestLut, LUT_RECHECK_MS);
     });
   }
+  /** A setup's lights as the rig draws them: without their shadow maps while the Face shadows preference is off. */
+  const rigLights = (setup: LightingSetup) => shadowsEnabled ? setup.lights : setup.lights.map(light => light.shadows ? { ...light, shadows: false } : light);
+  /** Put a resolved setup's surroundings on the scene: its room and its strength, its backdrop, its exposure. */
+  function present(setup: LightingSetup) {
+    const lit = setup.environment > 0;
+    scene.environment = lit ? room : null;
+    scene.environmentIntensity = setup.environment;
+    for (const probe of environment.lights) { probe.visible = lit; (probe as THREE.LightProbe).intensity = setup.environment; }
+    scene.background = setup.backdrop === "black" ? black : studioBackground;
+    if (setup.display === "game") display.setExposure(setup.exposure); else state.toneMappingExposure = setup.exposure;
+  }
   /** Resolve the source for the body and show it; `announce` when the status (display or body) may have changed. */
   function apply(announce: boolean) {
     const wasGame = game();
     shown = resolveLightingSource(source, sex, trial);
-    rig.apply(shadowsEnabled ? shown.lights : shown.lights.map(light => light.shadows ? { ...light, shadows: false } : light), shown.focus);
-    const lit = shown.environment > 0;
-    scene.environment = lit ? room : null;
-    scene.environmentIntensity = shown.environment;
-    for (const probe of environment.lights) { probe.visible = lit; (probe as THREE.LightProbe).intensity = shown.environment; }
-    scene.background = shown.backdrop === "black" ? black : studioBackground;
-    if (game()) display.setExposure(shown.exposure); else state.toneMappingExposure = shown.exposure;
+    rig.apply(rigLights(shown), shown.focus);
+    present(shown);
     if (game() && !wasGame) requestLut();
     else if (!game() && wasGame) stopRecheck();
     if (announce || game() !== wasGame) notify();
   }
   apply(false);
+  /**
+   * What the programs of a scene lit by `setup` depend on, as one string (its display and room, its light types and shadow switches as the
+   * rig draws them, and the scatter, contact and shadow switches): equal strings need no new programs for the same meshes.
+   */
+  const programStateOf = (setup: LightingSetup) => JSON.stringify([setup.display === "game", setup.environment > 0, shadowsEnabled, contactOn,
+    scatter.enabled, display.scatterPossible, state.toneMapping, rigLights(setup).map(light => [light.type === "spot", light.shadows, contactOnly(light.game)])]);
+  /**
+   * The staged setup (`stage`): its source, its own rig (outside the drawn scene except inside `withStaged`), and its own shadow-map
+   * fingerprint, so a frame drawn for it never makes the drawn setup's next frame draw its maps again.
+   */
+  let staged: { source: LightingSource; key: string; rig: LightListRig; shadowKey: string } | null = null;
+  const unstage = () => { staged?.rig.dispose(); staged = null; };
   /** Whether the next frame draws shadow maps (the setup's lights cast, and the Face shadows preference is on). */
   const castsShadowMaps = () => state.shadowMap.enabled && shadowsEnabled && shown.lights.some(light => light.shadows);
   /**
@@ -292,17 +321,168 @@ export function createLightingSetupStage(options: {
     return result;
   }
 
+  /** See `prepareSteps` below; a step reads the shown setup when it runs (inside `withStaged`, the staged one). */
+  function prepareSteps(object: THREE.Object3D, camera: THREE.Camera): PreparationSteps {
+    const pending: Promise<unknown>[] = [], materials = new Set<THREE.Material>();
+    /** The meshes' own depth materials as they were before a shadow variant was compiled with them (`shadowDepthMaterial`). */
+    const touched = new Map<THREE.Material, Record<string, unknown>>();
+    const drawables: THREE.Object3D[] = [], meshes: THREE.Mesh[] = [];
+    object.traverse(child => {
+      if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh);
+      if (isDrawable(child)) drawables.push(child);
+    });
+    const materialsOf = (drawable: THREE.Object3D) => { const material = (drawable as THREE.Mesh).material; return Array.isArray(material) ? material : [material]; };
+    /** Compile `mesh` as drawn with `material` (a pass's own material swapped in for the compile only). */
+    const compileAs = (mesh: THREE.Mesh, material: THREE.Material) => {
+      const own = mesh.material;
+      mesh.material = material;
+      try { pending.push(renderer.compileAsync(mesh, camera, scene)); materials.add(material); }
+      finally { mesh.material = own; }
+    };
+    /**
+     * One step, compiled with this scene's state: Three keys a program on the tone mapping, output colour space and shadow switches, and on
+     * whether its mesh receives shadows (as the frame will set it). `run` gets the display's scene target; everything is put back after.
+     */
+    const step = (run: (target: THREE.WebGLRenderTarget | null) => void) => () => {
+      applyState();
+      receiveShadows(object, false);
+      const previous = renderer.getRenderTarget(), target = display.sceneTarget(game() ? "creator" : "studio");
+      renderer.setRenderTarget(target);
+      try { run(target); }
+      finally {
+        renderer.setRenderTarget(previous); restoreTouched(touched);
+        // At once, not at `result()`: a preparation stopped part-way still frees the shaders of the programs it made (linked-programs.ts).
+        releaseShadersWithPrograms(renderer, linkedPrograms(renderer, materials));
+      }
+    };
+    const steps: (() => void)[] = [];
+    // The forward scene, into the display's target.
+    for (const drawable of drawables) steps.push(step(() => {
+      pending.push(renderer.compileAsync(drawable, camera, scene));
+      for (const material of materialsOf(drawable)) materials.add(material);
+    }));
+    for (const mesh of meshes) {
+      // The skin scatter's input variant, and the contact shadows' caster depth.
+      steps.push(step(() => {
+        if (!display.scatterPossible || Array.isArray(mesh.material)) return;
+        const variant = scatter.variantOf(mesh.material);
+        if (variant) compileAs(mesh, variant);
+      }));
+      steps.push(step(() => { if (contactOn && mesh.castShadow) compileAs(mesh, contact.casterMaterial(mesh)); }));
+      // The shadow pass draws into the lights' maps: any render target keys a program as one does (no tone mapping, working colour space).
+      steps.push(step(target => {
+        if (!castsShadowMaps() || !mesh.castShadow) return;
+        renderer.setRenderTarget(target ?? depthTarget());
+        for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material, touched));
+        }
+        // The maps are redrawn inside the contact prepass too (its draw is the frame's first, while every caster wears its depth
+        // material), so Three's shadow pass then picks a depth material for the depth material itself: that variant as well. It
+        // reads the caster as it is drawn now (what the line above wrote is put back first), and it turns the caster's side over on
+        // every redraw (PREV-208), so the next redraw's variant too.
+        if (contactOn) {
+          restoreTouched(touched);
+          const caster = contact.casterMaterial(mesh);
+          compileAs(mesh, shadowDepthMaterial(mesh, caster, touched));
+          compileAs(mesh, shadowDepthMaterial(mesh, caster, touched));
+        }
+      }));
+    }
+    return {
+      steps,
+      result(): PreparedObject {
+        const textures = new Set<THREE.Texture>();
+        const collect = (value: unknown) => {
+          if ((value as THREE.Texture | null)?.isTexture) textures.add(value as THREE.Texture);
+          else if (Array.isArray(value)) for (const entry of value) collect(entry);
+        };
+        // A material's own maps (Three copies them into its uniforms only when it draws), and the uniforms it was compiled with.
+        for (const material of materials) {
+          for (const value of Object.values(material)) collect(value);
+          const own = (material as THREE.ShaderMaterial).uniforms;
+          const compiled = (renderer.properties.get(material) as { uniforms?: Record<string, THREE.IUniform> }).uniforms;
+          for (const uniform of [...Object.values(own ?? {}), ...Object.values(compiled ?? {})]) collect(uniform?.value);
+        }
+        return { ready: Promise.all(pending).then(() => undefined), textures: [...textures], programs: () => linkedPrograms(renderer, materials) };
+      },
+    };
+  }
+
   return {
     /** The display the shown setup draws through, as the lighting preset it replaced (`creator` for the game display). */
     get preset(): LightingPreset { return game() ? "creator" : "studio"; },
     /** The setup or game rig the scene is lit by now (a copy). */
     get source(): LightingSource { return structuredClone(source); },
-    /** Light the scene by a setup, or by the built-in game rig for the body shown. */
+    /**
+     * Light the scene by a setup, or by the built-in game rig for the body shown. The staged setup (`stage`) is adopted: its rig, with the
+     * lights and shadow maps its warm-up made, becomes the drawn one. Any other setup drops what was staged.
+     */
     setSource(next: LightingSource) {
-      if (JSON.stringify(next) === JSON.stringify(source)) return;
+      const key = JSON.stringify(next);
+      if (staged && staged.key === key) {
+        const adopted = staged.rig;
+        shadowKey = staged.shadowKey;
+        staged = null;
+        rig.dispose();
+        rig = adopted;
+        lightsHolder.add(rig.group);
+      } else unstage();
+      if (key === JSON.stringify(source)) return;
       source = structuredClone(next);
       apply(false);
     },
+    /**
+     * Stage `next` beside the setup drawn (see the header): a rig of its own, shown only inside `withStaged`, until `setSource(next)` adopts
+     * it or `unstage` drops it. Staging the setup drawn now drops what was staged.
+     */
+    stage(next: LightingSource) {
+      const key = JSON.stringify(next);
+      if (key === JSON.stringify(source)) { unstage(); return; }
+      if (staged) { staged.source = structuredClone(next); staged.key = key; return; }
+      const made = createLightListRig();
+      made.setShadowMapSize(rig.shadowMapSize);
+      staged = { source: structuredClone(next), key, rig: made, shadowKey: "" };
+    },
+    /** Drop the staged setup, if any. */
+    unstage,
+    /** The staged setup's source (null: none). */
+    get staged(): LightingSource | null { return staged ? structuredClone(staged.source) : null; },
+    /**
+     * Run `run` with the staged setup in place of the drawn one (its lights, room, backdrop, display and exposure: everything a program or a
+     * draw depends on), then put the drawn setup back, whatever `run` did. Synchronous only: no frame is drawn meanwhile. Without a staged
+     * setup it just runs.
+     */
+    withStaged<T>(run: () => T): T {
+      if (!staged) return run();
+      const was = { shown, rig, shadowKey, environment: scene.environment, environmentIntensity: scene.environmentIntensity, background: scene.background,
+        exposure: state.toneMappingExposure, gameExposure: display.exposure,
+        probes: environment.lights.map(probe => ({ visible: probe.visible, intensity: (probe as THREE.LightProbe).intensity })) };
+      // Three's shadow pass, run inside the contact prepass, turns each caster's own depth material over (PREV-208): what a frame drawn for
+      // the staged setup does to them is put back, so the drawn setup's next frame draws exactly as it would have.
+      const depth = new Map<THREE.Material, Record<string, unknown>>();
+      scene.traverse(object => {
+        const custom = (object as THREE.Mesh).customDepthMaterial as unknown as Record<string, unknown> | undefined;
+        if (custom && !depth.has(custom as unknown as THREE.Material)) depth.set(custom as unknown as THREE.Material, Object.fromEntries(DEPTH_FIELDS.map(field => [field, custom[field]])));
+      });
+      const setup = resolveLightingSource(staged.source, sex, trial);
+      staged.rig.apply(rigLights(setup), setup.focus);
+      shown = setup; rig = staged.rig; shadowKey = staged.shadowKey;
+      lightsHolder.remove(was.rig.group); lightsHolder.add(rig.group);
+      present(setup);
+      try { return run(); }
+      finally {
+        if (staged) staged.shadowKey = shadowKey;
+        shadowKey = was.shadowKey;
+        restoreTouched(depth);
+        lightsHolder.remove(rig.group); lightsHolder.add(was.rig.group);
+        shown = was.shown; rig = was.rig;
+        scene.environment = was.environment; scene.environmentIntensity = was.environmentIntensity; scene.background = was.background;
+        state.toneMappingExposure = was.exposure; display.setExposure(was.gameExposure);
+        environment.lights.forEach((probe, i) => { probe.visible = was.probes[i]!.visible; (probe as THREE.LightProbe).intensity = was.probes[i]!.intensity; });
+      }
+    },
+    /** The program state (`programState`) the scene would have lit by `next`, without lighting it. */
+    programStateFor(next: LightingSource): string { return programStateOf(resolveLightingSource(next, sex, trial)); },
     setBodySex(next: BodySex) {
       if (next === sex) return;
       sex = next;
@@ -313,7 +493,10 @@ export function createLightingSetupStage(options: {
      * old studio rig disposed them on every quality notification and never drew them again); a new size is a new fingerprint, so the next
      * frame draws them at it.
      */
-    setShadowQuality(textureSize: number) { rig.setShadowMapSize(creatorShadowMapSize(textureSize)); scatter.setQuality(scatterQualityFor(textureSize)); },
+    setShadowQuality(textureSize: number) {
+      rig.setShadowMapSize(creatorShadowMapSize(textureSize)); staged?.rig.setShadowMapSize(creatorShadowMapSize(textureSize));
+      scatter.setQuality(scatterQualityFor(textureSize));
+    },
     /**
      * The Face shadows preference (the Rendering group): off, no light of any setup casts its shadow map onto the V; on again, the
      * setup's own shadow choices return. The setup itself is unchanged either way.
@@ -355,73 +538,17 @@ export function createLightingSetupStage(options: {
      * compiler). Returns the textures the compiled programs sample (their uniforms), so the caller can upload them ahead too, and the
      * programs themselves, whose first use (`LinkedProgram`) the caller can take ahead as well once they are linked.
      */
-    prepare(object: THREE.Object3D, camera: THREE.Camera): { ready: Promise<void>; textures: THREE.Texture[]; programs(): LinkedProgram[] } {
-      const pending: Promise<unknown>[] = [], materials = new Set<THREE.Material>();
-      /** The meshes' own depth materials as they were before a shadow variant was compiled with them (`shadowDepthMaterial`). */
-      const touched = new Map<THREE.Material, Record<string, unknown>>();
-      const meshes: THREE.Mesh[] = [];
-      object.traverse(child => { if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh); });
-      // Compiled with this scene's state: Three keys a program on the tone mapping, output colour space and shadow switches, and on
-      // whether its mesh receives shadows (as the frame will set it).
-      applyState();
-      receiveShadows(object, false);
-      const previous = renderer.getRenderTarget();
-      /** Compile `mesh` as drawn with `material` (a pass's own material swapped in for the compile only). */
-      const compileAs = (mesh: THREE.Mesh, material: THREE.Material) => {
-        const own = mesh.material;
-        mesh.material = material;
-        try { pending.push(renderer.compileAsync(mesh, camera, scene)); materials.add(material); }
-        finally { mesh.material = own; }
-      };
-      try {
-        const target = display.sceneTarget(game() ? "creator" : "studio");
-        renderer.setRenderTarget(target);
-        pending.push(renderer.compileAsync(object, camera, scene));
-        for (const mesh of meshes) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) materials.add(material);
-        if (display.scatterPossible) for (const mesh of meshes) {
-          if (Array.isArray(mesh.material)) continue;
-          const variant = scatter.variantOf(mesh.material);
-          if (variant) compileAs(mesh, variant);
-        }
-        if (contactOn) for (const mesh of meshes) if (mesh.castShadow) compileAs(mesh, contact.casterMaterial(mesh));
-        // The shadow pass draws into the lights' maps: any render target keys a program as one does (no tone mapping, working colour space).
-        if (castsShadowMaps()) {
-          renderer.setRenderTarget(target ?? depthTarget());
-          for (const mesh of meshes) if (mesh.castShadow) {
-            for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-              if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material, touched));
-            }
-            // The maps are redrawn inside the contact prepass too (its draw is the frame's first, while every caster wears its depth
-            // material), so Three's shadow pass then picks a depth material for the depth material itself: that variant as well. It
-            // reads the caster as it is drawn now (what the line above wrote is put back first), and it turns the caster's side over on
-            // every redraw (PREV-208), so the next redraw's variant too.
-            if (contactOn) {
-              restoreTouched(touched);
-              const caster = contact.casterMaterial(mesh);
-              compileAs(mesh, shadowDepthMaterial(mesh, caster, touched));
-              compileAs(mesh, shadowDepthMaterial(mesh, caster, touched));
-            }
-          }
-        }
-      } finally {
-        renderer.setRenderTarget(previous);
-        restoreTouched(touched);
-      }
-      const textures = new Set<THREE.Texture>();
-      const collect = (value: unknown) => {
-        if ((value as THREE.Texture | null)?.isTexture) textures.add(value as THREE.Texture);
-        else if (Array.isArray(value)) for (const entry of value) collect(entry);
-      };
-      // A material's own maps (Three copies them into its uniforms only when it draws), and the uniforms it was compiled with.
-      for (const material of materials) {
-        for (const value of Object.values(material)) collect(value);
-        const own = (material as THREE.ShaderMaterial).uniforms;
-        const compiled = (renderer.properties.get(material) as { uniforms?: Record<string, THREE.IUniform> }).uniforms;
-        for (const uniform of [...Object.values(own ?? {}), ...Object.values(compiled ?? {})]) collect(uniform?.value);
-      }
-      releaseShadersWithPrograms(renderer, linkedPrograms(renderer, materials));
-      return { ready: Promise.all(pending).then(() => undefined), textures: [...textures], programs: () => linkedPrograms(renderer, materials) };
+    prepare(object: THREE.Object3D, camera: THREE.Camera): PreparedObject {
+      const made = prepareSteps(object, camera);
+      for (const step of made.steps) step();
+      return made.result();
     },
+    /**
+     * `prepare` in steps (profiles phase 4a-v-b): each step compiles about one program's worth (one drawable for the forward scene, or one
+     * pass's variant of one mesh) with this scene's state applied for its length, so a caller can let a frame through between steps and no
+     * step holds the page's thread for long (one call for a whole part was 306 ms on real data). Run every step, then `result()`.
+     */
+    prepareSteps,
     /**
      * Compile the display's own passes for the shown setup, as the next frame draws them (the game display's grade, or the studio's coverage
      * and tone pass, and the skin scatter's blur), so a setup's first frame waits on none of them either.
@@ -438,10 +565,7 @@ export function createLightingSetupStage(options: {
      * What the programs this scene draws with depend on, as one string (the shown setup's light types and shadow switches, its room and
      * display, the scatter, contact and shadow switches): equal strings need no new programs for the same meshes.
      */
-    programState(): string {
-      return JSON.stringify([game(), shown.environment > 0, shadowsEnabled, contactOn, scatter.enabled, display.scatterPossible, state.toneMapping,
-        rig.objects.map(light => [isSpot(light), light.castShadow, bodyCastersOnly(light.shadow)])]);
-    },
+    programState(): string { return programStateOf(shown); },
     status: (): LightingStageStatus => structuredClone({ preset: game() ? "creator" : "studio", sex,
       defaultExposure: DEFAULT_CREATOR_LIGHTING.exposure, lut: lutStatus }),
     subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
@@ -476,20 +600,25 @@ export function createLightingSetupStage(options: {
      * restored context's maps are empty, and a still V would otherwise keep them: PREV-132).
      */
     restore() { environment.restore(); shadowKey = ""; },
-    /** Test and evidence access. */
-    rig,
+    /** Test and evidence access: the drawn setup's rig. */
+    get rig() { return rig; },
     display,
     environment,
     scatter,
     contact,
     dispose() {
-      disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); environment.dispose(); scatter.dispose(); contact.dispose();
+      disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); unstage(); lightsHolder.removeFromParent();
+      display.dispose(); environment.dispose(); scatter.dispose(); contact.dispose();
       for (const proxy of depthProxies.values()) proxy.dispose();
       depthProxies.clear(); depthCompileTarget?.dispose(); depthCompileTarget = null;
     },
   };
 }
 export type LightingSetupStage = ReturnType<typeof createLightingSetupStage>;
+/** What compiling an object ahead gives (`prepare`): when its programs are linked, the textures they sample, and the programs themselves. */
+export type PreparedObject = { ready: Promise<void>; textures: THREE.Texture[]; programs(): LinkedProgram[] };
+/** `prepare` in steps (`prepareSteps`): run every step (each synchronous), then take the result. */
+export type PreparationSteps = { steps: (() => void)[]; result(): PreparedObject };
 
 /** Every field `shadowDepthMaterial` sets on a depth material, as Three's shadow pass sets them. */
 const DEPTH_FIELDS = ["visible", "wireframe", "side", "alphaMap", "alphaTest", "map", "clipShadows", "clippingPlanes", "clipIntersection",

@@ -11,13 +11,14 @@
  *
  *   A  body: the masculine default V, under the same lighting setup (a body never drawn; the host prepares its core once, then
  *      the page prepares the runtime: `character.useDefault`);
- *   B  lighting: the shown V gets the character-creator setup, never drawn on this page (`preview.setLightingPreset`);
+ *   B  lighting: the shown V gets the character-creator setup, never drawn on this page (`preview.setLightingPreset`): it is prepared on the
+ *      shown V (the setup before stays drawn) and takes over once ready, so "shown" below means the frame it takes over in;
  *   C  body and lighting together: the feminine default V again under the creator setup (the warm runtime was prepared for soft light).
  *
  * For each it records, from the request to one second after the new V is shown: the main-thread tasks of 50 ms or more (the Long Tasks
  * API), the programs linked and maps uploaded before the show, in the first shown frame and after it, how long the page waited on a
  * program's first use, the stages the preparation went through, and whether the pane showed progress throughout. The record is checked
- * against the gates by `verdict` in the output.
+ * against the gates by `verdict` in the output. `G2_PROFILE=1` also keeps a sampled CPU profile of each switch beside the summary.
  */
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -67,7 +68,9 @@ const RECORD = `(() => {
   };
   /** Dispatch \`action\`, sample every animation frame until \`done(sample)\` (or \`maxMs\`), then \`tailMs\` more. */
   g2.run = async (action, doneSource, minMs, tailMs, maxMs) => {
-    const done = new Function("s", "strings", "return (" + doneSource + ")");
+    // \`seen\`: whether a preparation has been in flight since the request (a lighting change ends when its preparation does).
+    const done = new Function("s", "strings", "seen", "return (" + doneSource + ")");
+    let seen = false;
     const before = sample(), ticks = [before];
     const t0 = performance.now();
     const answer = window.xfStudioShell.runtime.dispatch(action);
@@ -77,7 +80,8 @@ const RECORD = `(() => {
       await new Promise(r => requestAnimationFrame(r));
       const s = sample(); ticks.push(s);
       const now = s[0];
-      if (doneAt === null && now - t0 >= minMs && done(s, strings)) doneAt = now;
+      if (s[3] >= 0) seen = true;
+      if (doneAt === null && now - t0 >= minMs && done(s, strings, seen)) doneAt = now;
       if (doneAt !== null && now - doneAt >= tailMs) break;
       if (now - t0 > maxMs) break;
     }
@@ -98,7 +102,7 @@ const round = (value: number, digits = 1) => Math.round(value * 10 ** digits) / 
 async function pageRecord() {
   return await page.evaluate(`(() => ({ long: window.__g2.long, tex: window.__g2.tex, lag: window.__g2.lag,
     programs: window.xfsGl.programs.map(p => [p.name + (p.defines.length ? "[" + p.defines.join(",") + "]" : ""), p.linkAt, p.waited, p.usedAt ?? null]),
-    uploads: window.xfsGl.uploads.map(u => [u.method, u.at, u.ms, u.w + "x" + u.h]) }))()`) as { long: [number, number][]; tex: [number, number][]; lag: [number, number][];
+    uploads: window.xfsGl.uploads.map(u => [u.method, u.at, u.ms, u.w + "x" + u.h + " " + u.kind]) }))()`) as { long: [number, number][]; tex: [number, number][]; lag: [number, number][];
     programs: [string, number, number | null, number | null][]; uploads: [string, number, number, string][] };
 }
 
@@ -107,14 +111,17 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
   const { ticks, strings } = run;
   const str = (tick: Tick, field: number) => (tick[field]! >= 0 ? strings[tick[field]!]! : null);
   const startKey = run.startKey;
-  // The first tick that shows another runtime: the show happened after the tick before it. That tick's frames count the new runtime's.
-  const shownIndex = kind === "body" ? ticks.findIndex(tick => str(tick, T.key) !== null && str(tick, T.key) !== startKey) : -1;
+  // The first tick that shows another runtime: the show happened after the tick before it. That tick's frames count the new runtime's. For
+  // a lighting change, the first tick after its preparation ended (the new setup takes over in that task), or the first tick if none ran.
+  const prepared = ticks.findIndex(tick => str(tick, T.stage) !== null);
+  const shownIndex = kind === "body" ? ticks.findIndex(tick => str(tick, T.key) !== null && str(tick, T.key) !== startKey)
+    : prepared < 0 ? Math.min(1, ticks.length - 1) : ticks.findIndex((tick, i) => i > prepared && str(tick, T.stage) === null);
   const shownTick = shownIndex > 0 ? ticks[shownIndex]! : null, beforeShown = shownIndex > 0 ? ticks[shownIndex - 1]![T.t]! : null;
   const t0 = run.t0, endAt = (run.doneAt ?? ticks[ticks.length - 1]![T.t]!) + 0;
   const showAt = shownTick ? shownTick[T.t]! : null;
   // Preparation window: from the request to the last tick before the new V shows. The first shown frames: from that tick to the second
   // frame after the show (the first frame is the one drawn with the show; the tick that saw it follows). Lighting runs have no show.
-  const prepEnd = kind === "body" ? (beforeShown ?? endAt) : endAt;
+  const prepEnd = beforeShown ?? endAt;
   const firstFramesEnd = shownIndex > 0 ? ticks[Math.min(ticks.length - 1, shownIndex + 1)]![T.t]! : t0;
   const inWindow = (value: number, from: number, to: number) => value >= from && value <= to;
   const longIn = (from: number, to: number) => record.long.filter(([start, duration]) => start + duration >= from && start <= to);
@@ -149,7 +156,6 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
   const linesSeen = [...new Set(ticks.map(tick => str(tick, T.line)).filter(Boolean))], panesSeen = [...new Set(ticks.map(tick => str(tick, T.pane)).filter(Boolean))];
   const fractions = ticks.map(tick => tick[T.fraction]!).filter(fraction => fraction >= 0);
   const prepPrograms = programsIn(t0, prepEnd), firstPrograms = shownTick ? programsIn(beforeShown!, firstFramesEnd) : [], afterPrograms = shownTick ? programsIn(firstFramesEnd, tailEnd) : [];
-  const linkedAfterChange = kind === "lighting" ? programsIn(t0, tailEnd) : [];
   const longList = (list: [number, number][]) => list.map(([start, duration]) => ({ atMs: round(start - t0), ms: round(duration), stage: stageOf(start) })).sort((a, b) => b.ms - a.ms).slice(0, 8);
   return {
     kind, startKey, shownKey: shownTick ? str(shownTick, T.key) : null, timedOut: run.timedOut, dispatch: run.dispatch,
@@ -162,18 +168,15 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
     timerLateMs: { duringPreparationMax: round(Math.max(0, ...lagIn(t0, prepEnd).map(([, d]) => d))), duringPreparationOver100: lagIn(t0, prepEnd).filter(([, d]) => d > 100).length,
       afterShown1sMax: shownTick ? round(Math.max(0, ...lagIn(prepEnd, tailEnd).map(([, d]) => d))) : null },
     frameGapMs: { duringPreparationMax: round(Math.max(0, ...prepGaps)), allMax: round(Math.max(0, ...gaps)), duringPreparationOver100: prepGaps.filter(gap => gap > 100).length },
-    programs: kind === "body"
-      ? { linkedDuringPreparation: prepPrograms.length, firstShownFrame: firstPrograms.length, afterFirstFrameTo1s: afterPrograms.length,
-          firstUseWaitMaxMs: { preparation: round(waitedMax(prepPrograms)), firstShownFrame: round(waitedMax(firstPrograms)), after: round(waitedMax(afterPrograms)) },
-          firstShownFrameNames: firstPrograms.slice(0, 12).map(p => p[0]), afterNames: afterPrograms.slice(0, 12).map(p => p[0]) }
-      : { linkedAfterTheChange: linkedAfterChange.length, firstUseWaitMaxMs: round(waitedMax(linkedAfterChange)), names: linkedAfterChange.slice(0, 12).map(p => p[0]) },
-    textureCalls: kind === "body"
-      ? { duringPreparation: texIn(t0, prepEnd).length, firstShownFrame: texIn(beforeShown ?? 0, firstFramesEnd).length, afterFirstFrameTo1s: texIn(firstFramesEnd, tailEnd).length,
-          slowestUploadMsInFirstShownFrame: round(Math.max(0, ...texIn(beforeShown ?? 0, firstFramesEnd).map(([, ms]) => ms)), 2) }
-      : { afterTheChange: texIn(t0, tailEnd).length },
+    programs: { linkedDuringPreparation: prepPrograms.length, firstShownFrame: firstPrograms.length, afterFirstFrameTo1s: afterPrograms.length,
+      firstUseWaitMaxMs: { preparation: round(waitedMax(prepPrograms)), firstShownFrame: round(waitedMax(firstPrograms)), after: round(waitedMax(afterPrograms)) },
+      firstShownFrameNames: firstPrograms.slice(0, 12).map(p => p[0]), afterNames: afterPrograms.slice(0, 12).map(p => p[0]) },
+    textureCalls: { duringPreparation: texIn(t0, prepEnd).length, firstShownFrame: texIn(beforeShown ?? 0, firstFramesEnd).length, afterFirstFrameTo1s: texIn(firstFramesEnd, tailEnd).length,
+      slowestUploadMsInFirstShownFrame: round(Math.max(0, ...texIn(beforeShown ?? 0, firstFramesEnd).map(([, ms]) => ms)), 2) },
     programTimeline: programsIn(t0, tailEnd).map(p => [p[0], round(p[1] - t0), p[2] === null ? null : round(p[2], 2)]),
     shownAtMs: shownTick ? round(showAt! - t0) : null, beforeShownAtMs: beforeShown === null ? null : round(beforeShown - t0),
-    slowUploads: record.uploads.filter(u => inWindow(u[1], t0, tailEnd) && u[2] >= 5).map(u => ({ atMs: round(u[1] - t0), ms: round(u[2]), size: u[3] })).slice(0, 8),
+    slowUploads: record.uploads.filter(u => inWindow(u[1], t0, tailEnd) && u[2] >= 5).map(u => ({ atMs: round(u[1] - t0), ms: round(u[2]), size: u[3], stage: stageOf(u[1]) }))
+      .sort((a, b) => b.ms - a.ms).slice(0, 12),
     progress: { quietLineOrPaneSeenFrames: progressTicks.filter(said).length, framesFrom150msToShow: progressTicks.length, longestStretchWithNothingMs: round(longestQuiet),
       linesSeen, panesSeen, fractionStart: fractions[0] ?? null, fractionEnd: fractions[fractions.length - 1] ?? null, fractionMonotone: fractions.every((f, i) => i === 0 || f >= fractions[i - 1]! - 1e-9),
       distinctFractions: new Set(fractions).size, coreDetailSeen: [...new Set(ticks.map(tick => str(tick, T.detail)).filter(Boolean))].slice(0, 6) },
@@ -181,21 +184,21 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
 }
 
 type Analysis = ReturnType<typeof analyse>;
-/** The gates G2 sets (README.md §5): no task of 50 ms or more during preparation, no link in the first shown frame, progress shown. */
+/** The longest the screen may go without a presented frame while a preparation runs: the progress line and bar must keep repainting. */
+const FRAME_GAP_MS = 500;
+/**
+ * The gates G2 sets (README.md §5, §11): no task of 50 ms or more during preparation or in the second after the show, no link in the first
+ * shown frame, and progress shown and repainting (the pane says something on every frame, and no frame is held back for long).
+ */
 function verdict(a: Analysis) {
   const failures: string[] = [];
-  if (a.kind === "body") {
-    if (a.timedOut || a.wantToShownMs === null) failures.push("the new V was never shown");
-    if (a.longTasks.duringPreparation.count50 > 0) failures.push(`${a.longTasks.duringPreparation.count50} main-thread task(s) of ${LONG_TASK_MS} ms or more during preparation (max ${a.longTasks.duringPreparation.maxMs} ms)`);
-    const firstFrameLinks = "firstShownFrame" in a.programs ? a.programs.firstShownFrame ?? 0 : 0;
-    if (firstFrameLinks > 0) failures.push(`${firstFrameLinks} program(s) linked in the first shown frame`);
-    if (a.longTasks.afterShown1s.count50 > 0) failures.push(`${a.longTasks.afterShown1s.count50} task(s) of ${LONG_TASK_MS} ms or more in the second after the show (max ${a.longTasks.afterShown1s.maxMs} ms)`);
-    if (a.progress.framesFrom150msToShow > 0 && a.progress.longestStretchWithNothingMs > 500) failures.push(`the pane said nothing for ${a.progress.longestStretchWithNothingMs} ms`);
-  } else {
-    if (a.longTasks.total.count50 > 0) failures.push(`${a.longTasks.total.count50} main-thread task(s) of ${LONG_TASK_MS} ms or more after the change (max ${a.longTasks.total.maxMs} ms)`);
-    const linked = "linkedAfterTheChange" in a.programs ? a.programs.linkedAfterTheChange ?? 0 : 0;
-    if (linked > 0) failures.push(`${linked} program(s) linked after the change, not prepared ahead`);
-  }
+  const what = a.kind === "body" ? "the new V was never shown" : "the new lighting setup never took over";
+  if (a.timedOut || a.wantToShownMs === null) failures.push(what);
+  if (a.longTasks.duringPreparation.count50 > 0) failures.push(`${a.longTasks.duringPreparation.count50} main-thread task(s) of ${LONG_TASK_MS} ms or more during preparation (max ${a.longTasks.duringPreparation.maxMs} ms)`);
+  if (a.programs.firstShownFrame > 0) failures.push(`${a.programs.firstShownFrame} program(s) linked in the first shown frame`);
+  if (a.longTasks.afterShown1s.count50 > 0) failures.push(`${a.longTasks.afterShown1s.count50} task(s) of ${LONG_TASK_MS} ms or more in the second after the show (max ${a.longTasks.afterShown1s.maxMs} ms)`);
+  if (a.progress.framesFrom150msToShow > 0 && a.progress.longestStretchWithNothingMs > 500) failures.push(`the pane said nothing for ${a.progress.longestStretchWithNothingMs} ms`);
+  if (a.frameGapMs.duringPreparationMax > FRAME_GAP_MS) failures.push(`no frame was presented for ${a.frameGapMs.duringPreparationMax} ms during preparation`);
   return { pass: failures.length === 0, failures };
 }
 
@@ -216,12 +219,19 @@ try {
     // name, kind, action, done condition (on a sample [t, key, frames, stage, fraction, waiting, line, pane, phase, detail]), minimum ms, tail ms, give-up ms
     ["A.body", "body", { kind: "character.useDefault", bodyGender: "male" },
       `s[1] >= 0 && strings[s[1]].endsWith("|male") && s[3] < 0 && s[2] >= 1`, 300, 1000, 600_000],
-    ["B.lighting", "lighting", { kind: "preview.setLightingPreset", preset: "creator" }, `true`, 6000, 1000, 300_000],
+    ["B.lighting", "lighting", { kind: "preview.setLightingPreset", preset: "creator" }, `seen && s[3] < 0 && s[2] >= 1`, 300, 1000, 600_000],
     ["C.bodyAndLighting", "body", { kind: "character.useDefault", bodyGender: "female" },
       `s[1] >= 0 && strings[s[1]].endsWith("|female") && s[3] < 0 && s[2] >= 1`, 300, 1000, 600_000],
   ];
   for (const [name, kind, action, done, minMs, tailMs, maxMs] of runs) {
+    // G2_PROFILE=1: a sampled CPU profile of each switch beside the summary (`<out>-<name>.cpuprofile`), to see what a long task did.
+    const profiling = process.env.G2_PROFILE === "1";
+    if (profiling) { await page.send("Profiler.enable"); await page.send("Profiler.setSamplingInterval", { interval: 500 }); await page.send("Profiler.start"); }
     const run = await page.evaluate(`window.__g2.run(${JSON.stringify(action)}, ${JSON.stringify(done)}, ${minMs}, ${tailMs}, ${maxMs})`) as Run;
+    if (profiling) {
+      const { profile } = await page.send<{ profile: unknown }>("Profiler.stop");
+      writeFileSync(resolve(outArg).replace(/\.json$/, `-${name}.cpuprofile`), JSON.stringify(profile));
+    }
     const record = await pageRecord();
     const analysis = analyse(run, record, kind);
     log(name, { ...analysis, verdict: verdict(analysis) });

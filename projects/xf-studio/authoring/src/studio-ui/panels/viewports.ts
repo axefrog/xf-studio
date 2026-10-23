@@ -52,6 +52,8 @@ function readinessBadge(view: ViewContext["view"]) {
 
 /** An icon name the shell knows; a module's unknown one falls back to a generic mark. */
 const toolIcon = (name: string): IconName => isIconName(name) ? name : "dot";
+/** Head panels made so far, for their status lines' element ids. */
+let detailLines = 0;
 
 /**
  * A view's toolbar, derived from its tools (view-graph-design.md §3.9): the platform's and the shown modules' tools placed on the
@@ -113,9 +115,10 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
   // when something can't be shown, with its one next step when it waits for WolvenKit (NATIVE-47). While the V shown stays and the next one
   // is made ready (profiles phase 4a-v), it says which stage that is, with a thin bar for how far. Absolutely placed, so it never moves the
   // viewport's other overlays, and a fixed width while preparing, so its stages never resize it.
-  const detailText = h("span", { class: "viewport-detail-text", role: "status" });
+  const detailText = h("span", { class: "viewport-detail-text", role: "status", id: `viewport-detail-text-${++detailLines}` });
   const detailStep = wolvenKitStepButton(rt);
-  const nextBar = progressBar({ label: "Next V", className: "viewport-detail-progress" });
+  // The bar is named by the line beside it ("Next V: …" or "Lighting: …").
+  const nextBar = progressBar({ labelledBy: detailText.id, className: "viewport-detail-progress" });
   nextBar.element.hidden = true;
   const detailStatus = h("div", { class: "viewport-detail-status", hidden: true }, detailText, detailStep.element, nextBar.element);
   /** When the preparation shown now began (its key), so a preparation shorter than the delay never flashes a line. */

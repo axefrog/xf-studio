@@ -17,6 +17,11 @@
  * 6. Closing everything: the GPU objects and Three's programs back at the baseline (4a-i's gate, with preparation).
  * 7. A context lost while a cold V's programs link (after 6, since a lost context's objects are never deleted): its preparation starts
  *    again once the context is back, and the V is shown and draws.
+ * 5. (After 4.) A lighting setup never drawn, asked of the shown V (profiles phase 4a-v-b): it is staged and prepared while the setup before
+ *    stays drawn, pixel for pixel, then takes over; the longest main-thread task from the change to 1 s after; links and programs made in
+ *    its first frame; the frames presented while it was prepared; a newer setup asked meanwhile replacing it; and the setup drawn asked
+ *    again stopping a preparation.
+ * The cold V's warm-up (2) and the setup's (5) are drawn in pieces, with frames presented between them (`warmUpFrames`).
  * Results land in `window.probe` as plain data.
  */
 import * as THREE from "three";
@@ -43,7 +48,14 @@ export type ScenePreparationProbe = {
   ok: boolean; failure?: string; errors: string[]; renderer: string; parallel: boolean;
   first: { prepareMs: number; longestTaskMs: number; result: RuntimePreparationResult | null };
   cold: { wantToShownMs: number; showToPresentedMs: number; longestTaskMs: number; tasksOver50: number; framesBeforeShown: number; warmUps: number;
-    canvasUnchanged: boolean; firstFrame: { links: number; programs: number; uploads: number }; result: RuntimePreparationResult | null };
+    canvasUnchanged: boolean; firstFrame: { links: number; programs: number; uploads: number }; result: RuntimePreparationResult | null;
+    /** Frames presented during its warm-up, and the longest wait between two of them (the GPU process presents none while it builds a draw's shaders). */
+    warmUpFrames: number; warmUpFrameGapMs: number };
+  /** 5: a lighting setup prepared on the shown V. */
+  setup: { staged: boolean; tookOverMs: number; longestTaskMs: number; tasksOver50: number; unchangedUntilTakeover: boolean; checks: number;
+    firstFrame: { links: number; programs: number; frames: number }; changedAfter: boolean; warmUps: number; warmUpFrames: number; warmUpFrameGapMs: number;
+    frameGapMs: number; progress: { change: string; stage: string; fraction: number }[]; prepared: boolean;
+    replaced: { adopted: string[]; final: string }; back: { stoppedMs: number; staged: boolean; source: string; preparing: boolean } };
   warm: { switchesMs: number[]; builds: number; preparations: number };
   cancel: { stage: string; cancelMs: number; superseded: string; drawn: number; canvasUnchanged: boolean; disposed: boolean; before: Counts; after: Counts };
   /** The context lost while the V's programs linked: how the want ended, the restarts the preparation reported, and the frames it drew once shown. */
@@ -69,9 +81,18 @@ export type ScenePreparationProbe = {
   baseline: Counts; closed: Counts;
 };
 const probe: ScenePreparationProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
-  cancel: null as never, contextLoss: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
+  cancel: null as never, setup: null as never, contextLoss: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
+/** Every animation frame's time while `recording` is set (frames presented: the GPU process presents none while it builds shaders). */
+const frameTimes: number[] = [];
+let recording = false;
+const recordFrames = (time: number) => { if (recording) frameTimes.push(time); requestAnimationFrame(recordFrames); };
+requestAnimationFrame(recordFrames);
+const longestGap = (from: number, to: number) => {
+  const times = frameTimes.filter(time => time >= from && time <= to);
+  return Math.max(0, ...times.slice(1).map((time, i) => time - times[i]!), times.length ? Math.max(times[0]! - from, to - times[times.length - 1]!) : to - from);
+};
 
 try {
   if (new URLSearchParams(location.search).get("parallel") === "off") {
@@ -143,9 +164,9 @@ try {
   }
   {
     const warmUp = device.warmUp.bind(device);
-    device.warmUp = slot => {
+    device.warmUp = (slot, draw) => {
       const start = performance.now(), links = calls.links;
-      try { return warmUp(slot); } finally { probe.timings.warmUps.push(performance.now() - start); probe.timings.warmUpLinks.push(calls.links - links); }
+      try { return warmUp(slot, draw); } finally { probe.timings.warmUps.push(performance.now() - start); probe.timings.warmUpLinks.push(calls.links - links); }
     };
   }
   {
@@ -210,6 +231,8 @@ try {
       probe.timings.builds.push(performance.now() - built);
       runtimes.set(runtime, want.key);
       runtime.setLighting(lightingOf(want.lighting));
+      // Shown, a lighting change it isn't prepared for prepares it again (browser-scene-heads.ts does the same).
+      runtime.onUnprepared(() => { if (residency.shown() === runtime) void residency.refresh().catch(() => {}); });
       return runtime;
     },
     prepare: async (runtime, want, signal, progress) => {
@@ -233,6 +256,7 @@ try {
       }
     },
     prepared: runtime => runtime.prepared(),
+    prepareShown: async (runtime, _want, signal, progress) => { await runtime.prepare({ signal, report: report => { current = { key: `shown:${report.stage}`, stage: report.stage }; progress(report); } }); },
     show: runtime => {
       const start = performance.now();
       // As the head's show connects its surface: it keeps what it was filled with, brought up to date.
@@ -244,9 +268,15 @@ try {
     dispose: runtime => { layers.releaseScene(runtime.feature(EYE_MAKEUP_RENDERER)!); runtimes.delete(runtime); runtime.dispose(); },
   };
   let residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
+  /** Each preparation's own list of progress states (a want, or a change of the shown V: `|shown`), numbered in the order they began. */
+  let progressList: string | null = null, preparations = 0;
   const follow = () => {
     const state: PreparationState | null = residency.preparation();
-    if (state) (probe.progress[state.key] ??= []).push({ stage: state.stage, fraction: state.fraction, waiting: state.waiting });
+    if (!state) progressList = null;
+    else {
+      progressList ??= `${state.key}${state.change === "shown" ? "|shown" : ""}#${++preparations}`;
+      (probe.progress[progressList] ??= []).push({ stage: state.stage, fraction: state.fraction, waiting: state.waiting });
+    }
     const label = state ? `${state.key}:${state.stage}` : "idle";
     type Program = { name: string; cacheKey: string };
     const programs = () => (renderer.info.programs ?? []) as unknown as Program[];
@@ -306,10 +336,14 @@ try {
   {
     const before = checksum();
     const start = performance.now();
+    frameTimes.length = 0; recording = true;
     const pending = residency.want(b);
     const runtime = await pending;
     // Shown now, before its first frame: the canvas still holds the first V's pixels, and this one has drawn nothing yet.
     const shownAt = performance.now(), framesBefore = runtime.frameTiming().frames, warmUps = runtime.slot.warmUps;
+    recording = false;
+    const warmUpFrom = stageLog.find(entry => entry.label === `${b.key}:warm-up`)?.at ?? shownAt;
+    const warmUpFrames = frameTimes.filter(time => time >= warmUpFrom && time <= shownAt).length, warmUpFrameGapMs = longestGap(warmUpFrom, shownAt);
     stageLog.push({ at: performance.now(), label: "probe:shown" });
     const unchanged = checksum() === before;
     const at = { ...calls, programs: counter.made().program };
@@ -333,7 +367,7 @@ try {
     await sleep(1000);
     probe.cold = { wantToShownMs: presented - start, showToPresentedMs: presented - shownAt, longestTaskMs: longest(start, presented + 1000),
       tasksOver50: over50(start, presented + 1000), framesBeforeShown: framesBefore, warmUps, canvasUnchanged: unchanged, firstFrame,
-      result: results.get(b.key) ?? null };
+      result: results.get(b.key) ?? null, warmUpFrames, warmUpFrameGapMs };
     await settle();
   }
 
@@ -363,6 +397,74 @@ try {
     probe.cancel = { stage: stopped?.key === c.key ? stopped.stage : "none", cancelMs: stoppedAt - asked, superseded,
       drawn: made ? made.frameTiming().frames : -1, canvasUnchanged: checksum() === canvasBefore, disposed: made ? !runtimes.has(made) : false,
       before, after: counts() };
+  }
+
+  // 5. A lighting setup never drawn, asked of the shown V (B): staged and prepared while the setup before stays drawn, then taken over.
+  {
+    await settle();
+    const runtime = residency.shown()!;
+    /** The studio setup with `n` spot lights more than any setup drawn before (the first casting a shadow): programs nobody has linked yet. */
+    const spots = (n: number): LightingSource => ({ kind: "setup", setup: { ...studio, lights: [...studio.lights, ...Array.from({ length: n }, (_, i) => ({
+      ...studio.lights[1]!, id: `spot${n}-${i}`, name: `Spot ${i}`, type: "spot" as const, position: [0.5 - i * 0.3, 1.8, -0.9] as [number, number, number],
+      intensity: 1.5, angle: 0.5, penumbra: 0.3, decay: 2, distance: 0, shadows: i === 0 }))] } });
+    const key = (source: LightingSource) => JSON.stringify(source);
+    // Every setup the runtime's lighting takes, with the GPU calls and frames at that moment (an adopted staged setup goes through here).
+    const adopted: { key: string; links: number; programs: number; frames: number; at: number }[] = [];
+    const setSource = runtime.lighting.setSource.bind(runtime.lighting);
+    runtime.lighting.setSource = next => {
+      adopted.push({ key: key(next), links: calls.links, programs: counter.made().program, frames: runtime.frameTiming().frames, at: performance.now() });
+      setSource(next);
+    };
+    const before = checksum(), target = spots(4), progress: ScenePreparationProbe["setup"]["progress"] = [];
+    const warmUpsBefore = runtime.slot.warmUps;
+    frameTimes.length = 0; recording = true;
+    const start = performance.now();
+    runtime.setLighting(target);
+    const staged = runtime.lightingEvidence().staged;
+    let unchangedUntilTakeover = true, checks = 0, warmUpFrom = 0;
+    for (let i = 0; i < 20000 && !adopted.some(entry => entry.key === key(target)); i++) {
+      await frame();
+      const state = residency.preparation();
+      if (state) { progress.push({ change: state.change, stage: state.stage, fraction: state.fraction }); if (state.stage === "warm-up" && !warmUpFrom) warmUpFrom = performance.now(); }
+      // The setup before, drawn as it was, until the new one takes over (a few checks; each reads the canvas back).
+      if (i % 20 === 5 && !adopted.some(entry => entry.key === key(target))) { checks++; if (checksum() !== before) unchangedUntilTakeover = false; }
+    }
+    const took = adopted.find(entry => entry.key === key(target));
+    for (let i = 0; i < 120 && took && runtime.frameTiming().frames === took.frames; i++) await frame();
+    await frame();
+    recording = false;
+    const firstFrame = { links: calls.links - (took?.links ?? 0), programs: counter.made().program - (took?.programs ?? 0), frames: runtime.frameTiming().frames - (took?.frames ?? 0) };
+    const changedAfter = checksum() !== before;
+    await sleep(1000);
+    const tookAt = took?.at ?? NaN;
+    probe.setup = { staged, tookOverMs: tookAt - start, longestTaskMs: longest(start, tookAt + 1000), tasksOver50: over50(start, tookAt + 1000), unchangedUntilTakeover, checks,
+      firstFrame, changedAfter, warmUps: runtime.slot.warmUps - warmUpsBefore,
+      warmUpFrames: frameTimes.filter(time => time >= warmUpFrom && time <= tookAt).length, warmUpFrameGapMs: warmUpFrom ? longestGap(warmUpFrom, tookAt) : -1,
+      frameGapMs: longestGap(start, tookAt), progress, prepared: runtime.prepared(), replaced: null as never, back: null as never };
+    // A newer setup asked while one is being prepared replaces it: only the newest is ever drawn.
+    {
+      const x = spots(5), y = spots(6), from = adopted.length;
+      runtime.setLighting(x);
+      for (let i = 0; i < 4000 && residency.preparation()?.stage !== "programs"; i++) await sleep(1);
+      runtime.setLighting(y);
+      for (let i = 0; i < 20000 && key(runtime.lighting.source) !== key(y); i++) await frame();
+      probe.setup.replaced = { adopted: adopted.slice(from).map(entry => entry.key === key(x) ? "x" : entry.key === key(y) ? "y" : "other"),
+        final: key(runtime.lighting.source) === key(y) ? "y" : "other" };
+      await settle();
+    }
+    // The setup drawn, asked again while another is being prepared: the preparation stops, and nothing changes.
+    {
+      const drawnNow = runtime.lighting.source;
+      runtime.setLighting(spots(7));
+      for (let i = 0; i < 4000 && residency.preparation()?.stage !== "programs"; i++) await sleep(1);
+      const asked = performance.now();
+      runtime.setLighting(drawnNow);
+      for (let i = 0; i < 2000 && residency.preparation(); i++) await sleep(1);
+      probe.setup.back = { stoppedMs: performance.now() - asked, staged: runtime.lightingEvidence().staged, source: key(runtime.lighting.source) === key(drawnNow) ? "drawn" : "other",
+        preparing: !!residency.preparation() };
+      await settle();
+    }
+    runtime.lighting.setSource = setSource;
   }
 
   // 6. Everything goes: back to the baseline.

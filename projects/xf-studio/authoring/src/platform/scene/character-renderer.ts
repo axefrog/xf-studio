@@ -55,12 +55,13 @@ export interface DetailLoader {
 export type CharacterRenderer = ReturnType<typeof createCharacterRenderer>;
 
 /**
- * How a part is brought to its first frame ahead (`prepareDetails`): `compile` starts its programs for every pass the next frame draws
- * it in, without waiting on the driver (the lighting stage's `prepare`), and returns the textures those programs sample; `frame` waits
- * for the next animation frame.
+ * How a part is brought to its first frame ahead (`prepareDetails`): `compile` gives the steps that start its programs for every pass the
+ * next frame draws it in, about one program each, without waiting on the driver (the lighting stage's `prepareSteps`), and once they ran,
+ * the textures those programs sample; `frame` waits for the next animation frame.
  */
 export type DetailPreparation = {
-  compile(object: THREE.Object3D): { ready: Promise<void>; textures: THREE.Texture[]; programs(): readonly { getUniforms(): unknown; getAttributes(): unknown }[] };
+  compile(object: THREE.Object3D): { steps: (() => void)[];
+    result(): { ready: Promise<void>; textures: THREE.Texture[]; programs(): readonly { getUniforms(): unknown; getAttributes(): unknown }[] } };
   frame(): Promise<void>;
   signal?: AbortSignal;
 };
@@ -242,14 +243,23 @@ export function createCharacterRenderer(input: {
       if (!signal?.aborted) { handle.bake(renderer); started = 0; }
     }
     if (signal?.aborted) return;
-    const compiled = fresh.map(item => {
-      if (item !== onHead) return preparation.compile(item.root);
-      // The head drawn with the skin's material, for the compile only (it is synchronous: no frame draws the swap).
-      const material = item.meshes[0]!.material as THREE.MeshStandardMaterial, shown = head.material;
-      wearOnHead(material);
-      head.material = material;
-      try { return preparation.compile(head); } finally { head.material = shown; }
-    });
+    // Each part's programs, about one per step, a frame let through whenever a step used up its share (a whole part in one call was 306 ms).
+    const compiled: ReturnType<ReturnType<DetailPreparation["compile"]>["result"]>[] = [];
+    for (const item of fresh) {
+      const material = item === onHead ? item.meshes[0]!.material as THREE.MeshStandardMaterial : null;
+      if (material) wearOnHead(material);
+      const made = preparation.compile(material ? head : item.root);
+      for (const step of made.steps) {
+        await pace();
+        if (signal?.aborted) return;
+        if (!material) { step(); continue; }
+        // The head drawn with the skin's material, for each step only (it is synchronous: no frame draws the swap).
+        const shown = head.material;
+        head.material = material;
+        try { step(); } finally { head.material = shown; }
+      }
+      compiled.push(made.result());
+    }
     await uploadAll(compiled.flatMap(entry => entry.textures));
     // The driver's links, left (not waited for) when the preparation stops: they finish on the driver's threads either way (PREV-192).
     const linked = Promise.all(compiled.map(entry => entry.ready));

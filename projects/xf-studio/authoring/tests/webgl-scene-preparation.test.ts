@@ -11,7 +11,9 @@ import type { ScenePreparationProbe } from "./webgl-scene-preparation-probe-page
  * shown frame links and uploads nothing; a warm switch draws its first frame within 100 ms; a superseded preparation stops within 100 ms
  * and leaves nothing behind; progress only moves forward; closing everything returns the GPU objects to the baseline; a context lost while
  * a cold V's programs link restarts its preparation after the restore, and the V is shown. The authored makeup reaches each runtime through
- * the production preview device (filled before preparing, connected at show). The same page runs
+ * the production preview device (filled before preparing, connected at show). Profiles phase 4a-v-b adds two: a lighting setup never drawn,
+ * asked of the shown V, is prepared while the setup before stays drawn and takes over with nothing left to link (a newer setup replaces it,
+ * and the setup drawn asked again stops it); and every warm-up is drawn in pieces, with frames presented between them. The same page runs
  * again without the extension (the fallback), which must stay chunked and still report progress; its numbers are recorded, not gated.
  * Public CI has no GPU and skips; XFS_REQUIRE_ORACLES=1 turns the skip into a failure. XFS_PROBE_PRINT=1 prints both probes.
  */
@@ -41,12 +43,51 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(parallel.cold.longestTaskMs).toBeLessThan(50);
   });
 
-  test("nothing of it is drawn before it is shown: the shown V's pixels stay as they were, and it was warmed up hidden once", () => {
+  test("nothing of it is drawn before it is shown: the shown V's pixels stay as they were, and it was warmed up hidden, in pieces", () => {
     for (const probe of [parallel, fallback]) {
       expect(probe.cold.framesBeforeShown).toBe(0);
-      expect(probe.cold.warmUps).toBe(1);
+      expect(probe.cold.warmUps).toBeGreaterThanOrEqual(2);
       expect(probe.cold.canvasUnchanged).toBe(true);
     }
+  });
+
+  test("a warm-up is drawn in pieces with frames presented between them, so the shown V and the progress line keep drawing (4a-v-b)", () => {
+    for (const probe of [parallel, fallback]) for (const warmUp of [{ pieces: probe.cold.warmUps, frames: probe.cold.warmUpFrames },
+      { pieces: probe.setup.warmUps, frames: probe.setup.warmUpFrames }]) {
+      expect(warmUp.pieces).toBeGreaterThanOrEqual(2);
+      // At least one presented frame after each piece but the last (each piece waits for the GPU a frame at a time).
+      expect(warmUp.frames).toBeGreaterThanOrEqual(warmUp.pieces - 1);
+    }
+  });
+
+  test("a lighting setup never drawn, asked of the shown V: staged, prepared while the setup before stays drawn, then taken over with nothing to link (4a-v-b)", () => {
+    for (const probe of [parallel, fallback]) {
+      const { setup } = probe;
+      expect(setup.staged).toBe(true);
+      expect(setup.tookOverMs).toBeGreaterThan(0);
+      // The setup before, pixel for pixel, until the new one takes over; then the new one.
+      expect(setup.checks).toBeGreaterThan(0);
+      expect(setup.unchangedUntilTakeover).toBe(true);
+      expect(setup.changedAfter).toBe(true);
+      expect({ links: setup.firstFrame.links, programs: setup.firstFrame.programs }).toEqual({ links: 0, programs: 0 });
+      expect(setup.firstFrame.frames).toBeGreaterThanOrEqual(1);
+      expect(setup.prepared).toBe(true);
+      // Its progress says it is a change of the V shown, and moves forward only.
+      expect(setup.progress.length).toBeGreaterThan(0);
+      expect(setup.progress.every(state => state.change === "shown")).toBe(true);
+      for (let i = 1; i < setup.progress.length; i++) {
+        expect(setup.progress[i]!.fraction).toBeGreaterThanOrEqual(setup.progress[i - 1]!.fraction);
+        expect(ORDER.indexOf(setup.progress[i]!.stage)).toBeGreaterThanOrEqual(ORDER.indexOf(setup.progress[i - 1]!.stage));
+      }
+      // A newer setup asked while one is prepared replaces it: only the newest is ever drawn.
+      expect(setup.replaced).toEqual({ adopted: ["y"], final: "y" });
+      // The setup drawn asked again stops the preparation at once and changes nothing.
+      expect(setup.back).toMatchObject({ staged: false, source: "drawn", preparing: false });
+      expect(setup.back.stoppedMs).toBeLessThanOrEqual(100);
+    }
+    // With KHR_parallel_shader_compile the page's thread stays free throughout.
+    expect(parallel.setup.tasksOver50).toBe(0);
+    expect(parallel.setup.longestTaskMs).toBeLessThan(50);
   });
 
   test("its first shown frame links no program and uploads no map: only what every frame sends (its bones), as a later frame does", () => {

@@ -21,8 +21,8 @@ const out = resolve(outArg), port = +portArg;
 mkdirSync(out, { recursive: true });
 
 type Stage = "core" | "build" | "details" | "programs" | "textures" | "warm-up";
-const state = (stage: Stage, fraction: number, waiting: string | null = null, detail?: string) =>
-  ({ scene: "capture", key: `capture|${stage}`, stage, fraction, waiting, warm: false, ...(detail ? { detail } : {}) });
+const state = (stage: Stage, fraction: number, waiting: string | null = null, detail?: string, change: "subject" | "shown" = "subject") =>
+  ({ scene: "capture", key: `capture|${change}|${stage}`, stage, fraction, waiting, warm: change === "shown", change, ...(detail ? { detail } : {}) });
 // The host's own core line carries a step count in this fixture, to show that a line beside a bar never says it.
 const NEXT: [string, ReturnType<typeof state>][] = [
   ["core", state("core", 0.12, "host", "Preparing the masculine V's head from your Cyberpunk 2077 files… (step 3 of 9)")],
@@ -31,6 +31,9 @@ const NEXT: [string, ReturnType<typeof state>][] = [
   ["programs", state("programs", 0.72, "driver")],
   ["textures", state("textures", 0.9)],
   ["warm-up", state("warm-up", 0.97, "gpu")],
+  // A lighting setup made ready on the V shown (profiles phase 4a-v-b).
+  ["lighting", state("programs", 0.4, "driver", undefined, "shown")],
+  ["lighting-warm-up", state("warm-up", 0.9, "gpu", undefined, "shown")],
 ];
 const PANE: [string, ReturnType<typeof state>][] = [["pane-core", NEXT[0]![1]], ["pane-details", NEXT[2]![1]], ["pane-programs", NEXT[3]![1]]];
 // `pane300`: a window that leaves the 3D pane about 300 px wide.

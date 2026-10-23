@@ -406,3 +406,90 @@ describe("prepared before shown, with typed progress (4a-v T1)", () => {
     expect(h.residency.shown()?.key).toBe(b.key);
   });
 });
+
+describe("the shown runtime prepared again for a change it isn't prepared for (refresh, profiles phase 4a-v-b)", () => {
+  /** Runtimes that are asked for a change (`needs`, a generation) and prepared for one (`prepared`) while shown, in three steps of 20 ms. */
+  type Shown = { key: string; needs: number; prepared: number; shown: boolean };
+  function shownHarness(clock: Clock) {
+    const log: string[] = [];
+    const residency = new SceneResidency<Want, Shown>({
+      build: async want => { await clock.sleep(10); return { key: want.key, needs: 0, prepared: 0, shown: false }; },
+      prepared: runtime => runtime.prepared >= runtime.needs,
+      prepareShown: async (runtime, _want, signal, progress) => {
+        const target = runtime.needs;
+        log.push(`prepare:${runtime.key}:${target}`);
+        for (const stage of ["programs", "textures", "warm-up"] as const) {
+          progress({ stage, fraction: 0.5 });
+          await clock.sleep(20);
+          if (signal.aborted) { log.push(`stopped:${target}`); throw signal.reason; }
+        }
+        runtime.prepared = target;
+        log.push(`ready:${target}`);
+      },
+      show: runtime => { runtime.shown = true; log.push(`show:${runtime.key}`); },
+      hide: runtime => { runtime.shown = false; log.push(`hide:${runtime.key}`); },
+      dispose: runtime => { log.push(`dispose:${runtime.key}`); },
+    });
+    return { residency, log };
+  }
+
+  test("it is prepared while it stays shown, its progress says it is the shown one's, and a newer change restarts it", async () => {
+    const clock = new Clock(), { residency, log } = shownHarness(clock);
+    const a = wantOf("s1", "v1", "female");
+    const showing = residency.want(a);
+    await clock.advance(20);
+    const runtime = await showing;
+    // Prepared for everything asked: nothing to do.
+    await residency.refresh();
+    expect(log.some(entry => entry.startsWith("prepare"))).toBe(false);
+    runtime.needs = 1;
+    const first = residency.refresh().then(() => "ready", (error: Error) => error.name);
+    await clock.advance(25);
+    expect(residency.shown()).toBe(runtime);
+    expect(runtime.shown).toBe(true);
+    expect(residency.preparation()).toMatchObject({ key: a.key, change: "shown", warm: true, stage: "textures" });
+    // A newer change while it is prepared: the preparation in flight stops, and the newest is prepared.
+    runtime.needs = 2;
+    const second = residency.refresh();
+    await clock.advance(100);
+    expect(await first).toBe("AbortError");
+    await second;
+    expect(runtime.prepared).toBe(2);
+    expect(residency.preparation()).toBeNull();
+    // It was never hidden or shown again.
+    expect(log.filter(entry => entry.startsWith("show") || entry.startsWith("hide"))).toEqual([`show:${a.key}`]);
+    expect(log).toContain("stopped:1");
+  });
+
+  test("a want for another runtime supersedes it; asked while another runtime is wanted, it waits; back to what is prepared, it stops", async () => {
+    const clock = new Clock(), { residency, log } = shownHarness(clock);
+    const a = wantOf("s1", "v1", "female"), b = wantOf("s1", "v2", "female");
+    const showing = residency.want(a);
+    await clock.advance(20);
+    const runtime = await showing;
+    runtime.needs = 1;
+    const refreshing = residency.refresh().then(() => "ready", (error: Error) => error.name);
+    await clock.advance(5);
+    // Another runtime wanted: the shown one's preparation stops (it is about to be hidden).
+    const toB = residency.want(b);
+    expect(residency.preparation()).toMatchObject({ key: b.key, change: "subject" });
+    // Asked again while B is built: nothing starts (A is hidden once B is shown, and takes its change at once then).
+    await residency.refresh();
+    expect(residency.preparation()?.key).toBe(b.key);
+    await clock.advance(30);
+    expect(await refreshing).toBe("AbortError");
+    await toB;
+    // B shown; A warm. Its change back to what it was prepared for: a preparation in flight stops, and nothing is prepared.
+    const runtimeB = residency.shown()!;
+    runtimeB.needs = 1;
+    const again = residency.refresh().then(() => "ready", (error: Error) => error.name);
+    await clock.advance(10);
+    runtimeB.needs = 0;
+    await residency.refresh();
+    await clock.advance(30);
+    expect(await again).toBe("AbortError");
+    expect(residency.preparation()).toBeNull();
+    expect(runtimeB.prepared).toBe(0);
+    expect(log.filter(entry => entry.startsWith("show"))).toEqual([`show:${a.key}`, `show:${b.key}`]);
+  });
+});

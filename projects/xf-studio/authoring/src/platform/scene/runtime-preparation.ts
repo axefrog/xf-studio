@@ -2,21 +2,27 @@ import * as THREE from "three";
 import type { LinkedProgram } from "../../materials/render/linked-programs";
 import { uploadTexture } from "../../character/render/character-detail-loader";
 import { PREPARE_FRAME_MS } from "./character-renderer";
+import { isDrawable } from "./drawables";
 
 /**
  * Preparing a scene runtime before it is shown (profiles phase 4a-v, experiments/043-scene-runtimes §11): what its first shown frame would
  * otherwise do on the page's thread, done ahead while the runtime is hidden, in small steps between frames, so no step blocks the page for
  * long and the first shown frame finds everything ready.
  *
- * 1. **Programs.** Every mesh the next frame draws is compiled for every pass it is drawn in (the lighting stage's `prepare`: the forward
- *    scene, the scatter and contact variants, the shadow depth variants), then the display's own passes. With KHR_parallel_shader_compile
+ * 1. **Programs.** Everything the next frame draws (meshes, and the points and lines of overlays) is compiled for every pass it is drawn in
+ *    (the lighting stage's `prepare`: the forward scene, the scatter and contact variants, the shadow depth variants), then whatever the
+ *    runtime will add once shown (`extra`: the on-head editor's guides), then the display's own passes. With KHR_parallel_shader_compile
  *    the driver links them on its own threads and the preparation asks, once a frame and without waiting, how many are done. Without it a
  *    fence stands in: once the GPU process has worked through what was sent, the links have been made, and asking no longer waits long.
  *    Then each program's first use (its uniforms and attributes read back, a synchronous round trip) is taken, a few per frame.
  * 2. **Textures.** The maps those programs sample, and the core head's own, uploaded a few per frame (a 4096² map takes about 40 ms).
- * 3. **Warm-up.** One hidden draw on the renderer device (`warmUp`): whatever only a draw makes (Three's draw-time programs, the driver's
- *    input layouts, frame-sized targets, small uploads) is made there, and the shown runtime is drawn again in the same task, so the canvas
- *    never shows it. A fence then waits for the GPU to finish it.
+ * 3. **Warm-up, in pieces.** Hidden draws on the renderer device (`warmUp`): whatever only a draw makes (Three's draw-time programs,
+ *    the driver's own shader variants and pipeline state, frame-sized targets, small uploads) is made there, and the shown runtime is drawn
+ *    again in the same task, so the canvas never shows it. The GPU process presents no frame while it makes a draw's shader variants, so
+ *    one draw of a whole cold scene held the screen still for all of them at once (33–36 s on real data, experiment 043 §11). Each piece
+ *    draws only some of the scene (`warmUp(only)`), and the next waits, a frame at a time, for a fence on the last: frames are presented
+ *    between pieces, the shown V and the progress line with them. Pieces start with one drawable and double while the GPU keeps up. A last
+ *    draw of everything follows (what only the whole frame makes), and its fence.
  *
  * Every step checks the signal: an abort stops at the next step and rejects with `signal.reason` (links already sent finish on the
  * driver's threads either way). Progress goes to `report` as the stage, how far into it, and what it waits on. A lost context is one
@@ -31,9 +37,10 @@ export type RuntimePreparationPorts = {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.Camera;
-  /** The lighting stage's compile ahead (lighting-setup-stage.ts). */
+  /** The lighting stage's compile ahead (lighting-setup-stage.ts), an object's in steps of about one program each. */
   lighting: {
-    prepare(object: THREE.Object3D, camera: THREE.Camera): { ready: Promise<void>; textures: THREE.Texture[]; programs(): readonly LinkedProgram[] };
+    prepareSteps(object: THREE.Object3D, camera: THREE.Camera): { steps: (() => void)[];
+      result(): { ready: Promise<void>; textures: THREE.Texture[]; programs(): readonly LinkedProgram[] } };
     prepareDisplay(): { ready: Promise<void>; programs(): readonly LinkedProgram[] };
   };
   /**
@@ -45,8 +52,15 @@ export type RuntimePreparationPorts = {
   textures?(): Iterable<THREE.Texture>;
   /** Wait for the next animation frame, then a task of its own (work between frames, never inside one). */
   frame(): Promise<void>;
-  /** The hidden warm-up draw (the renderer device's `warmUp`); false when it couldn't draw (the runtime is shown already). */
-  warmUp(): boolean;
+  /**
+   * One hidden warm-up draw (the renderer device's `warmUp`), of everything, or with only `only` (and what holds them) visible; false when it
+   * couldn't draw.
+   */
+  warmUp(only?: ReadonlySet<THREE.Object3D>): boolean;
+  /** Objects the runtime adds once shown (the on-head editor's guides), compiled with the scene though not in it. */
+  extra?(): Iterable<THREE.Object3D>;
+  /** Other work made ahead for the first shown frame (the on-head editor's parts), each step in a frame's turn of its own, after the maps. */
+  work?(): Iterable<() => void>;
   signal?: AbortSignal;
   report?(report: RuntimePreparationReport): void;
   /** The clock steps are paced by (default `performance.now`). */
@@ -71,18 +85,20 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   const pace = async () => { if (now() - started >= budget) await frame(); };
   const report = (stage: RuntimePreparationStage, fraction: number, waiting: RuntimePreparationReport["waiting"] = null) =>
     ports.report?.({ stage, fraction: Math.max(0, Math.min(1, fraction)), waiting });
-  /** Wait, a frame at a time and never blocking, until the GPU has done what was sent so far. */
+  /** Wait, a frame at a time and never blocking, until the GPU has done what was sent so far; resolves with the frames waited. */
   const drained = async (stage: RuntimePreparationStage, fraction: number, waiting: "driver" | "gpu") => {
-    if (typeof gl.fenceSync !== "function" || gl.isContextLost()) return;
+    if (typeof gl.fenceSync !== "function" || gl.isContextLost()) return 0;
     const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-    if (!fence) return;
+    if (!fence) return 0;
     gl.flush();
+    let waited = 0;
     try {
-      for (let waited = 0; waited < FENCE_FRAMES && gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED; waited++) {
+      for (; waited < FENCE_FRAMES && gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED; waited++) {
         report(stage, fraction, waiting);
         await frame();
       }
     } finally { gl.deleteSync(fence); }
+    return waited;
   };
   check();
 
@@ -90,14 +106,16 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   report("programs", 0);
   await ports.features?.(signal);
   check();
-  const meshes: THREE.Mesh[] = [];
-  scene.traverseVisible(object => { if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh); });
+  const drawables: THREE.Object3D[] = [];
+  scene.traverseVisible(object => { if (isDrawable(object)) drawables.push(object); });
+  const objects = [...drawables, ...ports.extra?.() ?? []];
   const compiled: { textures?: THREE.Texture[]; programs(): readonly LinkedProgram[] }[] = [];
-  for (const [index, mesh] of meshes.entries()) {
-    await pace();
-    // One mesh per step (a mesh's own child meshes are compiled with it again; Three finds their programs made and only checks them).
-    compiled.push(lighting.prepare(mesh, camera));
-    report("programs", 0.2 * (index + 1) / meshes.length);
+  for (const [index, object] of objects.entries()) {
+    // About one program per step (a mesh's own child meshes are compiled with it again; Three finds their programs made and only checks them).
+    const made = lighting.prepareSteps(object, camera);
+    for (const step of made.steps) { await pace(); step(); }
+    compiled.push(made.result());
+    report("programs", 0.2 * (index + 1) / objects.length);
   }
   await pace();
   compiled.push(lighting.prepareDisplay());
@@ -138,12 +156,26 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
     report("textures", (index + 1) / textures.length);
   }
   report("textures", 1);
+  for (const step of ports.work?.() ?? []) { await frame(); step(); }
 
-  // 3. The hidden warm-up draw, in a frame's turn of its own, then the GPU finishing it.
+  // 3. The hidden warm-up, in pieces, each in a frame's turn of its own, the GPU finishing each before the next (see the header).
   await frame();
   report("warm-up", 0);
-  const warmedUp = ports.warmUp();
-  if (warmedUp) await drained("warm-up", 0.5, "gpu");
+  let warmedUp = false;
+  if (drawables.length > 1) {
+    for (let at = 0, size = 1; at < drawables.length;) {
+      await pace();
+      const piece = new Set(drawables.slice(at, at + size));
+      if (!ports.warmUp(piece)) break;
+      warmedUp = true;
+      at += piece.size;
+      const waited = await drained("warm-up", 0.9 * at / drawables.length, "gpu");
+      size = waited <= 1 ? size * 2 : waited > 3 ? 1 : size;
+      check();
+    }
+  }
+  await pace();
+  if (ports.warmUp()) { warmedUp = true; await drained("warm-up", 0.95, "gpu"); }
   check();
   report("warm-up", 1);
   return { programs: programs.length, uploads, frames, parallel, warmedUp };

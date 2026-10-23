@@ -28,6 +28,7 @@ import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler"
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
 import type { RendererDevice } from "./renderer-device";
 import { acrossContextLoss, prepareRuntime, type RuntimePreparationReport, type RuntimePreparationResult } from "./runtime-preparation";
+import { drawOnly, isDrawable } from "./drawables";
 
 /**
  * The scene host (feature-module platform §5): one scene runtime, the platform's 3D scene of one subject, drawn by the window's renderer
@@ -43,6 +44,13 @@ import { acrossContextLoss, prepareRuntime, type RuntimePreparationReport, type 
  * releases everything made so far and rejects with the signal's reason. `dispose()` releases the same for a built runtime, on a renderer
  * that lives on: everything it made is freed without relying on the context being lost (PREV-20, experiments/043-scene-runtimes), and it
  * never disposes the device.
+ *
+ * A lighting setup asked for while the runtime is shown, whose programs no preparation has readied, is not drawn at once (its first frame
+ * would link every program in one task: 92–104 s on a cold program cache, PREV-209). It is staged beside the setup drawn
+ * (lighting-setup-stage.ts `stage`), the runtime says it needs preparing (`onUnprepared`), and its owner prepares it as it would a hidden
+ * runtime (`prepare`: the staged setup's programs compiled ahead, its maps uploaded, its warm-up drawn in pieces); the setup before keeps
+ * drawing until the staged one takes over at the end. A runtime that isn't shown takes a new setup at once (it is prepared before it is
+ * shown again).
  */
 
 export type SceneHostOptions = {
@@ -121,6 +129,8 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     canvas.style.cursor = "";
   }
   function detach() {
+    // Hidden, the runtime takes a setup still staged at once: it is prepared again before it is shown (`prepared`).
+    if (pendingLighting) { const next = pendingLighting; pendingLighting = null; lighting.setSource(next); }
     if (!attached) return;
     input?.dispose(); input = undefined;
     // Disconnecting resets the canvas's touch action and cursor; the next runtime shown connects its own.
@@ -326,29 +336,82 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     for (const listener of faceChanged) listener();
   }) ?? (() => {}));
   /**
-   * What the programs of the meshes drawn now depend on (the lighting stage's program state, then each visible mesh and its materials),
-   * recorded when a preparation ends: while it is unchanged the runtime is still prepared (`prepared`).
+   * What the programs of the meshes drawn now depend on besides the lighting (each visible mesh and its materials), recorded when a
+   * preparation ends: while it is unchanged, the lighting program states prepared since still hold (`prepared`).
    */
-  const programKey = () => {
-    const parts = [lighting.programState()];
+  const drawnKey = () => {
+    const parts: string[] = [];
     scene.traverseVisible(object => {
       const mesh = object as THREE.Mesh;
       if (mesh.isMesh) parts.push(`${mesh.id}:${(Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map(material => material.uuid).join(",")}`);
     });
     return parts.join("|");
   };
-  let preparedKey = "";
+  /** The meshes drawn when a preparation last ended (`drawnKey`), and every lighting program state a preparation readied them for since. */
+  let preparedFor: { drawn: string; lighting: Set<string> } | null = null;
+  /** Whether the meshes drawn now have been prepared for `source`'s programs (a setup drawn before, or the one drawn now). */
+  const lightingPrepared = (source: LightingSource) =>
+    !!preparedFor && preparedFor.lighting.has(lighting.programStateFor(source)) && preparedFor.drawn === drawnKey();
+  /** A lighting setup asked for while shown and not prepared yet: staged, drawn once a preparation readied it (see the header). */
+  let pendingLighting: LightingSource | null = null;
+  const unpreparedListeners = new Set<() => void>();
+  const unprepared = () => { for (const listener of [...unpreparedListeners]) listener(); };
+  /** See `api.setLighting`. */
+  function setLighting(source: LightingSource) {
+    const was = pendingLighting;
+    // Hidden, or the same programs as now (a value changed), or programs readied before: drawn at once.
+    if (!drawn.shown || lighting.programStateFor(source) === lighting.programState() || lightingPrepared(source)) {
+      pendingLighting = null;
+      lighting.setSource(source);
+      if (was) unprepared();
+      return;
+    }
+    pendingLighting = source;
+    lighting.stage(source);
+    // A value edit of the setup staged needs nothing new; another setup's programs do.
+    if (!was || lighting.programStateFor(was) !== lighting.programStateFor(source)) unprepared();
+  }
+  /** The staged setup takes over (its preparation ended, or failed for a reason other than an abort: the choice is never lost). */
+  function adoptPending() {
+    if (!pendingLighting) return;
+    const next = pendingLighting;
+    pendingLighting = null;
+    lighting.setSource(next);
+    invalidate();
+  }
   /** See `api.prepare`. */
   async function prepare(options: { signal?: AbortSignal; report?: (report: RuntimePreparationReport) => void;
-    setups?: readonly LightingSource[] } = {}): Promise<RuntimePreparationResult> {
+    setups?: readonly LightingSource[]; overlays?: () => Iterable<THREE.Object3D>; work?: () => Iterable<() => void> } = {}): Promise<RuntimePreparationResult> {
+    let result: RuntimePreparationResult;
     // A context lost part-way starts the preparation again once the context is back (runtime-preparation.ts `acrossContextLoss`).
-    const result = await acrossContextLoss(device, signal => prepareAttempt(signal, options), options);
-    preparedKey = programKey();
+    try { result = await acrossContextLoss(device, signal => prepareAttempt(signal, options), options); }
+    catch (error) {
+      if (!options.signal?.aborted && drawn.shown) adoptPending();
+      throw error;
+    }
+    if (drawn.shown) adoptPending();
+    const now = drawnKey();
+    if (preparedFor?.drawn !== now) preparedFor = { drawn: now, lighting: new Set() };
+    preparedFor.lighting.add(lighting.programState());
     return result;
   }
-  async function prepareAttempt(signal: AbortSignal, options: { report?: (report: RuntimePreparationReport) => void; setups?: readonly LightingSource[] }) {
+  /** The visible drawables now (the warm-up's pieces hide all but some of them). */
+  const visibleDrawables = () => { const found: THREE.Object3D[] = []; scene.traverseVisible(object => { if (isDrawable(object)) found.push(object); }); return found; };
+  async function prepareAttempt(signal: AbortSignal, options: { report?: (report: RuntimePreparationReport) => void; setups?: readonly LightingSource[];
+    overlays?: () => Iterable<THREE.Object3D>; work?: () => Iterable<() => void> }) {
+    // Shown with a setup staged: everything is compiled, uploaded and warmed up for the staged setup, put in place only inside each step
+    // (the drawn frames between steps still show the setup before).
+    const staged = drawn.shown && pendingLighting !== null;
+    const prepareLighting = staged ? {
+      prepareSteps: (object: THREE.Object3D, at: THREE.Camera) => {
+        const made = lighting.prepareSteps(object, at);
+        return { steps: made.steps.map(step => () => lighting.withStaged(step)), result: made.result };
+      },
+      prepareDisplay: () => lighting.withStaged(() => lighting.prepareDisplay()),
+    } : lighting;
     // The feature renderers' own passes first (eye makeup's composite), then their surfaces as the first frame draws them.
-    const base = { renderer, scene, camera, lighting, frame: nextFrame, signal, features: (signal?: AbortSignal) => features?.prepare(signal) };
+    const base = { renderer, scene, camera, lighting: prepareLighting, frame: nextFrame, signal, features: (signal?: AbortSignal) => features?.prepare(signal),
+      ...(options.overlays ? { extra: options.overlays } : {}) };
     // Other setups a view of this scene shows: their programs too, while hidden (a shown runtime keeps drawing its own setup).
     if (options.setups?.length && !drawn.shown) {
       const own = lighting.source, key = JSON.stringify(own);
@@ -360,7 +423,12 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
         }
       } finally { lighting.setSource(own); }
     }
-    return prepareRuntime({ ...base, report: options.report, warmUp: () => device.warmUp(drawn) });
+    // The shown runtime warms up only what it will draw under the staged setup: its scene rendered as it is (no motion advanced, no camera
+    // moved), and the device draws its own frame after it.
+    const stagedFrame = () => lighting.withStaged(() => { lighting.applyRendererState(); features?.beforeDraw(); lighting.render(camera); });
+    const warmUp = (only?: ReadonlySet<THREE.Object3D>) => device.warmUp(drawn,
+      staged ? () => drawOnly(visibleDrawables(), only, stagedFrame) : only ? () => drawOnly(visibleDrawables(), only, () => draw(0)) : undefined);
+    return prepareRuntime({ ...base, report: options.report, warmUp, ...(options.work ? { work: options.work } : {}) });
   }
   const api = {
     /** Whose core head this scene shows. */
@@ -371,18 +439,28 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
      * Releases the V's details, the feature renderers, the core head, the rig, the stage and every listener: all it made on the renderer, which
      * it never disposes (it leaves the device, hidden first if shown). The runtime is unusable afterwards.
      */
-    dispose: () => { drawn.remove(); character.dispose(); releaseAll(releases); },
+    dispose: () => { pendingLighting = null; unpreparedListeners.clear(); drawn.remove(); character.dispose(); releaseAll(releases); },
     /** Its place on the renderer device: the device shows it by this (`device.show(runtime.slot)`). */
     slot: drawn,
     /**
-     * Make this runtime ready for its first shown frame while it is hidden (profiles phase 4a-v, runtime-preparation.ts): every mesh drawn
-     * now compiled for every pass, the programs linked off the page's thread and taken, the maps uploaded, one hidden warm-up draw. `setups`:
-     * other lighting setups a view of this scene shows, whose programs are compiled too. Small steps between frames; rejects with the
-     * signal's reason once it aborts. Call it again after the V's details are placed: what is ready already costs only a check.
+     * Make this runtime ready for its first shown frame while it is hidden (profiles phase 4a-v, runtime-preparation.ts): everything drawn
+     * now compiled for every pass, the programs linked off the page's thread and taken, the maps uploaded, the hidden warm-up drawn in pieces.
+     * `setups`: other lighting setups a view of this scene shows, whose programs are compiled too. `overlays`: what will be added once shown
+     * (the on-head editor's guides), compiled too. `work`: the owner's own work to do ahead between frames (the on-head editor's parts). Shown with a lighting setup staged (`setLighting`), it readies that setup instead, which
+     * then takes over. Small steps between frames; rejects with the signal's reason once it aborts. Call it again after the V's details are
+     * placed: what is ready already costs only a check.
      */
     prepare,
-    /** Whether a preparation ended and nothing that decides programs changed since (the lighting, what is drawn): its next show needs none. */
-    prepared: () => preparedKey !== "" && preparedKey === programKey(),
+    /**
+     * Whether a preparation readied what is drawn now for the lighting asked for (the setup staged, else the one drawn): nothing that decides
+     * programs changed since, so its next show, or the staged setup, needs none.
+     */
+    prepared: () => lightingPrepared(pendingLighting ?? lighting.source),
+    /**
+     * Hear this runtime needing a preparation while shown (a lighting setup staged, see the header), or no longer needing it (the staged
+     * setup was replaced by one ready); its owner calls `prepare`. Returns the unsubscribe.
+     */
+    onUnprepared: (listener: () => void) => { unpreparedListeners.add(listener); return () => { unpreparedListeners.delete(listener); }; },
     onFrame,
     /** Something the host can't see changed what it draws (for example the selected layer's handles): draw a frame. */
     requestRender: invalidate,
@@ -439,7 +517,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
      * freezes the page. Stops early when `signal` aborts (a newer change).
      */
     prepareDetails: (details: Parameters<typeof character.prepareDetails>[0], signal?: AbortSignal) => character.prepareDetails(details, { signal,
-      compile: object => lighting.prepare(object, camera), frame: nextFrame }),
+      compile: object => lighting.prepareSteps(object, camera), frame: nextFrame }),
     /** Release the parts kept for later (another V is being shown: nothing of the previous one lingers in GPU memory). */
     releaseKeptParts: character.releaseKeptParts,
     /** Listen for the placed V's limits changing after it was placed (PREV-74); returns the unsubscribe. */
@@ -550,8 +628,11 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     },
     /** Typed theme input for the stage backdrop; it never changes lighting. */
     setStage: (theme: StageTheme) => backdrop.setTheme(theme),
-    /** Light the scene by a lighting setup (lighting-setups.ts), or the built-in game rig for the shown body. */
-    setLighting: (source: LightingSource) => lighting.setSource(source),
+    /**
+     * Light the scene by a lighting setup (lighting-setups.ts), or the built-in game rig for the shown body. While shown, a setup whose
+     * programs aren't prepared is staged and drawn once its preparation ends (see the header); anything else is drawn at once.
+     */
+    setLighting,
     // Rendering options (the Preview quality panel's Rendering group): how this view draws, never the looks or the export.
     /** The skin's screen-space scatter (on) or the wrap stand-in (off). */
     setSkinScatter: (enabled: boolean) => lighting.setScatter(enabled),
@@ -560,7 +641,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     /** The strands' Hair look: 0 Crisp (faithful coverage) … 1 Game-like (hair-colour-model.ts `HAIR_LOOK`). */
     setHairLook: (value: number) => character.setHairLook(value),
     /** Evidence: the setup drawn now, and how the room is lit on this GPU. */
-    lightingEvidence: () => ({ setup: lighting.shown(), environmentMode: lighting.environment.mode }),
+    lightingEvidence: () => ({ setup: lighting.shown(), environmentMode: lighting.environment.mode, staged: lighting.staged !== null }),
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't. The host is `api` itself (as with the lighting above), so
   // its getters stay live: a spread copy read `idles` once, before the eyes section joined (PREV-187).

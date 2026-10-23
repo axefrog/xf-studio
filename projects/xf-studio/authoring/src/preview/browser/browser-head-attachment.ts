@@ -69,7 +69,7 @@ export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
   /** The workspace's view graph (it outlives any one head): the head restores its main view and follows it. */
   graph?: ViewGraph;
-  viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead" | "mountSurface">;
+  viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead" | "mountSurface"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
   /** Every layered-makeup surface to connect, in composition order; at most one carries the on-head editor. */
   layered: readonly LayeredSurfaceWiring[];
   /**
@@ -125,6 +125,14 @@ export type AttachedHead = {
   prepare(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
   /** Whether a warm head is still prepared (nothing that decides its programs changed since): shown again, it needs nothing more. */
   prepared(): boolean;
+  /**
+   * Prepare the shown head for a change it was asked to draw and isn't prepared for (a lighting setup whose programs aren't linked: the
+   * scene stages it and keeps drawing the setup before: scene-host.ts), reporting its stages; the change is drawn once ready.
+   * Rejects with `signal.reason` once aborted.
+   */
+  prepareShown(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
+  /** Hear the shown head needing `prepareShown` (or no longer needing it). Returns the unsubscribe. */
+  onUnprepared(listener: () => void): () => void;
   /** Draw this head and connect it (see the module header). Throws, having let go of what it connected, when a step fails. */
   show(): void;
   /** Hand over to the head shown next: its camera to the node, its motion released, its connections let go. Safe to call when hidden. */
@@ -245,9 +253,20 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
             setups.push(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
           }
         }
-        await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report) });
+        // The on-head editor, which show mounts: its guides compiled with the scene (their first frame links nothing), and its parts (the
+        // surface map and occlusion trees) made ahead between frames, so mounting it makes none of them.
+        const edited = ports.layered.find(wiring => wiring.editor), viewport = ports.viewport;
+        const guides = edited && viewport.surfaceGuides ? () => viewport.surfaceGuides!(scene) : undefined;
+        const work = edited && viewport.surfaceSteps ? () => viewport.surfaceSteps!(scene, edited.surface(scene)!.surface) : undefined;
+        await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
+          ...(work ? { work } : {}) });
       },
       prepared: () => scene.prepared?.() ?? true,
+      async prepareShown(prepareSignal, progress) {
+        if (disposed) throw Error("The head was released.");
+        await scene.prepare?.({ signal: prepareSignal, report: report => progress(report) });
+      },
+      onUnprepared: listener => scene.onUnprepared?.(listener) ?? (() => {}),
       show() {
         if (shown || disposed) return;
         shown = true;

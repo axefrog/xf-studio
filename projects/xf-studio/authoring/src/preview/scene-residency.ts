@@ -16,6 +16,10 @@
  * - **Residency is a budget** (decision D2): the shown runtime plus at most `warm` others (default 1). A runtime that stops being shown
  *   becomes warm; past the budget, the least recently shown is disposed. Wanting a warm runtime again shows it at once when it is still
  *   prepared (the port's `prepared`), with no build; otherwise it is prepared again first, and stays warm if that is superseded.
+ * - **The shown runtime prepared again** (`refresh`, profiles phase 4a-v-b). A change asked of the shown runtime that its preparation hasn't
+ *   readied (a lighting setup whose programs aren't linked) is staged by the runtime, which keeps drawing what it drew; the owner prepares
+ *   it as it would a warm runtime (the port's `prepareShown`), and the runtime takes the change over at the end. It is a want like any other:
+ *   a newer change of the shown runtime restarts it, and a want for another runtime supersedes it.
  * - **Context loss** drops the warm runtimes first (`contextLost`): the device restores only what is shown or still being built.
  * - **Disposal is ordinary disposal** (the port's `dispose`), the same for eviction, context loss, a superseded build and `dispose`.
  */
@@ -44,7 +48,9 @@ export type PreparationProgress = (report: PreparationReport) => void;
  * host's own line while the host prepares (`detail`), and whether the runtime was already resident (a warm one prepared again).
  */
 export type PreparationState = { readonly scene: string; readonly key: string; readonly stage: PreparationStage; readonly fraction: number;
-  readonly waiting: PreparationWait | null; readonly detail?: string; readonly warm: boolean };
+  readonly waiting: PreparationWait | null; readonly detail?: string; readonly warm: boolean;
+  /** What is being prepared: another runtime to show (`subject`), or a change of the one shown (`shown`: a lighting setup, `refresh`). */
+  readonly change: "subject" | "shown" };
 
 /**
  * How much of the whole each stage weighs in the overall fraction (only the stages a want goes through count). The host's core preparation
@@ -53,6 +59,10 @@ export type PreparationState = { readonly scene: string; readonly key: string; r
 const STAGE_WEIGHT: Readonly<Record<PreparationStage, number>> = { core: 8, build: 2, details: 4, programs: 6, textures: 2, "warm-up": 1 };
 /** The stages a want goes through unless the port says otherwise (no core preparation). */
 const DEFAULT_STAGES: readonly PreparationStage[] = PREPARATION_STAGES.filter(stage => stage !== "core");
+/** The stages of a change of the shown runtime (`refresh`). */
+const SHOWN_STAGES: readonly PreparationStage[] = ["programs", "textures", "warm-up"];
+/** How many times a runtime is prepared again when what it draws changed while it was prepared (each new preparation finds less to do). */
+const PREPARE_ATTEMPTS = 3;
 
 export type ResidencyPort<W extends ResidencyWant, R> = {
   /** Build a runtime for `want`, hidden, reporting its stages. Rejects with `signal.reason` once aborted (a newer want superseded it). */
@@ -64,6 +74,11 @@ export type ResidencyPort<W extends ResidencyWant, R> = {
   prepare?(runtime: R, want: W, signal: AbortSignal, progress: PreparationProgress): Promise<void>;
   /** Whether a warm runtime is still prepared for `want` (shown at once), or must be prepared again first. Absent: it is. */
   prepared?(runtime: R, want: W): boolean;
+  /**
+   * Prepare the shown runtime for a change it was asked to draw (`refresh`) while it keeps drawing what it draws; it takes the change over
+   * once ready. Rejects with `signal.reason` once aborted. Absent: `refresh` does nothing.
+   */
+  prepareShown?(runtime: R, want: W, signal: AbortSignal, progress: PreparationProgress): Promise<void>;
   /** The stages a want goes through, in order (absent: every stage but `core`). */
   stages?(want: W): readonly PreparationStage[];
   /** `runtime` becomes the shown one (the one shown before was hidden first). */
@@ -81,8 +96,8 @@ export type ResidencySnapshot = { readonly residents: readonly ResidentView[]; r
   readonly preparation: PreparationState | null };
 
 type Resident<W, R> = { want: W; runtime: R; state: ResidentState; shownAt: number };
-/** A want in flight: being built (no `resident`), or a warm resident being prepared again. */
-type Build<W, R> = { want: W; controller: AbortController; promise: Promise<R>; resident?: Resident<W, R>;
+/** A want in flight: being built (no `resident`), a warm resident being prepared again, or the shown one prepared for a change (`shown`). */
+type Build<W, R> = { want: W; controller: AbortController; promise: Promise<R>; resident?: Resident<W, R>; shown?: boolean;
   stages: readonly PreparationStage[]; state: PreparationState };
 
 /** The reason a superseded build is aborted with (a `DOMException` named `AbortError`, like `AbortSignal.abort()`'s). */
@@ -137,6 +152,20 @@ export class SceneResidency<W extends ResidencyWant, R> {
       building: this.building ? { scene: this.building.want.scene, key: this.building.want.key } : null, warm: this.warm,
       preparation: this.preparation() };
   }
+  /**
+   * The shown runtime was asked for a change it isn't prepared for (or no longer is: the change went back): prepare it again while it keeps
+   * drawing (the port's `prepareShown`; see the header). A preparation of it in flight restarts; a want for another runtime in flight is
+   * left alone (the shown runtime is about to be hidden, and takes its change at once then). Resolves once it is prepared, or nothing was
+   * needed; rejects with an `AbortError` when superseded.
+   */
+  refresh(): Promise<void> {
+    const shown = this.shownResident();
+    if (this.disposed || !shown || !this.port.prepareShown) return Promise.resolve();
+    if (this.building && !this.building.shown) return Promise.resolve();
+    if (this.building) this.supersede();
+    if (this.port.prepared?.(shown.runtime, shown.want) ?? true) return Promise.resolve();
+    return this.start(shown.want, shown, true).then(() => undefined);
+  }
   /** The renderer's context was lost: the warm runtimes go first; the shown one, and one still being built, are restored by the device. */
   contextLost(): void { for (const resident of [...this.residents.values()]) if (resident.state === "warm") this.evict(resident); }
   /** A scene closed: its build stops and its runtimes go (a shown one is hidden first, and nothing is shown in its place). */
@@ -159,13 +188,16 @@ export class SceneResidency<W extends ResidencyWant, R> {
     this.listeners.clear();
   }
 
-  /** Build (unless a warm `resident` is given), prepare, then show `want`; superseded at any point by a newer want. */
-  private start(want: W, resident?: Resident<W, R>): Promise<R> {
+  /**
+   * Build (unless a warm `resident` is given), prepare, then show `want`; superseded at any point by a newer want. With `shown`, the
+   * resident is the shown runtime, prepared for a change (`refresh`).
+   */
+  private start(want: W, resident?: Resident<W, R>, shown = false): Promise<R> {
     const controller = new AbortController(), signal = controller.signal;
-    const plan = this.planOf(want).filter(stage => !resident || (stage !== "core" && stage !== "build"));
+    const plan = shown ? SHOWN_STAGES : this.planOf(want).filter(stage => !resident || (stage !== "core" && stage !== "build"));
     const stages = plan.length ? plan : DEFAULT_STAGES;
-    const build: Build<W, R> = { want, controller, promise: undefined as never, ...(resident ? { resident } : {}), stages,
-      state: { scene: want.scene, key: want.key, stage: stages[0]!, fraction: 0, waiting: null, warm: !!resident } };
+    const build: Build<W, R> = { want, controller, promise: undefined as never, ...(resident ? { resident } : {}), ...(shown ? { shown } : {}), stages,
+      state: { scene: want.scene, key: want.key, stage: stages[0]!, fraction: 0, waiting: null, warm: !!resident, change: shown ? "shown" : "subject" } };
     const progress: PreparationProgress = report => this.progress(build, report);
     const current = () => this.building === build && !signal.aborted;
     build.promise = (async () => {
@@ -175,12 +207,16 @@ export class SceneResidency<W extends ResidencyWant, R> {
         runtime = await this.port.build(want, signal, progress);
         if (!current()) { this.port.dispose(runtime); throw signal.reason ?? superseded(); }
       }
-      if (this.port.prepare) {
-        try { await this.port.prepare(runtime, want, signal, progress); }
+      const prepare = shown ? this.port.prepareShown : this.port.prepare;
+      // Prepared again while what it draws changed meanwhile (a lighting change while it compiled): each attempt finds less left to do.
+      for (let attempt = 0; prepare && attempt < PREPARE_ATTEMPTS; attempt++) {
+        try { await prepare.call(this.port, runtime, want, signal, progress); }
         catch (error) {
           // Only an abort stops a want: a preparation that failed otherwise leaves the rest to its first frame.
           if (!signal.aborted && !isAbort(error)) console.warn("A scene runtime couldn't be prepared ahead; it is shown anyway.", error);
+          break;
         }
+        if (signal.aborted || (this.port.prepared?.(runtime, want) ?? true)) break;
       }
       if (!current()) { if (!resident) this.port.dispose(runtime); throw signal.reason ?? superseded(); }
       this.building = null;
@@ -210,7 +246,7 @@ export class SceneResidency<W extends ResidencyWant, R> {
     const overall = (weight(build.stages.slice(0, index)) + STAGE_WEIGHT[report.stage] * clamp01(report.fraction ?? 0)) / weight(build.stages);
     const next: PreparationState = { scene: build.state.scene, key: build.state.key, stage: report.stage,
       fraction: Math.max(build.state.fraction, clamp01(overall)), waiting: report.waiting ?? null,
-      ...(report.detail ? { detail: report.detail } : {}), warm: build.state.warm };
+      ...(report.detail ? { detail: report.detail } : {}), warm: build.state.warm, change: build.state.change };
     if (JSON.stringify(next) === JSON.stringify(build.state)) return;
     build.state = next;
     this.publish();

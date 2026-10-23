@@ -11,6 +11,10 @@
  *   ahead, its maps uploaded, one hidden warm-up draw: browser-head-attachment.ts `prepare`), and only then shown, so its first frame
  *   waits on nothing. Its typed progress goes to the presentation (`preparation`): the head pane's loading state while nothing is shown,
  *   its quiet status line while another V is.
+ * - **A change of the shown head prepared ahead too** (phase 4a-v-b). A lighting setup asked of the shown head whose programs aren't linked
+ *   is staged by its scene, which keeps drawing the setup before and says so (`onUnprepared`); the shown head is then prepared again
+ *   (scene-residency.ts `refresh`), with progress in the quiet status line, and draws the new setup once ready. A newer change restarts it,
+ *   and a subject change supersedes it.
  * - **A view to show** (`show(view)`, for phase 2's tabs): the drawn view becomes `view`, and its scene's head is wanted like any other.
  * - **Residency.** The shown head plus at most one warm one (`warm`, decision D2); a warm head is shown again at once, catching up with
  *   its V. A lost context drops the warm heads first. The same decisions bound the choice-preview devices: only a V a resident head shows
@@ -85,17 +89,21 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   let drawnView: string | undefined;
 
   const residency = new SceneResidency<SceneHeadWant, AttachedHead>({
-    build: (want, signal, progress) => {
+    build: async (want, signal, progress) => {
       progress({ stage: want.body === "male" ? "core" : "build" });
-      return buildBrowserHead({ ...ports.head, character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
+      const head = await buildBrowserHead({ ...ports.head, character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
         prepareCore: (body, buildSignal) => ports.prepareCore(body, (message, fraction) => {
           progress({ stage: "core", fraction: fraction ?? 0, waiting: "host", ...(message ? { detail: message } : {}) });
           // The first load: the head pane says what the host is doing, as it always has.
           if (!residency.shown()) ports.pending(message, residency.preparation()?.fraction ?? fraction);
         }, buildSignal).then(() => progress({ stage: "build" })),
         notice: ports.notice }, signal);
+      // Shown, a change it isn't prepared for prepares it again (it says so only while shown); the head's release ends the subscription.
+      head.onUnprepared(() => { if (residency.shown() === head) void residency.refresh().catch(() => { /* Superseded, or shown anyway. */ }); });
+      return head;
     },
     prepare: (head, _want, signal, progress) => head.prepare(signal, progress),
+    prepareShown: (head, _want, signal, progress) => head.prepareShown(signal, progress),
     prepared: head => head.prepared(),
     // A masculine V's core head is prepared by the host first (once; the host caches it).
     stages: want => want.body === "male" ? STAGES_MALE : STAGES,
