@@ -24,7 +24,7 @@
  */
 import * as THREE from "three";
 import type { RenderChunkMaterial, RenderSkinProfile } from "../../character/render-detail";
-import { declarePass, SCATTER_INPUT_WRITE, type PassSkinProfile } from "../../platform/api/scene";
+import { declarePass, SCATTER_INPUT_WRITE, scatterUnlitWrite, type PassSkinProfile } from "../../platform/api/scene";
 
 /**
  * How a `TintColor` byte reaches the program: sRGB-decoded. The 2.31 executable's material constant-buffer packer turns every `Color`
@@ -476,6 +476,10 @@ export function patchSkinShader(shader: { vertexShader: string; fragmentShader: 
     "normal = normalize( tbn * xfsTangentNormal );\nxfsDiffuseNormal = normalize( tbn * xfsTangentMacro );");
   fragment = replace(fragment, "#include <common>", "#include <common>\nuniform float xfsScatterSlot;");
   fragment = replace(fragment, "#include <dithering_fragment>", SKIN_SCATTER_OUTPUT);
+  // S1 and S2 need no light, and the skin discards nothing after it.
+  fragment = replace(fragment, "#include <lights_physical_fragment>",
+    `${scatterUnlitWrite("vec4( sqrt( clamp( diffuseColor.rgb, 0.0, 1.0 ) ), ( xfsScatterSlot + 1.0 ) / 8.0 )", "vec4( metalnessFactor, 0.0, 0.0, 1.0 )")}
+#include <lights_physical_fragment>`);
   shader.fragmentShader = fragment;
   return shader;
 }

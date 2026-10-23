@@ -181,6 +181,9 @@ describe("skin shader", () => {
     expect(f).toContain("#define xfsScatterWrite( s0, s1, s2 ) gl_FragColor = ( s1 )");
     expect(f).not.toMatch(/layout\s*\(\s*location/);
     expect(f.indexOf("#include <dithering_fragment>")).toBeLessThan(f.indexOf("xfsScatterWrite( vec4( xfsScatterE"));
+    // S1 and S2 are written before the light, so those programs carry none (experiment 043 §12).
+    expect(f.indexOf("xfsScatterWrite( vec4( 0.0 ), vec4( sqrt( clamp( diffuseColor.rgb, 0.0, 1.0 ) ), ( xfsScatterSlot + 1.0 ) / 8.0 ), vec4( metalnessFactor, 0.0, 0.0, 1.0 ) );"))
+      .toBeLessThan(f.indexOf("#include <lights_physical_fragment>"));
   });
 
   test("a Three.js build without an expected chunk fails loudly instead of drawing a wrong skin", () => {

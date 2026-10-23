@@ -211,8 +211,8 @@ try {
   await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && e.characterDetails.components.length > 0 && !e.residency.preparation; })()", 900_000);
   if (warmProfile) {
     // A profile kept from an earlier session keeps its workspace too: start from the same V and setup as a fresh one does.
-    await page.evaluate(`(async () => { const run = window.xfStudioShell.runtime.dispatch;
-      await run({ kind: "character.useDefault", bodyGender: "female" }); await run({ kind: "preview.setLightingPreset", preset: "studio" }); })()`);
+    await page.evaluate(`(async () => { const runtime = window.xfStudioShell.runtime;
+      await runtime.dispatch({ kind: "character.useDefault", bodyGender: "female" }); await runtime.dispatch({ kind: "preview.setLightingPreset", preset: "studio" }); })()`);
     await page.waitFor(`(() => { const e = window.xfStudioSceneEvidence?.(); const shown = e?.residency.residents.find(r => r.state === "shown");
       return !!shown && shown.key.endsWith("|female") && !e.residency.preparation && window.xfStudioPresentation.authoring.previewState().lighting.preset === "studio"; })()`, 900_000);
   }
@@ -237,7 +237,10 @@ try {
   let traceSink: unknown[] | null = null, traceDone: (() => void) | null = null;
   page.on("Tracing.dataCollected", params => { traceSink?.push(...(params as { value: unknown[] }).value); });
   page.on("Tracing.tracingComplete", () => { traceDone?.(); });
+  // G2_SWITCHES=<name>[,<name>…]: only those switches (a closer look at one; B and C assume the ones before them ran).
+  const only = process.env.G2_SWITCHES?.split(",");
   for (const [name, kind, action, done, minMs, tailMs, maxMs] of runs) {
+    if (only && !only.includes(name)) continue;
     // G2_PROFILE=1: a sampled CPU profile of each switch beside the summary (`<out>-<name>.cpuprofile`), to see what a long task did.
     const profiling = process.env.G2_PROFILE === "1";
     if (profiling) { await page.send("Profiler.enable"); await page.send("Profiler.setSamplingInterval", { interval: 500 }); await page.send("Profiler.start"); }

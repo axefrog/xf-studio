@@ -97,6 +97,16 @@ export const SCATTER_INPUT_WRITE = /* glsl */`
 #define xfsScatterWrite( s0, s1, s2 ) gl_FragColor = ( s0 )
 #endif
 #endif`;
+/**
+ * The S1 and S2 passes' write before the light (to go before `#include <lights_physical_fragment>`), for a material whose S1 and S2 values
+ * are known there and that discards nothing after it: those programs then carry no light, and link as fast as an unlit one (a lit skin
+ * variant took 1 s or more of a driver thread under the creator rig). Its S0 pass goes on to the light and its own write.
+ */
+export const scatterUnlitWrite = (s1: string, s2: string) => /* glsl */`
+#if defined( XFS_SCATTER_INPUT ) && ( defined( XFS_SCATTER_S1 ) || defined( XFS_SCATTER_S2 ) )
+	xfsScatterWrite( vec4( 0.0 ), ${s1}, ${s2} );
+	return;
+#endif`;
 
 /** The skin under each vertex of a surface: linear colour (3), roughness (1) and metalness (1), with how it was read. */
 export type SurfaceUnderlay = { colour: THREE.BufferAttribute; roughness: THREE.BufferAttribute; metalness: THREE.BufferAttribute;
