@@ -25,6 +25,9 @@ void RestorePresetsAfterKill();
 void RegisterMethodsNpc(Dispatcher& aDispatcher);
 void TickNpc(double aDt, bool aScriptsReady);
 void RestoreNpcAfterKill();
+// Bridge 0.8 (HandlersNpc.cpp): bridge.handover's release of every NPC the bridge directs, one game-thread step after the
+// handover flag is set (npc.auto_released with reason handover): {released, hub_withdrawn, voice_lines_hidden}.
+nlohmann::json ReleaseNpcsForHandover(const std::string& aCid);
 
 // Shared with Handlers060.cpp: a redscript layer call (XFRuntimeBridge.<class>.<function>(cid, ...) -> JSON), the game-thread
 // step timeout, and a write method marked for the kill switch's restore.

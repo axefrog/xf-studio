@@ -3,7 +3,8 @@
 // simulated street (selftest/SimNpc.cpp, the plugin's own core/Npc.cpp service): the npc write class, refusals in the
 // design's order, protected and busy picks, spawn limits, commands and their events, lines, gestures, dialogue choices
 // answered through session.wait, walk_away, save holds, automatic release on combat, a handover and a load, the kill switch,
-// and the first scenario end to end. Proves nothing about the game.
+// and the first scenario end to end; the Story Engine's staging needs (mortal and hostile stand-ins handed back in a fight,
+// an out-of-sight spawn, the dissolve release) and the handover's release in its own request. Proves nothing about the game.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -91,6 +92,8 @@ describe("0.8 npc offline: the catalogue, the scenario checker, the actor record
     expect(npcParams({ cast: "woman_corpo", ahead_m: 12, side_m: 4, face: "v" })).toEqual({ cast: "woman_corpo", at: { ahead_m: 12, side_m: 4 }, face: "v" });
     expect(npcParams({ cast: "woman_corpo", at_point: [1, 2, 3], face_point: [4, 5, 6] })).toEqual({ cast: "woman_corpo", at: [1, 2, 3], face: [4, 5, 6] });
     expect(npcParams({ who: "p1", at: "v" })).toEqual({ who: "p1", at: "v" });
+    expect(npcParams({ cast: "woman_corpo", out_of_sight: true, min_m: 10 })).toEqual({ cast: "woman_corpo", at: "out_of_sight", min_m: 10 });
+    expect(npcParams({ cast: "woman_corpo", out_of_sight: false, ahead_m: 3 })).toEqual({ cast: "woman_corpo", at: { ahead_m: 3 } });
   });
 
   test("the tools' lists equal the plugin's own tables (casts, expressions, triggers, gestures)", () => {
@@ -114,7 +117,14 @@ describe("0.8 npc offline: the catalogue, the scenario checker, the actor record
       expect(r.savable).toBe(false);
       if (record !== "Character.xfs_actor_research_npc_base") expect(r.isCrowd).toBe(false);
     }
-    expect(yaml["XFRuntimeBridge.Npc.actorsVersion"]).toBe(1);
+    expect(yaml["XFRuntimeBridge.Npc.actorsVersion"]).toBe(2);
+    // V15: each cast (not the research ones) again with the game's own civilian reactions; nothing else differs.
+    for (const record of records.filter((r) => !r.includes("research"))) {
+      const reactive = yaml[`${record}_reactive`];
+      expect(reactive, `${record}_reactive`).toBeDefined();
+      expect(reactive.reactionPreset).toBe("ReactionPresets.Civilian_Neutral");
+      expect({ ...reactive, reactionPreset: undefined }).toEqual({ ...yaml[record], reactionPreset: undefined });
+    }
   });
 
   test("the first scenario is valid, and a dry run lists its branches", async () => {
@@ -530,5 +540,101 @@ describe("0.8 npc: the class gate", () => {
     expect(await refused(api, "npc.release", { who: "all" })).toBe("write_class_disabled");
     expect((await ok(api, "npc.list", {})).npcs.length).toBeGreaterThan(0);
     expect(findCommand("npc_spawn")!.name).toBe("npc.spawn");
+  }, 30_000);
+});
+
+describe("0.8.6+npc: the Story Engine's staging (V15 stand-ins, V16 out of sight) and the 0.8.6 rules", () => {
+  let host: Host;
+  let api: CommandApi;
+  beforeAll(async () => {
+    host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 180);
+    api = apiFor(host);
+    await bridge(api, "selftest.npc", { speed: 8 });
+    await bridge(api, "selftest.player", { busy: "", position: [100, 200, 10], yaw: 0 });
+  }, HOOK_TIMEOUT_MS);
+  afterAll(async () => {
+    await host?.stop();
+  });
+
+  test("V15: a hostile, mortal stand-in is handed back in a fight (the friendly actor is removed), and its body stays when it dies", async () => {
+    let since = await latest(api);
+    const standIn = await ok(api, "npc.spawn", { cast: "man_lowlife", ahead_m: 4, attitude: "hostile", immortal: false, reactions: "game" });
+    expect(standIn).toMatchObject({ attitude: "hostile", immortal: false, reactions: "game", record: "Character.xfs_actor_man_lowlife_reactive" });
+    expect(standIn.stand_in_note).toContain("handed_back");
+    const friendly = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
+    expect(friendly).toMatchObject({ attitude: "friendly", immortal: true, reactions: "quiet" });
+    await event(api, "npc.spawned", since, standIn.who);
+    await event(api, "npc.spawned", since, friendly.who);
+    const street = await bridge(api, "selftest.npc", {});
+    expect((street.actors as Any[]).find((a) => a.who === standIn.who)).toMatchObject({ attitude: 2, immortal: false });
+    await ok(api, "npc.look", { who: standIn.who, at: "v" });
+    await bridge(api, "selftest.player", { busy: "in_combat" });
+    const back = await event(api, "npc.handed_back", since, standIn.who);
+    expect(back.data).toMatchObject({ reason: "combat", attitude: "hostile", immortal: false });
+    expect((await event(api, "npc.auto_released", since, friendly.who)).data.reason).toBe("combat");
+    const status = await ok(api, "npc.status");
+    expect(status.npcs).toHaveLength(1);
+    expect(status.npcs[0]).toMatchObject({ who: standIn.who, handed_back: true, look: null });
+    await bridge(api, "selftest.player", { busy: "" });
+    expect(await refused(api, "npc.move", { who: standIn.who, to: "v" })).toBe("npc_handed_back");
+    since = await latest(api);
+    await bridge(api, "selftest.npc", { kill: standIn.who });
+    expect((await event(api, "npc.died", since, standIn.who)).data.kept_body).toBe(true);
+    expect((await ok(api, "npc.status")).npcs[0]).toMatchObject({ who: standIn.who, dead: true });
+    const plain = await api.run("npc.say", { who: standIn.who, text: "Hello." });
+    expect(plain.ok ? "" : plain.error.code).toBe("npc_dead");
+    expect(plain.ok ? "" : plain.error.message).toContain("body stays");
+    await ok(api, "npc.release", { who: standIn.who });
+    expect((await ok(api, "npc.status")).npcs).toEqual([]);
+  }, 30_000);
+
+  test("V16: an out-of-sight spawn lands behind V on walkable ground; with none in range it is refused in plain words", async () => {
+    const since = await latest(api);
+    const hidden = await ok(api, "npc.spawn", { cast: "woman_corpo", out_of_sight: true, min_m: 12, max_m: 20 });
+    expect(hidden.asked_at[1]).toBeLessThan(200 - 11.5); // V at (100, 200) faces +Y: behind her is -Y
+    expect(hidden.out_of_sight.probes).toBeGreaterThanOrEqual(1);
+    expect(hidden.out_of_sight.distance_v).toBeGreaterThanOrEqual(11.5);
+    await event(api, "npc.spawned", since, hidden.who);
+    await ok(api, "npc.release", { who: hidden.who });
+    await bridge(api, "selftest.npc", { no_ground_far: true });
+    const none = await api.run("npc.spawn", { cast: "woman_corpo", out_of_sight: true });
+    expect(none.ok ? "" : none.error.code).toBe("no_hidden_spot");
+    expect(none.ok ? "" : none.error.message).toContain("out of V's sight");
+    await bridge(api, "selftest.npc", { no_ground_far: false });
+    expect(await refused(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3, min_m: 5 })).toBe("bad_params");
+  }, 30_000);
+
+  test("V16: dissolve walks the actor off and removes it only once V can't see it", async () => {
+    const since = await latest(api);
+    const a = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
+    await event(api, "npc.spawned", since, a.who);
+    await ok(api, "npc.face", { who: a.who, expression: "joy" });
+    const out = await ok(api, "npc.release", { who: a.who, how: "dissolve" });
+    expect(out).toMatchObject({ how: "dissolve", walk: true, distance_m: 15 });
+    expect(out.to[1]).toBeGreaterThan(215);
+    expect((await ok(api, "npc.status")).npcs[0]).toMatchObject({ releasing: "dissolve", face: null });
+    await sleep(1500); // it walks off along V's view (+Y) and stays in sight
+    expect((await ok(api, "npc.status")).npcs).toHaveLength(1);
+    await bridge(api, "selftest.npc", { sight_blocked: true }); // a wall between V and everything
+    const dissolved = await event(api, "npc.dissolved", since, a.who, 12000);
+    expect(dissolved.data.waited_s).toBeGreaterThan(0);
+    expect((await event(api, "npc.released", since, a.who)).data.how).toBe("dissolve");
+    await bridge(api, "selftest.npc", { sight_blocked: false });
+    expect((await ok(api, "npc.status")).npcs).toEqual([]);
+  }, 30_000);
+
+  test("0.8.6: the handover releases every NPC in its own request and says so", async () => {
+    const since = await latest(api);
+    const a = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
+    await event(api, "npc.spawned", since, a.who);
+    await ok(api, "npc.say", { speaker: "A voice", text: "Over here.", seconds: 10 });
+    const handed = await ok(api, "session.handover", { note: "the player takes over" });
+    const step = (handed.steps as Any[]).find((s) => s.step === "release the NPCs the bridge directs");
+    expect(step).toMatchObject({ ok: true, released: [a.who] });
+    // Released in the request itself: the event is there at once, without waiting for a tick.
+    const read = await bridge(api, "session.events", { since, limit: 100, kinds: ["npc.auto_released"] });
+    expect((read.events as Any[]).some((e) => e.data?.who === a.who && e.data?.reason === "handover")).toBe(true);
+    expect((await ok(api, "npc.status")).voice_lines).toEqual([]);
+    await ok(api, "session.resume", {});
   }, 30_000);
 });

@@ -347,5 +347,84 @@ const nested = (depth: number) => "[".repeat(depth) + "]".repeat(depth);
   rmSync(host.dir, { recursive: true, force: true });
 }
 
+// --- Run 7 (bridge 0.8, NPC direction): the self-test street through the Bun library --------------------------
+// Every npc command once, the new staging options (a mortal, hostile stand-in handed back in a fight; an out-of-sight spawn;
+// the dissolve release), the handover's release in its own request and the kill switch's one-step release. The scenario
+// runner and the finer rows are tools/test/npc.test.ts.
+{
+  const { child, dir, session, log } = await startHost(["--allow-writes", "--write-classes", "photo,world,character,save,showroom,player,npc"], 90);
+  const client = new BridgeClient(session, 5000);
+  await client.connect();
+  const call = async (method: string, params: Record<string, unknown> = {}) => client.call(method, params, `t-${method}`);
+  const result = async (method: string, params: Record<string, unknown> = {}) => (await call(method, params)).result as any;
+  const latestEvent = async () => Number((await result("session.events", { since: 0, limit: 1 })).latest ?? 0);
+  const waitEvent = async (kind: string, since: number, who: string, ms = 8000) => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      const read = await result("session.events", { since, limit: 100, kinds: [kind] });
+      const hit = ((read?.events ?? []) as any[]).find((e) => e.data?.who === who);
+      if (hit) return hit;
+      await sleep(100);
+    }
+    return null;
+  };
+  await call("selftest.npc", { speed: 8 });
+  await call("selftest.player", { busy: "", position: [100, 200, 10], yaw: 0 });
+  let since = await latestEvent();
+  const a = await result("npc.spawn", { cast: "woman_corpo", at: { ahead_m: 6 } });
+  check("npc: an XF actor is spawned with its undo (friendly, immortal, quiet by default)", a?.who === "a1" && a.undo?.method === "npc.release" && a.attitude === "friendly" && a.immortal === true, a);
+  check("npc: npc.spawned follows", (await waitEvent("npc.spawned", since, "a1")) !== null);
+  const move = await result("npc.move", { who: "a1", to: "v", stop_m: 1.6 });
+  check("npc: a walk to V answers its undo (npc.stop)", move?.undo?.method === "npc.stop", move);
+  check("npc: npc.arrived near V", (await waitEvent("npc.arrived", since, "a1")) !== null);
+  const say = await result("npc.say", { who: "a1", text: "Excuse me.", style: "subtitle", seconds: 1 });
+  const holo = await result("npc.say", { speaker: "A voice", text: "Can you hear me?", style: "holocall", seconds: 1 });
+  check("npc: a subtitle line and a holocall-style voice line, each with an undo that hides it", say?.undo?.params?.hide === say?.line && holo?.voice === true && holo?.undo?.params?.hide === holo?.line, { say, holo });
+  const look = await result("npc.look", { who: "a1", at: "v" });
+  const face = await result("npc.face", { who: "a1", expression: "interested" });
+  check("npc: look and face with their undos", look?.undo?.params?.off === true && face?.undo?.params?.off === true, { look, face });
+  const hub = await result("npc.choices", { who: "a1", choices: ["Sure.", "Not now."], max_s: 20 });
+  await call("selftest.npc", { answer: 1 });
+  const choice = await waitEvent("npc.choice", since, "a1");
+  check("npc: dialogue choices shown and the pick returned as npc.choice", hub?.hub > 0 && choice?.data?.index === 1 && choice?.data?.label === "Not now.", choice);
+  const turn = await result("npc.turn", { who: "a1", away_from: "v", hold: true });
+  check("npc: a held turn away, undone by turn off", turn?.undo?.params?.off === true, turn);
+  const stop = await result("npc.stop", { who: "a1" });
+  check("npc: stop answers no undo", stop?.undo === null, stop);
+  const hostile = await result("npc.spawn", { cast: "man_lowlife", at: { ahead_m: 5 }, attitude: "hostile", immortal: false, reactions: "game" });
+  check("npc: a hostile, mortal stand-in with the game's reactions", hostile?.record === "Character.xfs_actor_man_lowlife_reactive" && hostile?.immortal === false, hostile);
+  await waitEvent("npc.spawned", since, "a2");
+  await call("selftest.player", { busy: "in_combat" });
+  const back = await waitEvent("npc.handed_back", since, "a2");
+  const gone = await waitEvent("npc.auto_released", since, "a1");
+  check("npc: a fight hands the stand-in back and removes the friendly actor", back?.data?.reason === "combat" && gone?.data?.reason === "combat", { back, gone });
+  await call("selftest.player", { busy: "" });
+  await call("npc.release", { who: "all" });
+  since = await latestEvent();
+  const hidden = await result("npc.spawn", { cast: "woman_corpo", at: "out_of_sight" });
+  check("npc: an out-of-sight spawn lands behind V", hidden?.out_of_sight?.probes >= 1 && hidden.asked_at?.[1] < 189, hidden);
+  await waitEvent("npc.spawned", since, hidden?.who ?? "a3");
+  const dissolve = await result("npc.release", { who: hidden?.who ?? "a3", how: "dissolve", walk: false, distance_m: 5 });
+  check("npc: dissolve answers how and its distance", dissolve?.how === "dissolve" && dissolve?.distance_m === 5, dissolve);
+  check("npc: a dissolving actor behind V and 12 m away is removed at once", (await waitEvent("npc.dissolved", since, hidden?.who ?? "a3")) !== null);
+  since = await latestEvent();
+  await result("npc.spawn", { cast: "woman_corpo", at: { ahead_m: 3 } });
+  await waitEvent("npc.spawned", since, "a4");
+  const handed = await result("bridge.handover", { on: true, note: "self-test" });
+  check("npc: the handover releases every NPC in its own request", JSON.stringify(handed?.npcs_released?.released) === JSON.stringify(["a4"]), handed);
+  const refusedSpawn = await call("npc.spawn", { cast: "woman_corpo", at: { ahead_m: 3 } });
+  check("npc: npc writes are refused while handed over", !refusedSpawn.ok && refusedSpawn.error?.code === "handed_over", refusedSpawn.error);
+  await call("bridge.handover", { on: false });
+  since = await latestEvent();
+  await result("npc.spawn", { cast: "woman_corpo", at: { ahead_m: 3 } });
+  await waitEvent("npc.spawned", since, "a5");
+  await call("bridge.kill", {});
+  client.close();
+  check("npc: host exits after the kill", await waitExit(child, 3000));
+  check("npc: the kill switch's restore released the NPCs in one step", log.some((l) => l.includes("evt=bridge.kill_restored") && l.includes("npcs_released") && l.includes("a5")));
+  if (child.exitCode === null) child.kill();
+  rmSync(dir, { recursive: true, force: true });
+}
+
 console.log(failures === 0 ? `\nALL ${checks} CHECKS PASSED` : `\n${failures} OF ${checks} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

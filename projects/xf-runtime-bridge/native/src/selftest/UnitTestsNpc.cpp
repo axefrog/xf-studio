@@ -3,7 +3,9 @@
 // the undo each write answers with, and the tick: npc.spawned, arrival by distance or by the command's Success, a failed or
 // timed-out move stopped, a follow's limit, lines and gestures ending, the hub's answer, time-out and walk-away, the
 // automatic release on combat and a handover, a load dropping everything without a game call, walk_away, and the kill
-// switch's one-step release. Part of `xfb_selftest --unit`.
+// switch's one-step release; and the Story Engine's staging needs: stand-ins that can die and are hostile, handed back in a
+// fight (V15), the view test, an out-of-sight spawn and the dissolve release (V16), the write gate on the tick's forward
+// step and the handover's release in its own request (0.8.6's rules). Part of `xfb_selftest --unit`.
 
 #include <cmath>
 #include <cstdio>
@@ -62,6 +64,9 @@ struct Fake
     json v = json{{"phase", "gameplay"}, {"position", {0.0, 0.0, 0.0}}, {"yaw", 0.0}, {"busy", ""}};
     std::map<std::string, json> npcs; // who -> poll entry
     json hub = json{{"id", 0}, {"answer", -1}};
+    bool walkable = true;    // ground: every probe walkable at the asked point
+    bool rayBlocked = false; // ray: static geometry between every two points
+    int groundProbes = 0;
     n::Ops Ops()
     {
         n::Ops ops;
@@ -77,8 +82,8 @@ struct Fake
             calls.push_back("pick " + aWho);
             return json{{"record", "Character.CorpoWoman"}, {"position", {2.0, 2.0, 0.0}}};
         };
-        ops.spawn = [this](const std::string& aWho, const std::string& aRecord, const n::Vec3& aAt, double, const std::string&, bool) {
-            calls.push_back("spawn " + aWho + " " + aRecord);
+        ops.spawn = [this](const std::string& aWho, const std::string& aRecord, const n::Vec3& aAt, double, const std::string&, bool, int32_t aAttitude, bool aImmortal) {
+            calls.push_back("spawn " + aWho + " " + aRecord + " attitude=" + std::to_string(aAttitude) + (aImmortal ? " immortal" : " mortal"));
             npcs[aWho] = json{{"who", aWho}, {"exists", false}, {"spawned", false}, {"position", {aAt[0], aAt[1], aAt[2]}}};
             return json{{"entity", "E-" + aWho}, {"position", {aAt[0], aAt[1], aAt[2]}}};
         };
@@ -127,7 +132,16 @@ struct Fake
             {
                 list.push_back(entry);
             }
-            return json{{"v", v}, {"npcs", list}, {"hub", hub}};
+            return json{{"v", v}, {"camera", v.value("camera", json())}, {"npcs", list}, {"hub", hub}};
+        };
+        ops.ground = [this](const n::Vec3& aPoint) {
+            ++groundProbes;
+            calls.push_back("ground");
+            return walkable ? json{{"walkable", true}, {"streamed", true}, {"point", {aPoint[0], aPoint[1], aPoint[2]}}} : json{{"walkable", false}, {"streamed", true}};
+        };
+        ops.ray = [this](const n::Vec3&, const n::Vec3&) {
+            calls.push_back("ray");
+            return json{{"blocked", rayBlocked}};
         };
         return ops;
     }
@@ -447,6 +461,191 @@ void DirectorTests()
     service.Tick(0.01, handover, ops);
     Check("voice: a handover takes it down", fake.Called("hide  " + kept["line"].get<std::string>().substr(1)) && !service.Active());
 }
+// A first-person camera at V's eyes (V at the origin), level, looking along a yaw.
+json CameraAt(double aYaw, const n::Vec3& aAt = {0.0, 0.0, 0.0})
+{
+    const double r = aYaw * 3.14159265358979323846 / 180.0;
+    return json{{"position", {aAt[0], aAt[1], aAt[2] + 1.6}}, {"forward", {-std::sin(r), std::cos(r), 0.0}}, {"fov", 70.0}, {"aspect", 16.0 / 9.0}};
+}
+
+// The Story Engine's staging needs (V15, V16) and the 0.8.6 rules on the tick and the handover.
+void StagingTests()
+{
+    // The view test.
+    const auto camera = n::CameraFrom(json{{"camera", CameraAt(0.0)}});
+    Check("view: a camera is read with its forward normalised", camera.known && Near(camera.forward[1], 1.0));
+    Check("view: straight ahead is in view, behind isn't", n::InView(camera, {0, 10, 1.6}, 0) && !n::InView(camera, {0, -10, 1.6}, 0));
+    Check("view: far to the side isn't (84 degrees off), 27 degrees off is", !n::InView(camera, {10, 1, 1.6}, 0) && n::InView(camera, {5, 10, 1.6}, 0));
+    Check("view: an unknown camera sees everything", n::InView(n::Camera{}, {0, -10, 0}, 0) && !n::CameraFrom(json::object()).known);
+    const auto candidates = n::HiddenCandidates({0, 0, 0}, camera, 12, 25);
+    bool noneInView = !candidates.empty();
+    for (const auto& c : candidates)
+    {
+        noneInView = noneInView && !n::InView(camera, {c[0], c[1], c[2] + 1.0}, n::kViewMarginDeg);
+    }
+    Check("hidden spots: none in view, the first behind V at the nearest distance",
+          noneInView && candidates[0][1] < -11.9 && Near(n::HorizontalDistance(candidates[0], {0, 0, 0}), 12.0, 1e-6));
+    Check("reactions: a cast's game-reactions record, none for the research casts",
+          n::ReactiveRecord(*n::FindCast("woman_corpo")) == "Character.xfs_actor_woman_corpo_reactive" && n::ReactiveRecord(*n::FindCast("research_npc_base")).empty());
+
+    // V15: the spawn's stance.
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        Check("stance: an unknown attitude is refused",
+              CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}, {"attitude", "angry"}}, ops); }) == "bad_params");
+        Check("stance: the research casts have no game-reactions record",
+              CodeOf([&] { service.Spawn(json{{"cast", "research_npc_base"}, {"at", json{{"ahead_m", 3}}}, {"reactions", "game"}}, ops); }) == "bad_params");
+        const auto quiet = service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops);
+        Check("stance: today's default is friendly and immortal with quiet reactions",
+              quiet["attitude"] == "friendly" && quiet["immortal"] == true && quiet["reactions"] == "quiet" &&
+                  fake.Called("spawn a1 Character.xfs_actor_woman_corpo attitude=0 immortal") && !quiet.contains("stand_in_note"));
+        const auto standIn = service.Spawn(
+            json{{"cast", "man_lowlife"}, {"at", json{{"ahead_m", 4}}}, {"attitude", "hostile"}, {"immortal", false}, {"reactions", "game"}}, ops);
+        Check("stance: a hostile, mortal stand-in with the game's reactions",
+              standIn["attitude"] == "hostile" && standIn["immortal"] == false && standIn.contains("stand_in_note") &&
+                  fake.Called("spawn a2 Character.xfs_actor_man_lowlife_reactive attitude=2 mortal"));
+        fake.npcs["a1"]["exists"] = true;
+        fake.npcs["a1"]["spawned"] = true;
+        fake.npcs["a2"]["exists"] = true;
+        fake.npcs["a2"]["spawned"] = true;
+        Poll(service, fake, ops);
+        service.Look(json{{"who", "a2"}, {"at", "v"}}, ops);
+        fake.v["busy"] = "in_combat";
+        fake.calls.clear();
+        Poll(service, fake, ops);
+        const auto back = Events(log, "npc.handed_back");
+        Check("a fight: the stand-in is handed back (its look given back, not removed), the friendly actor released",
+              back.size() == 1 && back[0]["data"]["who"] == "a2" && fake.Called("look a2 off") && !fake.Called("release a2") && fake.Called("release a1 despawn"));
+        Poll(service, fake, ops);
+        Check("a fight: handed back once, still watched", Events(log, "npc.handed_back").size() == 1 && service.Status(json::object())["npcs"][0]["handed_back"] == true);
+        fake.v["busy"] = "";
+        Check("after the fight: a handed-back actor isn't directed", CodeOf([&] { service.Move(json{{"who", "a2"}, {"to", "v"}}, ops); }) == "npc_handed_back");
+        fake.npcs["a2"]["dead"] = true;
+        Poll(service, fake, ops);
+        const auto died = Events(log, "npc.died");
+        Check("a mortal actor's death: npc.died with its body kept",
+              died.size() == 1 && died[0]["data"]["kept_body"] == true && service.Status(json::object())["npcs"][0]["dead"] == true);
+        Poll(service, fake, ops);
+        Check("a body: npc.died once; lines refused npc_dead",
+              Events(log, "npc.died").size() == 1 && CodeOf([&] { service.Say(json{{"who", "a2"}, {"text", "Hi."}}, ops); }) == "npc_dead");
+        service.Release(json{{"who", "a2"}}, ops);
+        Check("a body: released by npc_release", !service.Active());
+    }
+
+    // V16: an out-of-sight spawn.
+    {
+        n::Service service;
+        Fake fake;
+        const auto ops = fake.Ops();
+        Check("out of sight: min_m only with out_of_sight",
+              CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}, {"min_m", 5}}, ops); }) == "bad_params");
+        Check("out of sight: no camera, no spot (no_hidden_spot)", CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", "out_of_sight"}}, ops); }) == "no_hidden_spot");
+        fake.v["camera"] = CameraAt(0.0);
+        const auto hidden = service.Spawn(json{{"cast", "woman_corpo"}, {"at", "out_of_sight"}}, ops);
+        const auto at = hidden["asked_at"];
+        Check("out of sight: behind V, 12 m away, out of view, after one probe",
+              at[1].get<double>() < -11.9 && hidden["out_of_sight"]["probes"] == 1 &&
+                  !n::InView(n::CameraFrom(fake.v), {at[0].get<double>(), at[1].get<double>(), 1.6}, 0));
+        fake.walkable = false;
+        fake.groundProbes = 0;
+        Check("out of sight: no walkable ground refuses no_hidden_spot after a bounded search",
+              CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", "out_of_sight"}, {"min_m", 10}, {"max_m", 20}}, ops); }) == "no_hidden_spot" &&
+                  fake.groundProbes > 0 && fake.groundProbes <= static_cast<int>(n::kMaxHiddenProbes));
+    }
+
+    // V16: dissolve.
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        fake.v["camera"] = CameraAt(0.0);
+        service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops);
+        fake.npcs["a1"]["exists"] = true;
+        fake.npcs["a1"]["spawned"] = true;
+        Poll(service, fake, ops);
+        service.Face(json{{"who", "a1"}, {"expression", "joy"}}, ops);
+        Check("dissolve: walk and distance_m only with dissolve", CodeOf([&] { service.Release(json{{"who", "a1"}, {"walk", false}}, ops); }) == "bad_params");
+        fake.calls.clear();
+        const auto out = service.Release(json{{"who", "a1"}, {"how", "dissolve"}}, ops);
+        Check("dissolve: what it holds given back, a walk 20 m from V",
+              fake.Called("face a1 0/0") && fake.Called("command a1 move") && Near(out["to"][1].get<double>(), 20.0, 1e-6));
+        fake.npcs["a1"]["position"] = {0.0, 10.0, 0.0};
+        fake.npcs["a1"]["command_state"] = "Executing";
+        Poll(service, fake, ops);
+        Check("dissolve: not while V can see it", service.Active() && Events(log, "npc.released").empty());
+        fake.npcs["a1"]["position"] = {0.0, 19.0, 0.0};
+        fake.calls.clear();
+        Poll(service, fake, ops);
+        Check("dissolve: the walk off ends; still in sight, so it waits there", fake.Called("command a1 stop") && service.Active());
+        fake.rayBlocked = true;
+        Poll(service, fake, ops);
+        const auto released = Events(log, "npc.released");
+        Check("dissolve: gone once a wall hides it (npc.released how dissolve, npc.dissolved)",
+              !service.Active() && released.size() == 1 && released[0]["data"]["how"] == "dissolve" && Events(log, "npc.dissolved").size() == 1);
+        // Without the walk: it stays until V walks away with her back to it.
+        fake.rayBlocked = false;
+        service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops);
+        fake.npcs["a2"]["exists"] = true;
+        fake.npcs["a2"]["spawned"] = true;
+        Poll(service, fake, ops);
+        fake.calls.clear();
+        service.Release(json{{"who", "a2"}, {"how", "dissolve"}, {"walk", false}}, ops);
+        Check("dissolve, no walk: no move", !fake.Called("command a2 move"));
+        fake.v["camera"] = CameraAt(180.0);
+        Poll(service, fake, ops);
+        Check("dissolve, no walk: out of view but only 3 m from V: kept", service.Active());
+        fake.v["position"] = {0.0, -20.0, 0.0};
+        fake.v["camera"] = CameraAt(180.0, {0.0, -20.0, 0.0});
+        Poll(service, fake, ops);
+        Check("dissolve, no walk: V walked away with her back to it: gone", !service.Active());
+    }
+
+    // The tick's forward step and the write gate (RB-122); the handover's own release.
+    {
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 4}}}}, ops);
+        fake.npcs["a1"]["exists"] = true;
+        fake.npcs["a1"]["spawned"] = true;
+        fake.npcs["a1"]["position"] = {0.0, 4.0, 0.0};
+        fake.npcs["a1"]["yaw"] = 180.0;
+        Poll(service, fake, ops);
+        service.Turn(json{{"who", "a1"}, {"to", "v"}, {"hold", true}}, ops);
+        fake.npcs["a1"]["command_state"] = "Success";
+        Poll(service, fake, ops);
+        fake.v["position"] = {6.0, 4.0, 0.0}; // V walks round to its side: the held facing would turn it
+        fake.npcs["a1"]["command_state"] = "NotExecuting";
+        n::TickInput closed;
+        closed.writesOpen = [] { return false; };
+        fake.calls.clear();
+        service.Tick(1.1, closed, ops);
+        Check("the gate closed: a held facing's re-turn isn't sent", !fake.Called("command a1 turn") && service.Active());
+        n::TickInput open;
+        open.writesOpen = [] { return true; };
+        service.Tick(1.1, open, ops);
+        Check("the gate open: the re-turn goes", fake.Called("command a1 turn"));
+        service.Say(json{{"speaker", "A voice"}, {"text", "Over here."}, {"seconds", 10}}, ops);
+        fake.npcs["a1"]["position"] = {0.0, 1.5, 0.0};
+        fake.v["position"] = {0.0, 0.0, 0.0};
+        Poll(service, fake, ops);
+        service.Choices(json{{"who", "a1"}, {"choices", json::array({"Yes.", "No."})}}, ops);
+        fake.calls.clear();
+        const auto handover = service.ReleaseAllNow("handover", ops);
+        Check("the handover: everything released in its own step (actor, hub, voice line)",
+              handover["released"] == json::array({"a1"}) && handover["hub_withdrawn"] == true && handover["voice_lines_hidden"] == 1 && !service.Active() &&
+                  fake.Called("release a1 despawn") && Events(log, "npc.auto_released").back()["data"]["reason"] == "handover");
+        Check("the handover: nothing held, nothing to do", service.ReleaseAllNow("handover", ops)["released"].empty());
+    }
+}
 } // namespace
 
 int RunNpcUnitTests()
@@ -457,5 +656,6 @@ int RunNpcUnitTests()
     TickTests();
     ReleaseTests();
     DirectorTests();
+    StagingTests();
     return gNpcFailures;
 }

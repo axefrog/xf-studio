@@ -147,6 +147,11 @@ const std::vector<Cast>& Casts()
     return casts;
 }
 
+std::string ReactiveRecord(const Cast& aCast)
+{
+    return aCast.research ? std::string() : aCast.record + "_reactive";
+}
+
 const Cast* FindCast(const std::string& aName)
 {
     for (const auto& cast : Casts())
@@ -192,9 +197,10 @@ const std::vector<std::string>& VoiceTriggers()
 
 const std::vector<Gesture>& Gestures()
 {
-    // Vanilla standing clips that exist under the same name for woman_average and man_average: found in AMM's workspot
-    // catalogue (its db.sqlite3 table workspots) and confirmed in the game's own animsets, which tools/npc/gesture-carrier.ts
-    // lists per rig [resource]; seconds are estimates until session 9 (N11) [hypothesis].
+    // Vanilla standing clips listed under the same name for both the Woman Average and the Man Average rig in AMM's workspot
+    // catalogue (its db.sqlite3, table workspots, columns anim_name and anim_rig; clone 1.8.4-167-g5427235) [resource]. The
+    // XF gesture carrier that would play them isn't built yet, so npc.act answers carrier_missing in the game; the seconds
+    // are estimates until it is (N11) [hypothesis].
     static const std::vector<Gesture> gestures{
         {"talk", "stand__2h_on_sides__01__talk__neutral__02", "stand__2h_on_sides__01__talk__neutral__02", 4.0},
         {"talk_hips", "stand__2h_on_hip__01__talk__neutral__01", "stand__2h_on_hip__01__talk__neutral__01", 4.0},
@@ -253,6 +259,99 @@ double YawDifference(double aA, double aB)
         d += 360.0;
     }
     return d;
+}
+
+Camera CameraFrom(const json& aReading)
+{
+    Camera out;
+    const auto it = aReading.find("camera");
+    if (it == aReading.end() || !it->is_object() || !it->contains("position") || !it->contains("forward"))
+    {
+        return out;
+    }
+    out.position = ToVec((*it)["position"]);
+    out.forward = ToVec((*it)["forward"]);
+    const double length = std::sqrt(out.forward[0] * out.forward[0] + out.forward[1] * out.forward[1] + out.forward[2] * out.forward[2]);
+    if (length < 1e-6)
+    {
+        return Camera{};
+    }
+    for (auto& c : out.forward)
+    {
+        c /= length;
+    }
+    const auto fov = it->value("fov", 60.0);
+    out.fov = std::isfinite(fov) && fov >= 10.0 && fov <= 170.0 ? fov : 60.0;
+    const auto aspect = it->value("aspect", 16.0 / 9.0);
+    out.aspect = std::isfinite(aspect) && aspect >= 0.5 && aspect <= 5.0 ? aspect : 16.0 / 9.0;
+    out.known = true;
+    return out;
+}
+
+bool InView(const Camera& aCamera, const Vec3& aPoint, double aMarginDeg)
+{
+    if (!aCamera.known)
+    {
+        return true;
+    }
+    const auto& f = aCamera.forward;
+    const Vec3 d{aPoint[0] - aCamera.position[0], aPoint[1] - aCamera.position[1], aPoint[2] - aCamera.position[2]};
+    const double depth = d[0] * f[0] + d[1] * f[1] + d[2] * f[2];
+    if (std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) < 0.3)
+    {
+        return true; // at the camera itself
+    }
+    if (depth <= 0.0)
+    {
+        return false; // behind the camera
+    }
+    // Right: forward x up (Z up), so yaw 0 (facing +Y) has right +X; up: right x forward.
+    double rx = f[1], ry = -f[0];
+    const double rl = std::sqrt(rx * rx + ry * ry);
+    if (rl < 1e-6)
+    {
+        rx = 1.0; // looking straight up or down
+        ry = 0.0;
+    }
+    else
+    {
+        rx /= rl;
+        ry /= rl;
+    }
+    const Vec3 r{rx, ry, 0.0};
+    const Vec3 u{r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]};
+    const double x = d[0] * r[0] + d[1] * r[1] + d[2] * r[2];
+    const double y = d[0] * u[0] + d[1] * u[1] + d[2] * u[2];
+    const double half = aCamera.fov * kPi / 360.0;
+    const double hHalf = std::max(half, std::atan(std::tan(half) * aCamera.aspect));
+    const double vHalf = std::max(half, std::atan(std::tan(half) / aCamera.aspect));
+    const double margin = aMarginDeg * kPi / 180.0;
+    return std::atan2(std::abs(x), depth) <= hHalf + margin && std::atan2(std::abs(y), depth) <= vHalf + margin;
+}
+
+std::vector<Vec3> HiddenCandidates(const Vec3& aV, const Camera& aCamera, double aMin, double aMax)
+{
+    std::vector<Vec3> out;
+    if (!aCamera.known)
+    {
+        return out;
+    }
+    const double cameraYaw = YawTowards(aCamera.forward[0], aCamera.forward[1]);
+    const double offsets[] = {180.0, 150.0, -150.0, 120.0, -120.0, 90.0, -90.0, 60.0, -60.0};
+    const double distances[] = {aMin, (aMin + aMax) / 2.0, aMax};
+    for (const double distance : distances)
+    {
+        for (const double offset : offsets)
+        {
+            const auto point = OffsetPoint(aV, cameraYaw + offset, distance, 0.0);
+            const Vec3 chest{point[0], point[1], point[2] + 1.0};
+            if (!InView(aCamera, chest, kViewMarginDeg))
+            {
+                out.push_back(point);
+            }
+        }
+    }
+    return out;
 }
 
 // --- targets -----------------------------------------------------------------------------------------
@@ -373,7 +472,7 @@ void RequireKnown(const std::string& aMethod, const json& aParams)
         {"npc.list", {"radius_m", "max"}},
         {"npc.pick", {"id"}},
         {"npc.status", {}},
-        {"npc.spawn", {"cast", "at", "face", "appearance", "variant", "out_of_view", "label"}},
+        {"npc.spawn", {"cast", "at", "face", "appearance", "variant", "out_of_view", "label", "attitude", "immortal", "reactions", "min_m", "max_m"}},
         {"npc.move", {"who", "to", "gait", "stop_m", "face_v", "max_s"}},
         {"npc.follow", {"who", "target", "distance_m", "gait", "max_s"}},
         {"npc.turn", {"who", "to", "away_from", "hold", "off"}},
@@ -384,7 +483,7 @@ void RequireKnown(const std::string& aMethod, const json& aParams)
         {"npc.face", {"who", "expression", "off"}},
         {"npc.act", {"who", "gesture", "off", "seconds"}},
         {"npc.choices", {"who", "title", "choices", "max_s", "withdraw"}},
-        {"npc.release", {"who", "how"}},
+        {"npc.release", {"who", "how", "walk", "distance_m"}},
     };
     const auto it = known.find(aMethod);
     if (it == known.end())
@@ -463,6 +562,95 @@ Service::Npc& Service::Ours(const std::string& aWho, bool aActorOnly)
         throw MethodError("not_ours", aWho + " is someone else's NPC (picked): the bridge only looks, sets a face and speaks for it; moving and gestures are for actors from npc_spawn");
     }
     return it->second;
+}
+
+void Service::RequireDirected(const Npc& aNpc)
+{
+    if (aNpc.deadKept)
+    {
+        throw MethodError("npc_dead", aNpc.who + " is dead; its body stays until npc_release (despawn, or dissolve once V can't see it)");
+    }
+    if (aNpc.handedBack)
+    {
+        throw MethodError("npc_handed_back", aNpc.who + " was handed back to its own AI when the fight began; the bridge no longer directs it (npc_release removes it)");
+    }
+}
+
+bool Service::OutOfSight(const Camera& aCamera, const Vec3& aPoint, const Ops& aOps) const
+{
+    const Vec3 head{aPoint[0], aPoint[1], aPoint[2] + 1.6};
+    const Vec3 feet{aPoint[0], aPoint[1], aPoint[2] + 0.3};
+    if (!aCamera.known)
+    {
+        return false;
+    }
+    if (!InView(aCamera, head, kViewMarginDeg) && !InView(aCamera, feet, kViewMarginDeg))
+    {
+        return true;
+    }
+    if (!aOps.ray)
+    {
+        return false;
+    }
+    // In the view's cone: hidden only when static geometry stands between the camera and both its head and its feet.
+    try
+    {
+        return aOps.ray(aCamera.position, head).value("blocked", false) && aOps.ray(aCamera.position, feet).value("blocked", false);
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
+
+json Service::FindHiddenSpot(const json& aV, double aMin, double aMax, const Ops& aOps) const
+{
+    const auto camera = CameraFrom(aV);
+    if (!camera.known)
+    {
+        throw MethodError("no_hidden_spot", "the game didn't report V's camera, so the bridge can't tell what she sees; give at instead");
+    }
+    if (!aOps.ground)
+    {
+        throw MethodError("no_hidden_spot", "this build can't probe the ground for a hidden spot; give at instead");
+    }
+    const auto vPos = ToVec(aV.value("position", json::array({0, 0, 0})));
+    size_t probes = 0;
+    for (const auto& candidate : HiddenCandidates(vPos, camera, aMin, aMax))
+    {
+        if (probes >= kMaxHiddenProbes)
+        {
+            break;
+        }
+        ++probes;
+        json ground;
+        try
+        {
+            ground = aOps.ground(candidate);
+        }
+        catch (const std::exception&)
+        {
+            continue;
+        }
+        if (!ground.value("walkable", false) || !ground.contains("point"))
+        {
+            continue;
+        }
+        const auto point = ToVec(ground["point"]);
+        const double d = Distance(point, vPos);
+        if (d > kMaxRangeM || HorizontalDistance(point, vPos) < aMin - 1.0)
+        {
+            continue;
+        }
+        if (!OutOfSight(camera, point, aOps))
+        {
+            continue;
+        }
+        return json{{"point", json::array({point[0], point[1], point[2]})}, {"probes", probes}, {"distance_v", std::round(d * 100) / 100}};
+    }
+    throw MethodError("no_hidden_spot", "no walkable spot out of V's sight between " + std::to_string(static_cast<int>(aMin)) + " and " +
+                                            std::to_string(static_cast<int>(aMax)) + " m from her (" + std::to_string(probes) +
+                                            " tried); turn V towards a wall or open ground, or give at instead");
 }
 
 Vec3 Service::Resolve(const Target& aTarget, const json& aV) const
@@ -590,6 +778,14 @@ json Service::NpcJson(const Npc& aNpc) const
     {
         out["cast"] = aNpc.cast;
     }
+    if (aNpc.kind == "actor")
+    {
+        out["attitude"] = aNpc.attitude;
+        out["immortal"] = aNpc.immortal;
+        out["reactions"] = aNpc.reactions;
+        out["handed_back"] = aNpc.handedBack;
+        out["dead"] = aNpc.deadKept;
+    }
     if (aNpc.known)
     {
         out["position"] = json::array({aNpc.position[0], aNpc.position[1], aNpc.position[2]});
@@ -665,12 +861,45 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     }
     if (!aParams.contains("at"))
     {
-        Bad("'at' is required: [x, y, z] or {ahead_m, side_m} from V");
+        Bad("'at' is required: [x, y, z], {ahead_m, side_m} from V, or \"out_of_sight\"");
     }
-    const auto at = ParseTarget(aParams["at"], "at", true);
-    if (at.kind != Target::Kind::Point && at.kind != Target::Kind::Offset)
+    // V16: "out_of_sight" lets the bridge find a walkable spot V can't see, min_m to max_m from her.
+    const bool hidden = aParams["at"].is_string() && aParams["at"].get<std::string>() == "out_of_sight";
+    Target at;
+    if (!hidden)
     {
-        Bad("'at' must be [x, y, z] or {ahead_m, side_m} from V");
+        at = ParseTarget(aParams["at"], "at", true);
+        if (at.kind != Target::Kind::Point && at.kind != Target::Kind::Offset)
+        {
+            Bad("'at' must be [x, y, z], {ahead_m, side_m} from V, or \"out_of_sight\"");
+        }
+        if (aParams.contains("min_m") || aParams.contains("max_m"))
+        {
+            Bad("min_m and max_m go with at: \"out_of_sight\"");
+        }
+    }
+    const double minM = params::CheckNumber(aParams, "min_m", 3.0, kMaxRangeM).value_or(kHiddenMinM);
+    const double maxM = params::CheckNumber(aParams, "max_m", 3.0, kMaxRangeM).value_or(std::max(kHiddenMaxM, minM));
+    if (maxM < minM)
+    {
+        Bad("max_m must be at least min_m");
+    }
+    // V15: how it stands towards V, whether it can be killed, and whose reactions it has.
+    const auto attitude = params::CheckText(aParams, "attitude", 16).value_or("friendly");
+    if (attitude != "friendly" && attitude != "neutral" && attitude != "hostile")
+    {
+        Bad("'attitude' must be friendly (the default), neutral or hostile");
+    }
+    const bool immortal = params::CheckBoolean(aParams, "immortal").value_or(true);
+    const auto reactions = params::CheckText(aParams, "reactions", 16).value_or("quiet");
+    if (reactions != "quiet" && reactions != "game")
+    {
+        Bad("'reactions' must be quiet (the default: no crime or panic reactions) or game (the civilian's own)");
+    }
+    const auto record = reactions == "game" ? ReactiveRecord(*cast) : cast->record;
+    if (record.empty())
+    {
+        Bad("the research casts have no record with the game's reactions; use reactions quiet");
     }
     Target face;
     face.kind = Target::Kind::V;
@@ -695,42 +924,65 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
             appearance = "random";
         }
     }
-    const bool outOfView = params::CheckBoolean(aParams, "out_of_view").value_or(false);
+    const bool outOfView = params::CheckBoolean(aParams, "out_of_view").value_or(hidden);
     const auto label = params::CheckText(aParams, "label", kMaxTitleChars).value_or(cast->label);
     const auto v = RequireV(aOps);
-    std::string who;
-    Vec3 point{};
-    double yaw = 0.0;
     {
         std::scoped_lock _(m_mutex);
         if (ActorCount() >= kMaxActors)
         {
             throw MethodError("limit", "the bridge has " + std::to_string(kMaxActors) + " actors out already; npc_release one first");
         }
+    }
+    json hiddenSpot = nullptr;
+    if (hidden)
+    {
+        hiddenSpot = FindHiddenSpot(v, minM, maxM, aOps);
+        at.kind = Target::Kind::Point;
+        at.point = ToVec(hiddenSpot["point"]);
+    }
+    std::string who;
+    Vec3 point{};
+    double yaw = 0.0;
+    {
+        std::scoped_lock _(m_mutex);
         point = Resolve(at, v);
         CheckRange(point, v);
         const auto facing = Resolve(face, v);
         yaw = YawTowards(facing[0] - point[0], facing[1] - point[1]);
         who = "a" + std::to_string(m_nextActor);
     }
-    auto step = aOps.spawn(who, cast->record, point, yaw, appearance, outOfView);
+    const int32_t attitudeCode = attitude == "hostile" ? 2 : attitude == "neutral" ? 1 : 0;
+    auto step = aOps.spawn(who, record, point, yaw, appearance, outOfView, attitudeCode, immortal);
     std::scoped_lock _(m_mutex);
     ++m_nextActor;
     Npc npc;
     npc.who = who;
     npc.kind = "actor";
     npc.cast = cast->name;
-    npc.record = cast->record;
+    npc.record = record;
     npc.rig = cast->rig;
     npc.label = label;
+    npc.attitude = attitude;
+    npc.immortal = immortal;
+    npc.reactions = reactions;
     npc.entity = step.value("entity", std::string());
     if (step.contains("position"))
     {
         npc.position = ToVec(step["position"]); // where it will appear; known (a target, a distance) once it has
     }
     m_npcs[who] = npc;
-    json out{{"who", who}, {"cast", cast->name}, {"record", cast->record}, {"appearance", appearance}, {"entity", npc.entity}, {"asked_at", json::array({point[0], point[1], point[2]})},
-             {"yaw", yaw}, {"spawning", true}};
+    json out{{"who", who},       {"cast", cast->name},   {"record", record},     {"appearance", appearance}, {"entity", npc.entity},
+             {"asked_at", json::array({point[0], point[1], point[2]})}, {"yaw", yaw}, {"spawning", true}, {"attitude", attitude},
+             {"immortal", immortal}, {"reactions", reactions}};
+    if (!hiddenSpot.is_null())
+    {
+        out["out_of_sight"] = hiddenSpot;
+    }
+    if (npc.StandsIn())
+    {
+        out["stand_in_note"] = "a stand-in: if a fight begins the bridge stops directing it and its own AI takes over (npc.handed_back); if it dies its body stays until npc_release";
+    }
     if (step.contains("position"))
     {
         out["position"] = step["position"];
@@ -769,6 +1021,7 @@ json Service::Move(const json& aParams, const Ops& aOps)
     {
         std::scoped_lock _(m_mutex);
         auto& npc = Ours(who, true);
+        RequireDirected(npc);
         if (!npc.releasing.empty())
         {
             throw MethodError("npc_releasing", who + " is walking away to be released");
@@ -820,6 +1073,7 @@ json Service::Follow(const json& aParams, const Ops& aOps)
     {
         std::scoped_lock _(m_mutex);
         auto& npc = Ours(who, true);
+        RequireDirected(npc);
         if (!npc.releasing.empty())
         {
             throw MethodError("npc_releasing", who + " is walking away to be released");
@@ -873,6 +1127,7 @@ json Service::Turn(const json& aParams, const Ops& aOps)
     {
         std::scoped_lock _(m_mutex);
         auto& npc = Ours(who, true);
+        RequireDirected(npc);
         const auto there = Resolve(target, v);
         // The point to turn to: the target itself, or (away) the point opposite it, so the rotation doesn't depend on the
         // command's angleOffset semantics [hypothesis for angleOffset].
@@ -931,7 +1186,7 @@ json Service::Place(const json& aParams, const Ops& aOps)
     const auto v = RequireV(aOps);
     {
         std::scoped_lock _(m_mutex);
-        Ours(who, true);
+        RequireDirected(Ours(who, true));
         CheckRange(*at, v);
     }
     auto step = aOps.command(who, command);
@@ -1094,6 +1349,7 @@ json Service::Say(const json& aParams, const Ops& aOps)
         else
         {
             auto& npc = Ours(who, false);
+            RequireDirected(npc);
             line.speaker = speakerParam ? CleanMessageText(*speakerParam, kMaxTitleChars) : npc.label.empty() ? "Stranger" : npc.label;
         }
         line.number = m_nextLine;
@@ -1153,6 +1409,10 @@ json Service::Look(const json& aParams, const Ops& aOps)
     {
         std::scoped_lock _(m_mutex);
         auto& npc = Ours(who, false);
+        if (!off)
+        {
+            RequireDirected(npc);
+        }
         before = npc.look;
         if (at.kind == Target::Kind::Who)
         {
@@ -1208,7 +1468,12 @@ json Service::Face(const json& aParams, const Ops& aOps)
     std::string before;
     {
         std::scoped_lock _(m_mutex);
-        before = Ours(who, false).face;
+        auto& npc = Ours(who, false);
+        if (!off)
+        {
+            RequireDirected(npc);
+        }
+        before = npc.face;
     }
     aOps.face(who, off ? 0 : expression->category, off ? 0 : expression->idle);
     std::scoped_lock _(m_mutex);
@@ -1245,6 +1510,10 @@ json Service::Act(const json& aParams, const Ops& aOps)
     {
         std::scoped_lock _(m_mutex);
         auto& npc = Ours(who, true);
+        if (!off)
+        {
+            RequireDirected(npc);
+        }
         if (!off)
         {
             if (npc.motion && npc.motion->kind != "turn")
@@ -1338,6 +1607,7 @@ json Service::Choices(const json& aParams, const Ops& aOps)
             throw MethodError("one_hub_at_a_time", "hub " + std::to_string(m_hub->hub.id) + " is still showing; wait for its npc.choice or withdraw it");
         }
         auto& npc = Ours(who, false);
+        RequireDirected(npc);
         hub.title = CleanMessageText(params::CheckText(aParams, "title", kMaxTitleChars * 4).value_or(npc.label.empty() ? "Stranger" : npc.label), kMaxTitleChars);
         if (npc.known)
         {
@@ -1447,9 +1717,13 @@ json Service::Release(const json& aParams, const Ops& aOps)
     RequireKnown("npc.release", aParams);
     const auto who = RequireWho(aParams, true);
     const auto how = params::CheckText(aParams, "how", 16);
-    if (how && *how != "despawn" && *how != "walk_away" && *how != "leave")
+    if (how && *how != "despawn" && *how != "walk_away" && *how != "leave" && *how != "dissolve")
     {
-        Bad("'how' must be despawn, walk_away or leave");
+        Bad("'how' must be despawn, walk_away, dissolve or leave");
+    }
+    if ((aParams.contains("walk") || aParams.contains("distance_m")) && how.value_or("") != "dissolve")
+    {
+        Bad("walk and distance_m go with how: dissolve");
     }
     if (who == "all")
     {
@@ -1495,7 +1769,68 @@ json Service::Release(const json& aParams, const Ops& aOps)
     }
     if (kind == "actor" && chosen == "leave")
     {
-        Bad(who + " is an XF actor: release it with how: despawn or walk_away");
+        Bad(who + " is an XF actor: release it with how: despawn, walk_away or dissolve");
+    }
+    if (chosen == "dissolve")
+    {
+        // V16: stop directing it now, walk it off (walk, the default) and despawn it only once V can't see it and it is at least
+        // distance_m from her; with walk false it stays where it is until V walks away. No time limit: release it again with
+        // despawn to remove it at once.
+        const bool walk = params::CheckBoolean(aParams, "walk").value_or(true);
+        const double distance = params::CheckNumber(aParams, "distance_m", 5.0, kMaxRangeM).value_or(kDissolveM);
+        json v;
+        try
+        {
+            v = aOps.v();
+        }
+        catch (const std::exception&)
+        {
+        }
+        std::scoped_lock _(m_mutex);
+        auto& npc = Ours(who, true);
+        if (npc.releasing == "dissolve")
+        {
+            return json{{"who", who}, {"how", "dissolve"}, {"already", true}, {"undo", nullptr}};
+        }
+        StopHeld(npc, aOps, false);
+        npc.facing.reset();
+        npc.releasing = "dissolve";
+        npc.dissolveM = distance;
+        npc.dissolveAge = 0.0;
+        json out{{"who", who}, {"how", "dissolve"}, {"walk", walk}, {"distance_m", distance}};
+        if (walk && !npc.handedBack && !npc.deadKept)
+        {
+            const auto vPos = ToVec(v.value("position", json::array({0, 0, 0})));
+            const double d = HorizontalDistance(npc.position, vPos);
+            Vec3 away = npc.known && d > 0.1
+                            ? Vec3{vPos[0] + (npc.position[0] - vPos[0]) * (kDissolveWalkM / d), vPos[1] + (npc.position[1] - vPos[1]) * (kDissolveWalkM / d), npc.position[2]}
+                            : OffsetPoint(npc.position, v.value("yaw", 0.0), kDissolveWalkM, 0.0);
+            Command command;
+            command.kind = "move";
+            command.target.kind = Target::Kind::Point;
+            command.target.point = away;
+            command.distance = 1.0;
+            try
+            {
+                aOps.command(who, command);
+                Motion motion;
+                motion.kind = "walk_away";
+                motion.target = command.target;
+                motion.point = away;
+                motion.stopM = 1.5;
+                motion.maxS = kWalkAwayMaxS * 3;
+                npc.motion = motion;
+                out["to"] = json::array({away[0], away[1], away[2]});
+            }
+            catch (const std::exception&)
+            {
+                out["walk"] = false;
+                out["note"] = "it couldn't walk off (no path), so it waits where it is until V can't see it";
+            }
+        }
+        out["undo"] = nullptr;
+        out["undo_note"] = "nothing to undo: npc.released follows once V can't see it and it is far enough from her; npc_release with despawn removes it at once";
+        return out;
     }
     if (chosen == "walk_away")
     {
@@ -1591,8 +1926,18 @@ void Service::ReleaseEverything(const std::string& aReason, const Ops& aOps)
     std::vector<std::string> whos;
     {
         std::scoped_lock _(m_mutex);
-        for (const auto& [who, npc] : m_npcs)
+        for (auto& [who, npc] : m_npcs)
         {
+            // V15: a fight hands stand-ins back to their own AI (once) instead of removing them; they stay until released, the
+            // kill switch, a handover or a load.
+            if (aReason == "combat" && npc.StandsIn())
+            {
+                if (!npc.handedBack)
+                {
+                    HandBack(npc, aReason, aOps);
+                }
+                continue;
+            }
             whos.push_back(who);
         }
     }
@@ -1613,6 +1958,57 @@ void Service::ReleaseEverything(const std::string& aReason, const Ops& aOps)
         Emit("npc.choice", "info", "The dialogue choices were withdrawn", {{"who", m_hub->hub.who}, {"hub", m_hub->hub.id}, {"withdrawn", true}, {"reason", aReason}});
         m_hub.reset();
     }
+}
+
+void Service::HandBack(Npc& aNpc, const std::string& aReason, const Ops& aOps)
+{
+    // Called with the mutex held. What the bridge holds on it is given back (a put-back step), its walk cancelled so its own AI
+    // decides; the actor itself stays.
+    RestoreScope restoring;
+    const auto done = StopHeld(aNpc, aOps, false);
+    aNpc.facing.reset();
+    aNpc.handedBack = true;
+    if (aNpc.releasing == "walk_away")
+    {
+        aNpc.releasing.clear(); // a walk off for the release is over; it fights or flees now
+    }
+    Emit("npc.handed_back", "warn", aNpc.who + " was handed back to its own AI (" + aReason + ")",
+         {{"who", aNpc.who}, {"reason", aReason}, {"attitude", aNpc.attitude}, {"immortal", aNpc.immortal}, {"given_back", done}});
+}
+
+void Service::NoteHandoverRelease()
+{
+    std::scoped_lock _(m_mutex);
+    if (m_handoverDone.is_null())
+    {
+        m_handoverDone = json{{"released", json::array()}, {"hub_withdrawn", false}, {"voice_lines_hidden", 0}};
+    }
+    for (const auto& [who, npc] : m_npcs)
+    {
+        m_handoverDone["released"].push_back(who);
+    }
+    if (m_hub)
+    {
+        m_handoverDone["hub_withdrawn"] = true;
+    }
+    m_handoverDone["voice_lines_hidden"] = m_handoverDone["voice_lines_hidden"].get<size_t>() + m_voice.size();
+}
+
+json Service::ReleaseAllNow(const std::string& aReason, const Ops& aOps)
+{
+    // The tick may have seen the handover's flag first and released already (its safety net): the answer says what this
+    // handover released either way.
+    if (Active())
+    {
+        RestoreScope restoring;
+        NoteHandoverRelease();
+        // A handover takes the voice lines down too, and keeps no stand-in (only a fight hands them back).
+        ReleaseEverything(aReason, aOps);
+    }
+    std::scoped_lock _(m_mutex);
+    json out = m_handoverDone.is_null() ? json{{"released", json::array()}, {"hub_withdrawn", false}, {"voice_lines_hidden", 0}} : m_handoverDone;
+    m_handoverDone = nullptr;
+    return out;
 }
 
 bool Service::Active() const
@@ -1704,12 +2100,24 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
         DropAll("load");
         return;
     }
+    if (!aInput.handedOver)
+    {
+        std::scoped_lock _(m_mutex);
+        m_handoverDone = nullptr; // what a handover's tick released is reported by that handover only
+    }
     if (aInput.killed || !aInput.gateOpen || !Active())
     {
         return; // the kill switch's restore releases; a closed gate waits
     }
+    // Every game step the tick takes from here puts something back (a line hidden, a gesture ended, a hub withdrawn, a walk
+    // stopped, a release), except a held facing's re-turn, which checks the write gate itself (TickInput::writesOpen).
+    RestoreScope restoring;
     if (aInput.handedOver || aInput.paused)
     {
+        if (aInput.handedOver)
+        {
+            NoteHandoverRelease();
+        }
         ReleaseEverything(aInput.handedOver ? "handover" : "paused", aOps);
         return;
     }
@@ -1750,6 +2158,10 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
             if (!npc.spawned)
             {
                 npc.sinceSpawn += aDt;
+            }
+            if (npc.releasing == "dissolve")
+            {
+                npc.dissolveAge += aDt;
             }
         }
         for (auto& line : m_voice)
@@ -1886,20 +2298,25 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
     {
         return; // the next poll tries again
     }
-    OnPoll(reading, aOps);
+    OnPoll(reading, aOps, aInput);
 }
 
-void Service::OnPoll(const json& aReading, const Ops& aOps)
+void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aInput)
 {
+    const auto camera = CameraFrom(aReading);
     const auto v = aReading.value("v", json::object());
     const auto vPos = ToVec(v.value("position", json::array({0, 0, 0})));
     const auto busy = v.value("busy", std::string());
     if (busy == "in_combat" || busy == "in_scene" || busy == "in_vehicle" || busy == "not_v")
     {
         ReleaseEverything(busy == "in_combat" ? "combat" : busy == "in_scene" ? "scene" : busy == "in_vehicle" ? "vehicle" : "not_v", aOps);
-        return;
+        if (busy != "in_combat" || !Active())
+        {
+            return;
+        }
+        // V15: in a fight only handed-back stand-ins are left; they are still watched (lost, died, dissolve).
     }
-    std::vector<std::string> lost, died, spawnedNow, arrived, walkedAway;
+    std::vector<std::string> lost, died, spawnedNow, arrived, walkedAway, dissolved;
     std::vector<std::pair<std::string, std::string>> failed, followEnded;
     std::vector<json> blocked, turned;
     std::vector<std::pair<std::string, Command>> holdTurns;
@@ -1944,10 +2361,23 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
                 lost.push_back(who);
                 continue;
             }
+            // V16: dissolve: gone once it is far enough from V and out of her sight (it may still be walking off).
+            if (npc.releasing == "dissolve" && npc.known && Distance(npc.position, vPos) >= npc.dissolveM && OutOfSight(camera, npc.position, aOps))
+            {
+                dissolved.push_back(who);
+                continue;
+            }
             if (entry.value("dead", false))
             {
-                died.push_back(who);
+                if (!npc.deadKept)
+                {
+                    died.push_back(who);
+                }
                 continue;
+            }
+            if (npc.handedBack || npc.deadKept)
+            {
+                continue; // its own AI has it; nothing to track but lost, died and dissolve
             }
             if (!npc.motion)
             {
@@ -2090,6 +2520,10 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
     {
         try
         {
+            if (aInput.writesOpen && !aInput.writesOpen())
+            {
+                throw MethodError("writes_closed", "the write gate closed before the re-turn");
+            }
             aOps.command(who, turn);
         }
         catch (const std::exception&)
@@ -2184,7 +2618,44 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
     }
     for (const auto& who : walkedAway)
     {
-        ReleaseOne(who, "walk_away", "", aOps);
+        bool dissolving = false;
+        {
+            std::scoped_lock _(m_mutex);
+            const auto it = m_npcs.find(who);
+            if (it != m_npcs.end() && it->second.releasing == "dissolve")
+            {
+                dissolving = true;
+                Command stop;
+                stop.kind = "stop";
+                try
+                {
+                    aOps.command(who, stop);
+                }
+                catch (const std::exception&)
+                {
+                }
+                it->second.motion.reset();
+            }
+        }
+        if (!dissolving)
+        {
+            ReleaseOne(who, "walk_away", "", aOps);
+        }
+    }
+    for (const auto& who : dissolved)
+    {
+        double waited = 0.0;
+        {
+            std::scoped_lock _(m_mutex);
+            const auto it = m_npcs.find(who);
+            if (it == m_npcs.end())
+            {
+                continue;
+            }
+            waited = std::round(it->second.dissolveAge * 10) / 10;
+        }
+        ReleaseOne(who, "dissolve", "", aOps);
+        Emit("npc.dissolved", "done", who + " was out of V's sight and was removed", {{"who", who}, {"waited_s", waited}});
     }
     for (const auto& who : lost)
     {
@@ -2219,8 +2690,33 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
     }
     for (const auto& who : died)
     {
-        Emit("npc.died", "warn", who + " died", {{"who", who}});
-        ReleaseOne(who, who[0] == 'p' ? "leave" : "despawn", "died", aOps);
+        bool keep = false;
+        {
+            std::scoped_lock _(m_mutex);
+            const auto it = m_npcs.find(who);
+            if (it == m_npcs.end())
+            {
+                continue;
+            }
+            auto& npc = it->second;
+            if (npc.kind == "actor" && !npc.immortal)
+            {
+                // V15: shooting a mortal stand-in isn't a bug: its body stays (npc_release, or dissolve once V can't see it).
+                keep = true;
+                StopHeld(npc, aOps, false);
+                npc.facing.reset();
+                npc.deadKept = true;
+                if (npc.releasing == "walk_away")
+                {
+                    npc.releasing.clear();
+                }
+            }
+        }
+        Emit("npc.died", "warn", who + " died", {{"who", who}, {"kept_body", keep}});
+        if (!keep)
+        {
+            ReleaseOne(who, who[0] == 'p' ? "leave" : "despawn", "died", aOps);
+        }
     }
     // The hub: an answer, or V walked away.
     const auto hub = aReading.value("hub", json::object());

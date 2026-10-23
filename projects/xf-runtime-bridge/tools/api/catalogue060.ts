@@ -235,6 +235,16 @@ async function runHandover(input: Json, context: CommandContext): Promise<Comman
       ...(released && released.released === false ? { why: released.why } : { removed: released?.removed ?? [] }),
     });
   }
+  // 0.8 (NPC direction): every NPC the bridge directs is released in the same step (actors removed, picks left alone again,
+  // dialogue choices and lines taken down); an older bridge without NPC direction answers nothing here.
+  const npcs = handed.npcs_released as Json | null | undefined;
+  if (npcs) {
+    steps.push({
+      step: "release the NPCs the bridge directs",
+      ok: npcs.released !== false,
+      ...(npcs.released === false ? { why: npcs.why } : { released: npcs.released ?? [] }),
+    });
+  }
   await attempt(context, "ui.message", { text: "Handed over: the game is yours. XF automation is paused until the session resumes.", level: "ask", seconds: 15 });
   return { value: { handed_over: true, was: handed.was, steps, note: input.note ?? null, undo: { method: "session.resume", params: {} } } };
 }
@@ -387,7 +397,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     name: "session.handover",
     title: "Hand the game to the player",
     description:
-      "Gives the game to the player in one step: stops every behaviour, shows photo mode's menu and cursor again if the bridge hid them, clears the showroom's light rigs if lights is clear (so the player lights the heads with photo mode's own lights), then pauses the bridge and gives V back as player_stop does (every effect the bridge put on her, such as a crouch or a glide's movement hold, lifted; any look it started ended): every change it is asked for is refused until session_resume. A line in the game says so, and the session log records it. Reads, notes and the kill switch still work.",
+      "Gives the game to the player in one step: stops every behaviour, shows photo mode's menu and cursor again if the bridge hid them, clears the showroom's light rigs if lights is clear (so the player lights the heads with photo mode's own lights), then pauses the bridge and gives V back as player_stop does (every effect the bridge put on her, such as a crouch or a glide's movement hold, lifted; any look it started ended) and releases every NPC it directs (actors removed, dialogue choices and lines taken down): every change it is asked for is refused until session_resume. A line in the game says so, and the session log records it. Reads, notes and the kill switch still work.",
     permission: "control",
     input: obj({
       lights: oneOf("keep (default) or clear the showroom's rigs.", ["keep", "clear"]),

@@ -15,12 +15,24 @@
 //   npc.say               a text line (subtitle, overhead, holocall) and/or a vanilla voiceset trigger
 //   npc.look / face / act gaze, facial reaction, body gesture (the XF gesture carrier)
 //   npc.choices           a dialogue hub in the game's own widget; the pick arrives as an npc.choice event (session.wait)
-//   npc.release           ends an actor (despawn, walk_away) or a pick (leave)
+//   npc.release           ends an actor (despawn, walk_away, dissolve) or a pick (leave)
 // Every write is in the npc class (write-npc), listed only by the test profile's -writes build.
+//
+// The Story Engine's staging needs (research/story-engine/runtime-requirements.md): V15, an actor that can be killed and
+// that is hostile (or neutral) to V, handed back to its own AI when a fight starts instead of being removed; V16, a spawn at a
+// walkable spot out of V's sight (outside the camera's view, or behind static geometry) and a release that despawns only
+// once the actor is out of sight ("dissolve").
 //
 // Threads: every method and the tick run on the game thread (RunOn::GameThread; the plugin's Running update), so the game
 // steps (Ops) are direct calls that never wait for another thread. The (recursive) mutex guards the bookkeeping for
 // readers on other threads; a game step may run while it is held.
+//
+// The write gate (bridge 0.8.1, RB-122): each npc write is one game-thread step, which the dispatcher checks against the kill
+// switch, the pause and a handover on the game thread right before it runs (the check Dispatcher::RunWrite makes for each
+// step of a multi-step write). The tick's own forward step (a held facing turning again) checks TickInput::writesOpen right
+// before it runs; its put-back steps (lines hidden, a hub withdrawn, a walk stopped, a release) run inside a RestoreScope
+// whatever the gate says. A handover releases everything in its own request (Service::ReleaseAllNow), the pause on the next
+// tick, the kill switch in its restore (RestoreAfterKill).
 
 #include <array>
 #include <cstdint>
@@ -68,6 +80,13 @@ inline constexpr double kTurnedToleranceDeg = 15.0; // a turn has arrived (npc.t
 inline constexpr double kFacingReissueS = 1.0;      // a held facing re-turns at most once a second
 inline constexpr double kBlockedAfterS = 4.0;       // a walk that gains less than kProgressM for this long is blocked
 inline constexpr double kProgressM = 0.3;
+// V16: an out-of-sight spawn (npc.spawn at "out_of_sight") and the dissolve release.
+inline constexpr double kHiddenMinM = 12.0;    // default nearest distance from V
+inline constexpr double kHiddenMaxM = 25.0;    // default farthest (at most kMaxRangeM)
+inline constexpr double kViewMarginDeg = 10.0; // a spot this close outside the view still counts as in view
+inline constexpr size_t kMaxHiddenProbes = 24; // ground probes an out-of-sight spawn may make before it gives up
+inline constexpr double kDissolveM = 15.0;     // dissolve: despawned only this far from V (and out of sight)
+inline constexpr double kDissolveWalkM = 20.0; // dissolve with walk: it walks off to this far from V
 
 // --- the tables -------------------------------------------------------------------------------------
 
@@ -86,6 +105,9 @@ struct Cast
     std::vector<std::string> appearances;
     bool masked = false;
 };
+// V15: the record with the game's own reactions for a cast (reactions "game"): Character.xfs_actor_<cast>_reactive, the same
+// clone with the base civilian's reaction preset (tweaks/test-profile/xf_npc_actors.yaml); "" for the research casts.
+std::string ReactiveRecord(const Cast& aCast);
 const std::vector<Cast>& Casts();
 const Cast* FindCast(const std::string& aName);
 
@@ -109,7 +131,8 @@ struct Gesture
     std::string clipMan;   // ... on man_average
     double seconds = 3.0;  // how long it plays before npc.act_done (the workspot is left then)
 };
-// The XF gesture carrier's list (tools/npc/gesture-carrier.ts builds the carrier from it).
+// The XF gesture carrier's list. The carrier itself (a workspot entity built with WolvenKit) isn't built yet, so npc.act answers
+// carrier_missing in the game until a -writes package is made with --npc-carrier <archive>.
 const std::vector<Gesture>& Gestures();
 const Gesture* FindGesture(const std::string& aName);
 
@@ -119,6 +142,26 @@ const Gesture* FindGesture(const std::string& aName);
 int32_t StyleLineType(const std::string& aStyle); // -1 for an unknown style
 // The difference between two yaws in degrees, in [-180, 180].
 double YawDifference(double aA, double aB);
+
+// V's camera as the game reports it (XFNpcV.Where, XFNpc.Poll: GetActiveCameraWorldTransform, Forward, FOV, AspectRatio).
+struct Camera
+{
+    bool known = false;
+    Vec3 position{};
+    Vec3 forward{0.0, 1.0, 0.0};
+    double fov = 60.0;
+    double aspect = 16.0 / 9.0;
+};
+// From {camera: {position, forward, fov, aspect}}; known false without one.
+Camera CameraFrom(const json& aReading);
+// Whether a point is in the camera's view, widened by aMarginDeg. Which axis the game's fov measures isn't settled
+// (tools/scene/camera.ts), so the wider reading counts: the horizontal half-angle is the larger of fov / 2 and the angle a
+// vertical fov gives at the aspect; vertically, the fov / 2 or the narrower reading's, whichever is larger. An unknown camera
+// sees everything (nothing counts as hidden from it).
+bool InView(const Camera& aCamera, const Vec3& aPoint, double aMarginDeg);
+// Spots to try for an out-of-sight spawn, best first: behind the camera, then round to the sides, never inside the view (with
+// the margin), at aMin, the middle and aMax metres from V.
+std::vector<Vec3> HiddenCandidates(const Vec3& aV, const Camera& aCamera, double aMin, double aMax);
 
 // --- targets -------------------------------------------------------------------------------------------
 
@@ -198,8 +241,15 @@ struct Ops
     // the reasons in the message), npc_busy, too_far, npc_not_found.
     std::function<json(const std::string& aWho, const std::string& aId)> pick;
     // Spawns aRecord at aAt facing aYaw under the handle aWho, snapped to walkable ground, non-persistent, tagged:
-    // {entity, position}. Refuses codeware_missing, record_missing, not_walkable, not_streamed, too_far.
-    std::function<json(const std::string& aWho, const std::string& aRecord, const Vec3& aAt, double aYaw, const std::string& aAppearance, bool aOutOfView)> spawn;
+    // {entity, position}. aAttitude (V15): 0 friendly, 1 neutral, 2 hostile towards V; aImmortal: god mode (today's default).
+    // Both apply when the actor first exists. Refuses codeware_missing, record_missing, not_walkable, not_streamed, too_far.
+    std::function<json(const std::string& aWho, const std::string& aRecord, const Vec3& aAt, double aYaw, const std::string& aAppearance, bool aOutOfView,
+                       int32_t aAttitude, bool aImmortal)>
+        spawn;
+    // V16: walkable ground near a point (within 2 m, human navmesh): {walkable, point, streamed}. Never refuses.
+    std::function<json(const Vec3& aPoint)> ground;
+    // V16: whether static geometry blocks the straight line between two points: {blocked}. Never refuses.
+    std::function<json(const Vec3& aFrom, const Vec3& aTo)> ray;
     // Sends (or, kind stop, cancels) an AI command on an actor: {sent, before: {position, yaw}} (place and stop report where
     // the actor was). Refuses npc_lost, not_walkable, no_ai.
     std::function<json(const std::string& aWho, const Command& aCommand)> command;
@@ -223,8 +273,8 @@ struct Ops
     // Everything the bridge holds on NPCs, in one step (the kill switch): hubs withdrawn, lines hidden, commands cancelled,
     // look-ats removed, faces reset, gestures stopped, actors deleted: {released: n, ...}.
     std::function<json(const std::string& aReason)> releaseAll;
-    // The tick's reading, for the handles in aWhos (comma list): {v: {position, busy}, npcs: [{who, exists, spawned, dead,
-    //  position, yaw, command_state}], hub: {id, answer (-1 none), shown}}.
+    // The tick's reading, for the handles in aWhos (comma list): {v: {position, busy}, camera: {position, forward, fov,
+    //  aspect}, npcs: [{who, exists, spawned, dead, position, yaw, command_state}], hub: {id, answer (-1 none), shown}}.
     std::function<json(const std::string& aWhos)> poll;
 };
 
@@ -236,6 +286,9 @@ struct TickInput
     bool paused = false;     // the panel's pause
     bool handedOver = false; // session.handover
     uint64_t detaches = 0;   // the script layer's detaches so far (a change is a load: everything is dropped)
+    // RB-122: checked right before each of the tick's forward steps (a held facing's re-turn); false skips the step. Unset:
+    // open.
+    std::function<bool()> writesOpen;
 };
 
 // --- the service -----------------------------------------------------------------------------------------
@@ -268,6 +321,9 @@ public:
     json RestoreAfterKill(const Ops& aOps);
     // A load or a detach: forgets everything without a game call (Codeware drops non-persistent entities with the world).
     void DropAll(const std::string& aReason);
+    // A handover (bridge.handover {on: true}, on the game thread once its flag is set): everything released at once, each with
+    // npc.auto_released {reason}: {released: [handles], hub_withdrawn, voice_lines_hidden}. Nothing when nothing is held.
+    json ReleaseAllNow(const std::string& aReason, const Ops& aOps);
 
     // Whether anything is held (actors, picks, a hub, lines).
     bool Active() const;
@@ -338,7 +394,18 @@ private:
         std::string face;
         std::string gesture;
         double gestureLeft = 0.0;
-        std::string releasing; // walk_away while it walks off
+        std::string releasing; // walk_away while it walks off; dissolve until it is out of sight
+        // V15: how it stands towards V, and whether it can die.
+        std::string attitude = "friendly";
+        bool immortal = true;
+        std::string reactions = "quiet";
+        bool handedBack = false; // a fight began: its own AI has it now; the bridge only watches until it is released
+        bool deadKept = false;   // a mortal actor that died: its body stays until it is released
+        // V16: dissolve.
+        double dissolveM = kDissolveM;
+        double dissolveAge = 0.0;
+        // Stand-ins (V15) are handed back in a fight instead of being removed.
+        bool StandsIn() const { return kind == "actor" && (!immortal || attitude != "friendly"); }
     };
     struct HubHeld
     {
@@ -358,12 +425,24 @@ private:
     void ReleaseOne(const std::string& aWho, const std::string& aHow, const std::string& aReason, const Ops& aOps);
     void ReleaseEverything(const std::string& aReason, const Ops& aOps);
     json NpcJson(const Npc& aNpc) const;
-    void OnPoll(const json& aReading, const Ops& aOps);
+    void OnPoll(const json& aReading, const Ops& aOps, const TickInput& aInput);
+    // V16: whether a point (an actor's feet) is out of V's sight: outside the camera's view, or with static geometry between the
+    // camera and both its head and its feet.
+    bool OutOfSight(const Camera& aCamera, const Vec3& aPoint, const Ops& aOps) const;
+    // V16: a walkable spot out of V's sight between aMin and aMax metres from her: {point, probes}, or throws no_hidden_spot.
+    json FindHiddenSpot(const json& aV, double aMin, double aMax, const Ops& aOps) const;
+    // V15: a fight began: a stand-in's direction ends (lines, look, face, gesture, walk, its hub) and its own AI has it.
+    void HandBack(Npc& aNpc, const std::string& aReason, const Ops& aOps);
+    // Refuses a command for an actor the bridge no longer directs (handed back to its AI, or dead).
+    static void RequireDirected(const Npc& aNpc);
 
     mutable std::recursive_mutex m_mutex;
     std::map<std::string, Npc> m_npcs;
     std::optional<HubHeld> m_hub;
     std::vector<VoiceLine> m_voice; // lines from a voice with no body
+    // What the current handover released (the tick's safety net or ReleaseAllNow), for bridge.handover's answer.
+    json m_handoverDone;
+    void NoteHandoverRelease();
     // Hides every voice line now (a handover, a pause, a scene, release all); never throws.
     void HideVoices(const Ops& aOps);
     EventLog* m_events = nullptr;

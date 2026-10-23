@@ -2643,6 +2643,8 @@ int wmain(int argc, wchar_t** argv)
             out["what"] = aWhat;
             return out;
         };
+        // 0.8: the handover releases every NPC the bridge directs (simNpc is made below, before the bridge starts).
+        hooks.releaseNpcs = [] { return simNpc ? simNpc->ReleaseForHandover() : json(nullptr); };
         sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
         sim060->Register();
     }
@@ -2684,6 +2686,17 @@ int wmain(int argc, wchar_t** argv)
         hooksNpc.killed = [&dispatcher] { return dispatcher.IsKilled(); };
         hooksNpc.paused = [&dispatcher] { return dispatcher.WritesPaused(); };
         hooksNpc.handedOver = [&dispatcher] { return dispatcher.HandedOver(); };
+        hooksNpc.writesOpen = [&dispatcher] {
+            try
+            {
+                dispatcher.RequireWritesOpen();
+                return true;
+            }
+            catch (const xfb::MethodError&)
+            {
+                return false;
+            }
+        };
         hooksNpc.events = &sim060->Events();
         simNpc = std::make_unique<xfb::selftest::SimNpc>(dispatcher, std::move(hooksNpc));
     }

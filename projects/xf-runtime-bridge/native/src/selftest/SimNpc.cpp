@@ -78,6 +78,8 @@ struct Actor
     std::set<int32_t> lines;
     std::string trigger; // the last voice trigger played
     bool stuck = false;  // selftest.npc {stuck: who}: its walk makes no progress (npc.blocked)
+    int32_t attitude = 0; // V15: 0 friendly, 1 neutral, 2 hostile
+    bool immortal = true;
 };
 } // namespace
 
@@ -108,6 +110,11 @@ struct SimNpc::State
     bool carrier = true;
     bool noGround = false;
     std::string failNextCommand;
+    // V16: selftest.npc {sight_blocked}: every line-of-sight ray is blocked (a wall between the camera and everything);
+    // {no_ground_far}: no walkable ground further than 8 m from V (so no out-of-sight spot exists).
+    bool sightBlocked = false;
+    bool noGroundFar = false;
+    int32_t groundProbes = 0;
     double speedScale = 1.0; // selftest.npc {speed}: walk faster so tests run quickly
     uint64_t nextEntity = 5001;
     int32_t releasedAll = 0;
@@ -120,6 +127,14 @@ Vec3 PlayerPos(SimNpc::State& aState)
     return VecOf(aState.hooks.player().value("position", json::array({0, 0, 0})));
 }
 
+// The simulated first-person camera: at V's eyes, looking along her yaw (the game's yaw: 0 faces +Y, 90 faces -X), level.
+json CameraOf(const json& aPlayer)
+{
+    const auto p = VecOf(aPlayer.value("position", json::array({0, 0, 0})));
+    const double r = aPlayer.value("yaw", 0.0) * 3.14159265358979323846 / 180.0;
+    return json{{"position", json::array({p[0], p[1], p[2] + 1.6})}, {"forward", json::array({-std::sin(r), std::cos(r), 0.0})}, {"fov", 70.0}, {"aspect", 16.0 / 9.0}};
+}
+
 npc::Ops MakeOps(SimNpc::State* aState)
 {
     auto* s = aState;
@@ -127,7 +142,22 @@ npc::Ops MakeOps(SimNpc::State* aState)
     ops.v = [s] {
         auto p = s->hooks.player();
         p["phase"] = s->hooks.phase();
+        p["camera"] = CameraOf(p);
         return p;
+    };
+    ops.ground = [s](const Vec3& aPoint) -> json {
+        const auto v = PlayerPos(*s);
+        std::scoped_lock _(s->mutex);
+        ++s->groundProbes;
+        if (s->noGroundFar && npc::HorizontalDistance(aPoint, v) > 8.0)
+        {
+            return json{{"walkable", false}, {"streamed", true}};
+        }
+        return json{{"walkable", true}, {"streamed", true}, {"point", Arr({aPoint[0], aPoint[1], v[2]})}};
+    };
+    ops.ray = [s](const Vec3&, const Vec3&) -> json {
+        std::scoped_lock _(s->mutex);
+        return json{{"blocked", s->sightBlocked}};
     };
     ops.list = [s](double aRadius, int32_t aMax) {
         const auto v = PlayerPos(*s);
@@ -208,7 +238,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
         }
         throw MethodError("npc_not_found", "simulated: no NPC with that id near V (npc_list again)");
     };
-    ops.spawn = [s](const std::string& aWho, const std::string& aRecord, const Vec3& aAt, double aYaw, const std::string&, bool) -> json {
+    ops.spawn = [s](const std::string& aWho, const std::string& aRecord, const Vec3& aAt, double aYaw, const std::string&, bool, int32_t aAttitude, bool aImmortal) -> json {
         std::scoped_lock _(s->mutex);
         if (!s->codeware)
         {
@@ -231,6 +261,8 @@ npc::Ops MakeOps(SimNpc::State* aState)
         a.id = "EntityID(" + std::to_string(s->nextEntity++) + ")";
         a.position = aAt;
         a.yaw = aYaw;
+        a.attitude = aAttitude;
+        a.immortal = aImmortal;
         s->actors[aWho] = a;
         return json{{"entity", a.id}, {"position", Arr(aAt)}, {"simulated", true}};
     };
@@ -428,6 +460,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
             start = comma + 1;
         }
         return json{{"v", {{"position", player.value("position", json::array({0, 0, 0}))}, {"busy", player.value("busy", std::string())}}},
+                    {"camera", CameraOf(player)},
                     {"npcs", npcs},
                     {"hub", {{"id", s->hub.id}, {"answer", s->hub.answer}, {"shown", s->hub.shown}}}};
     };
@@ -478,6 +511,14 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                               if (p.contains("speed"))
                               {
                                   s->speedScale = std::clamp(p["speed"].get<double>(), 0.1, 50.0);
+                              }
+                              if (p.contains("sight_blocked"))
+                              {
+                                  s->sightBlocked = p["sight_blocked"].get<bool>();
+                              }
+                              if (p.contains("no_ground_far"))
+                              {
+                                  s->noGroundFar = p["no_ground_far"].get<bool>();
                               }
                               if (p.contains("fail_next_command"))
                               {
@@ -539,7 +580,10 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                                                     {"face", {a.faceCategory, a.faceIdle}},
                                                     {"clip", a.clip},
                                                     {"lines", std::vector<int32_t>(a.lines.begin(), a.lines.end())},
-                                                    {"trigger", a.trigger}});
+                                                    {"trigger", a.trigger},
+                                                    {"attitude", a.attitude},
+                                                    {"immortal", a.immortal},
+                                                    {"dead", a.dead}});
                               }
                               json voices = json::object();
                               for (const auto& [number, text] : s->voiceLines)
@@ -549,7 +593,8 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                               return json{{"actors", actors},
                                           {"voice_lines", voices},
                                           {"hub", {{"shown", s->hub.shown}, {"id", s->hub.id}, {"title", s->hub.title}, {"choices", s->hub.choices}, {"answer", s->hub.answer}}},
-                                          {"released_all", s->releasedAll}};
+                                          {"released_all", s->releasedAll},
+                                          {"ground_probes", s->groundProbes}};
                           }});
 }
 
@@ -619,7 +664,14 @@ void SimNpc::Tick(double aDt)
     input.paused = s->hooks.paused();
     input.handedOver = s->hooks.handedOver();
     input.detaches = s->hooks.detaches();
+    input.writesOpen = s->hooks.writesOpen;
     s->service.Tick(aDt, input, MakeOps(s));
+}
+
+json SimNpc::ReleaseForHandover()
+{
+    RestoreScope restoring;
+    return m_state->service.ReleaseAllNow("handover", MakeOps(m_state.get()));
 }
 
 void SimNpc::OnDetach()

@@ -31,7 +31,9 @@ public class XFNpcEntry {
   public let kind: String; // "actor" or "pick"
   public let record: String;
   public let id: EntityID;
-  public let prepared: Bool; // an actor made friendly and immortal once it exists
+  public let prepared: Bool; // an actor given its attitude (and god mode) once it exists
+  public let attitude: Int32; // V15: 0 friendly (the default), 1 neutral, 2 hostile towards V
+  public let immortal: Bool;  // V15: god mode (the default); false lets it be hurt and killed
   public let command: ref<AICommand>;
   public let look: ref<LookAtAddEvent>;
   public let faced: Bool;
@@ -198,8 +200,51 @@ public class XFNpcRegistry extends ScriptableSystem {
   }
 }
 
-// V for the NPC commands' refusals (no Codeware needed).
+// V for the NPC commands' refusals, her camera, and the probes an out-of-sight spawn and a dissolve use (no Codeware needed).
 public abstract class XFNpcV {
+  // ,"camera":{position, forward, fov, aspect} (V16: what V sees), or "" when the camera system has none. Every native answer
+  // is kept in a local first.
+  public static func Camera() -> String {
+    let cameraSystem = GameInstance.GetCameraSystem(GetGameInstance());
+    if !IsDefined(cameraSystem) {
+      return "";
+    }
+    let transform: Transform;
+    let has = cameraSystem.GetActiveCameraWorldTransform(transform);
+    if !has {
+      return "";
+    }
+    let position = transform.position;
+    let forward = cameraSystem.GetActiveCameraForward();
+    let fov = cameraSystem.GetActiveCameraFOV();
+    let aspect = cameraSystem.GetAspectRatio();
+    return ",\"camera\":{\"position\":" + XFScene.Arr(position) + ",\"forward\":" + XFScene.Arr(forward) + ",\"fov\":" + XFJson.Num(fov) + ",\"aspect\":" + XFJson.Num(aspect) + "}";
+  }
+
+  // V16: walkable ground within 2 m of a point (human navmesh), as XFNpc.Spawn snaps its spot. Never fails.
+  public static func Ground(cid: String, x: Float, y: Float, z: Float) -> String {
+    let target = new Vector4(x, y, z, 1.0);
+    let navigation = GameInstance.GetNavigationSystem(GetGameInstance());
+    if !IsDefined(navigation) {
+      return "{\"ok\":true,\"walkable\":false,\"streamed\":false}";
+    }
+    let streamed = navigation.IsNavmeshStreamedInLocation(target, 2.0);
+    if !streamed {
+      return "{\"ok\":true,\"walkable\":false,\"streamed\":false}";
+    }
+    let found = navigation.FindPointInSphereOnlyHumanNavmesh(target, 2.0, NavGenAgentSize.Human, true);
+    if NotEquals(found.status, worldNavigationRequestStatus.OK) {
+      return "{\"ok\":true,\"walkable\":false,\"streamed\":true}";
+    }
+    return "{\"ok\":true,\"walkable\":true,\"streamed\":true,\"point\":" + XFScene.Arr(found.point) + "}";
+  }
+
+  // V16: whether static geometry blocks the line between two points (scene.read's occlusion ray, XFScene.Ray).
+  public static func Ray(cid: String, fx: Float, fy: Float, fz: Float, tx: Float, ty: Float, tz: Float) -> String {
+    let ray = XFScene.Ray(new Vector4(fx, fy, fz, 1.0), new Vector4(tx, ty, tz, 1.0));
+    return "{\"ok\":true," + StrMid(ray, 1, StrLen(ray) - 1);
+  }
+
   public static func Where(cid: String) -> String {
     let phase = XFBridgeActions.Phase();
     let player = XFPlayer.Player();
@@ -210,7 +255,8 @@ public abstract class XFNpcV {
     let yaw = player.GetWorldYaw();
     let busy = XFPlayer.Busy(player);
     let state = XFPlayer.BusyState(player);
-    return "{\"ok\":true,\"phase\":" + XFJson.Str(phase) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"busy\":" + XFJson.Str(busy) + ",\"busy_state\":" + XFJson.Str(state) + "}";
+    let camera = XFNpcV.Camera();
+    return "{\"ok\":true,\"phase\":" + XFJson.Str(phase) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"busy\":" + XFJson.Str(busy) + ",\"busy_state\":" + XFJson.Str(state) + camera + "}";
   }
 }
 
@@ -421,7 +467,7 @@ public abstract class XFNpcCheck {
 
 @if(ModuleExists("Codeware"))
 public abstract class XFNpc {
-  // The XF gesture carrier (tools/npc/gesture-carrier.ts builds it into the -writes package's archive).
+  // The XF gesture carrier: an archive a -writes package carries only when made with --npc-carrier (not built yet).
   public static func CarrierPath() -> ResRef {
     return r"xfs\\bridge\\npc\\xfs_gesture_carrier.ent";
   }
@@ -578,7 +624,7 @@ public abstract class XFNpc {
     return XFJson.Fail("npc_not_found", "no NPC with that id is near V now (npc_list again)");
   }
 
-  public static func Spawn(cid: String, who: String, record: String, x: Float, y: Float, z: Float, yaw: Float, appearance: String, outOfView: Bool) -> String {
+  public static func Spawn(cid: String, who: String, record: String, x: Float, y: Float, z: Float, yaw: Float, appearance: String, outOfView: Bool, attitude: Int32, immortal: Bool) -> String {
     let game = GetGameInstance();
     let system = GameInstance.GetDynamicEntitySystem();
     let registry = XFNpcRegistry.Get();
@@ -627,21 +673,33 @@ public abstract class XFNpc {
     entry.kind = "actor";
     entry.record = record;
     entry.id = id;
+    entry.attitude = attitude;
+    entry.immortal = immortal;
     registry.Add(entry);
-    XFBridgeLog.Info(cid, "npc spawned " + who + " record=" + record + " at " + XFScene.Arr(found.point) + " (non-persistent, tag xfs_npc)");
+    XFBridgeLog.Info(cid, "npc spawned " + who + " record=" + record + " at " + XFScene.Arr(found.point) + " attitude=" + IntToString(attitude) + " immortal=" + (immortal ? "true" : "false") + " (non-persistent, tag xfs_npc)");
     return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(found.point) + "}";
   }
 
-  // An actor's first moment in the world: friendly to V and immortal (AMM's Director does the same), gone with it.
+  // An actor's first moment in the world: its attitude towards V (friendly by default, as AMM's Director sets its actors;
+  // V15: neutral or hostile) and, unless it was spawned mortal, god mode; both go with it.
   public static func Prepare(entry: ref<XFNpcEntry>, puppet: ref<ScriptedPuppet>) -> Void {
     let player = XFPlayer.Player();
     let agent = puppet.GetAttitudeAgent();
     if IsDefined(agent) && IsDefined(player) {
-      agent.SetAttitudeTowards(player.GetAttitudeAgent(), EAIAttitude.AIA_Friendly);
+      let stance = EAIAttitude.AIA_Friendly;
+      if entry.attitude == 1 {
+        stance = EAIAttitude.AIA_Neutral;
+      }
+      if entry.attitude == 2 {
+        stance = EAIAttitude.AIA_Hostile;
+      }
+      agent.SetAttitudeTowards(player.GetAttitudeAgent(), stance);
     }
-    let gods = GameInstance.GetGodModeSystem(GetGameInstance());
-    if IsDefined(gods) {
-      gods.AddGodMode(entry.id, gameGodModeType.Immortal, n"XFRuntimeBridge");
+    if entry.immortal {
+      let gods = GameInstance.GetGodModeSystem(GetGameInstance());
+      if IsDefined(gods) {
+        gods.AddGodMode(entry.id, gameGodModeType.Immortal, n"XFRuntimeBridge");
+      }
     }
     entry.prepared = true;
   }
@@ -1131,7 +1189,8 @@ public abstract class XFNpc {
       let hub = registry.Hub();
       hubText = "{\"id\":" + IntToString(hub.id) + ",\"answer\":" + IntToString(registry.HubAnswer()) + ",\"shown\":" + XFJson.Flag(registry.HubShown()) + "}";
     }
-    return "{\"ok\":true,\"v\":" + vText + ",\"npcs\":[" + out + "],\"hub\":" + hubText + "}";
+    let camera = XFNpcV.Camera();
+    return "{\"ok\":true,\"v\":" + vText + camera + ",\"npcs\":[" + out + "],\"hub\":" + hubText + "}";
   }
 }
 
@@ -1149,7 +1208,7 @@ public abstract class XFNpc {
     return XFNpc.Missing();
   }
 
-  public static func Spawn(cid: String, who: String, record: String, x: Float, y: Float, z: Float, yaw: Float, appearance: String, outOfView: Bool) -> String {
+  public static func Spawn(cid: String, who: String, record: String, x: Float, y: Float, z: Float, yaw: Float, appearance: String, outOfView: Bool, attitude: Int32, immortal: Bool) -> String {
     return XFNpc.Missing();
   }
 

@@ -40,6 +40,8 @@ struct SimHooks
     std::function<void()> takeSaveLock;
     // 0.8.2: bridge.handover's clearing of the showroom's rigs ("lights"), as the plugin's ClearShowroomForHandover.
     std::function<json(const std::string& aWhat)> clearShowroom;
+    // 0.8: bridge.handover's release of every NPC the bridge directs (selftest/SimNpc.cpp), on the game thread.
+    std::function<json()> releaseNpcs;
 };
 
 class Sim060

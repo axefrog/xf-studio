@@ -46,14 +46,27 @@ npc::Ops OpsFor(const std::string& aCid)
         RED4ext::CString id(aId.c_str());
         return ScriptCall("XFNpc", "Pick", {"String", "String"}, {&who, &id}, aCid);
     };
-    ops.spawn = [aCid](const std::string& aWho, const std::string& aRecord, const npc::Vec3& aAt, double aYaw, const std::string& aAppearance, bool aOutOfView) {
+    ops.spawn = [aCid](const std::string& aWho, const std::string& aRecord, const npc::Vec3& aAt, double aYaw, const std::string& aAppearance, bool aOutOfView,
+                       int32_t aAttitude, bool aImmortal) {
         RED4ext::CString who(aWho.c_str());
         RED4ext::CString record(aRecord.c_str());
         float x = static_cast<float>(aAt[0]), y = static_cast<float>(aAt[1]), z = static_cast<float>(aAt[2]), yaw = static_cast<float>(aYaw);
         RED4ext::CString appearance(aAppearance.c_str());
         bool outOfView = aOutOfView;
-        return ScriptCall("XFNpc", "Spawn", {"String", "String", "Float", "Float", "Float", "Float", "String", "Bool"},
-                          {&who, &record, &x, &y, &z, &yaw, &appearance, &outOfView}, aCid);
+        int32_t attitude = aAttitude;
+        bool immortal = aImmortal;
+        return ScriptCall("XFNpc", "Spawn", {"String", "String", "Float", "Float", "Float", "Float", "String", "Bool", "Int32", "Bool"},
+                          {&who, &record, &x, &y, &z, &yaw, &appearance, &outOfView, &attitude, &immortal}, aCid);
+    };
+    // V16: walkable ground near a point, and a static line-of-sight ray (XFNpcV: no Codeware needed).
+    ops.ground = [aCid](const npc::Vec3& aPoint) {
+        float x = static_cast<float>(aPoint[0]), y = static_cast<float>(aPoint[1]), z = static_cast<float>(aPoint[2]);
+        return ScriptCall("XFNpcV", "Ground", {"Float", "Float", "Float"}, {&x, &y, &z}, aCid);
+    };
+    ops.ray = [aCid](const npc::Vec3& aFrom, const npc::Vec3& aTo) {
+        float fx = static_cast<float>(aFrom[0]), fy = static_cast<float>(aFrom[1]), fz = static_cast<float>(aFrom[2]);
+        float tx = static_cast<float>(aTo[0]), ty = static_cast<float>(aTo[1]), tz = static_cast<float>(aTo[2]);
+        return ScriptCall("XFNpcV", "Ray", {"Float", "Float", "Float", "Float", "Float", "Float"}, {&fx, &fy, &fz, &tx, &ty, &tz}, aCid);
     };
     ops.command = [aCid](const std::string& aWho, const npc::Command& aCommand) {
         RED4ext::CString who(aWho.c_str());
@@ -154,9 +167,29 @@ void TickNpc(double aDt, bool aScriptsReady)
         input.killed = dispatcher.IsKilled();
         input.paused = dispatcher.WritesPaused();
         input.handedOver = dispatcher.HandedOver();
+        // RB-122: the tick's one forward step (a held facing's re-turn) checks the gate right before it runs.
+        input.writesOpen = [&dispatcher] {
+            try
+            {
+                dispatcher.RequireWritesOpen();
+                return true;
+            }
+            catch (const MethodError&)
+            {
+                return false;
+            }
+        };
     }
     input.detaches = state.scriptLayer.Describe().value("detaches", uint64_t{0});
     Service().Tick(aDt, input, OpsFor("npc-tick"));
+}
+
+json ReleaseNpcsForHandover(const std::string& aCid)
+{
+    // A game-thread step that puts things back: run inside a RestoreScope by the caller (bridge.handover), after its flag is
+    // set, so no npc write can come in between.
+    return RunGameTask(
+        Get().queue, GameTimeout(), [aCid] { return Service().ReleaseAllNow("handover", OpsFor(aCid)); }, "bridge.handover.npc_release");
 }
 
 void RestoreNpcAfterKill()

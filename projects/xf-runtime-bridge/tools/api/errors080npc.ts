@@ -40,5 +40,9 @@ export const NPC_MESSAGES: Record<string, string> = {
   choices_busy: "The game shows its own dialogue choices or an interaction prompt right now. Step away from doors, devices and other NPCs' prompts and try again.",
   one_hub_at_a_time: "Dialogue choices are showing already. Wait for the player's pick (npc.choice) or withdraw them first.",
   choice_too_long: "A choice is at most 90 characters. Shorten it.",
+  no_hidden_spot:
+    "The bridge found no walkable spot out of V's sight in that range. Turn V towards a wall or more open ground, widen min_m and max_m, or give a place with ahead_m or at_point. Nothing was spawned.",
+  npc_handed_back: "That actor was handed back to its own AI when the fight began, so the bridge no longer directs it. Release it with npc_release (despawn, or dissolve once V can't see it).",
+  npc_dead: "That actor is dead; its body stays until it is released. Release it with npc_release (despawn, or dissolve once V can't see it).",
   scenario_invalid: "The scene file isn't valid, so nothing ran. The message names each problem; fix the file and run it again (dry_run checks it without touching the game).",
 };

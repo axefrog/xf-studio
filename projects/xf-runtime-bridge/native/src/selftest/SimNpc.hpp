@@ -28,6 +28,8 @@ struct SimNpcHooks
     std::function<bool()> killed;
     std::function<bool()> paused;
     std::function<bool()> handedOver;
+    // RB-122: the tick's forward step checks the write gate (Dispatcher::RequireWritesOpen) right before it runs.
+    std::function<bool()> writesOpen;
     EventLog* events = nullptr;
 };
 
@@ -44,6 +46,8 @@ public:
     void RestoreAfterKill(nlohmann::json& aOut);
     // What a save would keep (XFGame.BridgeHolds' NPC line).
     nlohmann::json Holds();
+    // bridge.handover's release (the plugin's ReleaseNpcsForHandover), on the game thread: {released, hub_withdrawn, ...}.
+    nlohmann::json ReleaseForHandover();
 
     struct State; // public for the file's own helpers
 

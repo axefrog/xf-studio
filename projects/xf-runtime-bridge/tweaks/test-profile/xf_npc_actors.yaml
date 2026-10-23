@@ -17,7 +17,7 @@
 # characters/npcs/records/crowds/communities.tweak, personalities/base_values.tweak:372, factions/factions.tweak:323,
 # characters/spawnable_object_priority.tweak:10) [resource].
 
-XFRuntimeBridge.Npc.actorsVersion: 1
+XFRuntimeBridge.Npc.actorsVersion: 2
 
 Character.xfs_actor_woman_corpo:
   $base: Character.CorpoWoman
@@ -120,6 +120,99 @@ Character.xfs_actor_research_npc_base:
   entityTemplatePath: 'base\characters\entities\citizen\citizen__corporat_wa.ent'
   baseAttitudeGroup: civilian
   reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+# V15 (the Story Engine's mortal and hostile stand-ins): each cast again with the game's own civilian reactions, for
+# npc.spawn {reactions: "game"}. Only reactionPreset differs: ReactionPresets.Civilian_Neutral, the preset of the crowd base
+# every civilian derives from (characters/bases/base_records.tweak:42-68) [resource], so a stand-in that is shot reacts as a
+# passer-by would (flees, cowers, may bring the police) instead of standing calm [hypothesis: session 15's NPC rows].
+# Attitude and god mode are set at spawn, not here.
+Character.xfs_actor_woman_corpo_reactive:
+  $base: Character.CorpoWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__corporat_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_corpo_reactive:
+  $base: Character.CorpoMan
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__corporat_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_woman_nightlife_reactive:
+  $base: Character.NightlifeWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__nightlife_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_youngster_reactive:
+  $base: Character.YoungsterMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__youngster_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_woman_lowlife_reactive:
+  $base: Character.LowlifeWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_lowlife_reactive:
+  $base: Character.LowlifeMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_woman_masked_reactive:
+  $base: Character.CreoleWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__creole_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_masked_reactive:
+  $base: Character.LowlifeMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
   affiliation: Factions.Unaffiliated
   priority: SpawnableObjectPriority.Regular
   objectActions: []

@@ -12,7 +12,7 @@
 //   r6/tweaks/XFRuntimeBridge/xf_npc_actors.yaml         (TweakXL; writes package only: the XF actor records npc.spawn
 //                                                         brings in, clones of base-game civilians, 0.8)
 //   archive/pc/mod/xfs_bridge_npc_gestures.archive       (writes package only, when built: the XF gesture carrier for
-//                                                         npc.act, tools/npc/gesture-carrier.ts; 0.8)
+//                                                         npc.act, --npc-carrier; not built yet, 0.8)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/init.lua   (CET; 0.8.2: the folder's name is CET's mod name,
 //                                                                          so its Bindings tab heads it "XF Runtime Bridge")
 //   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/panel.lua  (CET panel; diagnostic and writes packages only)
@@ -171,7 +171,7 @@ export type StageOptions = {
   commit: string;
   /** -writes only: also allow the inventory write class (only with the maintainer's approval). */
   allowInventory?: boolean;
-  /** -writes only (0.8): the built XF gesture carrier archive to include (tools/npc/gesture-carrier.ts); none when absent. */
+  /** -writes only (0.8): the built XF gesture carrier archive to include (--npc-carrier; not built yet); none when absent. */
   npcCarrier?: string;
 };
 

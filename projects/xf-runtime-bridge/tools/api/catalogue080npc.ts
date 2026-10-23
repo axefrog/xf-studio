@@ -30,6 +30,8 @@ export const NPC_WAIT_KINDS = [
   "npc.act_done",
   "npc.choice",
   "npc.released",
+  "npc.dissolved",
+  "npc.handed_back",
   "npc.lost",
   "npc.died",
   "npc.auto_released",
@@ -54,6 +56,9 @@ export function npcParams(input: Record<string, unknown>): Record<string, unknow
   join("at", "at_point");
   join("face", "face_point");
   join("away_from", "away_from_point");
+  // V16: an out-of-sight spot is the bridge's own at form.
+  if (out.out_of_sight === true) out.at = "out_of_sight";
+  delete out.out_of_sight;
   if (out.ahead_m !== undefined || out.side_m !== undefined) {
     out.at = { ahead_m: out.ahead_m ?? 0, ...(out.side_m !== undefined ? { side_m: out.side_m } : {}) };
     delete out.ahead_m;
@@ -66,7 +71,7 @@ const bridgeNpc = (method: string) => ({ method, params: npcParams });
 
 /** V's state: every npc write (and a pick) is refused while V is out of normal play, fighting, driving or in a scene. */
 const V_STATE = ["not_in_world", "in_combat", "in_vehicle", "in_scene", "not_v"];
-const OURS = ["npc_unknown", "not_ours", "npc_lost"];
+const OURS = ["npc_unknown", "not_ours", "npc_lost", "npc_handed_back", "npc_dead"];
 /**
  * Each npc command's own refusal codes (for the MCP reference; with bridge 0.8a's catalogue080.ts they join its REFUSALS):
  * what core/Npc.cpp, the redscript layer (XFNpc) and the scenario runner raise, beyond the codes every command can answer.
@@ -76,17 +81,17 @@ export const NPC_REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "npc.list": ["not_in_world", "codeware_missing"],
   "npc.pick": [...V_STATE, "codeware_missing", "npc_protected", "npc_busy", "npc_not_found", "too_far", "limit"],
   "npc.status": [],
-  "npc.spawn": [...V_STATE, "cast_unknown", "codeware_missing", "record_missing", "not_ready", "not_streamed", "not_walkable", "spawn_refused", "too_far", "limit"],
+  "npc.spawn": [...V_STATE, "cast_unknown", "codeware_missing", "record_missing", "not_ready", "not_streamed", "not_walkable", "spawn_refused", "too_far", "limit", "no_hidden_spot"],
   "npc.move": [...V_STATE, ...OURS, "npc_not_spawned", "npc_releasing", "not_walkable", "too_far", "no_ai"],
   "npc.follow": [...V_STATE, ...OURS, "npc_not_spawned", "npc_releasing", "too_far", "no_ai"],
   "npc.turn": [...V_STATE, ...OURS, "npc_not_spawned", "no_ai"],
   "npc.place": [...V_STATE, ...OURS, "too_far", "no_ai"],
   "npc.stop": ["npc_unknown", "not_ours"],
-  "npc.say": [...V_STATE, "npc_unknown", "npc_lost", "line_too_long", "trigger_unknown"],
-  "npc.look": [...V_STATE, "npc_unknown", "npc_lost", "npc_not_spawned"],
-  "npc.face": [...V_STATE, "npc_unknown", "npc_lost", "expression_unknown"],
+  "npc.say": [...V_STATE, "npc_unknown", "npc_lost", "npc_handed_back", "npc_dead", "line_too_long", "trigger_unknown"],
+  "npc.look": [...V_STATE, "npc_unknown", "npc_lost", "npc_handed_back", "npc_dead", "npc_not_spawned"],
+  "npc.face": [...V_STATE, "npc_unknown", "npc_lost", "npc_handed_back", "npc_dead", "expression_unknown"],
   "npc.act": [...V_STATE, ...OURS, "npc_moving", "gesture_unknown", "rig_unsupported", "carrier_missing"],
-  "npc.choices": [...V_STATE, "npc_unknown", "npc_lost", "choices_busy", "one_hub_at_a_time", "too_far", "choice_too_long"],
+  "npc.choices": [...V_STATE, "npc_unknown", "npc_lost", "npc_handed_back", "npc_dead", "choices_busy", "one_hub_at_a_time", "too_far", "choice_too_long"],
   "npc.release": ["npc_unknown"],
   "npc.scenario": ["scenario_invalid"],
 };
@@ -125,7 +130,7 @@ const DEFINITIONS: CommandDef[] = [
     name: "npc.spawn",
     title: "Bring in an XF actor",
     description:
-      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. The actor is friendly to V, can't be killed, and is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Needs Codeware and the -writes package's actor records.",
+      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Needs Codeware and the -writes package's actor records.",
     permission: "write-npc",
     input: obj(
       {
@@ -141,6 +146,12 @@ const DEFINITIONS: CommandDef[] = [
         appearance: str("One of the actor's appearances by name (default: the cast's own look, or random).", { pattern: "^[A-Za-z0-9_]+$", maxLength: 96 }),
         variant: int("Which of the cast's own looks (npc_status lists them per cast), from 0. Default 0.", 0, 31),
         out_of_view: bool("Appear only when the spot isn't on screen."),
+        out_of_sight: bool("Let the bridge pick a walkable spot V can't see (outside her view, or behind static geometry), instead of ahead_m or at_point."),
+        min_m: num("With out_of_sight: at least this far from V, 3 to 30 m. Default 12.", 3, 30),
+        max_m: num("With out_of_sight: at most this far from V, 3 to 30 m. Default 25.", 3, 30),
+        attitude: oneOf("How it stands towards V: friendly (the default), neutral or hostile.", ["friendly", "neutral", "hostile"]),
+        immortal: bool("Whether it can't be hurt or killed (default true); false makes a mortal stand-in."),
+        reactions: oneOf("quiet (the default: no crime or panic reactions) or game (an ordinary passer-by's own reactions).", ["quiet", "game"]),
         label: str("The name its lines and dialogue choices show (default Stranger).", { minLength: 1, maxLength: 40 }),
       },
       ["cast"],
@@ -266,7 +277,7 @@ const DEFINITIONS: CommandDef[] = [
   {
     name: "npc.act",
     title: "Play a gesture",
-    description: `One of the bridge's actors plays a body gesture standing where it is: ${NPC_GESTURES.join(", ")}, for seconds (default the gesture's own length); npc.act_done follows. Needs the XF gesture carrier from the -writes package; without it the gesture is refused (carrier_missing) and lines, faces and looks still work. Not while it walks.`,
+    description: `One of the bridge's actors plays a body gesture standing where it is: ${NPC_GESTURES.join(", ")}, for seconds (default the gesture's own length); npc.act_done follows. Needs the XF gesture carrier, which no package carries yet: until it is built every gesture is refused (carrier_missing), and lines, faces and looks still work. Not while it walks.`,
     permission: "write-npc",
     input: obj({ who: who("The actor."), gesture: oneOf("The gesture.", [...NPC_GESTURES]), off: bool("End the gesture now."), seconds: num("How long it plays, 0.5 to 30 seconds.", 0.5, 30) }, ["who"]),
     undo: "The result's undo ends the gesture.",
@@ -294,9 +305,17 @@ const DEFINITIONS: CommandDef[] = [
     name: "npc.release",
     title: "Release an NPC",
     description:
-      "Ends what the bridge does with an NPC: its lines, gaze, face, gesture, walk and dialogue choices are taken back, then an actor is removed (how despawn, the default) or walks 15 m away from V first and is removed there (walk_away), and a picked NPC goes back to its own business (leave). who all releases everyone. npc.released follows.",
+      "Ends what the bridge does with an NPC: its lines, gaze, face, gesture, walk and dialogue choices are taken back, then an actor is removed (how despawn, the default), walks 15 m away from V first and is removed there (walk_away), or walks off and is removed only once V can't see it and it is at least distance_m from her (dissolve; with walk false it stays where it is until V walks away; no time limit, and despawn removes it at once), and a picked NPC goes back to its own business (leave). who all releases everyone. npc.released follows (and npc.dissolved for a dissolve).",
     permission: "write-npc",
-    input: obj({ who: str("The NPC's handle, or all.", { pattern: "^(all|[ap][0-9]{1,5})$" }), how: oneOf("despawn (actors, default), walk_away (actors) or leave (picked NPCs).", ["despawn", "walk_away", "leave"]) }, ["who"]),
+    input: obj(
+      {
+        who: str("The NPC's handle, or all.", { pattern: "^(all|[ap][0-9]{1,5})$" }),
+        how: oneOf("despawn (actors, default), walk_away (actors), dissolve (actors) or leave (picked NPCs).", ["despawn", "walk_away", "dissolve", "leave"]),
+        walk: bool("With dissolve: walk off first (default true)."),
+        distance_m: num("With dissolve: removed only this far from V, 5 to 30 m. Default 15.", 5, 30),
+      },
+      ["who"],
+    ),
     undo: "Nothing to undo; spawn a new actor if wanted.",
     bridge: { method: "npc.release" },
   },

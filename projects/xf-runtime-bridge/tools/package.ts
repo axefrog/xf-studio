@@ -8,7 +8,7 @@
 //   bun tools/package.ts --allow-inventory   the same, with the inventory write class in the -writes zip (only after
 //                                            the maintainer approves writes to V's inventory)
 //   bun tools/package.ts --npc-carrier <archive>   0.8: the -writes zip also carries the XF gesture carrier archive
-//                                            (built by tools/npc/gesture-carrier.ts; without it npc.act is refused)
+//                                            (not built yet: a WolvenKit workspot entity; without it npc.act is refused carrier_missing)
 //
 // What each package holds is tools/packaging.ts (tested by tools/test/package.test.ts). This file adds
 // the provenance gate and the zips: it refuses to package unless the project tree is clean and the DLL
