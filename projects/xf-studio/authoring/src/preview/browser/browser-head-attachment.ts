@@ -7,8 +7,9 @@
  * - **Prepared** (`prepare`, profiles phase 4a-v): still hidden, the V's details placed, the layered surfaces filled with the authored
  *   makeup as it is now, and the scene prepared with them, so its first shown frame has nothing left to compile, composite or upload.
  * - **Shown** (`show`): the head is drawn and becomes the one the application and the V's context use. Its services are attached, the
- *   layered surfaces connected (keeping what they were filled with, brought up to date) and the on-head editor mounted on it, it follows
- *   the V's context (catching up with what changed while it was hidden), and it restores the scene's motion and the view's camera.
+ *   layered surfaces connected (keeping what they were filled with, brought up to date), it follows the V's context (catching up with what
+ *   changed while it was hidden), and it restores the scene's motion and the view's camera. The on-head editor is the view's, mounted on the
+ *   head shown for it by the scene editors (scene-editors.ts).
  * - **Hidden** (`hide`): its camera pose goes to the view's camera node and its motion is released, then everything `show` connected is let
  *   go, newest first. A hidden head is warm: it stops following its V and catches up when shown again.
  *
@@ -34,7 +35,7 @@ import { createTrustedPreviewServices } from "../../app/trusted-preview-services
 import type { WorkspaceState } from "../../app/workspace/workspace-state";
 import type { ViewGraph } from "../../platform/core/view-graph";
 import type { LayeredMakeupSurface } from "../../engines/layered-makeup/render/makeup-stack";
-import { surfaceOutline, type SurfaceOutline } from "../../engines/layered-makeup/surface-edge";
+import type { SurfaceOutline } from "../../engines/layered-makeup/surface-edge";
 import type { PreparationProgress } from "../scene-residency";
 import type { ViewId } from "../../platform/api/view-graph";
 import { previewFields } from "../preview-view-graph";
@@ -51,9 +52,9 @@ export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewA
   surfaceOutline?: SurfaceOutline };
 
 /**
- * One layered-makeup surface on the loaded head and the devices that drive it (UI-76): the preview device that fills its layers, and
- * the on-head editor's hooks when this is the surface being edited. A scene's surface setup (scene-surfaces.ts) builds one per registered
- * surface its look editor edits, so neither it nor this module names a feature.
+ * One layered-makeup surface on the loaded head and the device that fills its layers (UI-76), and whether it is the surface the on-head
+ * editor edits. The scene editors (scene-editors.ts) build one per registered surface a look editor edits, so neither they nor this module
+ * name a feature.
  */
 export type LayeredSurfaceWiring = {
   /** The feature whose renderer draws the surface (for messages). */
@@ -61,8 +62,8 @@ export type LayeredSurfaceWiring = {
   /** The surface on a loaded head (the feature renderer's). */
   surface(scene: Scene): LayeredMakeupSurface | undefined;
   preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers" | "fillScene" | "releaseScene">;
-  /** The on-head editor's hooks into the authoring core, for the one surface being edited. */
-  editor?: Parameters<ViewportDevice["mountSurface"]>[1];
+  /** The surface the on-head editor edits (at most one): its guides and parts are prepared with the head (`prepare`). */
+  edited?: boolean;
 };
 
 export type HeadAttachmentPorts = {
@@ -71,8 +72,8 @@ export type HeadAttachmentPorts = {
   graph?: ViewGraph;
   /** The view the head is made for (its runtime owner's drawn view when it was wanted); `show` may draw it for another view of the scene. */
   view?: ViewId;
-  viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead" | "mountSurface"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
-  /** Every layered-makeup surface to connect, in composition order; at most one carries the on-head editor. */
+  viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
+  /** Every layered-makeup surface to connect, in composition order; at most one is the on-head editor's. */
   layered: readonly LayeredSurfaceWiring[];
   /**
    * The UI theme preference and the OS colour scheme the stage backdrop follows; the research tools preference the feature renderers
@@ -135,6 +136,9 @@ export type AttachedHead = {
   prepareShown(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
   /** Hear the shown head needing `prepareShown` (or no longer needing it). Returns the unsubscribe. */
   onUnprepared(listener: () => void): () => void;
+  /** Whether the view this head draws has its Surface controls tool on (withdrawn tools off), and hearing it change: the on-head editor follows. */
+  surfaceControls(): boolean;
+  onSurfaceControls(listener: () => void): () => void;
   /**
    * Draw this head for `view` (default: the view it drew last, or was made for) and connect it (see the module header). Throws, having let
    * go of what it connected, when a step fails.
@@ -162,7 +166,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
   const releases: (() => void)[] = [];
   try {
     signal.throwIfAborted();
-    if (ports.layered.filter(wiring => wiring.editor).length > 1) throw Error("Only one layered surface can carry the on-head editor.");
+    if (ports.layered.filter(wiring => wiring.edited).length > 1) throw Error("Only one layered surface can carry the on-head editor.");
     // The head is the V's body's own core (the masculine V's head is prepared on first use). If the masculine head can't be prepared, the
     // feminine head is built (with a notice) so the Character panel stays usable; the other body is tried again when the V changes body.
     const wanted = ports.character.body;
@@ -195,10 +199,11 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, undefined, ports.warmStart));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
     // The head takes the V's save (its facial shapes and body) before anything else follows it.
-    // The on-head editor exists only while the head is shown; the view's Surface controls tool is kept for it meanwhile.
-    let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined, surfaceEnabled = true;
+    // The view's Surface controls tool, which the on-head editor mounted on this head follows (scene-editors.ts).
+    let surfaceEnabled = true;
+    const surfaceListeners = new Set<() => void>();
     const services = createTrustedPreviewServices({ ...ports.workspace, savedV: ports.character.save }, createBrowserScenePreviewPorts(scene, {
-      setSurfaceControls: enabled => { surfaceEnabled = enabled; surface?.setEnabled(enabled); },
+      setSurfaceControls: enabled => { surfaceEnabled = enabled; for (const listener of [...surfaceListeners]) listener(); },
     }), ports.graph ? { graph: ports.graph, view: ports.view ?? ports.graph.viewIds()[0]! } : undefined);
     const savedAppearance = services.savedAppearance;
     const restored = services.finish();
@@ -262,7 +267,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
         }
         // The on-head editor, which show mounts: its guides compiled with the scene (their first frame links nothing), and its parts (the
         // surface map and occlusion trees) made ahead between frames, so mounting it makes none of them.
-        const edited = ports.layered.find(wiring => wiring.editor), viewport = ports.viewport;
+        const edited = ports.layered.find(wiring => wiring.edited), viewport = ports.viewport;
         const guides = edited && viewport.surfaceGuides ? () => viewport.surfaceGuides!(scene) : undefined;
         const work = edited && viewport.surfaceSteps ? () => viewport.surfaceSteps!(scene, edited.surface(scene)!.surface) : undefined;
         await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
@@ -274,6 +279,8 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
         await scene.prepare?.({ signal: prepareSignal, report: report => progress(report) });
       },
       onUnprepared: listener => scene.onUnprepared?.(listener) ?? (() => {}),
+      surfaceControls: () => surfaceEnabled,
+      onSurfaceControls: listener => { surfaceListeners.add(listener); return () => { surfaceListeners.delete(listener); }; },
       draw(view) {
         if (!shown || disposed || view === preview.view()) return;
         // The camera to the old view's node and the motion handed over, then the new view's settings, motion and camera.
@@ -297,21 +304,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
             const makeup = wiring.surface(scene)!;
             wiring.preview.connectScene(makeup);
             add(() => wiring.preview.disconnectScene(makeup));
-            if (!wiring.editor) continue;
-            surface = ports.viewport.mountSurface(makeup.surface, wiring.editor);
-            add(() => { surface = undefined; });
-            // The anchor's rest positions and UVs, read per element (glTF attributes may be interleaved).
-            const geometry = makeup.surface.geometry, uv = geometry?.getAttribute("uv"), position = geometry?.getAttribute("position");
-            if (uv && position) {
-              const uvs = new Float64Array(uv.count * 2), positions = new Float64Array(position.count * 3);
-              for (let i = 0; i < uv.count; i++) { uvs[2 * i] = uv.getX(i); uvs[2 * i + 1] = uv.getY(i); }
-              for (let i = 0; i < position.count; i++) { positions[3 * i] = position.getX(i); positions[3 * i + 1] = position.getY(i); positions[3 * i + 2] = position.getZ(i); }
-              ports.attach({ surfaceOutline: surfaceOutline({ positions, uvs, index: geometry!.index?.array ?? null }) });
-              add(() => ports.attach({ surfaceOutline: undefined }));
-            }
           }
-          // The surface controls follow the view's tool now that the editor exists on this head.
-          surface?.setEnabled(surfaceEnabled);
           add(preview.subscribe(ports.persist)); add(motion.subscribe(ports.persist)); add(preview.subscribe(ports.changed));
           for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
           add(characterDetails.subscribe(ports.changed)); add(characterDetails.subscribe(ports.persist));

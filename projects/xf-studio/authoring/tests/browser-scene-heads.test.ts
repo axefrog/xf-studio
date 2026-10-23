@@ -47,7 +47,7 @@ function gates() {
 }
 
 function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = [], previews: SceneHeadsPorts["previews"] = null,
-  views: Record<string, { scene: string; subject: string }> = {}) {
+  views: Record<string, { scene: string; subject: string }> = {}, editors?: SceneHeadsPorts["editors"]) {
   const scene = { subject: Object.keys(bodies)[0]! };
   const preparations: (PreparationState | null)[] = [];
   const gate = gates(), h = harness({ build: gate.build, failBuild }), people = characterOwner(bodies);
@@ -63,7 +63,7 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
     characters: people.port,
     prepareCore: (body, _pending, signal) => { prepared.push({ body, signal }); return prepare(body, signal); },
     pending: message => pending.push(message), notice: text => notices.push(text), preparation: state => preparations.push(state),
-    shown: head => shown.push(head), previews,
+    shown: head => shown.push(head), previews, ...(editors ? { editors } : {}),
     onContext: listener => { contextListeners.add(listener); return () => { contextListeners.delete(listener); }; },
   });
   return { h, gate, people, heads, shown, notices, pending, prepared, scene, listeners, preparations,
@@ -333,6 +333,27 @@ test("4a-v: a new head is prepared before it is shown, with the V shown before s
   expect(o.pending.length).toBe(pendingBefore);
   expect(o.notices.filter(text => text.includes("stays until"))).toEqual([]);
   o.heads.dispose();
+});
+
+test("4a-vi: each view's on-head editor is mounted on the head shown for it, and unmounted before that head is hidden or drawn for another view", async () => {
+  const views: Record<string, { scene: string; subject: string }> = {}, log: string[] = [];
+  const o = owner({ v1: "female", v2: "female" }, [], null, views, { mount: (head, view) => {
+    const id = head.scene.slot as unknown as { id: number };
+    log.push(`mount:${id.id}:${view}`);
+    return () => log.push(`unmount:${id.id}:${view}`);
+  } });
+  const graph = o.h.ports.graph!, side = graph.addView("main", {}, { label: "Side" }), twin = graph.addView("main", { scene: true }, { label: "Twin" });
+  views[side] = { scene: "s2", subject: "v2" }; views[twin] = { scene: "s1", subject: "v1" };
+  await o.heads.load();
+  expect(log).toEqual(["mount:1:main"]);
+  // Another view of the same scene: the same head, its editor mounted again for that view.
+  await o.heads.show(twin);
+  expect(log).toEqual(["mount:1:main", "unmount:1:main", "mount:1:" + twin]);
+  // Another scene's view: the old head's editor goes before it is hidden, and the new head's is mounted for the view.
+  await o.heads.show(side);
+  expect(log.slice(3)).toEqual(["unmount:1:" + twin, "mount:2:" + side]);
+  o.heads.dispose();
+  expect(log.at(-1)).toBe("unmount:2:" + side);
 });
 
 test("4a-vi: each view routes to the runtime holding it: the drawn one, a warm one of its V and body, or none (loading, absent)", async () => {

@@ -66,26 +66,6 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(restored.built).toBe(restored.reference);
   });
 
-  test("residency (4a-iv): female, male, then female 150 ms later shows female; the male build stops within 100 ms and never draws", () => {
-    const { residency } = probe;
-    expect({ superseded: residency.superseded, back: residency.back, shown: residency.shown }).toEqual({ superseded: "AbortError", back: "shown", shown: "s1|v1|female" });
-    // The male runtime was never built, so nothing of it reached the canvas.
-    expect(residency.built).toEqual(["s1|v1|female"]);
-    expect(residency.canvasUnchanged).toBe(true);
-    expect(residency.cancelMs).toBeGreaterThanOrEqual(0);
-    expect(residency.cancelMs).toBeLessThanOrEqual(100);
-  });
-
-  test("residency (4a-iv): the least recently shown runtime is evicted, and closing every runtime returns the GPU objects to the baseline", () => {
-    const { residency } = probe;
-    expect(residency.warm).toEqual(["s1|v1|female:warm", "s1|v1|male:shown"]);
-    expect(residency.evicted).toEqual(["s1|v1|female"]);
-    expect(residency.residents).toEqual(["s1|v1|male:warm", "s1|v2|female:shown"]);
-    expect(residency.closed.gl).toEqual(residency.before.gl);
-    expect(residency.closed.programs).toEqual(residency.before.programs);
-    expect(residency.closed.programs).toEqual(probe.warm.programs);
-  });
-
   test("disposing runtimes never touches the device: its canvas stays (hidden), the context lives, it draws the next runtime", () => {
     expect(probe.disposed).toMatchObject({ canvases: 1, hidden: true, lost: false, drawsAgain: true });
     // Two runtimes resident at once, then both disposed: the GPU objects are back where the first disposal left them.

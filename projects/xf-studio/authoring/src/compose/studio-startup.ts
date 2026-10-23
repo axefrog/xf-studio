@@ -30,7 +30,7 @@ import { builtModsOf, type BuiltMod } from "../installation/mod-install-actions"
 import { createBrowserPreviewDevice } from "../legacy/eye-makeup/browser/browser-preview-device";
 import { createBrowserSceneHeads } from "../preview/browser/browser-scene-heads";
 import type { AttachedHead } from "../preview/browser/browser-head-attachment";
-import { sceneLayeredSurfaces } from "../preview/browser/scene-surfaces";
+import { createSceneEditors } from "../preview/browser/scene-editors";
 import { CharacterWarmStart } from "../character/browser/character-warm-start";
 import { CreatorCatalogue } from "../character/creator-catalogue";
 import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
@@ -72,6 +72,7 @@ import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
 import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
+import { viewPanel } from "../app/profiles/profile-session-state";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
 import { lookRef, type LookRef } from "../library/collection-documents";
@@ -370,42 +371,25 @@ async function start(host: StudioHost, root: HTMLElement) {
   core.app.subscribe(() => facial.changed());
   facial.start();
   previewDevice.coordinator.quality.subscribe(persist);
-  // The editors' own selections and gestures name the look the drawn view shows (the input layer's resolution, profiles design §3.6).
-  const named = <A extends { kind: string }>(action: A) => targets.complete(action, core.app.descriptor(action.kind)) as unknown as StudioAction;
-  const fieldHooks = {
-    selectedField: () => core.presentation.selectedField()?.id,
-    selectField: (id: string) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "field.select", layerId: layer.id, fieldId: id })); },
-    select: (index: number) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "point.select", layerId: layer.id, index })); },
-  };
-  // Every composed layered surface is registered; the drawn scene connects the one its look editor edits (profiles design §7): the preview
-  // device fills its layers and the on-head editor edits it, naming the look the scene shows. The root names no feature.
-  const surfaces = sceneLayeredSurfaces(STUDIO_LAYERED_SURFACES, { feature: core.document.feature, preview: previewDevice, editor: {
-    layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
-    selected: () => core.presentation.selected, ...fieldHooks,
-    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id, targets.named().look); },
-    apply: proposal => core.app.applyGesture("surface", proposal),
-    cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
-    message: text => adapterMessage("surface", text),
-  } });
+  // The editors (scene-editors.ts): every composed layered surface is registered, and each view's on-head editor edits the look that view's
+  // scene shows, naming it through the view's panel (the input layer's resolution, profiles design §3.6). The root names no feature.
+  const panelOf = (view: string) => sessionState.instance(viewPanel(view));
+  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature: core.document.feature, preview: previewDevice }, core,
+    naming: { look: view => targets.named(panelOf(view)).look,
+      complete: (action, view) => targets.complete(action, core.app.descriptor(action.kind as StudioAction["kind"]), { instance: panelOf(view) }) as StudioAction },
+    drawn: () => drawnView(), viewport: viewportDevice, attach: services => core.app.attach(services), message: adapterMessage });
   uvEditor = viewportDevice.mountUV(byId<HTMLCanvasElement>("device-uv-canvas"), undefined, {
-    recipe: () => core.geometry.recipe(), layer: () => core.geometry.layer(),
-    selected: () => core.presentation.selected, ...fieldHooks,
-    canvases: () => previewDevice.canvases,
+    ...editors.uvHooks(), canvases: () => previewDevice.canvases,
     albedo: () => shownHead()?.scene.albedo.image as HTMLImageElement | undefined,
-    surfaceEdge: () => core.app.surfaceEdge(core.presentation.layer()?.id),
-    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id, targets.named().look); },
-    apply: proposal => core.app.applyGesture("uv", proposal),
-    cancel: () => core.app.endGesture("uv", true), finish: () => core.app.endGesture("uv"),
     persist: () => { persist(); viewportDevice.attachment.viewChanged(); },
-    message: text => adapterMessage("uv", text),
   }, workspace.uvView);
   // The drawn scene's heads (profiles phase 4a-iv): the head of the V it shows, built hidden and shown once ready, with one more kept warm.
   // A change of the scene's V or of the V's body supersedes any earlier one; the V's context outlives the heads. What follows the shown
   // head (the live face, the poses stage, prefetching) is connected here as each one is shown.
   const heads = createBrowserSceneHeads({
     head: { workspace, graph: views, viewport: viewportDevice, preferences, warmStart,
-      // The drawn scene's layered surfaces: every composed one is registered, and the scene wires those its look editor edits.
-      layered: surfaces.wiring,
+      // The layered surfaces each head connects (the one the look editor edits).
+      layered: editors.wiring,
       // The stage backdrop follows the resolved UI theme through the renderer's typed input.
       colourScheme: matchMedia("(prefers-color-scheme: dark)"),
       quality: previewDevice.coordinator.quality,
@@ -420,6 +404,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     preparation: state => viewportDevice.headPreparation(state),
     notice: text => adapterMessage("preview", text),
     onContext: listener => viewportDevice.onContext(listener),
+    editors,
     shown: head => {
       stopPrefetch?.(); stopPrefetch = undefined;
       facial.attachScene(head?.scene.face);
@@ -499,7 +484,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing, and which runtimes are
     // resident (profiles phase 4a-iv).
     xfStudioSceneEvidence: () => { const scene = viewer(); return scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
-      frames: scene.frameTiming(), plateBlend: (surfaces.edited && scene.feature(surfaces.edited)?.evidence?.()) ?? null,
+      frames: scene.frameTiming(), plateBlend: (editors.edited && scene.feature(editors.edited)?.evidence?.()) ?? null,
       features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence(), mouth: scene.mouthEvidence(),
       residency: heads.snapshot() }) : null; },
     // Developer captures: hold the mouth interior's light at a fixed parting and floor (the earlier stand-in: 0.010, 0.3), null to follow the face.

@@ -75,7 +75,7 @@ export function harness(plan: { failBuild?: number[]; failPresent?: number[]; bu
     }) as unknown as typeof createSceneRuntime,
     deviceFactory: (() => ({ show: (slot: unknown) => drawn.push(slot) })) as never,
     surfaceFactory: (() => ({ resize: noop, cancelInput: () => log.push("surface:cancel"), inputCapture: () => false, hitAt: () => undefined,
-      setEnabled: noop, dispose: () => log.push("surface:dispose") })) as unknown as typeof createSurfaceEditor,
+      setEnabled: (on: boolean) => log.push(`surface:enabled:${on}`), dispose: () => log.push("surface:dispose") })) as unknown as typeof createSurfaceEditor,
     window: { addEventListener: noop },
   });
   const preferenceListeners = new Set<Listener>(), schemeListeners = new Set<Listener>();
@@ -87,8 +87,8 @@ export function harness(plan: { failBuild?: number[]; failPresent?: number[]; bu
   const workspace = freshWorkspace(), graph = createStudioViewGraph(workspace.preview);
   const ports: HeadAttachmentPorts = {
     workspace, graph, viewport,
-    // The composition root wires the live feature's layered surface (its renderer's); here, one per scene.
-    layered: [{ feature: "eye-makeup", surface: surfaceOf, editor: {} as NonNullable<LayeredSurfaceWiring["editor"]>, preview: {
+    // The scene editors wire the live feature's layered surface (its renderer's), the on-head editor's; here, one per scene.
+    layered: [{ feature: "eye-makeup", surface: surfaceOf, edited: true, preview: {
       connectScene: scene => { connected = scene; return { accepted: true } as ReturnType<LayeredSurfaceWiring["preview"]["connectScene"]>; },
       disconnectScene: scene => { if (connected === scene) connected = undefined; },
       presentInitialLayers: () => { presents++; if (plan.failPresent?.includes(presents)) throw Error("A layer could not be shown."); },

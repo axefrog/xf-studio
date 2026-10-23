@@ -23,7 +23,8 @@ test("a head step failing as the head is shown releases every connection it made
   expect(h.drawn).toEqual([]);
   expect(() => head.show()).toThrow("A layer could not be shown.");
   expect(head.shown).toBe(false);
-  expect(h.log).toEqual(["surface:cancel", "surface:dispose"]);
+  // The head mounts no on-head editor of its own (the scene editors mount the view's: scene-editors.ts).
+  expect(h.log).toEqual([]);
   expect(h.viewport.scene()).toBeUndefined();
   expect(h.viewport.surfaceEditor()).toBeUndefined();
   expect(h.connected).toBeUndefined();
@@ -47,7 +48,7 @@ test("a head step failing as the head is shown releases every connection it made
   // Disposed (twice): hidden first, then everything goes, once.
   head.dispose(); head.dispose();
   expect(h.host.canvases).toBe(0);
-  expect(h.log).toEqual(["surface:cancel", "surface:dispose", "surface:cancel", "surface:dispose", "scene:dispose:1"]);
+  expect(h.log).toEqual(["scene:dispose:1"]);
   expect(h.preferenceListeners.size).toBe(0);
   expect(h.attached).toEqual(nothingAttached);
 });
@@ -69,7 +70,7 @@ test("a scene that fails to build attaches nothing, an aborted build rejects wit
   head.dispose();
 });
 
-test("every composed layered surface is connected and presented while its head is shown, the on-head editor mounts on one, and all are let go on hide (UI-76)", async () => {
+test("every composed layered surface is connected and presented while its head is shown, and all are let go on hide (UI-76)", async () => {
   const h = harness();
   const events: string[] = [];
   const second: LayeredSurfaceWiring = { feature: "cheek-makeup",
@@ -85,15 +86,13 @@ test("every composed layered surface is connected and presented while its head i
   head.show();
   expect(h.connected).toBe(h.surfaces.get(head.scene));
   expect(events).toEqual(["cheek:connect", "cheek:present"]);
-  expect(h.viewport.surfaceEditor()).toBeDefined();
   head.hide();
   expect(events).toEqual(["cheek:connect", "cheek:present", "cheek:disconnect"]);
   expect(h.connected).toBeUndefined();
-  expect(h.viewport.surfaceEditor()).toBeUndefined();
   head.dispose();
   // A surface whose renderer isn't composed, and two on-head editors, are refused and leave nothing behind.
   await expect(buildBrowserHead({ ...h.ports, layered: [{ ...second, surface: () => undefined }] })).rejects.toThrow("The cheek-makeup renderer is not composed.");
-  await expect(buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, { ...second, editor: {} as NonNullable<LayeredSurfaceWiring["editor"]> }] }))
+  await expect(buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, { ...second, edited: true }] }))
     .rejects.toThrow("Only one layered surface can carry the on-head editor.");
   expect(h.host.canvases).toBe(0);
   expect(h.viewport.scene()).toBeUndefined();

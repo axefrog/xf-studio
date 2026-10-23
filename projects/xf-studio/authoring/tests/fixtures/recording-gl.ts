@@ -13,10 +13,7 @@ const GL = { VERTEX_SHADER: 0x8b31, FRAGMENT_SHADER: 0x8b30, LINK_STATUS: 0x8b82
 export const RECORDED_GL = GL;
 const EXTENSIONS = ["EXT_color_buffer_float", "EXT_color_buffer_half_float", "OES_texture_float_linear"];
 
-/** A shader's text as the renderer gave it to the context. */
-export type RecordedShader = { stage: "vertex" | "fragment"; source: string };
-/** A framebuffer attachment the renderer made: `attachment` is the GL enum (COLOR_ATTACHMENT0 + n for a colour attachment). */
-export type RecordedAttachment = { call: string; attachment: number };
+import type { RecordedAttachment, RecordedShader } from "./single-output";
 
 export function recordingRenderer() {
   const sources: string[] = [], shaders: RecordedShader[] = [], attachments: RecordedAttachment[] = [], drawBuffers: number[][] = [];

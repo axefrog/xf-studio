@@ -1,7 +1,8 @@
 /**
- * Browser page for tests/webgl-scene-preparation.test.ts (profiles phase 4a-v, experiments/043-scene-runtimes §11): scene runtimes prepared
- * before they are shown, on one renderer device, on synthetic heads (no game files), under `SceneResidency` with the production ports'
- * shape: build, then the runtime's `prepare` (programs compiled ahead, maps uploaded, one hidden warm-up draw), then show. The authored
+ * Browser page for tests/webgl-scene-runtimes.test.ts (profiles phases 4a-v and 4a-vi, experiments/043-scene-runtimes §11–§13): the S2 gate
+ * table's synthetic half (T2), and scene runtimes prepared before they are shown, on one renderer device, on synthetic heads (no game
+ * files), under `SceneResidency` with the production ports' shape: build, then the runtime's `prepare` (programs compiled ahead, maps
+ * uploaded, one hidden warm-up draw), then show. The authored
  * makeup layer reaches each runtime as in production: the preview device fills the hidden surface before it is prepared and connects it at
  * show (browser-head-attachment.ts), never set on the stack by the probe. A fresh Chrome
  * profile per run, so the browser's program cache starts cold. With `?parallel=off` the page behaves like a browser without
@@ -15,6 +16,11 @@
  *    superseding want to the preparation stopping, nothing of it drawn, and the GPU objects back where they were once it is disposed.
  * 5. Every progress state, per want: stages and fractions, which must only move forward.
  * 6. Closing everything: the GPU objects and Three's programs back at the baseline (4a-i's gate, with preparation).
+ * 6b. The superseding subject change (4a-iv's T2, moved here from the renderer device probe so each S2 row has one place): female shown,
+ *    male wanted (his core slow to load), female again 150 ms later: female stays shown, the male build stops within 100 ms and is never
+ *    built. A build whose last step can't be stopped, finishing after it was superseded, is disposed and never shown (the generation check).
+ *    The least recently shown runtime is evicted past the budget. Then a V in a scene of its own is opened and closed (`close(scene)`):
+ *    the GPU objects and Three's programs are back where they were.
  * 7. A context lost while a cold V's programs link (after 6, since a lost context's objects are never deleted): its preparation starts
  *    again once the context is back, and the V is shown and draws.
  * 5. (After 4.) A lighting setup never drawn, asked of the shown V (profiles phase 4a-v-b): it is staged and prepared while the setup before
@@ -27,7 +33,9 @@
  *    it takes over with nothing to link). Then a setup prepared before the loss, asked again, is staged and prepared again (Three dropped its
  *    programs with the context), never drawn at once; and a setup prepared since, asked in the very task the context is lost in (its
  *    event still queued), is staged too.
- * The cold V's warm-up (2) and the setup's (5) are drawn in pieces, with frames presented between them (`warmUpFrames`).
+ * The cold V's warm-up (2) and the setup's (5) are drawn in pieces, with frames presented between them (`warmUpFrames`). Throughout, the
+ * context records every fragment shader it is given, every framebuffer attachment and every draw-buffer list (`singleOutput`): every
+ * program writes one output, into one colour attachment (experiment 043 §12).
  * Results land in `window.probe` as plain data.
  */
 import * as THREE from "three";
@@ -49,10 +57,11 @@ import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/bro
 import { offerUploadSource, uploadStep, UPLOAD_BITMAP_OPTIONS } from "../src/character/render/character-detail-loader";
 import { gpuGate } from "../src/platform/scene/gpu-gate";
 import { EYE_RASTER_REGION, freshWorkspace } from "./fixtures/eye-region";
+import { multipleOutputs, type RecordedAttachment, type RecordedShader } from "./fixtures/single-output";
 
 type Counts = { gl: GlObjectCounts; programs: string[] };
 type Want = ResidencyWant & { body: "female" | "male"; record: "a" | "b"; lighting: "studio" | "creator" | "many" };
-export type ScenePreparationProbe = {
+export type SceneRuntimesProbe = {
   ok: boolean; failure?: string; errors: string[]; renderer: string; parallel: boolean;
   first: { prepareMs: number; longestTaskMs: number; result: RuntimePreparationResult | null };
   cold: { wantToShownMs: number; showToPresentedMs: number; longestTaskMs: number; tasksOver50: number; framesBeforeShown: number; warmUps: number;
@@ -82,6 +91,12 @@ export type ScenePreparationProbe = {
       /** A setup prepared in this generation, asked in the task the context was lost in (its event still queued). */
       queued: { staged: boolean; tookOver: boolean; firstFrame: { links: number; programs: number } } };
   };
+  /** 6b: the superseding subject change, a late result, eviction, and a subject closed. */
+  supersede: { superseded: string; back: string; shown: string; built: string[]; cancelMs: number; canvasUnchanged: boolean;
+    late: { outcome: string; built: boolean; disposed: boolean; frames: number }; shownKeys: string[]; warm: string[]; evicted: string[]; residents: string[] };
+  closeSubject: { before: Counts; opened: Counts; after: Counts; shownAfter: boolean };
+  /** What the context showed of programs with several outputs and targets with several colour attachments (none), and how much it saw. */
+  singleOutput: { issues: string[]; fragments: number; attachments: number };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
   /** Diagnostics: GL calls that blocked the page for 20 ms or more, with where they came from, and each link with the stage it ran in. */
   slow: { call: string; ms: number; stage: string; via: string }[];
@@ -102,8 +117,8 @@ export type ScenePreparationProbe = {
   steadyUploads: number;
   baseline: Counts; closed: Counts;
 };
-const probe: ScenePreparationProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
-  cancel: null as never, setup: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
+const probe: SceneRuntimesProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
+  cancel: null as never, setup: null as never, supersede: null as never, closeSubject: null as never, singleOutput: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
 /** Every animation frame's time while `recording` is set (frames presented: the GPU process presents none while it builds shaders). */
@@ -152,6 +167,7 @@ try {
   let beforeWarmUp: { key: string; programs: Set<{ name: string; cacheKey: string }> } | null = null;
   // Links and uploads, counted at the context (a draw that links or uploads shows here).
   const calls = { links: 0, uploads: 0 };
+  const recorded = { shaders: [] as RecordedShader[], attachments: [] as RecordedAttachment[], drawBuffers: [] as number[][] };
   let watchUploads = false;
   {
     const context = gl as unknown as Record<string, (...args: unknown[]) => unknown>;
@@ -167,6 +183,20 @@ try {
         finally { const ms = performance.now() - start; if (ms >= 10 && probe.slow.length < 80) probe.slow.push({ call: name, ms, stage: stageNow(), via: via() }); }
       };
     }
+    // The single-output rule, as the driver is asked (fixtures/single-output.ts): fragment shaders, framebuffer attachments, draw buffers.
+    const types = new WeakMap<object, number>();
+    const createShader = context.createShader!.bind(gl), shaderSource = context.shaderSource!.bind(gl);
+    context.createShader = (...args: unknown[]) => { const made = createShader(...args) as object | null; if (made) types.set(made, args[0] as number); return made; };
+    context.shaderSource = (...args: unknown[]) => {
+      if (types.get(args[0] as object) === gl.FRAGMENT_SHADER) recorded.shaders.push({ stage: "fragment", source: args[1] as string });
+      return shaderSource(...args);
+    };
+    for (const name of ["framebufferTexture2D", "framebufferTextureLayer", "framebufferRenderbuffer"]) {
+      const original = context[name]!.bind(gl);
+      context[name] = (...args: unknown[]) => { recorded.attachments.push({ call: name, attachment: args[1] as number }); return original(...args); };
+    }
+    const drawBuffers = context.drawBuffers!.bind(gl);
+    context.drawBuffers = (...args: unknown[]) => { recorded.drawBuffers.push([...(args[0] as number[])]); return drawBuffers(...args); };
     for (const name of ["texImage2D", "texSubImage2D", "texStorage2D", "texImage3D", "texSubImage3D", "texStorage3D", "compressedTexImage2D"]) {
       const original = context[name]!.bind(gl);
       context[name] = (...args: unknown[]) => { calls.uploads++; if (watchUploads && probe.firstFrameUploads.length < 20) probe.firstFrameUploads.push(`${name} ${via()}`); return original(...args); };
@@ -246,15 +276,34 @@ try {
   let restarts = 0;
   /** When each want's details preparation (`prepareDetails`) ended. */
   const detailsSettled = new Map<string, number>();
+  /**
+   * 6b's plans per want: a core that takes `core` ms to load (stopping at once when its build is aborted), and a last step of `held` ms that
+   * can't be stopped (the build returns its runtime after it was superseded). When a build was aborted, every runtime built and disposed
+   * (with the frames it drew), and every runtime shown, by key.
+   */
+  const plans = new Map<string, { core?: number; held?: number }>(), aborted = new Map<string, number>();
+  const builtLog: string[] = [], disposedLog: { key: string; frames: number }[] = [], shownLog: string[] = [];
+  const wait = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+  });
   const ports: ConstructorParameters<typeof SceneResidency<Want, SceneRuntime>>[0] = {
     build: async (want, signal, progress) => {
       progress({ stage: "build" });
-      const options: SceneHostOptions = { renderers: STUDIO_RENDERERS, loadCore: async () => ({ ...syntheticCore(), body: want.body }), loadMotion: motion(),
-        loadLut: async () => ({ lut: null, source: null as never }), body: want.body, signal };
+      const plan = plans.get(want.key);
+      const options: SceneHostOptions = { renderers: STUDIO_RENDERERS, loadCore: async (_renderer, _body, coreSignal) => {
+        if (plan?.core) await wait(plan.core, coreSignal);
+        return { ...syntheticCore(), body: want.body };
+      }, loadMotion: motion(), loadLut: async () => ({ lut: null, source: null as never }), body: want.body, signal };
       const built = performance.now();
-      const runtime = await createSceneRuntime(device, options);
+      let runtime: SceneRuntime;
+      try { runtime = await createSceneRuntime(device, options); }
+      catch (error) { if (signal.aborted) aborted.set(want.key, performance.now()); throw error; }
       probe.timings.builds.push(performance.now() - built);
       runtimes.set(runtime, want.key);
+      builtLog.push(want.key);
+      // A last step that can't be stopped: the runtime comes back whether or not the want was superseded meanwhile.
+      if (plan?.held) await wait(plan.held);
       runtime.setLighting(lightingOf(want.lighting));
       // Shown, a lighting change it isn't prepared for prepares it again (browser-scene-heads.ts does the same).
       runtime.onUnprepared(() => { if (residency.shown() === runtime) void residency.refresh().catch(() => {}); });
@@ -291,9 +340,13 @@ try {
       const makeup = runtime.feature(EYE_MAKEUP_RENDERER)!;
       layers.connectScene(makeup); layers.presentInitialLayers();
       device.show(runtime.slot); runtime.requestRender(); probe.timings.shows.push(performance.now() - start);
+      shownLog.push(runtimes.get(runtime) ?? "?");
     },
     hide: runtime => layers.disconnectScene(runtime.feature(EYE_MAKEUP_RENDERER)!),
-    dispose: runtime => { layers.releaseScene(runtime.feature(EYE_MAKEUP_RENDERER)!); runtimes.delete(runtime); runtime.dispose(); },
+    dispose: runtime => {
+      disposedLog.push({ key: runtimes.get(runtime) ?? "?", frames: runtime.frameTiming().frames });
+      layers.releaseScene(runtime.feature(EYE_MAKEUP_RENDERER)!); runtimes.delete(runtime); runtime.dispose();
+    },
   };
   let residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
   /** Each preparation's own list of progress states (a want, or a change of the shown V: `|shown`), numbered in the order they began. */
@@ -444,7 +497,7 @@ try {
       adopted.push({ key: key(next), links: calls.links, programs: counter.made().program, frames: runtime.frameTiming().frames, at: performance.now() });
       setSource(next);
     };
-    const before = checksum(), target = spots(4), progress: ScenePreparationProbe["setup"]["progress"] = [];
+    const before = checksum(), target = spots(4), progress: SceneRuntimesProbe["setup"]["progress"] = [];
     const warmUpsBefore = runtime.slot.warmUps;
     frameTimes.length = 0; recording = true;
     const start = performance.now();
@@ -500,6 +553,56 @@ try {
   residency.dispose();
   await sleep(100);
   probe.closed = counts();
+
+  // 6b. The superseding subject change, a late result, eviction, and a subject closed (see the header).
+  {
+    residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
+    residency.subscribe(follow);
+    const f = want("v1", "female", "a", "studio"), m = want("v1", "male", "b", "studio"), late = want("v9", "male", "b", "studio"), f2 = want("v2", "female", "b", "studio");
+    builtLog.length = 0; disposedLog.length = 0; shownLog.length = 0;
+    await switchTo(f); await settle();
+    const canvas = checksum();
+    // Female shown; male wanted, his core 600 ms; female again 150 ms later.
+    plans.set(m.key, { core: 600 });
+    const toMale = residency.want(m).then(() => "shown", (error: Error) => error.name);
+    await sleep(150);
+    const asked = performance.now();
+    const back = await residency.want(f).then(() => "shown");
+    const superseded = await toMale;
+    await settle();
+    // A build whose last step can't be stopped, superseded on it: it comes back late, and is disposed, never shown.
+    plans.set(late.key, { held: 400 });
+    const toLate = residency.want(late).then(() => "shown", (error: Error) => error.name);
+    for (let i = 0; i < 4000 && !builtLog.includes(late.key); i++) await sleep(1);
+    await residency.want(f);
+    const lateOutcome = await toLate;
+    await sleep(100); await settle();
+    const lateDisposed = disposedLog.find(entry => entry.key === late.key);
+    const canvasUnchanged = checksum() === canvas;
+    const supersede = { superseded, back, shown: runtimes.get(residency.shown()!) ?? "", cancelMs: (aborted.get(m.key) ?? NaN) - asked, canvasUnchanged,
+      late: { outcome: lateOutcome, built: builtLog.includes(late.key), disposed: !!lateDisposed, frames: lateDisposed?.frames ?? -1 } };
+    // Male built and shown (female warm), then a second feminine V: the least recently shown (female v1) is evicted.
+    plans.delete(m.key);
+    await switchTo(m); await settle();
+    const warm = residency.snapshot().residents.map(item => `${item.key}:${item.state}`);
+    const disposedBefore = disposedLog.length;
+    await switchTo(f2); await settle();
+    probe.supersede = { ...supersede, built: [...builtLog], shownKeys: [...shownLog], warm, evicted: disposedLog.slice(disposedBefore).map(entry => entry.key),
+      residents: residency.snapshot().residents.map(item => `${item.key}:${item.state}`) };
+    residency.dispose();
+    await sleep(100);
+    // A V in a scene of its own, opened and closed.
+    const before = counts();
+    residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
+    residency.subscribe(follow);
+    await switchTo({ ...want("v10", "female", "a", "studio"), scene: "s2", key: "s2|v10|female|studio" }); await settle();
+    const opened = counts();
+    residency.close("s2");
+    await sleep(100);
+    probe.closeSubject = { before, opened, after: counts(), shownAfter: residency.shown() !== undefined };
+    residency.dispose();
+    await sleep(50);
+  }
 
   // 7. The context lost while a cold V's programs link (the masculine head under more lights: never linked here), then restored.
   {
@@ -688,6 +791,8 @@ try {
   probe.stages = stageLog.map(entry => ({ at: Math.round(entry.at), label: entry.label }));
   probe.longTasks = tasks.filter(task => task.duration >= 30).map(task => ({ ms: Math.round(task.duration), at: Math.round(task.start),
     stage: [...stageLog].reverse().find(entry => entry.at <= task.start)?.label ?? "before" }));
+  probe.singleOutput = { issues: multipleOutputs(recorded.shaders, recorded.attachments, recorded.drawBuffers),
+    fragments: recorded.shaders.length, attachments: recorded.attachments.length };
   probe.leaks = counter.aliveSince(baselineMark).map(({ kind, stack }) => ({ kind, stack: stack?.split("\n").slice(0, 30).map(line => line.trim()).join(" < ") }));
   device.dispose();
   probe.ok = probe.errors.length === 0;

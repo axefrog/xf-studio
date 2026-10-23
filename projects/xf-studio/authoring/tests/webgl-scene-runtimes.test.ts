@@ -2,33 +2,93 @@ import { beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { oracleDescribe } from "./optional-oracles";
 import { CHROME, chromeInstalled, runProbePage } from "./webgl-harness";
-import type { ScenePreparationProbe } from "./webgl-scene-preparation-probe-page";
+import type { SceneRuntimesProbe } from "./webgl-scene-runtimes-probe-page";
 
 /**
- * Scene runtimes prepared before they are shown (profiles phase 4a-v, experiments/043-scene-runtimes §11, the 4a-v T2 gates), on synthetic
- * heads in a fresh headless Chrome (a cold program cache): a cold V prepared while another is shown keeps the page's thread free (no task
- * over 50 ms with KHR_parallel_shader_compile), draws nothing and leaves the shown V's pixels as they were until it is shown, and its first
- * shown frame links and uploads nothing; a warm switch draws its first frame within 100 ms; a superseded preparation stops within 100 ms
- * and leaves nothing behind; progress only moves forward; closing everything returns the GPU objects to the baseline; a context lost while
- * a cold V's programs link restarts its preparation after the restore, and the V is shown. The authored makeup reaches each runtime through
- * the production preview device (filled before preparing, connected at show). Profiles phase 4a-v-b adds two: a lighting setup never drawn,
- * asked of the shown V, is prepared while the setup before stays drawn and takes over with nothing left to link (a newer setup replaces it,
- * and the setup drawn asked again stops it); and every warm-up is drawn in pieces, with frames presented between them. The 4a-v-b review adds
- * a context lost in the middle of GPU work, each recovering: a banded upload, a V's details waiting for a link slot, a lighting change
- * prepared on the shown V, and a setup prepared before the loss asked again (staged, never drawn at once). The same page runs
- * again without the extension (the fallback), which must stay chunked and still report progress; its numbers are recorded, not gated.
- * Public CI has no GPU and skips; XFS_REQUIRE_ORACLES=1 turns the skip into a failure. XFS_PROBE_PRINT=1 prints both probes.
+ * The S2 gate table in its final form (profiles phase 4a-vi, experiments/043-scene-runtimes §13; spike S2's rows, experiment 039), the T2
+ * tier: synthetic heads, a real GPU in a fresh headless Chrome (a cold program cache), one renderer device, `SceneResidency` with the
+ * production ports' shape. Each row is read from the one probe page that covers it (tests/webgl-scene-runtimes-probe-page.ts):
+ *
+ * | Row | Gate |
+ * |---|---|
+ * | Warm switch | want to first presented frame ≤ 100 ms |
+ * | Cancel | a superseded preparation, and a superseded body switch's build, stop ≤ 100 ms after the superseding want |
+ * | No stray frames | nothing built, prepared or superseded draws a frame before it is shown; the shown V's pixels don't change meanwhile |
+ * | No late result | a build that comes back after it was superseded is disposed, never shown |
+ * | Last choice | female, male, then female 150 ms later shows female; the male build stops and is never built |
+ * | No first-draw stall | the first shown frame links and makes no program; no presentation gap over 100 ms while preparing; no task of 50 ms or more (with KHR_parallel_shader_compile) |
+ * | Memory returned | closing a subject (`close(scene)`) and closing everything leave the GPU objects and Three's programs at the baseline |
+ * | One output | every program the page's runtimes build writes one output into one colour attachment, as the driver is asked |
+ *
+ * The page's other steps are 4a-v's and its reviews' (preparation, the lighting change on the shown V, context loss in the middle of GPU
+ * work): a cold V prepared while another is shown keeps the page's thread free and draws nothing until it is shown; a lighting setup never
+ * drawn, asked of the shown V, is prepared while the setup before stays drawn and takes over with nothing left to link; every warm-up is
+ * drawn in pieces; a context lost part-way recovers. The same page runs again without the extension (the fallback), which must stay chunked
+ * and still report progress; its page tasks are recorded, not gated. Public CI has no GPU and skips; XFS_REQUIRE_ORACLES=1 turns the skip
+ * into a failure. XFS_PROBE_PRINT=1 prints the gate table and both probes. The table's real-data half is G3 (`measure.ts` in experiment 043).
  */
-const PAGE = resolve(import.meta.dir, "webgl-scene-preparation-probe-page.ts");
+const PAGE = resolve(import.meta.dir, "webgl-scene-runtimes-probe-page.ts");
 const ORDER = ["core", "build", "details", "programs", "textures", "warm-up"];
 
-oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME} (set CHROME)`)("scene runtimes prepared before they are shown", () => {
-  let parallel: ScenePreparationProbe, fallback: ScenePreparationProbe;
+oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME} (set CHROME)`)("scene runtimes: the S2 gate table, and preparing before showing", () => {
+  let parallel: SceneRuntimesProbe, fallback: SceneRuntimesProbe;
   beforeAll(async () => {
-    parallel = await runProbePage<ScenePreparationProbe>(PAGE, "", 420_000);
-    fallback = await runProbePage<ScenePreparationProbe>(PAGE, "?parallel=off", 420_000);
-    if (process.env.XFS_PROBE_PRINT === "1") console.log(JSON.stringify({ parallel, fallback }, null, 1));
+    parallel = await runProbePage<SceneRuntimesProbe>(PAGE, "", 420_000);
+    fallback = await runProbePage<SceneRuntimesProbe>(PAGE, "?parallel=off", 420_000);
+    if (process.env.XFS_PROBE_PRINT === "1") console.log(JSON.stringify({ table: gateTable(parallel), parallel, fallback }, null, 1));
   }, 900_000);
+
+  test("the S2 gate table: every row passes (the rows' detail is in the tests below)", () => {
+    const table = gateTable(parallel);
+    expect(Object.fromEntries(Object.entries(table).map(([row, value]) => [row, value.pass]))).toEqual(Object.fromEntries(Object.keys(table).map(row => [row, true])));
+  });
+
+  test("S2 gate, last choice: female, male, then female 150 ms later shows female; the male build stops within 100 ms and is never built or shown", () => {
+    for (const probe of [parallel, fallback]) {
+      const { supersede } = probe;
+      expect({ superseded: supersede.superseded, back: supersede.back, shown: supersede.shown })
+        .toEqual({ superseded: "AbortError", back: "shown", shown: "s1|v1|female|studio" });
+      expect(supersede.cancelMs).toBeGreaterThanOrEqual(0);
+      expect(supersede.cancelMs).toBeLessThanOrEqual(100);
+      expect(supersede.canvasUnchanged).toBe(true);
+    }
+  });
+
+  test("S2 gate, no late result: a build that comes back after it was superseded is disposed, having drawn nothing, and never shown", () => {
+    for (const probe of [parallel, fallback]) {
+      const { supersede } = probe;
+      expect(supersede.late).toEqual({ outcome: "AbortError", built: true, disposed: true, frames: 0 });
+      // Only what was wanted last at each step was ever shown: neither the superseded male V nor the late one.
+      expect(supersede.shownKeys).toEqual(["s1|v1|female|studio", "s1|v1|male|studio", "s1|v2|female|studio"]);
+      expect(supersede.built.filter(key => key === "s1|v1|male|studio")).toHaveLength(1);
+    }
+  });
+
+  test("residency: the least recently shown runtime is evicted past the budget (4a-iv, moved from the renderer device probe)", () => {
+    for (const probe of [parallel, fallback]) {
+      expect(probe.supersede.warm).toEqual(["s1|v1|female|studio:warm", "s1|v1|male|studio:shown"]);
+      expect(probe.supersede.evicted).toEqual(["s1|v1|female|studio"]);
+      expect(probe.supersede.residents).toEqual(["s1|v1|male|studio:warm", "s1|v2|female|studio:shown"]);
+    }
+  });
+
+  test("S2 gate, memory returned: a subject in a scene of its own, opened and closed, leaves the GPU objects and Three's programs where they were", () => {
+    for (const probe of [parallel, fallback]) {
+      const close = probe.closeSubject;
+      expect(close.opened.gl.texture).toBeGreaterThan(close.before.gl.texture);
+      expect(close.after.gl).toEqual(close.before.gl);
+      expect(close.after.programs).toEqual(close.before.programs);
+      expect(close.shownAfter).toBe(false);
+    }
+  });
+
+  test("S2 gate, one output: every fragment shader the page's runtimes gave the driver writes one output, into one colour attachment", () => {
+    for (const probe of [parallel, fallback]) {
+      expect(probe.singleOutput.fragments).toBeGreaterThan(20);
+      expect(probe.singleOutput.attachments).toBeGreaterThan(10);
+      expect(probe.singleOutput.issues).toEqual([]);
+    }
+  });
 
   test("both pages ran without a shader error, one with KHR_parallel_shader_compile and one without", () => {
     for (const probe of [parallel, fallback]) {
@@ -114,7 +174,7 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
-  test("a switch to a warm, prepared V draws its first frame within 100 ms, with no build and no preparation", () => {
+  test("S2 gate, warm switch: a switch to a warm, prepared V draws its first frame within 100 ms, with no build and no preparation", () => {
     for (const probe of [parallel, fallback]) {
       expect(probe.warm.switchesMs.length).toBe(8);
       expect(Math.max(...probe.warm.switchesMs)).toBeLessThanOrEqual(100);
@@ -122,7 +182,7 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
-  test("a preparation superseded while it compiles stops within 100 ms, draws nothing and leaves the GPU objects where they were", () => {
+  test("S2 gate, cancel: a preparation superseded while it compiles stops within 100 ms, draws nothing and leaves the GPU objects where they were", () => {
     for (const probe of [parallel, fallback]) {
       const { cancel } = probe;
       expect(cancel.superseded).toBe("AbortError");
@@ -210,3 +270,25 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 });
+
+/** The S2 gate table's rows from the probe with KHR_parallel_shader_compile (the browsers the Studio runs in): each row's figures and verdict. */
+function gateTable(probe: SceneRuntimesProbe) {
+  const { cold, warm, cancel, supersede, setup, closeSubject } = probe;
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const warmMax = Math.max(...warm.switchesMs);
+  return {
+    "warm switch": { value: `${Math.round(warmMax * 10) / 10} ms (worst of ${warm.switchesMs.length})`, pass: warmMax <= 100 && warm.builds === 0 },
+    cancel: { value: `${Math.round(cancel.cancelMs * 10) / 10} ms (preparation), ${Math.round(supersede.cancelMs * 10) / 10} ms (body switch)`,
+      pass: cancel.cancelMs >= 0 && cancel.cancelMs <= 100 && supersede.cancelMs >= 0 && supersede.cancelMs <= 100 },
+    "no stray frames": { value: `cold ${cold.framesBeforeShown}, cancelled ${cancel.drawn}, late ${supersede.late.frames}`,
+      pass: cold.framesBeforeShown === 0 && cold.canvasUnchanged && cancel.drawn === 0 && cancel.canvasUnchanged && supersede.late.frames === 0 && supersede.canvasUnchanged },
+    "no late result": { value: supersede.late.outcome, pass: supersede.late.disposed && !supersede.shownKeys.includes("s1|v9|male|studio") },
+    "last choice": { value: supersede.shown, pass: supersede.superseded === "AbortError" && supersede.shown === "s1|v1|female|studio" },
+    "no first-draw stall": { value: `links ${cold.firstFrame.links}, gaps ${Math.round(cold.frameGapMs)} / ${Math.round(setup.frameGapMs)} ms, tasks ${cold.tasksOver50 + setup.tasksOver50}`,
+      pass: cold.firstFrame.links === 0 && cold.firstFrame.programs === 0 && setup.firstFrame.links === 0 && cold.frameGapMs <= 100 && setup.frameGapMs <= 100
+        && cold.tasksOver50 === 0 && setup.tasksOver50 === 0 },
+    "memory returned": { value: `${closeSubject.after.programs.length} programs after closing a subject`,
+      pass: same(closeSubject.after, closeSubject.before) && same(probe.closed.gl, probe.baseline.gl) && same(probe.closed.programs, probe.baseline.programs) },
+    "one output": { value: `${probe.singleOutput.fragments} fragment shaders, ${probe.singleOutput.attachments} attachments`, pass: probe.singleOutput.issues.length === 0 },
+  };
+}

@@ -161,6 +161,8 @@ export function createBrowserViewportDevice(options: {
       editors.attach("surface", surfaceEditor);
       return surfaceEditor;
     },
+    /** Unmount the on-head editor (its view stops being drawn on this head, or the head goes): an open gesture is settled (cancelled). */
+    unmountSurface() { releaseEditor(); },
     headReady() { attachment.setReady("head"); },
     failHead(error: string) { attachment.setError("head", error); },
     headPending(phase: "loading" | "preparing" | "unavailable", message: string, progress: number | null = null) {

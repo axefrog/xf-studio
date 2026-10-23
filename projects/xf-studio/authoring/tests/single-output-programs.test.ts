@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import * as THREE from "three";
-import { headSurface, RECORDED_GL, recordingRenderer, type RecordedAttachment, type RecordedShader } from "./fixtures/recording-gl";
+import { headSurface, RECORDED_GL, recordingRenderer } from "./fixtures/recording-gl";
+import { LATER_FRAG_DATA, LATER_OUTPUT, multipleOutputs, stripComments } from "./fixtures/single-output";
 import { createSkinMaterial, skinParameters, contactShadowUniforms } from "../src/materials/render/skin-material";
 import { createSkinScatter } from "../src/platform/scene/skin-scatter";
 import { createContactShadows } from "../src/platform/scene/contact-shadow";
@@ -28,31 +29,6 @@ import type { RenderLayer } from "../src/character/render-detail";
  * - **The source, as a tripwire** for passes the first check doesn't draw: no shader text declares an output past location 0, wherever its
  *   lines break, and no module that makes a render target passes a `count` option to anything.
  */
-
-/** GLSL without its comments, for the scans. */
-const stripComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
-/** An output declared past location 0, wherever the declaration's lines break (`layout(\n location = 1\n) out`). */
-const LATER_OUTPUT = /layout\s*\(\s*location\s*=\s*[1-9]\d*\s*\)/;
-const LATER_FRAG_DATA = /gl_FragData\s*\[\s*[1-9]/;
-/** A fragment shader's output declarations at global scope (after a statement or a line start, never a function parameter). */
-const OUTPUT_DECLARATION = /(?:^|[;}\n])\s*(?:layout\s*\(([^)]*)\)\s*)?out\s+(?:(?:highp|mediump|lowp)\s+)?\w+\s+\w+/g;
-
-/** What a recording shows of programs that write several outputs, and of targets with several colour attachments. */
-function multipleOutputs(shaders: readonly RecordedShader[], attachments: readonly RecordedAttachment[], drawBuffers: readonly number[][]): string[] {
-  const found: string[] = [];
-  for (const shader of shaders) {
-    if (shader.stage !== "fragment") continue;
-    const text = stripComments(shader.source), name = /#define SHADER_NAME (\S+)/.exec(shader.source)?.[1] ?? text.slice(0, 40).trim();
-    const outputs = [...text.matchAll(OUTPUT_DECLARATION)];
-    if (outputs.length > 1) found.push(`${name}: ${outputs.length} outputs`);
-    if (LATER_OUTPUT.test(text) || LATER_FRAG_DATA.test(text)) found.push(`${name}: an output past location 0`);
-  }
-  const colour = (attachment: number) => attachment >= RECORDED_GL.COLOR_ATTACHMENT0 && attachment < RECORDED_GL.COLOR_ATTACHMENT0 + 32;
-  for (const { call, attachment } of attachments)
-    if (colour(attachment) && attachment !== RECORDED_GL.COLOR_ATTACHMENT0) found.push(`${call}: colour attachment ${attachment - RECORDED_GL.COLOR_ATTACHMENT0}`);
-  for (const list of drawBuffers) if (list.filter(buffer => buffer !== RECORDED_GL.NONE).length > 1) found.push(`drawBuffers: ${list.length} buffers`);
-  return found;
-}
 
 /** What the source scan finds in one module's text. */
 function sourceIssues(name: string, text: string): string[] {

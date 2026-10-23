@@ -12,8 +12,7 @@
  * 5. Disposal of both leaves the device drawing-ready, its canvas in place, and the GPU objects where the first disposal left them.
  * 6. A context lost and restored while a runtime is still being built (after its stage prefiltered the room, before its core loads):
  *    once shown, it draws byte-identically to the same runtime built on an undisturbed context.
- * 7. Residency (profiles phase 4a-iv): female shown, male wanted, female again 150 ms later shows female, and the male build stops within
- *    100 ms without drawing; the least recently shown runtime is evicted; closing everything returns the GPU objects to the baseline.
+ * Residency on real runtimes (4a-iv's section 7) moved to tests/webgl-scene-runtimes-probe-page.ts, beside the S2 gate table's other rows.
  * Results land in `window.probe` as plain data.
  */
 import * as THREE from "three";
@@ -29,7 +28,6 @@ import { studioStageSetup } from "../src/preview/lighting-setups";
 import { DEFAULT_STUDIO_STAGE } from "../src/preview/studio-lighting";
 import { initialRecipe } from "./fixtures/eye-region";
 import { countGlObjects, type GlObjectCounts } from "./webgl-gl-objects";
-import { SceneResidency, type ResidencyWant } from "../src/preview/scene-residency";
 import { syntheticCore, syntheticIdle, syntheticRecords } from "./webgl-synthetic-head";
 
 type Counts = { gl: GlObjectCounts; programs: string[] };
@@ -45,12 +43,9 @@ export type RendererDeviceProbe = {
   input: { shownA: { a: boolean; b: boolean }; shownB: { a: boolean; b: boolean } };
   disposed: { counts: Counts; canvases: number; hidden: boolean; lost: boolean; drawsAgain: boolean };
   restoredWhileBuilding: { events: string[]; built: string; reference: string; identical: boolean };
-  /** Residency and the superseding subject change (4a-iv): what each want became, the cancel time, eviction and the counts after closing. */
-  residency: { superseded: string; back: string; shown: string; built: string[]; cancelMs: number; canvasUnchanged: boolean; warm: string[];
-    evicted: string[]; residents: string[]; before: Counts; closed: Counts };
 };
 const probe: RendererDeviceProbe = { ok: false, errors: [], renderer: "", warm: null as never, aborts: [], hidden: null as never, aba: null as never,
-  input: null as never, disposed: null as never, restoredWhileBuilding: null as never, residency: null as never };
+  input: null as never, disposed: null as never, restoredWhileBuilding: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 try {
@@ -209,57 +204,6 @@ try {
     identical: built.length === reference.length && built.every((value, i) => value === reference[i]) };
   disturbed.dispose();
 
-  // 7. Residency and the superseding subject change (4a-iv): female shown; male wanted (his core slow to load), then female again 150 ms
-  // later: female stays shown, the male build stops within 100 ms and draws nothing. Then male is built and shown (female warm), a second
-  // feminine V evicts the least recently shown, and closing everything leaves the GPU objects where the first disposal did.
-  {
-    type Want = ResidencyWant & { body: "female" | "male" };
-    const want = (subject: string, body: "female" | "male"): Want => ({ scene: "s1", key: `s1|${subject}|${body}`, body });
-    const built: { key: string; runtime: SceneRuntime }[] = [], disposedKeys: string[] = [];
-    let aborted: number | null = null;
-    // The baseline: what lives now, after section 6's context loss (whose dead objects the counter still lists, never deleted).
-    const before = counts();
-    /** A core that takes `ms` to load and stops at once when its build is aborted. */
-    const slowCore = (ms: number, body: "female" | "male") => (_renderer: unknown, _body: unknown, signal?: AbortSignal) => new Promise<ReturnType<typeof syntheticCore>>((resolve, reject) => {
-      const timer = setTimeout(() => resolve({ ...syntheticCore(), body }), ms);
-      signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
-    });
-    const residency = new SceneResidency<Want, SceneRuntime>({
-      build: async (wanted, signal) => {
-        try {
-          const runtime = await build({ body: wanted.body, signal, loadCore: slowCore(wanted.body === "male" ? 600 : 20, wanted.body) as never });
-          built.push({ key: wanted.key, runtime });
-          return runtime;
-        } catch (error) { if (signal.aborted) aborted = performance.now(); throw error; }
-      },
-      show: runtime => { device.show(runtime.slot); runtime.requestRender(); },
-      hide: () => {},
-      dispose: runtime => { disposedKeys.push(built.find(item => item.runtime === runtime)?.key ?? "?"); runtime.dispose(); },
-    }, { warm: 1 });
-    await residency.want(want("v1", "female"));
-    await settle();
-    const female = pixels();
-    const toMale = residency.want(want("v1", "male")).then(() => "shown", (error: Error) => error.name);
-    await sleep(150);
-    const asked = performance.now();
-    const back = await residency.want(want("v1", "female")).then(() => "shown");
-    const superseded = await toMale;
-    await settle();
-    const after = pixels();
-    const supersede = { superseded, back, shown: built.find(item => item.runtime === residency.shown())?.key ?? "", built: built.map(item => item.key),
-      cancelMs: aborted === null ? -1 : aborted - asked, canvasUnchanged: checksum(after) === checksum(female) };
-    // Male built and shown; female warm. Then a second feminine V: the least recently shown (female v1) is evicted.
-    await residency.want(want("v1", "male"));
-    await settle();
-    const warm = residency.snapshot().residents.map(item => `${item.key}:${item.state}`);
-    await residency.want(want("v2", "female"));
-    await settle();
-    const evicted = [...disposedKeys];
-    const residents = residency.snapshot().residents.map(item => `${item.key}:${item.state}`);
-    residency.dispose();
-    await sleep(50);
-    probe.residency = { ...supersede, warm, evicted, residents, before, closed: counts() };
-  }
   device.dispose();
   probe.ok = probe.errors.length === 0;
 } catch (error) {

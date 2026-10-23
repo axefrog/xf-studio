@@ -16,6 +16,10 @@
  *   (scene-residency.ts `refresh`), with progress in the quiet status line, and draws the new setup once ready. A newer change restarts it,
  *   and a subject change supersedes it.
  * - **A view to show** (`show(view)`, for phase 2's tabs): the drawn view becomes `view`, and its scene's head is wanted like any other.
+ * - **Each view's editors** (`editors`, scene-editors.ts): the on-head editor is mounted on the head shown for the drawn view, editing the
+ *   look that view's scene shows, and unmounted before the head is hidden (or drawn for another view).
+ * - **Routing by view** (`runtimes`, view-routes.ts): the application sends a view's camera, preview and motion actions to the head that
+ *   holds it, and says how.
  * - **Residency.** The shown head plus at most one warm one (`warm`, decision D2); a warm head is shown again at once, catching up with
  *   its V. A lost context drops the warm heads first. The same decisions bound the choice-preview devices: only a V a resident head shows
  *   is admitted to have one, and a question for any other V waits for its admission (choice-preview-suspension.ts).
@@ -66,6 +70,8 @@ export type SceneHeadsPorts = {
   notice(text: string): void;
   /** The head shown now changed (undefined: none is shown); the composition root connects what follows the shown head. */
   shown(head: AttachedHead | undefined): void;
+  /** Each view's editors (scene-editors.ts): mount the on-head editor on the head shown for `view`; the release unmounts it. */
+  editors?: { mount(head: AttachedHead, view: string): () => void };
   /** Hear the pane's WebGL context being lost and restored. */
   onContext?(listener: (event: "lost" | "restored") => void): () => void;
   /**
@@ -90,6 +96,10 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   let drawnView: string | undefined;
   /** The view drawn now. */
   const drawn = () => drawnView ?? ports.scenes.view();
+  /** The on-head editor mounted on the shown head (for the view it draws), and its release. */
+  let editor: { head: AttachedHead; release: () => void } | undefined;
+  const mountEditor = (head: AttachedHead) => { editor = { head, release: ports.editors?.mount(head, drawn()) ?? (() => {}) }; };
+  const unmountEditor = () => { const mounted = editor; editor = undefined; mounted?.release(); };
 
   const residency = new SceneResidency<SceneHeadWant, AttachedHead>({
     build: async (want, signal, progress) => {
@@ -113,12 +123,13 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     stages: want => want.body === "male" ? STAGES_MALE : STAGES,
     show: head => {
       head.show(drawn());
+      mountEditor(head);
       // The V's context stays attached while heads swap: creator changes are never refused for a reload (the old `not_ready`).
       ports.head.attach({ characterContext: head.characterContext });
       ports.shown(head);
       admitPreviews();
     },
-    hide: head => { head.hide(); ports.shown(undefined); },
+    hide: head => { if (editor?.head === head) unmountEditor(); head.hide(); ports.shown(undefined); },
     dispose: head => { head.dispose(); admitPreviews(); },
   }, { warm: ports.warm });
   const offContext = ports.onContext?.(event => { if (event === "lost") residency.contextLost(); });
@@ -261,7 +272,10 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       const want = current();
       if (!want) return Promise.reject(Error("That view's V isn't known yet."));
       // Another view of the scene shown now draws on the same head (its camera, settings and motion).
-      return request(want).then(head => { if (drawn() === view) head.draw(view); });
+      return request(want).then(head => {
+        if (drawn() !== view || head.preview.view() === view) return;
+        unmountEditor(); head.draw(view); mountEditor(head);
+      });
     },
     /** The view drawn now (the one `show` drew last, else the one the scenes port names). */
     shownView(): string { return drawn(); },
