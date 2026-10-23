@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { AuthoringDocument } from "../src/app/authoring/authoring-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
 import type { RasterPort } from "../src/legacy/eye-makeup/browser/raster-client";
+import type { LayeredMakeupSurface } from "../src/engines/layered-makeup/render/makeup-stack";
 import { createMakeupStack, EYE_RASTER_REGION, freshWorkspace } from "./fixtures/eye-region";
 
 // PREV-20: everything wired to a head is released together when a later step fails, so "Try again" starts clean: no doubled theme
@@ -179,8 +180,10 @@ function layeredMakeup() {
     }
     return stack;
   };
+  // One surface object per scene, as a scene's feature renderer is.
+  const surfaces = new Map<unknown, LayeredMakeupSurface>();
   const wiring: LayeredSurfaceWiring = { feature: "eye-makeup", preview: device,
-    surface: scene => { const stack = stackOf(scene); return { layers: stack, surface: stack.plate, maxTextureSize: 4096 }; } };
+    surface: scene => surfaces.get(scene) ?? surfaces.set(scene, { layers: stackOf(scene), surface: stackOf(scene).plate, maxTextureSize: 4096 }).get(scene)! };
   /** What a frame would compile, composite or upload for a stack: its slots' materials and textures, their versions, and its blend. */
   const state = (scene: unknown) => {
     const stack = stackOf(scene);
@@ -203,10 +206,10 @@ test("4a-v: a cold V's authored makeup is on its surface before its scene is pre
     atPrepare = makeup.state(head.scene);
   };
   await head.prepare(new AbortController().signal, () => {});
-  // Preparation saw the authored layer: one slot, its mask the completed 512² canvas, drawn.
-  expect(atPrepare?.textures).toHaveLength(1);
+  // Preparation saw the authored layers: a slot each, the first's mask the completed 512² canvas, drawn.
+  expect(atPrepare?.textures).toHaveLength(makeup.device.canvases.length);
   expect((atPrepare!.images[0] as HTMLCanvasElement).width).toBe(512);
-  expect(atPrepare!.visible).toEqual([true]);
+  expect(atPrepare!.visible[0]).toBe(true);
   expect(atPrepare!.dirty).toBe(false);
   head.show();
   // Shown: the same slots, materials, textures and images, no version moved (no program change, no upload), no composite pending.

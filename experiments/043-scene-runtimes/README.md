@@ -494,10 +494,10 @@ Sol's confirmation found five fixed and two only partly fixed, with one new Medi
 
 1. *High: authored makeup arrived after preparation.* Layers were connected only at show, so preparation saw an empty stack and a cold V with authored makeup compiled its plate, composited and uploaded in its first shown frame; the probe hid it by setting layers itself. Now the head fills its surfaces before preparing and show keeps them (*The authored makeup before show*, above).
 2. *High: a lost context could leave a preparation polling for good.* It held programs from before the loss. Now it restarts across the loss (*A lost context restarts the preparation*, above).
-3. *Medium: compiling ahead changed a live depth material.* `shadowDepthMaterial` wrote into a mesh's own `customDepthMaterial`, and its second call flipped the side again. Now every field it writes is put back after the compile.
+3. *Medium: compiling ahead changed a live depth material.* `shadowDepthMaterial` wrote into a mesh's own `customDepthMaterial`, and its second call flipped the side again. Now every field it writes is put back after the compile. The contact-prepass variant is then read from the depth material as it is drawn, and the next redraw's turned-over side is compiled too (PREV-208): with the old mutation gone, the first probe run found the cold V's warm-up linking that one depth variant, and the second run links none.
 4. *Medium: the composite's preparation ignored cancellation and kept its shaders.* Now its wait is abortable, and its passes' programs free their shaders on release.
 
-The bun tests for all four (above) are written but not yet run: free memory stayed below the memory guard's 16 GB floor while a game session ran. The T2 probe also still has to run with the production feed and the new gate (it needs about 19 GB free).
+The bun tests for all four (above) and the T2 probe with the production feed and the context-loss gate pass (results above).
 
 **What 4a-vi needs from this.**
 
@@ -557,21 +557,24 @@ It closes S2's second defect: a lighting setup's or a V's first draw froze the p
   - closing everything;
   - a context lost while a cold V's programs link (run after closing, since a lost context's objects are never deleted): its preparation restarts after the restore, and the V is shown and draws.
 
-**Results** (23 October 2026, before the review fixes below; RTX 4070, ANGLE D3D11, headless Chrome; every run under the 3 GB guard, peak 1.4 GB). The probe with the production makeup feed and the context-loss gate is still to run (see *Review fixes*):
+  The cold V's first shown frame still uploads no map with the authored layer on it: its mask is on the surface from the fill on, so it is uploaded while the runtime is prepared.
+
+**Results** (23 October 2026, with the review fixes below and the authored layer fed through the production preview device; RTX 4070, ANGLE D3D11, headless Chrome; every run under the 3 GB guard, peak 1.4 GB):
 
 | Gate | With KHR_parallel_shader_compile | Without it (fallback) |
 |---|---|---|
-| Longest main-thread task, cold V, from the want to 1 s after it is shown (< 50 ms) | **none of 50 ms or more** | 13.2 s (5 tasks over 50 ms) |
-| Cold V, want to first presented frame | 35.3 s (17 programs linked on the driver's threads, behind progress) | 32.1 s |
-| Cold V, show to first presented frame | 32.6 ms | 33.0 ms |
+| Longest main-thread task, cold V, from the want to 1 s after it is shown (< 50 ms) | **none of 50 ms or more** | 13.7 s (2 tasks over 50 ms) |
+| Cold V, want to first presented frame | 30.0 s (17 programs linked on the driver's threads, behind progress) | 30.0 s |
+| Cold V, show to first presented frame | 32.6 ms | 32.3 ms |
 | Cold V frames before shown / hidden warm-ups | 0 / 1 | 0 / 1 |
 | Shown V's pixels while the cold V prepared | unchanged | unchanged |
 | Cold V's first shown frame: links, programs made, uploads | 0, 0, 9 (a later frame also sends 9: its bone matrices) | 0, 0, 9 (9) |
-| Links in any warm-up draw, the renderer's first included | 0 (warm-ups 6–10 ms) | 0 (8–10 ms) |
-| Warm switch, want to first presented frame (≤ 100 ms) | 1.2–5.4 ms (8 switches) | 1.2–18 ms |
-| Cancel while compiling, superseding want to stop (≤ 100 ms) | 3.4 ms; nothing drawn, GPU objects back | 10.7 ms; the same |
-| Progress | stages in order, fraction never decreasing, 31 steps in `programs` | the same, 23 steps in `programs` |
+| Links in any warm-up draw, the renderer's first included | 0 (warm-ups 6–10 ms) | 0 (6–10 ms) |
+| Warm switch, want to first presented frame (≤ 100 ms) | 1.1–15 ms (8 switches) | 1.3–18 ms |
+| Cancel while compiling, superseding want to stop (≤ 100 ms) | 3.6 ms; nothing drawn, GPU objects back | 0.1 ms; the same |
+| Progress | stages in order, fraction never decreasing, 31 steps in `programs` | the same, 24 steps in `programs` |
 | Closing everything (4a-i's gate with preparation) | GPU objects and programs at the baseline (`BackgroundMaterial` used once) | the same |
+| Context lost while a cold V's programs link, restored 0.2 s later | the preparation restarted once, the V was shown and drew | the same |
 
 Before the fixes in this chunk, the same probe found the cold V's warm-up draw linking 5 programs in one 36–44 s task, the first V's linking 8 in 5.2 s, and a superseded preparation leaving 4 shaders. The probe's own diagnostics name what was linked where (`warmUpPrograms`, `links`, `slow`), and that is how each was found:
 
@@ -583,8 +586,9 @@ Before the fixes in this chunk, the same probe found the cold V's warm-up draw l
 
 | Other runs | Result |
 |---|---|
-| Scene, view, preview, character, viewport, motion, residency, lighting, render, head, parity, preparation, UI, style-guide, makeup, startup, workspace, profiles and boundary tests | 105 files: 1,032 pass, 5 skip (real-game oracles), 0 fail (peak 1.7 GB) |
-| WebGL probes | renderer device 9, scene dispose 4, scene host 7, body 6, clothing 7, studio lighting 4, display 12, eye 5, plate composite 8, contact shadow 3, skin scatter 8, choice preview 6: all pass (peaks 0.5–1.5 GB) |
+| Scene, view, preview, character, viewport, motion, residency, lighting, render, head, parity, preparation, UI, style-guide, makeup, feature-renderer, startup, workspace, profiles and boundary tests | 106 files: 1,043 pass, 5 skip (real-game oracles), 0 fail (peak 1.7 GB) |
+| WebGL probes after the review fixes | preparation 9 (both runs), plate composite 8, renderer device 9, studio lighting 4: all pass (peaks 0.8–1.4 GB) |
+| WebGL probes before them | scene dispose 4, scene host 7, body 6, clothing 7, display 12, eye 5, contact shadow 3, skin scatter 8, choice preview 6: all pass (peaks 0.5–1.5 GB) |
 | `bun run check` | passes |
 
 **The fallback (no KHR_parallel_shader_compile).** It stays chunked and reports progress, but it can't keep the page free. The fence trick assumes a link has finished once the GPU process has worked through the commands sent so far. ANGLE still links on its worker threads, so the fence signals early, and the first use of a program then blocks until its link is done (13.2 s for the slowest cold program). Without the extension the page has no way to ask whether a link is done without waiting. Chrome on Windows always offers the extension, so the fallback matters for other browsers and GPUs.

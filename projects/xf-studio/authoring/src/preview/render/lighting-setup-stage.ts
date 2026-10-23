@@ -392,8 +392,15 @@ export function createLightingSetupStage(options: {
               if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material, touched));
             }
             // The maps are redrawn inside the contact prepass too (its draw is the frame's first, while every caster wears its depth
-            // material), so Three's shadow pass then picks a depth material for the depth material itself: that variant as well.
-            if (contactOn) compileAs(mesh, shadowDepthMaterial(mesh, contact.casterMaterial(mesh), touched));
+            // material), so Three's shadow pass then picks a depth material for the depth material itself: that variant as well. It
+            // reads the caster as it is drawn now (what the line above wrote is put back first), and it turns the caster's side over on
+            // every redraw (PREV-208), so the next redraw's variant too.
+            if (contactOn) {
+              restoreTouched(touched);
+              const caster = contact.casterMaterial(mesh);
+              compileAs(mesh, shadowDepthMaterial(mesh, caster, touched));
+              compileAs(mesh, shadowDepthMaterial(mesh, caster, touched));
+            }
           }
         }
       } finally {

@@ -68,10 +68,11 @@ test("compiling ahead leaves every mesh's material and its own depth material as
     expect(fields(skin)).toEqual(before.skin);
     expect(fields(plain.material as THREE.Material)).toEqual(before.plainFields);
   }
-  // It still compiled the shadow depth variants with the depth material, as Three's shadow pass will pick them (a side of its own).
+  // It still compiled the shadow depth variants with the depth material, as Three's shadow pass will pick them: under the skin (its
+  // side turned over), and inside the contact prepass from the depth material as it is drawn (BackSide, turned over to FrontSide), then
+  // as the next redraw turns it back (PREV-208).
   const depthCompiles = seen.filter(entry => entry.material === "skin-depth");
-  expect(depthCompiles.length).toBeGreaterThan(0);
-  expect(new Set(depthCompiles.map(entry => entry.side)).has(THREE.BackSide)).toBe(true);
+  expect(new Set(depthCompiles.map(entry => entry.side))).toEqual(new Set([THREE.BackSide, THREE.FrontSide]));
   stage.dispose();
 });
 
