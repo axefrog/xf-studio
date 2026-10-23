@@ -81,6 +81,10 @@ By the WolvenKit team and contributors. [GitHub](https://github.com/WolvenKit/Wo
 
 ## Libraries, runtimes and general tools
 
+### ANGLE
+
+By Google and the ANGLE contributors. [Source](https://chromium.googlesource.com/angle/angle). ANGLE translates the Studio's WebGL to Direct3D 11 in Chrome on Windows. Its shader-compile trace events, with the HLSL of each build, showed which shader variants it builds at a program's first draw rather than at link time (for programs that write several outputs, and for float vertex inputs fed integers) and that those builds hold the screen still, which is why every Studio program writes one output and joint indices are floats.
+
 ### Apple ARKit face tracking
 
 By Apple. [Blend shape documentation](https://developer.apple.com/documentation/arkit/arfaceanchor/blendshapelocation). Its 52 named facial blend shapes, which MediaPipe and many face tools share, are the vocabulary our face-capture prototype maps onto V's face controls. Only the names and their descriptions were used.
@@ -96,6 +100,10 @@ By the Bun contributors. [GitHub](https://github.com/oven-sh/bun). Bun runs XF S
 ### Capstone
 
 By Nguyen Anh Quynh and contributors. [Website](https://www.capstone-engine.org), [GitHub](https://github.com/capstone-engine/capstone). Disassembling the game's executable with it showed where the hair lighting options get their default values and which shader constants they feed, and how the game bakes hair-colour profiles; it also traced how the game finds a material's compiled shaders and builds GPU pipeline states from them. Used as a research tool only; BSD-3-Clause-licensed.
+
+### Chromium
+
+By the Chromium authors. [Source](https://source.chromium.org/chromium). Chrome's tracing (the DevTools Protocol's `Tracing` domain and its `gpu` categories) showed where the GPU process spends a WebGL page's time, and its GPU program cache, kept with a browser profile, showed that most draw-time shader builds are a first-session cost.
 
 ### CSS Easing Functions
 
@@ -144,6 +152,10 @@ The [JSON Schema](https://json-schema.org/) specification (draft 2020-12). The X
 ### JSON for Modern C++
 
 By Niels Lohmann and contributors. [GitHub](https://github.com/nlohmann/json). The XF Runtime Bridge plugin parses and writes its protocol messages with it. It is compiled into the plugin (MIT), so its licence notice must ship with any distributed build.
+
+### KHR_parallel_shader_compile
+
+By the Khronos Group. [Extension specification](https://registry.khronos.org/webgl/extensions/KHR_parallel_shader_compile/). Its `COMPLETION_STATUS_KHR` query, which never waits for the driver, is how the Studio links a scene's programs ahead on the driver's threads and asks once a frame whether they are done.
 
 ### Khronos Data Format Specification
 

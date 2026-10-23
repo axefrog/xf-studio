@@ -1,6 +1,6 @@
 # Experiment 043: scene runtimes (profiles phase 4a)
 
-**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9), 4a-iv (§10) and 4a-v with its G2 follow-ups 4a-v-b (§11) and 4a-v-c (§12) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
+**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9), 4a-iv (§10), 4a-v with its G2 follow-ups 4a-v-b (§11) and 4a-v-c (§12), and 4a-vi (§13) are built on `claude/profiles-4a`; G3 and the merge are next. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `72369156` (phase 1 merged). Tests are in `projects/xf-studio/authoring/tests/`.
 
@@ -499,7 +499,7 @@ Sol's confirmation found five fixed and two only partly fixed, with one new Medi
 
 The bun tests for all four (above) and the T2 probe with the production feed and the context-loss gate pass (results above).
 
-**What 4a-vi needs from this.**
+**What 4a-vi needed from this** (built in §13).
 
 - **Routing by named view.** The owner shows one drawn scene. Routing a view action to the named view's runtime, and readiness per scene for the loaders (the `savedAppearance.ready` port reads `heads.shown()`), replace the single attachments the shown head makes (`attach({ preview, motion, … })`).
 - **The editors per view.** The shown head mounts the on-head editor in `show`; `preview/browser/scene-editors.ts` takes that over per view, and exception 17 goes.
@@ -783,7 +783,7 @@ The preparation probe passes 14 of 14 (peak 1.7 GB). The other WebGL probes pass
 
 One run's first read of the GL error after the banded upload found an `INVALID_OPERATION`. It came from no upload step: the next run read the error after each step and found none, so the gate now reads it there. Its source, somewhere else in the page between the last band and the read-back, is not known.
 
-**What 4a-vi needs from this.**
+**What 4a-vi needed from this** (§12 and §13 built it, except the last item but one).
 
 - **The three-target builds.** Done in 4a-v-c (§12).
 - **The head's morph-target texture** is built inside the first warm-up piece's draw (about 30 ms of the 52 ms task). Three builds it at a mesh's first draw and offers no other way to make it.
@@ -881,9 +881,9 @@ The preparation probe passes 15 of 15, and the other WebGL probes pass too: skin
 - **Each pass redraws the whole input scene against a cleared depth buffer** rather than testing S1 and S2 against S0's depth. Reusing S0's depth would drop the occluders' draws, but it relies on two programs computing the same depth to the last bit. Three doesn't declare `invariant gl_Position`, and the unlit programs keep fewer varyings.
 - **Program count.** The occluders share one program across passes. The extra skin and decal programs are cheap to link and are compiled ahead in the `programs` stage like the rest.
 
-**What 4a-vi needs from this.**
+**What 4a-vi needed from this** (built in §13, except the scatter's draw cost).
 
-- **The head's morph-target texture** is the last page task over 50 ms in G2 (A, about half the cold runs). Three builds and uploads it whole at a mesh's first draw and offers no other way to make it: a step of its own, with the texture built ahead or uploaded in layers, would need to reach into Three.
+- **The head's morph-target texture** was the last page task over 50 ms in G2 (A, about half the cold runs). Three builds and uploads it whole at a mesh's first draw and offers no other way to make it: a step of its own, with the texture built ahead or uploaded in layers, would need to reach into Three.
 - **The knowledge page on program linking in WebGL** should take this chunk's findings too:
   - ANGLE's draw-time builds for several outputs and for integer vertex inputs, both on the GPU process's main thread;
   - Chrome's program cache keeping them across sessions;

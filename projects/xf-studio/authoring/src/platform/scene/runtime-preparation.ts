@@ -5,6 +5,7 @@ import { PREPARE_FRAME_MS } from "./character-renderer";
 import { isDrawable } from "./drawables";
 import { linkPacer } from "./link-pacing";
 import { gpuDrained, gpuGate } from "./gpu-gate";
+import { morphGeometry, morphTextureSteps, watchMorphMap } from "./morph-textures";
 
 /**
  * Preparing a scene runtime before it is shown (profiles phase 4a-v, experiments/043-scene-runtimes §11): what its first shown frame would
@@ -18,7 +19,8 @@ import { gpuDrained, gpuGate } from "./gpu-gate";
  *    fence stands in: once the GPU process has worked through what was sent, the links have been made, and asking no longer waits long.
  *    Then each program's first use (its uniforms and attributes read back, a synchronous round trip) is taken, a few per frame.
  * 2. **Textures.** The maps those programs sample, and the core head's own, uploaded a few per frame, a large one in bands of rows (a 4096²
- *    map whole took 35–63 ms).
+ *    map whole took 35–63 ms). Then the morph-target textures Three would build at each morph mesh's first draw, made ahead a few layers at
+ *    a time and handed to Three (morph-textures.ts: the head's took 50–102 ms inside a draw on real data).
  * 3. **Warm-up, in pieces.** Hidden draws on the renderer device (`warmUp`): whatever only a draw makes (Three's draw-time programs,
  *    the driver's own shader variants and pipeline state, frame-sized targets, small uploads) is made there, and the shown runtime is drawn
  *    again in the same task, so the canvas never shows it. The GPU process presents no frame while it makes a draw's shader variants, so
@@ -150,10 +152,13 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
     || (texture as THREE.VideoTexture).isVideoTexture || (texture as THREE.CubeTexture).isCubeTexture
     || (properties.get(texture) as { __version?: number }).__version === texture.version) || uploadUnfinished(texture);
   const textures = [...new Set([...compiled.flatMap(entry => entry.textures ?? []), ...ports.textures?.() ?? []])].filter(needsUpload);
+  const morphs = [...new Set(drawables.map(morphGeometry).filter(geometry => geometry !== undefined))];
+  const steps = morphs.map(geometry => morphTextureSteps(renderer, geometry, { now, budget })).filter(made => made !== undefined);
   report("textures", 0);
   let uploads = 0;
   // Each upload sent only once the GPU process caught up with the last (gpu-gate.ts): none waits inside the call. Its last fence goes with it.
   const gate = gpuGate(renderer);
+  const total = textures.length + steps.length;
   try {
     for (const [index, texture] of textures.entries()) {
       // A large map a band at a time (character-detail-loader.ts `uploadStep`), a frame let through whenever a step used up its share.
@@ -166,9 +171,20 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
         gate.mark();
         if (done) break;
       }
-      report("textures", (index + 1) / textures.length);
+      report("textures", (index + 1) / total);
     }
-  } finally { gate.dispose(); }
+    // The morph textures, a step at a time (each a few layers filled, or those layers uploaded once the GPU process caught up).
+    for (const [index, made] of steps.entries()) {
+      for (let done = false; !done;) {
+        await pace();
+        while (!gate.idle()) await frame();
+        done = made.step();
+        gate.mark();
+      }
+      uploads++;
+      report("textures", (textures.length + index + 1) / total);
+    }
+  } finally { for (const made of steps) made.dispose(); gate.dispose(); }
   report("textures", 1);
   for (const step of ports.work?.() ?? []) { await frame(); step(); }
 
@@ -180,7 +196,8 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
     for (let at = 0, size = 1; at < drawables.length;) {
       await pace();
       const piece = new Set(drawables.slice(at, at + size));
-      if (!ports.warmUp(piece)) break;
+      // A morph mesh's first draw on a renderer shows where Three keeps its morph textures (morph-textures.ts).
+      if (!watchMorphMap(renderer, [...piece].map(morphGeometry).filter(geometry => geometry !== undefined), () => ports.warmUp(piece))) break;
       warmedUp = true;
       at += piece.size;
       const waited = await drained("warm-up", 0.9 * at / drawables.length, "gpu");

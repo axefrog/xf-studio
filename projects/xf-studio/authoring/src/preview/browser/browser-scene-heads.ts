@@ -273,7 +273,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       if (!want) return Promise.reject(Error("That view's V isn't known yet."));
       // Another view of the scene shown now draws on the same head (its camera, settings and motion).
       return request(want).then(head => {
-        if (drawn() !== view || head.preview.view() === view) return;
+        if (drawn() !== view || residency.shown() !== head || head.preview.view() === view) return;
         unmountEditor(); head.draw(view); mountEditor(head);
       });
     },

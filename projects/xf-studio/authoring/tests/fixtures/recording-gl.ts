@@ -17,6 +17,7 @@ import type { RecordedAttachment, RecordedShader } from "./single-output";
 
 export function recordingRenderer() {
   const sources: string[] = [], shaders: RecordedShader[] = [], attachments: RecordedAttachment[] = [], drawBuffers: number[][] = [];
+  const volumes: { call: string; width: number; height: number; layer: number; depth: number }[] = [];
   const constants: Record<string, number> = { ...GL };
   let next = 1;
   const base: Record<string, unknown> = {
@@ -40,6 +41,10 @@ export function recordingRenderer() {
     framebufferTextureLayer: (_target: number, attachment: number) => { attachments.push({ call: "framebufferTextureLayer", attachment }); },
     framebufferRenderbuffer: (_target: number, attachment: number) => { attachments.push({ call: "framebufferRenderbuffer", attachment }); },
     drawBuffers: (buffers: readonly number[]) => { drawBuffers.push([...buffers]); },
+    // Array-texture storage and uploads, by the layers they cover (`texSubImage3D`'s zoffset and depth).
+    texStorage3D: (_target: number, _levels: number, _format: number, width: number, height: number, depth: number) => { volumes.push({ call: "texStorage3D", width, height, layer: 0, depth }); },
+    texSubImage3D: (_target: number, _level: number, _x: number, _y: number, layer: number, width: number, height: number, depth: number) => {
+      volumes.push({ call: "texSubImage3D", width, height, layer, depth }); },
   };
   const gl = new Proxy(base, { get(target, key) {
     if (typeof key === "string" && key in target) return target[key];
@@ -64,7 +69,7 @@ export function recordingRenderer() {
     return programs;
   }
   const programKey = (material: THREE.Material) => (renderer.properties.get(material) as { currentProgram?: { cacheKey: string } }).currentProgram?.cacheKey;
-  return { renderer, compile, programKey, shaders, attachments, drawBuffers, scene, camera };
+  return { renderer, compile, programKey, shaders, attachments, drawBuffers, volumes, scene, camera };
 }
 
 /** A skinned surface with the head's second influence set (joints_1/weights_1) and a facial target, as the head and its plate have. */

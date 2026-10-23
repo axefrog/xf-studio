@@ -82,6 +82,20 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
+  test("the morph-target texture is made ahead in steps under 50 ms each, byte for byte Three's, and the draw that follows builds none (4a-vi)", () => {
+    for (const probe of [parallel, fallback]) {
+      const { morph } = probe;
+      expect(morph.mapKnown).toBe(true);
+      expect(morph.handed).toBe(true);
+      expect(morph.identical).toBe(true);
+      expect(morph.steps).toBeGreaterThan(2);
+      expect(morph.stepMaxMs).toBeLessThan(50);
+      // The draw that follows builds nothing: far cheaper than Three's own build at the draw.
+      expect(morph.drawMs).toBeLessThan(morph.threeDrawMs);
+    }
+    expect(parallel.morph.tasksOver50).toBe(0);
+  });
+
   test("S2 gate, one output: every fragment shader the page's runtimes gave the driver writes one output, into one colour attachment", () => {
     for (const probe of [parallel, fallback]) {
       expect(probe.singleOutput.fragments).toBeGreaterThan(20);

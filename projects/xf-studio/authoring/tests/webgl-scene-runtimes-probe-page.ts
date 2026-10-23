@@ -21,6 +21,9 @@
  *    built. A build whose last step can't be stopped, finishing after it was superseded, is disposed and never shown (the generation check).
  *    The least recently shown runtime is evicted past the budget. Then a V in a scene of its own is opened and closed (`close(scene)`):
  *    the GPU objects and Three's programs are back where they were.
+ * 6c. The morph-target texture (4a-vi): a geometry the size of the real head's morph targets (6,800 vertices, 105 targets of position and
+ *    normal deltas), drawn once as Three builds it at the draw, and its twin made ahead in steps (morph-textures.ts, as a preparation runs
+ *    them) and then drawn: each step's time, the draw's, and whether Three kept the texture made ahead, byte for byte its own.
  * 7. A context lost while a cold V's programs link (after 6, since a lost context's objects are never deleted): its preparation starts
  *    again once the context is back, and the V is shown and draws.
  * 5. (After 4.) A lighting setup never drawn, asked of the shown V (profiles phase 4a-v-b): it is staged and prepared while the setup before
@@ -56,6 +59,7 @@ import { AuthoringDocument } from "../src/app/authoring/authoring-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
 import { offerUploadSource, uploadStep, UPLOAD_BITMAP_OPTIONS } from "../src/character/render/character-detail-loader";
 import { gpuGate } from "../src/platform/scene/gpu-gate";
+import { morphTextureMap, morphTextureSteps } from "../src/platform/scene/morph-textures";
 import { EYE_RASTER_REGION, freshWorkspace } from "./fixtures/eye-region";
 import { multipleOutputs, type RecordedAttachment, type RecordedShader } from "./fixtures/single-output";
 
@@ -95,6 +99,9 @@ export type SceneRuntimesProbe = {
   supersede: { superseded: string; back: string; shown: string; built: string[]; cancelMs: number; canvasUnchanged: boolean;
     late: { outcome: string; built: boolean; disposed: boolean; frames: number }; shownKeys: string[]; warm: string[]; evicted: string[]; residents: string[] };
   closeSubject: { before: Counts; opened: Counts; after: Counts; shownAfter: boolean };
+  /** 6c: Three's own morph texture build at a draw, against the same texture made ahead in steps. */
+  morph: { vertices: number; targets: number; mapKnown: boolean; threeDrawMs: number; steps: number; stepMaxMs: number; totalMs: number; drawMs: number;
+    handed: boolean; identical: boolean; tasksOver50: number };
   /** What the context showed of programs with several outputs and targets with several colour attachments (none), and how much it saw. */
   singleOutput: { issues: string[]; fragments: number; attachments: number };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
@@ -118,7 +125,7 @@ export type SceneRuntimesProbe = {
   baseline: Counts; closed: Counts;
 };
 const probe: SceneRuntimesProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
-  cancel: null as never, setup: null as never, supersede: null as never, closeSubject: null as never, singleOutput: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
+  cancel: null as never, setup: null as never, supersede: null as never, closeSubject: null as never, morph: null as never, singleOutput: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
 /** Every animation frame's time while `recording` is set (frames presented: the GPU process presents none while it builds shaders). */
@@ -601,6 +608,75 @@ try {
     await sleep(100);
     probe.closeSubject = { before, opened, after: counts(), shownAfter: residency.shown() !== undefined };
     residency.dispose();
+    await sleep(50);
+  }
+
+  // 6c. The morph-target texture: Three's build at the draw, then its twin made ahead in steps and drawn.
+  {
+    const vertices = 6800, targets = 105;
+    const geometry = () => {
+      const made = new THREE.BufferGeometry();
+      made.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(vertices * 3).map((_, i) => (i % 97) * 1e-3), 3));
+      made.setIndex(Array.from({ length: vertices - 2 }, (_, i) => [i, i + 1, i + 2]).flat());
+      const deltas = (seed: number) => new THREE.Float32BufferAttribute(new Float32Array(vertices * 3).map((_, i) => Math.sin(seed * 31 + i) * 1e-3), 3);
+      made.morphAttributes.position = Array.from({ length: targets }, (_, t) => deltas(t));
+      made.morphAttributes.normal = Array.from({ length: targets }, (_, t) => deltas(t + 1000));
+      return made;
+    };
+    const material = new THREE.MeshBasicMaterial(), target = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    const meshOf = (made: THREE.BufferGeometry) => { const mesh = new THREE.Mesh(made, material); mesh.updateMorphTargets(); mesh.frustumCulled = false; return mesh; };
+    const camera = new THREE.PerspectiveCamera();
+    const theirs = geometry(), ours = geometry(), a = meshOf(theirs), b = meshOf(ours);
+    // The program first (a morph program, the same for both), so the draws below time the morph texture only.
+    {
+      const scene = new THREE.Scene(), copy = new THREE.BufferGeometry().copy(theirs); scene.add(meshOf(copy));
+      renderer.setRenderTarget(target);
+      await renderer.compileAsync(scene, camera);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      copy.dispose();
+      await settle();
+    }
+    const drawOnly = (mesh: THREE.Mesh) => {
+      const scene = new THREE.Scene(); scene.add(mesh);
+      renderer.setRenderTarget(target);
+      const start = performance.now();
+      renderer.render(scene, camera);
+      const ms = performance.now() - start;
+      renderer.setRenderTarget(null);
+      return ms;
+    };
+    const mapKnown = !!morphTextureMap(renderer);
+    await frame();
+    const threeDrawMs = drawOnly(a);
+    await settle();
+    // Ahead, as a preparation runs the steps: a frame let through whenever a step used its share, each upload once the GPU caught up.
+    const steps = morphTextureSteps(renderer, ours);
+    const gate = gpuGate(renderer), times: number[] = [];
+    const started = performance.now();
+    if (steps) for (let done = false; !done;) {
+      await frame();
+      while (!gate.idle()) await frame();
+      const start = performance.now();
+      done = steps.step();
+      times.push(performance.now() - start);
+      gate.mark();
+    }
+    while (!gate.idle()) await frame();
+    gate.dispose();
+    const totalMs = performance.now() - started;
+    await frame();
+    const made = morphTextureMap(renderer)?.get(ours);
+    const drawMs = drawOnly(b), drawnAt = performance.now();
+    const kept = morphTextureMap(renderer)?.get(ours);
+    const own = morphTextureMap(renderer)?.get(theirs);
+    const left = (made?.texture.image.data ?? new Float32Array()) as Float32Array, right = (own?.texture.image.data ?? new Float32Array(1)) as Float32Array;
+    let identical = left.length === right.length;
+    for (let i = 0; identical && i < left.length; i++) if (left[i] !== right[i]) identical = false;
+    await sleep(200);
+    probe.morph = { vertices, targets, mapKnown, threeDrawMs, steps: times.length, stepMaxMs: Math.max(0, ...times), totalMs, drawMs,
+      handed: !!made && kept === made, identical, tasksOver50: over50(started, drawnAt) };
+    theirs.dispose(); ours.dispose(); material.dispose(); target.dispose();
     await sleep(50);
   }
 
