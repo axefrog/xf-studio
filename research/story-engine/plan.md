@@ -157,7 +157,7 @@ A specification must be complete enough that an agent with no memory of any disc
 | Area | Theory and research | Design | Specification | Implementation |
 |---|---|---|---|---|
 | Kernel: the dimensional model | [Foundation](foundation.md) v0; formal grounding (P3) | The foundation | S0 [kernel](spec/kernel.md) | Reference model, then native core |
-| Simulation layer: processes, tiers, mirroring the game | P2 | P3 | S1 simulation | |
+| Simulation layer: processes, tiers, mirroring the game | P2 | [P3](p3-simulation-layer.md) | S1 simulation | |
 | Seeding layer and seed language | P1 | [P4](p4-seeding-layer.md) | [S2](spec/seeding.md) seed language | |
 | Procedural engine: sowing, fitting, director | P1 | [P5](p5-procedural-engine.md) | [S3](spec/procedural.md) procedural engine | |
 | Authored content and player configuration | P1 | P6 | S4 content packs and settings | |

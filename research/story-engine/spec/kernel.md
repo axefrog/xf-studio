@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.8, 23 October 2026.
+**Status:** v4.9, 23 October 2026.
+- v4.9 completes the process interface for S1 (V4-35 to V4-38), from the [P3](../p3-simulation-layer.md) design.
 - v4.8: an event-kind registry; occurrence ids and times on delivered envelopes; `tempo` in settings (V4-32 to V4-34).
 - v4.7 clarifies pattern frames for layer 3 (V4-31).
 - v4.6 adds staged batches, widens relevance routing to layer 2, tightens the production gate, fixes recall to once per encounter, and defers the memory machinery and implicit edges from the first version, after GPT-6 Astra's second review of S2 (V4-26 to V4-30 in §20).
@@ -735,6 +736,18 @@ Simulation processes are S1's. The kernel defines when they run and what they ma
 
   Processes never see each other's outputs within a span (double buffering).
 - **Outstanding outputs are state.** A batch computed but not yet applied is part of the process's `ProcessState`, with its application boundary. It is persisted, restored on load under the new epoch, and applied at its boundary without re-running the process.
+- **The process interface** (v4.9). `run(ctx, k)` may:
+  - **read its own state** and return a replacement with its batch. The state is applied atomically with the batch, and double-buffered like any output;
+  - **read other processes' published digests** as of the boundary snapshot, read-only;
+  - for a fine-tier process, **call `demanded(tier)`**, which returns the nodes demand reaches at that tier, with the claim;
+  - **return operations of these kinds:**
+    - frame operations: open, status, weight, interests;
+    - group `decide` and `order` (§12);
+    - `observe`;
+    - `tell`;
+    - belief set.
+
+    They are applied with the batch, in its order, under the same rules as the other operations.
 - **Partition independence (I-15).** Given the same timestamped external operations and the same demand history, a process's history doesn't depend on how ticks fell.
 - **Catch-up.** After an absence, tiers 0–2 run every missed boundary in order, each within the hard limits.
 - **Fine tiers (3–5)** run only where demand reaches them (§10.6). They never catch up: when V arrives, their state is generated from the coarse state, consistent with the pins.
@@ -1286,6 +1299,10 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-32 | The event-kind registry; kinds matched through the `kind` slot | §9.2, §10.5 | S3's sifter (Astra's S3 review, D-16) | A clarification and a small registry |
 | V4-33 | Occurrence id and game time on delivered emissions and dilemmas | §10.5, §10.8 | D-16 | Delivery only |
 | V4-34 | `tempo` in `SettingsSet` | §14.2 | D-16 | With V4-12 |
+| V4-35 | A process reads and replaces its own state, with its batch | §9.4 | S1 processes ([P3](../p3-simulation-layer.md) §16, K-1) | To implement |
+| V4-36 | A process reads other processes' published digests | §9.4 | K-2 | To implement |
+| V4-37 | `demanded(tier)` for fine-tier processes | §9.4, §10.6 | K-3 | To implement |
+| V4-38 | The process operation set: frames, decide, order, observe, tell, belief set | §9.4 | K-4 | To implement |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
