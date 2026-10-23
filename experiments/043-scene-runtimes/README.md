@@ -23,7 +23,7 @@ Each row gives what main has, what is missing, and the risks.
 |---|---|
 | **On main** | One scene host per head, which owns the context, canvas, scheduler, camera, controls, lighting stage, rig, character renderer and feature renderers (`platform/scene/scene-host.ts:81–509`). The pure scheduler (`preview/render/render-scheduler.ts`) is reusable. The feature-renderer registry is already per host and never sees a camera (`platform/scene/feature-renderers.ts`, view graph §2.15). The S2 prototype added `sharedRenderer` and `setDrawing` to the host (branch `claude/spike-views`, about 26 lines). |
 | **Missing** | A `RendererDevice` per window that owns the canvas, the one `WebGLRenderer`, the one scheduler, resize and DPR, context events and the input element, and draws only the shown runtime. A `SceneRuntime` per (scene, subject, body): today's host without the canvas, renderer, scheduler, resize or observer, built on the device's renderer. The viewport device holding runtimes instead of one `viewer`. The root's head variables moving into one owner (§2.6). |
-| **Risks** | *Renderer-global state* (§2.7). *Shared DOM host:* each host observes `headHost` itself (`:281`); the device must own that. *Context loss* now costs every resident runtime its GPU state: the device evicts the warm ones and restores only the shown one. *Frame-sized targets are per runtime:* the scene-linear target (`preview/render/linear-display.ts:155`), the skin scatter's three targets (`platform/scene/skin-scatter.ts:166–171`) and the contact-shadow target (`platform/scene/contact-shadow.ts:60`) would be duplicated in a warm runtime. A hidden runtime releases them, and they come back lazily on show (allocation only, no compiles). |
+| **Risks** | *Renderer-global state* (§2.7). *Shared DOM host:* each host observes `headHost` itself (`:281`); the device must own that. *Context loss* now costs every resident runtime its GPU state: the device evicts the warm ones and restores only the shown one. *Frame-sized targets are per runtime:* the scene-linear target (`preview/render/linear-display.ts:155`), the skin scatter's three targets (`platform/scene/skin-scatter.ts:166–171`) and the contact-shadow target (`platform/scene/contact-shadow.ts:60`) would be duplicated in a warm runtime. A hidden runtime releases them, and showing it allocates them again before its first frame (allocation only, no compiles; §15). |
 
 ### 2.2 Hidden creation with an `AbortSignal`
 
@@ -1002,7 +1002,7 @@ The last gate before phase 4a merges (§5). It is a measurement, with no change 
 | Item | Value |
 |---|---|
 | GPU, browser | RTX 4070 (driver 610.88), ANGLE D3D11, headless Chrome 155, the game not running |
-| After | `claude/profiles-4a` at `9ff40365` |
+| After | `claude/profiles-4a` at `9ff40365`; the reruns after the final fixes (§15) at `a3d8653f` |
 | Base | `origin/main` at `d815f67d` |
 | Setup | Each build in its own worktree with its own isolated server (own port, own data folder and caches, a read-only copy of the host's settings), never port 4317 or 4331. Servers under `memory_guard.py --limit 5`; every Chrome run under `--limit 5` |
 | Harness | `tools/scene-parity.ts` and `measure.ts` here, which gained the G3 rows below (`G3_ROWS=1`, `G3_PART=memory`) |
@@ -1017,8 +1017,9 @@ The last gate before phase 4a merges (§5). It is a measurement, with no change 
 | `after-2` | 14 | 6 | 0 | 1 pixel (0.0002 %), step 1 |
 | `after-3` | 16 | 4 | 0 | 1 pixel (0.0002 %), step 1 |
 | `after` (the first, on a fresh server) | 15 | 4 | **1** | `bare-creator-1024`: 99.5 % of the pixels, step up to 32 |
+| `final` (§15: a fresh server, the settle step fixed, at `a3d8653f`) | 15 | 5 | 0 | 1 pixel (0.0002 %), step 1 |
 
-The outlier is the first creator-lighting frame of a capture on a freshly started server, drawn with the neutral grade instead of the creator grade (less saturated, otherwise the same; the 2K frame after it matched). The harness's settle step passes while the grade's phase is `idle` as well as `ready`, so a grade that hasn't started loading counts as settled. It didn't recur in two reruns on the same server, and the base's first capture on its own fresh server was clean, so one fresh-server sample each can't say whether the branch makes this race likelier. **Verdict: pass** on the frames' content (every frame of two of three captures is within noise, worst 1 pixel at one step), with that one capture's neutral-grade frame open. The settle step should wait for the grade to be `ready` when the preset is creator.
+The outlier in `after` was the first creator-lighting frame of a capture on a freshly started server, drawn with the neutral grade instead of the creator grade (less saturated, otherwise the same; the 2K frame after it matched). The cause was the harness's settle step. The stage asks the host for the creator grade only once the creator setup is drawn, and on a fresh page that setup is first staged and prepared on the shown V. The settle step read the grade's phase before the takeover, found it `idle` (its check only refused `loading`) and moved on, so a frame could be kept before the grade arrived. The settle step now waits for the asked setup to be drawn (no preparation, nothing staged), then for the grade to be `ready`, then for the frames (§15). The rerun on a fresh server (the tool starts its own, with its Chrome, under one guard of 8 GB; peak 5.4 GB), against the same two bases, is within the rule on every frame, `bare-creator-1024` identical. **Verdict: pass.**
 
 ### The S2 gate table on real data
 
@@ -1041,16 +1042,43 @@ The outlier is the first creator-lighting frame of a capture on a freshly starte
 | **Last choice wins** (F): the V shown | only the final choice (male), 4.75 s after the first | 4.77 s | 4.75 s | **pass**: the shown keys were female, then male once, never an interim |
 | **No task of 50 ms or more** (A, B, C, D, E, F; the Long Tasks API) | none | none | none | **pass** |
 | **No link in the first shown frame**: A, B, C | 0, 0, 0 | 0, 0, 0 | 0, 0, 0 | **pass** |
-| No link in the first shown frame: D, the warm switches | 2 programs on each of the 4 male shows (0 on the 4 female ones) | the same | 0 of 8 | **fail** in the cold runs, below |
+| No link in the first shown frame: D, the warm switches | 2 programs on each of the 4 male shows (0 on the 4 female ones) | the same | 0 of 8 | **fail** in these cold runs (below); 0 of 8 in both reruns after §15 |
 | **No presentation gap over 100 ms**: longest gap during A, B, C, and over D | 52.3, 27.5, 18.9 ms; D 18.8 ms | 66.8, 26.8, 19.0 ms; D 20.3 ms | 18.9, 14.1, 19.4 ms; D 19.0 ms | ≤ 100 ms: **pass** |
 | Progress shown (the pane said something on every frame from 150 ms in; the fraction only grew) | longest silent stretch 0 ms | 0 ms | 0 ms | **pass** |
 | Programs linked in A, B, C before the show | 42, 75, 80 | 42, 75, 80 | 42, 0, 80 | |
 | Duration of the run | 154 s | 152 s | 736 s (600 s of it is B, below) | |
 | Peak memory (the guard's peak for Chrome and the harness, limit 5 GB) | 4.1 GB | 4.2 GB | 4.2 GB | |
 
-**The one failing row.** On each warm switch to the masculine V in the cold-profile runs, two programs are linked in the first shown frame: `LineBasicMaterial` and `PointsMaterial` (the first use waited 1.0 to 1.3 ms). They are the line and point materials of the on-head surface editor (`legacy/eye-makeup/browser/surface-editor.ts`, the only place they are made), which the owner mounts on a head each time it is shown. The feminine V shows none, and the kept-profile run shows none for either body, so what decides it hasn't been found; the cause above is the likeliest reading, not a verified one. The wait is about a millisecond and no frame is late (the longest gap in D is 20 ms), but the S2 row says no link in the first shown frame, so it fails by the letter. A fix would prepare the editor's materials ahead (in the preparation's warm-up) or keep them for the editor's lifetime instead of making them per mount.
+**The row that failed, and why.** On each warm switch to the masculine V in the cold-profile runs, two programs were linked in the first shown frame: `LineBasicMaterial` and `PointsMaterial`, the on-head editor's guides (the first use waited 1.0 to 1.3 ms). No frame was late (the longest gap in D was 20 ms), but the row is literal. The cause, found for §15:
 
-**B in the kept-profile run.** The creator setup took over in 14 ms with nothing to prepare: no program linked, no preparation. That profile had restored the creator setup at load, so its programs were already in the page. `measure.ts` ends a lighting run only after it has seen a preparation, so it waited out its 600 s limit and marked the run "never took over". That is the harness's condition, not the product: the first presented frame was 19.7 ms.
+- Three keys even an unlit material's program on the scene's light counts, so each lighting setup has its own variant of the guides' programs.
+- The editor made its own guide materials on every mount and disposed them on every unmount, and Three frees a program when the last material holding it is disposed.
+- The masculine V was prepared hidden under the studio setup (A), with the guides' stand-ins compiled for it. The creator setup was then prepared on him while shown (B), and that compiles what is drawn: the mounted editor's own materials, not the stand-ins. Hidden, his editor took the creator variants with it, so each show under the creator setup linked them again.
+- The feminine V was prepared hidden under the creator setup (C), so her stand-ins held those variants. The kept-profile run started under the creator setup, so neither body linked anything.
+
+The editor now draws with the head's own guide materials, the ones its stand-ins are compiled with, so every variant stays linked while the head lives (§15). The synthetic gate reproduces the sequence (a setup prepared on the shown V, then that V hidden and shown again) and fails without the fix.
+
+**B in the kept-profile run.** The creator setup took over in 14 ms with nothing to prepare: no program linked, no preparation. That profile had restored the creator setup at load, so its programs were already in the page. `measure.ts` then ended a lighting run only after it had seen a preparation, so it waited out its 600 s limit and marked the run "never took over" (the first presented frame was 19.7 ms). It now ends a lighting run at the takeover, whether or not a preparation ran (§15). The kept-profile rerun's B took over in 20 ms, and the run took 71 s.
+
+**Reruns after the final fixes** (§15, at `a3d8653f`; the same isolated server setup, the server under `--limit 5`, each Chrome run under `--limit 5`). Two runs with a fresh profile, all rows; then a third on the second run's kept profile (`G2_WARM=1`), A to C only, for the lighting run's end:
+
+| S2 row | Rerun 1 (cold) | Rerun 2 (cold) | Kept profile | Gate |
+|---|---|---|---|---|
+| A body: want to first presented frame | 12.6 s | 8.3 s | 2.1 s | progress, no gate |
+| B lighting: change to takeover | 18.2 s | 17.3 s | took over in 20 ms with nothing to prepare, and the run ended there | progress, no gate |
+| C body and lighting | 20.6 s | 20.7 s | 11.6 s | progress, no gate |
+| **Warm switch** (D, 8 switches): want to first presented frame | 18.4 to 25.5 ms | 18.1 to 26.9 ms | | ≤ 100 ms: **pass** |
+| D: want to the show | 8.2 to 15.8 ms | 7.6 to 17.3 ms | | |
+| **No link in the first shown frame**: A, B, C; D | 0, 0, 0; 0 of 8 | 0, 0, 0; 0 of 8 | 0, 0, 0 | **pass** |
+| **Cancel** (E) | 4.0 ms | 16.6 ms | | ≤ 100 ms: **pass** |
+| **No stray frames**, **no late result**, **last choice** (E, F) | E: 0 frames by the shown runtime, 0 canvas changes; F: only the final male, at 4.77 s | the same; F at 4.80 s | | **pass** |
+| **No task of 50 ms or more** | none | none | none | **pass** |
+| **No presentation gap over 100 ms**: A, B, C; over D | 61.1, 28.4, 19.2 ms; 25.9 ms | 60.2, 25.7, 20.0 ms; 19.1 ms | | ≤ 100 ms: **pass** |
+| Programs linked in A, B, C before the show | 42, 75, 80 | 42, 75, 80 | 42, 0, 80 | |
+| Duration of the run | 179 s | 169 s | 71 s (736 s before the fix) | |
+| Peak memory (Chrome and the harness) | 4.3 GB | 4.2 GB | 4.0 GB | |
+
+Rerun 1's A (12.6 s) was the first switch on a freshly started server; its details stage waited longer for the host's files. It has no gate.
 
 **Rows `measure.ts` can't drive on real data, and where they are covered.** The synthetic gate `tests/webgl-scene-runtimes.test.ts` covers each:
 
@@ -1075,7 +1103,8 @@ Phase 4a has no way to open a second V on the page: a want's key is (scene, V, b
 | 10 s idle | 2,923 MB | 1,890 MB | 722 MB | 511 MB | the same |
 | After a lost and restored context (informational) | 2,006 MB | 1,221 MB | 679 MB | 364 MB | not meaningful (a lost context's objects are never deleted) |
 
-- **Returned.** From the first cycle to the ninth, the GPU process's private bytes moved by 6 MB, its dedicated video memory by 0.2 MB, and the live GL objects not at all. The page's renderer wandered by about 60 MB (729 to 792 MB) with no direction. Each body cycle links 2 programs (the surface editor's, above) and deletes them again: Three's live program count is flat while the probe's link count rises by 2 per cycle. The setup cycles freed 12 textures and 6 framebuffers net, never more.
+- **Returned.** From the first cycle to the ninth, the GPU process's private bytes moved by 6 MB, its dedicated video memory by 0.2 MB, and the live GL objects not at all. The page's renderer wandered by about 60 MB (729 to 792 MB) with no direction. Each body cycle linked 2 programs (the surface editor's, above) and deleted them again: Three's live program count was flat while the probe's link count rose by 2 per cycle. That was the warm-switch row's cause, fixed in §15. The setup cycles freed 12 textures and 6 framebuffers net, never more.
+- **Since §15 a warm runtime holds no frame-sized targets** (the display's scene target, the skin scatter's five and the contact shadows'). The memory part wasn't run again. The reruns' readings with both bodies resident (after C, and the same after D's eight switches) show 292 textures, 62 framebuffers and 4 renderbuffers live, against 301, 70 and 7 in the first runs. The skin scatter's targets alone take 36 bytes a pixel of the pane's drawing buffer (its own evidence), so the saving grows with the pane's size and pixel ratio.
 - **What a second whole-body runtime costs** (the evidence D2 said a byte cap would wait for): about 860 MB of the GPU process's private bytes, 635 MB of dedicated video memory, 116 MB in the page's renderer and 190 MB of JS heap, with 135 textures, 382 buffers and 28 framebuffers. A card with 8 GB of video memory holds it comfortably; a 4 GB card is where a byte budget would start to matter.
 - **A second V opened and closed** can't be driven on real data (above). The synthetic gate does it (a V in a scene of its own opened, +48 textures and +33 programs, and closed: GL objects and Three's programs as before; closing everything: at the baseline), and 4a-i's disposal gate holds the same after five runtimes. The lost-context row is not a leak test, since a lost context frees everything. It shows only that dropping the warm runtime and rebuilding the shown one lands within 175 MB of the start.
 
@@ -1083,8 +1112,61 @@ Phase 4a has no way to open a second V on the page: a want's key is (scene, V, b
 
 | Part | Verdict |
 |---|---|
-| 1. Parity | **Pass**, with one capture's neutral-grade frame open (a harness settle race, not reproduced) |
-| 2. The S2 gate table | **Pass on every row but one**: warm switches to the masculine V link two small programs in the first shown frame (cold-profile runs; 1.0 to 1.3 ms each time). Every other row passes in all three runs, with the rows the harness can't drive pointed at the synthetic gate |
-| 3. Memory returned | **Pass** for what real data can drive (no growth over ten body cycles and four setup cycles); a second V's open and close is covered by the synthetic gate |
+| 1. Parity | **Pass**: the one neutral-grade frame was the harness's settle race, fixed in §15; the rerun on a fresh server is within the rule on every frame |
+| 2. The S2 gate table | **Pass on every row**: the warm-switch link row failed in the first cold runs (the editor's guides); since §15 both cold reruns link nothing in any warm switch, and every other row still passes, with the rows the harness can't drive pointed at the synthetic gate |
+| 3. Memory returned | **Pass** for what real data can drive (no growth over ten body cycles and four setup cycles); a second V's open and close is covered by the synthetic gate. Since §15 the warm runtime also lets go of its frame-sized targets |
 
-The merge is the coordinator's call on the one failing row: it costs about a millisecond and no late frame, and the fix is small (prepare the editor's materials ahead or keep them), but the table's row is literal. The only tool change is `measure.ts` (the G3 rows, GL object counts, OS memory).
+The tool changes are `measure.ts` (the G3 rows, GL object counts, OS memory; since §15 a lighting run ends at its takeover) and `scene-parity.ts`'s settle step (§15).
+
+## 15. The final review's and G3's fixes (built)
+
+Sol's final review of `9ff40365` answered MERGE AFTER FIXES, with one High, one Medium and one Low finding. G3 (§14) left three more: the warm-switch link row, the parity harness's settle race and the lighting run with nothing to prepare. All six are fixed at the root, each with a gate, and the changed G3 rows were run again on real data (§14).
+
+**What changed.**
+
+1. **A warm head's readiness follows the authored makeup** (High; `browser-head-attachment.ts`, `browser-preview-device.ts`). Sol's sequence: A prepared without makeup, B shown, a layer enabled, A wanted again. `prepared()` read only the scene's own record (the meshes drawn and the lighting), and a warm surface keeps what it was filled with until its show. So A was shown at once, and connecting its surface brought new materials and uploads into the first frame (Sol's probe found 10 shaders still to build). The preview device now says whether a surface not shown holds the layers as they are now (`holdsCurrent`): the tier it would be given, and slot for slot the layer, its mask canvas and its optical maps, which is exactly what connecting it would compare. A head is prepared only while every layered surface holds the makeup as it is now. A stale warm head is filled and prepared again before the show, by the residency's usual path, and the show then brings nothing. The surface shown is live, so the shown head is never stale.
+2. **A hidden runtime lets go of its frame-sized targets** (Medium; `scene-host.ts`, `lighting-setup-stage.ts`, `linear-display.ts`, `skin-scatter.ts`, `contact-shadow.ts`), as §2.1's memory policy says. Hidden (`detach`), a runtime releases the display's scene target, the skin scatter's five targets and their shared depth texture, and the contact shadows' target. Its programs stay, and so do its shadow maps (their size is the quality's, not the pane's). Shown, the device sizes it (`resized`, after `attach`), and it allocates the targets the next frame draws into, at the drawing buffer's size, with `WebGLRenderer.initRenderTarget`: the first frame finds them made. A runtime prepared hidden makes them in its warm-up, and its show then finds them already at size. A hidden runtime whose preparation stops (a warm one superseded) lets go of what its warm-up made. The contact shadows' uniforms are shared by every scene, so a release clears them only when they still point at its own target. Recreating a target links nothing: no program depends on a target's size (the T2 gate below).
+3. **The composite-abort test has no wall clock** (Low; `tests/scene-feature-renderers.test.ts`). It settles queued work on microtasks, checks the preparation still waits on the links (they never end there), aborts, and checks it is released with the links still unresolved. Measured latency stays in the GPU probes.
+4. **The on-head editor draws with the head's own guide materials** (G3's failing row; `surface-editor.ts`, `browser-viewport-device.ts`). The cause is in §14: Three keys an unlit material's program on the scene's light counts, and the editor's per-mount materials took the variants compiled for a setup prepared while it was shown away with them. `surfaceGuideStandIns` now owns the head's guide materials, and its stand-ins are compiled with them. The viewport device mounts the editor with those materials (`createSurfaceEditor`'s `guides`), and the editor never disposes materials it was given. Every variant the guides are ever drawn or compiled with stays linked until the head goes. An editor without them (the tests' own) makes and disposes its own, as before.
+5. **The parity harness waits for the look to take effect** (`tools/scene-parity.ts`). Its settle step waits, in the order they arrive: the layers at the preview size; the asked lighting drawn (no preparation, nothing staged, the preset drawn); for the creator preset its grade `ready`; the layers again; then the frames. The scene evidence (verification only) now reports the drawn preset and whether a setup is staged (`lighting`).
+6. **A lighting run ends at its takeover** (`measure.ts`). Each sample records the lighting drawn (with `staged:` while a setup waits beside it). A lighting run ends when the asked setup is drawn with nothing staged and no preparation in flight, whether or not a preparation ran, and the analysis takes the takeover from the first sample that draws it.
+
+**Gates.**
+
+- **T1:** `tests/browser-head-attachment.test.ts`, Sol's sequence on the real preview device and makeup stacks: A prepared and shown with the layer off, B shown, the layer enabled and its mask completed. A is no longer prepared and B is. A prepared again holds the layer, drawn, and its show moves no version (no program change, no upload). The layer turned off while A is shown leaves B stale in turn. `tests/surface-guide-materials.test.ts`: an editor given the head's guide materials draws with them on every mount and never disposes them; one without makes and disposes its own; the viewport device mounts each head's editor with that head's materials, the ones its stand-ins compile, which go with the head. The composite-abort test (item 3).
+- **T2, the S2 gate table** (`tests/webgl-scene-runtimes.test.ts`). The probe page mounts the real on-head editor on the shown V as production does (stand-ins compiled with the preparation, parts made ahead, the head's materials). Its preparations keep a warm V's placed details, as the head's do, and its readiness port reads the surface as the head's does. It gained:
+  - **Warm switches** record the links and programs made from the want to the first presented frame, the first frame's uploads against a later frame's, and, once settled, the frame-sized target pixels each runtime holds and the live GL objects.
+  - **3b, newer authored makeup while a V is warm:** B shown and A warm, the layer takes the Glossy finish (a clear coat: new layer programs), then A is wanted. A is no longer prepared, is prepared once, and its first shown frame links nothing with the clear coat applied. Back the other way, B is prepared again in turn.
+  - **5b, the editor shown again:** after the lighting setups prepared on the shown V (step 5), the other V is shown and then this one again: its editor is mounted anew, and its first shown frame links nothing.
+  - **A row "warm residency"** in the gate table: the hidden runtime holds no frame-sized target, and the GL objects are flat from switch to switch.
+- **Each new row fails without its fix.** With the readiness port reading only the scene's record, 3b's first shown frame linked 2 programs and A was shown without a preparation. With the editor given no materials, 5b's linked 2 (`LineBasicMaterial`, `PointsMaterial`: G3's pair).
+
+**Results** (24 October 2026; RTX 4070, ANGLE D3D11, headless Chrome 155, a fresh profile per run).
+
+| T2 (with the extension; without it the same unless said) | Result |
+|---|---|
+| Warm switch, want to first presented frame (≤ 100 ms) | 19.0–31.4 ms; without the extension 20.2–22.0 ms. The measurement now waits for the runtime's own next frame and the frame after it (before, a runtime that had drawn earlier ended the wait at once: one animation frame, 4.1–5.1 ms in §13). The show itself takes 2.8–3.2 ms, up from 0.6 ms, for the targets' allocation |
+| Links and programs made over each warm switch | 0 of 8 switches, with and without the extension |
+| A warm switch's first frame's uploads | 16 (female) and 17 (male), the same as a later frame's: what every frame sends (its bones) |
+| Frame-sized targets once settled | the shown runtime its display and scatter targets (and contact under the creator rig), the hidden one none, after every switch; GL objects equal from switch to switch |
+| 3b: newer makeup while warm | not prepared after the change; 1 preparation; first shown frame 0 links, 0 programs; the clear coat applied; back the other way the same |
+| 5b: the editor shown again under a setup prepared while shown | 1 mount, first shown frame 0 links, 0 programs |
+| The earlier rows | unchanged: the cancels 5.9 and 0.3 ms; no stray frames, no late result, last choice; the cold V's first frame 0 links; gaps 19 and 19 ms; memory back at the baseline; one output over 562 fragment shaders and 797 attachments |
+
+The page passes its 25 tests (peak 2.0 GB of 3 GB).
+
+| Other runs | Result |
+|---|---|
+| Targeted tests: lighting, scene, display, scatter, contact, renderer, viewport, surface, preview device, head, runtime, startup, the no-default boundary and the view graph | 45 files: 290 pass, 0 fail |
+| WebGL probes: renderer device (A, B, then A byte for byte, with the targets released and made again between), scene host, scene dispose, skin scatter, contact shadow, studio lighting, display, plate composite, eye, body, choice preview, clothing | 12 files, 77 tests: all pass (peak 1.5 GB) |
+| `bun run check` | passes |
+| G3 on real data, the changed rows only (§14) | the warm-switch row passes in two cold reruns (0 links in 8 switches each, 18.1–26.9 ms); parity on a fresh server within the rule on every frame; a kept-profile lighting run ends at its takeover in 20 ms |
+
+**Decisions and caveats.**
+
+- **Readiness compares, it doesn't count.** The device compares what a surface holds with what connecting it would bring, rather than keeping a revision counter beside every way the layers can change (an edit, a mask or optical maps completing, a tier change). It is the same comparison connecting makes, so the two can't disagree. A mask that completes after a warm head was filled makes it stale again, and the residency prepares it again, up to its attempt limit, before the show.
+- **A makeup edit makes a warm head's next show a preparation.** Nothing linked is lost, so it costs the details check, the fill, the compile check and the warm-up, not a cold preparation; an unchanged warm head still swaps at once.
+- **Allocation at the show, not in the first frame.** A warm switch has no preparation to allocate in, so the targets are made as the device sizes the shown runtime, in the show's task. On real data the want-to-show time stayed 7.6–17.3 ms (6.9–16.1 ms before).
+- **The probe's warm-switch figure is larger, not slower.** It now measures the want to the frame after the runtime's own first frame; the real-data D row measures the same way and is unchanged.
+
+**What's left before the merge.** The coordinator's merge.
