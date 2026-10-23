@@ -21,7 +21,7 @@ import { type ViewId, viewTitles } from "../platform/api/view-graph";
 import type { ViewGraph } from "../platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
 import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
-import type { TabAction } from "./profiles/profile-sessions";
+import type { LayoutTabAction } from "./profiles/tab-defaults";
 import type { LookRef } from "../library/collection-documents";
 import { isLookScope as lookScoped, lookScope } from "../platform/core/history-service";
 import { plannedModules, type PlannedModule, type StudioModule, type ViewSummaryContribution, type ViewToolContribution, type ViewToolFilter } from "../platform/api";
@@ -66,7 +66,7 @@ export type StudioOwnerActions = {
   quality: QualityAction;
   savedV: Naming<SavedAppearanceAction, { character: string }>;
   scenes: SceneAction;
-  tabs: TabAction;
+  tabs: LayoutTabAction;
   characterContext: Naming<CharacterContextAction, { character: string }>;
   views: ViewAction;
 };
@@ -126,8 +126,11 @@ type Services = { document: AuthoringDocument;
    * and `scene.setSubject`.
    */
   scenes?: Pick<SceneCommands, "gen" | "capability" | "dispatch">;
-  /** The session's layout tabs (`ProfileSessions`, profiles design §4.1): the `tabs.*` operations, each one commit and one step. */
-  tabs?: { capability(action: TabAction): StudioCapability; dispatch(action: TabAction): undefined };
+  /**
+   * The session's layout tabs and the default layouts (`TabDefaults` over `ProfileSessions`, profiles design §4.1, §4.2): each tab
+   * operation one commit and one step; the defaults' commands through the outbox.
+   */
+  tabs?: { capability(action: LayoutTabAction): StudioCapability; dispatch(action: LayoutTabAction): undefined };
   /**
    * Whether the view, scene and `gen` an action names are still what they were resolved to (the target resolver's check, the same rule as
    * its captures', profiles design §3.3). Without it (a core no session holds) an action naming a scene's `gen` can't be checked, and is refused.

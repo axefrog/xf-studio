@@ -19,6 +19,7 @@ import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_SLOTS, type ViewSlot } from "../../pl
 import type { PartRegistry } from "../../platform/core/document";
 import { sha256Hex } from "../../platform/core/sha256";
 import { lookScope } from "../../platform/core/history-service";
+import { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment } from "../../platform/api/layout-fragment";
 import { workspaceViewGraph } from "../../preview/preview-view-graph";
 import type { SavedV } from "../../saves/save-reader";
 import type { DockLayout, JsonValue } from "../ui-preferences";
@@ -33,7 +34,7 @@ export const MIGRATION_SNAPSHOT_SCHEMA = "xfs/profiles-migration-snapshot-1";
 export const MIGRATION_RESULT_SCHEMA = "xfs/profiles-migration-1";
 export const LAYOUT_DEFAULT_DOCUMENT = "layout-default";
 export const LAYOUT_DEFAULT_SCHEMA = "xfs/layout-default-1";
-export const LAYOUT_FRAGMENT_SCHEMA = "xfs/layout-fragment-1";
+export { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment };
 /** The subject and look slots a migrated fragment has (one V, one look, as today's single-V Studio shows). */
 export const FRAGMENT_SUBJECT = "v1", FRAGMENT_LOOK = "look1";
 
@@ -44,17 +45,6 @@ export type MigrationDraft = { readonly id: string; readonly name: string; reado
   readonly looks: readonly MigrationLook[]; readonly removed: readonly MigrationLook[] };
 /** The V: its character document as `character.create` writes it (without an ID), and the decoded save the workspace holds. */
 export type MigrationCharacter = { readonly document: Omit<CharacterDocument, "id">; readonly saved?: { readonly id: string; readonly value: SavedV } };
-/** A default layout as a graph fragment (§4.2): every key is local; subjects and looks are slots. */
-export type LayoutFragment = {
-  readonly schema: typeof LAYOUT_FRAGMENT_SCHEMA;
-  readonly tab: { readonly name: string; readonly dock: DockLayout };
-  readonly subjects: readonly { readonly key: string; readonly kinds: readonly string[] }[];
-  readonly looks: readonly { readonly key: string }[];
-  readonly nodes: readonly { readonly key: string; readonly slot: ViewSlot; readonly kind?: string; readonly state: Readonly<Record<string, unknown>>;
-    readonly subject?: string; readonly look?: string }[];
-  readonly views: readonly ({ readonly key: string; readonly title?: string } & { readonly [S in ViewSlot]: string })[];
-  readonly panels: readonly { readonly key: string; readonly type: string }[];
-};
 /** A saved layout as an own default; `active`: the layout the live arrangement belongs to (tab 1's origin). */
 export type MigrationLayout = { readonly name: string; readonly fragment: LayoutFragment; readonly active?: true };
 export type MigrationSnapshot = {
@@ -181,6 +171,55 @@ export function dockPanels(dock: DockLayout | undefined | null): string[] {
   const found = new Set<string>();
   rewriteDock(dock, id => { found.add(id); return id; });
   return [...found];
+}
+/**
+ * A dock arrangement without the panels `drop` names, in both size classes: gone from their groups (a group left empty goes, a split
+ * left with one child is that child, and a split or floating window left empty goes), the closed list, and the parked and last places (as a place's group member or anchor too).
+ * A tab saved as a default leaves out the panels of views it no longer holds, which the dock keeps parked.
+ */
+export function withoutDockPanels(dock: DockLayout, drop: (id: string) => boolean): DockLayout {
+  const keep = (value: unknown) => typeof value !== "string" || !drop(value);
+  const node = (value: unknown, depth: number): unknown => {
+    if (!value || typeof value !== "object" || Array.isArray(value) || depth > 16) return value;
+    const v = value as Record<string, unknown>;
+    if (Array.isArray(v.panels)) {
+      const panels = v.panels.filter(keep);
+      if (!panels.length) return undefined;
+      return { ...v, panels, ...("active" in v && !panels.includes(v.active) ? { active: panels[0] } : {}) };
+    }
+    if (!Array.isArray(v.children)) return v;
+    const kept = v.children.map((child, index) => ({ child: node(child, depth + 1), index })).filter(item => item.child !== undefined);
+    if (kept.length <= 1) return kept[0]?.child;
+    const sizes = Array.isArray(v.sizes) ? kept.map(item => (v.sizes as unknown[])[item.index]) : v.sizes;
+    return { ...v, children: kept.map(item => item.child), ...(sizes !== undefined ? { sizes } : {}) };
+  };
+  const place = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const v = value as Record<string, unknown>, anchor = v.anchor as Record<string, unknown> | undefined;
+    const out: Record<string, unknown> = { ...v, ...(Array.isArray(v.group) ? { group: v.group.filter(keep) } : {}) };
+    if (anchor && typeof anchor === "object" && !keep(anchor.panel)) delete out.anchor;
+    return out;
+  };
+  const tree = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const v = value as Record<string, unknown>;
+    const root = node(v.root, 0);
+    return { ...v, ...("root" in v ? { root: root ?? null } : {}),
+      ...(Array.isArray(v.floating) ? { floating: v.floating.flatMap(window => {
+        if (!window || typeof window !== "object") return [window];
+        const inner = node((window as Record<string, unknown>).node, 0);
+        return inner === undefined ? [] : [{ ...window, node: inner }];
+      }) } : {}),
+      ...(Array.isArray(v.closed) ? { closed: v.closed.filter(keep) } : {}),
+      ...Object.fromEntries((["parked", "lastPlace"] as const).flatMap(key => {
+        const places = v[key];
+        return places && typeof places === "object" && !Array.isArray(places)
+          ? [[key, Object.fromEntries(Object.entries(places).filter(([panel]) => keep(panel)).map(([panel, item]) => [panel, place(item)]))]] : [];
+      })) };
+  };
+  const state = dock.state as Record<string, unknown> | null;
+  if (!state || typeof state !== "object" || Array.isArray(state)) return structuredClone(dock);
+  return { ...dock, state: Object.fromEntries(Object.entries(state).map(([size, value]) => [size, tree(value)])) as unknown as JsonValue };
 }
 /** A dock arrangement with every panel ID passed through `rename`. */
 export function rewriteDock(dock: DockLayout | undefined | null, rename: (id: string) => string): DockLayout | null {

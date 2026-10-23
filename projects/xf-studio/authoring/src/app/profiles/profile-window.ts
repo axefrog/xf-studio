@@ -36,9 +36,14 @@ import { ProfileSessions, type TabAction } from "./profile-sessions";
 import type { DockLayout, UIPreferenceActions } from "../ui-preferences";
 import type { ProfileSessionData } from "./profile-session";
 import { FIRST_TAB_NAME, sessionOfWorkspace } from "./profiles-migration-data";
+import { LayoutDefaults, type ContributedLayoutDefault } from "./layout-defaults";
+import type { FragmentKnowledge, SceneCandidate, SubstitutionContext } from "./layout-fragment";
+import { TabDefaults } from "./tab-defaults";
 
 export type ProfileServices = {
   readonly profiles: ProfileService;
+  /** The default layouts: the modules' (read-only) and the person's own (`layout-default` documents). */
+  readonly defaults: LayoutDefaults;
   readonly characters: CharacterService;
   readonly collections: CollectionOwner;
   readonly looks: LookSessions;
@@ -47,15 +52,18 @@ export type ProfileServices = {
 };
 
 export function createProfileServices(deps: { documents: DocumentStorePort; outbox: DocumentOutbox; subjects: SubjectRegistryPort; catalogue: CreatorCatalogue;
-  history: HistoryService; versions?: CollectionVersionsPort; report?: (error: unknown) => void }): ProfileServices {
+  history: HistoryService; versions?: CollectionVersionsPort; report?: (error: unknown) => void;
+  /** The modules' default layouts and what the build has (`compose/layout-defaults.ts`). */
+  layouts?: { contributed: readonly ContributedLayoutDefault[]; known: FragmentKnowledge } }): ProfileServices {
   const profiles = new ProfileService({ documents: deps.documents, outbox: deps.outbox, subjects: deps.subjects });
   const characters = new CharacterService({ documents: deps.documents, outbox: deps.outbox, catalogue: deps.catalogue, history: deps.history, profiles,
     ...(deps.report ? { report: deps.report } : {}) });
   const collections = new CollectionOwner({ documents: deps.documents, outbox: deps.outbox, ...(deps.versions ? { versions: deps.versions } : {}),
     ...(deps.report ? { report: deps.report } : {}) });
   const looks = new LookSessions(collections, deps.outbox);
-  return { profiles, characters, collections, looks,
-    load: async signal => { await Promise.all([profiles.load(signal), characters.load(signal), collections.load(signal)]); } };
+  const defaults = new LayoutDefaults({ documents: deps.documents, outbox: deps.outbox, ...(deps.layouts ? { contributed: deps.layouts.contributed, known: deps.layouts.known } : {}) });
+  return { profiles, characters, collections, looks, defaults,
+    load: async signal => { await Promise.all([profiles.load(signal), characters.load(signal), collections.load(signal), defaults.load(signal)]); } };
 }
 
 /**
@@ -107,6 +115,33 @@ export function relayDockSaves(preferences: Pick<UIPreferenceActions, "snapshot"
     preferences.dispatch({ kind: "layout.set", ...(layout ? { layout } : {}) });
   });
   return () => { fromDock(); fromSession(); };
+}
+
+/**
+ * The layout tabs' actions over the window's session and the default layouts (`TabDefaults`): a new tab's slots are filled from the
+ * session's profile (its subjects, and the live looks of its collections in profile order) and its scenes (decision M2 of experiment
+ * 044: a V another tab shows shares that tab's scene by default, the scene of the most recently focused view first).
+ */
+export function tabDefaults(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "collections" | "defaults">,
+  build: { keepsState?(type: string): boolean; known?: FragmentKnowledge } = {}): TabDefaults {
+  return new TabDefaults({ sessions: state, defaults: services.defaults, ...build, candidates: () => substitutionContext(state, services) });
+}
+/** What a new tab can be filled from: the profile's subjects and live looks, and every scene the session shows, most recently focused first. */
+export function substitutionContext(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "collections">): SubstitutionContext {
+  const profile = services.profiles.profile(state.profile), graph = state.graph, order = state.focus.viewOrder();
+  const looks = (profile?.collections ?? []).flatMap(id => (services.collections.collection(id)?.looks ?? []).map(look => ({ collection: id, look })))
+    .filter(ref => services.collections.look(ref)?.state === "live");
+  const views = graph.viewIds().map((view, index) => ({ view, index })).sort((a, b) => (order[b.view] ?? 0) - (order[a.view] ?? 0) || a.index - b.index);
+  const seen = new Set<string>(), scenes: SceneCandidate[] = [];
+  for (const { view } of views) {
+    const node = graph.node(view, "scene");
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    const shown = state.scene(node.id);
+    scenes.push({ scene: node.id, kind: node.kind ?? "", tab: state.viewTab(view), ...(shown.subject ? { subject: shown.subject } : {}),
+      ...(shown.look ? { look: shown.look } : {}) });
+  }
+  return { subjects: [...(profile?.subjects ?? [])], looks, scenes };
 }
 
 /** `scene.setLook` and `scene.setSubject` over the session's scenes, checking that a look or V still exists (profiles design §3.6). */

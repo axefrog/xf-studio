@@ -72,7 +72,10 @@ import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-s
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
-import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, relayDockSaves, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
+import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, relayDockSaves, sceneCharacter, sceneCommands,
+  tabDefaults } from "../app/profiles/profile-window";
+import { printDefault } from "../app/profiles/layout-fragment";
+import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS } from "./layout-defaults";
 import { viewPanel } from "../app/profiles/profile-sessions";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
@@ -177,6 +180,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const creatorCatalogue = new CreatorCatalogue(createBrowserCreatorDevice());
   // The library's owners (profiles design §7): profiles, Vs, collections and looks, each changed only through its commands (the outbox).
   const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
+    layouts: { contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE },
     catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
     report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
   // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
@@ -284,7 +288,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   const shownScene = { look: () => sessionState.scene(drawn()).look, setLook: (ref: LookRef | undefined) => sessionState.setLook(drawn(), ref),
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
-  core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: sessionState });
+  // The layout tabs' actions: the session's operations, and those naming a default (the modules' and the person's own).
+  const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: STUDIO_FRAGMENT_KNOWLEDGE });
+  core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
   const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
@@ -487,6 +493,10 @@ async function start(host: StudioHost, root: HTMLElement) {
     /** The scene runtime shown now (developer evidence reads only that one). */
     const viewer = () => heads.shown()?.scene;
     Object.assign(window, { xfStudioPresentation: port,
+    // Verification only (experiment 044 decision M1): a tab (default: the shown one) printed as a module's default layout, to paste into
+    // the module's `defaults.ts`, so supplied layouts are arranged in the Studio and replace the contributed ones as data.
+    xfStudioTabAsDefault: (meta: { id: string; name: string; description: string }, tab = sessionState.tabId()) =>
+      printDefault(layoutTabs.contributionOf(tab, meta)),
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing, and which runtimes are
     // resident (profiles phase 4a-iv).
     xfStudioSceneEvidence: () => { const scene = viewer(); return scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),

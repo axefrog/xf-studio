@@ -13,10 +13,11 @@
  *   a scene shows (`scene.setLook`, `scene.setSubject`). A step holds a tab's arrangement and instances only when it makes, closes or
  *   resets the tab, so undoing a rename never moves a panel. After an Undo or Redo the shown tab stays, unless the step took it away (the
  *   tab the step's state showed is shown, else its neighbour) or brought back the tab its state showed.
- * - **Operations:** new tab (from content P2-ii instantiates), close (a closed-tab fragment holding the tab, its views, a value copy of
- *   every node they named and their focus numbers; the last 5 are kept), reopen (under its own IDs, in its place, with its views' focus
+ * - **Operations:** new tab (from content a default's fragment makes, `layout-fragment.ts`), close (a closed-tab fragment holding the
+ *   tab, its views, a value copy of every node they named and their focus numbers; the last 5 are kept), reopen (under its own IDs, in its place, with its views' focus
  *   numbers: byte-identical to before the close), reset (the content before it becomes a fragment, then the new content fills the tab),
- *   rename, move, duplicate (fresh IDs everywhere, scenes included: it shares nothing), show (navigation), and adding and closing views.
+ *   rename, move, duplicate (fresh IDs everywhere, scenes included: it shares nothing), the origin Save as default gives a tab, show
+ *   (navigation), and adding and closing views. Those that name a default run through `TabDefaults` (tab-defaults.ts).
  *   Tabs holding a view this build can't show (a newer build's) can't be closed or reset; a duplicate leaves those views out.
  * - **Settled before anyone hears.** An operation validates whole before it changes anything (a refusal changes nothing), and the graph's,
  *   focus's and the session's notifications are held until it has settled (tabs, views, focus and its step); an Undo or Redo too. Each
@@ -83,7 +84,7 @@ export const viewPanel = (view: string) => view === MAIN_VIEW ? "head" : `view.$
 
 /** A refused operation, with the reason a person reads. */
 export class TabRefusal extends Error {
-  constructor(readonly code: "missing_target" | "invalid_value" | "incompatible_mode", message: string) { super(message); }
+  constructor(readonly code: "missing_target" | "invalid_value" | "incompatible_mode" | "unavailable", message: string) { super(message); }
 }
 /**
  * A tab as the session holds it: with its content's identity (`@content`), which goes with the arrangement and instances when the tab
@@ -323,13 +324,22 @@ export class ProfileSessions {
     if (place === from) return;
     this.operate("Move tab", "tabs.move", () => { const [moved] = this.tabs.splice(from, 1); this.tabs.splice(place, 0, moved!); });
   }
+  /** The default a tab is made from becomes `origin` (Save as default names the default it made). One step, like a rename. */
+  setOrigin(tab: TabId, origin: string) {
+    const at = this.index(tab);
+    if (this.tabs[at]!.origin === origin) return;
+    this.operate("Save as default", "tabs.saveAsDefault", () => {
+      const { id, name, origin: _before, ...rest } = this.tabs[at]!;
+      this.tabs[at] = { id, name, origin, ...rest };
+    });
+  }
   /**
    * Close a tab: its views go, with the nodes only they used, and a closed-tab fragment holding all of it joins `closed` (the last 5).
    * Closing the shown tab shows its neighbour.
    */
   close(tab: TabId) {
     const at = this.index(tab);
-    this.closable(tab, "close");
+    this.checkClosable(tab, "close");
     const fragment = this.fragment(this.tabs[at]!, at);
     this.operate("Close tab", "tabs.close", () => {
       if (fragment.views.length) this.graph.restructure({ remove: fragment.views.map(item => item.view.id) }, { label: "Close tab" });
@@ -377,7 +387,7 @@ export class ProfileSessions {
   /** Reset a tab to `content` (a default's, instantiated): what it held becomes a closed fragment ("before reset"), and it shows the content. */
   reset(tab: TabId, content: TabContent) {
     const at = this.index(tab);
-    this.closable(tab, "reset");
+    this.checkClosable(tab, "reset");
     this.checkContent(content);
     const fragment = { ...this.fragment(this.tabs[at]!, at), reset: true as const }, added = this.contentNodes(content);
     this.operate("Reset tab", "tabs.reset", () => {
@@ -440,7 +450,7 @@ export class ProfileSessions {
       const issue = typeof action.name === "string" ? nameIssue(action.name.trim()) : "Name the tab.";
       if (issue) throw new TabRefusal("invalid_value", issue);
     } else if (action.kind === "tabs.move" && !Number.isSafeInteger(action.to)) throw new TabRefusal("invalid_value", "Choose a place for the tab.");
-    else if (action.kind === "tabs.close") this.closable(action.tab, "close");
+    else if (action.kind === "tabs.close") this.checkClosable(action.tab, "close");
     else if (action.kind === "tabs.arrange" && action.layout !== null && (typeof action.layout !== "object" || !action.layout))
       throw new TabRefusal("invalid_value", "That arrangement can't be read.");
   }
@@ -635,8 +645,8 @@ export class ProfileSessions {
   private closedFragment(closed: TabId | undefined): HeldClosed | undefined {
     return closed === undefined ? this.closed.at(-1) : [...this.closed].reverse().find(item => item.tab.id === closed);
   }
-  /** Refused (with the reason) when the tab's views can't go: one is a newer build's, or one is the view the window draws. */
-  private closable(tab: TabId, verb: "close" | "reset") {
+  /** Throws a refusal (with the reason) when the tab's views can't go: one is a newer build's, or one is the view the window draws. */
+  checkClosable(tab: TabId, verb: "close" | "reset") {
     if (this.keptTabs.has(tab)) throw new TabRefusal("incompatible_mode", "This tab holds a view from a newer version of XF Studio. Close or reset it there.");
     const drawn = this.drawnView();
     if (drawn && this.graph.tabOf(drawn) === tab)

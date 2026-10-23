@@ -3,8 +3,10 @@
  * Character as a preview and hidden until switched on from the Modules menu. It contributes one panel and no view tools. Data only.
  */
 import type { StudioModule } from "../../platform/api";
+import { POSES_DEFAULTS } from "./defaults";
 
 export const POSES_MODULE: StudioModule = Object.freeze({
   id: "poses", label: "Poses", icon: "body", group: "character", stage: "preview", shownByDefault: false,
   description: "Every photo-mode pose from your game and mods, in one searchable tree.",
+  defaults: POSES_DEFAULTS,
 });

@@ -4,10 +4,12 @@
  * Data only: the application derives each view's tools from it, and eye makeup's view renders its summary and readiness.
  */
 import type { StudioModule, ViewSummaryContribution, ViewToolContribution } from "../../platform/api";
+import { EYE_MAKEUP_DEFAULTS } from "./defaults";
 
 export const EYE_MAKEUP_MODULE: StudioModule = Object.freeze({
   id: "eye-makeup", label: "Eye makeup", icon: "category", group: "character", stage: "stable", feature: "eye-makeup", shownByDefault: true,
   description: "Design layered eye makeup for your V.",
+  defaults: EYE_MAKEUP_DEFAULTS,
 });
 
 export const EYE_MAKEUP_VIEW_TOOLS: readonly ViewToolContribution[] = Object.freeze([

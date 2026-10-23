@@ -28,6 +28,8 @@ import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-regi
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_SLOTS, type StoredNode, type ViewRecord } from "../src/platform/api/view-graph";
 import { createHistoryService, lookScope, viewScope, type HistoryService } from "../src/platform/core/history-service";
 import { hostRandom } from "../src/platform/core/random";
+import { fillOf, fragmentOfTab, instantiateFragment, substitutionOf, type SceneCandidate } from "../src/app/profiles/layout-fragment";
+import { STUDIO_LAYOUT_DEFAULTS } from "../src/compose/layout-defaults";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
 
@@ -68,6 +70,27 @@ function contentFrom(s: ProfileSessions, from: string, share: boolean, name = "M
   const id = s.freshId("view"), presets = s.freshInstance("presets");
   return { name, origin: "eye-makeup/default", dock: dockOf([presets]), panels: [{ id: presets, type: "presets" }],
     views: [{ id, kind: "3d", ...refs }], nodes };
+}
+
+/**
+ * A tab's content made from a default as New tab ▸ makes it (P2-ii): a module's default, or one saved from a random tab of the session,
+ * with random substitution choices (each scene shared with a scene showing its V, or new; a random look), instantiated with the session's
+ * fresh IDs.
+ */
+function fromDefault(s: ProfileSessions, random: () => number, name: string): TabContent {
+  const tabs = s.tabList(), saved = tabs.length && random() < .4 ? fragmentOfTab(s.session(), pick(random, tabs).id) : undefined;
+  const contributed = pick(random, STUDIO_LAYOUT_DEFAULTS), fragment = saved ?? contributed.fragment;
+  const scenes: SceneCandidate[] = [...new Set(s.graph.viewIds().map(view => s.graph.node(view, "scene").id))].map(scene => ({ scene, kind: "character",
+    tab: s.viewTab(s.graph.viewIds().find(view => s.graph.node(view, "scene").id === scene)!), ...s.knownScene(scene) }));
+  const subjects = [{ kind: "character", id: "c-1" }];
+  const choice = { looks: Object.fromEntries(fragment.looks.map(slot => [slot.key, random() < .5 ? LOOK : OTHER_LOOK])),
+    scenes: Object.fromEntries(fragment.nodes.filter(node => node.slot === "scene").map((node): [string, string | null] => {
+      const shares = scenes.filter(item => item.subject?.id === "c-1");
+      return [node.key, random() < .5 || !shares.length ? null : pick(random, shares).scene];
+    })) };
+  const substitution = substitutionOf(fragment, { subjects, looks: [LOOK, OTHER_LOOK], scenes }, choice);
+  if ("issue" in substitution) throw Error(substitution.issue);
+  return instantiateFragment(fragment, fillOf(substitution), s, { name, origin: saved ? "d-saved1" : contributed.id });
 }
 
 // ----- The independent model -----
@@ -195,7 +218,8 @@ function made(run: Run, tab: string): number {
 /** One random forward operation, applied to the session and the model; false when none applies. */
 function step(run: Run, random: () => number, n: number): boolean {
   const { s } = run, tabs = s.tabList(), views = s.graph.viewIds(), kinds: string[] = ["newTab"];
-  if (tabs.length) kinds.push("rename", "close", "duplicate", "reset", "newTab", "emptyTab", "emptyTab");
+  if (tabs.length) kinds.push("rename", "close", "duplicate", "reset", "newTab", "emptyTab", "emptyTab", "resetFromDefault");
+  kinds.push("fromDefault");
   if (tabs.length > 1) kinds.push("move");
   if (s.closedTabs().length) kinds.push("reopen", "reopen");
   if (views.length) kinds.push("addView", "light");
@@ -222,6 +246,13 @@ function step(run: Run, random: () => number, n: number): boolean {
     const id = s.newTab(content);
     next = model.insert(run.m, { id, name: content.name, ...(content.origin ? { origin: content.origin } : {}), content: made(run, id) }, tabs.length,
       content.views.map(view => view.id));
+  } else if (kind === "fromDefault") {
+    const content = fromDefault(s, random, `Default ${n}`), id = s.newTab(content);
+    next = model.insert(run.m, { id, name: content.name, origin: content.origin!, content: made(run, id) }, tabs.length, content.views.map(view => view.id));
+  } else if (kind === "resetFromDefault") {
+    const tab = pick(random, tabs).id, content = fromDefault(s, random, "ignored");
+    s.reset(tab, content);
+    next = model.reset(run.m, tab, content.origin!, content.views.map(view => view.id), made(run, tab));
   } else if (kind === "reset") {
     const tab = pick(random, tabs).id, content = views.length && random() < .75 ? contentFrom(s, pick(random, views), random() < .5, "ignored")
       : { name: "ignored", origin: "eye-makeup/default", dock: null, panels: [], views: [], nodes: [] };

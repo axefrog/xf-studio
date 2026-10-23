@@ -43,6 +43,8 @@ export type PanelContribution = {
    * by default. Absent: the panel works on the profile (no binding).
    */
   readonly context?: PanelContext;
+  /** A default layout saved from a tab keeps this panel's instance state (profiles design §4.2); absent: it starts afresh. */
+  readonly stateInDefaults?: boolean;
 };
 
 /** Which activity-log source an action kind reports under (first matching pattern wins within a contribution). */

@@ -8,6 +8,7 @@
  */
 import type { Capability, ReasonCode } from "./capability";
 import type { SceneKind } from "./view-graph";
+import type { DefaultLayoutContribution } from "./layout-fragment";
 
 export type ModuleId = string;
 /** The Modules menu's sections. */
@@ -24,6 +25,11 @@ export type StudioModule = {
   readonly shownByDefault: boolean;
   /** One plain line of what it adds, for the Modules menu. */
   readonly description: string;
+  /**
+   * Its default layouts (profiles design §4.2): read-only, listed under it in New tab ▸ (with the Early access tag unless it is stable),
+   * checked at composition against the panels and view tools the build has.
+   */
+  readonly defaults?: readonly DefaultLayoutContribution[];
 };
 
 /**

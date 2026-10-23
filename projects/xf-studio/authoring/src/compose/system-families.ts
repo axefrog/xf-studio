@@ -16,7 +16,7 @@ import type { QualityAction } from "../legacy/eye-makeup/preview/preview-quality
 import type { SavedAppearanceAction } from "../character/saved-appearance-actions";
 import type { ViewAction } from "../app/view-actions";
 import type { SceneAction } from "../app/profiles/scene-commands";
-import type { TabAction } from "../app/profiles/profile-sessions";
+import type { LayoutTabAction } from "../app/profiles/tab-defaults";
 import type { PartPresetRequest } from "../library/part-presets";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
   type RequestDescriptor } from "../app/studio-action-descriptors";
@@ -115,11 +115,17 @@ export const SCENES_FAMILY: SystemFamily<SceneAction, ActionScope, typeof SCENES
   actions: actionTable<SceneAction, ActionScope>(ACTION_DESCRIPTORS, { "scene.setLook": true, "scene.setSubject": true }),
 });
 
-/** The session's layout tabs (app/profiles/profile-sessions.ts, profiles design §4.1): show, rename, move, close, reopen, duplicate, arrange. */
-export const TABS_FAMILY: SystemFamily<TabAction, ActionScope, typeof TABS_ID> = Object.freeze({
+/**
+ * The session's layout tabs and the default layouts (app/profiles/profile-sessions.ts and tab-defaults.ts, profiles design §4.1, §4.2):
+ * show, rename, move, close, reopen, duplicate, arrange; a new tab from a default, reset, save as default, update; an own default's rename,
+ * delete and restore.
+ */
+export const TABS_FAMILY: SystemFamily<LayoutTabAction, ActionScope, typeof TABS_ID> = Object.freeze({
   owner: "system", id: TABS_ID, label: "Layout tabs",
-  actions: actionTable<TabAction, ActionScope>(ACTION_DESCRIPTORS, { "tabs.show": true, "tabs.rename": true, "tabs.move": true, "tabs.close": true,
-    "tabs.reopen": true, "tabs.duplicate": true, "tabs.arrange": true }, { "tabs.rename": { name: "characters" }, "tabs.move": { to: "index" } }),
+  actions: actionTable<LayoutTabAction, ActionScope>(ACTION_DESCRIPTORS, { "tabs.show": true, "tabs.rename": true, "tabs.move": true, "tabs.close": true,
+    "tabs.reopen": true, "tabs.duplicate": true, "tabs.arrange": true, "tabs.new": true, "tabs.reset": true, "tabs.saveAsDefault": true,
+    "tabs.updateDefault": true, "defaults.rename": true, "defaults.delete": true, "defaults.restore": true },
+    { "tabs.rename": { name: "characters" }, "tabs.move": { to: "index" }, "tabs.saveAsDefault": { name: "characters" }, "defaults.rename": { name: "characters" } }),
 });
 
 /**

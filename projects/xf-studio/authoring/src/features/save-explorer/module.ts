@@ -4,8 +4,10 @@
  * view tools. Data only.
  */
 import type { StudioModule } from "../../platform/api";
+import { SAVE_EXPLORER_DEFAULTS } from "./defaults";
 
 export const SAVE_EXPLORER_MODULE: StudioModule = Object.freeze({
   id: "save-explorer", label: "Save Explorer", icon: "folder", group: "tools", stage: "preview", shownByDefault: false,
   description: "Look inside your saves, read-only: their nodes, objects and script mods' data.",
+  defaults: SAVE_EXPLORER_DEFAULTS,
 });

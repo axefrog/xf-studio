@@ -80,6 +80,17 @@ export const ACTION_DESCRIPTORS = {
   "tabs.duplicate": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab }),
   // The arrangement the dock saved for a tab: the tab's own state, never Undo.
   "tabs.arrange": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, layout: { type: "object", required: false, from: "input" } }),
+  // Tabs and default layouts (app/profiles/tab-defaults.ts): a new tab or a reset names its default and the person's substitution choices
+  // (absent: each slot's default); saving a tab as a default, and changing an own default, write the library through the outbox.
+  "tabs.new": desc("workspace", "workspace", "none", { default: target("string"), choice: { type: "object", required: false, from: "input" } }),
+  "tabs.reset": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, default: { ...target("string"), required: false },
+    choice: { type: "object", required: false, from: "input" } }),
+  "tabs.saveAsDefault": desc("workspace", "library", "none", { tab: TARGET_SCHEMA.tab, name: inputText(1, TAB_NAME_LIMIT) }),
+  "tabs.updateDefault": desc("workspace", "library", "none", { tab: TARGET_SCHEMA.tab }),
+  "defaults.rename": desc("workspace", "library", "none", { default: target("string"), name: inputText(1, TAB_NAME_LIMIT) }),
+  // Deleting an own default is a tombstone; restoring it is the Undo notice's action.
+  "defaults.delete": desc("workspace", "library", "recovery", { default: target("string") }),
+  "defaults.restore": desc("workspace", "library", "recovery", { default: target("string") }),
   "camera.front": inView("viewport", "workspace", "none"),
   "camera.body": inView("viewport", "workspace", "none"),
   "camera.setFov": inView("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),
