@@ -97,6 +97,8 @@ const settle = async () => {
   await page.waitFor("window.xfStudioPresentation.previewReadiness.snapshot().phase === 'ready'", 120000);
   // The creator preset's grade arrives from the host after the preset turns on; the neutral grade shows until then.
   await page.waitFor("window.xfStudioPresentation.authoring.previewState().lighting?.lut.phase !== 'loading'", 60000);
+  // A setup never drawn is prepared on the shown V first, with the setup before drawn meanwhile (experiment 043 §11, 4a-v-b).
+  await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && !e.residency.preparation; })()", 600000);
   await page.wait(800);
   await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return e && !e.frames.running; })()", 30000);
   await page.wait(300);
