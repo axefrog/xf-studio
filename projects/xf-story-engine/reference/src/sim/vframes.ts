@@ -2,6 +2,7 @@
 // tier 3 and one for each of its neighbouring cells at tier 2, always open; a goal frame for each objective the game tracks, saying what the
 // game asked and not what V feels. The authored frames of R1's people and of any mirrored canon person stay active and are not advanced here.
 
+import type { ContextFrame } from '../frames.ts';
 import { mintedId } from '../id.ts';
 import type { Id, Value } from '../types.ts';
 import type { Sim } from './sim.ts';
@@ -18,6 +19,20 @@ export class VFrames {
   }
   goalId(journal: Id): Id {
     return mintedId(this.sim.w.v, this.sim.w.v, `frame:goal:${journal}`);
+  }
+
+  /**
+   * The live frame under an Id, if there is one. A frame that has ended (satisfied or abandoned) is gone as far as anything can tell: a save
+   * keeps only the live frames (S0 10.4), so a run that goes on and a run that was saved and loaded must treat a returning cell or a
+   * re-tracked entry alike, and both open the frame afresh (its `opened` is the time of the return).
+   */
+  private live(id: Id): ContextFrame | undefined {
+    const have = this.k.frames.frame(id);
+    if (have !== undefined && !this.k.frames.eligible(have)) {
+      this.k.frames.remove(id);
+      return undefined;
+    }
+    return have;
   }
 
   /** V's mirrored cell changed: the frames for the old cell are abandoned and the new ones opened (S1 8.2). */
@@ -38,7 +53,7 @@ export class VFrames {
     }
     for (const [cell, tier] of want) {
       const id = this.situationId(cell);
-      const have = k.frames.frame(id);
+      const have = this.live(id);
       if (!have) {
         k.frames.open({ id, actor: v, level: 'situation', origin: v, weight: 1, focus: { nodes: [cell], tier }, cause });
         continue;
@@ -55,11 +70,12 @@ export class VFrames {
     const tracked = k.value(journal, 'tracked') === 'yes';
     const state = k.value(journal, 'jstate');
     const id = this.goalId(journal);
-    const have = k.frames.frame(id);
     if (!tracked || state === 'finished' || state === 'failed') {
+      const have = k.frames.frame(id);
       if (have && (have.status === 'active' || have.status === 'blocked')) k.frames.setStatus(id, state === 'finished' ? 'satisfied' : 'abandoned', journal);
       return;
     }
+    const have = this.live(id);
     const status = state === 'blocked' ? 'blocked' : 'active';
     if (!have) {
       const target = k.value(journal, 'target');

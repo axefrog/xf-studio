@@ -288,7 +288,9 @@ export class Frames {
     }
   }
 
+  /** Drop a frame, as a save drops an ended one. The caller says it is gone: nothing is emitted. */
   remove(id: Id): void {
+    this.k.assertWritable();
     const f = this.frames.get(id);
     if (!f) return;
     for (const p of f.parents) this.kids.get(p.frame)?.delete(id);

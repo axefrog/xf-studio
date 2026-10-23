@@ -10,7 +10,7 @@ import { ScriptPort } from '../../src/seeding/port.ts';
 import { L2Registry } from '../../src/seeding/registries.ts';
 import type { FactsTable, Pack, Pred } from '../../src/seeding/types.ts';
 import { attachLayer2 } from '../../src/sim/layer2-wire.ts';
-import { ReplayPort } from '../../src/sim/port.ts';
+import { ReplayPort, type ReplayLine } from '../../src/sim/port.ts';
 import type { DistrictIndex } from '../../src/sim/index-types.ts';
 import type { ActsState } from '../../src/sim/proc-acts.ts';
 import type { EventsState } from '../../src/sim/proc-events.ts';
@@ -20,7 +20,10 @@ import { lintKinds } from '../../src/sim/kinds.ts';
 import { unionOf } from '../../src/sim/protection.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { MINI_ID, miniPack } from '../s2/mini.ts';
+import { restate, transfer } from './feed.ts';
+import { make as fixtureSim } from './gen.ts';
 import { child, eventsState, inject, quietData, quietSim, seedOf, withSecondDistrict } from './helpers.ts';
+import { recordOf } from './records.ts';
 
 const W = 600;
 const cause = H(hs('fx'), hs('review-fixes'));
@@ -749,5 +752,58 @@ describe('S1 8.8 (v0.3): a changed affiliation joins the group of the person’s
     port.submit([{ t: sim.k.now + 5, op: 'person', key: 'p', slots: { affiliation: 'GA' } }]);
     sim.advance(2);
     expect(sim.k.groups.memberships(port.node('p')).map((e) => e.to)).toEqual([sim.w.group(first.id, 'A1')]);
+  });
+});
+
+describe('V-frames: a cell V comes back to, and an entry tracked again, open their frames afresh, saved in between or not', () => {
+  // found by the full-scale partition property (a script whose readings take V away from a cell and back): a run that went on reactivated the
+  // abandoned frame, with its old `opened` and a status change, while a run saved and loaded in between had no such frame (a save keeps only
+  // the live ones, S0 10.4) and opened a new one
+  const sim0 = (): Sim => fixtureSim();
+  function run(lines: ReplayLine[], windows: number, reloadAt?: number): Sim {
+    let sim = sim0();
+    new ReplayPort(sim).submit(lines);
+    if (reloadAt === undefined) {
+      sim.advance(windows);
+      return sim;
+    }
+    sim.advance(reloadAt);
+    sim.k.persistence.save('V1');
+    sim = transfer(sim, 'V1', sim0, 3);
+    restate(sim, lines);
+    sim.advance(windows - reloadAt);
+    return sim;
+  }
+
+  test('V leaves a cell and returns: the frame of a neighbour that was dropped is opened at the return, as after a reload', () => {
+    const lines: ReplayLine[] = [
+      { t: 0, op: 'reading', node: 'v', slot: 'district', value: 'fx_d1' },
+      { t: 0, op: 'reading', node: 'v', slot: 'cell', value: 'c2' },
+      { t: 15844, op: 'reading', node: 'v', slot: 'cell', value: 'c1' },
+      { t: 94051, op: 'reading', node: 'v', slot: 'cell', value: 'c2' },
+    ];
+    const through = run(lines, 170);
+    const saved = run(lines, 170, 73);
+    // c3 is next to c2 and not to c1: it is abandoned while V is in c1 and has to be opened again when V is back in c2
+    const c3 = (sim: Sim) => sim.k.frames.frame(sim.vFrames.situationId(sim.w.districts[0]!.cellIds[2]!))!;
+    expect(c3(through).status).toBe('active');
+    expect(c3(through).opened).toBe(94200);
+    expect(c3(saved).opened).toBe(94200);
+    expect(recordOf(through).frames).toBe(recordOf(saved).frames);
+  });
+
+  test('a tracked entry untracked and tracked again opens its goal frame at the second time, as after a reload', () => {
+    const lines: ReplayLine[] = [
+      { t: 0, op: 'reading', node: 'journal:g1', slot: 'tracked', value: 'yes' },
+      { t: 6000, op: 'reading', node: 'journal:g1', slot: 'tracked', value: 'no' },
+      { t: 60000, op: 'reading', node: 'journal:g1', slot: 'tracked', value: 'yes' },
+    ];
+    const through = run(lines, 120);
+    const saved = run(lines, 120, 50);
+    const goal = (sim: Sim) => sim.k.frames.frame(sim.vFrames.goalId(new ReplayPort(sim).node('journal:g1')))!;
+    expect(goal(through).status).toBe('active');
+    expect(goal(through).opened).toBeGreaterThanOrEqual(60000);
+    expect(goal(saved).opened).toBe(goal(through).opened);
+    expect(recordOf(through).frames).toBe(recordOf(saved).frames);
   });
 });
