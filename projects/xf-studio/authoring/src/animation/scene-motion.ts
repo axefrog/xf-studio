@@ -114,8 +114,6 @@ export type MotionScene = {
   /** Whether a view's scene simulates its dangles, and turning it on or off (a recorded scene setting). */
   physics(view?: string): boolean;
   setPhysics(enabled: boolean, view: string): void;
-  /** Whether a view shows the scene this service's device draws (without it, only the main view does). */
-  draws?(view: string): boolean;
 };
 
 /** A motion scene of its own (fixtures, a service with no view graph): plain data, starting at `motion`. */

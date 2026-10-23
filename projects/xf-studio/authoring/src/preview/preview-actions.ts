@@ -10,7 +10,7 @@ import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENS
   type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
 import type { GradingLutSource } from "./grading-lut";
 import { refusal, type ReasonCode } from "../platform/api";
-import { NOT_DRAWN } from "../animation/motion-actions";
+import { holdsHead, notDrawn, type ViewReach } from "./view-routes";
 import { addLight, aimLightAtHead, duplicateLight, moveLight, BUILT_IN_SETUP_IDS, builtInInfo, colourHex, createSetup, deleteSetup, differsFromBase, editShownSetup,
   findUserSetup, isBuiltInSetup, LIGHT_NUMBER_KEYS, LIGHT_RANGES, LIGHT_TYPES, lightingSource, lightPlacement, LIGHTING_LIMITS, parseColourHex,
   removeLight, renameLight, renameSetup, resetSetup, rigKindOf, SETUP_BACKDROPS, SETUP_DISPLAYS, SETUP_ENVIRONMENT_RANGE,
@@ -139,8 +139,8 @@ const NO_LIGHTING = "Lighting controls are unavailable in this preview.";
 const SETUP_EDITS = new Set<PreviewAction["kind"]>(["preview.setExposure", "preview.setRoomLight", "preview.setBackdrop", "preview.setDisplayTransform",
   "preview.setLight", "preview.setLightColour", "preview.setLightShadows", "preview.setLightType", "preview.renameLight", "preview.aimLightAtHead",
   "preview.addLight", "preview.removeLight", "preview.moveLight", "preview.duplicateLight", "preview.setKeyAngle"]);
-/** Actions checked against what the drawn head offers: they name a view showing the drawn scene. */
-const DRAWN_CHECKS = new Set<PreviewAction["kind"]>(["preview.setEyeShape", "preview.setDetail", "preview.setHair"]);
+/** Camera actions a device computes from its live camera, lens and subject: only for a view it draws (view-routes.ts). */
+const FRAMING = new Set<PreviewAction["kind"]>(["camera.front", "camera.body", "camera.setFov", "camera.endFovGesture", "camera.creatorFraming"]);
 /** Actions that name one of the shown setup's lights. */
 const LIGHT_ACTIONS = new Set<PreviewAction["kind"]>(["preview.setLight", "preview.setLightColour", "preview.setLightShadows", "preview.setLightType",
   "preview.renameLight", "preview.aimLightAtHead", "preview.removeLight", "preview.moveLight", "preview.duplicateLight"]);
@@ -155,7 +155,11 @@ type Shown = ReturnType<typeof previewFields>;
 /**
  * Camera, light, display, scene and tool commands, independent of the DOM and the Three scene type. Their state lives in the view
  * graph (the one owner, design §3.3): each action edits the node its view references, and the device follows the graph for the view
- * it draws (`shown`, the main view while there is one visible view). Camera jumps are computed by the device, then recorded.
+ * it draws (`view()`; `draw` changes it, and says when the device is hidden). Camera jumps are computed by the device, then recorded.
+ *
+ * One service per scene runtime; the application routes each action to the runtime holding the view it names, and says how
+ * (`ViewReach`, view-routes.ts): framing needs a device drawing the view, and what the head offers is checked only on a head of the
+ * view's V. Without a reach (fixtures) it is worked out from this device's own view.
  */
 export class PreviewActions {
   private listeners = new Set<() => void>();
@@ -164,15 +168,20 @@ export class PreviewActions {
   private applied: Shown;
   private dispatching = false;
   private readonly unsubscribe: () => void;
+  /** The view this device draws (or would draw: it follows that view's state while hidden too). */
+  private shown: ViewId;
+  /** Whether the device is on screen now (a hidden runtime's frames wait: it can't frame a camera anyone sees). */
+  private drawing = true;
   /**
    * @param initial the workspace's preview, used to build a private one-view graph when `graph` is not given (fixtures)
-   * @param graph the workspace's view graph (the composition root's); the device must already show its `shown` view's state
-   * @param shown the view this device draws
+   * @param graph the workspace's view graph (the composition root's); the device must already show its `view`'s state
+   * @param view the view this device draws
    */
-  constructor(initial: PreviewState, private port: PreviewPort, graph?: ViewGraph, private readonly shown: ViewId = MAIN_VIEW) {
+  constructor(initial: PreviewState, private port: PreviewPort, graph?: ViewGraph, view: ViewId = MAIN_VIEW) {
     this.graph = graph ?? createStudioViewGraph(initial);
+    this.shown = view;
     // The device shows the stored state; a tool the presentation already withdrew goes off at once (UI-102).
-    this.applied = previewFields(this.graph, shown);
+    this.applied = previewFields(this.graph, view);
     this.apply(false);
     // The LUT arrives from the host after the preset turns on; readers learn of it like any other change.
     port.onLightingStatus?.(() => this.notify());
@@ -216,10 +225,31 @@ export class PreviewActions {
   }
   /** The view graph this device follows. */
   views(): ViewGraph { return this.graph; }
-  /** Whether `view` shows the scene this device draws (its own view's): what the drawn head offers applies there only. */
-  drawsScene(view: ViewId): boolean {
-    return this.graph.has(view) && this.graph.node(view, "scene").id === this.graph.node(this.shown, "scene").id;
+  /** The view this device draws, or follows while hidden. */
+  view(): ViewId { return this.shown; }
+  /**
+   * The device draws `view` now (its runtime is shown for it), or is hidden (`null`: it keeps following the view it drew). Another view of
+   * the same scene takes over its lights, display and tools at once; the camera is the caller's (the head restores the view's camera node).
+   */
+  draw(view: ViewId | null) {
+    this.drawing = view !== null;
+    if (view === null || view === this.shown) return;
+    this.shown = view;
+    this.apply(false);
+    this.notify();
   }
+  /** How this device holds `view` when no router says (fixtures): drawing it, drawing its scene, hidden with its scene, or not at all. */
+  private reachOf(view: ViewId): ViewReach {
+    if (view === this.shown) return this.drawing ? "drawn" : "warm";
+    const sameScene = this.graph.has(view) && this.graph.node(view, "scene").id === this.graph.node(this.shown, "scene").id;
+    return !sameScene ? "absent" : this.drawing ? "scene" : "warm";
+  }
+  /** Whether this device frames `view`'s camera: it draws the view, or a view sharing its camera node. */
+  private framesCamera(view: ViewId, reach: ViewReach) {
+    return reach === "drawn" || (reach === "scene" && this.graph.node(view, "camera").id === this.graph.node(this.shown, "camera").id);
+  }
+  /** The pose `view`'s camera node holds (where the view was last drawn from, or put since), if any. */
+  private nodePose(view: ViewId): CameraState | undefined { return previewFields(this.graph, view).camera; }
   /** The view a read is about: the one it names, else the one this device draws (never "the focused one": nothing here reads focus). */
   private fields(view?: ViewId) { return previewFields(this.graph, view !== undefined && this.graph.has(view) ? view : this.shown); }
   /** The head's eye shapes, and the one it shows for the drawn scene's choice (with the reason when that is its base shape instead). */
@@ -233,8 +263,9 @@ export class PreviewActions {
     const choices = this.port.eyeShapeOptions?.().choices;
     return choices && !choices.some(choice => choice.index === index) ? 0 : index;
   }
-  private validEyeShape(index: number) {
-    const choices = this.port.eyeShapeOptions?.().choices;
+  /** A valid eye shape: one this head offers (`head`), else one in the stored range. */
+  private validEyeShape(index: number, head = true) {
+    const choices = head ? this.port.eyeShapeOptions?.().choices : undefined;
     return Number.isInteger(index) && index >= 0 && (choices ? index < choices.length : index <= MAX_EYE_SHAPE_INDEX);
   }
   /** The shown view's settings in the workspace's `preview` shape (the legacy mirror), with the device's live camera. */
@@ -249,18 +280,24 @@ export class PreviewActions {
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   /** The existing uncoded capability shape; the application reads the coded `check()`. */
-  capability(action: PreviewAction): PreviewCapability {
-    const { code: _code, ...capability } = this.check(action);
+  capability(action: PreviewAction, reach?: ViewReach): PreviewCapability {
+    const { code: _code, ...capability } = this.check(action, reach);
     return capability;
   }
-  /** Capability with the reason code chosen at each refusal. */
-  check(action: PreviewAction): PreviewCapability & { code?: ReasonCode } {
+  /**
+   * Capability with the reason code chosen at each refusal. `reach`: how the application's router found this device holding the named view
+   * (view-routes.ts); without it, worked out from this device's own view.
+   */
+  check(action: PreviewAction, reach?: ViewReach): PreviewCapability & { code?: ReasonCode } {
     if (typeof action.view !== "string") return refusal("missing_target", "Open a 3D view to use this.");
     if (!this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");
-    // The device computes framing for the view it draws; other views get cameras of their own with more than one visible view (P4).
-    if (action.kind.startsWith("camera.") && action.view !== this.shown) return refusal("missing_target", NOT_DRAWN);
-    // What the drawn head offers (its eye shapes, which of its V's details are available) is checked only for a view showing its scene.
-    if (DRAWN_CHECKS.has(action.kind) && !this.drawsScene(action.view)) return refusal("missing_target", NOT_DRAWN);
+    const held = reach ?? this.reachOf(action.view);
+    // Framing is computed by a device drawing the view; a view not drawn keeps its camera node, which restores and steps still edit.
+    if (FRAMING.has(action.kind) && !this.framesCamera(action.view, held)) return notDrawn(held);
+    if (action.kind === "camera.navigate" && !this.framesCamera(action.view, held) && !this.nodePose(action.view)) return notDrawn(held);
+    // What a head offers (its eye shapes, which of its V's details are available) is checked on a head of the view's V; with none
+    // resident, the stored ranges are (the head built later shows its own fallback, and the node keeps the choice).
+    const head = holdsHead(held);
     const state = this.fields(action.view);
     if ((action.kind === "camera.back" || action.kind === "camera.forward") && !this.graph.cameraTrail(action.view)[action.kind === "camera.back" ? "back" : "forward"])
       return refusal("invalid_value", action.kind === "camera.back" ? "The camera hasn't jumped anywhere yet." : "There is no later camera position to go forward to.");
@@ -300,18 +337,25 @@ export class PreviewActions {
       if (!this.port.creatorCamera) return refusal("unavailable", NO_CREATOR);
       if (action.page !== "face" && action.page !== "hair") return refusal("invalid_value", "That creator page does not exist.");
     }
-    if (action.kind === "preview.setEyeShape" && !this.validEyeShape(action.index))
+    if (action.kind === "preview.setEyeShape" && !this.validEyeShape(action.index, head))
       return refusal("invalid_value", "That eye shape is not offered by this head.");
     const target = action.kind === "preview.setDetail" ? action.detail : action.kind === "preview.setHair" ? "hair" : undefined;
     const requested = action.kind === "preview.setDetail" || action.kind === "preview.setHair" ? action.enabled : false;
-    const unavailable = target && requested && this.port.availability?.(target);
+    const unavailable = head && target && requested && this.port.availability?.(target);
     if (unavailable) return refusal("asset_unavailable", unavailable);
     return { available: true };
   }
-  dispatch(action: PreviewAction): PreviewActionResult {
-    const capability = this.capability(action);
+  dispatch(action: PreviewAction, reach?: ViewReach): PreviewActionResult {
+    const capability = this.capability(action, reach);
     if (!capability.available) throw Error(capability.reason);
     const view = action.view, state = this.fields(view);
+    // A view this device doesn't frame: its camera node is edited, and whoever draws the view later starts there.
+    if (action.kind.startsWith("camera.") && !this.framesCamera(view, reach ?? this.reachOf(view))) {
+      this.dispatching = true;
+      try { this.nodeCamera(view, action); } finally { this.dispatching = false; }
+      this.notify();
+      return {};
+    }
     const lights = (next: Partial<LightsState>, label: string, coalesce?: string) => this.graph.edit(view, "lights", { state: next }, { label, coalesce });
     const scene = (next: Partial<SceneState>, label: string) => this.graph.edit(view, "scene", { state: next }, { label });
     const display = (next: Partial<DisplayState>, label: string) => this.graph.edit(view, "display", { state: next }, { label });
@@ -368,6 +412,16 @@ export class PreviewActions {
     } finally { this.dispatching = false; }
     this.notify();
     return limited === undefined ? {} : { limited };
+  }
+  /** A camera action on a view this device doesn't frame (only restores, orbit steps, Back and Forward pass `check`): its node only. */
+  private nodeCamera(view: ViewId, action: PreviewAction) {
+    const pose = this.nodePose(view);
+    switch (action.kind) {
+      case "camera.restore": this.graph.cameraJump(view, { pose: pose ?? action.camera }, { pose: action.camera }, "Saved camera"); break;
+      case "camera.navigate": this.graph.cameraMoved(view, { pose: navigateCamera(pose!, action.command) }); break;
+      case "camera.back": case "camera.forward":
+        this.graph.cameraStep(this.graph.target(view), action.kind === "camera.back" ? "back" : "forward", pose ? { pose } : {}); break;
+    }
   }
   /** A camera jump the device computes: record where it went from and to (a View and lighting step and a Back trail entry). */
   private jump(view: ViewId, label: string, move: () => boolean | void): boolean | undefined {

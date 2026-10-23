@@ -1,6 +1,4 @@
-import { MAIN_VIEW, type ViewId } from "../platform/api/view-graph";
-/** Why a view action naming a view whose scene isn't drawn is refused (phase 1 draws one view). */
-export const NOT_DRAWN = "That 3D view isn't drawn now, so this can't change it.";
+import type { ViewId } from "../platform/api/view-graph";
 import type { PreviewState } from "../app/workspace/workspace-state";
 import { localMotionScene, withMotion, type MotionScene, type SceneMotion } from "./scene-motion";
 import { refusal, type Capability } from "../platform/api";
@@ -241,10 +239,8 @@ export class MotionActions {
   }
   capability(action: MotionAction): Capability {
     if (this.released) return refusal("not_ready", RELEASED);
-    // The idle, pause, contributions and blink are the drawn scene's device's (profiles design §3.6): they act only for a view showing it.
-    // Physics is a scene-node setting, edited on the named view's scene.
-    if (action.kind !== "motion.setPhysics" && !(this.scene.draws ? this.scene.draws(action.view) : action.view === MAIN_VIEW))
-      return refusal("missing_target", typeof action.view === "string" ? NOT_DRAWN : "Open a 3D view to use this.");
+    // The application routes a motion action to the runtime showing the named view's scene, and refuses it for any other (view-routes.ts).
+    if (typeof action.view !== "string") return refusal("missing_target", "Open a 3D view to use this.");
     if (action.kind === "motion.setBlink" && (!Number.isFinite(action.value) || action.value < 0 || action.value > 1))
       return refusal("invalid_value", "Eyelid closure must be between 0 and 1.");
     if ((action.kind === "motion.setIdle" && action.enabled || action.kind === "motion.setPaused" ||

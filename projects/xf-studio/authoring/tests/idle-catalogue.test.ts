@@ -57,7 +57,7 @@ test("choosing an idle shows it at once, loads it behind, and a failed load puts
 test("the chosen idle is stored in the scene node only when it isn't the default, and a stored one is played again on restore", async () => {
   const idles = [entry("closeup"), entry("inventory", { puppet: null })];
   const workspace = freshWorkspace(), graph = createStudioViewGraph(workspace.preview);
-  const motion = new MotionActions(motionPort(idles), graphMotionScene(graph, () => undefined));
+  const motion = new MotionActions(motionPort(idles), graphMotionScene(graph, () => undefined, () => MAIN_VIEW));
   const sceneMotion = () => graph.state<SceneState>(MAIN_VIEW, "scene").motion!;
   expect("idleClip" in sceneMotion()).toBe(false);
   motion.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "inventory" });
@@ -66,7 +66,7 @@ test("the chosen idle is stored in the scene node only when it isn't the default
   const stored = JSON.parse(JSON.stringify(sessionViewGraph(graph)));
   const reread = createStudioViewGraph(workspace.preview, stored);
   const asked: string[] = [];
-  const restored = new MotionActions(motionPort(idles, "ok", asked), graphMotionScene(reread, () => undefined));
+  const restored = new MotionActions(motionPort(idles, "ok", asked), graphMotionScene(reread, () => undefined, () => MAIN_VIEW));
   restored.restore();
   expect(restored.snapshot().idleClip).toBe("inventory");
   expect(asked).toEqual(["inventory"]);

@@ -233,6 +233,8 @@ async function start(host: StudioHost, root: HTMLElement) {
    * when they are made (the live face starts following, the UV editor draws its first frame), before the owner exists: none is shown then.
    */
   let shownHead: () => AttachedHead | undefined = () => undefined;
+  /** The view drawn now: the scene runtime owner's once it exists; the window draws the main view first (phase 2's tabs choose others). */
+  let drawnView: () => string = () => MAIN_VIEW;
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
   const region = STUDIO_COMPOSITION.region;
@@ -272,8 +274,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (lease) core.app.attach({ access: lease });
   // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
   const views = core.views;
-  // The scene the drawn view shows (phase 1 draws one view: the main one) and the look it shows, which the collection service changes.
-  const drawn = () => views.node(MAIN_VIEW, "scene").id;
+  // The scene the drawn view shows and the look it shows, which the collection service changes.
+  const drawn = () => views.node(drawnView(), "scene").id;
   const shownScene = { look: () => sessionState.scene(drawn()).look, setLook: (ref: LookRef | undefined) => sessionState.setLook(drawn(), ref),
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
@@ -408,7 +410,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       colourScheme: matchMedia("(prefers-color-scheme: dark)"),
       quality: previewDevice.coordinator.quality,
       attach: attached => core.app.attach(attached), persist, changed: () => statusSource.changed() },
-    scenes: { drawn, of: view => views.has(view) ? views.node(view, "scene").id : undefined,
+    scenes: { view: () => MAIN_VIEW, of: view => views.has(view) ? views.node(view, "scene").id : undefined,
       subject: id => { const subject = sessionState.scene(id).subject; return subject?.kind === "character" ? subject.id : undefined; },
       ensureSubject: id => sceneCharacter(sessionState, id, services), subscribe: listener => sessionState.subscribe(listener) },
     characters: services.characters,
@@ -421,7 +423,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     shown: head => {
       stopPrefetch?.(); stopPrefetch = undefined;
       facial.attachScene(head?.scene.face);
-      poseStage.attach(head ? { view: MAIN_VIEW, motion: head.motion, details: head.characterDetails, context: head.characterContext } : null);
+      poseStage.attach(head ? { view: drawnView(), motion: head.motion, details: head.characterDetails, context: head.characterContext } : null);
       if (!head) return;
       stopPrefetch = prefetchWhenQuiet(() => facial.prefetch(), headQuiet({ details: head.characterDetails, scene: head.scene }));
       status = { ...status, assets: { ...status.assets, loaded: true } };
@@ -432,6 +434,9 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
   });
   shownHead = () => heads.shown();
+  drawnView = () => heads.shownView();
+  // Camera, preview and motion actions go to the runtime holding the view they name (view-routes.ts).
+  core.app.attach({ runtimes: heads.runtimes });
   // 3D preview setup: follows the host's preparation and WolvenKit setup, then loads the head.
   const previewSetup = new PreviewSetupActions({
     preparation: host.previewPreparation, wolvenKit: host.wolvenKitSetup, detection: installDetection, localSetup,
@@ -462,16 +467,16 @@ async function start(host: StudioHost, root: HTMLElement) {
     savedAppearance: {
       has: () => heads.shown()?.savedAppearance.hasSavedV() ?? false,
       read: () => heads.shown()?.savedAppearance.snapshot().savedV,
-      // A save file becomes where the V comes from (`character.setSource`, which `savedV.load` stays an alias of until phase 1 ends);
-      // the shown V's scene applies it.
-      // The V the request named when it was asked (profiles design §3.3).
+      // A save file becomes where the V comes from (`character.setSource`, which `savedV.load` stays an alias of until phase 1 ends),
+      // for the V the request named when it was asked (profiles design §3.3); the head showing that V applies it.
       load: (bytes, character) => {
         if (bytes.byteLength > 128 * 1024 * 1024) throw Error("Save is larger than the supported limit.");
         const result = core.app.dispatch({ kind: "character.setSource", character, source: { kind: "save", value: readSavedV(bytes) } });
         if (!result.ok) throw Error(result.message);
-        return heads.shown()!.savedAppearance.snapshot();
+        return heads.showing(character)!.savedAppearance.snapshot();
       },
-      ready: () => !!heads.shown(),
+      // Ready per scene: a head shows the V the request names.
+      ready: character => !!heads.showing(character),
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,

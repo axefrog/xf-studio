@@ -2,7 +2,7 @@
  * The view graph service (research/authoring/view-graph-design.md §3, phase P1): nodes, sharing, link, fork and collect, validation
  * against scene kinds, the default one-view graph from the workspace's preview, persistence and the View and lighting history.
  */
-import { NOT_DRAWN } from "../src/animation/motion-actions";
+import { VIEW_HIDDEN } from "../src/preview/view-routes";
 import { expect, test } from "bun:test";
 import { MAIN_VIEW, validViewId, viewPanelId, type ViewGraphChange } from "../src/platform/api/view-graph";
 import { parseViewGraph, VIEW_HISTORY_STRUCTURE, ViewGraph } from "../src/platform/core/view-graph";
@@ -205,7 +205,7 @@ test("preview actions edit the graph node of the view they name, and the device 
   actions.dispatch({ kind: "preview.setHair", enabled: false, view: v2 });
   expect(calls).toEqual(["exposure:3"]);
   expect(actions.snapshot().hair).toBe(true);
-  expect(actions.capability({ kind: "camera.front", view: v2 })).toMatchObject({ available: false, reason: NOT_DRAWN });
+  expect(actions.capability({ kind: "camera.front", view: v2 })).toMatchObject({ available: false, reason: VIEW_HIDDEN });
   expect(actions.capability({ kind: "preview.setHair", enabled: true, view: "gone" })).toMatchObject({ available: false });
   // A camera jump: the device computes it, the graph records it, Undo moves the device back.
   calls.length = 0;

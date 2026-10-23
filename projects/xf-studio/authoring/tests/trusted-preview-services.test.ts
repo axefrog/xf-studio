@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
+import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { eyeShapeFallback, type PreviewPort } from "../src/preview/preview-actions";
 import type { MotionPort } from "../src/animation/motion-actions";
@@ -202,7 +203,7 @@ test("a head that lacks the scene's eye shape shows its base shape and leaves th
     setEyeShape: index => shapes.push(index), setPiercings: noop, setDetail: noop,
     eyeShapeOptions: () => ({ choices: [{ index: 0, label: "Base" } as never], eyesFollow: false, eyeSource: null }) };
   const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
-  const head = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion }, graph).finish();
+  const head = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion }, { graph, view: MAIN_VIEW }).finish();
   head.show();
   expect(shapes).toEqual([0]);
   expect(graph.state<{ eyeShape: number }>("main", "scene").eyeShape).toBe(5);

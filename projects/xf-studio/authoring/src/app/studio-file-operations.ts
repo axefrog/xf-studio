@@ -60,7 +60,8 @@ type FileSources = {
   savedV(): SavedV | undefined;
   /** Show a save's V on `character` (the V the request named when it was asked). */
   loadSavedV(bytes: Uint8Array, character: string): Readonly<SavedAppearanceState>;
-  savedVReady(): boolean;
+  /** Whether a save can be shown on `character` now: a 3D view shows that V (the head that applies it). */
+  savedVReady(character: string): boolean;
   savedVUnavailableReason?(): string | undefined;
   executeCollection(request: CollectionRequest): Promise<CollectionOutcome>;
   recoverCollection(draft?: string): void;
@@ -136,7 +137,7 @@ export class StudioFileOperations {
       case "recipe.import": case "recipe.export": return { available: true };
       case "mask.export": return this.sources.selectedLayer() ? { available: true } :
         { available: false, reason: "Select a layer before exporting a mask." };
-      case "savedV.import": return this.sources.savedVReady() ? { available: true } :
+      case "savedV.import": return this.sources.savedVReady(action.character!) ? { available: true } :
         { available: false, reason: this.sources.savedVUnavailableReason?.() ?? "Wait for the 3D view to finish loading." };
       case "savedV.export": return this.sources.hasSavedV() ? { available: true } :
         { available: false, reason: this.sources.savedVUnavailableReason?.() ??

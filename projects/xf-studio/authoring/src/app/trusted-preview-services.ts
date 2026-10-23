@@ -3,35 +3,35 @@ import { PreviewActions, type PreviewPort } from "../preview/preview-actions";
 import { SavedAppearanceActions, type SavedAppearancePort } from "../character/saved-appearance-actions";
 import type { WorkspaceState } from "./workspace/workspace-state";
 import type { ViewGraph } from "../platform/core/view-graph";
-import { MAIN_VIEW, type ViewId } from "../platform/api/view-graph";
+import type { ViewId } from "../platform/api/view-graph";
 import { createStudioViewGraph, previewLights, previewMirror, type SceneState } from "../preview/preview-view-graph";
 import { lightingSource } from "../preview/lighting-setups";
 import { DEFAULT_MOTION, type MotionScene } from "../animation/scene-motion";
 
 /**
- * The motion service's scene (scene-motion.ts): the motion settings in the scene node of the view the device draws, edited as the device
- * already shows them (no View and lighting step); hair physics and whether a view shows the drawn scene through the preview service.
+ * The motion service's scene (scene-motion.ts): the motion settings in the scene node of the view the device draws (`drawn`, read each
+ * time: the device may be shown for another view of the scene), edited as the device already shows them (no View and lighting step); hair
+ * physics through the preview service.
  */
-export function graphMotionScene(graph: ViewGraph, preview: () => PreviewActions | undefined, shown: ViewId = MAIN_VIEW): MotionScene {
+export function graphMotionScene(graph: ViewGraph, preview: () => PreviewActions | undefined, drawn: () => ViewId): MotionScene {
   return {
-    motion: () => structuredClone(graph.state<SceneState>(shown, "scene").motion ?? DEFAULT_MOTION),
+    motion: () => structuredClone(graph.state<SceneState>(drawn(), "scene").motion ?? DEFAULT_MOTION),
     setMotion: (motion, options) => {
-      if (options?.sample) graph.sample(shown, "scene", { motion });
-      else graph.edit(shown, "scene", { state: { motion } }, { applied: true });
+      if (options?.sample) graph.sample(drawn(), "scene", { motion });
+      else graph.edit(drawn(), "scene", { state: { motion } }, { applied: true });
     },
-    physics: view => preview()?.scenePhysics(view) ?? graph.state<SceneState>(shown, "scene").physics === true,
+    physics: view => preview()?.scenePhysics(view) ?? graph.state<SceneState>(drawn(), "scene").physics === true,
     setPhysics: (enabled, view) => preview()?.setScenePhysics(enabled, view),
-    draws: view => preview()?.drawsScene(view) ?? view === shown,
   };
 }
 
 /**
- * Restore the preview from workspace data without reading presentation controls. `graph` is the workspace's view graph (the
- * composition root's, which outlives any one head); an unavailable detail is written into its main view's display as restore-time state
- * that records no View and lighting step. What the head can't honour of its **scene** (an eye shape it lacks, an idle it can't play) is
- * not written: several runtimes may share the scene, so its node keeps the person's choice and this head shows its own fallback
- * (experiment 043 §10). The motion is the main view's scene's (its node's `motion`). Without a graph (fixtures) the services keep a private
- * one-view graph over the restored preview.
+ * Restore the preview from workspace data without reading presentation controls. `views` is the workspace's view graph (the
+ * composition root's, which outlives any one head) and the view the head is made for (its runtime owner names it: experiment 043 §13);
+ * an unavailable detail is written into that view's display as restore-time state that records no View and lighting step. What the head
+ * can't honour of its **scene** (an eye shape it lacks, an idle it can't play) is not written: several runtimes may share the scene, so its
+ * node keeps the person's choice and this head shows its own fallback (experiment 043 §10). The motion is the drawn view's scene's (its
+ * node's `motion`). Without a graph (fixtures) the services keep a private one-view graph over the restored preview.
  *
  * Restore order: the saved V, the optics, eye shape and details when the head is built; then, each time the head is shown (`show`), the
  * motion and then the camera (the camera node's pose, which the head shown before wrote when it was hidden).
@@ -40,7 +40,8 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   savedAppearance: SavedAppearancePort;
   preview: PreviewPort;
   motion: MotionPort;
-}, graph?: ViewGraph) {
+}, views?: { graph: ViewGraph; view: ViewId }) {
+  const graph = views?.graph;
   const savedAppearance = new SavedAppearanceActions(ports.savedAppearance);
   const restoredSavedAppearance = workspace.savedV
     ? savedAppearance.dispatch({ kind: "savedV.restore", value: workspace.savedV }) : undefined;
@@ -48,7 +49,7 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   // With the workspace's graph, a head (a retry too) restores what the graph's main view holds now.
   // The graph's mirror holds `lightingSetups` only while there are user setups: the stored field never outlives them.
   const { lightingSetups: _stored, ...stored } = workspace.preview;
-  const initial = structuredClone(graph ? { ...stored, ...previewMirror(graph) } : workspace.preview);
+  const initial = structuredClone(views ? { ...stored, ...previewMirror(views.graph, views.view) } : workspace.preview);
   for (const detail of ["brows", "lashes"] as const) {
     if (ports.preview.availability?.(detail)) initial[detail] = false;
   }
@@ -83,13 +84,14 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
     /** Call after the surface editor exists. The motion and camera are applied by `show`. */
     finish() {
       ports.preview.setSurfaceControls(initial.surface);
-      const views = graph ?? createStudioViewGraph(initial);
-      // The motion lives in the main view's scene node, and its scene settings (hair physics) through the preview service.
+      const own = views ?? { graph: createStudioViewGraph(initial), view: undefined };
+      const graph = own.graph, view = own.view ?? graph.viewIds()[0]!;
+      // The motion lives in the drawn view's scene node, and its scene settings (hair physics) through the preview service.
       let preview: PreviewActions | undefined;
-      const motion = new MotionActions(ports.motion, graphMotionScene(views, () => preview));
-      // The head shows the restored display now: the graph's main view learns the details it couldn't show.
-      views.withoutHistory(() => views.edit(MAIN_VIEW, "display", { state: { brows: initial.brows, lashes: initial.lashes } }, { applied: true, seed: true }));
-      preview = new PreviewActions(initial, ports.preview, views);
+      const motion = new MotionActions(ports.motion, graphMotionScene(graph, () => preview, () => preview?.view() ?? view));
+      // The head shows the restored display now: the view learns the details it couldn't show.
+      graph.withoutHistory(() => graph.edit(view, "display", { state: { brows: initial.brows, lashes: initial.lashes } }, { applied: true, seed: true }));
+      preview = new PreviewActions(initial, ports.preview, graph, view);
       ports.preview.setPiercings(initial.piercings);
       ports.preview.setBody?.(initial.body ?? true);
       const shown = preview;
@@ -99,13 +101,14 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
          * camera node's pose (the head shown before wrote it when it was hidden), else where the workspace left it: not a jump, so no View
          * and lighting step and no Back trail entry.
          */
-        show() {
+        show(drawn?: ViewId) {
+          shown.draw(drawn ?? shown.view());
           motion.restore();
           const camera = shown.storedCamera() ?? initial.camera;
           if (camera) shown.restoreSavedCamera(camera);
         },
         /** Another head takes the view: this one's camera pose goes to the camera node, then its motion is released. */
-        hide() { shown.storeCamera(); motion.release(); } };
+        hide() { shown.storeCamera(); motion.release(); shown.draw(null); } };
     },
   };
 }

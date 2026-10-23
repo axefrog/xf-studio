@@ -36,7 +36,7 @@ import type { ViewGraph } from "../../platform/core/view-graph";
 import type { LayeredMakeupSurface } from "../../engines/layered-makeup/render/makeup-stack";
 import { surfaceOutline, type SurfaceOutline } from "../../engines/layered-makeup/surface-edge";
 import type { PreparationProgress } from "../scene-residency";
-import { MAIN_VIEW } from "../../platform/api/view-graph";
+import type { ViewId } from "../../platform/api/view-graph";
 import { previewFields } from "../preview-view-graph";
 import { lightingSource, type LightingSource } from "../lighting-setups";
 
@@ -67,8 +67,10 @@ export type LayeredSurfaceWiring = {
 
 export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
-  /** The workspace's view graph (it outlives any one head): the head restores its main view and follows it. */
+  /** The workspace's view graph (it outlives any one head): the head restores the view it is made for and follows the view it draws. */
   graph?: ViewGraph;
+  /** The view the head is made for (its runtime owner's drawn view when it was wanted); `show` may draw it for another view of the scene. */
+  view?: ViewId;
   viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead" | "mountSurface"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
   /** Every layered-makeup surface to connect, in composition order; at most one carries the on-head editor. */
   layered: readonly LayeredSurfaceWiring[];
@@ -133,8 +135,13 @@ export type AttachedHead = {
   prepareShown(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
   /** Hear the shown head needing `prepareShown` (or no longer needing it). Returns the unsubscribe. */
   onUnprepared(listener: () => void): () => void;
-  /** Draw this head and connect it (see the module header). Throws, having let go of what it connected, when a step fails. */
-  show(): void;
+  /**
+   * Draw this head for `view` (default: the view it drew last, or was made for) and connect it (see the module header). Throws, having let
+   * go of what it connected, when a step fails.
+   */
+  show(view?: ViewId): void;
+  /** The shown head draws another view of its scene: its camera to the old view's node, the new view's settings, motion and camera. */
+  draw(view: ViewId): void;
   /** Hand over to the head shown next: its camera to the node, its motion released, its connections let go. Safe to call when hidden. */
   hide(): void;
   /** Show a save's V on this head (the V's context asks while this head is shown): null for the default V. */
@@ -192,7 +199,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined, surfaceEnabled = true;
     const services = createTrustedPreviewServices({ ...ports.workspace, savedV: ports.character.save }, createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => { surfaceEnabled = enabled; surface?.setEnabled(enabled); },
-    }), ports.graph);
+    }), ports.graph ? { graph: ports.graph, view: ports.view ?? ports.graph.viewIds()[0]! } : undefined);
     const savedAppearance = services.savedAppearance;
     const restored = services.finish();
     const { preview, motion } = restored;
@@ -244,11 +251,11 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
         // The surface holds this snapshot until show connects it, which brings only what changed since.
         prepareSignal.throwIfAborted();
         for (const wiring of ports.layered) wiring.preview.fillScene(wiring.surface(scene)!);
-        // Every lighting setup a view of this scene shows (phase 4a draws the main view; its own setup is the scene's now).
+        // Every lighting setup another view of this scene shows (the view it draws is the scene's own now).
         const setups: LightingSource[] = [];
         if (ports.graph) {
-          const graph = ports.graph, own = graph.node(MAIN_VIEW, "scene").id;
-          for (const view of graph.viewIds()) if (view !== MAIN_VIEW && graph.node(view, "scene").id === own) {
+          const graph = ports.graph, drawn = preview.view(), own = graph.node(drawn, "scene").id;
+          for (const view of graph.viewIds()) if (view !== drawn && graph.node(view, "scene").id === own) {
             const lights = previewFields(graph, view).lights;
             setups.push(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
           }
@@ -267,7 +274,13 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
         await scene.prepare?.({ signal: prepareSignal, report: report => progress(report) });
       },
       onUnprepared: listener => scene.onUnprepared?.(listener) ?? (() => {}),
-      show() {
+      draw(view) {
+        if (!shown || disposed || view === preview.view()) return;
+        // The camera to the old view's node and the motion handed over, then the new view's settings, motion and camera.
+        restored.hide();
+        restored.show(view);
+      },
+      show(view) {
         if (shown || disposed) return;
         shown = true;
         const add = (release: () => void) => { shownReleases.push(release); };
@@ -303,7 +316,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
           for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
           add(characterDetails.subscribe(ports.changed)); add(characterDetails.subscribe(ports.persist));
           // The scene's motion, then the view's camera (where the head shown before left it).
-          restored.show();
+          restored.show(view);
           // The Body switch decides whether the body is prepared at all (PREV-108), and the uncensored setting how the game would draw it: the
           // context's request follows both.
           const followBody = () => {

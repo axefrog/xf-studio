@@ -57,7 +57,7 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
   let prepare: (body: string, signal: AbortSignal) => Promise<void> = async () => {};
   const heads = createBrowserSceneHeads({
     head: { ...h.ports },
-    scenes: { drawn: () => "s1", of: view => view === "main" ? "s1" : views[view]?.scene,
+    scenes: { view: () => "main", of: view => view === "main" ? "s1" : views[view]?.scene,
       subject: id => Object.values(views).find(view => view.scene === id)?.subject ?? scene.subject, ensureSubject: async () => scene.subject,
       subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
     characters: people.port,
@@ -335,18 +335,55 @@ test("4a-v: a new head is prepared before it is shown, with the V shown before s
   o.heads.dispose();
 });
 
+test("4a-vi: each view routes to the runtime holding it: the drawn one, a warm one of its V and body, or none (loading, absent)", async () => {
+  const views: Record<string, { scene: string; subject: string }> = {};
+  const o = owner({ v1: "female", v2: "female", v3: "female" }, [], null, views);
+  const graph = o.h.ports.graph!, side = graph.addView("main", {}, { label: "Side" }), third = graph.addView("main", {}, { label: "Third" });
+  views[side] = { scene: "s2", subject: "v2" }; views[third] = { scene: "s3", subject: "v3" };
+  expect(o.heads.runtimes.route("main")).toBeUndefined();
+  await o.heads.load();
+  const first = o.heads.shown()!;
+  expect(o.heads.runtimes.route("main")).toMatchObject({ reach: "drawn", preview: first.preview, motion: first.motion });
+  // Another view of the drawn scene reaches the shown head through its scene; a view of a scene nothing holds, the shown head's services
+  // for graph edits only.
+  const twin = graph.addView("main", { scene: true }, { label: "Twin" });
+  views[twin] = { scene: "s1", subject: "v1" };
+  expect(o.heads.runtimes.route(twin)).toMatchObject({ reach: "scene", preview: first.preview });
+  expect(o.heads.runtimes.route(side)).toMatchObject({ reach: "absent", preview: first.preview });
+  await o.heads.show(side);
+  const second = o.heads.shown()!;
+  expect(o.heads.runtimes.route(side)).toMatchObject({ reach: "drawn", preview: second.preview });
+  // The main view's head is warm: its own services, never the shown head's.
+  expect(o.heads.runtimes.route("main")).toMatchObject({ reach: "warm", preview: first.preview, motion: first.motion });
+  // A view whose head is being made ready.
+  o.gate.open.female = false;
+  const loading = o.heads.show(third);
+  await settle();
+  expect(o.heads.runtimes.route(third)).toMatchObject({ reach: "loading", preview: second.preview });
+  o.gate.release("female");
+  await loading;
+  expect(o.heads.runtimes.route("gone")).toBeUndefined();
+  o.heads.dispose();
+});
+
 test("4a-v: show(view) wants the head of that view's scene like any subject change; the head shown stays until it is ready, and a missing view is refused", async () => {
-  const o = owner({ v1: "female", v2: "female" }, [], null, { side: { scene: "s2", subject: "v2" } });
+  const views: Record<string, { scene: string; subject: string }> = {};
+  const o = owner({ v1: "female", v2: "female" }, [], null, views);
+  // A second view of the graph, on a scene of its own.
+  const side = o.h.ports.graph!.addView("main", {}, { label: "Side" });
+  views[side] = { scene: "s2", subject: "v2" };
   await o.heads.load();
   const first = o.heads.shown()!;
   o.gate.open.female = false;
-  const shown = o.heads.show("side");
+  const shown = o.heads.show(side);
   await settle();
   expect(o.heads.shown()).toBe(first);
   expect(o.heads.preparation()).toMatchObject({ scene: "s2", key: "s2|v2|female" });
   o.gate.release("female");
   await shown;
-  expect(o.heads.shownView()).toBe("side");
+  expect(o.heads.shownView()).toBe(side);
+  // The head shown draws that view (its preview follows its nodes).
+  expect(o.heads.shown()!.preview.view()).toBe(side);
   expect(o.heads.snapshot().residents.map(item => `${item.key}:${item.state}`)).toEqual(["s1|v1|female:warm", "s2|v2|female:shown"]);
   // Back to the main view: its head is warm, so it is shown at once.
   const builds = o.h.builds;

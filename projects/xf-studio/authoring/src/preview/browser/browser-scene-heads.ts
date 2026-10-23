@@ -32,20 +32,21 @@ import { pageFailure } from "../../diagnostics/page-sink";
 import { SceneResidency, type PreparationStage, type PreparationState, type ResidencySnapshot, type ResidencyWant } from "../scene-residency";
 import { suspendablePreviews, type SuspendablePreviews } from "../../character/choice-preview-suspension";
 import { buildBrowserHead, type AttachedHead, type HeadAttachmentPorts } from "./browser-head-attachment";
+import type { ViewRoute, ViewRuntimes } from "../view-routes";
 
 /** What the drawn scene wants shown: its V and the V's body. */
 export type SceneHeadWant = ResidencyWant & { readonly character: string; readonly body: CoreBody };
 
 export type SceneHeadsPorts = {
   /** What every head is built with (its scene ports, the graph, the layered surfaces, the application's attachments). */
-  head: Omit<HeadAttachmentPorts, "character" | "prepareCore" | "notice">;
+  head: Omit<HeadAttachmentPorts, "character" | "prepareCore" | "notice" | "view">;
   /**
-   * The drawn view's scene and the V it shows (phase 4a draws one view), and making one for a scene that has none. `of(view)`: the scene a
-   * view shows (`show(view)` draws it; absent: views can't be shown by name).
+   * The views and their scenes (phase 4a draws one view at a time): the view drawn until `show(view)` names another, the scene a view
+   * shows, the V a scene shows, and making one for a scene that has none.
    */
   scenes: {
-    drawn(): string;
-    of?(view: string): string | undefined;
+    view(): string;
+    of(view: string): string | undefined;
     subject(scene: string): string | undefined;
     ensureSubject(scene: string): Promise<string | null>;
     subscribe(listener: () => void): () => void;
@@ -85,13 +86,16 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   /** Each V's context as last handed over by its owner, with what this module connected to it and its choice-preview device. */
   const contexts = new Map<string, { context: CharacterContextActions; release: () => void; previews: SuspendablePreviews | undefined }>();
   let started = false, disposed = false, scheduled = false;
-  /** The view `show(view)` drew last (undefined: the drawn view the scenes port names). */
+  /** The view `show(view)` drew last (undefined: the view the scenes port names). */
   let drawnView: string | undefined;
+  /** The view drawn now. */
+  const drawn = () => drawnView ?? ports.scenes.view();
 
   const residency = new SceneResidency<SceneHeadWant, AttachedHead>({
     build: async (want, signal, progress) => {
       progress({ stage: want.body === "male" ? "core" : "build" });
-      const head = await buildBrowserHead({ ...ports.head, character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
+      // Made for the view drawn now; shown, it draws whichever view of its scene is drawn then (`show`).
+      const head = await buildBrowserHead({ ...ports.head, view: drawn(), character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
         prepareCore: (body, buildSignal) => ports.prepareCore(body, (message, fraction) => {
           progress({ stage: "core", fraction: fraction ?? 0, waiting: "host", ...(message ? { detail: message } : {}) });
           // The first load: the head pane says what the host is doing, as it always has.
@@ -108,7 +112,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     // A masculine V's core head is prepared by the host first (once; the host caches it).
     stages: want => want.body === "male" ? STAGES_MALE : STAGES,
     show: head => {
-      head.show();
+      head.show(drawn());
       // The V's context stays attached while heads swap: creator changes are never refused for a reload (the old `not_ready`).
       ports.head.attach({ characterContext: head.characterContext });
       ports.shown(head);
@@ -181,17 +185,28 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       ...(previews ? { previews } : {}),
     };
   }
-  /** The drawn view's scene: the view `show(view)` drew, else the one the scenes port names. */
-  function drawnScene(): string {
-    const scene = drawnView === undefined ? undefined : ports.scenes.of?.(drawnView);
-    return scene ?? ports.scenes.drawn();
-  }
+  /** The drawn view's scene. */
+  function drawnScene(): string { return ports.scenes.of(drawn()) ?? ""; }
   /** What the drawn scene wants now (undefined while its V isn't known: `load` makes one). */
   function current(): SceneHeadWant | undefined {
     const scene = drawnScene(), character = ports.scenes.subject(scene);
     if (!character || !ports.characters.document(character)) return undefined;
     const body = contextOf(character).shownBody();
     return { scene, character, body, key: `${scene}|${character}|${body}` };
+  }
+  /**
+   * The resident head holding what `view`'s scene shows now, and how (view-routes.ts): the shown head for its own scene; a warm head of the
+   * scene's V and body; else the shown head's services for graph edits only, the view's V being made ready (`loading`) or not (`absent`).
+   * It makes no context: a V whose context was never made has no head.
+   */
+  function route(view: string): ViewRoute | undefined {
+    const shown = residency.shown(), scene = ports.scenes.of(view);
+    if (!shown || scene === undefined) return undefined;
+    if (residency.shownWant()?.scene === scene) return { reach: view === drawn() ? "drawn" : "scene", preview: shown.preview, motion: shown.motion };
+    const character = ports.scenes.subject(scene), body = character === undefined ? undefined : contexts.get(character)?.context.shownBody();
+    const warm = body === undefined ? undefined : residency.resident(`${scene}|${character}|${body}`)?.runtime;
+    if (warm) return { reach: "warm", preview: warm.preview, motion: warm.motion };
+    return { reach: residency.pending()?.scene === scene ? "loading" : "absent", preview: shown.preview, motion: shown.motion };
   }
   /** Want what the drawn scene shows now, once the change that asked for it has finished. */
   function schedule() {
@@ -241,16 +256,21 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
      */
     show(view: string): Promise<void> {
       if (disposed) return Promise.reject(Error("The 3D view was closed."));
-      if (!ports.scenes.of?.(view)) return Promise.reject(Error("That view no longer exists."));
+      if (ports.scenes.of(view) === undefined) return Promise.reject(Error("That view no longer exists."));
       drawnView = view;
       const want = current();
       if (!want) return Promise.reject(Error("That view's V isn't known yet."));
-      return request(want).then(() => undefined);
+      // Another view of the scene shown now draws on the same head (its camera, settings and motion).
+      return request(want).then(head => { if (drawn() === view) head.draw(view); });
     },
-    /** The view `show` drew last (undefined: the drawn view the scenes port names). */
-    shownView(): string | undefined { return drawnView; },
+    /** The view drawn now (the one `show` drew last, else the one the scenes port names). */
+    shownView(): string { return drawn(); },
+    /** The runtimes as the application routes view actions to them (view-routes.ts). */
+    runtimes: { route } satisfies ViewRuntimes,
     /** The head shown now. */
     shown(): AttachedHead | undefined { return residency.shown(); },
+    /** The head showing `character` now, if any (what a loader that names the V applies through). */
+    showing,
     /** The want being built or prepared, and how far it is (null: none). */
     preparation(): PreparationState | null { return residency.preparation(); },
     /** The resident heads and the build in flight, as evidence. */

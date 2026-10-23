@@ -84,7 +84,7 @@ describe("persistence and migration", () => {
     expect(sceneMotion(window.graph)).toMatchObject({ idle: true, idleTime: 3.5, idlePaused: true, idleBody: false, idleClip: "inventory",
       pose: { id: "PhotoModePoses.lean", label: "Lean" } });
     // The motion service shows it on a head built for the scene.
-    const calls: string[] = [], port = motionPort(calls, ["closeup", "inventory"]), motion = new MotionActions(port, graphMotionScene(window.graph, () => undefined));
+    const calls: string[] = [], port = motionPort(calls, ["closeup", "inventory"]), motion = new MotionActions(port, graphMotionScene(window.graph, () => undefined, () => MAIN_VIEW));
     motion.restore();
     expect(calls).toEqual(["parts:false:true", "clip:inventory", "idle:true", "seek:3.5", "pause:true"]);
     expect(motion.pendingPose()).toEqual({ id: "PhotoModePoses.lean", label: "Lean" });
@@ -114,7 +114,7 @@ describe("persistence and migration", () => {
 
   test("an older build reads what this build stores: its scene codec ignores the motion, and its legacy fields are the ones read at the upgrade", () => {
     const state = upgradedWorkspace(), window = open(state);
-    const motion = new MotionActions(motionPort([], ["closeup", "inventory"]), graphMotionScene(window.graph, () => undefined));
+    const motion = new MotionActions(motionPort([], ["closeup", "inventory"]), graphMotionScene(window.graph, () => undefined, () => MAIN_VIEW));
     motion.dispatch({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: false });
     motion.dispatch({ kind: "motion.setBlink", view: MAIN_VIEW, value: .5 });
     const stored = JSON.parse(window.save());
@@ -209,7 +209,7 @@ describe("persistence and migration", () => {
     let motion: MotionActions | undefined;
     const window = open(state, () => motion?.sample());
     const port = motionPort([], ["closeup", "inventory"]);
-    motion = new MotionActions(port, graphMotionScene(window.graph, () => undefined));
+    motion = new MotionActions(port, graphMotionScene(window.graph, () => undefined, () => MAIN_VIEW));
     motion.restore();
     motion.dispatch({ kind: "motion.setPaused", view: MAIN_VIEW, paused: false });
     expect(sceneMotion(window.graph)?.idleTime).toBe(3.5);
@@ -223,7 +223,7 @@ describe("persistence and migration", () => {
     expect(saved.preview).toEqual(state.preview);
     // A reload (a flush, no head released) starts the idle there.
     const calls: string[] = [];
-    new MotionActions(motionPort(calls, ["closeup", "inventory"]), graphMotionScene(open(saved).graph, () => undefined)).restore();
+    new MotionActions(motionPort(calls, ["closeup", "inventory"]), graphMotionScene(open(saved).graph, () => undefined, () => MAIN_VIEW)).restore();
     expect(calls).toContain("seek:7.25");
     // Only live state can be sampled.
     expect(() => window.graph.sample(MAIN_VIEW, "scene", { eyeShape: 2 })).toThrow();
@@ -236,7 +236,7 @@ describe("history", () => {
     const workspace = freshWorkspace(), history = createHistoryService(), scope = viewScope("p-1");
     const graph = createStudioViewGraph(workspace.preview, undefined, history, scope);
     let preview: PreviewActions | undefined;
-    const port = motionPort(), motion = new MotionActions(port, graphMotionScene(graph, () => preview));
+    const port = motionPort(), motion = new MotionActions(port, graphMotionScene(graph, () => preview, () => MAIN_VIEW));
     motion.restore();
     preview = new PreviewActions(workspace.preview, previewPort(), graph);
     return { graph, history, preview, motion, port };
@@ -272,7 +272,7 @@ describe("history", () => {
 
 describe("a runtime applies its scene's motion", () => {
   const restored = (workspace: WorkspaceState, graph: ViewGraph, port: MotionPort) => createTrustedPreviewServices(workspace, {
-    savedAppearance: { apply: () => ({ applied: [], appearanceReferences: 0 }) as never }, preview: previewPort(), motion: port }, graph).finish();
+    savedAppearance: { apply: () => ({ applied: [], appearanceReferences: 0 }) as never }, preview: previewPort(), motion: port }, { graph, view: MAIN_VIEW }).finish();
   /** A head built for the scene and shown (its motion and camera applied). */
   const shownHead = (workspace: WorkspaceState, graph: ViewGraph, port: MotionPort) => { const head = restored(workspace, graph, port); head.show(); return head; };
 
@@ -295,13 +295,13 @@ describe("a runtime applies its scene's motion", () => {
     let reject!: (error: Error) => void;
     const first = { ...motionPort([], ["closeup", "inventory"]),
       selectIdle: () => new Promise<void>((_resolve, fail) => { reject = fail; }) };
-    const old = new MotionActions(first, graphMotionScene(graph, () => undefined));
+    const old = new MotionActions(first, graphMotionScene(graph, () => undefined, () => MAIN_VIEW));
     old.restore();
     old.dispatch({ kind: "motion.setIdleClip", view: MAIN_VIEW, clip: "inventory" });
     expect(old.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: true });
     // Sol's reproduction: the head is released while the load is under way, its replacement plays the choice, then the old load fails.
     old.release();
-    const replacement = new MotionActions(motionPort([], ["closeup", "inventory"]), graphMotionScene(graph, () => undefined));
+    const replacement = new MotionActions(motionPort([], ["closeup", "inventory"]), graphMotionScene(graph, () => undefined, () => MAIN_VIEW));
     replacement.restore();
     await Bun.sleep(0);
     expect(replacement.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: false });
@@ -321,12 +321,12 @@ describe("a runtime applies its scene's motion", () => {
     const workspace = freshWorkspace(), graph = createStudioViewGraph(workspace.preview), played: unknown[] = [];
     let resolve!: (sample: never) => void;
     const port = { ...motionPort(), setPose: async (pose: unknown) => { played.push(pose); } };
-    const old = new MotionActions(port, graphMotionScene(graph, () => undefined));
+    const old = new MotionActions(port, graphMotionScene(graph, () => undefined, () => MAIN_VIEW));
     const holding = old.holdPose({ id: "PhotoModePoses.a", label: "A", moves: false }, new Promise(done => { resolve = done; }));
     expect(sceneMotion(graph)?.pose).toEqual({ id: "PhotoModePoses.a", label: "A" });
     old.release();
     // The replacement takes the scene: it drops the pose it can't hold.
-    const replacement = new MotionActions(motionPort(), graphMotionScene(graph, () => undefined));
+    const replacement = new MotionActions(motionPort(), graphMotionScene(graph, () => undefined, () => MAIN_VIEW));
     replacement.dropPendingPose();
     resolve({} as never);
     expect(await holding).toBe(false);
@@ -424,7 +424,7 @@ function rigDevice() {
 }
 
 describe("a warm runtime's device follows the scene when shown again (4a-iv review)", () => {
-  const scene = () => { const graph = createStudioViewGraph(freshWorkspace().preview); return { graph, motion: () => graphMotionScene(graph, () => undefined) }; };
+  const scene = () => { const graph = createStudioViewGraph(freshWorkspace().preview); return { graph, motion: () => graphMotionScene(graph, () => undefined, () => MAIN_VIEW) }; };
 
   test("an idle load that succeeds after its runtime was hidden and shown again never replaces the clip the scene now plays", async () => {
     const { graph, motion } = scene();

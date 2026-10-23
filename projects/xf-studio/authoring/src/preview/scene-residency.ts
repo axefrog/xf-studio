@@ -145,6 +145,11 @@ export class SceneResidency<W extends ResidencyWant, R> {
   shown(): R | undefined { return this.shownResident()?.runtime; }
   /** The want shown now. */
   shownWant(): W | undefined { return this.shownResident()?.want; }
+  /** The resident runtime (shown or warm) named by `key`, if any. */
+  resident(key: string): { readonly runtime: R; readonly state: ResidentState } | undefined {
+    const resident = this.residents.get(key);
+    return resident && { runtime: resident.runtime, state: resident.state };
+  }
   /** The wants of the resident runtimes (shown and warm). */
   wants(): readonly W[] { return [...this.residents.values()].map(resident => resident.want); }
   /** The want being built or prepared, if any. */
