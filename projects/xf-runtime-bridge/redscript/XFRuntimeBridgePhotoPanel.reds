@@ -95,6 +95,8 @@ public class XFPhotoMenuPanel {
   // panel went.
   private let m_zones: array<Vector4>;
   private let m_zoneNames: array<String>;
+  // 0.8.9: how the zone rule placed the panel ("kept", "nudged", "corner:<name>" or "overlapping"), for the laid-out event.
+  private let m_zoneHow: String;
   private let m_placed: Vector4;
   private let m_reported: Bool;
   // 0.8.7 (the Sol review, finding 3): the plugin's frame couldn't be read; the panel holds nothing until a valid one arrives.
@@ -455,7 +457,9 @@ public class XFPhotoMenuPanel {
       let placed = this.m_view.Place(frame, scale, this.m_visible, units, false);
       // 0.8.7: out of photo mode's own menu, top bar and hint strips.
       this.MeasureZones();
-      let kept = XFInkStyle.Avoid(placed, this.m_zones, this.m_visible, 24.0 * units);
+      let how: String;
+      let kept = XFInkStyle.Avoid(placed, this.m_zones, this.m_visible, 24.0 * units, frame.anchor, how);
+      this.m_zoneHow = how;
       if kept.X != placed.X || kept.Y != placed.Y {
         this.m_view.MoveTo(kept.X, kept.Y);
       }
@@ -491,8 +495,27 @@ public class XFPhotoMenuPanel {
         let zw = lb.X - la.X;
         let zh = lb.Y - la.Y;
         if zw > 2.0 && zh > 2.0 {
-          ArrayPush(this.m_zones, new Vector4(la.X, la.Y, zw, zh));
-          ArrayPush(this.m_zoneNames, names[i]);
+          // 0.8.9: widgets under one name make one zone, their union (the title row is its icon and its words; the top bar
+          // is each tab button).
+          let at = -1;
+          let k = 0;
+          while k < ArraySize(this.m_zoneNames) {
+            if Equals(this.m_zoneNames[k], names[i]) {
+              at = k;
+            }
+            k += 1;
+          }
+          if at < 0 {
+            ArrayPush(this.m_zones, new Vector4(la.X, la.Y, zw, zh));
+            ArrayPush(this.m_zoneNames, names[i]);
+          } else {
+            let u = this.m_zones[at];
+            let x0 = MinF(u.X, la.X);
+            let y0 = MinF(u.Y, la.Y);
+            let x1 = MaxF(u.X + u.Z, la.X + zw);
+            let y1 = MaxF(u.Y + u.W, la.Y + zh);
+            this.m_zones[at] = new Vector4(x0, y0, x1 - x0, y1 - y0);
+          }
         }
       }
       i += 1;
@@ -779,7 +802,7 @@ public class XFPhotoMenuPanel {
         out += (z > 0 ? "," : "") + "{\"name\":" + XFJson.Str(this.m_zoneNames[z]) + ",\"rect\":[" + XFJson.Num(r.X) + "," + XFJson.Num(r.Y) + "," + XFJson.Num(r.Z) + "," + XFJson.Num(r.W) + "]}";
         z += 1;
       }
-      out += "],\"panel_rect\":[" + XFJson.Num(this.m_placed.X) + "," + XFJson.Num(this.m_placed.Y) + "," + XFJson.Num(this.m_placed.Z) + "," + XFJson.Num(this.m_placed.W) + "]";
+      out += "],\"zone_rule\":" + XFJson.Str(this.m_zoneHow) + ",\"panel_rect\":[" + XFJson.Num(this.m_placed.X) + "," + XFJson.Num(this.m_placed.Y) + "," + XFJson.Num(this.m_placed.Z) + "," + XFJson.Num(this.m_placed.W) + "]";
       if IsDefined(this.m_view) && this.m_showing {
         let plate = this.m_view.Plate();
         let a = WidgetUtils.LocalToGlobal(plate, new Vector2(0.0, 0.0));
@@ -829,6 +852,14 @@ public func XFBridgeZones(out widgets: array<wref<inkWidget>>, out names: array<
   ArrayPush(names, "menu_more");
   ArrayPush(widgets, inkWidgetRef.Get(this.m_radioButtons));
   ArrayPush(names, "top_bar");
+  // 0.8.9 (session 15's A5: the compound measured nothing, so no top_bar zone): each tab button as well.
+  let topBar = inkWidgetRef.GetController(this.m_radioButtons) as PhotoModeTopBarController;
+  if IsDefined(topBar) {
+    topBar.XFBridgeToggles(widgets, names);
+  }
+  // 0.8.9 (session 15's A5: the words alone left the category icon, the "V" of POSE, uncovered): the whole title row.
+  ArrayPush(widgets, inkWidgetRef.Get(this.m_tabTitleIcon));
+  ArrayPush(names, "top_bar_title");
   ArrayPush(widgets, inkWidgetRef.Get(this.m_tabTitleText));
   ArrayPush(names, "top_bar_title");
   ArrayPush(widgets, inkWidgetRef.Get(this.m_inputBottomRoot));
@@ -837,6 +868,17 @@ public func XFBridgeZones(out widgets: array<wref<inkWidget>>, out names: array<
   ArrayPush(names, "hint_exit");
   ArrayPush(widgets, inkWidgetRef.Get(this.m_inputScreenshot));
   ArrayPush(names, "hint_screenshot");
+}
+
+// 0.8.9: the top bar's tab buttons (read only), one top_bar zone between them.
+@addMethod(PhotoModeTopBarController)
+public func XFBridgeToggles(out widgets: array<wref<inkWidget>>, out names: array<String>) -> Void {
+  let i = 0;
+  while i < ArraySize(this.m_photoModeTogglesArray) {
+    ArrayPush(widgets, inkWidgetRef.Get(this.m_photoModeTogglesArray[i]));
+    ArrayPush(names, "top_bar");
+    i += 1;
+  }
 }
 
 // The vanilla menu area's hover block, set or cleared the way its own OnMenuHovered and OnMenuHoverOut do.

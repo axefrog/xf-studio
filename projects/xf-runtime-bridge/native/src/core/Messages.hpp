@@ -143,6 +143,10 @@ public:
     // is {ok: true, message_id, choice, label, text}; otherwise {ok: false, why} (no such ask showing, already answered,
     // choice out of range).
     nlohmann::json Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow = Clock::now());
+    // 0.8.9 (session 15: a stray F6 just after a question changed answered the new one): an answer by a key (aByKey) within
+    // kKeyGuard of the question appearing is ignored, {ok: false, why, too_soon: true}; buttons and clicks aren't held back.
+    nlohmann::json Answer(uint64_t aId, int32_t aChoice, bool aByKey, Clock::time_point aNow = Clock::now());
+    static constexpr std::chrono::milliseconds kKeyGuard{500};
     // RB-96/RB-103: what became of ask aId (session.wait reads it through ui.ask.state).
     AskState StateOf(uint64_t aId, Clock::time_point aNow = Clock::now());
     static constexpr size_t kAnsweredKept = 64;
@@ -155,6 +159,7 @@ private:
         std::string level;
         Clock::time_point expires;
         std::vector<std::string> choices; // an unanswered ask's; empty once answered
+        Clock::time_point posted{};       // 0.8.9: when it appeared (the answer keys' guard)
         std::string answered;             // 0.8: an answered ask's answer label (its text stays the question)
     };
     void DropExpired(Clock::time_point aNow);

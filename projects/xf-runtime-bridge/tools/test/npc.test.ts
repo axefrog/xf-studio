@@ -414,12 +414,43 @@ describe("0.8 npc against the self-test host's street", () => {
     expect((await ok(api, "npc.status")).npcs).toEqual([]);
   }, 30_000);
 
+  test("0.8.9 (session 15's NC1 redo): a scene's speech waits on a real arrival: an actor too far from V stops it early in plain words, released", async () => {
+    const scenario: Scenario = {
+      scenario: "xfs_test_far",
+      actors: { asker: { cast: "woman_corpo" } },
+      steps: [
+        { do: "npc.spawn", who: "asker", ahead_m: 9 },
+        { wait: "npc.spawned", who: "asker", max_s: 5 },
+        { do: "npc.say", who: "asker", text: "Is the market still open?", near_m: 3 },
+        { do: "npc.choices", who: "asker", choices: ["Yes.", "No."] },
+      ],
+    };
+    const report = await runScenario(scenario, { api, cid: "t-far", captureRoot: "" });
+    expect(report).toMatchObject({ ok: false, outcome: "failed", released: ["asker"] });
+    expect(report.why).toContain("wasn't near V, so the scene stopped before the line");
+    expect(report.steps.some((s: Any) => s.do === "npc.choices")).toBe(false);
+    expect((await ok(api, "npc.status")).npcs).toEqual([]);
+  }, 30_000);
+
+  test("0.8.9: the stranger scene gates its lines on arrival (near_m 3), leaves its lines their reading time, and uses the default choice timeout", () => {
+    const scene = loadScenario(join(SCENARIO_DIR, "stranger_question.json"));
+    const says = scene.steps.filter((s) => s.do === "npc.say" && (s.trigger === "greeting" || typeof s.text === "string") && !("on" in s));
+    expect(says.length).toBe(2);
+    for (const say of says) expect(say.near_m).toBe(3);
+    expect(says.every((s) => s.seconds === undefined)).toBe(true);
+    const choices = scene.steps.find((s) => s.do === "npc.choices")!;
+    expect(choices.max_s).toBeUndefined();
+    expect(scene.steps.find((s) => s.wait === "npc.choice")!.max_s).toBeGreaterThanOrEqual(120);
+    const runner = readFileSync(join(projectDir, "tools", "npc", "scenario.ts"), "utf8");
+    expect(runner).toContain("readingUntil[speaker]");
+  });
+
   test("a load drops everything without a game call (Codeware drops non-persistent entities with the world)", async () => {
     const since = await latest(api);
-    await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
-    await event(api, "npc.spawned", since, "a14");
+    const loaded = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
+    await event(api, "npc.spawned", since, loaded.who);
     await ok(api, "game.load", { latest: true, discard_unsaved: true });
-    const dropped = await event(api, "npc.auto_released", since, "a14", 10000);
+    const dropped = await event(api, "npc.auto_released", since, loaded.who, 10000);
     expect(dropped.data.reason).toBe("load");
     for (let i = 0; i < 100; i++) {
       const status = await api.run("game.status", {});
@@ -433,13 +464,13 @@ describe("0.8 npc against the self-test host's street", () => {
 
   test("the kill switch releases every NPC in one step (last: it ends the host's bridge)", async () => {
     const since = await latest(api);
-    await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
-    await event(api, "npc.spawned", since, "a15");
+    const last = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
+    await event(api, "npc.spawned", since, last.who);
     await ok(api, "bridge.kill", {});
     for (let i = 0; i < 80 && !host.log.some((l) => l.includes("bridge.kill_restored")); i++) await sleep(50);
     const line = host.log.find((l) => l.includes("bridge.kill_restored")) ?? "";
     expect(line).toContain("npcs_released");
-    expect(line).toContain("a15");
+    expect(line).toContain(last.who);
   }, 30_000);
 });
 
@@ -505,19 +536,19 @@ describe("0.8 npc: the live DM's additions (turn away and hold, a voice with no 
     await ok(api, "npc.release", { who: "all" });
   }, 30_000);
 
-  test("a voice with no body: ownerless by default, holocall and subtitle carried by V; npc.said names the speaker; hide", async () => {
+  test("a voice with no body: ownerless by default, call_subtitle and subtitle carried by V; npc.said names the speaker; hide", async () => {
     const since = await latest(api);
     expect(await refused(api, "npc.say", { text: "No name." })).toBe("bad_params");
     expect(await refused(api, "npc.say", { speaker: "A voice", text: "Up here.", style: "overhead" })).toBe("bad_params");
     const ownerless = await ok(api, "npc.say", { speaker: "A voice", text: "Can you hear me?", seconds: 1 });
     expect(ownerless).toMatchObject({ voice: true, style: "ownerless", speaker: "A voice", who: null });
     expect(ownerless.undo).toEqual({ method: "npc.say", params: { hide: ownerless.line } });
-    const holocall = await ok(api, "npc.say", { speaker: "A voice", text: "Over the relay.", style: "holocall", seconds: 10 });
+    const callLine = await ok(api, "npc.say", { speaker: "A voice", text: "Over the relay.", style: "call_subtitle", seconds: 10 });
     let street = await bridge(api, "selftest.npc", {});
-    expect(street.voice_lines[holocall.line]).toBe("A voice|holocall");
+    expect(street.voice_lines[callLine.line]).toBe("A voice|call_subtitle");
     const said = await event(api, "npc.said", since);
     expect(said.data).toMatchObject({ voice: true, speaker: "A voice", line: ownerless.line });
-    await ok(api, "npc.say", { hide: holocall.line });
+    await ok(api, "npc.say", { hide: callLine.line });
     street = await bridge(api, "selftest.npc", {});
     expect(street.voice_lines).toEqual({});
     expect((await ok(api, "npc.status")).voice_lines).toEqual([]);

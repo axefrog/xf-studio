@@ -265,7 +265,7 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
         m_messages.erase(victim);
     }
     const auto id = m_next++;
-    m_messages.push_back({id, text, aRequest.level, aNow + std::chrono::seconds(seconds), choices});
+    m_messages.push_back({id, text, aRequest.level, aNow + std::chrono::seconds(seconds), choices, aNow});
     json out{{"id", id},       {"shown", true},         {"text", text}, {"level", aRequest.level}, {"seconds", seconds},
              {"truncated", truncated}, {"dropped", dropped}, {"active", m_messages.size()}};
     if (!choices.empty())
@@ -379,6 +379,11 @@ bool MessageBoard::Pending(PendingAsk& aOut, Clock::time_point aNow)
 
 json MessageBoard::Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow)
 {
+    return Answer(aId, aChoice, false, aNow);
+}
+
+json MessageBoard::Answer(uint64_t aId, int32_t aChoice, bool aByKey, Clock::time_point aNow)
+{
     std::scoped_lock _(m_mutex);
     DropExpired(aNow);
     PendingAsk pending;
@@ -392,6 +397,11 @@ json MessageBoard::Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow)
         if (message.choices.empty())
         {
             return json{{"ok", false}, {"why", "that message has no answer buttons, or was answered already"}, {"message_id", id}};
+        }
+        if (aByKey && aNow - message.posted < kKeyGuard)
+        {
+            return json{{"ok", false}, {"why", "the question has only just appeared, so a key press this soon is taken as a stray one; press again"},
+                        {"message_id", id}, {"too_soon", true}};
         }
         if (aChoice < 0 || static_cast<size_t>(aChoice) >= message.choices.size())
         {

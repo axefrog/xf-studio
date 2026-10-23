@@ -65,10 +65,19 @@ bool ProbeRing::Push(const std::string& aKind, json aData, int64_t aNowMs)
     return true;
 }
 
-json ProbeRing::Read(uint64_t aSince, size_t aLimit) const
+json ProbeRing::Read(uint64_t aSince, size_t aLimit, const std::vector<std::string>& aKinds) const
 {
     std::scoped_lock _(m_mutex);
     const size_t limit = std::clamp<size_t>(aLimit, 1, 500);
+    const auto wanted = [&](const std::string& aKind) {
+        if (aKinds.empty())
+        {
+            return true;
+        }
+        return std::any_of(aKinds.begin(), aKinds.end(), [&](const std::string& k) {
+            return aKind == k || (aKind.size() > k.size() && aKind.compare(0, k.size(), k) == 0 && aKind[k.size()] == '.');
+        });
+    };
     json events = json::array();
     uint64_t next = aSince;
     for (const auto& entry : m_entries)
@@ -80,6 +89,11 @@ json ProbeRing::Read(uint64_t aSince, size_t aLimit) const
         if (events.size() >= limit)
         {
             break;
+        }
+        if (!wanted(entry.kind))
+        {
+            next = entry.seq + 1;
+            continue;
         }
         events.push_back(json{{"seq", entry.seq}, {"t_ms", entry.tMs}, {"kind", entry.kind}, {"data", entry.data}});
         next = entry.seq + 1;

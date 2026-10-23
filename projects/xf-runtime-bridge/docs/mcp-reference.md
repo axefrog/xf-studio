@@ -1347,7 +1347,7 @@ No parameters.
 
 ## NPC direction
 
-Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, turn, place, speak (voiced, text or holocall style), look, set a face, gesture, and offer V dialogue choices whose pick comes back as an event. Releasing, the kill switch, the pause, a handover or loading a save gives everything back.
+Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, turn, place, speak (voiced, text or a caller's subtitle), look, set a face, gesture, and offer V dialogue choices whose pick comes back as an event. Releasing, the kill switch, the pause, a handover or loading a save gives everything back.
 
 ### `npc_list`
 
@@ -1508,13 +1508,13 @@ No parameters.
 
 ### `npc_say`
 
-**Give an NPC a line.** An NPC (an actor or a picked one) says something: text (up to 200 characters) shown as a subtitle with its name (style subtitle, the default), in a bubble above its head (overhead) or in the holocall style, for seconds seconds (default from its length); and/or trigger, one of the game's own voice lines for that NPC's voice (greeting, bump, stlh_curious_grunt, coop_irritation, battlecry_curse, fear_foll, fear_beg, fear_run, danger, vehicle_bump: the voice picks the words, not us). speaker changes the name shown for this line. Without who, speaker is a voice with no body speaking to V from elsewhere: its text shows with that name and no NPC (style ownerless, the default, or holocall or subtitle). The player's subtitle settings still apply. npc.said follows when the line's time ends. hide takes a shown line down by its id.
+**Give an NPC a line.** An NPC (an actor or a picked one) says something: text (up to 200 characters) shown as a subtitle with its name (style subtitle, the default), in a bubble above its head (overhead) or as a caller's subtitle (call_subtitle: the game's holocall line type, drawn as a subtitle with no call frame), for seconds seconds (default from its length); and/or trigger, one of the game's own voice lines for that NPC's voice (greeting, bump, stlh_curious_grunt, coop_irritation, battlecry_curse, fear_foll, fear_beg, fear_run, danger, vehicle_bump: the voice picks the words, not us; greeting also sets a smile unless a face is directed). speaker changes the name shown for this line. Without who, speaker is a voice with no body speaking to V from elsewhere: its text shows with that name and no NPC (style ownerless, the default, or call_subtitle or subtitle). The player's subtitle settings still apply. npc.said follows when the line's time ends. hide takes a shown line down by its id.
 
 - **Command:** `npc.say`, the bridge method `npc.say`
 - **Permission:** Direct NPCs (`write-npc`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo hides the line; a voice line can't be taken back once it plays.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `npc_lost`, `npc_handed_back`, `npc_dead`, `line_too_long`, `trigger_unknown`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `npc_lost`, `npc_handed_back`, `npc_dead`, `line_too_long`, `trigger_unknown`, [`too_far`](#refusal-too-far)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1522,9 +1522,10 @@ No parameters.
 | `speaker` | string | 1 to 40 characters | The name shown with the line (a voice with no body needs one). |
 | `text` | string | 1 to 200 characters | The line, up to 200 characters. |
 | `trigger` | string | `greeting`, `bump`, `stlh_curious_grunt`, `coop_irritation`, `battlecry_curse`, `fear_foll`, `fear_beg`, `fear_run`, `danger`, `vehicle_bump` | A vanilla voice line in the NPC's own voice. |
-| `style` | string | `subtitle`, `overhead`, `holocall`, `ownerless` | How the text shows: subtitle (default for NPCs), overhead, holocall or ownerless (default for a voice with no body). |
+| `style` | string | `subtitle`, `overhead`, `call_subtitle`, `ownerless` | How the text shows: subtitle (default for NPCs), overhead, call_subtitle (the game's holocall line type: a subtitle with the caller's name, no call frame) or ownerless (default for a voice with no body). |
 | `seconds` | number | 1 to 15 | How long the text shows, 1 to 15 seconds. |
 | `hide` | string | matches `^l[0-9]{1,9}$` | Take down this line (its id from an earlier answer, such as l3) instead. |
+| `near_m` | number | 0.5 to 30 | Refuse the line (too_far) unless the NPC stands within this many metres of V, 0.5 to 30: a scene's speech waits on a real arrival. |
 
 ### `npc_look`
 
@@ -1934,7 +1935,7 @@ Tools not yet sorted into an area above.
 
 ### `test_events`
 
-**Read the event probes' records (test probe).** Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off). Reads the records of the game-events and save-identity probes from their own ring (512 records, at most 20 a second per kind; what goes over is counted in dropped and in the kind's next record), apart from the session's events: kinds session (each lifecycle point of a load or save, with restored, pre_game and the probe's test facts), death, defeated, knockdown, combat, heat (wanted_level, wanted_chase_active), zone (CityAreaType), district (the innermost district's enum name, previous, new_location_discovered), interior (a 2 Hz poll's flips), vehicle (mount and unmount with the seat), vehicle.stolen, vehicle.acquired, journal (hash, class, change type, state; no text), dialogue.hub (hub ids, states and choice counts; no text), dialogue.index, call (contact, phase), time (a jump of the clock, or the menu's skip), status.count and stim.count (the noisy hooks, counted every 5 s). Every record carries game_s and sim_s. since reads on from a cursor (next). stims: true switches on the stim tap (row 16), false off. Changes nothing in the game.
+**Read the event probes' records (test probe).** Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off). Reads the records of the game-events and save-identity probes from their own ring (512 records, at most 20 a second per kind; what goes over is counted in dropped and in the kind's next record), apart from the session's events: kinds session (each lifecycle point of a load or save, with restored, pre_game and the probe's test facts), death, defeated, knockdown, combat, heat (wanted_level, wanted_chase_active), zone (CityAreaType), district (the innermost district's enum name, previous, new_location_discovered), interior (a 2 Hz poll's flips), vehicle (mount and unmount with the seat), vehicle.stolen, vehicle.acquired, journal (hash, class, change type, state; no text), dialogue.hub (hub ids, states and choice counts; no text), dialogue.index (only when the highlight or hub changes), call (contact, phase; only a change), time (a jump of the clock, or the menu's skip), status.count and stim.count (the noisy hooks, counted every 5 s). Every record carries game_s and sim_s; death and defeated also carry the victim's attitude towards V. since reads on from a cursor (next); kinds keeps only those kinds. stims: true switches on the stim tap (row 16), false off. Changes nothing in the game.
 
 - **Command:** `test.events`, the bridge method `test.events`
 - **Permission:** Look (`read`)
@@ -1947,6 +1948,7 @@ Tools not yet sorted into an area above.
 | `since` | integer | at least 0 | Read records from this sequence number on (the last answer's next); 0 or none from the oldest. |
 | `limit` | integer | 1 to 500 | At most this many records (1 to 500, default 200). |
 | `stims` | boolean | `true`, `false` | true switches the stim tap on (allow-listed stims counted every 5 s), false off. |
+| `kinds` | array of string | 1 to 32 items; each 1 to 40 characters; matches `^[a-z0-9_.:/]+$` | Only these kinds (a family such as dialogue takes dialogue.hub and dialogue.index); next still moves past the rest. |
 
 ### `test_save_identity`
 

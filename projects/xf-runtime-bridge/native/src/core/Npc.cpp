@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <set>
 #include <tuple>
 
@@ -232,9 +233,9 @@ int32_t StyleLineType(const std::string& aStyle)
     {
         return 1; // scnDialogLineType.Regular: the bottom subtitle with the speaker's name
     }
-    if (aStyle == "holocall")
+    if (aStyle == "call_subtitle")
     {
-        return 2; // Holocall
+        return 2; // Holocall: the game draws it as a subtitle with the speaker's name; the call frame needs a real call (0.8.9)
     }
     if (aStyle == "overhead")
     {
@@ -478,7 +479,7 @@ void RequireKnown(const std::string& aMethod, const json& aParams)
         {"npc.turn", {"who", "to", "away_from", "hold", "off"}},
         {"npc.place", {"who", "at", "yaw"}},
         {"npc.stop", {"who"}},
-        {"npc.say", {"who", "speaker", "text", "trigger", "style", "seconds", "hide"}},
+        {"npc.say", {"who", "speaker", "text", "trigger", "style", "seconds", "hide", "near_m"}},
         {"npc.look", {"who", "at", "off"}},
         {"npc.face", {"who", "expression", "off"}},
         {"npc.act", {"who", "gesture", "off", "seconds"}},
@@ -1358,14 +1359,26 @@ json Service::Say(const json& aParams, const Ops& aOps)
     line.style = params::CheckText(aParams, "style", 16).value_or(voice ? "ownerless" : "subtitle");
     if (StyleLineType(line.style) < 0)
     {
-        Bad("'style' must be subtitle, overhead, holocall or ownerless");
+        if (line.style == "holocall")
+        {
+            Bad("'holocall' is now call_subtitle: the game draws that line type as a plain subtitle with the speaker's name, never the holocall frame (that needs a real call)");
+        }
+        Bad("'style' must be subtitle, overhead, call_subtitle or ownerless");
     }
     if (voice && line.style == "overhead")
     {
-        Bad("a voice with no body can't speak overhead: use ownerless (the default), holocall or subtitle");
+        Bad("a voice with no body can't speak overhead: use ownerless (the default), call_subtitle or subtitle");
     }
     const double byLength = line.text.empty() ? 3.0 : std::clamp(1.5 + static_cast<double>(CountChars(line.text)) / 15.0, 2.0, 10.0);
     line.seconds = params::CheckNumber(aParams, "seconds", 1.0, 15.0).value_or(byLength);
+    // 0.8.9 (session 15's NC1 redo: her lines played while she was nowhere near V): near_m refuses the line unless the NPC
+    // stands within that many metres of V, so a scene's speech waits on a real arrival and fails early in plain words.
+    const auto nearM = params::CheckNumber(aParams, "near_m", 0.5, kMaxRangeM);
+    if (voice && nearM)
+    {
+        Bad("near_m is for an NPC's line (a voice with no body has no place)");
+    }
+    Vec3 vAt{};
     if (voice)
     {
         // A line on screen only: normal play, whatever V is doing.
@@ -1378,7 +1391,7 @@ json Service::Say(const json& aParams, const Ops& aOps)
     }
     else
     {
-        RequireV(aOps);
+        vAt = ToVec(RequireV(aOps).value("position", json::array({0, 0, 0})));
     }
     {
         std::scoped_lock _(m_mutex);
@@ -1390,6 +1403,20 @@ json Service::Say(const json& aParams, const Ops& aOps)
         {
             auto& npc = Ours(who, false);
             RequireDirected(npc);
+            if (nearM)
+            {
+                if (!npc.known)
+                {
+                    throw MethodError("too_far", "where " + who + " stands isn't known yet, so its line waits (near_m)");
+                }
+                const double d = Distance(npc.position, vAt);
+                if (d > *nearM)
+                {
+                    char gap[160];
+                    std::snprintf(gap, sizeof gap, " is %.1f m from V; this line needs it within %.1f m (near_m)", d, *nearM);
+                    throw MethodError("too_far", who + gap);
+                }
+            }
             line.speaker = speakerParam ? CleanMessageText(*speakerParam, kMaxTitleChars) : npc.label.empty() ? "Stranger" : npc.label;
         }
         line.number = m_nextLine;
@@ -1405,8 +1432,24 @@ json Service::Say(const json& aParams, const Ops& aOps)
     {
         Ours(who, false).lines.push_back({line.number, line.seconds, !line.text.empty()});
     }
+    // 0.8.9 (session 15's NB2): the greeting comes with a smile unless a face is directed already (the script layer applies
+    // it); it is held like npc.face's, so npc.status names it and npc.face {off} or the release ends it.
+    bool smiled = false;
+    if (!voice && line.trigger == "greeting")
+    {
+        auto& npc = Ours(who, false);
+        if (npc.face.empty())
+        {
+            npc.face = "smile";
+            smiled = true;
+        }
+    }
     const auto id = "l" + std::to_string(line.number);
     json out{{"who", voice ? json(nullptr) : json(who)}, {"line", id}, {"seconds", line.seconds}, {"style", line.style}, {"speaker", line.speaker}};
+    if (smiled)
+    {
+        out["face"] = "smile";
+    }
     if (voice)
     {
         out["voice"] = true;

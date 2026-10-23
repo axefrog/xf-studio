@@ -19,6 +19,17 @@ public abstract class XFProbeOut {
     return (XFBridge_ProbeFlags() & 2) != 0;
   }
 
+  // 0.8.9 (session 15: a hostile stand-in's death came with civilian true, a reactive civilian clone's class): how the victim
+  // stood towards V (EAIAttitude: AIA_Friendly, AIA_Neutral, AIA_Hostile), "" when V isn't there.
+  public static func Attitude(puppet: ref<ScriptedPuppet>) -> String {
+    let player = GetPlayer(GetGameInstance());
+    if !IsDefined(player) || !IsDefined(puppet) {
+      return "";
+    }
+    let attitude = puppet.GetAttitudeTowards(player);
+    return EnumValueToString("EAIAttitude", Cast<Int64>(EnumInt(attitude)));
+  }
+
   // 0.8.7 (the Sol review, finding 2): the hooks' switch first, before anything is built; the game's and the simulation's clocks
   // only while the script gate is open (the live guard), else the record says live false and carries only what it was given.
   public static func Emit(kind: String, body: String) -> Void {
@@ -59,6 +70,10 @@ public class XFEventProbe extends ScriptableSystem {
   private let m_call: ref<CallbackHandle>;
   private let m_purchase: ref<CallbackHandle>;
   private let m_lastDistrict: String;
+  // 0.8.9 (session 15: dialogue.index took 346 of the ring's 500 records, and a call's phase 1 came twice): only a change
+  // is recorded.
+  private let m_lastIndex: String;
+  private let m_lastCall: String;
   private let m_interior: Int32;
   private let m_lastGame: Float;
   private let m_lastSim: Float;
@@ -188,14 +203,24 @@ public class XFEventProbe extends ScriptableSystem {
   protected cb func OnXFIndex(value: Int32) -> Bool {
     let defs = GetAllBlackboardDefs();
     let board = GameInstance.GetBlackboardSystem(this.GetGameInstance()).Get(defs.UIInteractions);
-    XFProbeOut.Emit("dialogue.index", "\"index\":" + IntToString(value) + ",\"hub\":" + IntToString(board.GetInt(defs.UIInteractions.ActiveChoiceHubID)));
+    let text = "\"index\":" + IntToString(value) + ",\"hub\":" + IntToString(board.GetInt(defs.UIInteractions.ActiveChoiceHubID));
+    if Equals(text, this.m_lastIndex) {
+      return false;
+    }
+    this.m_lastIndex = text;
+    XFProbeOut.Emit("dialogue.index", text);
     return false;
   }
 
   protected cb func OnXFCall(value: Variant) -> Bool {
     let call = FromVariant<PhoneCallInformation>(value);
-    XFProbeOut.Emit("call", "\"contact\":" + XFJson.Str(NameToString(call.contactName)) + ",\"phase\":" + IntToString(EnumInt(call.callPhase)) + ",\"mode\":" + IntToString(EnumInt(call.callMode))
-      + ",\"player_calling\":" + XFJson.Flag(call.isPlayerCalling) + ",\"player_triggered\":" + XFJson.Flag(call.isPlayerTriggered));
+    let text = "\"contact\":" + XFJson.Str(NameToString(call.contactName)) + ",\"phase\":" + IntToString(EnumInt(call.callPhase)) + ",\"mode\":" + IntToString(EnumInt(call.callMode))
+      + ",\"player_calling\":" + XFJson.Flag(call.isPlayerCalling) + ",\"player_triggered\":" + XFJson.Flag(call.isPlayerTriggered);
+    if Equals(text, this.m_lastCall) {
+      return false;
+    }
+    this.m_lastCall = text;
+    XFProbeOut.Emit("call", text);
     return false;
   }
 
@@ -334,7 +359,7 @@ protected cb func OnDeath(evt: ref<gameDeathEvent>) -> Bool {
     let instigator = IsDefined(evt) ? evt.instigator : null;
     let byV = IsDefined(instigator) && IsDefined(instigator as PlayerPuppet);
     XFProbeOut.Emit("death", "\"victim\":" + XFJson.Str(XFProbeOut.Id(this.GetEntityID())) + ",\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(this.GetRecordID()))
-      + ",\"crowd\":" + XFJson.Flag(this.IsCrowd()) + ",\"civilian\":" + XFJson.Flag(this.IsCharacterCivilian()) + ",\"by_v\":" + XFJson.Flag(byV)
+      + ",\"crowd\":" + XFJson.Flag(this.IsCrowd()) + ",\"civilian\":" + XFJson.Flag(this.IsCharacterCivilian()) + ",\"attitude\":" + XFJson.Str(XFProbeOut.Attitude(this)) + ",\"by_v\":" + XFJson.Flag(byV)
       + ",\"instigator\":" + XFJson.Str(IsDefined(instigator) ? XFProbeOut.Id(instigator.GetEntityID()) : ""));
   }
   return result;
@@ -345,7 +370,7 @@ protected cb func OnDefeated(evt: ref<DefeatedEvent>) -> Bool {
   let result = wrappedMethod(evt);
   if XFProbeOut.On() {
     XFProbeOut.Emit("defeated", "\"victim\":" + XFJson.Str(XFProbeOut.Id(this.GetEntityID())) + ",\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(this.GetRecordID()))
-      + ",\"crowd\":" + XFJson.Flag(this.IsCrowd()) + ",\"civilian\":" + XFJson.Flag(this.IsCharacterCivilian()));
+      + ",\"crowd\":" + XFJson.Flag(this.IsCrowd()) + ",\"civilian\":" + XFJson.Flag(this.IsCharacterCivilian()) + ",\"attitude\":" + XFJson.Str(XFProbeOut.Attitude(this)));
   }
   return result;
 }

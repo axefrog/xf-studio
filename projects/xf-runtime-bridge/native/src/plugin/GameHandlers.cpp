@@ -1829,14 +1829,32 @@ void RequireTestHooks(const char* aMethod)
     }
 }
 
-// test.events {since?, limit?, stims?}: the game-events and save-identity probes' records from their own ring; stims switches
+// test.events {since?, limit?, stims?, kinds?}: the game-events and save-identity probes' records from their own ring; stims switches
 // the stim tap (game-events row 16).
 json TestEvents(const MethodContext& aContext)
 {
     RequireTestHooks("test.events");
-    params::RequireOnly(aContext.params, {"since", "limit", "stims"});
+    params::RequireOnly(aContext.params, {"since", "limit", "stims", "kinds"});
     const auto since = static_cast<uint64_t>(params::CheckInteger(aContext.params, "since", 0, INT64_MAX).value_or(0));
     const auto limit = static_cast<size_t>(params::CheckInteger(aContext.params, "limit", 1, 500).value_or(200));
+    // 0.8.9 (session 15: no way to read one kind past a flood): kinds keeps only those kinds or families.
+    std::vector<std::string> kinds;
+    if (aContext.params.contains("kinds"))
+    {
+        const auto& list = aContext.params["kinds"];
+        if (!list.is_array() || list.size() > 32)
+        {
+            throw MethodError("bad_params", "'kinds' is a list of up to 32 probe kinds (death, dialogue.hub, dialogue for both dialogue kinds, ...)");
+        }
+        for (const auto& k : list)
+        {
+            if (!k.is_string() || !probes::KindOk(k.get<std::string>()))
+            {
+                throw MethodError("bad_params", "each of 'kinds' is a probe kind: letters, digits, '_', '.', ':' or '/', up to 40");
+            }
+            kinds.push_back(k.get<std::string>());
+        }
+    }
     auto& state = Get();
     if (const auto stims = params::CheckBoolean(aContext.params, "stims"))
     {
@@ -1849,7 +1867,7 @@ json TestEvents(const MethodContext& aContext)
             state.probeSwitches.fetch_and(~2);
         }
     }
-    auto out = state.probeEvents.Read(since, limit);
+    auto out = state.probeEvents.Read(since, limit, kinds);
     out["stims"] = (state.probeSwitches.load() & 2) != 0;
     out["arm_before_save"] = (state.probeSwitches.load() & 4) != 0;
     return out;

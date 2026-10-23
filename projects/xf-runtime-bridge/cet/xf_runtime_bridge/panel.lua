@@ -182,6 +182,14 @@ end
 local function drawQuestion(state, queue, theme, which)
   local ask = state.pendingAsk
   local answered = state.answeredAsk
+  -- 0.8.9: with no question, the newest line from XF Studio (info included) holds the slot.
+  local latest = not ask and not answered and state.latestMessage or nil
+  if latest then
+    ImGui.Separator()
+    coloured(panel.colour(theme, which, "XfAccentText", AMBER), "From XF Studio")
+    wrapped(tostring(latest.text))
+    return
+  end
   if not ask and not answered then return end
   ImGui.Separator()
   coloured(panel.colour(theme, which, "XfAccentText", AMBER), "Question from XF Studio")

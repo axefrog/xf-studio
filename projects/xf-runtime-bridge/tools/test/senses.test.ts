@@ -157,9 +157,11 @@ describe("the Sol review's fixes in the redscript layer", () => {
     // No linear search per stack; the stacks are counted in arrays indexed by the item type's enum value.
     expect(code).not.toContain("ArrayFindFirst");
     expect(inventory).toMatch(/stacks\[type\] \+= 1;/);
-    // The only per-stack native calls are the three the summary needs.
+    // The per-stack native calls are the ones the summary needs; 0.8.9 adds the item id (the equipped check) and the
+    // screen's filter (HiddenInBackpack: its tags and the preview flag).
     const loop = inventory.slice(inventory.indexOf("while i < limit {"), inventory.indexOf("let out ="));
-    expect([...loop.matchAll(/item\.(\w+)\(/g)].map((m) => m[1]).sort()).toEqual(["GetItemType", "GetQuantity", "HasTag"]);
+    expect([...new Set([...loop.matchAll(/item\.(\w+)\(/g)].map((m) => m[1]))].sort()).toEqual(["GetID", "GetItemType", "GetQuantity", "HasTag"]);
+    expect(loop).toContain("XFSenses.HiddenInBackpack(item)");
     const cap = /func InventoryCap\(\) -> Int32 \{\s*return (\d+);/.exec(code);
     expect(cap).not.toBeNull();
     expect(Number(cap![1])).toBeLessThanOrEqual(2000);

@@ -218,13 +218,13 @@ describe("0.8.7 the photo-menu panel (P5 clicks, P8/P9 modal, P11 safe zones), r
     for (const field of ["m_menuArea", "m_additionalMenuArea", "m_radioButtons", "m_tabTitleText", "m_inputBottomRoot", "m_inputExit", "m_inputScreenshot"]) {
       expect(zones).toContain(`this.${field}`);
     }
-    expect(panel).toContain("let kept = XFInkStyle.Avoid(placed, this.m_zones, this.m_visible, 24.0 * units);");
-    expect(panel).toContain('out += "],\\"panel_rect\\":["');
-    // The redscript's rule is the TypeScript mirror's.
+    expect(panel).toContain("let kept = XFInkStyle.Avoid(placed, this.m_zones, this.m_visible, 24.0 * units, frame.anchor, how);");
+    expect(panel).toContain(',\\"panel_rect\\":["');
+    // The redscript's rule is the TypeScript mirror's (0.8.9: slide along the anchor's own edge first, then a free corner).
     const ink = read("redscript", "XFRuntimeBridgeInk.reds");
-    expect(ink).toContain("if z.Y + z.W >= v.Y + v.W * 0.8 {");
-    expect(ink).toContain("if z.X >= v.X + v.Z * 0.5 {");
-    expect(ink).toContain("if z.Y <= v.Y + v.W * 0.2 {");
+    expect(ink).toContain("let sideways = !StrBeginsWith(anchor, \"center\");");
+    expect(ink).toContain("let cb = k == 0 || k == 3 ? bottom : !bottom;");
+    expect(ink).toContain("let cr = k == 1 || k == 3 ? right : !right;");
   });
 
   test("P11 (the mirror, at session 14's 21:9 geometry): bottom_left goes above the hint strip, a panel on the menu goes left of it, top_right stays", () => {
@@ -237,8 +237,8 @@ describe("0.8.7 the photo-menu panel (P5 clicks, P8/P9 modal, P11 safe zones), r
     expect(bottomLeft.x).toBe(40);
     const onMenu = avoidZones({ x: 3600, y: 800, w: 700, h: 230 }, zones, visible, 24);
     expect(onMenu.x + onMenu.w).toBeLessThanOrEqual(menu.x - 24);
-    const topRight = avoidZones({ x: 4444, y: 40, w: 700, h: 230 }, zones, visible, 24);
-    expect(topRight).toEqual({ x: 4444, y: 40, w: 700, h: 230 });
+    const topRight = avoidZones({ x: 4444, y: 40, w: 700, h: 230 }, zones, visible, 24, "top_right");
+    expect(topRight).toEqual({ x: 4444, y: 40, w: 700, h: 230, how: "kept" });
     // Pushed up out of the hints and then into the menu: the second pass moves it left too.
     const corner = avoidZones({ x: 4400, y: 1700, w: 700, h: 230 }, zones, visible, 24);
     expect(corner.y + corner.h).toBeLessThanOrEqual(hints.y - 24);
@@ -250,7 +250,8 @@ describe("0.8.7 the pin mark, the save lock's notice, the probes", () => {
   test("U2: an off-screen or behind-camera pin keeps its mark at the screen's edge in its direction, whole on screen, and says so (at_edge); the mark has a dark halo and plate", () => {
     const ink = read("redscript", "XFRuntimeBridgeInk.reds");
     expect(ink).toContain("let edge = s.W <= 0.0 || AbsF(s.X) > 1.0 || AbsF(s.Y) > 1.0;");
-    expect(ink).toContain("let dx = s.W <= 0.0 ? -s.X : s.X;");
+    // 0.8.9 (session 15's D1): a point behind the camera takes its way from the camera's right and up (batch22).
+    expect(ink).toContain("let way = projector.Direction(new Vector4(point.X, point.Y, point.Z, 1.0));");
     expect(ink).toContain("entry.markAtEdge = edge;");
     const pins = read("redscript", "XFRuntimeBridgePins.reds");
     expect(pins).toContain('halo.SetName(n"halo");');

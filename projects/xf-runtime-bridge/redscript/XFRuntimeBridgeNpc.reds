@@ -109,6 +109,37 @@ public class XFNpcRegistry extends ScriptableSystem {
     return n;
   }
 
+  // 0.8.9 (session 15's NB1, NB2 and NC1: with reactions quiet, the actor still got "pissy" and barked "whaddya want?" over
+  // npc.face's smile and the greeting): whether the game's own look-at reaction is held back on this entity. That reaction
+  // (ReactionManagerComponent.TriggerFacialLookAtReaction, reactionComponent.script:2835-2874) gives an NPC outside the
+  // crowd, as every XF actor is, the aggressive face (category 3, idle 1) and the voiceset's "greeting" bark whenever V
+  // comes close, stands in front of it or lingers (the proximity look-at, the comfort zone and the repeat look-at); the
+  // preset guard (CanTriggerExpressionLookAt) only stops presets of the NoReaction type, which Civilian_NoReaction isn't.
+  // Held back always on a quiet actor (what reactions quiet promises), and on any actor or pick while the bridge directs
+  // its face, its look or a line.
+  public func HoldsReactions(id: EntityID) -> Bool {
+    for entry in this.m_entries {
+      if entry.id == id {
+        if Equals(entry.kind, "actor") && !StrEndsWith(entry.record, "_reactive") {
+          return true;
+        }
+        return entry.faced || IsDefined(entry.look) || ArraySize(entry.lines) > 0;
+      }
+    }
+    return false;
+  }
+
+  public static func HoldsReactionsOf(owner: ref<GameObject>) -> Bool {
+    if !IsDefined(owner) {
+      return false;
+    }
+    let registry = XFNpcRegistry.Get();
+    if !IsDefined(registry) || ArraySize(registry.m_entries) == 0 {
+      return false;
+    }
+    return registry.HoldsReactions(owner.GetEntityID());
+  }
+
   // The entry whose entity is this id ("" when none): npc.list marks the session's own.
   public func WhoIs(id: EntityID) -> String {
     for entry in this.m_entries {
@@ -293,7 +324,42 @@ public abstract class XFNpcHub {
       return true;
     }
     let prompt = FromVariant<InteractionChoiceHubData>(board.GetVariant(defs.InteractionChoiceHub));
-    return prompt.active;
+    if prompt.active {
+      return true;
+    }
+    return XFNpcHub.DeviceFocus();
+  }
+
+  // 0.8.9 (session 15's NB6/NB6b: at a vending machine's in-world screen, with the hand cursor over an item, our choices
+  // showed and stayed, and F bought from the machine): an in-world device screen shows no interaction prompt, so the prompt
+  // check missed it. V is busy with a device while the player state machine says she interacts with, zooms into or controls
+  // one, or while she looks at a device within 3.5 m (the distance its screen takes the cursor from).
+  public static func DeviceFocus() -> Bool {
+    let player = XFPlayer.Player();
+    if !IsDefined(player) {
+      return false;
+    }
+    let psmDefs = GetAllBlackboardDefs().PlayerStateMachine;
+    let psm = GameInstance.GetBlackboardSystem(GetGameInstance()).GetLocalInstanced(player.GetEntityID(), psmDefs);
+    if IsDefined(psm) {
+      let interacting = psm.GetBool(psmDefs.IsInteractingWithDevice);
+      let zoomed = psm.GetBool(psmDefs.IsUIZoomDevice);
+      let controlling = psm.GetBool(psmDefs.IsControllingDevice);
+      if interacting || zoomed || controlling {
+        return true;
+      }
+    }
+    let targeting = GameInstance.GetTargetingSystem(GetGameInstance());
+    if !IsDefined(targeting) {
+      return false;
+    }
+    let looked = targeting.GetLookAtObject(player, false, false);
+    let device = looked as Device;
+    if IsDefined(device) {
+      let distance = Vector4.Distance(device.GetWorldPosition(), player.GetWorldPosition());
+      return distance <= 3.5;
+    }
+    return false;
   }
 
   // Makes every widget listening to the dialogue data draw again (our wrap below appends the hub), then selects our hub.
@@ -336,6 +402,12 @@ public abstract class XFNpcHub {
       return false;
     }
     if NotEquals(actionType, gameinputActionType.BUTTON_PRESSED) {
+      return false;
+    }
+    // 0.8.9: a device screen in focus takes the key, and our choices go (between two polls).
+    if XFNpcHub.DeviceFocus() {
+      registry.WithdrawForGame();
+      XFNpcHub.Refresh(false);
       return false;
     }
     // One input per frame (the module's guard against a doubled action).
@@ -437,6 +509,59 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
     }
   }
   return wrappedMethod(action, consumer);
+}
+
+// 0.8.9: the actor's own look-at reactions (the annoyed face and bark) and the resets of its face held back while
+// XFNpcRegistry.HoldsReactions says so; every other reaction (fear, combat, bumps) runs as the game has it.
+@wrapMethod(ReactionManagerComponent)
+private final func TriggerFacialLookAtReaction(opt forceFear: Bool, opt playVO: Bool) -> Void {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+    return;
+  }
+  wrappedMethod(forceFear, playVO);
+}
+
+@wrapMethod(ReactionManagerComponent)
+private final func CanTriggerExpressionLookAt() -> Bool {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+    return false;
+  }
+  return wrappedMethod();
+}
+
+// 0.8.9 (session 15's NC1: she "walked backwards" to V and away again): the reaction's own look-at twists the chest towards
+// V at weight 2.0 within a 210-degree back limit and, for an NPC outside the crowd, never ends by itself
+// (reactionComponent.script:3539-3600); walking while it held made the body walk one way and face the other. Held back as
+// the face and bark are, and ended when the bridge sends a walk (XFBridgeEndReactionLook).
+@wrapMethod(ReactionManagerComponent)
+private func ActivateReactionLookAt(targetEntity: ref<Entity>, opt end: Bool, opt repeat: Bool, opt duration: Float, opt upperBody: Bool, opt inVehicle: Bool) -> Bool {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+    return false;
+  }
+  return wrappedMethod(targetEntity, end, repeat, duration, upperBody, inVehicle);
+}
+
+@addMethod(ReactionManagerComponent)
+public func XFBridgeEndReactionLook() -> Void {
+  if IsDefined(this.m_lookatEvent) {
+    this.DeactiveLookAt();
+  }
+}
+
+@wrapMethod(ReactionManagerComponent)
+private final func ResetFacial(cooldown: Float) -> Void {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+    return;
+  }
+  wrappedMethod(cooldown);
+}
+
+@wrapMethod(ReactionManagerComponent)
+protected cb func OnResetFacialEvent(evt: ref<ResetFacialEvent>) -> Bool {
+  if XFNpcRegistry.HoldsReactionsOf(this.GetOwner()) {
+    return true;
+  }
+  return wrappedMethod(evt);
 }
 
 // Protection reasons for an NPC the bridge didn't spawn (npc.list, npc.pick): typed checks after a cast only (the world-object
@@ -778,6 +903,11 @@ public abstract class XFNpc {
       return "{\"ok\":true,\"sent\":true,\"before\":" + before + "}";
     }
     XFBridgeActions.EnsureSaveLock(cid);
+    // 0.8.9: a walk ends the reaction's own look-at first (it twisted the walker's body towards V).
+    let reactions = puppet.GetStimReactionComponent();
+    if IsDefined(reactions) && (Equals(kind, "move") || Equals(kind, "follow")) {
+      reactions.XFBridgeEndReactionLook();
+    }
     if Equals(kind, "move") {
       let move = new AIMoveToCommand();
       let spec: AIPositionSpec;
@@ -785,9 +915,12 @@ public abstract class XFNpc {
         return XFJson.Fail("npc_lost", "the target isn't in the world");
       }
       move.movementTarget = spec;
+      // 0.8.9 (session 15's NC1): V as the facing target only, as the game's own move-to-V does (quickhackEffectors.script
+      // 911-918). rotateEntityTowardsFacingTarget made it a strafing target (aiMoveToCommandHandler.script:317-324), the body
+      // held towards V for the whole walk. Whether the facing target alone turns it to V at the end, as the game's does, is
+      // session 16's to see [hypothesis]; the scenario turns it with npc.turn after arriving either way.
       if faceV {
         AIPositionSpec.SetEntity(move.facingTarget, GetPlayer(GetGameInstance()));
-        move.rotateEntityTowardsFacingTarget = true;
       }
       move.movementType = IntEnum<moveMovementType>(gait);
       move.desiredDistanceFromTarget = distance;
@@ -865,6 +998,15 @@ public abstract class XFNpc {
     }
     XFBridgeActions.EnsureSaveLock(cid);
     if StrLen(trigger) > 0 && !voice {
+      // 0.8.9: the greeting comes with a smile (held like npc.face's, until npc.face reset or the release) unless a face is
+      // directed already; the voiceset's line itself is the game's choice (a civilian's greeting can sound curt).
+      if Equals(trigger, "greeting") && !entry.faced {
+        let smile = new AnimFeature_FacialReaction();
+        smile.category = 3;
+        smile.idle = 6;
+        AnimationControllerComponent.ApplyFeatureToReplicate(npc, n"FacialReaction", smile);
+        entry.faced = true;
+      }
       GameObject.PlayVoiceOver(npc, StringToName(trigger), n"Scripts:XFRuntimeBridge");
     }
     if StrLen(text) > 0 {
@@ -1119,7 +1261,7 @@ public abstract class XFNpc {
       return "{\"ok\":true,\"withdrawn\":false}";
     }
     if XFNpcHub.GameBusy() {
-      return XFJson.Fail("choices_busy", "the game shows its own dialogue choices or an interaction prompt right now; step away from doors and devices and try again");
+      return XFJson.Fail("choices_busy", "the game shows its own dialogue choices, an interaction prompt or a device's screen right now; step away from doors and devices and try again");
     }
     let npc = XFNpc.EntityOf(registry.Entry(who)) as GameObject;
     let player = XFPlayer.Player();
@@ -1177,6 +1319,17 @@ public abstract class XFNpc {
       XFNpcHub.Refresh(false);
     }
     XFNpc.Undo(entry);
+    // 0.8.9 (session 15's NB8: a released pick stood about 20 s before walking on): a crowd member is told to walk on at its
+    // normal pace, as the reaction component does after its own reactions (reactionComponent.script:3241-3243).
+    if Equals(entry.kind, "pick") {
+      let picked = XFNpc.PuppetOf(entry);
+      if IsDefined(picked) && picked.IsCrowd() {
+        let crowd = picked.GetCrowdMemberComponent();
+        if IsDefined(crowd) {
+          crowd.ChangeMoveType(n"normal");
+        }
+      }
+    }
     if Equals(entry.kind, "actor") {
       let system = GameInstance.GetDynamicEntitySystem();
       if IsDefined(system) {
@@ -1268,9 +1421,17 @@ public abstract class XFNpc {
         }
         out += (StrLen(out) > 0 ? "," : "") + item;
       }
-      // Keep our hub active and its highlight where the player left it (the module's per-frame update).
+      // Keep our hub active and its highlight where the player left it (the module's per-frame update). 0.8.9: a device
+      // screen V turned to withdraws it, as a prompt does (the game's comes first).
       if registry.HubShown() {
-        XFNpcHub.Refresh(true);
+        if XFNpcHub.DeviceFocus() {
+          registry.WithdrawForGame();
+          XFNpcHub.Refresh(false);
+          let ours = registry.Hub();
+          XFBridgeLog.Info("npc-hub", "V turned to a device's screen; hub " + IntToString(ours.id) + " withdrawn");
+        } else {
+          XFNpcHub.Refresh(true);
+        }
       }
     }
     let hubText = "{\"id\":0,\"answer\":-1,\"shown\":false}";

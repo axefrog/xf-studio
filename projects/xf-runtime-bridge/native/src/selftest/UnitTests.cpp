@@ -3209,6 +3209,15 @@ void Bridge070Tests()
         Check("0.7 answering the pending ask names the choice and the question", answered.value("ok", false) && answered["label"] == "Yes" &&
                                                                                     answered["message_id"] == ask["id"], answered.dump());
         Check("0.7 an answered ask stops waiting and can't be answered twice", !board.Pending(pending, t0) && !board.Answer(ask["id"].get<uint64_t>(), 0, t0).value("ok", true));
+        // 0.8.9 (session 15: a stray F6 answered the next question): a key within 0.5 s of the question is ignored; a button isn't.
+        board.Post({"Key check?", 60, "ask", false, {"A", "B"}}, t0);
+        const auto early = board.Answer(0, 0, true, t0 + std::chrono::milliseconds(200));
+        const auto later = board.Answer(0, 1, true, t0 + std::chrono::milliseconds(600));
+        board.Post({"Button check?", 60, "ask", false, {"A", "B"}}, t0);
+        const auto button = board.Answer(0, 1, false, t0 + std::chrono::milliseconds(100));
+        Check("0.8.9 an answer key within 0.5 s of its question is ignored (too_soon), works after; a button isn't held back",
+              !early.value("ok", true) && early.value("too_soon", false) && later.value("ok", false) && later["label"] == "B" && button.value("ok", false),
+              early.dump() + later.dump() + button.dump());
         xfb::MessageRequest custom{"Which light?", 30, "ask", false, {"Key", "Fill", "Rim"}};
         const auto posted = board.Post(custom, t0);
         Check("0.7 an ask takes its own choices", posted["choices"] == json::array({"Key", "Fill", "Rim"}));
@@ -5173,6 +5182,19 @@ void Bridge087Tests()
           read.dump());
     const auto later = ring.Read(read["next"].get<uint64_t>(), 100);
     Check("0.8.7 the probe ring reads on from a cursor", later["events"].empty() && later["next"] == read["next"], later.dump());
+
+    // 0.8.9: kinds keeps only those kinds or families, and the cursor still moves past what it skipped.
+    pr::ProbeRing mixed(64, 100);
+    mixed.Push("dialogue.index", json{{"index", 0}}, 1'000);
+    mixed.Push("death", json{{"i", 1}}, 1'000);
+    mixed.Push("dialogue.hub", json{{"count", 1}}, 1'000);
+    mixed.Push("heat", json{{"value", 1}}, 1'000);
+    const auto deaths = mixed.Read(0, 100, {"death"});
+    const auto dialogue = mixed.Read(0, 100, {"dialogue"});
+    Check("0.8.9 test.events kinds: one kind, or a family (dialogue takes dialogue.hub and dialogue.index); next moves past the rest",
+          deaths["events"].size() == 1 && deaths["events"][0]["kind"] == "death" && deaths["next"] == 5 && dialogue["events"].size() == 2 &&
+              dialogue["events"][1]["kind"] == "dialogue.hub" && mixed.Read(0, 100, {"dial"})["events"].empty(),
+          deaths.dump() + dialogue.dump());
 
     pr::ProbeRing small(16, 100);
     for (int i = 0; i < 20; ++i)

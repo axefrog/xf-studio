@@ -453,7 +453,10 @@ void Answer(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CStrin
         }
         else
         {
-            answer = state.messages.Answer(id > 0 ? static_cast<uint64_t>(id) : 0, choice);
+            // 0.8.9: answer keys (ink_key, cet_key) wait out the key guard; buttons and clicks don't.
+            const auto via = ToStd(source);
+            const bool byKey = via.size() >= 4 && via.compare(via.size() - 4, 4, "_key") == 0;
+            answer = state.messages.Answer(id > 0 ? static_cast<uint64_t>(id) : 0, choice, byKey);
         }
         if (answer.value("ok", false))
         {

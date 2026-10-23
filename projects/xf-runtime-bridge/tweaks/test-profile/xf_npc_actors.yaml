@@ -6,8 +6,9 @@
 #   isCrowd: false          a full AI puppet that takes AI commands, not a crowd-lane walker [hypothesis: session 9, N4-N5]
 #   entityTemplatePath      the base game's own citizen template, so no clone needs Phantom Liberty (the vanilla crowd
 #                           records use the ep1 variant when it is installed)
-#   reactionPreset          Civilian_NoReaction: calm, no crime or panic reactions, no greeting barks of its own
-#                           [hypothesis: session 9, open question 4]
+#   reactionPreset          Civilian_NoReaction: calm, no crime or panic reactions. It does NOT stop the look-at reaction
+#                           (the aggressive face and the "greeting" bark when V comes close; session 15): the bridge's
+#                           script layer holds that back for these quiet actors (XFRuntimeBridgeNpc.reds, 0.8.9)
 #   affiliation             Factions.Unaffiliated (no gang or faction ties)
 #   priority                Regular, as the game's own _quest crowd variants use, so the population budget keeps it
 #   objectActions: []       no Talk prompt when V looks at it (it would block npc.choices as choices_busy)

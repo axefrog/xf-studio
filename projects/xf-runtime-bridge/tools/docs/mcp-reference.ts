@@ -84,7 +84,7 @@ export const AREAS: readonly Area[] = [
     id: "npc-direction",
     title: "NPC direction",
     intro:
-      "Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, turn, place, speak (voiced, text or holocall style), look, set a face, gesture, and offer V dialogue choices whose pick comes back as an event. Releasing, the kill switch, the pause, a handover or loading a save gives everything back.",
+      "Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, turn, place, speak (voiced, text or a caller's subtitle), look, set a face, gesture, and offer V dialogue choices whose pick comes back as an event. Releasing, the kill switch, the pause, a handover or loading a save gives everything back.",
     match: prefix("npc"),
   },
   {

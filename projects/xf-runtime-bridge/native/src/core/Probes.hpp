@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <map>
 #include <mutex>
+#include <vector>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -36,7 +37,9 @@ public:
     // is dropped and counted; the kind's next record carries the count (dropped_before). Answers whether it was kept.
     bool Push(const std::string& aKind, nlohmann::json aData, int64_t aNowMs);
     // {events: [{seq, t_ms, kind, data}], next, latest, evicted, dropped: {kind: n}} from aSince on, at most aLimit (1-500).
-    nlohmann::json Read(uint64_t aSince, size_t aLimit) const;
+    // 0.8.9: aKinds, when not empty, keeps only those kinds (a family name such as "dialogue" takes dialogue.hub and
+    // dialogue.index); next still moves past the records it skipped.
+    nlohmann::json Read(uint64_t aSince, size_t aLimit, const std::vector<std::string>& aKinds = {}) const;
     size_t Size() const;
 
 private:

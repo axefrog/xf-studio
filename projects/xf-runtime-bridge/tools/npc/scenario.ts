@@ -230,6 +230,7 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
   // The hub of the choices each actor showed last (the review's finding 6).
   const lastHub: Record<string, number> = {};
   const lastLine: Record<string, string> = {};
+  const readingUntil: Record<string, { line: string; until: number }> = {};
   const consumed = new Set<number>();
   const pollMs = options.pollMs ?? 250;
   const latest = await context.api.callBridge("session.events", { since: 0, limit: 1 }, context.cid);
@@ -288,6 +289,18 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
             throw new ScenarioError(`${step.who} is already out (${handles[step.who]}); release it before spawning that name again`);
           }
         }
+        // 0.8.9 (session 15's NC1: a line was replaced before it could be read): a line or a set of choices waits until the
+        // same speaker's last text line has had its time on screen (its npc.said), at most that line's seconds and 2 more.
+        const speaker = step.who ?? "";
+        const reading = readingUntil[speaker];
+        if ((step.do === "npc.say" || step.do === "npc.choices") && reading && !step.hide) {
+          while (Date.now() < reading.until && !context.signal?.aborted) {
+            await readEvents();
+            if (seen.some((e) => e.kind === "npc.said" && e.data?.line === reading.line)) break;
+            await idle(pollMs);
+          }
+          delete readingUntil[speaker];
+        }
         const out = await execute(context, step.do, input);
         const entry: Json = { do: step.do, who: step.who, at_s: began, ok: out.ok, took_s: Math.round((seconds() - began) * 10) / 10 };
         if (out.ok) {
@@ -298,6 +311,9 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
           }
           if (step.do === "npc.choices" && typeof out.result.hub === "number") lastHub[step.who ?? ""] = out.result.hub;
           if (step.do === "npc.say" && out.result.line) lastLine[step.who ?? ""] = String(out.result.line); // "" : a voice with no body
+          if (step.do === "npc.say" && out.result.line && typeof step.text === "string") {
+            readingUntil[step.who ?? ""] = { line: String(out.result.line), until: Date.now() + (Number(out.result.seconds ?? 4) + 2) * 1000 };
+          }
           entry.result = out.result;
           report.steps.push(entry);
           log(`${step.do} ${step.who ?? ""}: ok`);
@@ -310,6 +326,10 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
           report.warnings.push(`${step.do} for ${step.who} was skipped: ${out.error.message}`);
           log(`${step.do} ${step.who ?? ""}: skipped (${out.error.code})`);
           continue;
+        }
+        if (out.error.code === "too_far") {
+          // 0.8.9: speech never plays to an empty street; the scene stops and its actors are released (below).
+          throw new ScenarioError(`${step.who} wasn't near V, so the scene stopped before ${step.do === "npc.choices" ? "the choices" : "the line"}: ${out.error.message}`, out.error.code);
         }
         throw new ScenarioError(`${step.do} for ${step.who ?? "the scene"} was refused: ${out.error.message}`, out.error.code);
       }

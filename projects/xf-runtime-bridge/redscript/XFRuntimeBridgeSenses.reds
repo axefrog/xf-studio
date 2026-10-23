@@ -246,6 +246,20 @@ public abstract class XFSenses {
     if IsDefined(quests) {
       out += ",\"facts\":{\"wanted_level\":" + IntToString(quests.GetFactStr("wanted_level")) + ",\"wanted_chase_active\":" + IntToString(quests.GetFactStr("wanted_chase_active")) + "}";
     }
+    // 0.8.9 (session 15's SS4: star_state read Searching while the bar showed one solid star): the bar itself is drawn from
+    // the UI_WantedBar blackboard the prevention system writes (preventionSystem.script:1062-1078, 2156): the stars and the
+    // chase state Active, Searching (V escaping the pursuit: the stars stay solid), Dropping (the stars flash, EStarState
+    // Blinking) or Default (no stars). bar.look is that, in the screen's words.
+    let barDefs = GetAllBlackboardDefs().UI_WantedBar;
+    let bar = GameInstance.GetBlackboardSystem(game).Get(barDefs);
+    if IsDefined(bar) {
+      let stars = bar.GetInt(barDefs.CurrentWantedLevel);
+      let chase = NameToString(bar.GetName(barDefs.CurrentChaseState));
+      let stages = bar.GetInt(barDefs.DeescalationStages);
+      let look = stars <= 0 || Equals(chase, "Default") || Equals(chase, "None") ? "none" : Equals(chase, "Dropping") ? "flashing" : "solid";
+      out += ",\"bar\":{\"stars\":" + IntToString(stars) + ",\"chase_state\":" + XFJson.Str(chase) + ",\"look\":" + XFJson.Str(look)
+        + ",\"escaping\":" + XFJson.Flag(Equals(chase, "Searching") || Equals(chase, "Dropping")) + ",\"deescalation_stages\":" + IntToString(stages) + "}";
+    }
     return out + "}";
   }
 
@@ -276,8 +290,22 @@ public abstract class XFSenses {
     return 512;
   }
 
+  // 0.8.9 (session 15's SS5: the read counted 3 handguns where the backpack shows 1): what the inventory screen leaves out.
+  // The backpack drops HideInBackpackUI, SoftwareShard and preview items (backpack_main.script:440-470), and the UI's item
+  // lists drop HideInUI, TppHead, Currency, Ammo and base_fists (inventoryItemsManager.script:402-411).
+  public static func HiddenInBackpack(item: wref<gameItemData>) -> Bool {
+    let id = item.GetID();
+    if ItemID.HasFlag(id, gameEItemIDFlag.Preview) {
+      return true;
+    }
+    return item.HasTag(n"HideInBackpackUI") || item.HasTag(n"SoftwareShard") || item.HasTag(n"HideInUI") || item.HasTag(n"TppHead")
+      || item.HasTag(n"Currency") || item.HasTag(n"Ammo") || item.HasTag(n"base_fists");
+  }
+
   // Counts by item type (the game's gamedataItemType names), not a list: stacks (entries in the inventory) and the quantity
-  // summed over them, plus how many stacks carry the Quest tag. Money is an item too, so its type's quantity is the eddies.
+  // summed over them, plus how many stacks carry the Quest tag. 0.8.9: types counts only what the inventory screen shows
+  // (equipped items included, as the backpack lists them); equipped counts those of them V has equipped, by type;
+  // hidden_stacks is what the screen leaves out (money, ammo, fists, hidden quest items). Money is read by the money part.
   // Bounded work (InventoryCap): the first stacks only, with total_stacks, stacks (the ones read) and truncated saying how much.
   public static func Inventory(game: GameInstance, player: ref<PlayerPuppet>) -> String {
     let transactions = GameInstance.GetTransactionSystem(game);
@@ -286,7 +314,7 @@ public abstract class XFSenses {
     }
     let items: array<wref<gameItemData>>;
     if !transactions.GetItemList(player, items) {
-      return "{\"stacks\":0,\"total_stacks\":0,\"truncated\":false,\"quest_stacks\":0,\"other_stacks\":0,\"types\":[]}";
+      return "{\"stacks\":0,\"total_stacks\":0,\"truncated\":false,\"shown_stacks\":0,\"hidden_stacks\":0,\"quest_stacks\":0,\"other_stacks\":0,\"types\":[],\"equipped\":[]}";
     }
     let total = ArraySize(items);
     let limit = XFSenses.InventoryCap();
@@ -295,47 +323,66 @@ public abstract class XFSenses {
       limit = total;
     }
     let typeLimit = XFSenses.InventoryTypeLimit();
+    let equipment = EquipmentSystem.GetData(player);
     let stacks: array<Int32>;
     let quantity: array<Int32>;
+    let worn: array<Int32>;
     let quest = 0;
     let read = 0;
     let other = 0;
+    let hidden = 0;
     let i = 0;
     while i < limit {
       let item = items[i];
       if IsDefined(item) {
-        let type = EnumInt(item.GetItemType());
-        if type >= 0 && type < typeLimit {
-          while ArraySize(stacks) <= type {
-            ArrayPush(stacks, 0);
-            ArrayPush(quantity, 0);
-          }
-          stacks[type] += 1;
-          quantity[type] += item.GetQuantity();
-        } else {
-          other += 1;
-        }
-        if item.HasTag(n"Quest") {
-          quest += 1;
-        }
         read += 1;
+        if XFSenses.HiddenInBackpack(item) {
+          hidden += 1;
+        } else {
+          let type = EnumInt(item.GetItemType());
+          let itemId = item.GetID();
+          let equipped = IsDefined(equipment) && equipment.IsEquipped(itemId);
+          if type >= 0 && type < typeLimit {
+            while ArraySize(stacks) <= type {
+              ArrayPush(stacks, 0);
+              ArrayPush(quantity, 0);
+              ArrayPush(worn, 0);
+            }
+            stacks[type] += 1;
+            quantity[type] += item.GetQuantity();
+            if equipped {
+              worn[type] += 1;
+            }
+          } else {
+            other += 1;
+          }
+          if item.HasTag(n"Quest") {
+            quest += 1;
+          }
+        }
       }
       i += 1;
     }
-    let out = "{\"stacks\":" + IntToString(read) + ",\"total_stacks\":" + IntToString(total) + ",\"truncated\":" + XFJson.Flag(truncated) + ",\"quest_stacks\":" + IntToString(quest) + ",\"other_stacks\":" + IntToString(other) + ",\"types\":[";
+    let out = "{\"stacks\":" + IntToString(read) + ",\"total_stacks\":" + IntToString(total) + ",\"truncated\":" + XFJson.Flag(truncated) + ",\"shown_stacks\":" + IntToString(read - hidden)
+      + ",\"hidden_stacks\":" + IntToString(hidden) + ",\"quest_stacks\":" + IntToString(quest) + ",\"other_stacks\":" + IntToString(other) + ",\"types\":[";
+    let equippedOut = "";
     let emitted = 0;
     i = 0;
     while i < ArraySize(stacks) {
       if stacks[i] > 0 {
+        let name = XFJson.Str(EnumValueToString("gamedataItemType", Cast<Int64>(i)));
         if emitted > 0 {
           out += ",";
         }
-        out += "{\"type\":" + XFJson.Str(EnumValueToString("gamedataItemType", Cast<Int64>(i))) + ",\"stacks\":" + IntToString(stacks[i]) + ",\"quantity\":" + IntToString(quantity[i]) + "}";
+        out += "{\"type\":" + name + ",\"stacks\":" + IntToString(stacks[i]) + ",\"quantity\":" + IntToString(quantity[i]) + "}";
         emitted += 1;
+        if worn[i] > 0 {
+          equippedOut += (StrLen(equippedOut) > 0 ? "," : "") + "{\"type\":" + name + ",\"stacks\":" + IntToString(worn[i]) + "}";
+        }
       }
       i += 1;
     }
-    return out + "]}";
+    return out + "],\"equipped\":[" + equippedOut + "]}";
   }
 
   // Whether V is in scanner mode (the player state machine's Vision is Focus) and what the scanner has: the entity the

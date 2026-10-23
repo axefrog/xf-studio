@@ -71,6 +71,7 @@ local state = {
   messages = {},   -- ui.message lines: { {text, level}, ... }, oldest first (XFBridge_Messages)
   pendingAsk = nil, -- 0.7: the ask waiting for the player's answer: { id, text, choices } (XFBridge_Messages' pending_ask)
   answeredAsk = nil, -- 0.8: the answered ask still showing: { id, text, label } (answered_ask)
+  latestMessage = nil, -- 0.8.9: the newest ui.message line when no question holds the window's slot: { id, text, level }
   inkAsk = 0,        -- 0.8: the question the ink panel shows on screen now (the frame's inkask record), or 0
   comment = "",     -- 0.7: the commentary box's text
   commentSoft = {}, -- 0.8.4: where the box wrapped a space into a line break (panel.wrap)
@@ -225,6 +226,7 @@ local function pollMessages()
     state.messages = {}
     state.pendingAsk = nil
     state.answeredAsk = nil
+    state.latestMessage = nil
     state.cetLabel = true -- cet_label never hides a stopped bridge's label (the window's Reconnect is named there)
     return
   end
@@ -244,6 +246,7 @@ local function pollMessages()
     -- the buttons under it don't move.
     state.messages = {}
     state.pendingAsk = nil
+    state.latestMessage = nil
     return
   end
   local decoded, answer = pcall(json.decode, text)
@@ -266,6 +269,18 @@ local function pollMessages()
     state.answeredAsk = answered
   elseif state.pendingAsk then
     state.answeredAsk = nil -- 0.8.4: the new question takes the slot; until then the last "Sent: ..." stays
+  end
+  -- 0.8.9 (session 15: the window kept an answered question while a newer line showed on the ink panel): the newest line
+  -- (info included) takes the slot from an older answered question, so the window never shows something staler than the panel.
+  local newest = nil
+  for _, line in ipairs(lines) do
+    if type(line.id) == "number" and (not newest or line.id > newest.id) then newest = line end
+  end
+  state.latestMessage = nil
+  if not state.pendingAsk and newest and (not state.answeredAsk or newest.id > state.answeredAsk.id) then
+    state.answeredAsk = nil
+    state.latestMessage = nil
+    state.latestMessage = newest
   end
 end
 
@@ -669,7 +684,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.8",
+  version = "0.8.9",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

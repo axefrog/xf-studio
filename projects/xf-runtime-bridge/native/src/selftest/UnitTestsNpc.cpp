@@ -200,7 +200,7 @@ void PureTests()
         }
         return n::FindCast("judy") == nullptr && n::FindCast("woman_corpo") != nullptr;
     }());
-    Check("styles map to the game's line types", n::StyleLineType("subtitle") == 1 && n::StyleLineType("holocall") == 2 && n::StyleLineType("overhead") == 4 && n::StyleLineType("x") == -1);
+    Check("styles map to the game's line types", n::StyleLineType("subtitle") == 1 && n::StyleLineType("call_subtitle") == 2 && n::StyleLineType("holocall") == -1 && n::StyleLineType("overhead") == 4 && n::StyleLineType("x") == -1);
 }
 
 void RefusalTests()
@@ -291,6 +291,20 @@ void TickTests()
     Check("tick: a line's time ends: hidden and npc.said with its id", fake.Called("hide a1 " + line["line"].get<std::string>().substr(1)) && Events(log, "npc.said").size() == 1 &&
                                                                             Events(log, "npc.said")[0]["data"]["line"] == line["line"]);
     Check("tick: a gesture's time ends: stopped and npc.act_done", fake.Called("act a1 off") && Events(log, "npc.act_done").size() == 1);
+    // 0.8.9 (session 15's NC1 redo and NB2): near_m gates a line on the NPC's distance to V; the greeting brings a smile.
+    fake.npcs["a1"]["position"] = {0.0, 5.0, 0.0};
+    Poll(service, fake, ops);
+    const auto farCode = CodeOf([&] { service.Say(json{{"who", "a1"}, {"text", "Over here."}, {"near_m", 3}}, ops); });
+    const auto nearLine = service.Say(json{{"who", "a1"}, {"text", "Over here."}, {"near_m", 6}}, ops);
+    Check("0.8.9 say near_m: refused too_far beyond it, shown within it; a voice with no body can't take it",
+          farCode == "too_far" && nearLine["line"].is_string() &&
+              CodeOf([&] { service.Say(json{{"speaker", "A voice"}, {"text", "Hi."}, {"near_m", 3}}, ops); }) == "bad_params");
+    const auto greet = service.Say(json{{"who", "a1"}, {"trigger", "greeting"}}, ops);
+    const auto greetAgain = service.Say(json{{"who", "a1"}, {"trigger", "greeting"}}, ops);
+    Check("0.8.9 the greeting comes with a smile, held as npc.face's (a second greeting keeps it)", greet.value("face", std::string()) == "smile" && !greetAgain.contains("face"),
+          greet.dump());
+    Check("0.8.9 the holocall style is call_subtitle now; the old name is refused in plain words",
+          CodeOf([&] { service.Say(json{{"speaker", "A voice"}, {"text", "Hi."}, {"style", "holocall"}}, ops); }) == "bad_params");
     // The hub: shown near V, answered, one at a time, timed out.
     fake.npcs["a1"]["position"] = {0.0, 2.0, 0.0};
     Poll(service, fake, ops);
@@ -450,7 +464,7 @@ void DirectorTests()
     const auto said = Events(log, "npc.said");
     Check("voice: npc.said with the speaker when its time ends, hidden", !said.empty() && said.back()["data"]["voice"] == true && said.back()["data"]["speaker"] == "A voice" &&
                                                                           fake.Called("hide  "));
-    const auto kept = service.Say(json{{"speaker", "A voice"}, {"text", "Still there?"}, {"style", "holocall"}, {"seconds", 10}}, ops);
+    const auto kept = service.Say(json{{"speaker", "A voice"}, {"text", "Still there?"}, {"style", "call_subtitle"}, {"seconds", 10}}, ops);
     fake.v["busy"] = "in_combat";
     Poll(service, fake, ops);
     Check("voice: a fight releases the actors but the voice line stays", Events(log, "npc.auto_released").size() == 1 && service.Status(json::object())["voice_lines"].size() == 1);

@@ -118,7 +118,8 @@ void RegisterSimSenses(Dispatcher& aDispatcher, SimSensesHooks aHooks)
                               if (has("heat"))
                               {
                                   out["heat"] = {{"stage", 0}, {"star_state", "Default"}, {"chasing", false}, {"system_enabled", true}, {"system_locked", false},
-                                                 {"facts", {{"wanted_level", 0}, {"wanted_chase_active", 0}}}};
+                                                 {"facts", {{"wanted_level", 0}, {"wanted_chase_active", 0}}},
+                                                 {"bar", {{"stars", 0}, {"chase_state", "Default"}, {"look", "none"}, {"escaping", false}, {"deescalation_stages", 0}}}};
                               }
                               if (has("vehicle"))
                               {
@@ -128,8 +129,10 @@ void RegisterSimSenses(Dispatcher& aDispatcher, SimSensesHooks aHooks)
                               }
                               if (has("inventory"))
                               {
-                                  out["inventory"] = {{"stacks", 3}, {"total_stacks", 3}, {"truncated", false}, {"quest_stacks", 1}, {"other_stacks", 0}, {"types", json::array({{{"type", "Gen_Misc"}, {"stacks", 1}, {"quantity", 12345}},
-                                                                                                                    {{"type", "Wea_Handgun"}, {"stacks", 2}, {"quantity", 2}}})}};
+                                  // 0.8.9: the money stack is hidden from the backpack (Currency), so types counts the two shown handguns only.
+                                  out["inventory"] = {{"stacks", 3}, {"total_stacks", 3}, {"truncated", false}, {"shown_stacks", 2}, {"hidden_stacks", 1}, {"quest_stacks", 1}, {"other_stacks", 0},
+                                                      {"types", json::array({{{"type", "Wea_Handgun"}, {"stacks", 2}, {"quantity", 2}}})},
+                                                      {"equipped", json::array({{{"type", "Wea_Handgun"}, {"stacks", 1}}})}};
                               }
                               if (has("scanner"))
                               {

@@ -36,8 +36,11 @@ public class XFPinEntry {
   public let piece: Int32;
   public let position: Vector4;
   public let bound: Bool;
-  // 0.8: the views that have drawn this pin so far (controller class names), for world.pin's answer and the log.
-  public let drawnBy: array<String>;
+  // 0.8: the views that have drawn this pin so far, for world.pin's answer and the log. 0.8.9 (session 15's D1: ui.state's
+  // pins came back "failed" because one name read "????????ay"): the mappin controllers' UpdateIcon runs on the UI's worker
+  // threads, several at once, and they all pushed into one script array; now each view sets one bit of a plain integer (a
+  // lost bit is set again on the next update; nothing is reallocated under another thread).
+  public let drawnBits: Int32;
   // 0.8.3: the bridge's own mark in the world (XFRuntimeBridgeInk.reds PlacePinMark) as the overlay last placed it: shown
   // this tick, its top-left corner in the overlay's units and in window pixels (the game's own layout), on screen or not.
   public let markShown: Bool;
@@ -145,11 +148,37 @@ public abstract class XFInkPins {
 
   // 0.8: records the first time a view draws an XF pin (the plugin log and world.pin's drawn_by).
   public static func NoteDrawn(entry: ref<XFPinEntry>, view: String) -> Void {
-    if !IsDefined(entry) || ArrayContains(entry.drawnBy, view) {
+    let bit = XFInkPins.ViewBit(view);
+    if !IsDefined(entry) || bit == 0 || (entry.drawnBits & bit) != 0 {
       return;
     }
-    ArrayPush(entry.drawnBy, view);
-    XFBridgeLog.Info("pins", "world.pin " + IntToString(entry.id) + " '" + entry.label + "' drawn by " + view);
+    entry.drawnBits = entry.drawnBits | bit;
+    XFBridgeLog.Info("pins", "world.pin " + IntToString(entry.id) + " drawn by " + view);
+  }
+
+  // The views in drawn_by's order, one bit each.
+  public static func ViewName(i: Int32) -> String {
+    switch i {
+      case 0: return "world_map";
+      case 1: return "world";
+      case 2: return "world_gameplay";
+      case 3: return "minimap";
+      case 4: return "xf_overlay";
+      default: return "";
+    }
+  }
+
+  public static func ViewBit(view: String) -> Int32 {
+    let i = 0;
+    let bit = 1;
+    while i < 5 {
+      if Equals(XFInkPins.ViewName(i), view) {
+        return bit;
+      }
+      bit = bit * 2;
+      i += 1;
+    }
+    return 0;
   }
 
   public static func Entry(mappin: wref<IMappin>) -> ref<XFPinEntry> {
@@ -165,8 +194,14 @@ public abstract class XFInkPins {
 
   public static func Json(entry: ref<XFPinEntry>) -> String {
     let drawn = "";
-    for view in entry.drawnBy {
-      drawn += (StrLen(drawn) > 0 ? "," : "") + XFJson.Str(view);
+    let i = 0;
+    let bit = 1;
+    while i < 5 {
+      if (entry.drawnBits & bit) != 0 {
+        drawn += (StrLen(drawn) > 0 ? "," : "") + XFJson.Str(XFInkPins.ViewName(i));
+      }
+      bit = bit * 2;
+      i += 1;
     }
     return "{\"id\":" + IntToString(entry.id) + ",\"label\":" + XFJson.Str(entry.label) + ",\"variant\":" + XFJson.Str(entry.variant)
       + ",\"target\":" + XFJson.Str(entry.target) + ",\"piece\":" + IntToString(entry.piece) + ",\"bound\":" + XFJson.Str(entry.bound ? "object" : "position")

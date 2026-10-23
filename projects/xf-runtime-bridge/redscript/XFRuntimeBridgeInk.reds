@@ -212,6 +212,22 @@ public class XFHudFrame {
 // ---- The game's look: its font family and colour tokens ----------------------------------------------------------------
 
 public abstract class XFInkStyle {
+  // 0.8.9: a phone screen is open on the HUD: the contact list or dialer (UI_ComDevice.ContactsActive, phoneSystem.script:177),
+  // the text messenger (SmsMessengerActive, the player's context listener, player.script:1621-1622) or a message being read
+  // (isDisplayingMessage, messagePopup.script:84 and 237). The journal, the codex and the other menus hide the HUD layer
+  // themselves.
+  public static func PhoneOpen() -> Bool {
+    let defs = GetAllBlackboardDefs().UI_ComDevice;
+    let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(defs);
+    if !IsDefined(board) {
+      return false;
+    }
+    let contacts = board.GetBool(defs.ContactsActive);
+    let messenger = board.GetBool(defs.SmsMessengerActive);
+    let reading = board.GetBool(defs.isDisplayingMessage);
+    return contacts || messenger || reading;
+  }
+
   public static func Font() -> String {
     return "base\\gameplay\\gui\\fonts\\raj\\raj.inkfontfamily";
   }
@@ -369,39 +385,115 @@ public abstract class XFInkStyle {
     return new Vector2(0.0, 0.0);
   }
 
-  // 0.8.7 (session 14's P11): the panel's rectangle p (left, top, width, height) moved out of each zone it overlaps (photo
-  // mode's menu, top bar and hint strips), then kept inside the visible screen v, gap apart. A zone along the bottom fifth
-  // pushes the panel up, one in the right half pushes it left, one along the top fifth pushes it down; two passes settle a
-  // panel that a first move pushed into a second zone. tools/overlay/ink-place.ts has the same rule (avoidZones) and tests it.
-  public static func Avoid(p: Vector4, zones: array<Vector4>, v: Vector4, gap: Float) -> Vector4 {
-    let left = p.X;
-    let top = p.Y;
+  // 0.8.9 (session 15's A5): the panel's rectangle p (left, top, width, height) kept out of photo mode's zones (its menu, its
+  // top bar, the title row with its icon, its hint strips) inside the visible screen v, gap apart. The asked place when it is
+  // clear; else the panel slides out of each zone it meets along its anchor's own edge first (sideways for a top or bottom
+  // anchor, so bottom_right goes left of the menu, not up over it), then the other way, up to four zones; if it still meets
+  // one, the first free corner, the anchor's own side first; how names which ("kept", "nudged", "corner:<the corner it
+  // started from>" or "overlapping"). tools/overlay/ink-place.ts has the same rule (avoidZones) and tests it.
+  public static func Avoid(p: Vector4, zones: array<Vector4>, v: Vector4, gap: Float, anchor: String, out how: String) -> Vector4 {
+    let asked = XFInkStyle.Inside(p, v, gap);
+    if XFInkStyle.Clear(asked, zones, gap) {
+      how = "kept";
+      return asked;
+    }
+    let sideways = !StrBeginsWith(anchor, "center");
+    let nudged = XFInkStyle.Nudge(asked, zones, v, gap, sideways);
+    if XFInkStyle.Clear(nudged, zones, gap) {
+      how = "nudged";
+      return nudged;
+    }
+    let bottom = !StrBeginsWith(anchor, "top");
+    let right = !StrEndsWith(anchor, "left");
+    let k = 0;
+    while k < 4 {
+      // The anchor's own edge on the other side, its own side on the other edge, the opposite corner, then its own corner.
+      let cb = k == 0 || k == 3 ? bottom : !bottom;
+      let cr = k == 1 || k == 3 ? right : !right;
+      let at = new Vector4(cr ? v.X + v.Z - gap - p.Z : v.X + gap, cb ? v.Y + v.W - gap - p.W : v.Y + gap, p.Z, p.W);
+      let r = XFInkStyle.Nudge(at, zones, v, gap, true);
+      if XFInkStyle.Clear(r, zones, gap) {
+        how = "corner:" + (cb ? "bottom" : "top") + (cr ? "_right" : "_left");
+        return r;
+      }
+      k += 1;
+    }
+    how = "overlapping";
+    return nudged;
+  }
+
+  public static func Hit(r: Vector4, z: Vector4, gap: Float) -> Bool {
+    return r.X < z.X + z.Z + gap && r.X + r.Z + gap > z.X && r.Y < z.Y + z.W + gap && r.Y + r.W + gap > z.Y;
+  }
+
+  public static func Clear(r: Vector4, zones: array<Vector4>, gap: Float) -> Bool {
+    let i = 0;
+    while i < ArraySize(zones) {
+      if XFInkStyle.Hit(r, zones[i], gap) {
+        return false;
+      }
+      i += 1;
+    }
+    return true;
+  }
+
+  public static func Inside(r: Vector4, v: Vector4, gap: Float) -> Vector4 {
+    return new Vector4(ClampF(r.X, v.X + gap, MaxF(v.X + gap, v.X + v.Z - gap - r.Z)), ClampF(r.Y, v.Y + gap, MaxF(v.Y + gap, v.Y + v.W - gap - r.W)), r.Z, r.W);
+  }
+
+  // One zone at a time (up to four): the nearer side of the anchor's own axis first, then the other axis.
+  public static func Nudge(r: Vector4, zones: array<Vector4>, v: Vector4, gap: Float, sideways: Bool) -> Vector4 {
+    let out = XFInkStyle.Inside(r, v, gap);
     let pass = 0;
-    while pass < 2 {
+    while pass < 4 {
+      let found = -1;
       let i = 0;
-      while i < ArraySize(zones) {
-        let z = zones[i];
-        let overlaps = left < z.X + z.Z + gap && left + p.Z + gap > z.X && top < z.Y + z.W + gap && top + p.W + gap > z.Y;
-        if overlaps {
-          if z.Y + z.W >= v.Y + v.W * 0.8 {
-            top = z.Y - gap - p.W;
-          } else {
-            if z.X >= v.X + v.Z * 0.5 {
-              left = z.X - gap - p.Z;
-            } else {
-              if z.Y <= v.Y + v.W * 0.2 {
-                top = z.Y + z.W + gap;
-              }
-            }
-          }
+      while i < ArraySize(zones) && found < 0 {
+        if XFInkStyle.Hit(out, zones[i], gap) {
+          found = i;
         }
         i += 1;
       }
+      if found < 0 {
+        return out;
+      }
+      let z = zones[found];
+      let leftOf = new Vector4(z.X - gap - out.Z, out.Y, out.Z, out.W);
+      let rightOf = new Vector4(z.X + z.Z + gap, out.Y, out.Z, out.W);
+      let above = new Vector4(out.X, z.Y - gap - out.W, out.Z, out.W);
+      let below = new Vector4(out.X, z.Y + z.W + gap, out.Z, out.W);
+      let across1 = AbsF(leftOf.X - out.X) <= AbsF(rightOf.X - out.X) ? leftOf : rightOf;
+      let across2 = AbsF(leftOf.X - out.X) <= AbsF(rightOf.X - out.X) ? rightOf : leftOf;
+      let along1 = AbsF(above.Y - out.Y) <= AbsF(below.Y - out.Y) ? above : below;
+      let along2 = AbsF(above.Y - out.Y) <= AbsF(below.Y - out.Y) ? below : above;
+      let tries: array<Vector4>;
+      if sideways {
+        ArrayPush(tries, across1);
+        ArrayPush(tries, across2);
+        ArrayPush(tries, along1);
+        ArrayPush(tries, along2);
+      } else {
+        ArrayPush(tries, along1);
+        ArrayPush(tries, along2);
+        ArrayPush(tries, across1);
+        ArrayPush(tries, across2);
+      }
+      let moved = false;
+      let t = 0;
+      while t < 4 && !moved {
+        let c = XFInkStyle.Inside(tries[t], v, gap);
+        if !XFInkStyle.Hit(c, z, gap) {
+          out = c;
+          moved = true;
+        }
+        t += 1;
+      }
+      if !moved {
+        return out;
+      }
       pass += 1;
     }
-    left = ClampF(left, v.X + gap, MaxF(v.X + gap, v.X + v.Z - gap - p.Z));
-    top = ClampF(top, v.Y + gap, MaxF(v.Y + gap, v.Y + v.W - gap - p.W));
-    return new Vector4(left, top, p.Z, p.W);
+    return out;
   }
 
   public static func AnchorPoint(name: String) -> Vector2 {
@@ -436,6 +528,8 @@ public class XFProjector {
   public let camera: ref<CameraSystem>;
   public let position: Vector4;
   public let forward: Vector4;
+  public let right: Vector4;
+  public let up: Vector4;
   public let kind: Int32; // 0 ndc, 1 unit, 2 pixels
   public let cx: Float;
   public let cy: Float;
@@ -460,6 +554,8 @@ public class XFProjector {
     p.forward = p.camera.GetActiveCameraForward();
     let r = p.camera.GetActiveCameraRight();
     let u = p.camera.GetActiveCameraUp();
+    p.right = r;
+    p.up = u;
     let ahead = new Vector4(p.position.X + p.forward.X * 5.0, p.position.Y + p.forward.Y * 5.0, p.position.Z + p.forward.Z * 5.0, 1.0);
     let c = XFProjector.Persp(p.camera.ProjectPoint(ahead));
     let up = XFProjector.Persp(p.camera.ProjectPoint(new Vector4(ahead.X + u.X * 0.5, ahead.Y + u.Y * 0.5, ahead.Z + u.Z * 0.5, 1.0)));
@@ -479,6 +575,16 @@ public class XFProjector {
     }
     p.ok = p.kind != 2 || (AbsF(p.cx) > 1.0 && AbsF(p.cy) > 1.0);
     return p;
+  }
+
+  // 0.8.9 (session 15's D1: turned 120 degrees away, the XF mark drew low in the middle while the game's marker sat at the
+  // right edge): Project answers (0, 0, 0, 0) for a point behind the camera, so the edge rule had no direction and fell to
+  // straight down. The way to a point on screen terms, from the camera's own right and up: x to the right, y down.
+  public func Direction(point: Vector4) -> Vector2 {
+    let d = new Vector4(point.X - this.position.X, point.Y - this.position.Y, point.Z - this.position.Z, 0.0);
+    let x = d.X * this.right.X + d.Y * this.right.Y + d.Z * this.right.Z;
+    let y = -(d.X * this.up.X + d.Y * this.up.Y + d.Z * this.up.Z);
+    return new Vector2(x, y);
   }
 
   // Normalised screen position of a world point, -1 to 1 across the screen, y down; W is the distance, 0 when it's behind.
@@ -818,6 +924,7 @@ public class XFInkOverlay extends ScriptableSystem {
   // the geometry last announced, so a change (a measurement after the first layout, a new resolution) is announced again.
   private let m_visibleFrom: String;
   private let m_announced: String;
+  private let m_phoneOpen: Bool;
   private let m_units: Float;
   private let m_platesRoot: ref<inkCanvas>;
   private let m_plates: array<ref<inkText>>;
@@ -1045,7 +1152,10 @@ public class XFInkOverlay extends ScriptableSystem {
       return;
     }
     this.m_remount = this.m_remount && NotEquals(XFInkHost.HostLayer(frame.layer), this.m_layer);
-    this.m_view.canvas.SetVisible(frame.show);
+    // 0.8.9 (session 15: the panel drew over the phone's message reader, MESSAGES > N54 BREAKING NEWS): the phone's screens
+    // draw on the HUD as the panel does, so the panel steps aside while one is open (only asked while the scripts are live).
+    this.m_phoneOpen = frame.live && XFInkStyle.PhoneOpen();
+    this.m_view.canvas.SetVisible(frame.show && !this.m_phoneOpen);
     if IsDefined(this.m_parent) {
       this.Measure(this.m_parent);
     }
@@ -1097,11 +1207,12 @@ public class XFInkOverlay extends ScriptableSystem {
     // 0.8.2 (the review): id is the question this panel holds with its answer keys (DrawnAsk, which the keys answer, on screen
     // or not), else the answered one it shows; the plugin tells the other surfaces whether the keys work.
     let keysAsk = 0;
-    if this.m_mounted && IsDefined(this.m_view) && IsDefined(this.m_view.drawn) {
-      keysAsk = this.m_view.drawn.askId;
+    let held = this.DrawnAsk();
+    if IsDefined(held) {
+      keysAsk = held.askId;
     }
     let id = keysAsk > 0 ? keysAsk : frame.answeredId;
-    let shown = frame.show && this.m_mounted && frame.live;
+    let shown = frame.show && this.m_mounted && frame.live && !this.m_phoneOpen;
     if shown && Equals(this.m_layer, "hud") {
       shown = Equals(XFBridgeActions.Phase(), "gameplay");
     }
@@ -1110,7 +1221,20 @@ public class XFInkOverlay extends ScriptableSystem {
 
   // RB-114: the question the panel shows now with its keys, or null (nothing mounted, hidden, or no question drawn).
   public func DrawnAsk() -> ref<XFHudFrame> {
-    return this.m_mounted && IsDefined(this.m_view) ? this.m_view.drawn : null;
+    if !this.m_mounted {
+      return null;
+    }
+    if IsDefined(this.m_view) && IsDefined(this.m_view.drawn) {
+      return this.m_view.drawn;
+    }
+    // 0.8.9 (session 15: with the panel switched off, ui_hud {show: false}, the CET line showed the question and F6 did
+    // nothing): the keys answer the question the CET line shows too, while the panel is switched off (not while a phone
+    // screen has it step aside).
+    let frame = this.m_frame;
+    if IsDefined(frame) && frame.valid && !frame.show && frame.live && frame.askId > 0 && ArraySize(frame.askKeys) > 0 {
+      return frame;
+    }
+    return null;
   }
 
   private func Plate(index: Int32) -> ref<inkText> {
@@ -1286,15 +1410,37 @@ public class XFInkOverlay extends ScriptableSystem {
     // camera (its projection mirrored), keeps its mark at the screen's edge in the pin's direction from the centre.
     let edge = s.W <= 0.0 || AbsF(s.X) > 1.0 || AbsF(s.Y) > 1.0;
     if edge {
-      let dx = s.W <= 0.0 ? -s.X : s.X;
-      let dy = s.W <= 0.0 ? -s.Y : s.Y;
+      let dx = s.X;
+      let dy = s.Y;
+      let behind = s.W <= 0.0;
+      if behind {
+        // Behind the camera: the camera's own right and up give the way (0.8.9); a point behind goes to a side edge, as the
+        // game's marker does, unless it is almost straight above or below.
+        let way = projector.Direction(new Vector4(point.X, point.Y, point.Z, 1.0));
+        dx = way.X;
+        dy = way.Y;
+        if AbsF(dx) < 0.0001 && AbsF(dy) < 0.0001 {
+          dx = 1.0;
+        }
+        if AbsF(dx) >= AbsF(dy) * 0.25 {
+          let side = MaxF(AbsF(dx), AbsF(dy));
+          dx = dx >= 0.0 ? side : -side;
+        }
+      }
       let reach = MaxF(AbsF(dx), AbsF(dy));
       if reach < 0.0001 {
-        dx = 0.0;
-        dy = 1.0;
+        dx = 1.0;
+        dy = 0.0;
         reach = 1.0;
       }
-      s = new Vector4(dx / reach * 0.9, dy / reach * 0.86, s.Z, AbsF(s.W));
+      let far = AbsF(s.W);
+      if behind {
+        let bx = point.X - projector.position.X;
+        let by = point.Y - projector.position.Y;
+        let bz = point.Z - projector.position.Z;
+        far = SqrtF(bx * bx + by * by + bz * bz);
+      }
+      s = new Vector4(dx / reach * 0.9, dy / reach * 0.86, s.Z, far);
     }
     let mark = this.PinMark(slot);
     XFInkPins.MarkLabel(mark, entry.label);
