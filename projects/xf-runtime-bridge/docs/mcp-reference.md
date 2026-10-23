@@ -1498,7 +1498,7 @@ List, make and load saves. Only `game_save` ever saves the game, and never over 
 - **Permission:** Save and load the game (`write-save`)
 - **Changes the game:** Yes
 - **Undo:** None: a save can't be unsaved. Delete it in the game's Load menu if it isn't wanted.
-- **Refusals:** [`bridge_save_lock`](#refusal-bridge-save-lock), [`bridge_effects_active`](#refusal-bridge-effects-active), [`saving_locked`](#refusal-saving-locked), [`no_free_slot`](#refusal-no-free-slot), [`save_failed`](#refusal-save-failed), [`save_uncertain`](#refusal-save-uncertain), [`not_in_gameplay`](#refusal-not-in-gameplay)
+- **Refusals:** [`bridge_save_lock`](#refusal-bridge-save-lock), [`bridge_effects_active`](#refusal-bridge-effects-active), [`saving_locked`](#refusal-saving-locked), [`no_free_slot`](#refusal-no-free-slot), [`save_failed`](#refusal-save-failed), [`save_uncertain`](#refusal-save-uncertain), [`not_in_gameplay`](#refusal-not-in-gameplay), [`save_in_progress`](#refusal-save-in-progress)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1743,6 +1743,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-rtti-missing"></a>`rtti_missing` | This game version doesn't have a function the bridge needs for this action, so nothing was changed. The game may have been updated: the bridge needs a rebuild for it. |
 | <a id="refusal-rtti-signature"></a>`rtti_signature` | A game function this action uses has changed shape in this game version, so the bridge refused to call it and nothing was changed. The bridge needs updating for this game version. |
 | <a id="refusal-save-failed"></a>`save_failed` | The game answered that the save failed. Nothing new was saved. Check free disk space and the game's save folder. |
+| <a id="refusal-save-in-progress"></a>`save_in_progress` | Another save is being made right now (game_save, or Save anyway in the XF Runtime Bridge window). Nothing was saved by this request; try again when it has finished. |
 | <a id="refusal-save-lock-not-held"></a>`save_lock_not_held` | The appearance screen wasn't opened because the game hasn't confirmed the bridge's save lock yet. Saving stays locked until a save is loaded. Try again in a moment. |
 | <a id="refusal-save-not-found"></a>`save_not_found` | No save has that name in the game's list, so nothing was loaded. The detail lists some of the names the game shows. |
 | <a id="refusal-save-uncertain"></a>`save_uncertain` | The game took the save request but didn't confirm it in time. Check the game's Load menu before saving again, so no duplicate save is made. |

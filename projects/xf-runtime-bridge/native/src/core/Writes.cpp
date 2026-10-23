@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <mutex>
 #include <thread>
 
 #include "core/Dispatcher.hpp"
@@ -1242,8 +1243,24 @@ private:
 };
 } // namespace
 
+// 0.8.7 (the Sol review of 0.8.7, finding 1): every save, a client's game.save and the XF Runtime Bridge window's Save anyway,
+// has one owner from its first check to the relock, so no second save can run while the first holds the bridge's lock
+// released (a held test.save.delay stretches that window) or shares its status and relock steps. A second one is refused.
+static std::mutex& SaveOwner()
+{
+    static std::mutex owner;
+    return owner;
+}
+
 json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
 {
+    // Declared before the relock below, so the relock runs while the owner is still held.
+    std::unique_lock<std::mutex> owner(SaveOwner(), std::try_to_lock);
+    if (!owner.owns_lock())
+    {
+        throw MethodError("save_in_progress", "another save is being made right now (game_save, or Save anyway in the XF Runtime Bridge "
+                                              "window); nothing was saved by this request. Try again when it has finished");
+    }
     if (aOps.guard)
     {
         aOps.guard();

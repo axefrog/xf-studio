@@ -187,11 +187,30 @@ describe("0.8.7 the photo-menu panel (P5 clicks, P8/P9 modal, P11 safe zones), r
     expect(panel).toMatch(/@wrapMethod\(gameuiPhotoModeMenuController\)\s+protected cb func OnTryExitPhotomode\(\) -> Bool \{\s+if IsDefined\(this\.m_xfPhotoPanel\) && this\.m_xfPhotoPanel\.HoldExit\(\) \{\s+return false;\s+\}\s+return wrappedMethod\(\);/);
     const hold = panel.slice(panel.indexOf("public func HoldExit() -> Bool {"), panel.indexOf("// ---- Opening and closing"));
     expect(hold).toContain("!XFBridge_Live()");
-    expect(hold).toContain("this.m_killed");
-    expect(hold).toContain("!this.m_frame.modal");
+    // The Sol review of 0.8.7, finding 3: a frame read at the moment of Esc; an unreadable one, or a stopped bridge, lets the exit work.
+    expect(hold).toContain("let now = XFHudFrame.Parse(XFBridge_Hud());");
+    expect(hold).toContain('if !now.valid || !now.modal || !now.show || !Equals(now.layer, "photo_menu") || Equals(now.tone, "killed") {');
     const handlers = read("native", "src", "plugin", "GameHandlers.cpp");
     expect(handlers).toContain('out["modal_cannot_hold"] = json::array({"photo_mode_camera_keys"});');
     expect(findCommand("ui.hud")!.description).toContain("camera keys are read natively and can't be held");
+  });
+
+  test("Sol review of 0.8.7, finding 3: an unreadable frame fails open: the last frame forgotten, everything released once, no hover retaken until a valid frame", () => {
+    const update = panel.slice(panel.indexOf("public func Update(timeDelta: Float) -> Void {"), panel.indexOf("private func FrameLost()"));
+    expect(update).toMatch(/if frame\.valid \{[\s\S]*this\.Apply\(frame\);\s+\} else \{\s+this\.FrameLost\(\);/);
+    const lost = panel.slice(panel.indexOf("private func FrameLost()"), panel.indexOf("private func Apply("));
+    expect(lost).toMatch(/if this\.m_frameBad \{\s+return;\s+\}\s+this\.m_frameBad = true;\s+this\.m_frame = null;\s+this\.Release\("frame_invalid"\);/);
+    expect(panel).toContain("let wanted = this.m_hoverCount > 0 && this.m_showing && !this.m_killed && !this.m_frameBad;");
+  });
+
+  test("Sol review of 0.8.7, finding 4: giving up the mouse drops the press, and a release completes only while the panel holds the mouse", () => {
+    const block = panel.slice(panel.indexOf("private func Block(on: Bool) -> Void {"), panel.indexOf("private func Pointer("));
+    const giveBack = block.slice(block.indexOf("} else {"));
+    expect(giveBack).toContain("this.m_hoverTaken = false;");
+    expect(giveBack).toContain("this.ClearPress();");
+    const complete = panel.slice(panel.indexOf("private func Complete("), panel.indexOf("protected cb func OnXFChipPress"));
+    expect(complete.indexOf("if !this.m_hoverTaken {")).toBeGreaterThan(0);
+    expect(complete.indexOf("if !this.m_hoverTaken {")).toBeLessThan(complete.indexOf("XFBridge_Answer("));
   });
 
   test("P11: the panel measures photo mode's menu, top bar and hint strips from the controller's widgets and keeps out of them; the laid-out event reports them", () => {
@@ -275,6 +294,29 @@ describe("0.8.7 the pin mark, the save lock's notice, the probes", () => {
     // Spoiler-safe: the dialogue and journal records carry ids, states and counts, never text.
     const events = read("redscript-probes", "XFRuntimeBridgeProbeEvents.reds");
     expect(events).not.toMatch(/localizedName|\.title\b|GetText\(|ShowDialogLine/);
+  });
+
+  test("Sol review of 0.8.7, findings 2 and 5: the probes build nothing with the hooks off, read game systems only while the script gate is open, and keep journal hashes exact", () => {
+    const events = read("redscript-probes", "XFRuntimeBridgeProbeEvents.reds");
+    const emit = events.slice(events.indexOf("public static func Emit("), events.indexOf("public static func Id("));
+    expect(emit.indexOf("if !XFProbeOut.On() {")).toBeLessThan(emit.indexOf("if XFBridge_Live() {"));
+    expect(emit.indexOf("if XFBridge_Live() {")).toBeLessThan(emit.indexOf("GameInstance.GetTimeSystem"));
+    expect(emit.indexOf("if XFBridge_Live() {")).toBeLessThan(emit.indexOf("GameInstance.GetSimTime"));
+    const save = read("redscript-probes", "XFRuntimeBridgeProbeSave.reds");
+    const point = save.slice(save.indexOf("public static func Point("), save.indexOf("public static func SaveIdentity("));
+    expect(point.indexOf("if !XFProbeOut.On() {")).toBeLessThan(point.indexOf("XFProbeSave.Facts()"));
+    expect(point).toContain('let facts = XFBridge_Live() ? "," + XFProbeSave.Facts() : "";');
+    expect(save).not.toMatch(/Session\/BeforeStart"\) \|\| Equals/);
+    expect(events).not.toContain("Cast<Float>(hash)");
+    expect(events).toContain('+ s"\\(hash)" +');
+  });
+
+  test("Sol review of 0.8.7, finding 1: every save has one owner from its first check to its relock; a second is refused save_in_progress", () => {
+    const writes = read("native", "src", "core", "Writes.cpp");
+    const save = writes.slice(writes.indexOf("json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)"));
+    expect(save.indexOf("std::unique_lock<std::mutex> owner(SaveOwner(), std::try_to_lock);")).toBeLessThan(save.indexOf("RelockOnExit relock("));
+    expect(read("native", "src", "plugin", "GameHandlers.cpp")).toContain("return writes::GameSave(request, ops);");
+    expect(findCommand("game.save")!.refusals).toContain("save_in_progress");
   });
 
   test("the save-identity probe's facts are all xfs_probe_* and the pin's check is the plugin's FNV-1a", () => {

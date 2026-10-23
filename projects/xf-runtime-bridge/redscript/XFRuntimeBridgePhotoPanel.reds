@@ -97,6 +97,8 @@ public class XFPhotoMenuPanel {
   private let m_zoneNames: array<String>;
   private let m_placed: Vector4;
   private let m_reported: Bool;
+  // 0.8.7 (the Sol review, finding 3): the plugin's frame couldn't be read; the panel holds nothing until a valid one arrives.
+  private let m_frameBad: Bool;
 
   // The panel of the photo mode open now, if it is on screen.
   public static func Current() -> ref<XFPhotoMenuPanel> {
@@ -149,9 +151,15 @@ public class XFPhotoMenuPanel {
   }
 
   // 0.8.7, ui.hud's modal: whether photo mode's exit is held now (the controller's OnTryExitPhotomode wrap asks); when it is,
-  // it says so. Only while the panel shows, the bridge isn't stopped and the scripts are live; otherwise the exit works.
+  // it says so. Only while the panel shows and the scripts are live, and (the Sol review, finding 3) on a frame read at this
+  // moment: modal set, the panel on photo mode's menu, the bridge not stopped. A frame that can't be read lets the exit work
+  // (fail open), and the stop key reaches the veto at once rather than with the next frame.
   public func HoldExit() -> Bool {
-    if !this.m_open || !this.m_showing || this.m_killed || !IsDefined(this.m_frame) || !this.m_frame.modal || !XFBridge_Live() {
+    if !this.m_open || !this.m_showing || this.m_frameBad || !XFBridge_Live() {
+      return false;
+    }
+    let now = XFHudFrame.Parse(XFBridge_Hud());
+    if !now.valid || !now.modal || !now.show || !Equals(now.layer, "photo_menu") || Equals(now.tone, "killed") {
       return false;
     }
     this.m_exitHolds += 1;
@@ -188,11 +196,15 @@ public class XFPhotoMenuPanel {
     this.ClearPress();
     this.Listen(true);
     let frame = XFHudFrame.Parse(XFBridge_Hud());
+    this.m_frameBad = !frame.valid;
     if frame.valid {
       this.Apply(frame);
     } else {
+      this.m_frame = null;
       this.m_layer.SetVisible(false);
       this.m_showing = false;
+      this.Interactive(false);
+      this.Listen(false);
     }
     this.Tree(root, created, index, false);
     if created {
@@ -375,7 +387,13 @@ public class XFPhotoMenuPanel {
       this.m_since = 0.0;
       let frame = XFHudFrame.Parse(XFBridge_Hud());
       if frame.valid {
+        if this.m_frameBad {
+          this.m_frameBad = false;
+          XFBridge_InkEvent("ink_input", "photo-menu panel: the bridge's frame reads again", "{\"frame\":\"valid\"}");
+        }
         this.Apply(frame);
+      } else {
+        this.FrameLost();
       }
     }
     this.UpdateHover();
@@ -385,6 +403,18 @@ public class XFPhotoMenuPanel {
         this.Tree(root, false, -1, true);
       }
     }
+  }
+
+  // 0.8.7 (the Sol review, finding 3): the plugin's frame can't be read (XFBridge_Hud failed). Fail open: the last frame's modal
+  // and stop state are forgotten, the press is dropped, the answers stop taking clicks and the camera gets the mouse back,
+  // until a valid frame arrives (Apply then gives the panel back its input).
+  private func FrameLost() -> Void {
+    if this.m_frameBad {
+      return;
+    }
+    this.m_frameBad = true;
+    this.m_frame = null;
+    this.Release("frame_invalid");
   }
 
   private func Apply(frame: ref<XFHudFrame>) -> Void {
@@ -495,7 +525,7 @@ public class XFPhotoMenuPanel {
   }
 
   private func UpdateHover() -> Void {
-    let wanted = this.m_hoverCount > 0 && this.m_showing && !this.m_killed;
+    let wanted = this.m_hoverCount > 0 && this.m_showing && !this.m_killed && !this.m_frameBad;
     if wanted && !this.m_hoverTaken {
       if XFBridge_MouseHeld() || this.Faded() {
         if !this.m_hoverWaiting {
@@ -538,6 +568,9 @@ public class XFPhotoMenuPanel {
         this.m_controller.XFBridgeHoverBlock(false);
       }
       this.m_hoverTaken = false;
+      // 0.8.7 (the Sol review, finding 4): a press made while the panel held the mouse ends with that hold; once the camera has
+      // the mouse, coming back over the answer and letting go answers nothing.
+      this.ClearPress();
       XFBridge_InkEvent("ink_input", "photo-menu panel gives the camera its mouse back", "{\"hover\":false,\"menu_hovered\":" + XFJson.Flag(this.m_menuHovered) + "}");
     }
   }
@@ -631,6 +664,11 @@ public class XFPhotoMenuPanel {
     }
     if pressAsk == 0 && this.m_clickedFrame == this.m_frames {
       return false; // the other route of the same release already answered
+    }
+    if !this.m_hoverTaken {
+      this.PointerAt("release_ignored", e, choice, ",\"ask\":" + IntToString(frame.askId) + ",\"route\":" + XFJson.Str(route)
+        + ",\"why\":\"the panel doesn't hold the camera's mouse\"" + XFPhotoMenuPanel.Actions(e));
+      return false;
     }
     if pressAsk != frame.askId || pressChoice != choice {
       this.PointerAt("release_ignored", e, choice, ",\"ask\":" + IntToString(frame.askId) + ",\"route\":" + XFJson.Str(route)

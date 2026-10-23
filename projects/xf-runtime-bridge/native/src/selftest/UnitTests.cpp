@@ -2121,6 +2121,49 @@ void InventoryAndSaveTests()
                   xfb::DescribeConfig(xfb::ParseConfig("[bridge]\nallow_test_hooks = true\n")).find("bridge.allow_test_hooks=true") != std::string::npos);
     }
     {
+        // 0.8.7 (the Sol review of 0.8.7, finding 1): a save held after its prepare (test.save.delay) has released the bridge's
+        // lock; a second save meanwhile, even one that finds no lock (override_lock false, the lock released), is refused before
+        // any step, and the first saves and takes its lock back.
+        FakeSaves first;
+        first.hold = 200;
+        std::atomic<bool> inHold{false};
+        std::atomic<bool> secondDone{false};
+        auto ops = first.Ops(true);
+        ops.sleep = [&](std::chrono::milliseconds aFor) {
+            first.clock.Advance(aFor);
+            inHold = true;
+            while (!secondDone)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        };
+        std::string firstCode;
+        std::thread holder([&] {
+            try
+            {
+                firstCode = w::GameSave(p::ParseGameSave(overrideLock), ops).value("saved", false) ? "saved" : "?";
+            }
+            catch (const xfb::MethodError& e)
+            {
+                firstCode = e.code;
+            }
+        });
+        while (!inHold)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        FakeSaves second;
+        second.bridgeLock = false;
+        second.locked = false;
+        const auto secondCode = saveCode(second, json::object());
+        secondDone = true;
+        holder.join();
+        Check("0.8.7 a save while another holds the lock released (Save anyway during a test.save.delay hold) is refused save_in_progress before any step; the first saves and relocks",
+              secondCode == "save_in_progress" && second.saves == 0 && second.guards == 0 && firstCode == "saved" && first.relocks == 1 && first.saves == 1,
+              secondCode + " / " + firstCode);
+        Check("0.8.7 once the first save has finished, the next one runs", saveCode(second, json::object()) == "saved" && second.saves == 1);
+    }
+    {
         FakeSaves fake;
         fake.killed = true;
         Check("RB-53: killed or paused before the first step: nothing released, nothing saved",

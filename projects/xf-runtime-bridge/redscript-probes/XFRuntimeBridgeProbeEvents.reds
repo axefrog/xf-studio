@@ -19,16 +19,21 @@ public abstract class XFProbeOut {
     return (XFBridge_ProbeFlags() & 2) != 0;
   }
 
+  // 0.8.7 (the Sol review, finding 2): the hooks' switch first, before anything is built; the game's and the simulation's clocks
+  // only while the script gate is open (the live guard), else the record says live false and carries only what it was given.
   public static func Emit(kind: String, body: String) -> Void {
     if !XFProbeOut.On() {
       return;
     }
-    let game = GetGameInstance();
-    let clock = GameInstance.GetTimeSystem(game);
-    let gameTime = IsDefined(clock) ? clock.GetGameTimeStamp() : -1.0;
-    let sim = EngineTime.ToFloat(GameInstance.GetSimTime(game));
-    let data = "{\"game_s\":" + XFJson.Num(gameTime) + ",\"sim_s\":" + XFJson.Num(sim) + (StrLen(body) > 0 ? "," + body : "") + "}";
-    XFBridge_Event(kind, data);
+    let stamp = "\"live\":false";
+    if XFBridge_Live() {
+      let game = GetGameInstance();
+      let clock = GameInstance.GetTimeSystem(game);
+      let gameTime = IsDefined(clock) ? clock.GetGameTimeStamp() : -1.0;
+      let sim = EngineTime.ToFloat(GameInstance.GetSimTime(game));
+      stamp = "\"live\":true,\"game_s\":" + XFJson.Num(gameTime) + ",\"sim_s\":" + XFJson.Num(sim);
+    }
+    XFBridge_Event(kind, "{" + stamp + (StrLen(body) > 0 ? "," + body : "") + "}");
   }
 
   public static func Id(id: EntityID) -> String {
@@ -92,8 +97,12 @@ public class XFEventProbe extends ScriptableSystem {
     this.m_poll = new XFEventProbePoll();
     this.m_poll.probe = this;
     GameInstance.GetDelaySystem(game).DelayCallback(this.m_poll, 0.5, false);
-    XFProbeOut.Emit("probe", "\"what\":\"attached\",\"wanted_level\":" + IntToString(quests.GetFact(n"wanted_level")) + ",\"wanted_chase_active\":" + IntToString(quests.GetFact(n"wanted_chase_active"))
-      + ",\"city_area_type\":" + IntToString(quests.GetFact(n"CityAreaType")));
+    if XFBridge_Live() {
+      XFProbeOut.Emit("probe", "\"what\":\"attached\",\"wanted_level\":" + IntToString(quests.GetFact(n"wanted_level")) + ",\"wanted_chase_active\":" + IntToString(quests.GetFact(n"wanted_chase_active"))
+        + ",\"city_area_type\":" + IntToString(quests.GetFact(n"CityAreaType")));
+    } else {
+      XFProbeOut.Emit("probe", "\"what\":\"attached\"");
+    }
   }
 
   private func OnDetach() -> Void {
@@ -202,7 +211,8 @@ public class XFEventProbe extends ScriptableSystem {
     let journal = GameInstance.GetJournalManager(this.GetGameInstance());
     let entry = journal.GetEntry(hash);
     let state = IsDefined(entry) ? EnumInt(journal.GetEntryState(entry)) : -1;
-    XFProbeOut.Emit("journal", "\"what\":" + XFJson.Str(what) + ",\"hash\":" + XFJson.Num(Cast<Float>(hash)) + ",\"class\":" + XFJson.Str(NameToString(className))
+    // 0.8.7 (the Sol review, finding 5): the hash as its exact decimal digits, never through a Float.
+    XFProbeOut.Emit("journal", "\"what\":" + XFJson.Str(what) + ",\"hash\":" + s"\(hash)" + ",\"class\":" + XFJson.Str(NameToString(className))
       + ",\"change\":" + IntToString(EnumInt(changeType)) + ",\"notify\":" + IntToString(EnumInt(notifyOption)) + ",\"state\":" + IntToString(state));
   }
 

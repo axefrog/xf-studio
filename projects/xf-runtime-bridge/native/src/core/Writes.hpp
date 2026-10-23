@@ -219,6 +219,7 @@ json TestSaveDelay(const json& aParams, bool aAllowed, std::atomic<int32_t>& aSl
 // queue's running grace, GameThreadQueue::kDefaultRunningGrace; 2000 + 1000 ms by default): prepare T, the unlock wait kSaveUnlockWaitMs plus one status step T, save T, the answer wait
 // timeoutMs plus one status step T, and the relock T: timeoutMs + kSaveUnlockWaitMs + 5 T. The tools'
 // client timeout is derived from this (tools/api/catalogue.ts, saveClientTimeoutMs).
+// 0.8.7: one save at a time, from its first check to its relock; a second, from any entry point, is refused save_in_progress.
 json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps);
 
 struct LoadOps

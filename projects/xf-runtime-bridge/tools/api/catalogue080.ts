@@ -188,7 +188,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "wardrobe.equip": [...INVENTORY, "no_active_outfit", "outfit_managed_elsewhere", "script_outfit_api_changed", "timeout"],
   "inventory.unequip": [...INVENTORY, "not_added_by_bridge", "timeout"],
   "cc.back": ["creator_leave_disabled", "not_in_character_menu"],
-  "game.save": ["bridge_save_lock", "bridge_effects_active", "saving_locked", "no_free_slot", "save_failed", "save_uncertain", "not_in_gameplay"],
+  "game.save": ["bridge_save_lock", "bridge_effects_active", "saving_locked", "no_free_slot", "save_failed", "save_uncertain", "not_in_gameplay", "save_in_progress"],
   "game.load": ["not_in_gameplay", "save_not_found", "metadata_pending", "unavailable", "timeout"],
   "game.continue": ["no_safe_route"],
   "ui.message": [],
