@@ -391,6 +391,19 @@ Session 17 ran 0.8.10 in the game (23 October 2026, [card](runtime-bridge-test-c
 - **Clothing with Equipment-EX.** `XFScriptOutfit.ItemFor(player, area)` (a stub when Equipment-EX is absent) finds the outfit part attached to one of Equipment-EX's slots whose record's equip area is the vanilla area; `XFWardrobe.Shows` answers `outfit` for it before it looks at the hidden flag, and `outfit_item` names the part (RB-220).
 - **Grades.** The clear's effect, the resend's effect and the Equipment-EX read are [source] and [offline] until session 18. Session 17's other results (the pin mark, the layers in photo mode, `holocall`, the tripwire, three loads of memory) are in the knowledge pages and the card's session-17 section.
 
+### 3.20 Bridge 0.8.11: the review fixes
+
+Two reviews of 0.8.11 (the code review by Sol: MERGE AFTER FIXES; the UI review: PASS WITH CONDITIONS) are answered in the same version, none adding a native (27).
+
+- **Facing target (Sol 1).** `ClearFacing` clears only a target our own move set (`entry.facingSet`), not whatever the behaviour holds: an actor handed back to the game after a fight, and a pick, keep their own AI's target even when a public `npc.stop` reaches them.
+- **Move then place (Sol 2).** `Service::Send` is the one way the service hands a command to the game, and it clears the native `facingSet` whenever the command is not a move that sets its own, since the script clears the facing target with every command. Before, the tick's clearing stop followed a `npc.place` after a `face_v` move and could cancel the pending teleport. A move, then place regression is in the unit checks.
+- **The CET line's dot (UI fix 1).** The log of sessions 14 to 16 says, every time, that this CET lacks `PushClipRect`, `GetWindowPos`, `GetWindowSize` or `SetCursorPosX` (the `type()` check failed), yet the installed CET registers all four names, and `GetWindowPos`, `GetWindowSize` and `SetCursorPosX` are used by other mods, so the check itself, not the build, is the likely cause [hypothesis]. The dot is now drawn on the foreground draw list (no clip rect to widen), nothing is tested for by `type()`, the calls are made under pcall and what raised is named once in the mod's log. Session 18's capture settles it.
+- **Save anyway (UI fix 2).** The window shows "Saves are held: a test change would go into them." in the muted colour, the button on its own row and "or load a save" beside it. A failure reads from `writes::SaveAnywayFailureCopy(code)`: plain words and one next step per reason code, never the raw reason (the event keeps `code` and `why` for an agent).
+- **Esc in photo mode (UI fix 3).** `HoldExit` holds Esc only while a question waits (`askId` and its keys in a freshly read frame). A held press flashes the answers (red and back, 0.9 s) and fills a line the panel keeps under them while a question waits, so nothing moves: "Answer first, or press <the stop key's label> to stop the bridge" (the label from `XFBridge_KillKey get`; without a stop key, a pointer to the window); it empties after 4 s.
+- **The key guard (UI fix 6).** `MessageBoard::NoteArmed` restarts the 0.5 s when the ink panel starts reporting a question (`XFBridge_InkDrawn`: a new question, or the same one after a gap longer than `kInkShownMs`), so a question that waited behind the phone, photo mode's menu or a loading screen is not answered by a stray key as it appears. Clicks are not held back.
+- **The tag and the wording (UI fixes 7, 9).** " · " between "TEST" and the surface; "(open the CET overlay)" everywhere the player is sent to the window (the CET line, the save-lock sentence, the stopped and answer hints).
+- **Left for the pre-beta pass:** UI fixes 4, 5 and 8, the tag's place in the beta, and the optional order of the save-lock line ([ledger UI-221](../authoring/code-health.md)).
+
 ## 4. Safety model
 
 **The security boundary is the Windows user at medium integrity.** The bridge keeps out:
