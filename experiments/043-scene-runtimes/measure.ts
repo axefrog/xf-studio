@@ -24,6 +24,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { launch } from "../../projects/xf-studio/authoring/tools/cdp";
 import { GL_PROBE } from "../../projects/xf-studio/authoring/tools/gl-probe";
+import { FRAME_GAP_MS, preparationGaps } from "../../projects/xf-studio/authoring/tools/frame-gaps";
 
 const [portArg, outArg, profileArg] = process.argv.slice(2);
 const port = Number(portArg);
@@ -155,7 +156,8 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
   }
   const lagIn = (from: number, to: number) => record.lag.filter(([start, duration]) => start + duration >= from && start <= to);
   const gaps = ticks.slice(1).map((tick, i) => tick[T.t]! - ticks[i]![T.t]!);
-  const prepGaps = ticks.slice(1).filter(tick => tick[T.t]! <= prepEnd).map((tick, i) => tick[T.t]! - ticks[i]![T.t]!);
+  // Up to and including the interval that ends at the takeover (tools/frame-gaps.ts).
+  const prepGaps = preparationGaps(ticks.map(tick => tick[T.t]!), shownIndex > 0 ? shownIndex : null);
   const linesSeen = [...new Set(ticks.map(tick => str(tick, T.line)).filter(Boolean))], panesSeen = [...new Set(ticks.map(tick => str(tick, T.pane)).filter(Boolean))];
   const fractions = ticks.map(tick => tick[T.fraction]!).filter(fraction => fraction >= 0);
   const prepPrograms = programsIn(t0, prepEnd), firstPrograms = shownTick ? programsIn(beforeShown!, firstFramesEnd) : [], afterPrograms = shownTick ? programsIn(firstFramesEnd, tailEnd) : [];
@@ -187,8 +189,6 @@ function analyse(run: Run, record: Awaited<ReturnType<typeof pageRecord>>, kind:
 }
 
 type Analysis = ReturnType<typeof analyse>;
-/** The longest the screen may go without a presented frame while a preparation runs: the progress line and bar must keep repainting (4a-v-c). */
-const FRAME_GAP_MS = 100;
 /**
  * The gates G2 sets (README.md §5, §11): no task of 50 ms or more during preparation or in the second after the show, no link in the first
  * shown frame, and progress shown and repainting (the pane says something on every frame, and no frame is held back for long).

@@ -9,75 +9,13 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { glslDeclarations, glslIssues } from "./fixtures/glsl-check";
+import { headSurface, recordingRenderer } from "./fixtures/recording-gl";
 import { extendSkin, fullSkinDepthMaterial } from "../src/materials/render/skin";
 import { createSkinMaterial, skinParameters, contactShadowUniforms } from "../src/materials/render/skin-material";
 import { createSkinScatter } from "../src/platform/scene/skin-scatter";
 import { createContactShadows } from "../src/platform/scene/contact-shadow";
 import { createMakeupStack, initialRecipe } from "./fixtures/eye-region";
 import { defaultDirectGlintFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
-
-/** A WebGL 2 context that records the shader text it is given and answers every query plausibly; nothing is drawn. */
-function recordingRenderer() {
-  const sources: string[] = [];
-  const constants: Record<string, number> = {};
-  let next = 1;
-  const base: Record<string, unknown> = {
-    canvas: null, drawingBufferWidth: 1, drawingBufferHeight: 1,
-    getParameter: (p: number) => p === constants.VERSION ? "WebGL 2.0" : p === constants.SHADING_LANGUAGE_VERSION ? "WebGL GLSL ES 3.00"
-      : p === constants.VIEWPORT || p === constants.SCISSOR_BOX ? new Int32Array([0, 0, 1, 1]) : 16,
-    getShaderPrecisionFormat: () => ({ precision: 23, rangeMin: 127, rangeMax: 127 }),
-    getExtension: () => null, getSupportedExtensions: () => [],
-    getContextAttributes: () => ({ alpha: true, antialias: false, depth: true, stencil: false, premultipliedAlpha: true }),
-    createShader: () => ({ id: next++ }), shaderSource: (_shader: object, source: string) => { sources.push(source); },
-    createProgram: () => ({ id: next++ }), getProgramParameter: () => 0, getShaderParameter: () => true,
-    getProgramInfoLog: () => "", getShaderInfoLog: () => "", isContextLost: () => false,
-    createTexture: () => ({}), createBuffer: () => ({}), createFramebuffer: () => ({}), createRenderbuffer: () => ({}), createVertexArray: () => ({}),
-  };
-  const gl = new Proxy(base, { get(target, key) {
-    if (typeof key === "string" && key in target) return target[key];
-    if (typeof key === "string" && /^[A-Z0-9_]+$/.test(key)) return constants[key] ??= 0x1000 + Object.keys(constants).length;
-    return () => null;
-  } });
-  const canvas = { addEventListener() {}, removeEventListener() {}, width: 1, height: 1, style: {}, getContext: () => gl } as unknown as HTMLCanvasElement;
-  const renderer = new THREE.WebGLRenderer({ canvas, context: gl as unknown as WebGL2RenderingContext });
-  renderer.shadowMap.enabled = true;
-  // The lights the V is drawn with: shadow-casting key and fill (the creator rig's kind), and the room's ambient.
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(15, 1, 0.01, 10);
-  const key = new THREE.SpotLight(0xffffff, 10), fill = new THREE.DirectionalLight(0xffffff, 1);
-  key.castShadow = fill.castShadow = true;
-  scene.add(key, fill, new THREE.AmbientLight(0xffffff, 0.2));
-  /** Build `mesh`'s programs as drawn with `material` (the mesh's own when omitted); the programs new to the renderer, as text. */
-  function compile(mesh: THREE.Mesh, material: THREE.Material = mesh.material as THREE.Material) {
-    const own = mesh.material, from = sources.length;
-    mesh.material = material; mesh.receiveShadow = true;
-    try { renderer.compile(mesh, camera, scene); } finally { mesh.material = own; }
-    const added = sources.slice(from), programs: { vertex: string; fragment: string }[] = [];
-    for (let i = 0; i + 1 < added.length; i += 2) programs.push({ vertex: added[i]!, fragment: added[i + 1]! });
-    return programs;
-  }
-  const programKey = (material: THREE.Material) => (renderer.properties.get(material) as { currentProgram?: { cacheKey: string } }).currentProgram?.cacheKey;
-  return { renderer, compile, programKey };
-}
-
-/** A skinned surface with the head's second influence set (joints_1/weights_1) and a facial target, as the head and its plate have. */
-function headSurface() {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
-  geometry.setAttribute("normal", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
-  geometry.setAttribute("uv", new THREE.Float32BufferAttribute([0.25, 0.5, 0.75, 0.5, 0.25, 0.625], 2));
-  geometry.setAttribute("tangent", new THREE.Float32BufferAttribute([1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1], 4));
-  for (const [j, w] of [["skinIndex", "skinWeight"], ["joints_1", "weights_1"]] as const) {
-    geometry.setAttribute(j, new THREE.Uint16BufferAttribute(new Uint16Array(12), 4));
-    geometry.setAttribute(w, new THREE.Float32BufferAttribute([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], 4));
-  }
-  geometry.morphAttributes.position = [new THREE.Float32BufferAttribute(new Float32Array(9), 3)];
-  const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshStandardMaterial());
-  mesh.morphTargetDictionary = { h091_eyes: 0 }; mesh.morphTargetInfluences = [0];
-  const bones = [new THREE.Bone(), new THREE.Bone()];
-  mesh.bind(new THREE.Skeleton(bones, bones.map(() => new THREE.Matrix4())));
-  new THREE.Group().add(mesh, ...bones);
-  return mesh;
-}
 
 /** Every program must pass the text check, and must be built with the hooks' code live (not a replace that found no marker). */
 function checked(programs: { vertex: string; fragment: string }[], label: string) {
