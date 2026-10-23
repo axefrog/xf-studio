@@ -1,6 +1,6 @@
 # Experiment 044: profile tabs and contributed defaults (profiles phase 2)
 
-**Status:** plan agreed, with the coordinator's decisions on M1–M3 (§6). P2-i (session operations and one history) is built on `claude/profiles-p2` (§8); P2-ii to P2-vii are to come. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
+**Status:** plan agreed, with the coordinator's decisions on M1–M3 (§6). P2-i (session operations and one history, §8) and P2-ii (fragments, substitution, the modules' defaults and Save as default, §9) are built on `claude/profiles-p2`; P2-iii to P2-vii are to come. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `076a7a65`. Tests are in `projects/xf-studio/authoring/tests/`. Effort is in the design's units (agent-days).
 
@@ -240,6 +240,82 @@ Each gate was checked against a deliberate fault (focus numbers not restored, th
 - P2-ii: until P2-iii, Reset to default and Close are refused for the tab that holds the drawn view, with the reason.
 - P2-iii: the heads owner still draws `MAIN_VIEW`, and the startup's drawn scene reads it. Once a tab without the main view can be shown (P2-iv), it must draw the shown tab's most recently focused view. When the drawn view follows the shown tab, the session's `drawn` refusal goes (or narrows to a view still being switched away from). `ProfileSessions.viewTab`, `graph.tabOf` and `focus.shownTab` are what it reads.
 - P2-iv switches the dock's save from `layout.set` to `tabs.arrange` and removes `relayDockSaves`.
+
+## 9. P2-ii as built
+
+On `claude/profiles-p2`, after P2-i. Source paths as in §1. No UI: everything here is data and actions that P2-iv's strip, tab menu, New tab ▸ and substitution step present.
+
+**Fragments** (`platform/api/layout-fragment.ts` for the types, `app/profiles/layout-fragment.ts` for the rest) are the design's §4.2 shape, with panel bindings (pins as local keys) and panel state for types marked `stateInDefaults` (a new optional field on a panel contribution; no type sets it yet).
+
+- **Validation on read** comes in two parts. `fragmentIssues` checks structure: keys well formed and unique, views naming a node of each slot, scenes naming declared slots, pins naming the fragment's views, scenes or slots, and the dock showing only the fragment's panels and `view:<key>` views. `buildIssues` checks what this build has: panel types, view tools in tools nodes, each node's kind and state through the graph's codecs, and each view's scene, camera and lights kinds fitting.
+- **From a tab** (`fragmentOfTab`, used by Save as default):
+  - the tab's views, with value copies of every node they name (links to other tabs included);
+  - its scenes' subjects and looks as slots, and its pins as local keys (a pin to something outside the tab is dropped);
+  - canonical keys in order of appearance: `view1`, `scene1`, `v1`, `look1`, and panels by type (`<type>_2` for a second);
+  - the panels of views the tab no longer holds, which the dock keeps parked, left out of the arrangement (`withoutDockPanels` in `profiles-migration-data.ts`).
+- **Into a tab** (`instantiateFragment`): fresh IDs from the session for every view, node and instance, scenes included. Each new scene takes the fragment's state and the subject and look its slots are filled with. A shared scene is the existing scene. A view's dock entry becomes a `view` instance pinned to the new view, and pins follow.
+- **Substitution as data** (`substitutionOf`, `fillOf`):
+  - Per subject slot: the profile's subjects of its kinds. Per look slot: the profile's live looks. Per scene: the existing scenes showing the chosen V (the input layer orders them, most recently focused first).
+  - Defaults: the only candidate, else Leave empty. For a scene, the first scene to share, else New scene (M2).
+  - A look slot only shared scenes use isn't `needed`. `oneClick` is set when every subject slot, needed look slot and scene has at most one candidate.
+  - A choice naming something not on offer is refused with the reason.
+  - `substitutionContext` (`profile-window.ts`) builds the context. It reads focus, so it sits with the input layer; `TabDefaults` gets it as a port, and the no-focus boundary test holds.
+
+**Defaults.**
+
+- **Contributed:**
+  - `StudioModule.defaults` (`DefaultLayoutContribution`: `id`, `name`, `description`, `fragment`).
+  - Each module's defaults live in `features/<module>/defaults.ts`. They were arranged as tabs and printed by the verification-only command, so they are canonical.
+  - **Eye makeup** is today's factory arrangement in both size classes. It is built from the shell's and eye makeup's panels only, so it activates no other module once P2-v derives feature focus from the tab. It has one V slot and one look slot.
+  - **Minimal defaults:** **Poses** (3D view beside Poses and Motion), **Expressions** (3D view beside Expression and Expression sets) and the **Save Explorer** (its panel alone, no view, no slots). Poses and Expressions have Surface controls off.
+  - `compose/layout-defaults.ts` lists them in module order, deep-frozen, with `earlyAccess` for modules that aren't stable (M3). It checks them at composition: one naming a panel type, view tool, node kind or state the build lacks stops the build.
+  - Fragment sizes: Eye makeup 3.1K, Poses 1.9K, Expressions 2.0K and the Save Explorer 0.7K characters.
+- **Own:** `LayoutDefaults` (`app/profiles/layout-defaults.ts`) is the one owner of `layout-default` documents (`xfs/layout-default-1`, as the migration writes them).
+  - Commands: create, update, rename, delete (a tombstone) and restore. Each is one outbox write; unknown fields are kept.
+  - Names are 1 to 60 characters and unique among own defaults, ignoring case. A module's default's name may be reused.
+  - Every command on a module's default is refused: "A feature's default can't be changed. Make a tab from it and save your own."
+  - Loading reads the library and the outbox's pending entries, so a default saved while the library was unreachable is there after a restart.
+  - An own default whose fragment doesn't read, or that needs what the build lacks, is listed with the reason (`unavailable`). It can still be renamed or deleted, but no tab is made from it.
+  - `conflicts()` and `resolve(id, "mine" | "theirs")` follow the outbox's rules. The panel that shows "Changed in another window" comes with the UI.
+- **IDs and origins:** a module's default is `<module>/<id>` (the four are `<module>/default`); an own default is `d-<base36>`. A tab's `origin` names one of them.
+
+**Actions** (`TabDefaults`, `app/profiles/tab-defaults.ts`, attached as the `tabs` service in place of the bare session). They are in the Layout tabs family, and the action catalogue and the spec-fields golden were regenerated (additions only).
+
+| Action | What it does |
+|---|---|
+| `tabs.new { default, choice? }` | A tab from a default, named after it, with the substitution's defaults or the person's choices. One step. |
+| `tabs.reset { tab, default?, choice? }` | Fills the tab from its origin, or from the default named, keeping its ID and name (D16). Refusals: a tab with no origin and no default named; a deleted default; a module's default not in this build; the tab holding the drawn view ("The 3D view draws a view in this tab, so the tab can't be reset yet.") until P2-iii. |
+| `tabs.saveAsDefault { tab, name }` | Makes an own default from the tab, and makes it the tab's origin (`ProfileSessions.setOrigin`, a step labelled "Save as default"; Undo restores the old origin and leaves the default). |
+| `tabs.updateDefault { tab }` | Saves the tab over the own default it was made from. Refused for a module's default: "This tab wasn't made from a default of yours. Save it as a new default instead." |
+| `defaults.rename`, `defaults.delete`, `defaults.restore` | Act on own defaults. Delete and restore have Undo policy `recovery`: the Undo notice's action restores. |
+
+**The verification-only command** is `xfStudioTabAsDefault({ id, name, description }, tab?)`, on `?verify=1` windows. It prints the tab, by default the shown one, as a module default (`printDefault`: JSON, one value per line where it fits in 140 columns) to paste into the module's `defaults.ts`. It refuses a tab the build couldn't make a tab from again.
+
+**Gates** (`tests/layout-defaults.test.ts`, and T1 in `tests/profile-sessions.test.ts`):
+
+| Gate | Result |
+|---|---|
+| Fragment round trip | Each of the four contributed defaults, made into a tab with every slot filled and saved again, is byte-identical. So is a second round through an own default. A migrated own default (keys and node states from the old graph) comes back equal up to its keys and the codec's form of the lighting calibration, then byte-identical. |
+| Substitution | 0 candidates: Leave empty, one click. 1: chosen and one click. 2: Leave empty until chosen, and the step is needed. Choices fill slots. M2: a V another scene shows is shared by default, the look isn't asked for, and New scene asks for it. Two scenes showing the V: the most recently focused is the default. In a session, `tabs.new` shares the scene and New scene shows the chosen look. Choices not on offer are refused and change nothing. |
+| Contributed immutable | Deep-frozen. Every command refused with the reason. Listings detached. A tab made from one, arranged and renamed, leaves it unchanged. The composition check names a bad panel type, view tool, node kind, node state, a duplicate ID and a broken structure. Eye makeup's dock is the factory arrangement in both size classes. |
+| Own defaults through the outbox | Save, Undo and Redo of the origin, duplicate and empty names refused, Update, rename, delete as a tombstone (the tab keeps working; Update and Reset refuse plainly), restore, each reaching the library. |
+| Restart | Reopened with the library unreachable: the default comes from the outbox alone and a tab can be made from it. Reopened with the library reachable: replayed there. A fresh window reads it from the library. |
+| Conflict | Two windows rename one default: the later is a conflict, the library keeps the other's. Use other window's takes theirs; Keep mine writes over it. |
+| Validation on read | A newer build's default and a damaged one are listed unavailable with the reason; `tabs.new` refuses; rename keeps unknown fields; a non-document isn't listed. |
+| Reset | To the origin, then to another default. Undo and Redo are byte-identical. The drawn view's tab and a tab without an origin refuse plainly. |
+| T1, seeded | P2-i's two seeded suites (40 runs each) also make tabs from defaults and reset tabs to them: a module's default or one saved from a random tab, with random share-or-new scene choices and looks (about 200 such operations across the runs). Every operation still matches the model, and every Undo and Redo is byte-identical. |
+
+Each new gate was checked against a deliberate fault: without the outbox's pending entries at load (the restart gate fails), with every look slot counted as needed (M2 fails), and without leaving out stale view panels (the closed-view test fails).
+
+**Outbox model test.** `tests/document-outbox-model.test.ts` is generic over document kinds (its documents are `doc/*`), so a `layout-default` kind there would add nothing. The owner-level outbox behaviour (writes, restart before and after the library has a write, a conflict either way) is tested at `LayoutDefaults` instead.
+
+**For P2-iii and P2-iv.**
+
+- **P2-iii:** when the drawn view follows the shown tab, `checkClosable`'s drawn-view refusal goes or narrows, and `tabs.reset` of the drawn view's tab works with no change here.
+- **P2-iv: New tab ▸.** It lists `services.defaults.list()`, grouped by `owner` (module label and `earlyAccess`, then the person's). `TabDefaults.substitution(id, choice)` is the step's data, and `oneClick` decides whether a row creates at once. The one-click row label names `subjects[i].chosen` and `looks[i].chosen` where needed, and `scenes[i].chosen` with its `shares` entry (tab, V, look). It dispatches `tabs.new { default, choice }`.
+- **P2-iv: the tab menu.** Reset ▸ lists the origin first. Save as default… dispatches `tabs.saveAsDefault`. Update "<name>" shows when `defaults.get(tab.origin)?.owner.kind === "user"`. An own default row's Delete dispatches `defaults.delete`, and the toast's Undo `defaults.restore`. The UI also owns presenting `unavailable` and the own-default conflicts (`LayoutDefaults.conflicts`, `resolve`).
+- **P2-iv: an empty dock.** A tab made from the Save Explorer default holds no view, and a fragment of a tab with no arrangement saves an empty dock (`state: {}`). The dock still falls back to the factory arrangement when a tab's arrangement doesn't parse (`restoreDockPreference`). §2.3 says that fallback goes ("an empty tab is empty"), so the strip's switch must load an empty arrangement as empty.
+- **P2-v:** feature focus is derived from the tab's instances. Eye makeup's default holds only shell and eye-makeup panels, so it activates eye makeup alone.
 
 ## Related pages
 
