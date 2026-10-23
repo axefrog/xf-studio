@@ -76,5 +76,5 @@ Requests answered by pointing at what we already had. One line each, newest firs
 
 | Date | Question | Asked by | Answered by |
 |---|---|---|---|
-| 23 Oct | Does REA (`github.com/morluto/rea`, an MIT-licensed MCP server for agent-driven reverse engineering) add value beyond what our agents already do? | The maintainer | A quick README review by the meta-coordinator. Little value now: its runtime capture is Linux and macOS only, its Windows support is experimental Ghidra, and it has no Frida, x64dbg or DLL hooking. We reach engine internals through RED4ext, Codeware and redscript, and our agents can drive headless Ghidra directly. **Banked, with a trigger:** if we need native engine functions that RED4ext and Codeware don't expose (for example after 2.5), trial its Ghidra provider against plain headless Ghidra on the game executable, installed under `D:/Dev/tools/`, never into every agent's configuration. |
+| 23 Oct | Does REA (`github.com/morluto/rea`, an MIT-licensed MCP server for agent-driven reverse engineering) add value beyond what our agents already do? | The maintainer | A quick README review by the meta-coordinator. Below our bar, so dropped and not banked (the maintainer). It wraps general tools our agents already drive directly; its runtime capture is Linux and macOS only, and its Windows support is experimental Ghidra. |
 | — | | | |
