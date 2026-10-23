@@ -79,7 +79,7 @@ test("every composed layered surface is connected and presented while its head i
       connectScene: () => { events.push("cheek:connect"); return { accepted: true } as ReturnType<LayeredSurfaceWiring["preview"]["connectScene"]>; },
       disconnectScene: () => { events.push("cheek:disconnect"); },
       presentInitialLayers: () => { events.push("cheek:present"); },
-      fillScene: () => { events.push("cheek:fill"); }, releaseScene: () => { events.push("cheek:release"); },
+      fillScene: () => { events.push("cheek:fill"); }, holdsCurrent: () => true, releaseScene: () => { events.push("cheek:release"); },
     } };
   const head = await buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, second] });
   expect(events).toEqual([]);
@@ -190,7 +190,12 @@ function layeredMakeup() {
       versions: [...stack.materials.map(material => material.version), ...stack.textures.map(texture => texture.version)],
       dirty: stack.blendDiagnostics().dirty, visible: stack.plates.map(plate => plate.visible) };
   };
-  return { device, publish, stackOf, wiring, state, paints, canvas: () => device.canvases[0]! };
+  /** The first layer switched on or off, as an edit publishes it. */
+  const setEnabled = (enabled: boolean) => {
+    const recipe = authoring.recipe;
+    authoring.publishLayer({ ...recipe, layers: recipe.layers.map((layer, i) => i === 0 ? { ...layer, enabled } : layer) }, 0);
+  };
+  return { device, publish, setEnabled, stackOf, wiring, state, paints, canvas: () => device.canvases[0]! };
 }
 
 test("4a-v: a cold V's authored makeup is on its surface before its scene is prepared, and its first shown frame has nothing left to compile, composite or upload", async () => {
@@ -255,4 +260,39 @@ test("4a-v: a surface filled ahead keeps its snapshot while a newer mask complet
   shownHead.show(); shownHead.hide(); hidden.show();
   expect(makeup.state(hidden.scene).versions).toEqual(kept.versions);
   shownHead.dispose(); hidden.dispose();
+});
+
+test("4a final review: a warm head prepared before a layer was enabled is not prepared any more; prepared again, its show brings nothing new", async () => {
+  const h = harness(), makeup = layeredMakeup(), signal = new AbortController().signal;
+  // A is prepared and shown with its one layer off (no makeup), then B is shown and A goes warm.
+  makeup.setEnabled(false);
+  const a = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  await a.prepare(signal, () => {});
+  a.show();
+  const b = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  await b.prepare(signal, () => {});
+  a.hide(); b.show();
+  expect(a.prepared()).toBe(true);
+  expect(makeup.state(a.scene).visible[0]).toBe(false);
+  // The layer is enabled while B is shown (and its mask completes): A's surface holds the makeup as it was, so A is no longer prepared.
+  makeup.setEnabled(true);
+  makeup.publish();
+  expect(b.prepared()).toBe(true);
+  expect(a.prepared()).toBe(false);
+  // Prepared again (as the runtime owner does before showing a warm head that isn't prepared): it holds the layer, drawn, before its show.
+  await a.prepare(signal, () => {});
+  expect(a.prepared()).toBe(true);
+  const filled = makeup.state(a.scene);
+  expect(filled.visible[0]).toBe(true);
+  // Shown: the same slots, materials, textures and images, no version moved (no program change, no upload).
+  b.hide(); a.show();
+  const shown = makeup.state(a.scene);
+  expect(shown.materials).toEqual(filled.materials);
+  expect(shown.images).toEqual(filled.images);
+  expect(shown.versions).toEqual(filled.versions);
+  // A layer edited back while A is shown leaves B (warm, holding the layer on) stale in turn.
+  makeup.setEnabled(false);
+  expect(a.prepared()).toBe(true);
+  expect(b.prepared()).toBe(false);
+  a.dispose(); b.dispose();
 });

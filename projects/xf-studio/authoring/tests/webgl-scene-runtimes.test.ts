@@ -16,7 +16,8 @@ import type { SceneRuntimesProbe } from "./webgl-scene-runtimes-probe-page";
  * | No stray frames | nothing built, prepared or superseded draws a frame before it is shown; the shown V's pixels don't change meanwhile |
  * | No late result | a build that comes back after it was superseded is disposed, never shown |
  * | Last choice | female, male, then female 150 ms later shows female; the male build stops and is never built |
- * | No first-draw stall | the first shown frame links and makes no program; no presentation gap over 100 ms while preparing; no task of 50 ms or more (with KHR_parallel_shader_compile) |
+ * | No first-draw stall | the first shown frame links and makes no program (a cold V, a warm switch, a warm V whose authored makeup changed while it was warm, a V shown again with its on-head editor under a setup prepared while it was shown); no presentation gap over 100 ms while preparing; no task of 50 ms or more (with KHR_parallel_shader_compile) |
+ * | Warm residency | a hidden runtime holds none of its frame-sized targets (display, skin scatter, contact shadows), and switching back and forth leaves the live GL objects flat |
  * | Memory returned | closing a subject (`close(scene)`) and closing everything leave the GPU objects and Three's programs at the baseline |
  * | One output | every program the page's runtimes build writes one output into one colour attachment, as the driver is asked |
  *
@@ -193,6 +194,44 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
       expect(probe.warm.switchesMs.length).toBe(8);
       expect(Math.max(...probe.warm.switchesMs)).toBeLessThanOrEqual(100);
       expect({ builds: probe.warm.builds, preparations: probe.warm.preparations }).toEqual({ builds: 0, preparations: 0 });
+      // Its frame-sized targets, let go when it was hidden, come back at the show without a link, and its first frame uploads only what a
+      // later frame does (its bones): the allocation happens as it is shown, not in the frame.
+      expect(probe.warm.links).toEqual(Array(8).fill(0));
+      expect(probe.warm.programs).toEqual(Array(8).fill(0));
+      expect(probe.warm.firstUploads).toEqual(probe.warm.laterUploads);
+    }
+  });
+
+  test("warm residency: a hidden runtime holds none of its frame-sized targets, the shown one holds its own, and switching leaves the GL objects flat", () => {
+    for (const probe of [parallel, fallback]) {
+      for (const { shown, hidden } of probe.warm.targets) {
+        expect(hidden).toEqual([0, 0, 0]);
+        expect(shown[0]).toBeGreaterThan(0);
+      }
+      // Each body shown again holds exactly what it held the time before: nothing grows from switch to switch.
+      for (let i = 2; i < probe.warm.gl.length; i++) expect(probe.warm.gl[i]).toEqual(probe.warm.gl[i - 2]!);
+    }
+  });
+
+  test("a warm V whose authored makeup changed while it was warm is prepared again before it is shown, and its first shown frame links nothing (final review)", () => {
+    for (const probe of [parallel, fallback]) {
+      const stale = probe.staleMakeup;
+      expect({ before: stale.preparedBefore, after: stale.preparedAfterChange }).toEqual({ before: true, after: false });
+      expect(stale.preparations).toBe(1);
+      expect(stale.clearcoat).toBe(1);
+      expect(stale.firstFrame).toEqual({ links: 0, programs: 0 });
+      expect(stale.made).toEqual([]);
+      // Back the other way: the V shown when the layer changed holds it, so it is prepared again in turn.
+      expect(stale.back).toEqual({ preparations: 1, firstFrame: { links: 0, programs: 0 } });
+    }
+  });
+
+  test("a V shown again with its on-head editor, under a setup prepared while it was shown, links nothing: the guides draw with the head's own materials (G3)", () => {
+    for (const probe of [parallel, fallback]) {
+      expect(probe.editorRemount.editors).toBe(1);
+      expect(probe.editorRemount.firstFrame).toEqual({ links: 0, programs: 0 });
+      expect(probe.editorRemount.window).toEqual({ links: 0, programs: 0 });
+      expect(probe.editorRemount.made).toEqual([]);
     }
   });
 
@@ -287,7 +326,7 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
 
 /** The S2 gate table's rows from the probe with KHR_parallel_shader_compile (the browsers the Studio runs in): each row's figures and verdict. */
 function gateTable(probe: SceneRuntimesProbe) {
-  const { cold, warm, cancel, supersede, setup, closeSubject } = probe;
+  const { cold, warm, cancel, supersede, setup, closeSubject, staleMakeup, editorRemount } = probe;
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   const warmMax = Math.max(...warm.switchesMs);
   return {
@@ -298,9 +337,13 @@ function gateTable(probe: SceneRuntimesProbe) {
       pass: cold.framesBeforeShown === 0 && cold.canvasUnchanged && cancel.drawn === 0 && cancel.canvasUnchanged && supersede.late.frames === 0 && supersede.canvasUnchanged },
     "no late result": { value: supersede.late.outcome, pass: supersede.late.disposed && !supersede.shownKeys.includes("s1|v9|male|studio") },
     "last choice": { value: supersede.shown, pass: supersede.superseded === "AbortError" && supersede.shown === "s1|v1|female|studio" },
-    "no first-draw stall": { value: `links ${cold.firstFrame.links}, gaps ${Math.round(cold.frameGapMs)} / ${Math.round(setup.frameGapMs)} ms, tasks ${cold.tasksOver50 + setup.tasksOver50}`,
+    "no first-draw stall": { value: `links ${cold.firstFrame.links} (cold), ${Math.max(...warm.links)} (warm), ${staleMakeup.firstFrame.links} (makeup changed while warm), `
+      + `${editorRemount.firstFrame.links} (editor shown again); gaps ${Math.round(cold.frameGapMs)} / ${Math.round(setup.frameGapMs)} ms, tasks ${cold.tasksOver50 + setup.tasksOver50}`,
       pass: cold.firstFrame.links === 0 && cold.firstFrame.programs === 0 && setup.firstFrame.links === 0 && cold.frameGapMs <= 100 && setup.frameGapMs <= 100
-        && cold.tasksOver50 === 0 && setup.tasksOver50 === 0 },
+        && cold.tasksOver50 === 0 && setup.tasksOver50 === 0 && warm.links.every(links => links === 0) && same(staleMakeup.firstFrame, { links: 0, programs: 0 })
+        && !staleMakeup.preparedAfterChange && same(editorRemount.firstFrame, { links: 0, programs: 0 }) },
+    "warm residency": { value: `hidden targets ${warm.targets.map(entry => entry.hidden.reduce((sum, n) => sum + n, 0)).join("/")} px`,
+      pass: warm.targets.every(entry => same(entry.hidden, [0, 0, 0])) && warm.gl.every((counts, i) => i < 2 || same(counts, warm.gl[i - 2])) },
     "memory returned": { value: `${closeSubject.after.programs.length} programs after closing a subject`,
       pass: same(closeSubject.after, closeSubject.before) && same(probe.closed.gl, probe.baseline.gl) && same(probe.closed.programs, probe.baseline.programs) },
     "one output": { value: `${probe.singleOutput.fragments} fragment shaders, ${probe.singleOutput.attachments} attachments`, pass: probe.singleOutput.issues.length === 0 },

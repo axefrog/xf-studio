@@ -11,7 +11,14 @@
  * 2. A cold V (another body under the game's creator rig: programs never linked in this page) wanted while the first is shown: the longest
  *    main-thread task from the want to 1 s after it is shown; that the shown V's pixels never change and the new V draws no frame until it
  *    is shown; the programs linked and the maps uploaded during its first shown frame; the time from the want to that frame.
- * 3. Warm switches between the two (both prepared): the time from the want to the first presented frame.
+ * 3. Warm switches between the two (both prepared): the time from the want to the first presented frame, the programs linked from the want
+ *    to that frame (none: a runtime shown again only allocates its frame-sized targets, which it let go when hidden), the first frame's
+ *    uploads against a later frame's, and what each runtime holds of its frame-sized targets once settled (the hidden one none).
+ * 3b. Newer authored makeup while a V is warm (the final review's sequence): the shown V's layer changes finish (new layer programs) while
+ *    the other V is warm, then the warm V is wanted: it is no longer prepared, so it is filled and prepared again first, and its first shown
+ *    frame links nothing.
+ * The on-head editor is mounted on the shown V as in production (browser-viewport-device.ts): its guides compiled with the V's preparation
+ * as stand-ins of the head's own guide materials, its parts made ahead, and the editor drawing with those materials on each show.
  * 4. Cancel: a third V (a setup with more lights: new programs) superseded while its programs are being prepared: the time from the
  *    superseding want to the preparation stopping, nothing of it drawn, and the GPU objects back where they were once it is disposed.
  * 5. Every progress state, per want: stages and fractions, which must only move forward.
@@ -31,6 +38,8 @@
  *    stays drawn, pixel for pixel, then takes over; the longest main-thread task from the change to 1 s after; links and programs made in
  *    its first frame; the frames presented while it was prepared; a newer setup asked meanwhile replacing it; and the setup drawn asked
  *    again stopping a preparation.
+ * 5b. (After 5.) The on-head editor shown again under a setup prepared on the shown V (G3's warm-switch row): the V with the setup is
+ *    hidden and shown again, and its first shown frame links nothing (the guides' programs for that setup stay with the head's materials).
  * 8. (After 7.) A context lost in the middle of GPU work, each recovering (4a-v-b review): a large map's banded upload (it starts again
  *    from its bitmap and every texel is the bitmap's, with no GL error); a V's details waiting for a link slot (the wait ends with the
  *    context's generation, before the restore, and the V is shown); a lighting change prepared on the shown V (restarted after the restore,
@@ -63,6 +72,8 @@ import { gpuGate } from "../src/platform/scene/gpu-gate";
 import { morphTextures, morphTextureSteps } from "../src/platform/scene/morph-textures";
 import { EYE_RASTER_REGION, freshWorkspace } from "./fixtures/eye-region";
 import { multipleOutputs, type RecordedAttachment, type RecordedShader } from "./fixtures/single-output";
+import { createSurfaceEditor, surfaceEditorParts, surfaceGuideStandIns, type SurfaceEditorParts } from "../src/legacy/eye-makeup/browser/surface-editor";
+import { EYE_REGION } from "./fixtures/eye-region";
 
 type Counts = { gl: GlObjectCounts; programs: string[] };
 type Want = ResidencyWant & { body: "female" | "male"; record: "a" | "b"; lighting: "studio" | "creator" | "many" };
@@ -80,7 +91,17 @@ export type SceneRuntimesProbe = {
     firstFrame: { links: number; programs: number; frames: number }; changedAfter: boolean; warmUps: number; warmUpFrames: number; warmUpFrameGapMs: number;
     frameGapMs: number; progress: { change: string; stage: string; fraction: number }[]; prepared: boolean;
     replaced: { adopted: string[]; final: string }; back: { stoppedMs: number; staged: boolean; source: string; preparing: boolean } };
-  warm: { switchesMs: number[]; builds: number; preparations: number };
+  warm: { switchesMs: number[]; builds: number; preparations: number;
+    /** Per switch: programs linked and made from the want to the first presented frame; the first frame's uploads and a later frame's. */
+    links: number[]; programs: number[]; firstUploads: number[]; laterUploads: number[];
+    /** Per switch, once settled: the frame-sized target pixels the shown and the hidden runtime hold (display, scatter, contact), and the live GL objects. */
+    targets: { shown: number[]; hidden: number[] }[]; gl: GlObjectCounts[] };
+  /** 3b: newer authored makeup while a V is warm. */
+  staleMakeup: { preparedBefore: boolean; preparedAfterChange: boolean; preparations: number; firstFrame: { links: number; programs: number };
+    /** The layer's clear coat once shown (the Glossy finish applied), and the programs made from the preparation's end to the first presented frame (diagnostics). */
+    clearcoat: number; made: string[]; back: { preparations: number; firstFrame: { links: number; programs: number } } };
+  /** 5b: the V whose setup was prepared while shown, hidden and shown again with its on-head editor. */
+  editorRemount: { firstFrame: { links: number; programs: number }; window: { links: number; programs: number }; made: string[]; editors: number };
   cancel: { stage: string; cancelMs: number; superseded: string; drawn: number; canvasUnchanged: boolean; disposed: boolean; before: Counts; after: Counts };
   /** The context lost while the V's programs linked: how the want ended, the restarts the preparation reported, and the frames it drew once shown. */
   contextLoss: { outcome: string; stage: string; restarts: number; frames: number; events: string[] };
@@ -128,6 +149,7 @@ export type SceneRuntimesProbe = {
   baseline: Counts; closed: Counts;
 };
 const probe: SceneRuntimesProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
+  staleMakeup: null as never, editorRemount: null as never,
   cancel: null as never, setup: null as never, supersede: null as never, closeSubject: null as never, morph: null as never, singleOutput: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
@@ -262,7 +284,8 @@ try {
   const mask = document.createElement("canvas"); mask.width = mask.height = 16;
   mask.getContext("2d")!.fillRect(0, 0, 16, 16);
   // The authored makeup as production feeds it: the preview device (a raster worker that never answers) holding one completed 512² mask.
-  const layers = createBrowserPreviewDevice({ region: EYE_RASTER_REGION, document: new AuthoringDocument(freshWorkspace()), initialSize: 512,
+  const authoring = new AuthoringDocument(freshWorkspace());
+  const layers = createBrowserPreviewDevice({ region: EYE_RASTER_REGION, document: authoring, initialSize: 512,
     makeWorker: () => ({ onmessage: null, onerror: null, postMessage() {}, terminate() {} }), frame: run => run(), refresh: () => {}, refreshSelection: () => {},
     refreshQuality: () => {}, drawUV: () => {}, report: () => {}, measurement: () => {} });
   {
@@ -297,6 +320,25 @@ try {
     const timer = setTimeout(resolve, ms);
     signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
   });
+  /**
+   * Each runtime's on-head editor as production keeps it (browser-viewport-device.ts): the head's guide materials and their stand-ins, its
+   * parts made ahead, and the editor mounted while it is shown (drawing with the head's materials).
+   */
+  const editors = new Map<SceneRuntime, { guides: ReturnType<typeof surfaceGuideStandIns>; parts: SurfaceEditorParts; editor?: ReturnType<typeof createSurfaceEditor> }>();
+  let editorMounts = 0;
+  const editorOf = (runtime: SceneRuntime) => {
+    let made = editors.get(runtime);
+    if (!made) editors.set(runtime, made = { guides: surfaceGuideStandIns(),
+      parts: surfaceEditorParts(runtime.head, runtime.eyes, runtime.feature(EYE_MAKEUP_RENDERER)!.surface) });
+    return made;
+  };
+  const editorHooks: Parameters<typeof createSurfaceEditor>[1] = { region: EYE_REGION, layer: () => authoring.recipe.layers[0], selected: () => 0, select: () => {},
+    selectedField: () => undefined, selectField: () => {}, begin: () => {}, apply: () => false, cancel: () => {}, message: () => {} };
+  const unmountEditor = (runtime: SceneRuntime) => { const made = editors.get(runtime); made?.editor?.dispose(); if (made) made.editor = undefined; };
+  /** Runtimes whose V's details are placed (a warm runtime prepared again keeps them, as the head's own preparation does). */
+  const placed = new Set<SceneRuntime>();
+  /** Each want's preparations (the port's `prepare`), by key. */
+  const preparationsOf = new Map<string, number>();
   const ports: ConstructorParameters<typeof SceneResidency<Want, SceneRuntime>>[0] = {
     build: async (want, signal, progress) => {
       progress({ stage: "build" });
@@ -321,16 +363,22 @@ try {
     },
     prepare: async (runtime, want, signal, progress) => {
       try {
+        preparationsOf.set(want.key, (preparationsOf.get(want.key) ?? 0) + 1);
         // The V's details, made ready for their first frame and placed, as the head's own preparation does.
         progress({ stage: "details", fraction: 0, waiting: "files" });
-        const loaded = await runtime.details.load(want.record === "a" ? recordA : recordB, { fetcher, reuse: null, signal });
-        try { await runtime.prepareDetails(loaded, signal); } finally { detailsSettled.set(want.key, performance.now()); }
-        signal.throwIfAborted();
-        runtime.setCharacterDetails(loaded);
+        if (!placed.has(runtime)) {
+          const loaded = await runtime.details.load(want.record === "a" ? recordA : recordB, { fetcher, reuse: null, signal });
+          try { await runtime.prepareDetails(loaded, signal); } finally { detailsSettled.set(want.key, performance.now()); }
+          signal.throwIfAborted();
+          runtime.setCharacterDetails(loaded);
+          placed.add(runtime);
+        }
         progress({ stage: "details", fraction: 1 });
         // The authored makeup on the hidden surface, as the head's preparation fills it.
         layers.fillScene(runtime.feature(EYE_MAKEUP_RENDERER)!);
-        results.set(want.key, await runtime.prepare({ signal, report: report => {
+        // The on-head editor's guides compiled with the scene (as stand-ins of the head's own guide materials) and its parts made ahead.
+        const editor = editorOf(runtime);
+        results.set(want.key, await runtime.prepare({ signal, overlays: () => editor.guides.objects, work: () => editor.parts.steps, report: report => {
           if (report.stage === "programs" && report.waiting === "gpu") restarts++;
           current = { key: want.key, stage: report.stage }; progress(report);
         } }));
@@ -339,7 +387,8 @@ try {
         throw error;
       }
     },
-    prepared: runtime => runtime.prepared(),
+    // As the head's readiness: the scene's own record, and its surface holding the authored makeup as it is now (browser-head-attachment.ts).
+    prepared: runtime => runtime.prepared() && layers.holdsCurrent(runtime.feature(EYE_MAKEUP_RENDERER)!),
     prepareShown: async (runtime, _want, signal, progress) => { await runtime.prepare({ signal, report: report => {
       if (report.stage === "programs" && report.waiting === "gpu") restarts++;
       current = { key: `shown:${report.stage}`, stage: report.stage }; progress(report);
@@ -349,12 +398,20 @@ try {
       // As the head's show connects its surface: it keeps what it was filled with, brought up to date.
       const makeup = runtime.feature(EYE_MAKEUP_RENDERER)!;
       layers.connectScene(makeup); layers.presentInitialLayers();
-      device.show(runtime.slot); runtime.requestRender(); probe.timings.shows.push(performance.now() - start);
+      device.show(runtime.slot);
+      // The on-head editor, mounted on the shown head with the head's guide materials and parts (browser-viewport-device.ts `mountSurface`).
+      const editor = editorOf(runtime);
+      editor.editor = createSurfaceEditor({ renderer, scene: runtime.scene, camera: runtime.camera, head: runtime.head, eyes: runtime.eyes, controls: runtime.controls,
+        cameraInput: runtime.cameraInput, onFrame: runtime.onFrame, requestRender: runtime.requestRender, plate: makeup.surface }, editorHooks, editor.parts,
+        editor.guides.materials);
+      editorMounts++;
+      runtime.requestRender(); probe.timings.shows.push(performance.now() - start);
       shownLog.push(runtimes.get(runtime) ?? "?");
     },
-    hide: runtime => layers.disconnectScene(runtime.feature(EYE_MAKEUP_RENDERER)!),
+    hide: runtime => { unmountEditor(runtime); layers.disconnectScene(runtime.feature(EYE_MAKEUP_RENDERER)!); },
     dispose: runtime => {
       disposedLog.push({ key: runtimes.get(runtime) ?? "?", frames: runtime.frameTiming().frames });
+      unmountEditor(runtime); editors.get(runtime)?.guides.dispose(); editors.delete(runtime); placed.delete(runtime);
       layers.releaseScene(runtime.feature(EYE_MAKEUP_RENDERER)!); runtimes.delete(runtime); runtime.dispose();
     },
   };
@@ -463,13 +520,74 @@ try {
     await settle();
   }
 
+  /**
+   * Want `target` (a warm runtime): the time from the want to the first presented frame of it (the frame after the one that drew it), the
+   * programs linked and made meanwhile, and its first frame's uploads against a later frame's (drawn on request).
+   */
+  const measuredSwitch = async (target: Want) => {
+    const resident = residency.resident(target.key)?.runtime, framesBefore = resident?.frameTiming().frames ?? 0;
+    const at = { links: calls.links, programs: counter.made().program };
+    const start = performance.now();
+    const runtime = await residency.want(target);
+    const shown = { uploads: calls.uploads, links: calls.links, programs: counter.made().program };
+    for (let i = 0; i < 600 && runtime.frameTiming().frames === framesBefore; i++) await frame();
+    const firstUploads = calls.uploads - shown.uploads;
+    await frame();
+    const ms = performance.now() - start, links = calls.links - at.links, programs = counter.made().program - at.programs;
+    // From the show to the first presented frame (a preparation's own links, before the show, are not in it).
+    const firstFrame = { links: calls.links - shown.links, programs: counter.made().program - shown.programs };
+    const drawnNow = runtime.frameTiming().frames, before = calls.uploads;
+    runtime.requestRender();
+    for (let i = 0; i < 60 && runtime.frameTiming().frames === drawnNow; i++) await frame();
+    return { runtime, ms, links, programs, firstFrame, firstUploads, laterUploads: calls.uploads - before };
+  };
+  const pixels = (runtime: SceneRuntime) => Object.values(runtime.lighting.frameTargetPixels());
+  type ThreeProgram = { name: string; cacheKey: string };
+  const threePrograms = () => (renderer.info.programs ?? []) as unknown as ThreeProgram[];
+  /** The programs Three holds now that it didn't hold in `before` (diagnostics: the name and the start of the cache key). */
+  const madeSince = (before: Set<ThreeProgram>) => threePrograms().filter(program => !before.has(program)).map(program => `${program.name} ${program.cacheKey.slice(0, 160)}`);
+  const runtimeOf = (key: string) => residency.resident(key)?.runtime;
+
   // 3. Warm switches between the two prepared Vs.
   {
-    const preparedBefore = results.size, builds = runtimes.size, switchesMs: number[] = [];
+    const preparedBefore = results.size, builds = runtimes.size;
+    const warm: SceneRuntimesProbe["warm"] = { switchesMs: [], builds: 0, preparations: 0, links: [], programs: [], firstUploads: [], laterUploads: [], targets: [], gl: [] };
     for (let i = 0; i < 4; i++) {
-      for (const target of [a, b]) { const { ms } = await switchTo(target); switchesMs.push(ms); await settle(); }
+      for (const target of [a, b]) {
+        const { ms, links, programs, firstUploads, laterUploads } = await measuredSwitch(target);
+        warm.switchesMs.push(ms); warm.links.push(links); warm.programs.push(programs); warm.firstUploads.push(firstUploads); warm.laterUploads.push(laterUploads);
+        await settle();
+        const other = target === a ? b : a;
+        warm.targets.push({ shown: pixels(runtimeOf(target.key)!), hidden: pixels(runtimeOf(other.key)!) });
+        warm.gl.push(counter.live());
+      }
     }
-    probe.warm = { switchesMs, builds: runtimes.size - builds, preparations: results.size - preparedBefore };
+    probe.warm = { ...warm, builds: runtimes.size - builds, preparations: results.size - preparedBefore };
+  }
+
+  // 3b. Newer authored makeup while a V is warm: B is shown, A warm; the layer takes the Glossy finish (a clear coat: new layer programs).
+  {
+    const runtimeA = runtimeOf(a.key)!, preparedBefore = ports.prepared!(runtimeA, a);
+    const layer = authoring.recipe.layers[0]!, original = structuredClone(layer);
+    const publish = (next: typeof layer) => authoring.publishLayer({ ...authoring.recipe, layers: authoring.recipe.layers.map((each, i) => i === 0 ? next : each) }, 0);
+    publish({ ...layer, finish: "glossy", optics: undefined });
+    const preparedAfterChange = ports.prepared!(runtimeA, a), preparationsA = preparationsOf.get(a.key) ?? 0;
+    // The programs Three holds when the preparation ends (the show follows in the same task), against those after the first presented frame.
+    let beforeShow = new Set<ThreeProgram>();
+    const offShow = residency.subscribe(() => { if (!residency.preparation()) beforeShow = new Set(threePrograms()); });
+    const toA = await measuredSwitch(a);
+    offShow();
+    const made = madeSince(beforeShow);
+    await settle();
+    const clearcoat = (runtimeA.feature(EYE_MAKEUP_RENDERER)!.materials[0] as THREE.MeshPhysicalMaterial).clearcoat;
+    // Back: the layer as it was, while A is shown; then B (warm, holding the Glossy layer) is wanted, prepared again, and shown.
+    publish(original);
+    const preparationsB = preparationsOf.get(b.key) ?? 0;
+    const toB = await measuredSwitch(b);
+    await settle();
+    probe.staleMakeup = { preparedBefore, preparedAfterChange, preparations: (preparationsOf.get(a.key) ?? 0) - preparationsA,
+      firstFrame: toA.firstFrame, clearcoat, made,
+      back: { preparations: (preparationsOf.get(b.key) ?? 0) - preparationsB, firstFrame: toB.firstFrame } };
   }
 
   // 4. Cancel: a third V under more lights, superseded (by B again, warm) while its programs are prepared.
@@ -557,6 +675,20 @@ try {
       await settle();
     }
     runtime.lighting.setSource = setSource;
+  }
+
+  // 5b. The V whose setup was prepared while shown (B, its on-head editor mounted throughout) hidden and shown again: its editor is mounted
+  // anew under that setup, and its first shown frame links nothing.
+  {
+    await settle();
+    const shownKey = runtimes.get(residency.shown()!)!, other = shownKey === b.key ? a : b, back = shownKey === b.key ? b : a;
+    await measuredSwitch(other); await settle();
+    const before = new Set(threePrograms()), mounts = editorMounts;
+    const again = await measuredSwitch(back);
+    const made = madeSince(before);
+    await settle();
+    probe.editorRemount = { firstFrame: again.firstFrame, window: { links: again.links, programs: again.programs },
+      made, editors: editorMounts - mounts };
   }
 
   // 6. Everything goes: back to the baseline.

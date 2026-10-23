@@ -67,6 +67,7 @@ function roundHandles(shader: THREE.WebGLProgramParametersWithUniforms) {
   );
 }
 /** The guides' materials: the handles (points) and the outlines and tangent connectors (lines), each also drawn without depth. */
+export type GuideMaterials = ReturnType<typeof guideMaterials>;
 function guideMaterials() {
   const point = new THREE.PointsMaterial({
     size: 10,
@@ -86,18 +87,21 @@ function guideMaterials() {
 }
 
 /**
- * Stand-ins for the guides the editor adds to a head's scene once it is mounted (profiles phase 4a-v-b): the same materials on a points and a
- * lines object of the same attributes, so a head prepared before it is shown compiles the guides' programs ahead (their first frame
- * links nothing), and keeps them linked while the stand-ins live (Three frees a program its last material lets go). Not drawn.
+ * The guides' materials for one head, and stand-ins for the guides the editor adds to its scene once mounted (profiles phase 4a-v-b): the
+ * same materials on a points and a lines object of the same attributes, so a head prepared before it is shown compiles the guides' programs
+ * ahead (their first frame links nothing). Not drawn. The editor mounted on the head draws with these very materials
+ * (`createSurfaceEditor`'s `guides`), so every program variant they were ever drawn or compiled with (one per lighting setup: Three keys
+ * even an unlit material's program on the scene's light counts) stays linked while the head lives, whatever the editor's mounts and
+ * unmounts: Three frees a program only when the last material holding it is disposed.
  */
-export function surfaceGuideStandIns(): { objects: readonly THREE.Object3D[]; dispose(): void } {
+export function surfaceGuideStandIns(): { objects: readonly THREE.Object3D[]; materials: GuideMaterials; dispose(): void } {
   const materials = guideMaterials();
   const points = new THREE.BufferGeometry(), lines = new THREE.BufferGeometry();
   points.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(3), 3));
   points.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(3), 3));
   lines.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(6), 3));
   const objects = [new THREE.Points(points, materials.point), new THREE.LineSegments(lines, materials.line)];
-  return { objects, dispose() { points.dispose(); lines.dispose(); for (const material of Object.values(materials)) material.dispose(); } };
+  return { objects, materials, dispose() { points.dispose(); lines.dispose(); for (const material of Object.values(materials)) material.dispose(); } };
 }
 
 /**
@@ -120,11 +124,16 @@ export function surfaceEditorParts(head: THREE.Mesh, eyes: THREE.Mesh, plate: TH
   };
 }
 
-/** Face controls operate on the same recipe as the UV editor. No baked geometry edits. `parts`: made ahead for this head and plate. */
+/**
+ * Face controls operate on the same recipe as the UV editor. No baked geometry edits. `parts`: made ahead for this head and plate. `guides`:
+ * the head's guide materials (`surfaceGuideStandIns`), which the head owns and the editor never disposes; without them the editor makes its
+ * own and disposes them with itself.
+ */
 export function createSurfaceEditor(
   viewer: SurfaceViewer,
   hooks: Hooks,
   parts: SurfaceEditorParts = surfaceEditorParts(viewer.head, viewer.eyes, viewer.plate),
+  guides?: GuideMaterials,
 ) {
   const { renderer, scene, camera, plate, head, controls } = viewer,
     canvas = renderer.domElement;
@@ -154,7 +163,7 @@ export function createSurfaceEditor(
       THREE.DynamicDrawUsage,
     ),
   );
-  const materials = guideMaterials(), pointMaterial = materials.point, tangentMaterial = materials.tangentPoint;
+  const materials = guides ?? guideMaterials(), pointMaterial = materials.point, tangentMaterial = materials.tangentPoint;
   const points = new THREE.Points(pointGeometry, pointMaterial);
   const tangentGeometry = pointGeometry.clone(), tangentLineGeometry = new THREE.BufferGeometry();
   tangentLineGeometry.setAttribute("position",new THREE.Float32BufferAttribute(new Float32Array(4*2*3),3).setUsage(THREE.DynamicDrawUsage));
@@ -854,8 +863,7 @@ export function createSurfaceEditor(
     if (typeof offFrame === "function") offFrame();
     scene.remove(group);
     pointGeometry.dispose(); lineGeometry.dispose(); tangentGeometry.dispose(); tangentLineGeometry.dispose();
-    pointMaterial.dispose(); tangentMaterial.dispose();
-    (lines.material as THREE.Material).dispose(); (tangentLines.material as THREE.Material).dispose();
+    if (!guides) for (const material of Object.values(materials)) material.dispose();
   }
   publishInput();
   return {

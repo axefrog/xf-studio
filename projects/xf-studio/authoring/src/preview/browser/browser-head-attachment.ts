@@ -61,7 +61,7 @@ export type LayeredSurfaceWiring = {
   feature: string;
   /** The surface on a loaded head (the feature renderer's). */
   surface(scene: Scene): LayeredMakeupSurface | undefined;
-  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers" | "fillScene" | "releaseScene">;
+  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers" | "fillScene" | "holdsCurrent" | "releaseScene">;
   /** The surface the on-head editor edits (at most one): its guides and parts are prepared with the head (`prepare`). */
   edited?: boolean;
 };
@@ -126,7 +126,11 @@ export type AttachedHead = {
    * `signal.reason` once aborted. A detail failure doesn't stop it: the head shows without them, as it would anyway.
    */
   prepare(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
-  /** Whether a warm head is still prepared (nothing that decides its programs changed since): shown again, it needs nothing more. */
+  /**
+   * Whether a warm head is still prepared, so shown again it needs nothing more: nothing that decides its programs changed since (the scene's
+   * own record), and each layered surface still holds the authored makeup as it is now (a layer enabled or edited while the head was warm
+   * would bring new materials and uploads at show: it is filled and prepared again first).
+   */
   prepared(): boolean;
   /**
    * Prepare the shown head for a change it was asked to draw and isn't prepared for (a lighting setup whose programs aren't linked: the
@@ -273,7 +277,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
         await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
           ...(work ? { work } : {}) });
       },
-      prepared: () => scene.prepared?.() ?? true,
+      prepared: () => (scene.prepared?.() ?? true) && ports.layered.every(wiring => wiring.preview.holdsCurrent(wiring.surface(scene)!)),
       async prepareShown(prepareSignal, progress) {
         if (disposed) throw Error("The head was released.");
         await scene.prepare?.({ signal: prepareSignal, report: report => progress(report) });

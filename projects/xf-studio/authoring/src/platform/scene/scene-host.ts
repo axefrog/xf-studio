@@ -131,6 +131,8 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   function detach() {
     // Hidden, the runtime takes a setup still staged at once: it is prepared again before it is shown (`prepared`).
     if (pendingLighting) { const next = pendingLighting; pendingLighting = null; lighting.setSource(next); }
+    // A hidden runtime holds no frame-sized target (experiment 043 §2.1); its programs stay, and showing it allocates them again (`resized`).
+    lighting.releaseTargets();
     if (!attached) return;
     input?.dispose(); input = undefined;
     // Disconnecting resets the canvas's touch action and cursor; the next runtime shown connects its own.
@@ -244,7 +246,11 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   const ray = new THREE.Raycaster();
   let fovGestureAnchor: THREE.Vector3 | undefined;
   let appliedWidth = 0, appliedHeight = 0;
-  /** The device's pane, while this runtime is shown: the camera takes its aspect, and a Front view asked for while it had no size happens now. */
+  /**
+   * The device's pane, while this runtime is shown (or drawn for a warm-up): the camera takes its aspect, and a Front view asked for while it
+   * had no size happens now. Shown, the frame-sized targets are allocated at the pane's size here, as the device shows the runtime or the pane
+   * changes size, so the frame after it draws into targets that exist (a runtime shown again let them go when it was hidden).
+   */
   const resized = (width: number, height: number) => {
     if (width !== appliedWidth || height !== appliedHeight) {
       camera.aspect = width / height;
@@ -252,6 +258,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
       appliedWidth = width; appliedHeight = height;
     }
     if (frontPending) front();
+    if (drawn.shown) lighting.allocateTargets();
   };
   const frameListeners = new Set<(dt: number) => void>();
   /**
@@ -396,6 +403,8 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     try { result = await acrossContextLoss(device, signal => prepareAttempt(signal, options), options); }
     catch (error) {
       if (!options.signal?.aborted && drawn.shown) adoptPending();
+      // A hidden runtime's preparation that stopped (a warm one superseded stays resident) lets go of the targets its warm-up made.
+      if (!drawn.shown) lighting.releaseTargets();
       throw error;
     }
     if (drawn.shown) adoptPending();

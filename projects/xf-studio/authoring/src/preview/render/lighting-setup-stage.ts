@@ -602,6 +602,26 @@ export function createLightingSetupStage(options: {
      * fingerprint, a record of maps drawn in the context's last generation, is dropped with them.
      */
     restore() { environment.restore(); shadowKey = ""; if (staged) staged.shadowKey = ""; },
+    /**
+     * Let the frame-sized targets go: the display's scene target, the skin scatter's and the contact shadows' (a hidden scene runtime holds
+     * none: experiment 043 §2.1). Every program stays, and so do the shadow maps (their size is the quality's, not the frame's).
+     */
+    releaseTargets() { display.releaseTarget(); scatter.releaseTargets(); contact.releaseTarget(); },
+    /**
+     * Make the frame-sized targets the next frame draws into, at the drawing buffer's size, with their GPU storage: a runtime shown again
+     * allocates them as it is shown, so its first frame doesn't. Allocation only: no program depends on a target's size.
+     */
+    allocateTargets() {
+      applyState();
+      display.allocate(game() ? "creator" : "studio");
+      scatter.allocate(scene, display.scatterPossible);
+      if (contactOn) contact.allocate(scene);
+    },
+    /** Developer evidence: the pixels of each frame-sized target held now (none while the runtime is hidden). */
+    frameTargetPixels() {
+      const area = (size: { width: number; height: number }) => size.width * size.height;
+      return { display: area(display.info()), scatter: area(scatter.evidence()), contact: area(contact.evidence()) };
+    },
     /** Test and evidence access: the drawn setup's rig. */
     get rig() { return rig; },
     display,

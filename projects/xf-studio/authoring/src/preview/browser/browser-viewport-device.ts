@@ -44,8 +44,12 @@ export function createBrowserViewportDevice(options: {
   const contextListeners = new Set<(event: "lost" | "restored") => void>();
   let uvEditor: UVEditor | undefined;
   let surfaceEditor: SurfaceEditor | undefined;
-  /** Each head's stand-ins for the on-head editor's guides, compiled with it before it is shown (`surfaceGuides`); they go with the head. */
+  /**
+   * Each head's guide materials and their stand-ins (`surfaceGuideStandIns`), compiled with it before it is shown (`surfaceGuides`); the
+   * on-head editor mounted on the head draws with the same materials, so their programs stay linked across its mounts. They go with the head.
+   */
   const guides = new Map<Scene, ReturnType<typeof surfaceGuideStandIns>>();
+  const guidesFor = (scene: Scene) => { let made = guides.get(scene); if (!made) guides.set(scene, made = surfaceGuideStandIns()); return made; };
   /** Each head's on-head editor parts (its surface map and occlusion trees), made before it is shown (`surfaceSteps`); they go with the head. */
   const editorParts = new Map<Scene, { surface: THREE.SkinnedMesh; parts: SurfaceEditorParts }>();
   const partsFor = (scene: Scene, surface: THREE.SkinnedMesh) => {
@@ -140,11 +144,7 @@ export function createBrowserViewportDevice(options: {
      * What the on-head editor will add to `scene` once mounted on it (its guides), as stand-ins to compile with the head before it is shown,
      * so its first shown frame links nothing of theirs (profiles phase 4a-v-b). They live as long as the head, keeping those programs.
      */
-    surfaceGuides(scene: Scene): readonly THREE.Object3D[] {
-      let made = guides.get(scene);
-      if (!made) guides.set(scene, made = surfaceGuideStandIns());
-      return made.objects;
-    },
+    surfaceGuides(scene: Scene): readonly THREE.Object3D[] { return guidesFor(scene).objects; },
     /**
      * The steps that make the on-head editor's parts for `surface` on `scene` ahead (its surface map and occlusion trees, tens of milliseconds
      * each), for a head prepared before it is shown: the editor mounted at show takes them made (profiles phase 4a-v-b).
@@ -157,7 +157,8 @@ export function createBrowserViewportDevice(options: {
       if (!viewer) throw Error("The head scene must be shown before mounting surface controls.");
       const { renderer, scene, camera, head, eyes, controls, cameraInput, onFrame, requestRender } = viewer;
       surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)({ renderer, scene, camera, head, eyes, controls, cameraInput, onFrame,
-        requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) }, partsFor(viewer, surface));
+        requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) }, partsFor(viewer, surface),
+        guidesFor(viewer).materials);
       editors.attach("surface", surfaceEditor);
       return surfaceEditor;
     },

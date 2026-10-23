@@ -63,6 +63,16 @@ export function createContactShadows(renderer: THREE.WebGLRenderer, contactShado
     return target;
   }
   const off = () => { contactShadowUniforms.xfsContactCount.value = 0; drawn = 0; };
+  /** Whether a visible flagged light shines and something casts: the caster depth pass runs (`prepare`). */
+  const wanted = (scene: THREE.Scene) => {
+    let flagged = false, casters = false;
+    scene.traverseVisible(object => {
+      const light = object as THREE.Light;
+      if (light.isLight && light.userData.xfsContactShadows && light.intensity > 0) flagged = true;
+      casters ||= !!(object as THREE.Mesh).isMesh && object.castShadow;
+    });
+    return flagged && casters;
+  };
   return {
     /**
      * Before the forward scene: when a visible light is flagged and something casts, draw the casters' depth and point the shared
@@ -117,6 +127,16 @@ export function createContactShadows(renderer: THREE.WebGLRenderer, contactShado
     casterMaterial: (mesh: THREE.Mesh): THREE.Material => mesh.customDepthMaterial ?? fallbackDepth,
     /** Switch the term off without drawing (a frame without flagged lights, or the shadow switch off). */
     off,
+    /**
+     * Let the frame-sized target go (a hidden scene runtime holds none: experiment 043 §2.1). The uniforms are shared by every scene, so they
+     * let go of it only when they still point at it; the shown scene's next frame points them at its own.
+     */
+    releaseTarget() {
+      if (target && contactShadowUniforms.xfsContactDepth.value === target.depthTexture) contactShadowUniforms.xfsContactDepth.value = null;
+      target?.dispose(); target = null;
+    },
+    /** Make the target at the drawing buffer's size, with its GPU storage, ahead of the frame that draws it, when the pass runs for `scene`. */
+    allocate(scene: THREE.Scene) { if (wanted(scene)) renderer.initRenderTarget(ensureTarget()); },
     /** Developer evidence: how many flagged lights the last frame marched toward, and the target's size. */
     evidence: () => ({ lights: drawn, width: target?.width ?? 0, height: target?.height ?? 0 }),
     dispose() { off(); contactShadowUniforms.xfsContactDepth.value = null; target?.dispose(); target = null; fallbackDepth.dispose(); },

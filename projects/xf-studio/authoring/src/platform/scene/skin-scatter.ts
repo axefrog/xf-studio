@@ -355,6 +355,17 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
     },
     /** The blur's material (its program, for a caller preparing ahead). */
     get blurMaterial(): THREE.Material { return blur; },
+    /** Let the frame-sized targets go (a hidden scene runtime holds none: experiment 043 §2.1); the passes' programs stay. */
+    releaseTargets() { disposeTargets(); },
+    /**
+     * Make the targets at the drawing buffer's size, with their GPU storage, ahead of the frame that draws them; only when the scatter runs
+     * for `scene` (as `prepare` decides it, which this calls).
+     */
+    allocate(scene: THREE.Scene, possible: boolean) {
+      if (!this.prepare(scene, possible)) return;
+      ensureTargets();
+      for (const target of [...inputs!, p0!, p1!]) renderer.initRenderTarget(target);
+    },
     /** Developer evidence: drop the input variants, so the next frame measures their compile (a V's first scatter frame). */
     resetVariants() { for (const variants of passes) variants.clear(); },
     dispose() { disposeTargets(); for (const variants of passes) variants.dispose(); blur.dispose(); quad.geometry.dispose(); },

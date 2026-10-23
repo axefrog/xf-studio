@@ -92,7 +92,7 @@ export function harness(plan: { failBuild?: number[]; failPresent?: number[]; bu
       connectScene: scene => { connected = scene; return { accepted: true } as ReturnType<LayeredSurfaceWiring["preview"]["connectScene"]>; },
       disconnectScene: scene => { if (connected === scene) connected = undefined; },
       presentInitialLayers: () => { presents++; if (plan.failPresent?.includes(presents)) throw Error("A layer could not be shown."); },
-      fillScene: noop, releaseScene: noop,
+      fillScene: noop, holdsCurrent: () => true, releaseScene: noop,
     } }],
     preferences: { snapshot: () => ({ theme: "dark" }), subscribe: listener => { preferenceListeners.add(listener); return () => { preferenceListeners.delete(listener); }; } },
     colourScheme: { matches: true, addEventListener: (_type, listener) => schemeListeners.add(listener), removeEventListener: (_type, listener) => schemeListeners.delete(listener) },

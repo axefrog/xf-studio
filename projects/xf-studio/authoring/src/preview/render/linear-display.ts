@@ -280,6 +280,16 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
         return { pending, materials: [...materials, coverage, studio] };
       } finally { renderer.setRenderTarget(previous); }
     },
+    /**
+     * Let the frame-sized target go (a hidden scene runtime holds none: experiment 043 §2.1); the passes' programs stay. The next frame that
+     * draws, or `allocate`, makes it again (allocation only: a program doesn't depend on the target's size).
+     */
+    releaseTarget() {
+      target?.dispose(); target = null;
+      creator.uniforms.tScene!.value = studio.uniforms.tScene!.value = null;
+    },
+    /** Make the target `preset` draws into, at the drawing buffer's size and with its GPU storage, ahead of the frame that draws it. */
+    allocate(preset: LightingPreset) { if (preset === "creator" || linear) renderer.initRenderTarget(ensureTarget()); },
     /** Use a decoded game LUT, or the neutral LUT (null). */
     setLut(next: GradingLut | null) {
       const replacement = lutTexture(next ?? neutralGradingLut(32));

@@ -422,13 +422,16 @@ test("4a-v: a superseded composite preparation stops waiting on its links at onc
   });
   const features = createFeatureRenderers(ctx, [EYE_MAKEUP_RENDERER]);
   const controller = new AbortController();
-  const prepared = features.prepare(controller.signal);
-  const started = performance.now();
-  setTimeout(() => controller.abort(new DOMException("Superseded.", "AbortError")), 20);
-  // Released at the abort, not when the links end (they never do here).
-  const outcome = await Promise.race([prepared.then(() => "released"), new Promise(resolve => setTimeout(() => resolve("still waiting"), 500))]);
+  let outcome = "waiting";
+  void features.prepare(controller.signal).then(() => { outcome = "released"; }, () => { outcome = "rejected"; });
+  // No clock: everything queued settles, and the preparation still waits on the links (they never end here).
+  const settle = async () => { for (let i = 0; i < 50; i++) await Promise.resolve(); };
+  await settle();
+  expect(outcome).toBe("waiting");
+  // Released by the abort itself, with the links still unresolved (measured latency is the GPU probes' gate, not this test's).
+  controller.abort(new DOMException("Superseded.", "AbortError"));
+  await settle();
   expect(outcome).toBe("released");
-  expect(performance.now() - started).toBeLessThan(120);
   // The composite's seven passes were compiled (the layer and the resolve for each of its three targets, and the roughness chain); released
   // unused, each program deletes its two shaders with it.
   expect(programs).toHaveLength(7);

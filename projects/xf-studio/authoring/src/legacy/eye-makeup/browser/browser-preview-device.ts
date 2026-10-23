@@ -208,6 +208,20 @@ export function createBrowserPreviewDevice(options: {
       if (accepted) for (const i of changed) present(scene, i);
       held.set(scene, snapshot(accepted));
     },
+    /**
+     * Whether `scene` holds the layers as they are now (profiles phase 4a-v, the surface's part of a warm head's readiness): the surface
+     * shown is live; a surface not shown is current when connecting it would bring nothing, that is, its hold has the tier it would be given
+     * now and, slot for slot, the layers, masks and optical maps there are now. A layer enabled, edited, added or removed, or a mask or maps
+     * completed, since it was filled or hidden makes it stale: it is filled and prepared again before it is shown.
+     */
+    holdsCurrent(scene: Scene): boolean {
+      if (scene === viewer) return true;
+      const from = held.get(scene), layers = authoring.recipe.layers;
+      if (!from || from.accepted !== assessPreviewQuality(authoring.recipe, coordinator.size, scene.maxTextureSize).accepted) return false;
+      if (from.ids.length !== layers.length) return false;
+      return layers.every((layer, i) => { const slot = from.slots[i]!;
+        return from.ids[i] === layer.id && slot.canvas === canvases[i] && slot.optics === optics[i] && slot.layer === JSON.stringify(layer); });
+    },
     /** A surface goes (its head is released): it holds nothing any more. */
     releaseScene(scene: Scene) { held.delete(scene); },
   };
