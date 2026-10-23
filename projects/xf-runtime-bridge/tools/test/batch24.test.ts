@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { projectDir } from "./helpers.ts";
 
-const read = (...parts: string[]) => readFileSync(join(projectDir, ...parts), "utf8");
+const read = (...parts: string[]) => readFileSync(join(projectDir, ...parts), "utf8").split(String.fromCharCode(13)).join(""); // the sources may have CRLF line ends
 
 describe("0.8.11 N1: a move's facing target is cleared, not left to steer later walks", () => {
   const npc = read("redscript", "XFRuntimeBridgeNpc.reds");
