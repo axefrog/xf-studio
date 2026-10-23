@@ -1,6 +1,6 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v1.2, 23 October 2026. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
+**Status:** v1.3, 23 October 2026. v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
 - **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
 - **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
 - **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
@@ -2147,7 +2147,7 @@ Dropping never renumbers; a reference to a dropped entry reads as "dropped". P7 
 ### 10.1a The read API for layer 3
 
 Layer 2 exposes a read-only `Layer2View` (S3 §1.2) to layer 3 and to tools:
-- `instances()`, `instance(id)`, `sownBy(decision)`;
+- `instances()`, `instance(id)`, `sownBy(decision)`. `sownBy` keeps answering after an instance ends and is compacted, from a small index of decisions in the global record;
 - `global()`;
 - `exposedNode(node, atLeast)`;
 - `playTotal()`: the **current** cumulative play time in this branch, not the value last saved.
@@ -2158,7 +2158,7 @@ Its views are projections of the instance state (§12.1) and the record. Each de
 - the `playTotal` at closure, beside the game time;
 - each delivery's wait as play seconds (`maxWaitPlay`), with `Duration`s normalised.
 
-A shared `claimConflict(node, span)` read answers whether a node is held.
+A shared `claimConflict(node, span, share)` read answers whether a node is held under a claim that conflicts with one of that span and sharing, by the rules of §9.1.
 
 ### 10.2 The exposure ledger
 
