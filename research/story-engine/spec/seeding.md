@@ -1,6 +1,6 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v1.4, 23 October 2026. v1.4 aligns the city and social reads with [S1](simulation.md): bands are registered strings, and regimes have two reads. v1.3: v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
+**Status:** v1.5, 23 October 2026. v1.5 adds in-scene offers and puts obstacles in the core, from [language check 1](../language-check-1.md). v1.4: v1.4 aligns the city and social reads with [S1](simulation.md): bands are registered strings, and regimes have two reads. v1.3: v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
 - **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
 - **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
 - **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
@@ -58,8 +58,8 @@ The first implementation proves one complete path: **pack → cast → offer →
 | Packs and instances (§1) | Namespaced ids, maturity, structure versions with a frozen semantic closure (§12.3), one-shot and bounded repeatable seeds |
 | Binding (§2.2, §2.4, §5) | Fixed, preferred and open parts; bounded role queries; identities; `must` and `prefer`; claim priority; ladders of `wait`, `relax` and `withdraw` |
 | Predicates (§2.6) | Kleene logic; guarded game facts; seed facts; `role`, `cast`; beat, response and seed states; `since`, `hour`; `count`; `exposed`; `setting`; registered reads (`fn`) with declared dependencies |
-| Execution (§6, §7) | One beat graph; links with their conditions always evaluated (§7.1); objectives and failures; one end predicate; the unattended plan |
-| Offers (§2.9, §7.4) | Actions, declines, null path, bounded reoffers, retract, foresight and writes; one response lifecycle for every offer |
+| Execution (§6, §7) | One beat graph; links with their conditions always evaluated (§7.1); objectives and failures; **obstacle beats with their affordances**; one end predicate; the unattended plan |
+| Offers (§2.9, §7.4) | Actions, declines, null path, bounded reoffers, retract, foresight and writes; one response lifecycle for every offer; **in-scene offers** (§8.3) |
 | Effects (§2.5) | Seed-fact writes, declared kernel effects, reward-table references, capability-checked game writes, only for operations the game port supports |
 | Delivery (§8) | One arbiter, channel fallback, attention gates, spacing and caps, a total retry bound, three exposure grades, persistent answerable offers, receipts |
 | Content (§2.19, §2.20) | Registered classes, ceilings, the floors, one fallback chain, author-fill presentation slots, game content by reference, origin |
@@ -91,7 +91,7 @@ The first implementation proves one complete path: **pack → cast → offer →
 |---|---|
 | Document integrity | L-01, L-13, L-73, L-74 |
 | Binding guarantees | L-02, L-17, L-76 |
-| Choices and writes | L-05, L-06, L-12, L-15 |
+| Choices and writes | L-05, L-06, L-12, L-15, L-27 |
 | Closure and failure | L-07, L-09, L-89 |
 | Perspective | L-19, L-52, L-56, L-57, L-60, L-61 |
 | Evidence | L-49, L-58, L-62, L-63 |
@@ -568,6 +568,7 @@ interface Beat {
   mustReach?: boolean;                 // V needs this to take an option (L-63)
   droppable?: boolean;                 // may be dropped above the player's ceiling (§2.19)
   reoffer?: { when: Pred; max: number };              // offer beats: may be offered again (§7.4)
+  inScene?: boolean;                   // an offer made inside a running beat's own scene (§8.3)
 }
 
 type Link =
@@ -1909,6 +1910,13 @@ The arbiter runs once a second of play:
 
 **What the arbiter never does.** It holds, delays, expires and releases. It never creates or changes content.
 
+**In-scene offers.** A choice V makes inside a scene that is already running (a conversation, an encounter) is part of that scene's content, not a new push. A beat marked `inScene: true` is released straight into the running scene of the beat it follows:
+- It skips the arbiter's busy-UI gate, attention gates, spacing, cap, category and session gates.
+- It still follows the response lifecycle (§7.4), the honesty rules (§2.9) and the content ceilings (§2.19).
+- It must link `because` a beat that is `running` with the same scene, and it is refused otherwise (L-131a).
+
+Only offers that **start** contact go through the arbiter's gates.
+
 **Retracting.** Every released push of class 2 or above can be **retracted by one input** (S5) for `retractWindow` seconds **[tunable 10]**. A retraction is a `retract` response (§7.4).
 
 ### 8.4 Prepare, then confirm
@@ -2353,6 +2361,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-128 | A non-colour phrasing that reads nothing from the record | error |
 | L-129 | An option label that names an emotion, or isn't from the closed list | error |
 | L-130 | A told story containing an event its teller neither witnessed nor was told | error |
+| L-131a | An `inScene` offer that doesn't follow a running beat of the same scene | error |
 | L-131 | A `modelOk` unit without a model-free `says` that leaves the same facts | error |
 | L-132 | `modelOk` on an excluded unit (§2.23): authored-source, author-fill, offers, responses, attribution, `mustReach`, humour, told evaluations, system voices, intensity 2 or 3 | error |
 | L-133 | A model render when the cast binds anyone who isn't an adult | error, at cast time |
