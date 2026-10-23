@@ -1,7 +1,7 @@
 // The fixes of the independent review of the simulation layer (SIM-01 to SIM-15) and the rulings of S1 v0.3, one regression test each.
 // Every test here fails on the code the review was made against.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { processCause } from '../../src/evolution.ts';
 import { H, id as hid, mintedId, s as hs } from '../../src/id.ts';
 import type { Change, Id } from '../../src/types.ts';
@@ -24,6 +24,9 @@ import { restate, transfer } from './feed.ts';
 import { make as fixtureSim } from './gen.ts';
 import { child, eventsState, inject, quietData, quietSim, seedOf, withSecondDistrict } from './helpers.ts';
 import { recordOf } from './records.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const cause = H(hs('fx'), hs('review-fixes'));
@@ -71,7 +74,7 @@ describe('SIM-01: a closing condition sees every value a read passed through, th
 
   const seedWith = (closes: Pred): Pack => miniPack({}, { windows: [{ id: 'w', opens: { city: { regimeIs: { scope: 'fx_d1', kind: 'festival' } }, is: ['yes'] } as never, closes: closes as never, onClose: 'withdraw' }] });
 
-  function run(name: string, closes: Pred, patch: boolean) {
+  function run(name: string, closes: Pred, patch: boolean, arriving = 'crackdown') {
     const { sim, l2, w } = equalTimes(name);
     const pack = seedWith(closes);
     expect(l2.installPack(pack)).toEqual([]);
@@ -82,14 +85,16 @@ describe('SIM-01: a closing condition sees every value a read passed through, th
     const inst = l2.instance(sown.instance!)! as Instance;
     sim.k.settle();
     expect(inst.st.latches).toEqual([]);
-    sim.data.regimes.find((r) => r.kind === 'crackdown')!.arrival = 5760;
+    sim.data.regimes.find((r) => r.kind === arriving)!.arrival = 5760;
     sim.advance(1);
     const T = w * W;
     if (patch) {
-      // the crackdown starts in the second the festival ends: the two changes share a time, the end made first
+      // the new regime starts in the second the festival ends: the changes share a time, the end made first (and its price shift after it)
       const batch = sim.k.evolution.states.get('city.events')!.outstanding.find((b) => b.ops.some((op) => op.op === 'mint-event' && op.spec.kind === 'regime-start'))!;
       for (const op of batch.ops) if (op.op === 'mint-event' && op.spec.kind === 'regime-start') op.spec.time = T;
-      for (const win of (batch.digest as { changes: { windows: Array<{ items: Array<{ t: number; value: string }> }> } }).changes.windows) for (const it of win.items) if (it.value === 'crackdown') it.t = T;
+      for (const win of (batch.digest as { changes: { windows: Array<{ items: Array<{ t: number; value: string; key: string }> }> } }).changes.windows) {
+        for (const it of win.items) if (it.value === arriving || it.key.startsWith('price|')) it.t = T;
+      }
     }
     sim.advance(1);
     sim.k.settle();
@@ -100,7 +105,9 @@ describe('SIM-01: a closing condition sees every value a read passed through, th
     const { sim, T } = run('R1-01a', { city: { regime: { scope: 'fx_d1' } }, is: ['none'] } as never, true);
     const port = sim.reads.port();
     const t = port.transitions('regime', ['fx_d1'], T - 1, T);
-    expect(t).toEqual([{ t: T - 1, value: 'festival' }, { t: T, value: 'none' }, { t: T, value: 'crackdown' }]);
+    expect(t.map((x) => [x.t, x.value])).toEqual([[T - 1, 'festival'], [T, 'none'], [T, 'crackdown']]);
+    // the changes at one time carry the order they were made in
+    expect(t[1]!.ord).toBeLessThan(t[2]!.ord!);
     // eval at that time alone answers the last of them, which is why a closing condition needs the rest
     expect(port.eval('regime', ['fx_d1'], T)).toBe('crackdown');
   });
@@ -111,6 +118,30 @@ describe('SIM-01: a closing condition sees every value a read passed through, th
     // a condition that none of the values satisfied stays open: the walk through the values does not latch what was never true
     const other = run('R1-01c', { city: { regime: { scope: 'fx_d1' } }, is: ['lockdown'] } as never, true);
     expect(other.inst.st.latches).toEqual([]);
+  });
+
+  test('a condition on two reads is met only by values that stood together, whatever the order of the reads in it', () => {
+    // the festival ends, a lockdown starts and the price rises, all at one second, in that order: regime none and price fair stood together
+    // (after the end), regime lockdown and price high stood together (at the end), and none with high did not
+    const cond = (regime: string, price: string, swap: boolean): Pred => {
+      const a = { city: { regime: { scope: 'fx_d1' } }, is: [regime] };
+      const b = { city: { priceLevel: { district: 'fx_d1' } }, is: [price] };
+      return { all: swap ? [b, a] : [a, b] } as never;
+    };
+    const probe = run('R2-01p', cond('none', 'fair', false), true, 'lockdown');
+    const port = probe.sim.reads.port();
+    const regime = port.transitions('regime', ['fx_d1'], probe.T - 1, probe.T);
+    const price = port.transitions('priceLevel', ['fx_d1'], probe.T - 1, probe.T);
+    expect(regime.map((x) => x.value)).toEqual(['festival', 'none', 'lockdown']);
+    expect(price.map((x) => x.value)).toEqual(['fair', 'high']);
+    // the changes carry the order they were made in: the end, the start, then the price
+    const order = [...regime.slice(1), ...price.slice(1)].sort((x, y) => x.ord! - y.ord!).map((x) => x.value);
+    expect(order).toEqual(['none', 'lockdown', 'high']);
+    for (const swap of [false, true]) {
+      expect(run(`R2-01q${swap}`, cond('none', 'fair', swap), true, 'lockdown').inst.st.latches).toEqual(['w']);
+      expect(run(`R2-01r${swap}`, cond('none', 'high', swap), true, 'lockdown').inst.st.latches).toEqual([]);
+      expect(run(`R2-01s${swap}`, cond('lockdown', 'high', swap), true, 'lockdown').inst.st.latches).toEqual(['w']);
+    }
   });
 
   test('with the changes at different times the window latched before, and still does', () => {
@@ -231,6 +262,44 @@ describe('SIM-03: a memorable belief keeps the facts of its source event through
     expect(sim.policies.tellScore(belief(), who, listener)).toBe(score);
   });
 
+  test('an authored rule that names the event does not stop its own fields being restored (R2-03)', () => {
+    const { sim, who, listener, E, belief, reload } = teller('R2-03');
+    const view = sim.policies.viewEvent(E)!;
+    const score = sim.policies.tellScore(belief(), who, listener);
+    // a rule of someone else's that names the event (it restates the kind it already has): the event still has to be put back
+    sim.k.contribute({ source: { layer: 'authored', origin: 'rule:r2-03' }, target: { slot: 'kind', scope: { nodes: [E] } }, form: { f: 'const', value: 'assault' }, mode: 'constrain', silent: true });
+    reload('A');
+    expect(sim.k.value(E, 'time')).toBe(1000);
+    expect(sim.policies.viewEvent(E)).toEqual(view);
+    expect(sim.policies.tellScore(belief(), who, listener)).toBe(score);
+  });
+
+  test('a rule that restates a field for a while is not saved as what the event was: after the rule has ended the event is what it was minted as (R2-04)', () => {
+    const { sim, E, reload } = teller('R2-04');
+    expect(sim.k.value(E, 'kind')).toBe('assault');
+    // a general rule, valid for a while, makes every event a theft; the save is made while it holds
+    sim.k.contribute({ source: { layer: 'authored', origin: 'rule:r2-04' }, target: { kind: 'core:event', slot: 'kind' }, form: { f: 'const', value: 'theft' }, mode: 'constrain', valid: { from: 0, to: 1200 }, silent: true });
+    expect(sim.k.now).toBe(600);
+    expect(sim.k.value(E, 'kind')).toBe('theft');
+    reload('A');
+    // the rule is not part of a save; what is restored is what the event was minted as, so once the rule would have lapsed it is an assault in the run that loaded too
+    expect(sim.k.value(E, 'kind', 1800)).toBe('assault');
+  });
+
+  test('the frame an act served is kept with the event through a load (R2-05)', () => {
+    const sim = quietSim('R2-05', (d) => { d.minds.tellBase = 1e9; d.events.offspring = [0, 0, 0, 0]; });
+    const d = sim.w.districts[0]!;
+    const who = sim.people.residentAt(d.cellIds[0]!, 0);
+    const subject = sim.people.residentAt(d.cellIds[1]!, 0);
+    const served = H(hs('r2-05'), hs('frame'));
+    const E = sim.k.events.mintEvent({ creator: sim.w.port, cause: sim.w.port, name: 'served', time: 1000, kind: 'assault', place: d.cellIds[0]!, participants: [{ who: subject, role: 'victim' }], served });
+    sim.k.beliefs.set({ id: H(hs('r2-05'), hs('belief')), believer: who, subject, path: 'did.harm', at: 1000, value: subject, confidence: 1, evidence: [E], source: { by: 'observed', event: E }, formed: sim.k.now, refreshed: sim.k.now, memorable: true });
+    expect(sim.k.value(E, 'served')).toBe(served);
+    sim.k.persistence.save('A');
+    sim.k.persistence.load('A');
+    expect(sim.k.value(E, 'served')).toBe(served);
+  });
+
   test('restoring the events of a loaded save announces none of them', () => {
     const { sim, E, reload } = teller('R1-03d');
     const emitted = watchEvents(sim);
@@ -291,6 +360,33 @@ describe('SIM-04: the protected set of a past time survives a save, so a regener
     sim.k.persistence.save('B');
     sim.k.persistence.load('B');
     expect(sim.people.protectedAt(victim, d.time)).toBe(true);
+  });
+
+  test('a cause still live at a save is recorded up to the save only: its later end is not undone by the record, across further loads', () => {
+    const { sim, d, victim } = moment('R1-04d');
+    const seed = sim.k.root('live-seed-R1-04d', 'core:seed');
+    sim.k.retention.setSeed({ id: seed, state: {}, nodes: [victim] });
+    const edge = sim.k.addEdge({ type: 'core:cast', from: seed, to: victim, data: { role: 'target' }, cause: seed, valid: { from: d.time - 1 } });
+    sim.advance(Math.ceil((d.time + 100) / W) - sim.windowNow());
+    sim.k.persistence.save('A');
+    sim.k.persistence.load('A');
+    // live at the save: still held by the kernel, and still protecting
+    const live = sim.k.store.edgesTo(victim).find((e) => e.type === 'core:cast')!;
+    expect(live.valid.to).toBeUndefined();
+    expect(sim.people.protectedAt(victim, d.time)).toBe(true);
+    const end = sim.k.now + 400;
+    sim.k.endEdge(live.id, end);
+    sim.advance(Math.ceil((end + 1800) / W) - sim.windowNow());
+    expect(sim.people.protectedAt(victim, d.time)).toBe(true);
+    expect(sim.people.protectedAt(victim, end - 1)).toBe(true);
+    expect(sim.people.protectedAt(victim, end + 100)).toBe(false);
+    for (const key of ['B', 'C']) {
+      sim.k.persistence.save(key);
+      sim.k.persistence.load(key);
+      expect(sim.people.protectedAt(victim, d.time)).toBe(true);
+      expect(sim.people.protectedAt(victim, end + 100)).toBe(false);
+    }
+    void edge;
   });
 
   test('where a protected resident was is read from the same history: present at the time of the protection, before and after a load', () => {
@@ -361,6 +457,67 @@ describe('SIM-05: what is cached of a resident depends on every rule that reache
     expect(a.people.view(r)!.ageClass).toBe('adult');
   });
 
+  test('a rule that reads the owner chain sees a pin on the cell: the view of a warm resident follows it (R2-06)', () => {
+    const sim = quietSim('R2-06');
+    const r = adultOf(sim);
+    const cell = sim.w.districts[0]!.cellIds[0]!;
+    const was = sim.people.view(r)!.age;
+    expect(was).toBeGreaterThan(25);
+    // an age of 17 where the cell of the household (two owners up) is private: a pin on the cell is all that changes
+    sim.k.contribute({
+      source: { layer: 'authored', origin: cause }, target: { kind: 'xf:resident', slot: 'age' },
+      form: { f: 'rule', when: [{ path: '^/^/public', op: 'eq', arg: 'private' }], then: { f: 'const', value: 17 } }, mode: 'constrain',
+    });
+    expect(sim.k.value(cell, 'public')).not.toBe('private');
+    expect(sim.people.view(r)!.age).toBe(was);
+    sim.k.pin({ node: cell, slot: 'public', value: 'private', reason: 'authored', cause });
+    expect(sim.k.value(r, 'age')).toBe(17);
+    expect(sim.people.view(r)!.age).toBe(17);
+    expect(sim.people.view(r)!.ageClass).toBe('minor');
+    sim.people.cacheOn = false;
+    expect(sim.people.view(r)!.age).toBe(17);
+  });
+
+  test('the same for a rule that names the resident, and a pin on a slot no rule reads from below does not disturb the cache (R2-06)', () => {
+    const sim = quietSim('R2-06b');
+    const r = adultOf(sim);
+    const cell = sim.w.districts[0]!.cellIds[0]!;
+    const was = sim.people.view(r)!.age;
+    sim.k.contribute({
+      source: { layer: 'authored', origin: cause }, target: { slot: 'age', scope: { nodes: [r] } },
+      form: { f: 'rule', when: [{ path: '^/^/public', op: 'eq', arg: 'private' }], then: { f: 'const', value: 17 } }, mode: 'constrain',
+    });
+    expect(sim.people.view(r)!.age).toBe(was);
+    // the band of the cell is pinned by the processes all the time and nothing reads it from below: the warm view is still the view
+    const warm = sim.people.view(r);
+    sim.k.pin({ node: cell, slot: 'band@w1', value: 'hot', reason: 'game', cause });
+    expect(sim.people.view(r)).toBe(warm);
+    sim.k.pin({ node: cell, slot: 'public', value: 'private', reason: 'authored', cause });
+    expect(sim.people.view(r)!.age).toBe(17);
+  });
+
+  test('worlds that differ in the kernel configuration do not share what they resolve (R2-07)', () => {
+    const mk = (epsilon: number): Sim => Sim.create({ worldSeed: seedOf('R2-07'), index: fx3Slice(), data: quietData(), only: ['city.events'], config: { epsilon } });
+    // a weight on one value: with the default floor it settles every resident on it, with a floor of one it weighs nothing
+    const rule = (sim: Sim): void => {
+      sim.k.contribute({ source: { layer: 'authored', origin: cause }, target: { kind: 'xf:resident', slot: 'sociability' }, form: { f: 'const', value: 'low' }, mode: 'weight' });
+    };
+    const tight = mk(2 ** -20);
+    const loose = mk(1);
+    rule(tight);
+    rule(loose);
+    const cell = tight.w.districts[0]!.cellIds[0]!;
+    const residents = tight.people.residentsOfBlock(cell);
+    const primed = residents.map((r) => tight.people.view(r)!.sociability);
+    loose.people.residentsOfBlock(cell);
+    const got = residents.map((r) => loose.people.view(r)!.sociability);
+    loose.people.cacheOn = false;
+    const alone = residents.map((r) => loose.people.view(r)!.sociability);
+    expect(got).toEqual(alone);
+    // and the test is not vacuous: the two configurations do resolve differently
+    expect(alone).not.toEqual(primed);
+  });
+
   test('a rule that opens and closes at times of its own is seen at those times, with nothing else changed', () => {
     const sim = quietSim('R1-05c');
     const r = adultOf(sim);
@@ -405,6 +562,33 @@ describe('SIM-07 and SIM-11: a materialised tie that ended opens again under its
     return { loose: loose!, tied: tied! };
   }
   const at = (sim: Sim, p: [Id, Id], t: number, type: unknown = 'xf:tie'): string => sim.reads.eval('tied', [p[0], p[1], type], t);
+
+  test('once the oldest intervals are dropped, the times they covered are not known: tied says maybe there, not no (R2-09)', () => {
+    const sim = quietSim('R2-09');
+    const { loose } = pairs(sim);
+    sim.advance(1); // 600
+    const first = sim.tiePolicy.materialise(loose[0], loose[1])!;
+    sim.advance(1); // 1200
+    sim.k.endEdge(first.id, sim.k.now);
+    expect(at(sim, loose, 900)).toBe('yes');
+    // seventeen more cycles: the first interval is the oldest of eighteen, and the record keeps sixteen
+    for (let n = 0; n < 17; n++) {
+      sim.advance(1);
+      const e = sim.tiePolicy.materialise(loose[0], loose[1])!;
+      sim.advance(1);
+      sim.k.endEdge(e.id, sim.k.now);
+      sim.k.persistence.save(`T${n}`);
+      sim.k.persistence.load(`T${n}`);
+      pairs(sim); // the people are addressed again, as the game would
+    }
+    expect(at(sim, loose, 900)).toBe('maybe');
+    // the intervals still kept are answered as before, and so is a time after everything dropped
+    const kept = sim.tiePolicy.intervalsOf(...loose);
+    expect(kept.length).toBeLessThanOrEqual(17);
+    const recent = kept[kept.length - 1]!;
+    expect(at(sim, loose, recent.from + 1)).toBe('yes');
+    expect(sim.tiePolicy.coverageFloor(...loose)).toBeGreaterThan(900);
+  });
 
   test('materialise, end, materialise: the second tie is live under the same Id, and the intervals are kept for the reads of the past', () => {
     const sim = quietSim('R1-07a');
@@ -580,6 +764,28 @@ describe('SIM-08: the divergence of a past time is what the log says, not what t
     return { sim, believer, mv, believe, read };
   }
 
+  test('a belief set inside a staged batch that is discarded leaves nothing in the log; one that is committed is logged (R2-08)', () => {
+    const { sim, believer, mv, read } = world('R2-08');
+    const contradict = (k: typeof sim.k): void => {
+      k.beliefs.set({ believer, subject: mv, path: 'alive', at: k.now, value: 'no', confidence: 1, evidence: [mv], source: { by: 'inferred', rule: { name: 'test', version: 1 }, from: [mv] }, formed: k.now, refreshed: k.now, memorable: true });
+    };
+    const batch = sim.k.stage();
+    batch.write(contradict);
+    expect(Object.keys(sim.record.divLog)).toEqual([]);
+    batch.discard();
+    expect(sim.k.beliefs.activeOf(believer).length).toBe(0);
+    sim.advance(3);
+    expect(read(1200)).toBe('none');
+    expect(read(sim.k.now)).toBe('none');
+    expect(Object.keys(sim.record.divLog)).toEqual([]);
+    // committed, it is logged at the time it was made, with the batch no longer open
+    const kept = sim.k.stage();
+    kept.write(contradict);
+    kept.commit();
+    expect(read(sim.k.now)).toBe('large');
+    expect(sim.record.divLog[`${believer}|${mv}`]?.map((e) => e.value)).toEqual(['large']);
+  });
+
   test('a contradicting belief formed at 1200 changes the answer from 1200 on, and not the answers for the times before', () => {
     const { sim, believe, read } = world('R1-08a');
     expect(read(0)).toBe('none');
@@ -734,6 +940,29 @@ describe('S1 8.8 (v0.3): a changed affiliation joins the group of the person’s
     expect(inFirst.held).toEqual([inFirst.sim.w.group(inFirst.first.id, 'A1')]);
   });
 
+  test('where the outlines overlap the innermost district holds the person, and a district whose band the height is outside of does not (places.md 3.2)', () => {
+    const { ix, first, second } = twoDistricts();
+    // the second district's outline lies wholly inside the first's: a point in it is in both, and the smaller one is where the person is
+    first.polygon = [[0, 0], [40, 0], [40, 40], [0, 40]];
+    second.polygon = [[20, 10], [30, 10], [30, 20], [20, 20]];
+    const sim = Sim.create({ worldSeed: seedOf('R1-136f'), index: ix, data: quietData(), only: ['city.events'] });
+    const named = (p: unknown): Id | undefined => sim.w.districtAt(p)?.id;
+    expect(named([25, 15, 0])).toBe(second.id);
+    expect(named([5, 5, 0])).toBe(first.id);
+    expect(named([100, 100, 0])).toBeUndefined();
+    // the same whichever order the districts are listed in
+    sim.w.districts.reverse();
+    expect(named([25, 15, 0])).toBe(second.id);
+    sim.w.districts.reverse();
+    // a band: the inner district stops at 50 m, the outer one goes up to 600; a height of 100 m is in the outer one only, none given is in the inner
+    second.zBand = [-20, 50];
+    first.zBand = [-20, 600];
+    expect(named([25, 15, 100])).toBe(first.id);
+    expect(named([25, 15, 10])).toBe(second.id);
+    expect(named([25, 15])).toBe(second.id);
+    expect(named([25, 15, 700])).toBeUndefined();
+  });
+
   test('otherwise it is the group of the first simulated district, in Id order, that lists it: a position outside every district, or none', () => {
     for (const [name, position] of [['R1-136c', [100, 100, 0]], ['R1-136d', undefined]] as const) {
       const r = moved(name, position as [number, number, number] | undefined);
@@ -779,17 +1008,58 @@ describe('V-frames: a cell V comes back to, and an entry tracked again, open the
     const lines: ReplayLine[] = [
       { t: 0, op: 'reading', node: 'v', slot: 'district', value: 'fx_d1' },
       { t: 0, op: 'reading', node: 'v', slot: 'cell', value: 'c2' },
-      { t: 15844, op: 'reading', node: 'v', slot: 'cell', value: 'c1' },
-      { t: 94051, op: 'reading', node: 'v', slot: 'cell', value: 'c2' },
+      { t: 2000, op: 'reading', node: 'v', slot: 'cell', value: 'c1' },
+      { t: 9051, op: 'reading', node: 'v', slot: 'cell', value: 'c2' },
     ];
-    const through = run(lines, 170);
-    const saved = run(lines, 170, 73);
+    const through = run(lines, 24);
+    const saved = run(lines, 24, 10);
     // c3 is next to c2 and not to c1: it is abandoned while V is in c1 and has to be opened again when V is back in c2
     const c3 = (sim: Sim) => sim.k.frames.frame(sim.vFrames.situationId(sim.w.districts[0]!.cellIds[2]!))!;
     expect(c3(through).status).toBe('active');
-    expect(c3(through).opened).toBe(94200);
-    expect(c3(saved).opened).toBe(94200);
+    expect(c3(through).opened).toBe(9600);
+    expect(c3(saved).opened).toBe(9600);
     expect(recordOf(through).frames).toBe(recordOf(saved).frames);
+  });
+
+  test('an ended frame that a live one hangs from is kept by a save, and is opened afresh all the same, with the live one still attached (R2-14)', () => {
+    const lines: ReplayLine[] = [
+      { t: 0, op: 'reading', node: 'v', slot: 'district', value: 'fx_d1' },
+      { t: 0, op: 'reading', node: 'v', slot: 'cell', value: 'c2' },
+      { t: 2000, op: 'reading', node: 'v', slot: 'cell', value: 'c1' },
+      { t: 9051, op: 'reading', node: 'v', slot: 'cell', value: 'c2' },
+    ];
+    // at window 40 V's goal takes the dropped neighbour's frame (c3's, abandoned at window 27) as its parent, so the frame is referred to
+    const hang = (sim: Sim): Id => {
+      const parent = sim.vFrames.situationId(sim.w.districts[0]!.cellIds[2]!);
+      expect(sim.k.frames.frame(parent)!.status).toBe('abandoned');
+      return sim.k.frames.open({ actor: sim.w.v, level: 'goal', origin: H(hs('r2-14')), weight: 1, cause: sim.w.vState, parents: [{ frame: parent, weight: 1 }] }).id;
+    };
+    const go = (reloadAt?: number): { sim: Sim; child: Id } => {
+      let sim = sim0();
+      new ReplayPort(sim).submit(lines);
+      sim.advance(6);
+      const child = hang(sim);
+      if (reloadAt === undefined) sim.advance(18);
+      else {
+        sim.advance(reloadAt - 6);
+        sim.k.persistence.save('V2');
+        sim = transfer(sim, 'V2', sim0, 3);
+        restate(sim, lines);
+        // kept by the save: the ended frame is there after the load
+        expect(sim.k.frames.frame(sim.vFrames.situationId(sim.w.districts[0]!.cellIds[2]!))?.status).toBe('abandoned');
+        sim.advance(24 - reloadAt);
+      }
+      return { sim, child };
+    };
+    const through = go();
+    const saved = go(10);
+    for (const { sim, child } of [through, saved]) {
+      const c3 = sim.k.frames.frame(sim.vFrames.situationId(sim.w.districts[0]!.cellIds[2]!))!;
+      expect(c3.status).toBe('active');
+      expect(c3.opened).toBe(9600);
+      expect(sim.k.frames.frame(child)!.parents.map((p) => p.frame)).toEqual([c3.id]);
+    }
+    expect(recordOf(through.sim).frames).toBe(recordOf(saved.sim).frames);
   });
 
   test('a tracked entry untracked and tracked again opens its goal frame at the second time, as after a reload', () => {

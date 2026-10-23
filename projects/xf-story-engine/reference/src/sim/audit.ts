@@ -29,17 +29,42 @@ export interface SourceFile {
 
 // ---- source text without comments and strings ----
 
+/** How the contents of a string or template literal are read: dropped (`blank`), kept as they are (`keep`), or kept between two marks (`mark`). */
+export type StringMode = 'blank' | 'keep' | 'mark';
+/** The marks around a literal's contents in `mark` mode: characters that never occur in source, so a quote inside a string cannot pass for the start of one. */
+export const MARK_OPEN = '\u0001';
+export const MARK_CLOSE = '\u0002';
+
 /**
- * The code of a TypeScript file: comments removed and, unless `keepStrings`, the contents of string and template literals blanked, line
- * structure kept.
+ * The code of a TypeScript file: comments removed and, unless the strings are kept, the contents of string and template literals blanked,
+ * line structure kept. The expressions inside a template literal (`${...}`) are code, whatever the mode: they are read like the rest.
  */
-export function codeOf(text: string, keepStrings = false): string {
+export function codeOf(text: string, strings: boolean | StringMode = 'blank'): string {
+  const mode: StringMode = strings === true ? 'keep' : strings === false ? 'blank' : strings;
+  return scan(text, 0, mode, false).out;
+}
+
+/** One level of the scan: the whole text, or (inside `${`) up to the brace that closes the expression. */
+function scan(text: string, from: number, mode: StringMode, inExpression: boolean): { out: string; end: number } {
   let out = '';
-  let i = 0;
+  let i = from;
+  let depth = 0;
   const n = text.length;
+  /** A literal's own character: kept in `keep` and `mark`; in `blank` only the line breaks stay. */
+  const literalChar = (ch: string): void => {
+    if (mode !== 'blank') out += ch;
+    else if (ch === '\n') out += '\n';
+  };
   while (i < n) {
     const c = text[i]!;
     const d = text[i + 1];
+    if (inExpression) {
+      if (c === '{') depth++;
+      else if (c === '}') {
+        if (depth === 0) return { out, end: i };
+        depth--;
+      }
+    }
     if (c === '/' && d === '/') {
       while (i < n && text[i] !== '\n') i++;
     } else if (c === '/' && d === '*') {
@@ -49,18 +74,44 @@ export function codeOf(text: string, keepStrings = false): string {
         i++;
       }
       i += 2;
-    } else if (c === '"' || c === "'" || c === '`') {
+    } else if (c === '"' || c === "'") {
       out += c;
+      if (mode === 'mark') out += MARK_OPEN;
       i++;
       while (i < n && text[i] !== c) {
         if (text[i] === '\\') {
-          if (keepStrings) out += text[i]!;
+          if (mode !== 'blank') out += text[i]!;
           i++;
         }
-        if (keepStrings && i < n) out += text[i]!;
-        else if (text[i] === '\n') out += '\n';
+        if (i < n) literalChar(text[i]!);
         i++;
       }
+      if (mode === 'mark') out += MARK_CLOSE;
+      out += c;
+      i++;
+    } else if (c === '`') {
+      out += c;
+      if (mode === 'mark') out += MARK_OPEN;
+      i++;
+      while (i < n && text[i] !== '`') {
+        if (text[i] === '$' && text[i + 1] === '{') {
+          // the expression is code
+          if (mode === 'mark') out += MARK_CLOSE;
+          out += '${';
+          const inner = scan(text, i + 2, mode, true);
+          out += inner.out + '}';
+          i = inner.end + 1;
+          if (mode === 'mark') out += MARK_OPEN;
+          continue;
+        }
+        if (text[i] === '\\') {
+          if (mode !== 'blank') out += text[i]!;
+          i++;
+        }
+        if (i < n) literalChar(text[i]!);
+        i++;
+      }
+      if (mode === 'mark') out += MARK_CLOSE;
       out += c;
       i++;
     } else {
@@ -68,7 +119,7 @@ export function codeOf(text: string, keepStrings = false): string {
       i++;
     }
   }
-  return out;
+  return { out, end: n };
 }
 
 const lineOf = (code: string, index: number): number => {
@@ -128,7 +179,8 @@ export function lintSources(files: SourceFile[]): Finding[] {
   }
   // the policies that hear events ignore the director's kinds
   const policies = files.find((f) => f.path === 'policies.ts');
-  if (policies && (codeOf(policies.text, true).match(/startsWith\(['"`]meta:['"`]\)/g) ?? []).length < 2) {
+  // the guards are code: a string that merely contains the call does not count, so the literal is read between the marks
+  if (policies && (codeOf(policies.text, 'mark').match(new RegExp(`startsWith\\(\\s*['"\`]${MARK_OPEN}meta:${MARK_CLOSE}['"\`]\\s*\\)`, 'g')) ?? []).length < 2) {
     out.push({ audit: 'meta-inert', where: 'policies.ts', detail: 'the policies do not ignore every meta: kind (witness and absorb)' });
   }
   // a decision that reads beliefs reads memorable ones: every read of a believer's beliefs tests it within a few lines

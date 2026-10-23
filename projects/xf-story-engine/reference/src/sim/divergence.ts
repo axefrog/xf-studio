@@ -6,6 +6,7 @@
 // beliefs said then (SIM-08), and is `maybe` where the log no longer reaches.
 
 import type { GameTime, Id } from '../types.ts';
+import { ORD_DIVERGENCE } from './reads.ts';
 import type { Sim } from './sim.ts';
 
 export type DivValue = 'none' | 'small' | 'large';
@@ -87,8 +88,8 @@ export class Divergence {
   }
 
   /** The value at `from` and every change in `(from, to]`, from the log (S1 9.1); `maybe` before the log reaches. */
-  transitions(believer: Id, subject: Id, from: GameTime, to: GameTime): Array<{ t: GameTime; value: DivValue | 'maybe' }> {
+  transitions(believer: Id, subject: Id, from: GameTime, to: GameTime): Array<{ t: GameTime; value: DivValue | 'maybe'; ord?: number }> {
     const list = this.sim.record.divLog[`${believer}|${subject}`] ?? [];
-    return [{ t: from, value: this.evaluate(believer, subject, from) }, ...list.filter((e) => e.t > from && e.t <= to).map((e) => ({ t: e.t, value: e.value }))];
+    return [{ t: from, value: this.evaluate(believer, subject, from) }, ...list.flatMap((e, n) => (e.t > from && e.t <= to ? [{ t: e.t, value: e.value, ord: ORD_DIVERGENCE + n }] : []))];
   }
 }

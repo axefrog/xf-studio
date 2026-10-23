@@ -22,9 +22,10 @@ export class VFrames {
   }
 
   /**
-   * The live frame under an Id, if there is one. A frame that has ended (satisfied or abandoned) is gone as far as anything can tell: a save
-   * keeps only the live frames (S0 10.4), so a run that goes on and a run that was saved and loaded must treat a returning cell or a
-   * re-tracked entry alike, and both open the frame afresh (its `opened` is the time of the return).
+   * The live frame under an Id, if there is one. A frame that has ended (satisfied or abandoned) is not reactivated: a save keeps the live
+   * frames and the ended ones a persisted record refers to (S0 10.4), so whether an ended frame is still there depends on whether the game was
+   * saved and loaded, and a run that goes on and a run that was saved and loaded must treat a returning cell or a re-tracked entry alike. Both
+   * open the frame afresh, as the run that was loaded must (its `opened` is the time of the return); what hangs from the old one stays attached.
    */
   private live(id: Id): ContextFrame | undefined {
     const have = this.k.frames.frame(id);

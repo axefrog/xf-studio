@@ -176,47 +176,6 @@ export class Sim {
     return out;
   }
 
-  /** An event as it was minted, read back from the kernel; undefined for a node that is not a readable minted event (an item nobody has opened has no people to record). */
-  private factsOf(id: Id): EvidenceFacts | undefined {
-    const k = this.k;
-    const h = k.store.header(id);
-    if (!h || h.origin.by !== 'minted' || !k.schema.isKind(h.kind, 'core:event')) return undefined;
-    const kind = k.value(id, 'kind');
-    const time = k.value(id, 'time');
-    const pc = k.value(id, 'participants#count');
-    if (typeof kind !== 'string' || typeof time !== 'number' || typeof pc !== 'number') return undefined;
-    const count = (key: string): number => {
-      const c = k.value(id, key);
-      return typeof c === 'number' ? c : 0;
-    };
-    const f: EvidenceFacts = { creator: h.origin.creator, cause: h.origin.cause, name: h.origin.name, time, kind, participants: [], effects: [], witnesses: [], causes: [] };
-    const place = k.value(id, 'place');
-    if (typeof place === 'string') f.place = place;
-    for (let i = 0; i < count('participants#count'); i++) {
-      const m = k.address(id, `participants[${i}]`);
-      const who = k.value(m, 'who');
-      const role = k.value(m, 'role');
-      if (typeof who === 'string' && typeof role === 'string') f.participants.push({ who, role });
-    }
-    for (let i = 0; i < count('effects#count'); i++) {
-      const m = k.address(id, `effects[${i}]`);
-      const on = k.value(m, 'on');
-      const effect = k.value(m, 'effect');
-      if (typeof on === 'string' && typeof effect === 'string') f.effects.push({ on, effect: effect as Effect });
-    }
-    for (let i = 0; i < count('witnesses#count'); i++) {
-      const w = k.value(id, `witnesses[${i}]`);
-      if (typeof w === 'string') f.witnesses.push(w);
-    }
-    for (let i = 0; i < count('causes#count'); i++) {
-      const c = k.value(id, `causes[${i}]`);
-      if (typeof c === 'string') f.causes.push(c);
-    }
-    const outcome = k.value(id, 'outcome');
-    if (outcome === 'done' || outcome === 'failed' || outcome === 'prevented') f.outcome = outcome;
-    return f;
-  }
-
   /**
    * Keep, in the record, the facts of the events a memorable belief is read back through (SIM-03). The simulation-layer contributions that
    * hold an event's fields are not saved, so a load keeps the header of such an event and none of its fields; the facts are put back from
@@ -227,21 +186,22 @@ export class Sim {
     const rec = this.record.evidence;
     for (const id of Object.keys(rec)) if (!need.has(id)) delete rec[id];
     for (const id of need) {
-      const f = this.factsOf(id);
-      if (f) rec[id] = f;
+      // the fields the event was minted with, not what it resolves to now (R2-04); one that has none of its own (a load dropped them) keeps its record
+      const spec = this.k.events.mintedSpec(id);
+      if (spec) rec[id] = { creator: spec.creator, cause: spec.cause, name: spec.name, time: spec.time, kind: spec.kind, ...(spec.place !== undefined ? { place: spec.place } : {}), participants: spec.participants!, effects: spec.effects!, witnesses: spec.witnesses!, causes: spec.causes!, ...(spec.outcome !== undefined ? { outcome: spec.outcome } : {}), ...(spec.served !== undefined ? { served: spec.served } : {}) };
     }
   }
 
-  /** Put the recorded events back, silently: each was announced when it happened (S0 14.3). One that already has contributions naming it (an opened item the scene regenerated) is left alone. */
+  /** Put the recorded events back, silently: each was announced when it happened (S0 14.3). An event whose own fields are there (an opened item the scene regenerated) is left alone by `restoreEvent`. */
   private restoreEvidence(): void {
     for (const id of Object.keys(this.record.evidence).sort()) {
-      if (this.k.store.namedContributions(id) > 0) continue;
       const f = this.record.evidence[id]!;
       const spec: Parameters<Kernel['events']['restoreEvent']>[0] = {
         creator: f.creator, cause: f.cause, name: f.name, time: f.time, kind: f.kind, participants: f.participants, effects: f.effects, witnesses: f.witnesses, causes: f.causes,
       };
       if (f.place !== undefined) spec.place = f.place;
       if (f.outcome !== undefined) spec.outcome = f.outcome;
+      if (f.served !== undefined) spec.served = f.served;
       this.k.events.restoreEvent(spec);
     }
   }

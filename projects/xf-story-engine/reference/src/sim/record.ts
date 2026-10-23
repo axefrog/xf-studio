@@ -64,6 +64,7 @@ export interface EvidenceFacts {
   witnesses: Id[];
   causes: Id[];
   outcome?: 'done' | 'failed' | 'prevented';
+  served?: Id;
 }
 
 export interface TieRecord {
@@ -76,6 +77,8 @@ export interface TieRecord {
   lastLoss: { trustA: number; trustB: number; trustI: number };
   /** The intervals in which the tie was materialised and then ended, oldest first; the live (or last) interval is the edge's (SIM-07). */
   spans?: Array<{ from: GameTime; to: GameTime }>;
+  /** Once the oldest intervals were dropped: the end of the newest one dropped. Before it, a time no kept interval covers is not known (R2-09). */
+  spanFloor?: GameTime;
 }
 
 export function emptyRecord(): S1Record {

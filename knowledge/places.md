@@ -400,6 +400,7 @@ Dogtown adds a region with its own preset, matrix and radio; six new district re
 - **Add a place the game will recognise.** A new district area needs a `worldLocationAreaNode` with the notifier and a polygon, a `District` record (TweakXL) and, to appear on the map, a fast-travel record naming it; the ArchiveXL streaming-block route of [world and streaming §2](world-and-streaming.md#2-how-mods-change-the-world-additively) adds the node. The polygon buffer layout above is what an authoring tool must write [source, hypothesis for the whole recipe].
 - **Read a place from the game port.** Everything in §1 is available offline as plain data; at run time the bridge has no district read (population session row 16), which is the one reading that would make the indexed model check itself.
 - **Do not trust region records for the player's surroundings.** Use the leaf area's record.
+- **The reference model takes the page's rule.** The simulation layer of the Story Engine places a mirrored position in the smallest outline that contains it, within the outline's floor-to-ceiling band when both are known, whichever order the districts are listed in [offline: exercised on nested outlines by the reference model's tests; the game's own order is still open question 1].
 
 ## 12. Place dimensions for the world index (W1)
 

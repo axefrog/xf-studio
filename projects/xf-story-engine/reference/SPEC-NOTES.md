@@ -826,18 +826,21 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
     SF1-I-10 (160 windows at 12 times the rates, plus a second test that writes the ring and the fourth generation down instead of
     waiting for them), SF1-I-15 (120 roots), SF1-S-2 (the arrival statistics are taken from the draws alone, in a test of their own;
     the whole-world run keeps three seeds of eight days at 0.4 a day), the gate fixtures SF1-X-1 and SF1-X-3 (50 windows of occurrences, 800 casts), SF1-A-5 (36 windows),
-    SF1-P-0 (250 households), SF1-P-4 (4 cells, thresholds scaled), the week fixture (96 windows, one baseline reused, reloads at 45 and 75),
+    SF1-P-0 (250 households), SF1-P-4 (about 350 households, thresholds scaled), the week fixture (96 windows, one baseline reused, reloads at 45 and 75),
     the metamorphic relations (60 windows) and the other property tests (3 seeds of 90 windows). SF1-T-1 checks every pair of FX-3.
-    SF1-H-6 reads the artifact files and checks their hashes and the fixed vectors in the ordinary run and regenerates them only with
-    `S1_FULL=1` (or when the generator changes). `S1_FULL=1` runs the spec's figures (a 1,008-window Kabuki week, 100 game days, 20 seeds of
-    30 days, 1,000 roots, 2,600 windows, 10,000 casts, 12 seeds of 240 windows, 10,000 random tie pairs, the natural run for SF1-E4); the
-    repository's workflow runs it on demand and once a week (`reference-full`), never on a push.
+    SF1-H-6 regenerates the artifacts in every run (a third of a second), so a change of the generator that changes an artifact fails on
+    every push. `S1_FULL=1` runs the spec's figures (a 1,008-window Kabuki week, 100 game days, 20 seeds of 30 days, 1,000 roots, 2,600
+    windows, 10,000 casts, 12 seeds of 240 windows, 10,000 random tie pairs, 10,000 sampled households for SF1-P-4 from Kabuki worlds of
+    several seeds, the natural run for SF1-E4); the repository's workflow runs it on demand and once a week (`reference-full`), never on a
+    push. Its first run found one defect of the model (154) and three of the harness, and the suite passes at that scale.
 123. **Layer 2 asks the simulation layer through `SimReadPort`; the reads it builds are the `city` and `social` atoms. (amended, R1 SIM-01)** The
     port (`builds`, `eval`, `transitions`, `deps`) is layer 2's own type (`seeding/registries.ts`); `Reads.port()` implements it, and
     `attachLayer2` builds layer 2 on a sim's kernel with it and with S1's spine. `eval` at a time gives the last value the time passed
     through; `transitions` gives the value at `from` and then every change in `(from, to]`, those at one time in the order they were
     made (S1 9.1), and layer 2 evaluates a window's closing condition at each of them (S2-4): the first version had no
-    `transitions` in the port and latched on the last value of a second in which a regime ended and another began. Eleven of the
+    `transitions` in the port and latched on the last value of a second in which a regime ended and another began. A change carries
+    `ord`, where it stands among the changes other reads made at the same second, and a condition on several reads is evaluated after
+    each change in that order with every read at the value it had then (155). Eleven of the
     sixteen reads of S2 2.16 and 2.17 are built (`band`, `regime`, `regimeIs`, `presence`, `priceLevel`, `refuge`, `label`, `bridge`,
     `normGap`, `tied`, `divergence`). `heatRank`, `tension`, `reach`, `protected` and `contract` are registered, answer `maybe`, and are
     refused at compile as "not supported yet", as is every read when no port is attached. A read's `deps` become the instance's
@@ -914,7 +917,10 @@ regression test. The decisions the fixes needed:
     is dead joins nothing. The group is the A1 to A3 of the district the mirrored position is in, when that district lists the
     affiliation; otherwise the first simulated district, in `Id` order, that does. A membership already held is kept. The slice
     has to say which district a position is in: the real slice has polygons, the stand-ins none, so `DistrictIndex.polygon` is an
-    optional outline in the game's x and y, and a slice without outlines (or a person with no position) takes the second rule.
+    optional outline in the game's x and y (with an optional floor and ceiling, `zBand`), and a slice without outlines (or a person with no
+    position) takes the second rule. The outlines overlap and nest, and the game's current district is the innermost one entered
+    (knowledge/places.md 3.2, game-events.md 1): of the districts whose outline contains the point, and whose band contains its height,
+    the one with the smallest outline holds the person, the lower `Id` on a tie.
     `test/sim/review-fixes.test.ts` has two districts with outlines.
 137. **A process version is pinned with its id. (new)** `PROCESS_VERSIONS` (in `s1ctx.ts`) is the one table; every process takes
     its version from it, and the lineage pack hashes the ids and versions of all seven whether or not an instance runs them.
@@ -940,7 +946,8 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
 143. **The record keeps the spans of protection. (new, R1 SIM-04)** S1 4.4 and 5.4 cast an occurrence from the protected set as of its own time,
     and an occurrence within the ring regenerates. The kernel drops an ended `core:cast` edge, an old reading of a quest link and a
     withdrawn pin when it saves, so S1 writes the spans (a cast edge's interval, an observed pin from `at`, a quest-linked reading's
-    validity) into its record at each save, as their union per node, and drops the ones that ended before the oldest occurrence
+    validity) into its record at each save, as their union per node (a cause that is live at the save is recorded up to the save and no
+    further: 156), and drops the ones that ended before the oldest occurrence
     that can regenerate (a week and a window). A game that restates a quest link after a load makes a reading inside a span already
     held, so the union is what makes the record the same for a run that reloaded and one that did not. For a time before now the
     protected set is the kernel's state and the spans together. A cast edge counts for the interval it was live in: the first
@@ -948,20 +955,23 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
     spine and the essential set are read as they are (they are configuration, not history).
 144. **The record keeps the facts of the events behind memorable beliefs. (new, R1 SIM-03)** At each save S1 reads, from the kernel, the events a
     memorable belief is read back through (the source of an observed belief, the first evidence, the cause of an inference; a
-    ledger item reads none) and keeps what each was minted with: creator, cause, name, time, kind, place, participants, effects,
-    witnesses, causes and outcome. At the load it restores them silently (140). An item nobody has opened is not kept: it has no
+    ledger item reads none) and keeps what each was minted with, read from the contributions that hold the minted fields and not from what
+    the event resolves to at the time of the save (157): creator, cause, name, time, kind, place, participants, effects, witnesses,
+    causes, outcome and the frame it served. At the load it restores them silently (140). An item nobody has opened is not kept: it has no
     people to record, and restoring one would stop the scene from regenerating its people (128). The set is cut to the events a
     belief still cites at each save.
 145. **A tie that ended is opened again under its Id, and the past of `tied` is not rewritten. (new, R1 SIM-07, SIM-11)** `materialise` of a pair
     whose edge ended reopens it (141) with fresh attributes, and the interval that ended goes to the tie's record (`spans`, the newest
     16); a save writes the intervals of the ended edges it is about to drop. `tied(a, b, type)` at a time before now is `yes` if the
     implicit tie (a pure function of the pair) holds or any interval of the materialised tie covers the time, and `no` otherwise
-    (`maybe` where the implicit tie is unknown); its transitions are the openings and closings of the intervals. Only `xf:tie`
+    (`maybe` where the implicit tie is unknown, and for the times the dropped intervals covered: 160); its transitions are the openings
+    and closings of the intervals. Only `xf:tie`
     is built; another type answers `maybe`.
 146. **The divergence log is written when a belief changes. (new, R1 SIM-08)** `Beliefs.onChange` tells S1 when a belief is added, replaced or
     dropped, by anyone, and S1 logs the divergence of that believer from the game at that time. The boundary hook finds nothing new
     to write. The value at a time before now is the last log entry at or before it; when the oldest transitions have been dropped
-    (the log keeps eight) the record keeps the time they reached back to, and an earlier time is `maybe`.
+    (the log keeps eight) the record keeps the time they reached back to, and an earlier time is `maybe`. While a staged batch is open the
+    notification waits for its commit, and goes with a discard (159).
 147. **`groupGap` is the band the group maintains. (new, R1 SIM-09)** The digest carries the band `group.decide` keeps with its hysteresis, and
     the read and the transitions both give it. The first version worked a band out from the enter thresholds alone.
 148. **`label` takes a carrier's node as well as its name. (new, R1 SIM-10)** S2 2.17 says an audience is a role or an Id; a cast role resolves to a
@@ -991,11 +1001,45 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
     the contract.
 154. **A frame that has ended is opened afresh, never reactivated. (new, found by the full-scale partition property)** `v.frames` used
     to set an abandoned situation frame (a neighbour V had left) or a satisfied or abandoned goal frame (an entry untracked) back to
-    `active` when V came back or the entry was tracked again, keeping its old `opened`. A save keeps only the live frames (S0 10.4), so a
-    run that was saved and loaded in between had no such frame and opened a new one: the two runs differed in `opened` and in the status
-    change the reactivation emits. The ended frame is now dropped (`Frames.remove`, which asserts the kernel is writable and emits
+    `active` when V came back or the entry was tracked again, keeping its old `opened`. A save keeps the live frames and the ended ones a
+    persisted record refers to (S0 10.4: the ended ancestors of a live frame among them), so a run that was saved and loaded in between had
+    no such frame, unless something hung from it, and opened a new one: the two runs differed in `opened` and in the status change the
+    reactivation emits. The ended frame is now dropped (`Frames.remove`, which asserts the kernel is writable and emits
     nothing) and the frame opened as new, which is what the saved run does. The rule is S1's, not the kernel's: `Frames.open` still
     returns the frame under an explicit Id if there is one.
+155. **A closing condition is evaluated after each change, in the order the changes were made. (new, R2-01)** Layer 2 used to walk the values of
+    each read separately and pair them by their index, which could meet a condition on two reads with values that never stood
+    together. A transition now carries `ord` (`SimReadPort.transitions`), and `statesAt` puts the changes of every read the condition
+    names in that order, with one state after each. The order across sources at one second is that of a boundary (S0 9.4): the process
+    feeds first (`city.events`, then `order.norms`, then `group.decide`, each in the order its process wrote them), then what the
+    layer's own hooks logged (the divergence log), then the intervals of materialised ties. A change with no `ord` follows those that
+    have one.
+156. **A cause that is live at a save is recorded up to the save. (new, R2-02)** The span of a cast edge, an observed pin or a quest link that
+    has not ended is written as `[from, now)`: the kernel keeps it and says when it ends. The first version wrote it open, and the union
+    with the closed span the kernel later reported kept it open for ever.
+157. **The facts of an event are the fields it was minted with. (new, R2-03, R2-04, R2-05)** `Events.mintedSpec` reads them from the simulation
+    contributions whose origin is the event, not from what the event resolves to, so a rule or a pin that restates a field for a while is
+    not made permanent by a save. The load restores an event unless its own fields are there (`restoreEvent` decides; a contribution
+    of someone else's that names the event does not stop it), and `served` is kept with the rest.
+158. **What is cached of a resident depends on the owner slots the rules read, and on the configuration. (new, R2-06, R2-07)** A rule may read the
+    slots of the owner chain (S0 2.3: `^/^/public` from a resident is its cell's), so a pin on a cell can move a resident. The stamp of a
+    household or a block therefore covers, besides the pins and contributions that name the household and its members, the pins and
+    contributions that are not the pack's, on the cell and every owner above it, on a slot that a rule reads through an owner path: the
+    rules of everything and the rules that name the household or a member. A cell's band, which the processes pin all the time and
+    nothing reads from below, is not in it, and with no rule reading an owner the stamp is what it was. The key of the cache and of
+    the memo shared between worlds covers the kernel configuration (the floor of a weight, the size of an enumeration). The edges of a
+    node are not an input of the pack's rules and are not stamped: an authored rule that reads them is a limit of the cache, and
+    `People.cacheOn = false` is the way to see it.
+159. **A belief notification waits for the staged batch that made it. (new, R2-08)** `Beliefs.onChange` listeners keep state outside the
+    tables a discard restores, so `Beliefs` hands the notification to the open batch (`StagedBatch.after`), which delivers it on commit
+    and drops it on a discard.
+160. **`tied` says maybe where dropped intervals covered. (new, R2-09)** A tie keeps its newest 16 intervals; once the oldest is dropped the
+    record keeps `spanFloor`, the end of the newest dropped, and `tied` at a time before it that no kept interval covers is `maybe`,
+    not `no`.
+161. **The source audit reads template expressions as code and guards as code. (new, R2-10, R2-11)** `codeOf` has three readings of a string
+    (`blank`, `keep`, `mark`); the expressions in `${...}` of a template literal are code in each. The `meta:` guards of the policies are
+    found in the `mark` reading, where a literal's contents lie between marks no source contains, so a message that quotes the call is
+    not a guard.
 
 ### Spec findings for the coordinator (S1)
 
@@ -1004,7 +1048,7 @@ The ones that need a decision, worst first. The six questions of the first build
 - **S0 9.4 (the order of a boundary).** S1 10.2 relies on a step the kernel specification does not list: between the external operations
   and the snapshot, the frame work and the relevance dispatch they queued run to their end (109, 142). S0 should say so.
 - **S2 4.2 and the read port.** S2-4 asks layer 2 to evaluate a closing condition at each entry of a read's transitions. Layer 2 holds
-  none of S1's code and is handed a `SimReadPort`; the port S2 names should carry `transitions` (123).
+  none of S1's code and is handed a `SimReadPort`; the port S2 names should carry `transitions`, each change with the place it stands among the changes of other reads at the same second, because a condition on two reads needs one order for both (123, 155).
 - **S1 8.4 (assimilate).** "The listener's default reasons for the actor's group" is not defined. The reference uses `attr@1` from the
   listener's side with no constraint visible, which makes everyone dispositional at the default data (150). Is that meant, or is the
   default a table?
@@ -1014,7 +1058,7 @@ The ones that need a decision, worst first. The six questions of the first build
   ended ties and the time the divergence log reaches back to (143 to 146); S1 2.2 lists none of them.
 - **S1 8.2 (a frame V returns to).** "The frames for the old cell are abandoned and the new ones opened" does not say what opening means for a
   frame that was abandoned earlier under the same Id. The reference opens it afresh (154), the only reading under which a run that goes
-  on and a run that is saved and loaded agree.
+  on and a run that is saved and loaded agree, whether or not something hangs from the ended frame.
 - **S1 4.7 (reopening a tie).** The spec is silent on a tie that ended and is wanted again. The reference opens it under its Id with
   fresh attributes and keeps the history for reads (145).
 - **106 (SF1-I-13).** FX-3 has no cell two steps from `c2`.

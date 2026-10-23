@@ -1,6 +1,6 @@
 // SF1-P: the people (S1 4, 7.4, 14.1): the schema, the fit, rosters, regeneration, spells, routines.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { H, s } from '../../src/id.ts';
 import { ipf, ipfIterate, fitDistrict, personSeed } from '../../src/sim/fit.ts';
 import { identityKeys } from '../../src/sim/keys.ts';
@@ -9,6 +9,9 @@ import { HH_TYPES, N_PROFILES, profileIndex } from '../../src/sim/profile.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { defaultData } from '../../src/sim/data.ts';
 import { fxWorld, kabukiWorld } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const cause = H(s('cause'), s('people'));
 const FULL = process.env.S1_FULL === '1';
@@ -122,43 +125,53 @@ describe('SF1-P-2: a district fit', () => {
 });
 
 describe('SF1-P-4: rosters', () => {
-  const w = kabukiWorld('SF1-P-4');
-  const people = new People(w, identityKeys(w.k.worldSeed));
-  const d = w.districts[0]!;
-  test('none beyond the size; a family child is two bands younger than member 0; crew share an affiliation; a couple is within one band', () => {
-    const k = w.k;
+  // the spec's sample is 10,000 households; a Kabuki stand-in has about 3,500, so the long profile draws worlds of other seeds until it has them
+  const SAMPLE = FULL ? 10_000 : 350;
+  test(`${FULL ? '10,000' : 'about 350'} households (10,000 with S1_FULL=1): none beyond the size; a family child is two bands younger than member 0; crew share an affiliation; a couple is within one band`, () => {
     const seen = { family: 0, crew: 0, couple: 0 };
-    for (const c of d.cellIds.slice(0, FULL ? 6 : 4)) {
-      const info = people.blockInfo(c);
-      info.households.forEach((hh, h) => {
-        const type = Math.floor(Number(k.value(hh, 'hprofile')) / 12);
-        const v = (j: number) => {
-          k.address(hh, `m${j}`);
-          return people.view(people.residentId(hh, j))!;
-        };
-        const size = info.sizes[h]!;
-        for (let j = size; j < 6; j++) expect(k.value(hh, `p${j}`)).toBe('none');
-        if (type === 2) {
-          seen.family++;
-          const b0 = v(0).aband;
-          for (let j = 2; j < size; j++) expect(b0 - v(j).aband).toBeGreaterThanOrEqual(2);
+    let examined = 0;
+    for (let n = 0; examined < SAMPLE; n++) {
+      expect(n).toBeLessThan(20);
+      const w = kabukiWorld(n === 0 ? 'SF1-P-4' : `SF1-P-4-${n}`);
+      const people = new People(w, identityKeys(w.k.worldSeed));
+      const k = w.k;
+      for (const c of w.districts[0]!.cellIds) {
+        const info = people.blockInfo(c);
+        for (let h = 0; h < info.households.length && examined < SAMPLE; h++) {
+          examined++;
+          const hh = info.households[h]!;
+          const type = Math.floor(Number(k.value(hh, 'hprofile')) / 12);
+          const v = (j: number) => {
+            k.address(hh, `m${j}`);
+            return people.view(people.residentId(hh, j))!;
+          };
+          const size = info.sizes[h]!;
+          for (let j = size; j < 6; j++) expect(k.value(hh, `p${j}`)).toBe('none');
+          if (type === 2) {
+            seen.family++;
+            const b0 = v(0).aband;
+            for (let j = 2; j < size; j++) expect(b0 - v(j).aband).toBeGreaterThanOrEqual(2);
+          }
+          if (type === 4) {
+            seen.crew++;
+            for (let j = 1; j < size; j++) expect(v(j).affc).toBe(v(0).affc);
+            expect([2, 3, 4]).toContain(v(0).affc);
+          }
+          if (type === 1) {
+            seen.couple++;
+            expect(size).toBe(2);
+            expect(Math.abs(v(0).aband - v(1).aband)).toBeLessThanOrEqual(1);
+          }
         }
-        if (type === 4) {
-          seen.crew++;
-          for (let j = 1; j < size; j++) expect(v(j).affc).toBe(v(0).affc);
-          expect([2, 3, 4]).toContain(v(0).affc);
-        }
-        if (type === 1) {
-          seen.couple++;
-          expect(size).toBe(2);
-          expect(Math.abs(v(0).aband - v(1).aband)).toBeLessThanOrEqual(1);
-        }
-      });
+        if (examined >= SAMPLE) break;
+      }
     }
-    expect(seen.family).toBeGreaterThan(FULL ? 20 : 12);
-    expect(seen.crew).toBeGreaterThan(FULL ? 3 : 1);
-    expect(seen.couple).toBeGreaterThan(FULL ? 10 : 6);
-  });
+    // the sample is the size the fixture says, and each kind of household is in it
+    expect(examined).toBe(SAMPLE);
+    expect(seen.family).toBeGreaterThan(FULL ? 300 : 12);
+    expect(seen.crew).toBeGreaterThan(FULL ? 60 : 1);
+    expect(seen.couple).toBeGreaterThan(FULL ? 150 : 6);
+  }, 600_000);
 });
 
 describe('SF1-P-5: residents are regenerated', () => {

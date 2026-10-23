@@ -1,12 +1,13 @@
 // SF1-H: S1's arithmetic and table functions (S1 1.2, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { LQ, T, TABLE_HASHES, Z, exptab, invCum, logNormalOf, nbCount, normalOf, powTab, q64, spacingCountR, splitCountR } from '../../src/sim/arith.ts';
 import { makeTables, sha256 } from '../../src/sim/make-tables.ts';
 import { ln } from '../../src/fdlibm-log.ts';
 
-const FULL = process.env.S1_FULL === '1';
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 describe('SF1-H-1: exptab', () => {
   test('the table and the function', () => {
@@ -96,21 +97,16 @@ describe('SF1-H-5: nbCount', () => {
 });
 
 describe('SF1-H-6: the table artifacts', () => {
-  test('the files in the repository carry the frozen hashes, and the frozen hashes are the ones stated', () => {
-    for (const name of ['exptab@1', 'normtab@1', 'lqtab@1'] as const) {
-      expect(sha256(readFileSync(new URL(`../../src/sim/tables/${name}.txt`, import.meta.url), 'utf8'))).toBe(TABLE_HASHES[name]);
-    }
-    expect(TABLE_HASHES['exptab@1']).toBe('14b2d09c5c8e697452d1141f9a2a5da46bc33aebf6b4316235d43b10a61cdbb3');
-    expect(TABLE_HASHES['normtab@1']).toBe('9a8bb800f0ceb60753772fca95394aef86230abdf96ee591d276fd75979032e6');
-    expect(TABLE_HASHES['lqtab@1']).toBe('cb0478b554d1fb9c396d6402bbcf0edaea2a68d9d47579af4cf285cbdaf33cdb');
-  });
-  test('regeneration reproduces the artifacts byte for byte (the long profile, S1_FULL=1; in the ordinary run the hashes and the vectors above are the check)', () => {
-    if (!FULL) return;
+  // regeneration takes a third of a second, so the ordinary run does it: a change to the generator that changes an artifact fails on every push (R2-12)
+  test('the files in the repository carry the frozen hashes, and regeneration reproduces them byte for byte', () => {
     const files = makeTables();
     for (const name of ['exptab@1', 'normtab@1', 'lqtab@1'] as const) {
       expect(sha256(files[name])).toBe(TABLE_HASHES[name]);
       expect(files[name]).toBe(readFileSync(new URL(`../../src/sim/tables/${name}.txt`, import.meta.url), 'utf8'));
     }
+    expect(TABLE_HASHES['exptab@1']).toBe('14b2d09c5c8e697452d1141f9a2a5da46bc33aebf6b4316235d43b10a61cdbb3');
+    expect(TABLE_HASHES['normtab@1']).toBe('9a8bb800f0ceb60753772fca95394aef86230abdf96ee591d276fd75979032e6');
+    expect(TABLE_HASHES['lqtab@1']).toBe('cb0478b554d1fb9c396d6402bbcf0edaea2a68d9d47579af4cf285cbdaf33cdb');
   });
   test('the normal table is exactly antisymmetric, and the log-normal table has mean 1 and the stated tails', () => {
     for (let i = 0; i < 4096; i++) expect(Z[i]).toBe(-Z[4095 - i]!);

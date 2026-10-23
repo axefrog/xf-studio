@@ -116,21 +116,37 @@ export class World {
    * The simulated district whose outline holds a position (x, y), in `Id` order when outlines touch; undefined when none does or the
    * slice has no outlines (S1 8.8: a mirrored person's district comes from the mirrored position).
    */
+  /**
+   * The district a mirrored position lies in. The outlines overlap (they are drawn by hand and nest), and the game's current district is the
+   * innermost one entered: of the districts whose outline contains the point, and whose floor-to-ceiling band contains its height when both
+   * are known, the one with the smallest outline; an equal area goes to the lower Id (knowledge/places.md 3.2, game-events.md 1).
+   */
   districtAt(position: unknown): DistrictIndex | undefined {
     if (!Array.isArray(position) || typeof position[0] !== 'number' || typeof position[1] !== 'number') return undefined;
     const [x, y] = position as [number, number];
+    const z = typeof position[2] === 'number' ? position[2] : undefined;
+    let best: DistrictIndex | undefined;
+    let bestArea = Number.POSITIVE_INFINITY;
     for (const d of this.districts) {
       const poly = d.polygon;
       if (!poly || poly.length < 3) continue;
+      if (z !== undefined && d.zBand !== undefined && (z < d.zBand[0] || z > d.zBand[1])) continue;
       let inside = false;
+      let twice = 0;
       for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
         const [xi, yi] = poly[i]!;
         const [xj, yj] = poly[j]!;
         if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+        twice += xj * yi - xi * yj;
       }
-      if (inside) return d;
+      if (!inside) continue;
+      const area = Math.abs(twice) / 2;
+      if (area < bestArea || (area === bestArea && best !== undefined && d.id < best.id)) {
+        best = d;
+        bestArea = area;
+      }
     }
-    return undefined;
+    return best;
   }
   /** The group node of an affiliation slot `A1`, `A2` or `A3` of a district (S1 7.0). */
   group(district: Id, slot: 'A1' | 'A2' | 'A3'): Id {

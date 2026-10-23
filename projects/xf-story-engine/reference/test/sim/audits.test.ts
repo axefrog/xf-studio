@@ -1,6 +1,6 @@
 // SF1-Q: the honesty audits (S1 12, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeConfig } from '../../src/config.ts';
@@ -16,6 +16,9 @@ import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { simDefs, worldRegistry } from '../../src/sim/world-schema.ts';
 import { fxData, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const SRC = join(import.meta.dir, '../../src/sim');
 const files = readdirSync(SRC).filter((f) => f.endsWith('.ts')).map((f) => ({ path: f, text: readFileSync(join(SRC, f), 'utf8') }));
@@ -193,6 +196,31 @@ describe('SF1-Q-2: the audits catch', () => {
     expect(lintSources([real])).toEqual([]);
     const once = real.text.replace(/ev\.kind\.startsWith\('meta:'\)/g, 'false');
     expect(lintSources([{ path: 'policies.ts', text: once }]).map((f) => f.audit)).toContain('meta-inert');
+  });
+
+  test('the guards of the policies are code: a message that contains the call does not stand in for one (R2-11)', () => {
+    const real = files.find((f) => f.path === 'policies.ts')!;
+    // both real guards replaced by messages that quote them: the file reads as guarding nothing
+    const quoted = real.text.replace(/ev\.kind\.startsWith\('meta:'\)/g, `"ev.kind.startsWith('meta:')".length < 0`);
+    expect(quoted).not.toBe(real.text);
+    expect(lintSources([{ path: 'policies.ts', text: quoted }]).map((f) => f.audit)).toContain('meta-inert');
+    // and a guard inside a template literal's expression is code
+    const inTemplate = real.text.replace(/ev\.kind\.startsWith\('meta:'\)/g, "`${ev.kind.startsWith('meta:')}` === 'true'");
+    expect(lintSources([{ path: 'policies.ts', text: inTemplate }]).map((f) => f.audit)).not.toContain('meta-inert');
+  });
+
+  test('the expressions inside a template literal are code, and its text is not (R2-10)', () => {
+    const audits = (text: string): string[] => lintSources([{ path: 'proc-stocks.ts', text }]).map((f) => f.audit);
+    expect(audits('const x = `${Math.random()}`;')).toContain('no-load-reads');
+    expect(audits('const x = Number(`${Math.exp(1)}`);')).toContain('arithmetic');
+    expect(audits('const x = `a ${b ** 2} c`;')).toContain('arithmetic');
+    // nested: an expression inside an expression, and a string inside one
+    expect(audits('const x = `${f(`${Math.random()}`)}`;')).toContain('no-load-reads');
+    expect(audits('const x = `${f("Math.random()")} ${g({ a: 1 })}`;')).toEqual([]);
+    // the text of a template is a message, as any string
+    expect(audits('const x = `Math.random() and Math.exp(1) and 2 ** 3`;')).toEqual([]);
+    // the lines stay where they were
+    expect(codeOf('const a = `one\n${x}\ntwo`;\nconst b = 2;').split('\n').length).toBe(4);
   });
 
   test('two writers of one slot', () => {

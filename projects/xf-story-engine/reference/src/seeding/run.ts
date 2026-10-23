@@ -41,27 +41,35 @@ export function windowStates(l2: Layer2, inst: Instance, t: GameTime): WindowSta
 
 /**
  * The states a condition passes through at one time (S2-4): the registered reads it names can change more than once at a time (a regime
- * ends and another starts at the same second), and `eval` at that time gives only the last value. Each state takes the value its read had
- * after that many of the changes at the time; a read with one value is not walked, `eval` gives it.
+ * ends and another starts at the same second), and `eval` at that time gives only the last value. The changes of all the reads the condition
+ * names are put in the order they were made (the port's `ord`), and there is one state after each: every read at the value it had then, a
+ * read that did not change at this time left to `eval`. So a condition on two reads is never met by values that did not stand together.
  */
 function statesAt(l2: Layer2, inst: Instance, pred: Pred, at: GameTime): Array<(read: string, args: unknown[]) => string | undefined> {
   const port = l2.reg.sim;
   if (!port) return [];
-  const seqs = new Map<string, string[]>();
+  const initial = new Map<string, string>();
+  const changes: Array<{ key: string; value: string; ord: number; n: number }> = [];
   for (const { atom } of atoms(pred)) {
     if (!('city' in atom || 'social' in atom)) continue;
     const call = readCall(atom);
     if ('error' in call || !port.builds(call.name)) continue;
     const args = resolveReadArgs(call, inst);
     if (args === undefined) continue;
-    const values = port.transitions(call.name, args, at - 1, at).slice(1).map((x) => x.value);
-    if (values.length > 1) seqs.set(`${call.name}|${JSON.stringify(args)}`, values);
+    const key = `${call.name}|${JSON.stringify(args)}`;
+    if (initial.has(key)) continue;
+    const seq = port.transitions(call.name, args, at - 1, at);
+    if (seq.length < 2) continue;
+    initial.set(key, seq[0]!.value);
+    for (const x of seq.slice(1)) changes.push({ key, value: x.value, ord: x.ord ?? Number.MAX_SAFE_INTEGER, n: changes.length });
   }
-  if (seqs.size === 0) return [];
-  const n = Math.max(...[...seqs.values()].map((v) => v.length));
-  return Array.from({ length: n }, (_, i) => (read: string, args: unknown[]) => {
-    const seq = seqs.get(`${read}|${JSON.stringify(args)}`);
-    return seq === undefined ? undefined : seq[Math.min(i, seq.length - 1)];
+  if (changes.length === 0) return [];
+  changes.sort((a, b) => a.ord - b.ord || a.n - b.n);
+  const standing = new Map(initial);
+  return changes.map((c) => {
+    standing.set(c.key, c.value);
+    const state = new Map(standing);
+    return (read: string, args: unknown[]) => state.get(`${read}|${JSON.stringify(args)}`);
   });
 }
 

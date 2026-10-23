@@ -229,8 +229,22 @@ export class Beliefs {
       outcome = 'kept';
     }
     this.k.bump();
-    if (outcome === 'added' || outcome === 'replaced') for (const f of this.onChange) f(b.believer, b.subject);
+    if (outcome === 'added' || outcome === 'replaced') this.notify(b.believer, b.subject);
     return outcome;
+  }
+
+  /**
+   * Tell the listeners that a believer's belief about a subject changed. A listener keeps state outside the kernel's tables, which a staged
+   * batch's discard does not put back, so while a batch is open the notification waits for its commit and goes with a discard (R2-08).
+   */
+  private notify(believer: Id, subject: Id): void {
+    if (this.onChange.length === 0) return;
+    const run = (): void => {
+      for (const f of this.onChange) f(believer, subject);
+    };
+    const batch = this.k.batch;
+    if (batch !== null && batch.state === 'open') batch.after.push(run);
+    else run();
   }
 
   drop(believer: Id, beliefId: Id): boolean {
@@ -241,7 +255,7 @@ export class Beliefs {
       if (b.id === beliefId) {
         m.delete(key);
         this.k.bump();
-        for (const f of this.onChange) f(believer, b.subject);
+        this.notify(believer, b.subject);
         return true;
       }
     }

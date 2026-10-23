@@ -43,6 +43,8 @@ export interface DistrictIndex {
    * person's position is placed in a district by it (S1 8.8).
    */
   polygon?: Array<[number, number]>;
+  /** The floor and the ceiling of the outline, in the game's z: a position above or below is not in the district (places.md 3.2). Absent: any height. */
+  zBand?: [number, number];
 }
 
 export interface CellIndex {

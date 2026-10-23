@@ -5,7 +5,8 @@
 // still regenerate, and answers "protected at `t`" for a time before now from the kernel's state and the spans together.
 //
 // The spans of a node are kept as their union, in order: a game that restates a quest link after a load makes a new reading inside a span
-// already held, and the record must not depend on whether the game was saved and loaded.
+// already held, and the record must not depend on whether the game was saved and loaded. A span is always closed: a cause that is live at a
+// save is recorded up to the save, and the kernel, which keeps it, says when it ends.
 
 import { edgeActive } from '../predicate.ts';
 import type { GameTime, Id } from '../types.ts';
@@ -71,15 +72,19 @@ export class Protection {
       if (list) list.push(s);
       else held.set(node, [s]);
     };
+    // a cause that is live now is recorded as far as now and no further: the kernel keeps it and goes on saying it holds, and when it ends the end
+    // is the kernel's to say. An open span in the record would hold for ever, whatever the kernel later said (R2-02).
+    const now = k.now;
+    const upTo = (from: GameTime, to: GameTime | undefined): Span => ({ from, to: to === undefined ? Math.max(from, now) : to });
     for (const e of k.store.allEdges()) {
-      if (e.type === 'core:cast') add(e.to, e.valid.to === undefined ? { from: e.valid.from } : { from: e.valid.from, to: e.valid.to });
+      if (e.type === 'core:cast') add(e.to, upTo(e.valid.from, e.valid.to));
     }
     for (const p of k.store.allPins()) {
       if (p.reason === 'observed') {
         const w = k.store.withdrawn.get(p.id);
-        add(p.node, w === undefined ? { from: p.at } : { from: p.at, to: Math.max(p.at, w.at) });
+        add(p.node, upTo(p.at, w === undefined ? undefined : Math.max(p.at, w.at)));
       } else if (p.reason === 'game' && p.slot === 'quest-linked' && p.value === 'yes') {
-        add(p.node, p.valid.to === undefined ? { from: p.valid.from } : { from: p.valid.from, to: p.valid.to });
+        add(p.node, upTo(p.valid.from, p.valid.to));
       }
     }
     const rec = this.sim.record.protect;

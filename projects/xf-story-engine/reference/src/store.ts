@@ -206,6 +206,16 @@ export class Store {
     return n;
   }
 
+  /** The contributions that name the node, in the order they were added. */
+  contributionsNaming(node: Id): Contribution[] {
+    const out: Contribution[] = [];
+    for (const i of this.contribByNode.get(node) ?? []) {
+      const c = this.contribs.get(i);
+      if (c) out.push(c);
+    }
+    return out;
+  }
+
   /** How many contributions name the node. */
   namedContributions(node: Id): number {
     return this.contribByNode.get(node)?.length ?? 0;

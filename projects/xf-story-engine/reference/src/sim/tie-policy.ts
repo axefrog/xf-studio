@@ -131,7 +131,13 @@ export class TiePolicy {
     if (spans.some((s) => s.from === from && s.to === to)) return;
     spans.push({ from, to });
     spans.sort((x, y) => x.from - y.from || x.to - y.to);
-    while (spans.length > SPAN_MAX) spans.shift();
+    // what an interval dropped said is no longer known: the record keeps how far back it can still answer
+    while (spans.length > SPAN_MAX) rec.spanFloor = Math.max(rec.spanFloor ?? Number.NEGATIVE_INFINITY, spans.shift()!.to);
+  }
+
+  /** Before this time the intervals kept do not say whether the pair's tie was materialised: the oldest were dropped. Undefined when none was. */
+  coverageFloor(a: Id, b: Id): GameTime | undefined {
+    return this.sim.record.tieHistory[tieEdgeId(a, b)]?.spanFloor;
   }
 
   /** A save is about to drop the ended ties: their intervals go into the record first. */

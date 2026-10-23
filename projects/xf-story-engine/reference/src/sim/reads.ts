@@ -27,7 +27,19 @@ export interface ReadDeps {
 export interface ReadTransition {
   t: GameTime;
   value: string;
+  /** Where the change stands among the changes of other reads made at the same time (the lower was made first); see `SimReadPort.transitions`. */
+  ord?: number;
 }
+
+/**
+ * The order the changes of different sources were made in at one time, as one number: the process feeds first, each in the order its process
+ * wrote them (the batches of a boundary apply before its external operations, S0 9.4), then what the layer's own hooks logged (divergence),
+ * then the intervals of materialised ties.
+ */
+const FEED_RANK: Record<string, number> = { 'city.events': 0, 'order.norms': 1, 'group.decide': 2 };
+const FEED_SPAN = 100_000_000;
+export const ORD_DIVERGENCE = 10 * FEED_SPAN;
+export const ORD_TIES = 11 * FEED_SPAN;
 
 export interface S1Read {
   name: string;
@@ -44,18 +56,23 @@ const GAP_NAMES = ['aligned', 'gap', 'wide'] as const;
 const GROUP_GAP_NAMES = ['low', 'mid', 'high'] as const;
 
 /** The value of a keyed transition feed at `from`, and the changes in `(from, to]`; `maybe` when `from` is older than the feed (S1 9.1). */
-export function feedTransitions(sim: Sim, feed: Feed<Transition> | undefined, key: string, current: string, from: GameTime, to: GameTime): ReadTransition[] {
+export function feedTransitions(sim: Sim, feed: Feed<Transition> | undefined, key: string, current: string, from: GameTime, to: GameTime, rank = 0): ReadTransition[] {
   if (!feed || feed.windows.length === 0) return [{ t: from, value: MAYBE }];
   const W = sim.data.time.W;
   if (from < feed.windows[0]!.w * W) return [{ t: from, value: MAYBE }];
-  const all: Transition[] = [];
-  for (const win of feed.windows) for (const tr of win.items) if (tr.key === key) all.push(tr);
+  const all: Array<Transition & { ord: number }> = [];
+  // the position of an item in its feed, over every key, is the order the process wrote the changes in
+  let pos = 0;
+  for (const win of feed.windows) for (const tr of win.items) {
+    if (tr.key === key) all.push({ ...tr, ord: rank * FEED_SPAN + pos });
+    pos++;
+  }
   let initial = current;
   const firstAfter = all.find((x) => x.t > from);
   const lastBefore = [...all].reverse().find((x) => x.t <= from);
   if (lastBefore) initial = lastBefore.value;
   else if (firstAfter && firstAfter.prev !== null) initial = firstAfter.prev;
-  return [{ t: from, value: initial }, ...all.filter((x) => x.t > from && x.t <= to).map((x) => ({ t: x.t, value: x.value }))];
+  return [{ t: from, value: initial }, ...all.filter((x) => x.t > from && x.t <= to).map((x) => ({ t: x.t, value: x.value, ord: x.ord }))];
 }
 
 export class Reads {
@@ -102,7 +119,13 @@ export class Reads {
     return { value: this.eval(name, args, t), catchingUp: this.sim.catchingUp };
   }
 
-  transitions(name: string, args: unknown[], from: GameTime, to: GameTime): ReadTransition[] {
+  /** The value at `from` and every change in `(from, to]` (S1 9.1): each a time and a value. */
+  transitions(name: string, args: unknown[], from: GameTime, to: GameTime): Array<{ t: GameTime; value: string }> {
+    return this.transitionsOrd(name, args, from, to).map((x) => ({ t: x.t, value: x.value }));
+  }
+
+  /** The same, each change with its place among the changes of other reads made at the same time: what layer 2 is handed (155). */
+  transitionsOrd(name: string, args: unknown[], from: GameTime, to: GameTime): ReadTransition[] {
     const d = this.defs.get(name);
     return d ? d.transitions(args, from, to) : [{ t: from, value: MAYBE }];
   }
@@ -125,7 +148,7 @@ export class Reads {
       const kk = key(args);
       const cur = current(args);
       if (kk === undefined || cur === MAYBE) return [{ t: from, value: MAYBE }];
-      return feedTransitions(this.sim, feed(this.dg(digestId) as never), kk, cur, from, to);
+      return feedTransitions(this.sim, feed(this.dg(digestId) as never), kk, cur, from, to, FEED_RANK[digestId] ?? 3);
     };
     this.add({
       name, version: 1, deps,
@@ -164,7 +187,7 @@ export class Reads {
     this.add({
       name: 'regimeIs', version: 1, deps: { ...ev(), interests: [{ kind: 'core:event', slot: '*' }] },
       eval: (a, t) => { const r = this.eval('regime', [a[0]], t); return r === MAYBE ? MAYBE : r === a[1] ? 'yes' : 'no'; },
-      transitions: (a, from, to) => this.transitions('regime', [a[0]], from, to).map((x) => ({ t: x.t, value: x.value === MAYBE ? MAYBE : x.value === a[1] ? 'yes' : 'no' })),
+      transitions: (a, from, to) => this.transitionsOrd('regime', [a[0]], from, to).map((x) => ({ ...x, value: x.value === MAYBE ? MAYBE : x.value === a[1] ? 'yes' : 'no' })),
     });
 
     // presence(leaf, faction): static
@@ -226,7 +249,7 @@ export class Reads {
         const out: ReadTransition[] = [{ t: from, value: this.tiedAt(a[0], a[1], a[2], from) }];
         for (const t of [...at].sort((x, y) => x - y)) {
           const value = this.tiedAt(a[0], a[1], a[2], t);
-          if (value !== out[out.length - 1]!.value) out.push({ t, value });
+          if (value !== out[out.length - 1]!.value) out.push({ t, value, ord: ORD_TIES + out.length });
         }
         return out;
       },
@@ -255,7 +278,7 @@ export class Reads {
     return {
       builds: (name) => this.defs.get(name)?.built === true,
       eval: (name, args, t) => this.eval(name, args, t),
-      transitions: (name, args, from, to) => this.transitions(name, args, from, to).map((x) => ({ t: x.t, value: x.value })),
+      transitions: (name, args, from, to) => this.transitionsOrd(name, args, from, to).map((x) => (x.ord === undefined ? { t: x.t, value: x.value } : { t: x.t, value: x.value, ord: x.ord })),
       deps: (name) => {
         const d = this.defs.get(name);
         return { interests: d ? d.deps.interests.map((i) => ({ ...i })) : [], boundary: d?.deps.boundary === true };
@@ -279,6 +302,9 @@ export class Reads {
     const implicit = this.sim.ties.tie(a, b);
     if (implicit?.tied) return 'yes';
     if (this.sim.tiePolicy.intervalsOf(a, b).some((s) => s.from <= t && (s.to === undefined || t < s.to))) return 'yes';
+    // an interval may have been in a stretch whose record was dropped: the answer for those times is not known (R2-09)
+    const floor = this.sim.tiePolicy.coverageFloor(a, b);
+    if (floor !== undefined && t < floor) return MAYBE;
     return implicit === undefined ? MAYBE : 'no';
   }
 

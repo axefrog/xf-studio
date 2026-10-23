@@ -76,8 +76,10 @@ export interface SimReadPort {
   /**
    * The value at `from` (an entry with `t = from`), then every change in `(from, to]` in time order, the changes at one time in the order they
    * were made (S1 9.1, S2-4). `eval` at a time gives only the last of the values a time passed through; a closing condition is evaluated at each.
+   * `ord` places a change among the changes of other reads made at the same time: the lower was made first. A condition on several reads is
+   * evaluated after each change in that order, with every read at the value it had then; a change with no `ord` is placed after those that have one.
    */
-  transitions(read: string, args: unknown[], from: number, to: number): Array<{ t: number; value: string }>;
+  transitions(read: string, args: unknown[], from: number, to: number): Array<{ t: number; value: string; ord?: number }>;
   /** The kernel values a read depends on, and whether it must be looked at again at every boundary (beliefs emit no Changes). */
   deps(read: string): { interests: Array<{ kind?: string; slot: string }>; boundary: boolean };
 }
