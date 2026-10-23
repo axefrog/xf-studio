@@ -72,7 +72,7 @@ import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-s
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
-import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
+import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, relayDockSaves, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
 import { viewPanel } from "../app/profiles/profile-sessions";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
@@ -196,8 +196,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The session this window opens on (its tabs, the views and scenes, and what each scene shows), with the window's focus: the history
   // service records the editing context into it (profiles design §3.3, §3.7). The session owns the view graph and its View and lighting
   // history: its operations and the graph's edits are one history (§4.1).
+  // Until P2-iii makes the drawn view follow the shown tab, the session refuses to close the view the window draws.
   const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, { history: historyService,
-    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph });
+    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph, drawn: () => drawnView() });
   // The shown tab's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
   const legacyLayout = workspace.uiPreferences.layout, tabDock = sessionState.dock();
   const { layout: _legacy, ...uiPreferences } = workspace.uiPreferences;
@@ -299,14 +300,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     profiles: sessionStored ? sessionState.stored(workspace.profiles) : workspace.profiles });
   // The dock saves to the shown tab (`tabs.arrange`, never Undo). Until the tab strip replaces the Layouts button (P2-iv), the dock still
   // saves through `layout.set`, kept in memory only (the workspace's own arrangement stays frozen), and is passed on from there.
-  let arranged = preferences.snapshot().layout;
-  preferences.subscribe(() => {
-    const layout = preferences.snapshot().layout;
-    if (layout === arranged) return;
-    arranged = layout;
-    const tab = sessionState.tabId();
-    if (tab) core.app.dispatch({ kind: "tabs.arrange", tab, layout: layout ?? null });
-  });
+  relayDockSaves(preferences, sessionState, action => core.app.dispatch(action));
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).

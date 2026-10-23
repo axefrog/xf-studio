@@ -15,6 +15,7 @@
  * - **Focus never enters Undo**: nothing here is recorded in any history.
  */
 import type { ViewId } from "../api/view-graph";
+import { notifyAll } from "./listeners";
 
 /** A history scope ID (`look:<collection>/<look>`, `character:<id>`, `view:<profile>`, `doc:<id>`). */
 export type EditingScope = string;
@@ -61,6 +62,9 @@ export class FocusService {
   private tab: string | undefined;
   private recentScopes: EditingScope[];
   private readonly listeners = new Set<() => void>();
+  /** Open holds (`hold`), and whether anything changed under them. */
+  private held = 0;
+  private pending = false;
 
   constructor(data: FocusData = { seq: 0, views: {} }) {
     const valid = focusDataOf(data, data.seq);
@@ -69,7 +73,23 @@ export class FocusService {
   }
 
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  private changed() { for (const listener of [...this.listeners]) listener(); }
+  /**
+   * Hold notifications until the returned release (an owner's operation that changes focus among other things settles first): listeners
+   * hear once, after the last release, and only if something changed. Releasing twice does nothing.
+   */
+  hold(): () => void {
+    this.held++;
+    let open = true;
+    return () => {
+      if (!open) return;
+      open = false;
+      if (--this.held === 0 && this.pending) { this.pending = false; notifyAll(this.listeners); }
+    };
+  }
+  private changed() {
+    if (this.held) { this.pending = true; return; }
+    notifyAll(this.listeners);
+  }
 
   /** Focus as plain data, detached. */
   snapshot(): FocusData {

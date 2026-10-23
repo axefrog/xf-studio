@@ -30,6 +30,7 @@ import { HISTORY_LIMIT, HISTORY_START_ID, UNKNOWN_HISTORY_LABEL, type DocumentHi
 import { HistoryStack, ReferenceStore, WHOLE_VALUES, type LookReader } from "./history-stack";
 import { HistoryTransaction, type TransactionHost, type TransactionPolicy } from "./history-transaction";
 import { FocusService } from "./focus";
+import { notifyAll } from "./listeners";
 
 const VIEW_PREFIX = "view:";
 /** A profile session's View and lighting history (`view:<profile>`, §3.7): its views and lighting, never a look's. */
@@ -96,6 +97,11 @@ export interface HistoryScope {
   revertTransaction(step: HistoryEntryId | undefined): boolean;
   undo(): boolean;
   redo(): boolean;
+  /**
+   * Why the next `count` steps' Undo or Redo is refused now though they are sound (the target's `refusal`), or undefined. A refused move
+   * changes nothing and keeps every step.
+   */
+  blocked(direction: "undo" | "redo", count?: number): string | undefined;
   /** Go to the state right after step `stepId` (or the start) as one change. */
   jumpTo(stepId: string): boolean;
   plan(stepId: string): HistoryJumpPlan | undefined;
@@ -221,13 +227,17 @@ class Scope implements HistoryScope {
     const held = this.target.unavailable?.();
     if (held) return refusal(held, "not_ready");
     if (this.options.capability) return this.options.capability(action);
+    const blocked = (direction: "undo" | "redo", count = 1): Capability => {
+      const reason = this.blocked(direction, count);
+      return reason ? refusal(reason, "incompatible_mode") : { available: true };
+    };
     if (action.kind === "history.jumpTo") {
       const plan = this.plan(action.entryId);
       return !plan ? refusal("That history step no longer exists.", "missing_target") :
-        plan.direction === "none" ? refusal("This is already the current step.") : { available: true };
+        plan.direction === "none" ? refusal("This is already the current step.") : blocked(plan.direction, plan.count);
     }
-    if (action.kind === "history.undo") return this.stack.canUndo ? { available: true } : refusal("There is no change to undo.");
-    return this.redoValid() ? { available: true } : refusal("There is no undone change to redo.");
+    if (action.kind === "history.undo") return this.stack.canUndo ? blocked("undo") : refusal("There is no change to undo.");
+    return this.redoValid() ? blocked("redo") : refusal("There is no undone change to redo.");
   }
   state(): HistoryState {
     if (this.options.state) return this.options.state(this.timeline());
@@ -247,8 +257,16 @@ class Scope implements HistoryScope {
       redoCount: undone.length, trimmed: this.stack.trimmed, ...(documentLabel === undefined ? {} : { documentLabel }) };
   }
 
+  blocked(direction: "undo" | "redo", count = 1): string | undefined {
+    if (!this.target.refusal || (direction === "redo" && !this.redoValid())) return undefined;
+    const values = this.stack.peek(direction, count);
+    return values && this.target.refusal(values, direction);
+  }
+
   private move(plan: HistoryJumpPlan): boolean {
     if (this.target.unavailable?.()) return false;
+    // A refusal that holds for a while (a view still drawn): nothing moves and every step stays.
+    if (plan.direction !== "none" && this.blocked(plan.direction, plan.count)) return false;
     let moved: { parts: Record<string, unknown> } | undefined;
     if (plan.direction === "undo") {
       if (this.stack.depth < plan.count) return false;
@@ -266,8 +284,8 @@ class Scope implements HistoryScope {
       return false;
     }
     this.expected = { revision: this.target.revision?.(), fingerprint: this.target.fingerprint?.() ?? "", top: this.stack.topId };
-    this.changed(true);
-    this.target.settled?.();
+    // The target settles even when a listener throws, so it never stays half published.
+    try { this.changed(true); } finally { this.target.settled?.(); }
     return true;
   }
   private redoValid() {
@@ -296,13 +314,12 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
   const scopes = new Map<HistoryScopeId, Scope>();
   const listeners = new Set<() => void>(), documentListeners = new Set<() => void>();
   const providers = new Set<() => readonly HistoryParticipant[]>();
-  const emit = (set: Set<() => void>) => { for (const listener of [...set]) listener(); };
+  const emit = (set: Set<() => void>) => notifyAll(set);
   /** Inside `batch`, listeners hear once at the end, however many changes the operation made. */
   let batching = 0, pending = { all: false, documents: false };
   const notify = (documentChange: boolean) => {
     if (batching) { pending.all = true; pending.documents ||= documentChange; return; }
-    if (documentChange) emit(documentListeners);
-    emit(listeners);
+    notifyAll([...(documentChange ? [() => emit(documentListeners)] : []), () => emit(listeners)]);
   };
   const batch = <T>(work: () => T): T => {
     batching++;

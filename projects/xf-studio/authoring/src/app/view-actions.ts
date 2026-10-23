@@ -75,8 +75,14 @@ export class ViewActions {
    */
   settings(filter: Pick<ViewToolFilter, "research">): readonly string[] { return filter.research ? Object.keys(RESEARCH_RENDERING) : []; }
   capability(action: ViewAction): Capability {
-    if (action.kind === "view.undo") return this.graph.history().depth ? { available: true } : refusal("invalid_value", "There is no view or lighting change to undo.");
-    if (action.kind === "view.redo") return this.graph.history().redoDepth ? { available: true } : refusal("invalid_value", "There is no undone view or lighting change to redo.");
+    if (action.kind === "view.undo" || action.kind === "view.redo") {
+      const undo = action.kind === "view.undo", history = this.graph.history();
+      if (!(undo ? history.depth : history.redoDepth))
+        return refusal("invalid_value", undo ? "There is no view or lighting change to undo." : "There is no undone view or lighting change to redo.");
+      // A move its owner refuses for now (it would close the view the 3D view draws), with the reason.
+      const blocked = this.graph.historyBlocked(undo ? "undo" : "redo");
+      return blocked ? refusal("incompatible_mode", blocked) : { available: true };
+    }
     if (action.kind === "view.endEdit") return { available: true };
     if (typeof action.view !== "string") return refusal("missing_target", "Open a 3D view to use this.");
     if (!this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");

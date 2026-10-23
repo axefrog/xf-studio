@@ -22,6 +22,7 @@ import { SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, validViewId, viewPanelId, t
   type ViewId, type ViewRecord, type ViewSlot } from "../api/view-graph";
 import type { HistoryTarget } from "../api/history";
 import { createHistoryService, LOCAL_VIEW_SCOPE, type HistoryScope, type HistoryService, type ScopeOptions } from "./history-service";
+import { notifyAll } from "./listeners";
 
 /** Steps kept in the View and lighting history, and camera positions in each Back/Forward trail. */
 export const VIEW_HISTORY_LIMIT = 50;
@@ -46,7 +47,7 @@ type KeptEntry = { at: number; record: KeptView };
 /** The views, and every node's place in the stored order (so a step that brings a node back puts it where it was). */
 type Structure = { views: ViewRecord[]; order?: string[] };
 /** What the graph's history needs from its scope. */
-export type ViewHistoryScope = Pick<HistoryScope, "checkpoint" | "clear" | "seal" | "undo" | "redo" | "state" | "withoutHistory" | "recording">;
+export type ViewHistoryScope = Pick<HistoryScope, "checkpoint" | "clear" | "seal" | "undo" | "redo" | "blocked" | "state" | "withoutHistory" | "recording">;
 /**
  * The graph's owner (a profile session, profiles design §4.1): it holds the View and lighting scope the graph records into, over a target
  * that includes the graph's (`history`), and names every new view and node (`freshId`), so its own operations and the graph's edits share
@@ -267,6 +268,24 @@ export class ViewGraph {
   private referenced(id: string) { return this.keptRefs.has(id) || this.views.some(view => VIEW_SLOTS.some(slot => view[slot] === id)); }
 
   subscribe(listener: (change: ViewGraphChange) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  /**
+   * Hold what commits publish until the returned release (the graph's owner settling an operation of its own around graph edits): the
+   * changes then go out in order, once the owner's state matches the graph's. Releasing twice does nothing.
+   */
+  hold(): () => void {
+    this.held++;
+    let open = true;
+    return () => {
+      if (!open) return;
+      open = false;
+      if (--this.held > 0) return;
+      const changes = this.heldChanges;
+      this.heldChanges = [];
+      notifyAll(changes.map(change => () => notifyAll(this.listeners, change)));
+    };
+  }
+  private held = 0;
+  private heldChanges: ViewGraphChange[] = [];
 
   // ----- Withdrawn tools -----
   /**
@@ -480,6 +499,8 @@ export class ViewGraph {
   seal() { this.scope.seal(); }
   undo(): boolean { return this.scope.undo(); }
   redo(): boolean { return this.scope.redo(); }
+  /** Why the next Undo or Redo is refused now though its steps are sound (the owner's rule, such as a view still drawn), if it is. */
+  historyBlocked(direction: "undo" | "redo"): string | undefined { return this.scope.blocked(direction); }
   /** The View and lighting history's value of a node (by ID) or of the views (`structure`), detached. */
   private readHistory(key: string): unknown {
     if (key === STRUCTURE) return { views: clone(this.views), order: [...this.nodes.keys()] } satisfies Structure;
@@ -577,6 +598,7 @@ export class ViewGraph {
   private emit(nodes: readonly string[], structure: boolean, origin: ViewGraphChange["origin"], applied: boolean, extra: readonly ViewId[] = []) {
     const views = [...new Set([...nodes.flatMap(id => this.viewsOf(id)), ...extra])];
     const change: ViewGraphChange = Object.freeze({ nodes: [...nodes], views, structure, origin, applied });
-    for (const listener of [...this.listeners]) listener(change);
+    if (this.held) this.heldChanges.push(change);
+    else notifyAll(this.listeners, change);
   }
 }

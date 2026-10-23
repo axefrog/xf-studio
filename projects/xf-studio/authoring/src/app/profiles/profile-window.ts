@@ -15,6 +15,7 @@ import { characterRef } from "../../platform/api/characters";
 import type { DocumentStorePort } from "../../platform/api/document-store";
 import type { DocumentOutbox } from "../../platform/core/document-outbox";
 import type { HistoryService } from "../../platform/core/history-service";
+import { hostRandom } from "../../platform/core/random";
 import { CharacterService } from "../../character/character-service";
 import type { CreatorCatalogue } from "../../character/creator-catalogue";
 import { CollectionOwner, type CollectionVersionsPort } from "../../library/collection-owner";
@@ -31,7 +32,8 @@ import { TargetResolver } from "./targets";
 import { SceneCommands } from "./scene-commands";
 import type { WorkspaceState } from "../workspace/workspace-state";
 import { ProfileService } from "./profile-service";
-import { ProfileSessions } from "./profile-sessions";
+import { ProfileSessions, type TabAction } from "./profile-sessions";
+import type { DockLayout, UIPreferenceActions } from "../ui-preferences";
 import type { ProfileSessionData } from "./profile-session";
 import { FIRST_TAB_NAME, sessionOfWorkspace } from "./profiles-migration-data";
 
@@ -62,10 +64,12 @@ export function createProfileServices(deps: { documents: DocumentStorePort; outb
  * views (the composition's rules and recovery), recording through the session; `stored` is the graph as the session stores it.
  */
 export function openProfileSession(workspace: WorkspaceState, services: Pick<ProfileServices, "profiles" | "collections">,
-  deps: { history: HistoryService; graph(data: ViewGraphData, owner: ViewGraphOwner): ViewGraph; stored?(graph: ViewGraph): ViewGraphData },
-  random: () => number = Math.random): { state: ProfileSessions; stored: boolean } {
+  deps: { history: HistoryService; graph(data: ViewGraphData, owner: ViewGraphOwner): ViewGraph; stored?(graph: ViewGraph): ViewGraphData;
+    drawn?(): string | undefined },
+  random: () => number = hostRandom().next): { state: ProfileSessions; stored: boolean } {
   const open = (profile: string, data: ProfileSessionData) =>
-    new ProfileSessions({ profile, data, history: deps.history, graph: deps.graph, ...(deps.stored ? { stored: deps.stored } : {}), random });
+    new ProfileSessions({ profile, data, history: deps.history, graph: deps.graph, ...(deps.stored ? { stored: deps.stored } : {}),
+      ...(deps.drawn ? { drawn: deps.drawn } : {}), random });
   const sessions = workspace.profiles?.sessions ?? {}, first = Object.keys(sessions)[0];
   if (workspace.migration?.state === "done" && first) return { state: open(first, sessions[first]!), stored: true };
   const profile = services.profiles.list()[0];
@@ -74,6 +78,35 @@ export function openProfileSession(workspace: WorkspaceState, services: Pick<Pro
   const look: LookRef | undefined = collection ? { collection: collection.id, look: collection.looks[0]! } : undefined;
   const session = sessionOfWorkspace(workspace, { tab: FIRST_TAB_NAME, ...(character ? { character } : {}), ...(look ? { look } : {}) }, random);
   return { state: open(profile?.id ?? "", session), stored: false };
+}
+
+/**
+ * Until the tab strip (P2-iv) has the dock save straight to `tabs.arrange`, the dock saves through `layout.set` (the Layouts button reads
+ * it) and this passes each save on to the shown tab (`arrange`, the `tabs.arrange` action). Only a change of the preference's arrangement
+ * itself is a save, compared by value (a snapshot is a copy, and another preference changing is no save). An arrangement the session makes
+ * for the shown tab otherwise (`tabs.arrange` from elsewhere, another tab shown, a reset) becomes the preference's, so the relay never
+ * passes a stale one on. Returns the unsubscribe.
+ */
+export function relayDockSaves(preferences: Pick<UIPreferenceActions, "snapshot" | "subscribe" | "dispatch">, session: ProfileSessions,
+  arrange: (action: Extract<TabAction, { kind: "tabs.arrange" }>) => void): () => void {
+  const same = (a: DockLayout | null, b: DockLayout | null) => JSON.stringify(a) === JSON.stringify(b);
+  /** The arrangement the preference and the shown tab last agreed on. */
+  let relayed: DockLayout | null = preferences.snapshot().layout ?? null;
+  const fromDock = preferences.subscribe(() => {
+    const layout = preferences.snapshot().layout ?? null, tab = session.tabId();
+    if (same(layout, relayed)) return;
+    relayed = layout;
+    if (tab && !same(layout, session.dock(tab))) arrange({ kind: "tabs.arrange", tab, layout });
+  });
+  const fromSession = session.subscribe(() => {
+    const tab = session.tabId();
+    if (!tab) return;
+    const layout = session.dock(tab);
+    if (same(layout, relayed)) return;
+    relayed = layout;
+    preferences.dispatch({ kind: "layout.set", ...(layout ? { layout } : {}) });
+  });
+  return () => { fromDock(); fromSession(); };
 }
 
 /** `scene.setLook` and `scene.setSubject` over the session's scenes, checking that a look or V still exists (profiles design §3.6). */

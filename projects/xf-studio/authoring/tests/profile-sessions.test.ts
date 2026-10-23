@@ -13,16 +13,18 @@
  *   back byte-identical (sessions are workspace data, design §1.2; library documents go through the outbox).
  */
 import { describe, expect, test } from "bun:test";
-import { profileSessionOf, type ProfileSessionData } from "../src/app/profiles/profile-session";
+import { PANEL_INSTANCE_ID, profileSessionOf, type LayoutTab, type ProfileSessionData } from "../src/app/profiles/profile-session";
 import { sessionOfWorkspace, workspaceProfiles } from "../src/app/profiles/profiles-migration-data";
 import { PROFILES_MIGRATION } from "../src/app/profiles/profile-session";
 import { type ProfileSessions, type TabContent } from "../src/app/profiles/profile-sessions";
-import type { DockLayout } from "../src/app/ui-preferences";
+import { UIPreferenceActions, type DockLayout } from "../src/app/ui-preferences";
+import { relayDockSaves } from "../src/app/profiles/profile-window";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_SLOTS, type StoredNode, type ViewRecord } from "../src/platform/api/view-graph";
-import { createHistoryService, viewScope } from "../src/platform/core/history-service";
+import { createHistoryService, lookScope, viewScope } from "../src/platform/core/history-service";
+import { hostRandom } from "../src/platform/core/random";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
 
@@ -66,15 +68,34 @@ function contentFrom(s: ProfileSessions, from: string, share: boolean, name = "M
 }
 
 // ----- The independent model -----
-type ModelTab = { id: string; name: string; origin?: string };
-type ModelClosed = { id: string; name: string; origin?: string; at: number; views: { id: string; at: number }[] };
+/**
+ * The model's tabs and fragments carry a content identity (`content`): the arrangement and instances that go with a tab when it closes,
+ * reopens or is reset, which the session never names. It is recorded state (Undo restores it with the rest); what that content's
+ * arrangement is, and what each scene shows, are not (`Outside`), so Undo and Redo leave them as they are now.
+ */
+type ModelTab = { id: string; name: string; origin?: string; content: number };
+type ModelClosed = { id: string; name: string; origin?: string; content: number; at: number; views: { id: string; at: number }[] };
 type Model = { tabs: ModelTab[]; views: { id: string; tab: string }[]; closed: ModelClosed[] };
+type Account = { tabs: Omit<ModelTab, "content">[]; views: Model["views"]; closed: Omit<ModelClosed, "content">[] };
+/** The state outside Undo: each content's arrangement and instances (as text), and what each scene shows once the model has seen it. */
+type Outside = { contents: Map<number, string>; looks: Map<string, { look?: string; gen: number }>; next: number };
 /** What the model accounts for, read from the session: tabs in order, views in the graph's order with their tabs, closed fragments. */
-function account(s: ProfileSessions): Model {
+function account(s: ProfileSessions): Account {
   return { tabs: s.tabList().map(tab => ({ id: tab.id, name: tab.name, ...(tab.origin ? { origin: tab.origin } : {}) })),
     views: s.graph.viewIds().map(id => ({ id, tab: s.graph.tabOf(id)! })),
     closed: s.closedTabs().map(item => ({ id: item.tab.id, name: item.tab.name, ...(item.tab.origin ? { origin: item.tab.origin } : {}), at: item.at,
       views: item.views.map(view => ({ id: view.view.id, at: view.at })) })) };
+}
+const accounted = (m: Model): Account => ({ tabs: m.tabs.map(({ content: _c, ...tab }) => tab), views: m.views,
+  closed: m.closed.map(({ content: _c, ...item }) => item) });
+const contentOf = (tab: Pick<LayoutTab, "dock" | "panels">) => JSON.stringify({ dock: tab.dock, panels: tab.panels });
+const lookOf = (target: { look?: { look: string }; gen: number } | undefined) => ({ ...(target?.look ? { look: target.look.look } : {}), gen: target?.gen ?? 0 });
+/** The model of a session as it opens: each tab and fragment its own content. */
+function modelOf(s: ProfileSessions): { m: Model; outside: Outside } {
+  const outside: Outside = { contents: new Map(), looks: new Map(), next: 1 }, a = account(s), tabs = s.tabList(), closed = s.closedTabs();
+  const content = (tab: Pick<LayoutTab, "dock" | "panels">) => { const id = outside.next++; outside.contents.set(id, contentOf(tab)); return id; };
+  return { m: { tabs: a.tabs.map((tab, i) => ({ ...tab, content: content(tabs[i]!) })), views: a.views,
+    closed: a.closed.map((item, i) => ({ ...item, content: content(closed[i]!.tab) })) }, outside };
 }
 const copy = (m: Model): Model => structuredClone(m);
 const model = {
@@ -93,7 +114,7 @@ const model = {
     next.closed = [...next.closed, fragment].slice(-5);
     return next;
   },
-  /** Reopen the newest fragment of tab `closed` as tab `id`. */
+  /** Reopen the newest fragment of tab `closed` as tab `id`, with its content. */
   reopen: (m: Model, closed: string, id: string) => {
     const next = copy(m), index = next.closed.map(item => item.id).lastIndexOf(closed), { at, views, ...header } = next.closed[index]!;
     next.closed.splice(index, 1);
@@ -106,10 +127,11 @@ const model = {
     next.tabs.splice(at, 0, tab); next.views.push(...views.map(id => ({ id, tab: tab.id })));
     return next;
   },
-  reset: (m: Model, tab: string, origin: string, views: readonly string[]) => {
+  /** Reset tab `tab` to new content `content`: the content before it goes into a fragment. */
+  reset: (m: Model, tab: string, origin: string, views: readonly string[], content: number) => {
     const next = copy(m), fragment = model.fragment(m, tab);
     next.views = [...next.views.filter(view => view.tab !== tab), ...views.map(id => ({ id, tab }))];
-    next.tabs.find(item => item.id === tab)!.origin = origin;
+    Object.assign(next.tabs.find(item => item.id === tab)!, { origin, content });
     next.closed = [...next.closed, fragment].slice(-5);
     return next;
   },
@@ -129,11 +151,47 @@ function invariants(s: ProfileSessions) {
   const stored = s.session();
   expect(profileSessionOf(structuredClone(stored))).toEqual(stored);
 }
+/**
+ * Listeners of the graph, focus and the session, each checking what it reads when it hears: every view in a live tab, a live shown tab.
+ * Returns what they found wrong (finding 2 of review P2-1: they heard while an operation or a replay was half done).
+ */
+function watch(s: ProfileSessions): string[] {
+  const issues: string[] = [];
+  const check = (who: string) => () => {
+    const tabs = new Set(s.tabList().map(tab => tab.id));
+    for (const view of s.graph.viewIds()) if (!tabs.has(s.graph.tabOf(view)!)) issues.push(`${who} heard view ${view} in missing tab ${s.graph.tabOf(view)}`);
+    if (tabs.size ? !tabs.has(s.tabId()) : s.tabId() !== "") issues.push(`${who} heard missing shown tab ${s.tabId()}`);
+  };
+  s.graph.subscribe(check("graph")); s.focus.subscribe(check("focus")); s.subscribe(check("session"));
+  return issues;
+}
 
-type Run = { s: ProfileSessions; m: Model; states: { model: Model; stored: string }[]; at: number };
+type Run = { s: ProfileSessions; m: Model; outside: Outside; states: { model: Model; stored: string }[]; at: number; issues: string[] };
+function startRun(s: ProfileSessions): Run {
+  const { m, outside } = modelOf(s);
+  return { s, m, outside, states: [{ model: copy(m), stored: json(s) }], at: 0, issues: watch(s) };
+}
+/** The model's account and the state outside Undo (each tab's and fragment's arrangement, what each shown scene shows) hold. */
+function holds(run: Run) {
+  const { s, m, outside } = run;
+  expect(account(s)).toEqual(accounted(m));
+  s.tabList().forEach((tab, i) => expect(contentOf(tab)).toBe(outside.contents.get(m.tabs[i]!.content)!));
+  s.closedTabs().forEach((item, i) => expect(contentOf(item.tab)).toBe(outside.contents.get(m.closed[i]!.content)!));
+  for (const view of s.graph.viewIds()) {
+    const scene = s.graph.node(view, "scene").id, known = outside.looks.get(scene);
+    if (known) expect(lookOf(s.knownScene(scene))).toEqual(known);
+  }
+  expect(run.issues).toEqual([]);
+}
+/** A new content identity for what tab `tab` holds now. */
+function made(run: Run, tab: string): number {
+  const id = run.outside.next++;
+  run.outside.contents.set(id, contentOf(run.s.tab(tab)!));
+  return id;
+}
 /** One random forward operation, applied to the session and the model; false when none applies. */
 function step(run: Run, random: () => number, n: number): boolean {
-  const { s } = run, tabs = s.tabList(), views = s.graph.viewIds(), kinds: string[] = ["newTab", "light"];
+  const { s } = run, tabs = s.tabList(), views = s.graph.viewIds(), kinds: string[] = ["newTab"];
   if (tabs.length) kinds.push("rename", "close", "duplicate", "reset", "newTab");
   if (tabs.length > 1) kinds.push("move");
   if (s.closedTabs().length) kinds.push("reopen", "reopen");
@@ -152,19 +210,20 @@ function step(run: Run, random: () => number, n: number): boolean {
     next = model.reopen(run.m, chosen, id);
   } else if (kind === "duplicate") {
     const source = pick(random, tabs), at = tabs.indexOf(source), id = s.duplicate(source.id);
-    next = model.insert(run.m, { id, name: source.name, ...(source.origin ? { origin: source.origin } : {}) }, at + 1,
+    next = model.insert(run.m, { id, name: source.name, ...(source.origin ? { origin: source.origin } : {}), content: made(run, id) }, at + 1,
       s.graph.viewIds().filter(view => s.graph.tabOf(view) === id));
     expect(s.graph.viewIds().filter(view => s.graph.tabOf(view) === id).length).toBe(views.filter(view => s.graph.tabOf(view) === source.id).length);
   } else if (kind === "newTab") {
     const content = views.length ? contentFrom(s, pick(random, views), random() < .5, `New ${n}`)
       : { name: `New ${n}`, dock: null, panels: [], views: [], nodes: [] };
     const id = s.newTab(content);
-    next = model.insert(run.m, { id, name: content.name, ...(content.origin ? { origin: content.origin } : {}) }, tabs.length, content.views.map(view => view.id));
+    next = model.insert(run.m, { id, name: content.name, ...(content.origin ? { origin: content.origin } : {}), content: made(run, id) }, tabs.length,
+      content.views.map(view => view.id));
   } else if (kind === "reset") {
     const tab = pick(random, tabs).id, content = views.length ? contentFrom(s, pick(random, views), random() < .5, "ignored")
       : { name: "ignored", origin: "eye-makeup/default", dock: null, panels: [], views: [], nodes: [] };
     s.reset(tab, content);
-    next = model.reset(run.m, tab, content.origin!, content.views.map(view => view.id));
+    next = model.reset(run.m, tab, content.origin!, content.views.map(view => view.id), made(run, tab));
   } else if (kind === "addView") { const from = pick(random, views), id = s.addView(from, { scene: random() < .5 }); next = model.addView(run.m, from, id); }
   else if (kind === "closeView") { const view = pick(random, views); s.closeView(view); next = model.closeView(run.m, view); }
   else {
@@ -178,6 +237,21 @@ function step(run: Run, random: () => number, n: number): boolean {
   run.at = run.states.length - 1;
   return true;
 }
+/** Navigation, never a step: arranging a tab (its content's arrangement changes) or showing another look in a view's scene. */
+function navigate(run: Run, random: () => number, kind: "arrange" | "look") {
+  const { s } = run, tabs = s.tabList(), views = s.graph.viewIds();
+  if (kind === "arrange") {
+    const at = Math.floor(random() * tabs.length), tab = tabs[at]!.id;
+    const own = views.filter(view => s.graph.tabOf(view) === tab).map(view => view === MAIN_VIEW ? "head" : `view.${view}`);
+    s.arrange(tab, dockOf([...own, pick(random, ["presets", "layers", "history"])]));
+    run.outside.contents.set(run.m.tabs[at]!.content, contentOf(s.tab(tab)!));
+  } else {
+    const scene = s.graph.node(pick(random, views), "scene").id, look = random() < .5 ? OTHER_LOOK : LOOK;
+    const before = run.outside.looks.get(scene) ?? lookOf(s.knownScene(scene));
+    s.setLook(scene, look);
+    run.outside.looks.set(scene, before.look === look.look ? before : { look: look.look, gen: before.gen + 1 });
+  }
+}
 /** Undo or Redo, in the session and the model: the session must then be byte-identical to the state the model reached. */
 function move(run: Run, direction: "undo" | "redo") {
   const target = direction === "undo" ? run.at - 1 : run.at + 1;
@@ -190,14 +264,13 @@ function move(run: Run, direction: "undo" | "redo") {
 describe("T1: seeded random runs against an independent model", () => {
   test("every operation matches the model; every Undo and Redo is byte-identical to the state it reaches; Undo to the start and Redo to the end are too", () => {
     for (let seed = 1; seed <= 40; seed++) {
-      const random = seededRandom(seed * 31), s = open(seed);
-      const run: Run = { s, m: account(s), states: [{ model: account(s), stored: json(s) }], at: 0 };
+      const random = seededRandom(seed * 31), s = open(seed), run = startRun(s);
       for (let n = 0; n < 40; n++) {
         const roll = random();
         if (roll < .2) move(run, "undo");
         else if (roll < .3) move(run, "redo");
         else step(run, random, n);
-        expect(account(s)).toEqual(run.m);
+        holds(run);
         invariants(s);
       }
       // Undo to the start, then Redo to the end.
@@ -207,26 +280,24 @@ describe("T1: seeded random runs against an independent model", () => {
       expect(s.graph.undo()).toBe(false);
       while (run.at < end) move(run, "redo");
       expect(json(s)).toBe(run.states[end]!.stored);
+      holds(run);
       invariants(s);
     }
   });
 
-  test("with navigation between the operations (show, focus, arrange, another look), the model's account and every invariant hold", () => {
+  test("with navigation between the operations (show, focus, arrange, another look), the model's account, what stays outside Undo and every invariant hold", () => {
     for (let seed = 1; seed <= 25; seed++) {
-      const random = seededRandom(seed * 131), s = open(seed);
-      const run: Run = { s, m: account(s), states: [{ model: account(s), stored: json(s) }], at: 0 };
+      const random = seededRandom(seed * 131), s = open(seed), run = startRun(s);
       for (let n = 0; n < 45; n++) {
         const roll = random(), tabs = s.tabList(), views = s.graph.viewIds();
         if (roll < .15 && run.at > 0) { expect(s.graph.undo()).toBe(true); run.at--; run.m = copy(run.states[run.at]!.model); }
         else if (roll < .22 && run.at < run.states.length - 1) { expect(s.graph.redo()).toBe(true); run.at++; run.m = copy(run.states[run.at]!.model); }
         else if (roll < .3 && tabs.length) s.show(pick(random, tabs).id);
         else if (roll < .38 && views.length) s.focus.focusView(pick(random, views));
-        else if (roll < .46 && tabs.length) {
-          const tab = pick(random, tabs).id, own = views.filter(view => s.graph.tabOf(view) === tab).map(view => view === MAIN_VIEW ? "head" : `view.${view}`);
-          s.arrange(tab, dockOf([...own, pick(random, ["presets", "layers", "history"])]));
-        } else if (roll < .5 && views.length) s.setLook(s.graph.node(pick(random, views), "scene").id, random() < .5 ? OTHER_LOOK : LOOK);
+        else if (roll < .46 && tabs.length) navigate(run, random, "arrange");
+        else if (roll < .52 && views.length) navigate(run, random, "look");
         else step(run, random, n);
-        expect(account(s)).toEqual(run.m);
+        holds(run);
         invariants(s);
       }
     }
@@ -381,10 +452,10 @@ describe("operations", () => {
     expect(s.graph.viewIds().filter(view => s.graph.tabOf(view) === again)).toEqual(old);
   });
 
-  test("IDs are never used twice, across a restart too: new IDs avoid what the session holds, held and keeps in closed fragments", () => {
-    // A random source that repeats every few draws: fresh IDs still never collide.
+  test("IDs are never used twice within a run, even from a source of randomness that repeats: the session never gives out one it holds, keeps or gave out", () => {
+    // A random source that repeats every 997 draws: fresh IDs still never collide.
     let n = 0;
-    const cyclic = () => ((n++ * 7919) % 36) / 36, s = openSession(startData(23), { random: cyclic });
+    const cyclic = () => ((n++ * 7919) % 997) / 997, s = openSession(startData(23), { random: cyclic });
     const seen = new Set(JSON.stringify(s.session()).match(/"(t|v|s|c|l|d|x)-[0-9a-z]{8,}"/g) ?? []);
     for (let i = 0; i < 12; i++) {
       const tab = s.duplicate(s.tabId());
@@ -394,6 +465,30 @@ describe("operations", () => {
     const ids = [s.freshId("tab"), s.freshId("view"), s.freshId("scene"), s.freshInstance("presets")];
     expect(ids.every(id => !seen.has(`"${id}"`))).toBe(true);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test("IDs are never used twice across a restart (finding 6): a session stored with retired IDs, reopened, gives out none of them", () => {
+    const s = open(83), given: string[] = [];
+    // Views made and closed, and tabs made and closed until their fragments fall out of the last 5: retired, named nowhere.
+    for (let i = 0; i < 4; i++) { const view = s.addView(MAIN_VIEW, { scene: i % 2 === 0 }); given.push(view); s.closeView(view); }
+    for (let i = 0; i < 7; i++) {
+      const tab = s.duplicate(s.tabList()[1]!.id);
+      given.push(tab, ...s.graph.viewIds().filter(view => s.graph.tabOf(view) === tab), ...s.tab(tab)!.panels.map(panel => panel.id));
+      s.close(tab);
+    }
+    const stored = json(s), retired = given.filter(id => !stored.includes(`"${id}"`));
+    expect(retired.length).toBeGreaterThan(10);
+    // A real restart: a new window, with the platform's source of randomness (a seeded source given the same seed repeats by design).
+    const restarted = openSession(profileSessionOf(JSON.parse(stored))!, { random: hostRandom().next });
+    expect(json(restarted)).toBe(stored);
+    const view = restarted.addView(MAIN_VIEW, { scene: true }), tab = restarted.duplicate(restarted.tabList()[1]!.id);
+    const fresh = [view, tab, ...restarted.graph.viewIds().filter(item => restarted.graph.tabOf(item) === tab), ...restarted.tab(tab)!.panels.map(panel => panel.id),
+      restarted.freshId("tab"), restarted.freshId("view"), restarted.freshId("scene"), restarted.freshInstance("presets")];
+    expect(fresh.filter(id => given.includes(id) || stored.includes(`"${id}"`))).toEqual([]);
+    // Over 128 bits of randomness each (a panel instance: the stored format's 12 characters), so none recurs in practice.
+    for (const id of fresh) expect(id).toMatch(id.includes("--") ? PANEL_INSTANCE_ID : /^[tvscldx]-[0-9a-z]{25}$/);
+    // The session with them stores and reads back as itself.
+    expect(profileSessionOf(structuredClone(restarted.session()))).toEqual(restarted.session());
   });
 
   test("an empty session is valid: every tab closed, it stores and reads back, and a new tab fills it", () => {
@@ -437,5 +532,255 @@ describe("persistence", () => {
     stored.closed.unshift({ ...(stored.closed[0] as object), tab: { ...(stored.closed[0] as { tab: object }).tab, id: stored.tabs[0]!.id } });
     const read = profileSessionOf(stored)!;
     expect(read.closed.map(item => item.tab.id)).toEqual([second!.id]);
+  });
+});
+
+describe("refusals change nothing (review P2-1, finding 1)", () => {
+  test("the view the window draws can't close: its tab can't close or be reset, it can't close, and each refusal says why", () => {
+    const s = openSession(startData(41), { random: seededRandom(41), drawn: () => MAIN_VIEW }), [first, second] = s.tabList();
+    // A listener reading the drawn view on every change, as the 3D view's does: it must never find it gone.
+    s.graph.subscribe(() => { s.graph.node(MAIN_VIEW, "scene"); });
+    expect(s.capability({ kind: "tabs.close", tab: first!.id })).toEqual({ available: false, code: "incompatible_mode",
+      reason: "The 3D view draws a view in this tab, so the tab can't close yet." });
+    expect(() => s.close(first!.id)).toThrow("The 3D view draws a view in this tab, so the tab can't close yet.");
+    expect(() => s.reset(first!.id, contentFrom(s, MAIN_VIEW, false))).toThrow("The 3D view draws a view in this tab, so the tab can't be reset yet.");
+    expect(() => s.closeView(MAIN_VIEW)).toThrow("The 3D view draws this view, so it can't close yet.");
+    // Another tab, and a view beside the drawn one, close as before.
+    const beside = s.graph.viewIds().find(view => view !== MAIN_VIEW && s.graph.tabOf(view) === first!.id)!;
+    s.closeView(beside);
+    s.close(second!.id);
+    expect(s.tabList().map(tab => tab.id)).toEqual([first!.id]);
+    invariants(s);
+  });
+
+  test("every refused operation leaves the session, its history and every listener untouched", () => {
+    const history = createHistoryService(), s = openSession(startData(43), { history, random: seededRandom(43), drawn: () => MAIN_VIEW });
+    const [first, second] = s.tabList();
+    s.rename(second!.id, "Renamed");
+    let heard = 0;
+    s.subscribe(() => heard++); s.graph.subscribe(() => heard++); s.focus.subscribe(() => heard++); history.subscribe(() => heard++);
+    const content = () => contentFrom(s, MAIN_VIEW, false), main = s.graph.data().views.find(view => view.id === MAIN_VIEW) as ViewRecord;
+    const refusals: [string, () => unknown][] = [
+      ["close the drawn view's tab", () => s.close(first!.id)],
+      ["reset the drawn view's tab", () => s.reset(first!.id, content())],
+      ["close the drawn view", () => s.closeView(MAIN_VIEW)],
+      ["close a closed tab", () => s.close("t-gone")],
+      ["reset a closed tab", () => s.reset("t-gone", content())],
+      ["reset with IDs taken", () => s.reset(second!.id, { ...content(), views: [{ ...main, id: MAIN_VIEW }] })],
+      ["rename to nothing", () => s.rename(first!.id, "  ")],
+      ["rename with a control character", () => s.rename(first!.id, "a\u0007")],
+      ["rename a closed tab", () => s.rename("t-gone", "Name")],
+      ["move a closed tab", () => s.move("t-gone", 0)],
+      ["reopen with nothing closed", () => s.reopen()],
+      ["reopen a fragment no longer kept", () => s.reopen("t-gone")],
+      ["a new tab whose IDs are taken", () => s.newTab({ ...content(), views: [{ ...main, id: MAIN_VIEW }] })],
+      ["a new tab without a name", () => s.newTab({ ...content(), name: " " })],
+      // Checked by the graph inside the operation: refused there before anything changes.
+      ["a new tab whose view names a missing node", () => s.newTab({ ...content(), views: [{ ...content().views[0]!, scene: "s-missing" }] })],
+      ["duplicate a closed tab", () => s.duplicate("t-gone")],
+      ["a view in a closed tab", () => s.addView(MAIN_VIEW, { scene: true }, { tab: "t-gone" })],
+      ["a view copied from a closed view", () => s.addView("v-gone", { scene: true })],
+      ["close a closed view", () => s.closeView("v-gone")],
+      ["show a closed tab", () => s.show("t-gone")],
+      ["arrange a closed tab", () => s.arrange("t-gone", null)],
+    ];
+    for (const [what, run] of refusals) {
+      const before = json(s), steps = s.graph.history(), timeline = history.scope(viewScope("p-1"))!.timeline(), editing = history.focus.recent();
+      heard = 0;
+      let threw = false;
+      try { run(); } catch { threw = true; }
+      expect([what, threw, heard]).toEqual([what, true, 0]);
+      expect(json(s)).toBe(before);
+      expect(s.graph.history()).toEqual(steps);
+      expect(history.scope(viewScope("p-1"))!.timeline()).toEqual(timeline);
+      expect(history.focus.recent()).toEqual(editing);
+    }
+    // The step recorded before them is still there to undo.
+    expect(s.graph.undo()).toBe(true);
+    expect(s.tab(second!.id)!.name).not.toBe("Renamed");
+  });
+
+  test("an Undo or Redo that would close the drawn view waits, with the reason, and keeps every step", () => {
+    let drawn = MAIN_VIEW;
+    const history = createHistoryService(), s = openSession(startData(47), { history, random: seededRandom(47), drawn: () => drawn });
+    const core = createTrustedAuthoringCore({ ...freshWorkspace() }, { history, views: s.graph, resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+    const scope = history.scope(viewScope("p-1"))!;
+    // Undo of a new view that is drawn now.
+    const added = s.addView(MAIN_VIEW, { scene: true });
+    drawn = added;
+    let before = json(s), steps = s.graph.history();
+    const undo = "Undoing this would close the view the 3D view draws, so it can't be undone yet.";
+    expect(s.graph.historyBlocked("undo")).toBe(undo);
+    expect(scope.capability({ kind: "history.undo" })).toEqual({ available: false, code: "incompatible_mode", reason: undo });
+    expect(core.app.capability({ kind: "view.undo" })).toMatchObject({ available: false, reason: undo });
+    expect(s.graph.undo()).toBe(false);
+    expect(scope.jumpTo(scope.timeline().startId)).toBe(false);
+    expect([json(s), s.graph.history()]).toEqual([before, steps]);
+    drawn = MAIN_VIEW;
+    expect(s.graph.undo()).toBe(true);
+    expect(s.graph.has(added)).toBe(false);
+    // Redo of closing a view that is drawn now.
+    const other = s.addView(MAIN_VIEW, { scene: true });
+    s.closeView(other);
+    expect(s.graph.undo()).toBe(true);
+    drawn = other;
+    before = json(s); steps = s.graph.history();
+    const redo = "Redoing this would close the view the 3D view draws, so it can't be redone yet.";
+    expect(s.graph.historyBlocked("redo")).toBe(redo);
+    expect(scope.capability({ kind: "history.redo" })).toEqual({ available: false, code: "incompatible_mode", reason: redo });
+    expect(s.graph.redo()).toBe(false);
+    expect([json(s), s.graph.history()]).toEqual([before, steps]);
+    drawn = MAIN_VIEW;
+    expect(s.graph.redo()).toBe(true);
+    expect(s.graph.has(other)).toBe(false);
+  });
+});
+
+describe("listeners hear a settled session (review P2-1, finding 2)", () => {
+  test("graph, focus and session listeners hear once an operation, Undo or Redo has settled: never a view in a missing tab, a missing shown tab or a step not yet recorded", () => {
+    const s = open(53), issues = watch(s), [first, second] = s.tabList();
+    let depth = -1, sessions = 0;
+    s.graph.subscribe(() => { depth = s.graph.history().depth; });
+    s.subscribe(() => sessions++);
+    const id = s.duplicate(first!.id);
+    expect(depth).toBe(s.graph.history().depth);
+    expect(sessions).toBe(1);
+    // Undo of the duplicate takes away the shown tab; Redo brings it back.
+    expect(s.graph.undo()).toBe(true);
+    expect(s.graph.redo()).toBe(true);
+    expect(s.tabId()).toBe(id);
+    s.close(id); s.close(first!.id);
+    expect(s.graph.undo()).toBe(true); expect(s.graph.undo()).toBe(true);
+    s.close(second!.id);
+    s.reopen(second!.id);
+    expect(s.graph.undo()).toBe(true); expect(s.graph.redo()).toBe(true);
+    expect(issues).toEqual([]);
+  });
+
+  test("a listener that throws can't leave the session invalid: the operation has settled with its step, the others hear, and nothing stays held", () => {
+    const s = open(59), [first] = s.tabList(), depth = s.graph.history().depth;
+    let others = 0;
+    s.graph.subscribe(() => { throw Error("A broken listener"); });
+    s.subscribe(() => others++);
+    expect(() => s.duplicate(first!.id)).toThrow("A broken listener");
+    expect(s.tabList()).toHaveLength(3);
+    expect(s.tabId()).toBe(s.tabList()[1]!.id);
+    expect(s.graph.history().depth).toBe(depth + 1);
+    expect(others).toBe(1);
+    invariants(s);
+    expect(() => s.graph.undo()).toThrow("A broken listener");
+    expect(s.tabList()).toHaveLength(2);
+    expect(s.tabId()).toBe(first!.id);
+    expect(others).toBe(2);
+    invariants(s);
+    s.rename(first!.id, "After");
+    expect(others).toBe(3);
+  });
+});
+
+describe("replays keep what Undo doesn't hold (review P2-1, finding 3)", () => {
+  test("close, Undo, arrange the tab again, Redo, Reopen: it comes back as last arranged, after a restart too", () => {
+    const s = open(61), [, second] = s.tabList();
+    s.close(second!.id);
+    expect(s.graph.undo()).toBe(true);
+    s.arrange(second!.id, dockOf(["layers", "presets"]));
+    const arranged = s.tab(second!.id)!;
+    expect(s.graph.redo()).toBe(true);
+    expect(s.closedTabs().at(-1)!.tab).toMatchObject({ dock: arranged.dock, panels: arranged.panels });
+    const restarted = openSession(profileSessionOf(JSON.parse(json(s)))!);
+    for (const session of [s, restarted]) {
+      session.reopen(second!.id);
+      expect(session.dock(second!.id)).toEqual(dockOf(["layers", "presets"]));
+    }
+  });
+
+  test("close, Undo, show another look in its scene, Redo, Reopen: the scene shows that look with its generation, after a restart too", () => {
+    const s = open(67), [, second] = s.tabList(), view = s.graph.viewIds().find(item => s.graph.tabOf(item) === second!.id)!;
+    const scene = s.graph.node(view, "scene").id;
+    s.close(second!.id);
+    expect(s.graph.undo()).toBe(true);
+    s.setLook(scene, OTHER_LOOK);
+    const shown = s.knownScene(scene)!;
+    expect(shown).toMatchObject({ look: OTHER_LOOK, gen: 1 });
+    expect(s.graph.redo()).toBe(true);
+    expect(s.closedTabs().at(-1)!.nodes.find(item => item.node.id === scene)!.node).toMatchObject({ look: OTHER_LOOK, gen: 1 });
+    const restarted = openSession(profileSessionOf(JSON.parse(json(s)))!);
+    for (const session of [s, restarted]) {
+      session.reopen(second!.id);
+      expect(session.knownScene(scene)).toEqual(shown);
+    }
+  });
+
+  test("close, Reopen, arrange, then Undo twice: the tab comes back as last arranged; Redo twice keeps it", () => {
+    const s = open(71), [, second] = s.tabList();
+    s.close(second!.id);
+    s.reopen(second!.id);
+    s.arrange(second!.id, dockOf(["history"]));
+    const arranged = s.tab(second!.id)!;
+    expect(s.graph.undo()).toBe(true);
+    expect(s.closedTabs().at(-1)!.tab).toMatchObject({ dock: arranged.dock, panels: arranged.panels });
+    expect(s.graph.undo()).toBe(true);
+    expect(s.dock(second!.id)).toEqual(dockOf(["history"]));
+    expect(s.graph.redo()).toBe(true); expect(s.graph.redo()).toBe(true);
+    expect(s.dock(second!.id)).toEqual(dockOf(["history"]));
+  });
+
+  test("reset, Undo, arrange the tab, Redo, Reopen the fragment: the content before the reset comes back as last arranged", () => {
+    const s = open(73), tab = s.tabId();
+    s.reset(tab, contentFrom(s, MAIN_VIEW, false));
+    expect(s.graph.undo()).toBe(true);
+    s.arrange(tab, dockOf(["head", "layers"]));
+    expect(s.graph.redo()).toBe(true);
+    const id = s.reopen();
+    expect(s.dock(id)).toEqual(dockOf(["head", "layers"]));
+  });
+});
+
+describe("the dock relay (review P2-1, finding 4)", () => {
+  test("only a change of the dock's arrangement passes on to the shown tab; another preference changing passes nothing on; an arrangement the session makes becomes the preference's", () => {
+    const s = open(77), [first, second] = s.tabList();
+    const preferences = new UIPreferenceActions({ ...freshWorkspace().uiPreferences, ...(s.dock() ? { layout: s.dock()! } : {}) });
+    const relayed: unknown[] = [];
+    relayDockSaves(preferences, s, action => { relayed.push(action); s.dispatch(action); });
+    // An arrangement set elsewhere stays when another preference changes (the review's case), and becomes the preference's.
+    s.dispatch({ kind: "tabs.arrange", tab: first!.id, layout: dockOf(["layers"]) });
+    preferences.dispatch({ kind: "inputHints.set", enabled: false });
+    expect(s.dock(first!.id)).toEqual(dockOf(["layers"]));
+    expect(relayed).toEqual([]);
+    expect(preferences.snapshot().layout).toEqual(dockOf(["layers"]));
+    // The dock saves: passed on, once.
+    preferences.dispatch({ kind: "layout.set", layout: dockOf(["presets", "history"]) });
+    preferences.dispatch({ kind: "theme.set", theme: "dark" });
+    expect(relayed).toEqual([{ kind: "tabs.arrange", tab: first!.id, layout: dockOf(["presets", "history"]) }]);
+    expect(s.dock(first!.id)).toEqual(dockOf(["presets", "history"]));
+    // Another tab shown: the preference follows it, and nothing is passed on to either tab.
+    s.show(second!.id);
+    expect(preferences.snapshot().layout ?? null).toEqual(s.dock(second!.id));
+    preferences.dispatch({ kind: "inputHints.set", enabled: true });
+    expect(relayed).toHaveLength(1);
+    expect(s.dock(first!.id)).toEqual(dockOf(["presets", "history"]));
+  });
+});
+
+describe("the editing context (review P2-1, finding 5)", () => {
+  test("a recorded tab operation becomes the editing context: after a look edit and Rename tab, global Undo undoes the rename; showing, focusing and arranging don't change it", () => {
+    const history = createHistoryService(), s = openSession(startData(79), { history }), tab = s.tabId();
+    let value = 1;
+    const look = history.open(lookScope(LOOK), { read: () => value, apply: values => { value = values.x as number; return true; } });
+    look.checkpoint(["x"], { label: "Layer change", actionKind: "layer.edit" });
+    value = 2;
+    expect(history.focus.editing()).toBe(lookScope(LOOK));
+    s.rename(tab, "Renamed");
+    expect(history.focus.editing()).toBe(viewScope("p-1"));
+    s.show(s.tabList()[1]!.id); s.focus.focusView(MAIN_VIEW); s.arrange(tab, dockOf(["layers"]));
+    expect(history.focus.editing()).toBe(viewScope("p-1"));
+    // Global Undo acts on the editing context (the input layer's `acting`): the rename, not the look.
+    const acting = history.acting(history.focus.recent())!;
+    expect(acting.id).toBe(viewScope("p-1"));
+    expect(acting.command({ kind: "history.undo" })).toBe(true);
+    expect(s.tab(tab)!.name).not.toBe("Renamed");
+    expect(value).toBe(2);
+    // The look's history is next once the session's has nothing left of it.
+    expect(history.focus.recent()).toEqual([viewScope("p-1"), lookScope(LOOK)]);
   });
 });
