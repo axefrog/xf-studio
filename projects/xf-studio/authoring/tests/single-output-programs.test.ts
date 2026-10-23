@@ -6,7 +6,7 @@ import { headSurface, RECORDED_GL, recordingRenderer } from "./fixtures/recordin
 import { LATER_FRAG_DATA, LATER_OUTPUT, multipleOutputs, stripComments } from "./fixtures/single-output";
 import { createSkinMaterial, skinParameters, contactShadowUniforms } from "../src/materials/render/skin-material";
 import { createSkinScatter } from "../src/platform/scene/skin-scatter";
-import { createContactShadows } from "../src/platform/scene/contact-shadow";
+import { createContactShadows, setContactShadows } from "../src/platform/scene/contact-shadow";
 import { createLinearDisplay } from "../src/preview/render/linear-display";
 import { createPlateComposite } from "../src/engines/layered-makeup/render/plate-composite";
 import { createLayeredMaterial, layerBakeParameters } from "../src/materials/render/layered-material";
@@ -63,9 +63,21 @@ test("what the renderer builds and binds for the passes that once wrote several 
   const scatter = createSkinScatter(renderer);
   expect(scatter.prepare(scene, true)).toBe(true);
   expect(scatter.render(scene, camera)).not.toBeNull();
-  // The contact shadows' depth prepass and the scene-linear display under both rigs.
+  // The contact shadows' depth prepass, for a light flagged as the game flags its character lights (without one it draws nothing), and the
+  // scene-linear display under both rigs.
+  const key = new THREE.DirectionalLight(0xffffff, 1);
+  key.position.set(1, 1, 2);
+  setContactShadows(key, true);
+  scene.add(key);
   const contact = createContactShadows(renderer, contactShadowUniforms);
-  contact.prepare(scene, camera);
+  const before = { shaders: recording.shaders.length, attachments: recording.attachments.length };
+  expect(contact.prepare(scene, camera)).toBe(true);
+  expect(contact.evidence().lights).toBe(1);
+  // The prepass built its caster depth program and bound its target (one colour attachment and its depth texture).
+  const contactShaders = recording.shaders.slice(before.shaders), contactAttachments = recording.attachments.slice(before.attachments);
+  expect(contactShaders.some(shader => shader.stage === "fragment")).toBe(true);
+  expect(contactAttachments.map(item => item.attachment)).toEqual(expect.arrayContaining([RECORDED_GL.COLOR_ATTACHMENT0, RECORDED_GL.DEPTH_ATTACHMENT]));
+  expect(multipleOutputs(contactShaders, contactAttachments, recording.drawBuffers)).toEqual([]);
   const display = createLinearDisplay(renderer);
   display.render(scene, camera, "creator");
   display.render(scene, camera, "studio");
