@@ -1,10 +1,12 @@
 // Shared test helpers: synthetic windows and the self-test bridge host.
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { readSession, type BridgeSession } from "../bridge-lib.ts";
+import { sweptDir, tempDir } from "./temp-dir.ts";
+
+export { tempDir };
 
 export const projectDir = resolve(import.meta.dir, "..", "..");
 // No test may ever press a key on this machine's desktop (photo.open's sender refuses with this set);
@@ -65,7 +67,7 @@ export type Host = { child: ChildProcess; dir: string; session: BridgeSession; l
 /** Starts build/Release/xfb_selftest.exe: the real bridge core and pipe with a simulated game. */
 export async function startSelftestHost(extraArgs: string[] = [], seconds = 60): Promise<Host> {
   if (!existsSync(selftestExe)) throw new Error(`missing ${selftestExe}; build first: cmake --build build --config Release`);
-  const dir = mkdtempSync(join(tmpdir(), "xfb-test-"));
+  const dir = sweptDir("xfb-test-");
   const log: string[] = [];
   // The lifetime is a safety net for an orphaned host, never a test's clock (RB-92: a describe outlived its host under load).
   const lifetime = Math.max(seconds, MIN_LIFETIME_S);
@@ -92,8 +94,4 @@ export async function startSelftestHost(extraArgs: string[] = [], seconds = 60):
   }
   child.kill();
   throw new Error(`host did not write session.json; log:\n${log.join("\n")}`);
-}
-
-export function tempDir(prefix: string) {
-  return mkdtempSync(join(tmpdir(), prefix));
 }

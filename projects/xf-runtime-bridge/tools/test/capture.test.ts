@@ -2,7 +2,7 @@
 // (tools/test/synthetic-window.ps1). No game involved.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, parse } from "node:path";
 import { CAPTURE_PORT, captureBurst, captureWindow, CaptureError, recrop } from "../capture/capture.ts";
 import { REFUSALS } from "../api/catalogue080.ts";
@@ -171,7 +171,7 @@ describe("capture refusals", () => {
     const otherDir = join(projectDir, "build");
     if (parse(otherDir).root.toLowerCase() === parse(root).root.toLowerCase()) console.warn("recrop cross-drive test: temp and project share a drive");
     mkdirSync(otherDir, { recursive: true });
-    const dir = mkdtempSync(join(otherDir, "xfb-otherdrive-"));
+    const dir = tempDir("xfb-otherdrive-", otherDir);
     const file = join(dir, "x.full.png");
     writeFileSync(file, tinyPng());
     try {

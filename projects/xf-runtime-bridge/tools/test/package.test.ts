@@ -1,10 +1,10 @@
 // What each package carries (tools/packaging.ts), staged into temporary folders with a stand-in DLL,
 // and the test preload that keeps key input off. This file deliberately imports nothing from
-// helpers.ts, so the first test proves bunfig.toml's preload ran (RB-41).
+// helpers.ts, so the first test proves bunfig.toml's preload ran (RB-41); its scratch folder comes from temp-dir.ts.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tempDir } from "./temp-dir.ts";
 import { join, resolve } from "node:path";
 import { OLD_PRESETS_FILE, PANEL_FILE, PLUGIN_DIR, PRESETS_FILE, stageVariant, variantConfig, VARIANTS, type Variant } from "../packaging.ts";
 
@@ -13,12 +13,12 @@ const projectDir = resolve(import.meta.dir, "..", "..");
 describe("test preload", () => {
   test("key input is off in every test process, before any test file sets it itself", () => {
     expect(process.env.XFB_NO_INPUT).toBe("1");
-    expect(readFileSync(join(projectDir, "bunfig.toml"), "utf8")).toMatch(/preload\s*=\s*\[\s*"\.\/tools\/test\/preload\.ts"\s*\]/);
+    expect(readFileSync(join(projectDir, "bunfig.toml"), "utf8")).toMatch(/preload\s*=\s*\[\s*"\.\/tools\/test\/preload\.ts"\s*,\s*"\.\/tools\/test\/temp-dir-sweep\.ts"\s*\]/);
   });
 });
 
 describe("packages", () => {
-  const work = mkdtempSync(join(tmpdir(), "xfb-package-"));
+  const work = tempDir("xfb-package-");
   const dll = join(work, "XFRuntimeBridge.dll");
   writeFileSync(dll, "stand-in DLL XFB_BUILD=0000000000000000000000000000000000000000;dirty=0");
   writeFileSync(join(work, "xfb_companion_probe.exe"), "stand-in companion probe");
