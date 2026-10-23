@@ -404,6 +404,13 @@ Key bindings and palette commands resolve targets in the input layer, then dispa
 
 Undo reverses all of an operation, including pushing or popping a fragment. A session may hold no view and no tab, and an empty session shows **New tab ▸**.
 
+**Built in phase 2, P2-i** ([experiment 044 §8](../../experiments/044-profile-tabs/README.md#8-p2-i-as-built)).
+
+- **One owner, one history.** `ProfileSessions` (`src/app/profiles/profile-sessions.ts`) replaced `ProfileSessionState`. It holds the `view:<profile>` scope over the graph's values and its own (the tab order, closed fragments and shown tab; each tab's name and origin; each tab's arrangement and instances). The graph records through it (`ViewGraphOwner`), so an operation and its graph edits are one step. An Undo or Redo is checked whole: every view is in a live tab, or nothing changes.
+- **Never Undo:** focus with the shown tab, a tab's arrangement and the instances the dock makes there, and what a scene shows. A step holds a tab's arrangement and instances only when it makes, closes or resets the tab (experiment 044 D15). Add or remove a panel and change a binding become recorded operations with phase 3's picker and binding selector.
+- **The graph** has no required main view and no `MAX_VIEWS`; views carry their tab, and new IDs come from the session. Reset keeps the tab and pushes its content as a `reset` fragment (D16). Closed fragments keep their views' and nodes' places and the views' focus numbers, so close then Reopen is byte-identical.
+- **Actions:** `tabs.show`, `rename`, `move`, `close`, `reopen`, `duplicate` and `arrange` (Duplicate at the data level only until phase 6's menu entry).
+
 ### 4.2 Defaults are graph fragments
 
 ```ts
