@@ -30,11 +30,11 @@ export const NO_MODULES: ModuleRegistration = Object.freeze({ modules: [], tools
 
 /**
  * The view graph over a workspace's preview (and its stored views) and the views family over it, with the platform's tools beside
- * the composition's modules. The trusted core builds one per session; fixtures build their own.
+ * the composition's modules. `graph`: the session's own (`ProfileSessions` records it); without it one is made here (fixtures).
  */
 export function createViewServices(preview: PreviewState, stored?: ViewGraphData, modules: ModuleRegistration = NO_MODULES,
-  history?: HistoryService, scope?: string) {
-  const views = createStudioViewGraph(preview, stored, history, scope);
+  history?: HistoryService, graph?: ViewGraph) {
+  const views = graph ?? createStudioViewGraph(preview, stored, history);
   const viewActions = new ViewActions(views, { ...modules, tools: [...PLATFORM_VIEW_TOOLS, ...modules.tools.filter(tool => tool.module !== "platform")] });
   return { views, viewActions };
 }

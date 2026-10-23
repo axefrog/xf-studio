@@ -60,7 +60,7 @@ import { TransitionSettings } from "../platform/core/transition-settings";
 import { createBrowserFacialDevice } from "../animation/browser/browser-facial-device";
 import { PartPresetService, partPresetTransport, setExportTransport } from "../library/part-presets";
 import { UIPreferenceActions } from "../app/ui-preferences";
-import { sessionViewGraph } from "../preview/preview-view-graph";
+import { createStudioViewGraph, sessionViewGraph } from "../preview/preview-view-graph";
 import { DiagnosticsActions } from "../diagnostics/actions";
 import { createBrowserDiagnostics } from "../diagnostics/browser/browser-device";
 import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-device";
@@ -73,11 +73,11 @@ import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
 import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
-import { viewPanel } from "../app/profiles/profile-session-state";
+import { viewPanel } from "../app/profiles/profile-sessions";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
 import { lookRef, type LookRef } from "../library/collection-documents";
-import { lookScope, viewScope } from "../platform/core/history-service";
+import { lookScope } from "../platform/core/history-service";
 import { MAIN_VIEW } from "../platform/api/view-graph";
 import { emptyLookHistory } from "../platform/core/look-history";
 import { emptyRecipe } from "../engines/layered-makeup/recipe";
@@ -193,10 +193,12 @@ async function start(host: StudioHost, root: HTMLElement) {
       report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
   }
   await services.load();
-  // The session this window opens on (tab 1, the views and scenes, and what each scene shows), with the window's focus: the history
-  // service records the editing context into it (profiles design §3.3, §3.7).
-  const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, historyService.focus);
-  // Tab 1's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
+  // The session this window opens on (its tabs, the views and scenes, and what each scene shows), with the window's focus: the history
+  // service records the editing context into it (profiles design §3.3, §3.7). The session owns the view graph and its View and lighting
+  // history: its operations and the graph's edits are one history (§4.1).
+  const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, { history: historyService,
+    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph });
+  // The shown tab's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
   const legacyLayout = workspace.uiPreferences.layout, tabDock = sessionState.dock();
   const { layout: _legacy, ...uiPreferences } = workspace.uiPreferences;
   const preferences = new UIPreferenceActions({ ...uiPreferences, ...(tabDock ? { layout: tabDock } : {}) });
@@ -264,25 +266,25 @@ async function start(host: StudioHost, root: HTMLElement) {
     catch (error) { pageFailure("library", "look_unreadable", "A look couldn't be read.", error); }
   }
   const shownState = first?.state ?? { recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() };
-  const core = createTrustedAuthoringCore({ ...workspace, views: sessionState.graph(), recipe: shownState.recipe, active: shownState.active,
+  const core = createTrustedAuthoringCore({ ...workspace, recipe: shownState.recipe, active: shownState.active,
     selected: shownState.selected, fieldSelection: shownState.fieldSelection, history: shownState.history, historyTrimmed: shownState.historyTrimmed,
     liveFeatures: shownState.liveFeatures, liveLocked: shownState.liveLocked }, {
-    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}), viewScope: viewScope(sessionState.profile),
+    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}), views: sessionState.graph,
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
   // One writer per workspace: while another window holds it, every action, request, control and gesture is refused here.
   if (lease) core.app.attach({ access: lease });
-  // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
+  // The session's view graph (view-graph-design.md §3.3), which the core acts on: the head restores and follows its main view.
   const views = core.views;
   // The scene the drawn view shows and the look it shows, which the collection service changes.
   const drawn = () => views.node(drawnView(), "scene").id;
   const shownScene = { look: () => sessionState.scene(drawn()).look, setLook: (ref: LookRef | undefined) => sessionState.setLook(drawn(), ref),
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
-  core.app.attach({ scenes: sceneCommands(sessionState, services) });
-  const targets: TargetResolver = createTargetResolver({ state: sessionState, graph: views, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
+  core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: sessionState });
+  const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
   core.app.attach({ targetCheck: targets });
@@ -294,8 +296,17 @@ async function start(host: StudioHost, root: HTMLElement) {
     history: workspace.history, ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}), ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}) };
   // The session as it is now, stored with the migration's mark (a session made for this window from the library is stored nowhere).
   const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
-    profiles: sessionStored ? sessionState.stored({ graph: sessionViewGraph(views), dock: preferences.snapshot().layout ?? null },
-      workspace.profiles) : workspace.profiles });
+    profiles: sessionStored ? sessionState.stored(workspace.profiles) : workspace.profiles });
+  // The dock saves to the shown tab (`tabs.arrange`, never Undo). Until the tab strip replaces the Layouts button (P2-iv), the dock still
+  // saves through `layout.set`, kept in memory only (the workspace's own arrangement stays frozen), and is passed on from there.
+  let arranged = preferences.snapshot().layout;
+  preferences.subscribe(() => {
+    const layout = preferences.snapshot().layout;
+    if (layout === arranged) return;
+    arranged = layout;
+    const tab = sessionState.tabId();
+    if (tab) core.app.dispatch({ kind: "tabs.arrange", tab, layout: layout ?? null });
+  });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).

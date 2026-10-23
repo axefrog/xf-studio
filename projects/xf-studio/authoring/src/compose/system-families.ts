@@ -16,6 +16,7 @@ import type { QualityAction } from "../legacy/eye-makeup/preview/preview-quality
 import type { SavedAppearanceAction } from "../character/saved-appearance-actions";
 import type { ViewAction } from "../app/view-actions";
 import type { SceneAction } from "../app/profiles/scene-commands";
+import type { TabAction } from "../app/profiles/profile-sessions";
 import type { PartPresetRequest } from "../library/part-presets";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
   type RequestDescriptor } from "../app/studio-action-descriptors";
@@ -30,6 +31,7 @@ const TRANSITIONS_ID = familyId("transitions");
 const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
 const SCENES_ID = familyId("scenes");
+const TABS_ID = familyId("tabs");
 const VIEWS_ID = familyId("views");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
@@ -111,6 +113,13 @@ export const SAVED_V_FAMILY: SystemFamily<SavedAppearanceAction, ActionScope, ty
 export const SCENES_FAMILY: SystemFamily<SceneAction, ActionScope, typeof SCENES_ID> = Object.freeze({
   owner: "system", id: SCENES_ID, label: "Scenes",
   actions: actionTable<SceneAction, ActionScope>(ACTION_DESCRIPTORS, { "scene.setLook": true, "scene.setSubject": true }),
+});
+
+/** The session's layout tabs (app/profiles/profile-sessions.ts, profiles design §4.1): show, rename, move, close, reopen, duplicate, arrange. */
+export const TABS_FAMILY: SystemFamily<TabAction, ActionScope, typeof TABS_ID> = Object.freeze({
+  owner: "system", id: TABS_ID, label: "Layout tabs",
+  actions: actionTable<TabAction, ActionScope>(ACTION_DESCRIPTORS, { "tabs.show": true, "tabs.rename": true, "tabs.move": true, "tabs.close": true,
+    "tabs.reopen": true, "tabs.duplicate": true, "tabs.arrange": true }, { "tabs.rename": { name: "characters" }, "tabs.move": { to: "index" } }),
 });
 
 /**

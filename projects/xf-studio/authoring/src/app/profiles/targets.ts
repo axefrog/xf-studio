@@ -23,12 +23,15 @@ export type Capture = { readonly id: number; readonly instance?: string; readonl
   readonly released: () => boolean };
 
 export type TargetResolverDeps = {
-  /** The session: its tab, each view's scene and tab (default: the session's), each scene's kind, subject, look and `gen`, and its panel instances. */
+  /**
+   * The session: its shown tab, each view's scene and tab (default: the shown one), each scene's kind, subject, look and `gen`, and its
+   * panel instances, each with its tab (default: the shown one).
+   */
   readonly session: {
     tab(): TabId;
     views(): readonly { readonly id: ViewId; readonly scene: string; readonly tab?: TabId }[];
     scene(id: string): { readonly kind: string; readonly subject?: SubjectRef; readonly look?: LookRef; readonly gen: number } | undefined;
-    panel(instance: string): { readonly type: string; readonly binding?: PanelBinding } | undefined;
+    panel(instance: string): { readonly type: string; readonly binding?: PanelBinding; readonly tab?: TabId } | undefined;
   };
   readonly focus: Pick<FocusService, "viewOrder" | "recent" | "focusedPanel">;
   /** The first editing context that can act now (the history service's `acting`), by scope ID. */
@@ -65,12 +68,12 @@ export class TargetResolver {
     return { views, scenes, focus: focus.viewOrder(), subject: ref => exists.subject(ref), look: ref => exists.look(ref) };
   }
   /**
-   * What `instance` resolves to through its binding; without one (a key binding or palette command outside any panel), the whole chain
-   * of the most recently focused view in the session's tab.
+   * What `instance` resolves to through its binding, among the views of its own tab; without one (a key binding or palette command outside
+   * any panel), the whole chain of the most recently focused view in the shown tab.
    */
   resolve(instance?: string): Resolution {
     const panel = instance === undefined ? undefined : this.deps.session.panel(instance);
-    return resolveBinding(this.world(), { tab: this.deps.session.tab(), ...(panel?.binding ? { binding: panel.binding } : {}),
+    return resolveBinding(this.world(), { tab: panel?.tab ?? this.deps.session.tab(), ...(panel?.binding ? { binding: panel.binding } : {}),
       context: panel ? this.deps.context(panel.type) : WHOLE_CHAIN, ...(this.deps.rules ? { rules: this.deps.rules } : {}) });
   }
   /** The editing context Undo acts on now (§3.7): the newest that can act, if any. */

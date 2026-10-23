@@ -11,6 +11,7 @@ import type { DocumentModel } from "./workspace/collection-workspace";
 import type { AnyOwner, Registry } from "../platform/core/registry";
 import { LiveFeatures } from "../platform/core/live-features";
 import { createHistoryService, type HistoryService } from "../platform/core/history-service";
+import type { ViewGraph } from "../platform/core/view-graph";
 import { StudioApplication } from "./studio-application";
 import type { Recipe } from "../engines/layered-makeup/recipe";
 import type { LayeredMakeupRegion } from "../engines/layered-makeup/region";
@@ -37,8 +38,11 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   history?: HistoryService;
   /** The history scope of the look the document shows first (`look:<collection>/<look>`); default: a look of its own (fixtures). */
   scope?: string;
-  /** The session's View and lighting history scope (`view:<profile>`, profiles design §3.7); default: one no session holds (fixtures). */
-  viewScope?: string;
+  /**
+   * The session's view graph (`ProfileSessions.graph`, which records in the session's View and lighting scope, profiles design §4.1);
+   * default: one made from the workspace, in a scope no session holds (fixtures).
+   */
+  views?: ViewGraph;
 }, composition: StudioComposition) {
   const { registry, documents } = composition;
   if (composition.region.id !== documents.live) throw Error(`The composition's layered-makeup region is not the live feature's (${documents.live}).`);
@@ -83,7 +87,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   const controls = new AuthoringControlEdits(document, action => eyeMakeup.apply(specOf(action.kind), action, false).changed,
     action => specOf(action.kind).label(action));
   // The view graph (view-graph-design.md §3.3): every view's camera, light, display, scene and tool state, for the whole session.
-  const { views, viewActions } = createViewServices(workspace.preview, workspace.views, composition.modules, history, ports.viewScope);
+  const { views, viewActions } = createViewServices(workspace.preview, workspace.views, composition.modules, history, ports.views);
   const app = new StudioApplication({ document, eyeMakeup, history, gestures, controls, views, viewActions,
     ...(ports.newId ? { newId: ports.newId } : {}) }, registry);
   return { document, geometry, presentation, recipe, eyeMakeup, gestures, controls, app, history, documents, views };

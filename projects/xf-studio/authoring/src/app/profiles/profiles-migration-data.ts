@@ -297,7 +297,8 @@ export function sessionOfWorkspace(state: WorkspaceState, input: { tab: string; 
     ? { ...scene, ...(input.character ? { subject: { kind: "character", id: input.character } } : {}), ...(look ? { look } : {}), gen: 0 } : { ...scene, gen: 0 });
   const views: SessionView[] = graph.views.map(view => ({ ...(view as ViewRecord | KeptView), tab }));
   return { schema: PROFILE_SESSION_SCHEMA, tabs: [tabValue], views: { ...graph, views, scenes },
-    focus: { views: { [graph.focused]: 1 }, ...(look ? { editing: lookScope(look) } : {}) }, closed: [], seq: 1 };
+    focus: { views: graph.focused !== undefined ? { [graph.focused]: 1 } : {}, ...(look ? { editing: lookScope(look) } : {}) }, closed: [],
+    seq: graph.focused !== undefined ? 1 : 0 };
 }
 /** The workspace's `profiles` holding one session. */
 export const workspaceProfiles = (profile: string, session: ProfileSessionData): WorkspaceProfiles =>

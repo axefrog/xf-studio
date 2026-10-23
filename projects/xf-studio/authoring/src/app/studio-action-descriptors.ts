@@ -21,6 +21,7 @@ import { TRANSITION_SECONDS, TRANSITION_SOURCES } from "../platform/core/transit
 import { EASING_IDS } from "../platform/api/easing";
 import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS } from "../legacy/eye-makeup/eye-makeup-descriptors";
 import { TARGET_SCHEMA } from "./action-targets";
+import { TAB_NAME_LIMIT } from "./profiles/profile-sessions";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
@@ -69,6 +70,16 @@ export const ACTION_DESCRIPTORS = {
     look: { type: "object", required: false, from: "input" } }),
   "scene.setSubject": desc("viewport", "workspace", "none", { scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen,
     subject: { type: "object", required: false, from: "input" } }),
+  // The session's layout tabs (app/profiles/profile-sessions.ts): each names its tab; each operation but showing and arranging is one View
+  // and lighting step (the session's own history), never a look's.
+  "tabs.show": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab }),
+  "tabs.rename": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, name: inputText(1, TAB_NAME_LIMIT) }),
+  "tabs.move": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, to: input("integer", 0) }),
+  "tabs.close": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab }),
+  "tabs.reopen": desc("workspace", "workspace", "none", { closed: { ...target("string"), required: false } }),
+  "tabs.duplicate": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab }),
+  // The arrangement the dock saved for a tab: the tab's own state, never Undo.
+  "tabs.arrange": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, layout: { type: "object", required: false, from: "input" } }),
   "camera.front": inView("viewport", "workspace", "none"),
   "camera.body": inView("viewport", "workspace", "none"),
   "camera.setFov": inView("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),

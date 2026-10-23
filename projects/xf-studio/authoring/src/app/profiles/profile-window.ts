@@ -4,9 +4,9 @@
  *
  * - **Owners.** Profiles (`ProfileService`), Vs (`CharacterService`, one context per V a scene shows), collections and looks
  *   (`CollectionOwner`, and `LookSessions` per look shown or edited). Each loads what the library holds before the window shows anything.
- * - **The session** is the workspace's (`profiles.sessions`, made by the profiles migration). A window that has none to open (another
- *   window holds an unmigrated workspace, or the workspace can't be written) opens a session made for it from the library's first profile,
- *   stored nowhere.
+ * - **The session** is the workspace's (`profiles.sessions`, made by the profiles migration), held by `ProfileSessions`, the one owner of
+ *   its tabs, view graph and focus. A window that has none to open (another window holds an unmigrated workspace, or the workspace can't be
+ *   written) opens a session made for it from the library's first profile, stored nowhere.
  * - **What a scene shows** must exist: a scene whose V was deleted gets a new default V (listed in the profile), so the 3D view always has
  *   one to show.
  */
@@ -20,11 +20,10 @@ import type { CreatorCatalogue } from "../../character/creator-catalogue";
 import { CollectionOwner, type CollectionVersionsPort } from "../../library/collection-owner";
 import { LookSessions } from "../../library/look-sessions";
 import type { LookRef } from "../../library/collection-documents";
-import { MAIN_VIEW } from "../../platform/api/view-graph";
+import { MAIN_VIEW, type ViewGraphData } from "../../platform/api/view-graph";
 import { documentKey } from "../../platform/api/document-commands";
 import { CHARACTER_KIND } from "../../platform/api/characters";
-import type { FocusService } from "../../platform/core/focus";
-import type { ViewGraph } from "../../platform/core/view-graph";
+import type { ViewGraph, ViewGraphOwner } from "../../platform/core/view-graph";
 import { CHARACTER_DOCUMENT } from "../../character/character-document";
 import { LOOK_WORKING, lookRef as lookDocument } from "../../library/collection-documents";
 import type { PanelContext } from "./bindings";
@@ -32,7 +31,8 @@ import { TargetResolver } from "./targets";
 import { SceneCommands } from "./scene-commands";
 import type { WorkspaceState } from "../workspace/workspace-state";
 import { ProfileService } from "./profile-service";
-import { ProfileSessionState } from "./profile-session-state";
+import { ProfileSessions } from "./profile-sessions";
+import type { ProfileSessionData } from "./profile-session";
 import { FIRST_TAB_NAME, sessionOfWorkspace } from "./profiles-migration-data";
 
 export type ProfileServices = {
@@ -58,22 +58,26 @@ export function createProfileServices(deps: { documents: DocumentStorePort; outb
 
 /**
  * The session this window opens on: the workspace's (its first profile's, phase 1 opening one profile), else one made from the library's
- * first profile (its first V and its first collection's first look), stored nowhere (`stored` false).
+ * first profile (its first V and its first collection's first look), stored nowhere (`stored` false). `graph` makes the view graph over its
+ * views (the composition's rules and recovery), recording through the session; `stored` is the graph as the session stores it.
  */
 export function openProfileSession(workspace: WorkspaceState, services: Pick<ProfileServices, "profiles" | "collections">,
-  focus: FocusService, random: () => number = Math.random): { state: ProfileSessionState; stored: boolean } {
+  deps: { history: HistoryService; graph(data: ViewGraphData, owner: ViewGraphOwner): ViewGraph; stored?(graph: ViewGraph): ViewGraphData },
+  random: () => number = Math.random): { state: ProfileSessions; stored: boolean } {
+  const open = (profile: string, data: ProfileSessionData) =>
+    new ProfileSessions({ profile, data, history: deps.history, graph: deps.graph, ...(deps.stored ? { stored: deps.stored } : {}), random });
   const sessions = workspace.profiles?.sessions ?? {}, first = Object.keys(sessions)[0];
-  if (workspace.migration?.state === "done" && first) return { state: new ProfileSessionState(first, sessions[first]!, random, focus), stored: true };
+  if (workspace.migration?.state === "done" && first) return { state: open(first, sessions[first]!), stored: true };
   const profile = services.profiles.list()[0];
   const character = profile?.subjects.find(subject => subject.kind === "character")?.id;
   const collection = profile?.collections.map(id => services.collections.collection(id)).find(view => view?.looks.length);
   const look: LookRef | undefined = collection ? { collection: collection.id, look: collection.looks[0]! } : undefined;
   const session = sessionOfWorkspace(workspace, { tab: FIRST_TAB_NAME, ...(character ? { character } : {}), ...(look ? { look } : {}) }, random);
-  return { state: new ProfileSessionState(profile?.id ?? "", session, random, focus), stored: false };
+  return { state: open(profile?.id ?? "", session), stored: false };
 }
 
 /** `scene.setLook` and `scene.setSubject` over the session's scenes, checking that a look or V still exists (profiles design §3.6). */
-export function sceneCommands(state: ProfileSessionState, services: Pick<ProfileServices, "characters" | "collections">): SceneCommands {
+export function sceneCommands(state: ProfileSessions, services: Pick<ProfileServices, "characters" | "collections">): SceneCommands {
   return new SceneCommands({ scene: id => state.knownScene(id), setLook: (scene, look) => state.setLook(scene, look), setSubject: (scene, subject) => state.setSubject(scene, subject) },
     { look: ref => services.collections.look(ref)?.state === "live", subject: ref => ref.kind === CHARACTER_KIND && !!services.characters.document(ref.id) });
 }
@@ -82,9 +86,9 @@ export function sceneCommands(state: ProfileSessionState, services: Pick<Profile
  * The window's input-layer resolution (app/profiles/targets.ts) over its session, view graph, focus and owners: what each panel, key
  * binding and palette command acts on, and the captures gestures and menus hold. `contexts`: each panel type's context (§3.1, §5).
  */
-export function createTargetResolver(deps: { state: ProfileSessionState; graph: ViewGraph; history: Pick<HistoryService, "acting">;
+export function createTargetResolver(deps: { state: ProfileSessions; history: Pick<HistoryService, "acting">;
   services: Pick<ProfileServices, "characters" | "collections" | "looks">; contexts: (type: string) => PanelContext; collection?: () => string | undefined }): TargetResolver {
-  const { state, graph, services } = deps;
+  const { state, services } = deps, graph = state.graph;
   return new TargetResolver({
     session: {
       tab: () => state.tabId(),
@@ -117,17 +121,17 @@ export function createTargetResolver(deps: { state: ProfileSessionState; graph: 
   });
 }
 
-/** The main view's scene in a session's graph (the drawn view, phase 1). */
-export function drawnScene(state: ProfileSessionState): string {
-  const graph = state.graph();
-  return (graph.views.find(view => view.id === MAIN_VIEW) as { scene?: string } | undefined)?.scene ?? graph.scenes[0]?.id ?? "";
+/** The scene the window draws first: the main view's, else the first view's (empty: a session with no view). */
+export function drawnScene(state: ProfileSessions): string {
+  const graph = state.graph, view = graph.has(MAIN_VIEW) ? MAIN_VIEW : graph.viewIds()[0];
+  return view === undefined ? "" : graph.node(view, "scene").id;
 }
 
 /**
  * The V a scene shows, made when it has none (or its V was deleted): a new default V, listed in the session's profile, shown on the scene.
  * Answers its ID (null when no V could be made: this window may not write).
  */
-export async function sceneCharacter(state: ProfileSessionState, scene: string, services: Pick<ProfileServices, "profiles" | "characters">): Promise<string | null> {
+export async function sceneCharacter(state: ProfileSessions, scene: string, services: Pick<ProfileServices, "profiles" | "characters">): Promise<string | null> {
   const shown = state.scene(scene).subject;
   if (shown?.kind === "character" && services.characters.document(shown.id)) return shown.id;
   const profile = services.profiles.profile(state.profile);

@@ -4,10 +4,10 @@
  */
 import { describe, expect, test } from "bun:test";
 import { PANEL_INSTANCE_ID, panelBindingOf, profileSessionOf, type ProfileSessionData } from "../src/app/profiles/profile-session";
-import { ProfileSessionState } from "../src/app/profiles/profile-session-state";
+import { openSession } from "./fixtures/profile-sessions";
+import { createHistoryService } from "../src/platform/core/history-service";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import { FocusService } from "../src/platform/core/focus";
-import { createStudioViewGraph, sessionViewGraph } from "../src/preview/preview-view-graph";
 import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -64,15 +64,14 @@ describe("sessions as stored", () => {
 
   test("the window's session restores focus into the focus service and stores it back with the session; a focus change is a session change", () => {
     const data = session(), focus = new FocusService();
-    const state = new ProfileSessionState("p-1", data, seeded(), focus);
-    expect(focus.snapshot()).toEqual({ seq: 1, views: { main: 1 }, editing: `look:${LOOK.collection}/${LOOK.look}` });
+    const state = openSession(data, { history: createHistoryService({ focus }) });
+    expect(focus.snapshot()).toEqual({ seq: 1, views: { main: 1 }, tab: data.tabs[0]!.id, editing: `look:${LOOK.collection}/${LOOK.look}` });
     let changes = 0;
     state.subscribe(() => changes++);
     focus.focusPanel("history--abcd"); focus.edited("character:c-1");
     expect(changes).toBe(2);
-    const graph = createStudioViewGraph(freshWorkspace().preview, undefined, undefined);
-    const stored = state.stored({ graph: sessionViewGraph(graph), dock: null }).sessions["p-1"]!;
-    expect(stored.focus).toEqual({ views: { main: 1 }, panel: "history--abcd", editing: "character:c-1" });
+    const stored = state.stored().sessions["p-1"]!;
+    expect(stored.focus).toEqual({ views: { main: 1 }, panel: "history--abcd", tab: data.tabs[0]!.id, editing: "character:c-1" });
     expect(stored.seq).toBe(1);
     // Reading it back gives the same focus.
     expect(profileSessionOf(structuredClone(stored))!.focus).toEqual(stored.focus);

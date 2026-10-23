@@ -21,6 +21,7 @@ import { type ViewId, viewTitles } from "../platform/api/view-graph";
 import type { ViewGraph } from "../platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
 import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
+import type { TabAction } from "./profiles/profile-sessions";
 import type { LookRef } from "../library/collection-documents";
 import { isLookScope as lookScoped, lookScope } from "../platform/core/history-service";
 import { plannedModules, type PlannedModule, type StudioModule, type ViewSummaryContribution, type ViewToolContribution, type ViewToolFilter } from "../platform/api";
@@ -65,6 +66,7 @@ export type StudioOwnerActions = {
   quality: QualityAction;
   savedV: Naming<SavedAppearanceAction, { character: string }>;
   scenes: SceneAction;
+  tabs: TabAction;
   characterContext: Naming<CharacterContextAction, { character: string }>;
   views: ViewAction;
 };
@@ -124,6 +126,8 @@ type Services = { document: AuthoringDocument;
    * and `scene.setSubject`.
    */
   scenes?: Pick<SceneCommands, "gen" | "capability" | "dispatch">;
+  /** The session's layout tabs (`ProfileSessions`, profiles design §4.1): the `tabs.*` operations, each one commit and one step. */
+  tabs?: { capability(action: TabAction): StudioCapability; dispatch(action: TabAction): undefined };
   /**
    * Whether the view, scene and `gen` an action names are still what they were resolved to (the target resolver's check, the same rule as
    * its captures', profiles design §3.3). Without it (a core no session holds) an action naming a scene's `gen` can't be checked, and is refused.
@@ -883,6 +887,10 @@ export class StudioApplication {
       scenes: {
         capability: action => app.services.scenes?.capability(action) ?? missing("The scenes are still loading."),
         dispatch: action => app.services.scenes!.dispatch(action),
+      },
+      tabs: {
+        capability: action => app.services.tabs?.capability(action) ?? missing("The layout tabs are still loading."),
+        dispatch: action => app.services.tabs!.dispatch(action),
       },
       savedV: {
         capability: action => app.shownCharacter(action.character) ?? app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),

@@ -16,6 +16,7 @@ import { createStudioSubjects } from "../src/compose/subjects";
 import { immutableDocumentKind } from "../src/compose/document-kinds";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { createHistoryService } from "../src/platform/core/history-service";
+import { createStudioViewGraph, sessionViewGraph } from "../src/preview/preview-view-graph";
 import type { WorkspaceState } from "../src/app/workspace/workspace-state";
 import { alpha2Library, COLLECTION, fixtureSave, MODEL, realWorkspace } from "./fixtures/profiles-migration-fixtures";
 import { HarnessHost, HarnessWorkspace, migrateUntilDone } from "./fixtures/profiles-migration-harness";
@@ -39,7 +40,8 @@ async function start(library: TestLibrary, workspace: WorkspaceState) {
   const services = createProfileServices({ documents: port, outbox, subjects: createStudioSubjects(), catalogue: new CreatorCatalogue(creator),
     history, versions: libraryVersions(library) });
   await services.load();
-  const { state, stored } = openProfileSession(workspace, services, history.focus);
+  const { state, stored } = openProfileSession(workspace, services, { history,
+    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph });
   const scene = drawnScene(state), character = await sceneCharacter(state, scene, services);
   await outbox.settle();
   return { services, state, stored, scene, character, look: state.scene(scene).look };

@@ -9,7 +9,10 @@
 
 /** A view's identity. `main` is the first 3D view, shown in the dock panel `head`; other views use `view.<id>` panels. */
 export type ViewId = string;
-/** The one view every graph has; it cannot be closed. */
+/**
+ * The first view a workspace's graph was made with. An ordinary view (profiles design §4.4): a session may close it or hold no view at all;
+ * `main` and the `head` panel survive as aliases in capture tools and evidence keys.
+ */
 export const MAIN_VIEW: ViewId = "main";
 /** The node types a view references, one of each. */
 export const VIEW_SLOTS = ["scene", "camera", "lights", "display", "tools"] as const;
@@ -23,8 +26,11 @@ export type RigKind = "studio" | "creator" | (string & {});
 
 /** One node: its identity, its kind within its slot (a scene's, camera's or rig's; display and tools have none) and its state. */
 export type GraphNode = { readonly id: string; readonly kind?: string; readonly state: Readonly<Record<string, unknown>> };
-/** One view: one node reference per slot. `title` is the name a person gave it (absent: derived from its scene). */
-export type ViewRecord = { readonly id: ViewId; readonly kind: "3d"; readonly title?: string } & { readonly [S in ViewSlot]: string };
+/**
+ * One view: one node reference per slot. `title` is the name a person gave it (absent: derived from its scene). `tab`: the layout tab it is
+ * in (profiles design §1.1); its owner (the profile session) keeps it valid, and a graph no session holds leaves it out.
+ */
+export type ViewRecord = { readonly id: ViewId; readonly kind: "3d"; readonly title?: string; readonly tab?: string } & { readonly [S in ViewSlot]: string };
 /**
  * A view this build can't show, kept as stored: a newer build's view kind (a `map2d`), or a 3D view whose scene, camera or rig kind
  * this build doesn't know (a World `location`). The graph writes it back unchanged and keeps the nodes it references alive; it is
@@ -47,9 +53,9 @@ export type ViewGraphData = {
   readonly display: readonly StoredNode[]; readonly tools: readonly StoredNode[];
   /**
    * Not focus (that is the session's, platform/core/focus.ts): the field older builds require, kept as stored while it names a shown
-   * view, else the main view. Nothing reads it to decide a target.
+   * view, else the first shown view (absent with none). Nothing reads it to decide a target.
    */
-  readonly focused: ViewId;
+  readonly focused?: ViewId;
 };
 export type StoredNode = { readonly id: string; readonly kind?: string } & Readonly<Record<string, unknown>>;
 

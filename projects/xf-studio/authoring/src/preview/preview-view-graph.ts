@@ -12,7 +12,7 @@
  * stored; the main view's scene stored without it takes it once from the legacy `preview` fields, which are then left as they were read.
  */
 import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules, type ViewRecord } from "../platform/api/view-graph";
-import { parseViewGraph, ViewGraph } from "../platform/core/view-graph";
+import { parseViewGraph, ViewGraph, type ViewGraphOwner } from "../platform/core/view-graph";
 import type { HistoryService } from "../platform/core/history-service";
 import type { CameraState, PreviewState } from "../app/workspace/workspace-state";
 import { DEFAULT_CREATOR_LIGHTING, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
@@ -205,14 +205,15 @@ export function defaultViewGraph(preview: PreviewState): ViewGraphData {
 }
 
 /**
- * The graph a workspace holds: its stored `views` when valid (with the main view's nodes taken from the legacy `preview` fields,
- * which always mirror them), else the default one-view graph. The main view's scene keeps the motion it stores; one stored before motion
+ * The graph a workspace holds: its stored `views` when valid (with the main view's nodes, while it has one, taken from the legacy
+ * `preview` fields, which always mirror them), else the default one-view graph. The main view's scene keeps the motion it stores; one stored before motion
  * moved into the scene takes the legacy fields' (read once: from then on the node holds it).
  */
 export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData | undefined): ViewGraphData {
   const parsed = stored && parseViewGraph(recoverScenes(stored), STUDIO_VIEW_GRAPH_RULES);
   if (!parsed) return defaultViewGraph(preview);
-  const main = parsed.views.find(view => view.id === MAIN_VIEW) as ViewRecord, nodes = mainNodes(preview);
+  const main = parsed.views.find(view => view.id === MAIN_VIEW && view.kind === "3d") as ViewRecord | undefined, nodes = mainNodes(preview);
+  if (!main) return parsed;
   // The legacy fields hold only Surface controls and Plate wireframe: every other tool the main view has stays as stored (CORE-97).
   const storedTools = parsed.tools.find(node => node.id === main.tools)?.on as ToolsState["on"] | undefined;
   const tools: ToolsState = { on: { ...storedTools, ...nodes.tools.on } };
@@ -254,8 +255,11 @@ export function recoverScenes(stored: ViewGraphData, reset?: (settings: readonly
   }) };
 }
 
-/** A graph service for a workspace's preview (and its stored views, if any). */
-export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, history?: HistoryService, scope?: string) {
+/**
+ * A graph service for a workspace's preview (and its stored views, if any). `history`: the graph's owner (a profile session), or a
+ * history service in whose scope `scope` it records alone (fixtures).
+ */
+export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, history?: HistoryService | ViewGraphOwner, scope?: string) {
   return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES, history, scope);
 }
 
