@@ -3,7 +3,8 @@
 
 import { describe, expect, test } from 'bun:test';
 import { LAPSE_AFTER, R1_ID } from './r1.ts';
-import { clock, delivery, play, playUntil, r1World, show } from './drive.ts';
+import { clock, delivery, play, playUntil, r1World, r1WorldWith, show } from './drive.ts';
+import { r1Params } from './r1.ts';
 import { advance, setFact, settle, type World } from './world.ts';
 import type { Instance } from '../../src/seeding/layer2.ts';
 
@@ -83,10 +84,12 @@ function fingerprint(w: World, inst: Instance): unknown {
   };
 }
 
-function sweep(name: string, steps: Step[]): void {
+type Make = (name: string) => { w: World; inst: Instance };
+
+function sweep(name: string, steps: Step[], make: Make = r1World): void {
   describe(`crash-point sweep: ${name}`, () => {
     const baseline = (): unknown => {
-      const { w } = r1World(`sweep-${name}`);
+      const { w } = make(`sweep-${name}`);
       const inst = (): Instance => w.l2.ofTemplate(R1_ID)[0]!;
       for (const s of steps) s.run(w, inst);
       return fingerprint(w, inst());
@@ -95,7 +98,7 @@ function sweep(name: string, steps: Step[]): void {
 
     for (let cut = 0; cut < steps.length; cut++) {
       test(`save and load after step ${cut} (${steps[cut]!.name}) goes on to the same end`, () => {
-        const { w } = r1World(`sweep-${name}`);
+        const { w } = make(`sweep-${name}`);
         const inst = (): Instance => w.l2.ofTemplate(R1_ID)[0]!;
         for (let i = 0; i <= cut; i++) steps[i]!.run(w, inst);
         const before = fingerprint(w, inst());
@@ -113,12 +116,31 @@ function sweep(name: string, steps: Step[]): void {
   });
 }
 
+/** The first offer is ignored until it lapses with no reoffer left (T10); then the world settles the seed, with no change in between that could wake it. */
+const LAPSE: Step[] = [
+  { name: 'open the window', run: (w) => { setFact(w, 'q112_done', 1, 10); settle(w); } },
+  { name: 'the first offer is shown and ignored', run: (w, inst) => { playUntil(w, () => delivery(inst(), 'offer-1') !== undefined); show(w, delivery(inst(), 'offer-1')!, 'confirmed'); } },
+  { name: 'the offer lapses on the play clock', run: (w, inst) => { play(w, clock(w) + 1801); expect(inst().st.state).toBe('unattended'); } },
+  { name: 'the world settles it', run: (w) => { advance(w, w.k.now + LAPSE_AFTER + 700); settle(w); } },
+  { name: 'play the closing deliveries', run: (w, inst) => { playUntil(w, () => inst().st.deliveries.filter((d) => ['closing', 'coda', 'news'].includes(d.what)).every((d) => d.state !== 'queued'), 4000); } },
+];
+
+/** The first request waits out its maxWait unreleased (a busy interface throughout): T14; then the same settling. */
+const EXPIRY: Step[] = [
+  { name: 'the interface is busy, and the window opens', run: (w) => { w.port.busy = true; setFact(w, 'q112_done', 1, 10); settle(w); } },
+  { name: 'the request expires unreleased', run: (w, inst) => { play(w, clock(w) + 125); expect(inst().st.state).toBe('unattended'); } },
+  { name: 'the interface is free again, and the world settles it', run: (w) => { w.port.busy = false; advance(w, w.k.now + LAPSE_AFTER + 700); settle(w); } },
+  { name: 'play the closing deliveries', run: (w, inst) => { playUntil(w, () => inst().st.deliveries.filter((d) => ['closing', 'coda', 'news'].includes(d.what)).every((d) => d.state !== 'queued'), 4000); } },
+];
+
 sweep('the accepting path', ACCEPT);
 sweep('the declining path', DECLINE);
 sweep('"not now", then accept, then decline', NOT_NOW);
+sweep('an ignored offer that lapses', LAPSE, (n) => r1WorldWith(n, { profile: { id: 'relationship-ladder', params: r1Params({ reoffers: 0 }) as never } }));
+sweep('a request that expires unreleased', EXPIRY, (n) => r1WorldWith(n, { timing: { maxWait: { clock: 'play', s: 120 }, onExpire: 'unattended' } } as never));
 
 describe('the sweep is not vacuous', () => {
-  test('the accepting path ends resolved; the declining path ends resolved by the plan; the clock moved', () => {
+  test('the accepting path ends resolved; the declining path ends resolved by its exit; the lapse and the expiry end by the plan; the clock moved', () => {
     const { w } = r1World('sweep-check');
     const inst = (): Instance => w.l2.ofTemplate(R1_ID)[0]!;
     for (const s of ACCEPT) s.run(w, inst);
@@ -128,6 +150,16 @@ describe('the sweep is not vacuous', () => {
     const inst2 = (): Instance => w2.l2.ofTemplate(R1_ID)[0]!;
     for (const s of DECLINE) s.run(w2, inst2);
     expect(inst2().st.state).toBe('resolved');
+    expect(inst2().st.record.some((r) => r.kind === 'transition' && (r.data as { row?: string }).row === 'T12')).toBe(true);
+    for (const [label, steps, make] of [['lapse', LAPSE, (n: string) => r1WorldWith(n, { profile: { id: 'relationship-ladder', params: r1Params({ reoffers: 0 }) as never } })], ['expiry', EXPIRY, (n: string) => r1WorldWith(n, { timing: { maxWait: { clock: 'play', s: 120 }, onExpire: 'unattended' } } as never)]] as const) {
+      const { w: w3 } = make(`sweep-check-${label}`);
+      const inst3 = (): Instance => w3.l2.ofTemplate(R1_ID)[0]!;
+      for (const s of steps) s.run(w3, inst3);
+      expect(inst3().st.state).toBe('resolved');
+      const rowsOf = inst3().st.record.filter((r) => r.kind === 'transition').map((r) => (r.data as { row: string }).row);
+      expect(rowsOf).toEqual(expect.arrayContaining([label === 'lapse' ? 'T10' : 'T14', 'T13']));
+      expect(inst3().st.closed!.status).toBe('abandoned');
+    }
     expect(play).toBeDefined();
   });
 });

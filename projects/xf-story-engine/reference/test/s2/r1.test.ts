@@ -223,6 +223,7 @@ describe('SF-46: R1 in text form', () => {
     expect(fit.cast.takemura!.node).toBe(w.k.mirrored('takemura', 'fx:character'));
     expect(fit.exits.map((e) => e.beat).sort()).toEqual(['exit-decline', 'exit-lapse', 'exit-stay']);
     expect(fit.exits.every((e) => e.reachable)).toBe(true);
+    expect(fit.declinePreview.response).toBe('pack:qh-exit-decline');
     expect(fit.declinePreview.unattendedOutcome).toEqual([{ fact: 'exit', set: 3 }]);
     expect(fit.timing.channel).toBe('message');
     // The report changes nothing: no instance, no kernel revision.

@@ -150,7 +150,9 @@ function evaluate(l2: Layer2, out: FitReport, res: CompiledResult, fitId: Id, pa
     if (b.kind === 'exit') out.exits.push({ beat: bk, reachable: reach.has(bk), leadsTo: playOf(b).refs[0] ?? '' });
   }
   const firstOffer = doc.start.map((bk) => playOf(doc.beats[bk]!).refs).flat().map((r) => res.closure.fragments.find((f) => f.id === r.replace(/^pack:/, ''))).find((f) => f?.offer);
-  const resp = firstOffer?.offer?.decline[0]?.response;
+  // A decline with no content of its own is answered by the exit beat that reads it (S2 section 2.9): that beat's content is the preview.
+  const declineExit = Object.values(doc.beats).find((b) => b.kind === 'exit' && (b.links ?? []).some((l) => 'because' in l && l.on !== undefined && JSON.stringify(l.on).includes('"decline')));
+  const resp = firstOffer?.offer?.decline[0]?.response ?? (declineExit ? playOf(declineExit).refs[0] : undefined);
   if (resp !== undefined) out.declinePreview.response = resp;
   out.declinePreview.unattendedOutcome = doc.unattended.outcome;
   out.turns = doc.turns.filter((t) => t.who).map((t) => ({ who: t.who!, kind: t.kind ?? t.level, pressure: 'not measured' }));

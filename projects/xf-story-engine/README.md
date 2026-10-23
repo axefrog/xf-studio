@@ -32,13 +32,13 @@ kernel rules around them can be tested.
 - The layer 2 tests live in `reference/test/s2/`: the R1 acceptance tests and three crash-point sweeps, the
   lint matrix (each lint has a tripping seed and the passing base), casting, the lifecycle, the arbiter,
   predicates, pack lifecycle, property tests, and `fixtures.test.ts`, which indexes SF-1 to SF-64 (50 have
-  named tests; the rest name the later capability they wait for). The suite has 613 tests.
+  named tests; the rest name the later capability they wait for). The suite has 692 tests.
 
 - The **v4 core** of S0 (section 20): derives that get the query time, fact, seed and cast kinds with the offer,
   response and seed-outcome events, `outcome` and `served` on events, the `frame` change, routing to layer 2,
-  typed `SettingsSet` content, `age-class`, and staged batches. The frozen v3 digest runs unchanged with the
+  typed `SettingsSet` content, `age-class`, and staged batches (S0 v4.12). The frozen v3 digest runs unchanged, on the v3 schema with frame changes off, with the
   v4 additions switched off; a second frozen digest covers the run with them on.
-- **Layer 2** ([`reference/src/seeding/`](reference/src/seeding/)): the core of S2 v1.5 (section 0.3). Seed
+- **Layer 2** ([`reference/src/seeding/`](reference/src/seeding/)): the core of S2 v1.7 (section 0.3). Seed
   documents and the text form of predicates, the ladder profile, compilation and the core lints, casting with
   claims, the lifecycle and beats, offers and responses, the arbiter (gates, tempo, session states, prepare and
   confirm through a staged batch, display grades, receipts), the exposure ledger, the fit report, and
