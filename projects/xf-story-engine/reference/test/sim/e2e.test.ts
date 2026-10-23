@@ -16,7 +16,7 @@ import type { StocksDigest } from '../../src/sim/proc-stocks.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
 import { itemTime } from '../../src/summary.ts';
-import { eventsState, fxData, occurrences, seedOf } from './helpers.ts';
+import { child as childOf, eventsState, fxData, inject as injectInto, occurrences, seedOf } from './helpers.ts';
 import { lcg, restate, transfer } from './feed.ts';
 import { differing, recordOf } from './records.ts';
 
@@ -47,7 +47,7 @@ describe('SF1-E2: a save and reload in the middle of an aftershock cascade', () 
         d.kinds.find((k) => k.name === 'gang-clash')!.offspringFactor = 1.3;
       }),
     });
-  const N = FULL ? 1008 : 400;
+  const N = FULL ? 1008 : 280;
 
   /** Run U to the end, one window at a time, noting the first boundary at which the calendar holds three pending children and one is due 100 windows on. */
   function runU(): { sim: Sim; bStar: number } {
@@ -134,11 +134,13 @@ describe('SF1-E3: the mirror overriding a simulated value with a game reading', 
   const rawId = (sim: Sim, t: number, n = 0): Id => mintedId(sim.w.port, sim.w.port, `raw/${t}/${n}`);
   const adult = { alive: 'yes', 'age-class': 'adult' } as const;
 
+  /** The story starts at window 140 (the whole run from window 0 with S1_FULL=1): nothing before it matters to what it checks. */
+  const START = FULL ? 0 : 140;
   const script = (): ReplayLine[] => [
-    { t: 0, op: 'person', key: 'mv', slots: { affiliation: 'civilian', 'quest-linked': 'no', ...adult } },
-    { t: 0, op: 'person', key: 'claw1', slots: { affiliation: 'TygerClaws', ...adult } },
-    { t: 0, op: 'person', key: 'claw2', slots: { affiliation: 'TygerClaws', ...adult } },
-    { t: 0, op: 'person', key: 'mox1', slots: { affiliation: 'TheMox', ...adult } },
+    { t: START * W, op: 'person', key: 'mv', slots: { affiliation: 'civilian', 'quest-linked': 'no', ...adult } },
+    { t: START * W, op: 'person', key: 'claw1', slots: { affiliation: 'TygerClaws', ...adult } },
+    { t: START * W, op: 'person', key: 'claw2', slots: { affiliation: 'TygerClaws', ...adult } },
+    { t: START * W, op: 'person', key: 'mox1', slots: { affiliation: 'TheMox', ...adult } },
     { t: 90_300, op: 'event', kind: 'game.combat.start', place: 'g3', participants: [{ who: 'claw1', role: 'hostile' }, { who: 'mox1', role: 'hostile' }] },
     { t: 90_900, op: 'event', kind: 'game.death', place: 'v2', participants: [{ who: 'mv', role: 'victim' }, { who: 'claw2', role: 'actor' }], effects: [{ on: 'mv', effect: 'kill' }], witnesses: 3 },
     { t: 90_900, op: 'person', key: 'mv', slots: { alive: 'no' } },
@@ -175,6 +177,7 @@ describe('SF1-E3: the mirror overriding a simulated value with a game reading', 
 
   const prepared = (): { sim: Sim; a: ReturnType<typeof author> } => {
     const sim = make();
+    if (START > 0) sim.startAt(START);
     new ReplayPort(sim).submit(script());
     sim.advance(1);
     return { sim, a: author(sim) };
@@ -182,11 +185,11 @@ describe('SF1-E3: the mirror overriding a simulated value with a game reading', 
 
   test('derived events, the game\'s reading, the corrections and the abandoned state of mv; the same records in one call, in per-window calls and across a reload', () => {
     const A = prepared();
-    A.sim.advance(170 - 1);
+    A.sim.advance(170 - A.sim.windowNow());
     const B = prepared();
-    for (let w = 1; w < 170; w++) B.sim.advance(1);
+    while (B.sim.windowNow() < 170) B.sim.advance(1);
     const C = prepared();
-    C.sim.advance(154 - 1);
+    C.sim.advance(154 - C.sim.windowNow());
     C.sim.k.persistence.save('E3');
     const reloaded = transfer(C.sim, 'E3', make, 5);
     // the game restates what it knows after a load, and the harness its statement
@@ -280,10 +283,12 @@ describe('SF1-E4: reload after the parent has left the ring', () => {
     return k.frames.open({ actor: r1, level: 'goal', origin: H(hs('r1-goal')), weight: 1, payload: { goal: { effects: [] } }, cause: seed, status: 'active' }).id;
   }
 
-  const prepare = (sim: Sim): Id => {
+  /** R1 and V's cell, from window `at` (the world starts there without running the windows before it). */
+  const prepare = (sim: Sim, at = 0): Id => {
+    if (at > 0) sim.startAt(at);
     new ReplayPort(sim).submit([
-      { t: 0, op: 'person', key: 'r1', slots: { affiliation: 'civilian', 'quest-linked': 'yes', ...adult } },
-      { t: 0, op: 'reading', node: 'v', slot: 'cell', value: 'c1' },
+      { t: sim.k.now, op: 'person', key: 'r1', slots: { affiliation: 'civilian', 'quest-linked': 'yes', ...adult } },
+      { t: sim.k.now, op: 'reading', node: 'v', slot: 'cell', value: 'c1' },
     ]);
     sim.advance(1);
     return authorGoal(sim);
@@ -311,15 +316,18 @@ describe('SF1-E4: reload after the parent has left the ring', () => {
     return undefined;
   };
 
-  test('the child fires as in U with the same kind, size, cell, time and cast; its why chain has at most 4 links with ancestors beyond the ring marked; R1\'s goal stays active; published items are not published again', () => {
+  /** What the scenarios give the assertions: the world U, the world R reloaded at b*, the child that fires, the items published before b*. */
+  interface E4 { U: Sim; goalU: Id; bStar: number; child: PendingChild; fresh: Sim; goalFresh: Id; published: ActsState['published'] }
+
+  /** The spec's scale: run until a natural child outlives its parent's place in the ring (S1_FULL=1). */
+  function natural(): E4 {
     const U = make();
     const goalU = prepare(U);
     let bStar = -1;
     let child: PendingChild | undefined;
     let fresh!: Sim;
     let published: ActsState['published'] = [];
-    let goalFresh!: Id;
-    const limit = FULL ? 2600 : 2400;
+    const limit = 2600;
     while (U.windowNow() < limit) {
       U.advance(1);
       if (bStar < 0 && (child = found(U))) {
@@ -327,11 +335,41 @@ describe('SF1-E4: reload after the parent has left the ring', () => {
         // run R: to b*, save, and a fresh process under another epoch
         U.k.persistence.save('E4');
         published = actsOf(U).published.map((p) => ({ ...p }));
-        goalFresh = goalU;
         fresh = transfer(U, 'E4', make, 11);
       }
       if (bStar >= 0 && U.windowNow() >= bStar + horizon + 2) break;
     }
+    return { U, goalU, bStar, child: child!, fresh, goalFresh: goalU, published };
+  }
+
+  /**
+   * The same situation from a calendar written down: the world starts at window 1200, and a child of `size` is due 5 windows after b* whose
+   * parent was born in window 100, long before the ring's week; size-1 incidents are due on the windows before b*, in V's cell, so that
+   * items are opened and published before the save. No warm-up is run; the child's generation is 4 and its chain three Ids deep.
+   */
+  function injected(size: 1 | 2): E4 {
+    const START = 1200;
+    const bStar = START + 30;
+    const U = make();
+    const goalU = prepare(U, START);
+    const c1 = U.w.districts[0]!.cellIds[0]!;
+    const parent = H(hs('fixture-parent'), hs('e4-old'));
+    const chain = [H(hs('e4-g2')), H(hs('e4-g1')), H(hs('e4-g0'))];
+    const parentFacts = { id: parent, kind: 'gang-clash', size: 2, w: 100, time: 100 * W + 7, cell: c1, gen: 3, chain };
+    const child = childOf(U, 'e4-old', 0, bStar + 5, 'theft', size, c1, { parentFacts });
+    const before = Array.from({ length: 12 }, (_, n) => childOf(U, `e4-item-${n}`, 0, START + 3 + 2 * n, 'theft', 1, c1));
+    injectInto(U, child, ...before);
+    while (U.windowNow() < bStar) U.advance(1);
+    U.k.persistence.save('E4');
+    const published = actsOf(U).published.map((p) => ({ ...p }));
+    const fresh = transfer(U, 'E4', make, 11);
+    U.advance(10);
+    return { U, goalU, bStar, child, fresh, goalFresh: goalU, published };
+  }
+
+  const scenarios: Array<[string, () => E4]> = FULL ? [['the natural run', natural]] : [['a size-2 child from a calendar written down', () => injected(2)], ['a size-1 child (an item) from a calendar written down', () => injected(1)]];
+  for (const [label, scenario] of scenarios) test(`${label}: the child fires as in U with the same kind, size, cell, time and cast; its why chain has at most 4 links with ancestors beyond the ring marked; R1's goal stays active; published items are not published again`, () => {
+    const { U, goalU, bStar, child, fresh, goalFresh, published } = scenario();
     expect(bStar).toBeGreaterThan(1008);
     expect(child).toBeDefined();
     expect(U.k.frames.frame(goalU)!.status).toBe('active');
@@ -401,9 +439,9 @@ const actsOf = (sim: Sim): ActsState => sim.k.evolution.states.get('scene.acts')
 
 describe('SF1-E1: a Kabuki week, in one call, in many calls and with reloads', () => {
   const index = makeKabukiSlice();
-  const N = FULL ? 1008 : 288;
-  const publicW = FULL ? 300 : 100;
-  const privateW = FULL ? 400 : 160;
+  const N = FULL ? 1008 : 144;
+  const publicW = FULL ? 300 : 40;
+  const privateW = FULL ? 400 : 90;
   const DAYW = 144;
   const district = 'wat_kab';
   const adult = { alive: 'yes', 'age-class': 'adult' } as const;
@@ -550,7 +588,7 @@ describe('SF1-E1: a Kabuki week, in one call, in many calls and with reloads', (
       // refused and uncast incidents are offered and not admitted
       expect(Math.abs(got - want), `${kd.name}: ${got} against ${want.toFixed(1)}`).toBeLessThanOrEqual(4 * Math.sqrt(want) + 0.1 * want + 2);
     }
-    expect(Object.values(expected).reduce((a, b) => a + b, 0)).toBeGreaterThan(20);
+    expect(Object.values(expected).reduce((a, b) => a + b, 0)).toBeGreaterThan(FULL ? 20 : 10);
     // no size 4 closer than 432 windows to another
     const big = [...eventsState(A).ring.filter((e) => e.event?.size === 4).map((e) => e.w)].sort((a, b) => a - b);
     for (let i = 1; i < big.length; i++) expect(big[i]! - big[i - 1]!).toBeGreaterThanOrEqual(432);

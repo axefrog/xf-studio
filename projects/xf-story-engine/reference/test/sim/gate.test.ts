@@ -76,7 +76,7 @@ describe('SF1-X-1: a line', () => {
     expect(closed.counted).toBe(0);
     expect(closed.ring).toBe(0);
     expect(closed.occurrences).toBeGreaterThan(20);
-  });
+  }, 120_000);
 
   test('a person with no age class is never in a victim, target or hostile role', () => {
     const sim = busySim('SF1-X-1b', 1, undefined, ['city.events']);
@@ -196,9 +196,9 @@ describe('SF1-X-2: the floors', () => {
 describe('SF1-X-3: V', () => {
   test('sampled events: V is never a victim or a target, and no harmful effect names V', () => {
     const sim = busySim('SF1-X-3', 40);
-    sim.advance(100);
+    sim.advance(FULL ? 100 : 50);
     const events = cityEvents(sim);
-    expect(events.length).toBeGreaterThan(50);
+    expect(events.length).toBeGreaterThan(FULL ? 50 : 25);
     const harm = new Set<string>(sim.data.gate.harmEffects);
     for (const e of events) {
       const view = sim.policies.viewEvent(e)!;
@@ -209,7 +209,7 @@ describe('SF1-X-3: V', () => {
     const d0 = sim.w.districts[0]!;
     const kinds = ['theft', 'assault', 'gang-clash', 'shakedown', 'police-action', 'psycho-break', 'disorder', 'accident', 'commerce'] as const;
     let named = 0;
-    for (let n = 0; n < (FULL ? 10_000 : 2_000); n++) {
+    for (let n = 0; n < (FULL ? 10_000 : 800); n++) {
       const cell = d0.cellIds[n % 3]!;
       const kind = kinds[n % kinds.length]!;
       const time = (n * 37 % 168) * HOUR + (n % 7) * 400;
@@ -223,7 +223,7 @@ describe('SF1-X-3: V', () => {
         if (e.who === sim.w.v) throw new Error(`V was cast in ${kind} as ${e.role}`);
       }
     }
-    expect(named).toBeGreaterThan(FULL ? 5000 : 1000);
+    expect(named).toBeGreaterThan(FULL ? 5000 : 400);
   }, 120_000);
 
   test('the gate refuses V as a victim or a target, and a harmful effect on V', () => {

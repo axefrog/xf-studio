@@ -149,7 +149,7 @@ describe('SF1-S-5: one admission owner', () => {
       if (tried >= 2) break;
     }
     expect(tried).toBeGreaterThan(0);
-  });
+  }, 120_000);
 });
 
 describe('SF1-I-1 and SF1-I-2: the mean and the cells', () => {

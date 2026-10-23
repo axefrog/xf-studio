@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { processCause } from '../../src/evolution.ts';
-import { H, id as hid, i as hi, s as hs } from '../../src/id.ts';
+import { H, id as hid, i as hi, rand, s as hs } from '../../src/id.ts';
 import { itemTime } from '../../src/summary.ts';
 import type { Id } from '../../src/types.ts';
 import type { S1Data } from '../../src/sim/data.ts';
@@ -12,7 +12,9 @@ import { ReplayPort } from '../../src/sim/port.ts';
 import { type EventsDigest, type EventsState, type RegimeRec } from '../../src/sim/proc-events.ts';
 import type { MirrorDigest } from '../../src/sim/proc-mirror.ts';
 import { Sim } from '../../src/sim/sim.ts';
-import { fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
+import { spacingCount } from '../../src/sim/arith.ts';
+import { processKeys } from '../../src/sim/keys.ts';
+import { districtIdOf, fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
 import { child, eventsState, fxData, inject, occurrences, quietData, quietSim, seedOf } from './helpers.ts';
 
 const W = 600;
@@ -27,13 +29,13 @@ const busy = (factor: number, tweak: (d: S1Data) => void = () => {}): S1Data =>
   });
 
 describe('SF1-S-2: regimes', () => {
-  test('arrivals within three standard deviations, none ends before its planned length, all gone by their maximum dwell, one live regime of a kind per district', () => {
-    const seeds = 20;
+  /** The check of one window of a run: one live regime of a kind per district, none older than its maximum dwell; the ages at the exits. */
+  function soak(seeds: number, days: number, rate: number): number {
     let arrivals = 0;
     for (let n = 0; n < seeds; n++) {
-      const sim = quietSim(`SF1-S-2-${n}`, (d) => { for (const r of d.regimes) r.arrival = 0.03; });
+      const sim = quietSim(`SF1-S-2-${n}`, (d) => { for (const r of d.regimes) r.arrival = rate; });
       const live = new Map<Id, RegimeRec>();
-      for (let w = 0; w < 30 * DAY; w++) {
+      for (let w = 0; w < days * DAY; w++) {
         sim.advance(1);
         const regimes = eventsState(sim).regimes;
         const keys = new Set<string>();
@@ -55,10 +57,56 @@ describe('SF1-S-2: regimes', () => {
         }
       }
     }
-    // three kinds at 0.03 a day: 0.9 each per seed
-    const mean = 3 * 0.9 * seeds;
-    expect(Math.abs(arrivals - mean)).toBeLessThan(3 * Math.sqrt(mean) + 1);
+    return arrivals;
+  }
+
+  test('arrivals: the draws offer, over 20 seeds of 30 days at 0.03 a day, a number within three standard deviations of the rate (the draws alone, without a world)', () => {
+    const seeds = 20;
+    const kinds = quietSim('SF1-S-2-kinds').data.regimes.map((r) => r.kind);
+    const district = districtIdOf('fx_d1');
+    let offered = 0;
+    for (let n = 0; n < seeds; n++) {
+      const seed = seedOf(`SF1-S-2-${n}`);
+      const keys = processKeys((w, ...key) => rand(hs('proc'), hid(seed), hs('city.events'), hi(w), ...key));
+      for (let w = 0; w < 30 * DAY; w++) for (const kind of kinds) if (spacingCount((0.03 * W) / 86400, (i) => keys.regime(w, district, kind, i), 1) === 1) offered++;
+    }
+    // each kind at 0.03 a day for 30 days: 0.9 a seed
+    const mean = kinds.length * 0.9 * seeds;
+    expect(kinds.length).toBe(3);
+    expect(Math.abs(offered - mean)).toBeLessThan(3 * Math.sqrt(mean) + 1);
+  });
+
+  test('a world run: one live regime of a kind per district, none ends before its planned length, all are gone by their maximum dwell', () => {
+    const arrivals = FULL ? soak(20, 30, 0.03) : soak(3, 8, 0.4);
+    expect(arrivals).toBeGreaterThan(FULL ? 20 : 8);
+    if (FULL) expect(Math.abs(arrivals - 3 * 0.9 * 20)).toBeLessThan(3 * Math.sqrt(3 * 0.9 * 20) + 1);
   }, 600_000);
+
+  test('the exit boundaries, directly: a regime one window short of its planned length is never ended; one at its maximum dwell always is', () => {
+    const w = 700;
+    const sim = quietSim('SF1-S-2-edges');
+    const district = sim.w.districts[0]!.id;
+    const early: Id[] = [];
+    const late: Id[] = [];
+    sim.startAt(w);
+    sim.setState('city.events', (st) => {
+      const regimes = (st as EventsState).regimes;
+      for (const def of sim.data.regimes) {
+        for (let n = 0; n < 12; n++) {
+          const base = { kind: def.kind, scope: district, plannedLength: def.plannedLength, maxDwell: def.maxDwell, size: 3 as const, effects: def.effects, closes: def.closes, priceShift: def.priceShift };
+          const e = { ...base, id: H(hs('s2-early'), hs(def.kind), hi(n)), startW: w - (def.plannedLength - 1), start: (w - (def.plannedLength - 1)) * W };
+          const l = { ...base, id: H(hs('s2-late'), hs(def.kind), hi(n)), startW: w - def.maxDwell, start: (w - def.maxDwell) * W };
+          regimes.push(e, l);
+          early.push(e.id);
+          late.push(l.id);
+        }
+      }
+    });
+    sim.advance(1); // the run for window w, applied at the boundary after it
+    const left = new Set(eventsState(sim).regimes.map((r) => r.id));
+    expect(early.every((id) => left.has(id))).toBe(true);
+    expect(late.some((id) => left.has(id))).toBe(false);
+  });
 });
 
 describe('SF1-S-4: no coupling inside a window', () => {
@@ -138,8 +186,8 @@ describe('SF1-S-6: a value closes and reopens in one batch', () => {
 
 describe('SF1-I-5: causality', () => {
   test('every child is born in a later window and at a later time than its parent; no cause follows its effect', () => {
-    const seeds = FULL ? 20 : 4;
-    const windows = FULL ? 30 * DAY : 220;
+    const seeds = FULL ? 20 : 3;
+    const windows = FULL ? 30 * DAY : 150;
     let children = 0;
     for (let n = 0; n < seeds; n++) {
       const sim = Sim.create({ worldSeed: seedOf(`SF1-I-5-${n}`), index: fx3Slice(), data: busy(FULL ? 1 : 25), only: ['city.events'] });
@@ -190,11 +238,49 @@ describe('SF1-I-9 and SF1-I-10: summaries, items, the ring and why', () => {
     expect(sim.k.value(S, 'count')).toBe(count);
   });
 
+  /** A run that creates its own ring, descriptors and cascades; the spec's week and a half under `S1_FULL=1`. The ring's week is written down below. */
   const week = (name: string) => {
     const sim = Sim.create({ worldSeed: seedOf(name), index: fx3Slice(), data: busy(FULL ? 4 : 12), only: ['city.events'] });
-    sim.advance(1008 + 300);
+    sim.advance(FULL ? 1008 + 300 : 160);
     return sim;
   };
+
+  test('SF1-I-10: from a ring written down, a descriptor older than 1,008 windows is dropped at the next run and a younger one stays; a child of generation 3 fires as generation 4, with a chain of four, and has no children', () => {
+    const START = 3000;
+    const sim = Sim.create({ worldSeed: seedOf('SF1-I-10c'), index: fx3Slice(), data: busy(12), only: ['city.events'] });
+    const c1 = sim.w.districts[0]!.cellIds[0]!;
+    // a ring that spans the horizon: entries from 1,100 windows old to 900 old
+    const ages = Array.from({ length: 11 }, (_, n) => 900 + n * 20);
+    sim.startAt(START);
+    sim.setState('city.events', (st) => {
+      (st as EventsState).ring = ages.map((age, n) => ({ id: H(hs('r1-ring'), hs(String(n))), w: START - age, kind: 'theft', cell: c1, count: 1, meta: { 0: { gen: 0, chain: [] } } }));
+    });
+    // children of generation 3, whose parents the ring does not hold: they fire as generation 4
+    const chain = [H(hs('g2')), H(hs('g1')), H(hs('g0'))];
+    const kids = Array.from({ length: 6 }, (_, n) => {
+      const parent = H(hs('fixture-parent'), hs(`g3-${n}`));
+      return child(sim, `g3-${n}`, 0, START + 1 + n, 'gang-clash', 2, c1, { sides: { a: 2, b: 3 }, parentFacts: { id: parent, kind: 'gang-clash', size: 3, w: START - 5, time: (START - 5) * W, cell: c1, gen: 3, chain } });
+    });
+    inject(sim, ...kids);
+    sim.advance(12);
+    const st = eventsState(sim);
+    const now = sim.windowNow();
+    // what the ring keeps is younger than 1,008 windows; of the ones written down exactly those that were
+    expect(st.ring.every((e) => now - 1 - e.w < 1008)).toBe(true);
+    for (const [n, age] of ages.entries()) {
+      expect(st.ring.some((e) => e.id === H(hs('r1-ring'), hs(String(n)))), `age ${age}`).toBe(START + 11 - (START - age) < 1008);
+    }
+    // the children fired as generation 4, with a chain of at most four, and nothing names them as a parent
+    const fired = occurrences(sim).filter((o) => o.gen === 4);
+    expect(fired.length).toBeGreaterThan(0);
+    const gen4 = new Set(fired.map((o) => o.id));
+    for (const o of fired) {
+      expect(o.chain.length).toBe(4);
+      expect(sim.why(o.id)!.length - 1).toBeLessThanOrEqual(4);
+    }
+    for (const o of occurrences(sim)) if (o.parent !== undefined) expect(gen4.has(o.parent)).toBe(false);
+    for (const list of Object.values(st.calendar)) for (const c of list) expect(gen4.has(c.parent)).toBe(false);
+  });
 
   test('SF1-I-10: descriptors older than 1,008 windows are gone; a why chain reaches an immigrant in at most 4 links; an occurrence of generation 4 has no children', () => {
     const sim = week('SF1-I-10');

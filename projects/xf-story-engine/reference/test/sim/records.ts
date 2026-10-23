@@ -19,7 +19,13 @@ export function recordOf(sim: Sim, skip: { processes?: string[]; logProcs?: stri
   }
   for (const p of data.processes) if (!skip.processes?.includes(p.id)) out[`process:${p.id}`] = canonicalKey(p);
   const record = structuredClone(sim.record);
-  if (skip.logProcs) record.log = record.log.filter((e) => !skip.logProcs!.includes(e.proc));
+  if (skip.logProcs) {
+    // the log's numbers are one count over every process, so the entries left are renumbered in their order and the count follows: what is
+    // compared is what the other processes wrote and in which order, not how many lines the skipped ones wrote between them
+    record.log = record.log.filter((e) => !skip.logProcs!.includes(e.proc));
+    record.log.forEach((e, n) => { e.seq = n; });
+    record.seq = record.log.length;
+  }
   out['s1-record'] = canonicalKey(record);
   return out;
 }

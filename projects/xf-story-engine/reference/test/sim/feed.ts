@@ -25,12 +25,13 @@ export function transfer(from: Sim, key: string, make: () => Sim, epochs = 7): S
   return fresh;
 }
 
-/** What the game states again after a load: the latest of every reading, and the events that have not happened yet. */
+/** What the game states again after a load: the latest (by time) of every reading, and the events that have not happened yet. */
 export function restate(sim: Sim, lines: readonly ReplayLine[]): void {
   const now = sim.k.now;
   const latest = new Map<string, ReplayLine>();
   const out: ReplayLine[] = [];
-  for (const l of lines) {
+  // a script is not written in the order of its times, and the latest reading is the one with the latest time
+  for (const l of [...lines].sort((x, y) => x.t - y.t)) {
     if (l.op === 'event') {
       if (l.t >= now) out.push(l);
     } else if (l.op === 'reading') {

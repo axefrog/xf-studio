@@ -11,19 +11,21 @@ import { defaultData } from '../../src/sim/data.ts';
 import { fxWorld, kabukiWorld } from './helpers.ts';
 
 const cause = H(s('cause'), s('people'));
+const FULL = process.env.S1_FULL === '1';
 
 describe('SF1-P-0: the schema resolves', () => {
   const w = kabukiWorld('SF1-P-0');
   const people = new People(w, identityKeys(w.k.worldSeed));
   const d = w.districts[0]!;
 
-  test('1,000 households resolve with no defect; every resident age lies in its profile band and the class agrees', () => {
+  test(`${FULL ? '1,000' : '250'} households resolve with no defect (1,000 with S1_FULL=1); every resident age lies in its profile band and the class agrees`, () => {
+    const want = FULL ? 1000 : 250;
     const k = w.k;
     let households = 0;
     let residents = 0;
     for (const c of d.cellIds.slice(0, 12)) {
       const info = people.blockInfo(c);
-      for (let h = 0; h < info.households.length && households < 1000; h++) {
+      for (let h = 0; h < info.households.length && households < want; h++) {
         households++;
         for (let j = 0; j < 6; j++) {
           const m = people.residentId(info.households[h]!, j);
@@ -42,8 +44,8 @@ describe('SF1-P-0: the schema resolves', () => {
         }
       }
     }
-    expect(households).toBe(1000);
-    expect(residents).toBeGreaterThan(2000);
+    expect(households).toBe(want);
+    expect(residents).toBeGreaterThan(want * 2);
     expect(k.defects.items).toEqual([]);
   }, 120_000);
 
@@ -126,7 +128,7 @@ describe('SF1-P-4: rosters', () => {
   test('none beyond the size; a family child is two bands younger than member 0; crew share an affiliation; a couple is within one band', () => {
     const k = w.k;
     const seen = { family: 0, crew: 0, couple: 0 };
-    for (const c of d.cellIds.slice(0, 6)) {
+    for (const c of d.cellIds.slice(0, FULL ? 6 : 4)) {
       const info = people.blockInfo(c);
       info.households.forEach((hh, h) => {
         const type = Math.floor(Number(k.value(hh, 'hprofile')) / 12);
@@ -153,9 +155,9 @@ describe('SF1-P-4: rosters', () => {
         }
       });
     }
-    expect(seen.family).toBeGreaterThan(20);
-    expect(seen.crew).toBeGreaterThan(3);
-    expect(seen.couple).toBeGreaterThan(10);
+    expect(seen.family).toBeGreaterThan(FULL ? 20 : 12);
+    expect(seen.crew).toBeGreaterThan(FULL ? 3 : 1);
+    expect(seen.couple).toBeGreaterThan(FULL ? 10 : 6);
   });
 });
 

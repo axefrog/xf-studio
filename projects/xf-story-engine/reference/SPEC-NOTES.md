@@ -817,13 +817,21 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
     computed from the same formula the process uses (rate, shape, share, regime and group modifiers) on the snapshot each
     run saw. Incidents that admission refuses or the cast cannot fill are offered and not admitted, so the test allows
     ten per cent and two incidents beyond the four deviations.
-122. **The long fixtures run at a smaller scale unless `S1_FULL=1`. (new)** Scaled down by default: SF1-E1 (a Kabuki stand-in
-    of two days, the injected events at windows 100 and 160), SF1-E2 (400 windows), SF1-E4 (the boundary is found in the first
-    2,400 windows), SF1-O-3 (6 days), SF1-I-5 (4 seeds of 220 windows at 25 times the rates), SF1-I-10 (1,308 windows at 12 times
-    the rates), SF1-I-15 (120 roots), SF1-X-1 and SF1-X-3 (about a hundred occurrences and 2,000 casts), and the property tests
-    (3 seeds of 90 windows). `S1_FULL=1` runs the spec's figures (a 1,008-window Kabuki week, 100 game days, 20 seeds of 30 days,
-    1,000 roots, 2,600 windows, 10,000 casts, 12 seeds of 240 windows); SF1-E1 at that scale takes under a minute. SF1-S-2
-    runs its 20 seeds of 30 days always.
+122. **The long fixtures run at a smaller scale unless `S1_FULL=1`. (amended, R1 suite time)** The default suite runs in under a minute
+    on the development machine (it took five minutes before R1's round; the budget is 90 seconds) and every assertion stands at the
+    smaller scale; what shrinks is the length of a run, never what a test checks. Scaled down by default: SF1-E1 (a Kabuki stand-in of
+    one day, the injected events at windows 40 and 90), SF1-E2 (280 windows), SF1-E3 (the story starts at window 140, not window 0),
+    SF1-E4 (a calendar written down: one child of size 2 and one of size 1, injected where a natural child would stand; the natural run to
+    the boundary of the ring is the `S1_FULL=1` scenario), SF1-O-3 (6 days), SF1-I-5 (3 seeds of 150 windows at 25 times the rates),
+    SF1-I-10 (160 windows at 12 times the rates, plus a second test that writes the ring and the fourth generation down instead of
+    waiting for them), SF1-I-15 (120 roots), SF1-S-2 (the arrival statistics are taken from the draws alone, in a test of their own;
+    the whole-world run keeps three seeds of eight days at 0.4 a day), the gate fixtures SF1-X-1 and SF1-X-3 (50 windows of occurrences, 800 casts), SF1-A-5 (36 windows),
+    SF1-P-0 (250 households), SF1-P-4 (4 cells, thresholds scaled), the week fixture (96 windows, one baseline reused, reloads at 45 and 75),
+    the metamorphic relations (60 windows) and the other property tests (3 seeds of 90 windows). SF1-T-1 checks every pair of FX-3.
+    SF1-H-6 reads the artifact files and checks their hashes and the fixed vectors in the ordinary run and regenerates them only with
+    `S1_FULL=1` (or when the generator changes). `S1_FULL=1` runs the spec's figures (a 1,008-window Kabuki week, 100 game days, 20 seeds of
+    30 days, 1,000 roots, 2,600 windows, 10,000 casts, 12 seeds of 240 windows, 10,000 random tie pairs, the natural run for SF1-E4); the
+    repository's workflow runs it on demand and once a week (`reference-full`), never on a push.
 123. **Layer 2 asks the simulation layer through `SimReadPort`; the reads it builds are the `city` and `social` atoms. (amended, R1 SIM-01)** The
     port (`builds`, `eval`, `transitions`, `deps`) is layer 2's own type (`seeding/registries.ts`); `Reads.port()` implements it, and
     `attachLayer2` builds layer 2 on a sim's kernel with it and with S1's spine. `eval` at a time gives the last value the time passed
@@ -971,6 +979,23 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
     for a supported one. `lintKinds` names it and says it is not supported yet.
 152. **A save the kernel opened read-only is not written by S1's load hook. (new, R1 SIM-12)** The hook restores the record and stops; it builds
     nothing, restores nothing and reconciles nothing, and `flush` writes nothing while the world is read-only.
+153. **The reference is faster; no value changed. (new, kernel and layer 2, R1 suite time)** The frozen digests (v3 and v4) and the S1
+    transcript digest are the same before and after, so these are changes of how an answer is reached, not of the answer. The hashes of
+    one chunk or less (all but a rare long message) go through `blake3-short.ts`, the library's function with its state in fixed arrays
+    and the chain of a key's whole blocks computed once for the draws of one key over many values (`randOverValues`, which the sampled
+    slots use for every candidate); a test compares it with the library on every length from 0 to 1,024 and on heads and tails of every
+    split. The Ids of owned values and members are remembered (bounded); the canonical encoder writes into one buffer; the store
+    indexes general contributions by slot and lists edge values without copying; the predicate matcher tests a slot before a kind;
+    a process's own state is copied by its own `cloneState` when it has one (S1's ring shares its entries, which are never edited in
+    place); reads that only look at a digest use `digestPeek` and do not copy it. A native core can ignore all of it: none of it is in
+    the contract.
+154. **A frame that has ended is opened afresh, never reactivated. (new, found by the full-scale partition property)** `v.frames` used
+    to set an abandoned situation frame (a neighbour V had left) or a satisfied or abandoned goal frame (an entry untracked) back to
+    `active` when V came back or the entry was tracked again, keeping its old `opened`. A save keeps only the live frames (S0 10.4), so a
+    run that was saved and loaded in between had no such frame and opened a new one: the two runs differed in `opened` and in the status
+    change the reactivation emits. The ended frame is now dropped (`Frames.remove`, which asserts the kernel is writable and emits
+    nothing) and the frame opened as new, which is what the saved run does. The rule is S1's, not the kernel's: `Frames.open` still
+    returns the frame under an explicit Id if there is one.
 
 ### Spec findings for the coordinator (S1)
 
@@ -987,6 +1012,9 @@ The ones that need a decision, worst first. The six questions of the first build
   stand-ins do not, and the reference reads an optional outline (136).
 - **S1 2.2 (the record).** The record now holds spans of protection, the facts of the events behind memorable beliefs, the intervals of
   ended ties and the time the divergence log reaches back to (143 to 146); S1 2.2 lists none of them.
+- **S1 8.2 (a frame V returns to).** "The frames for the old cell are abandoned and the new ones opened" does not say what opening means for a
+  frame that was abandoned earlier under the same Id. The reference opens it afresh (154), the only reading under which a run that goes
+  on and a run that is saved and loaded agree.
 - **S1 4.7 (reopening a tie).** The spec is silent on a tie that ended and is wanted again. The reference opens it under its Id with
   fresh attributes and keeps the history for reads (145).
 - **106 (SF1-I-13).** FX-3 has no cell two steps from `c2`.

@@ -21,6 +21,8 @@ const W = 600;
 const FULL = process.env.S1_FULL === '1';
 const SEEDS = FULL ? 12 : 3;
 const WINDOWS = FULL ? 240 : 90;
+/** The metamorphic relations run several worlds each, and compare counts and records, not single windows. */
+const MW = FULL ? 240 : 60;
 
 describe('partition and reload', () => {
   for (let n = 0; n < SEEDS; n++) {
@@ -138,8 +140,8 @@ describe('metamorphic relations', () => {
     const one = make(busy);
     const two = make(busy, withSecondDistrict());
     expect(two.w.districts.length).toBe(2);
-    one.advance(WINDOWS);
-    two.advance(WINDOWS);
+    one.advance(MW);
+    two.advance(MW);
     const d1 = one.w.districts[0]!;
     const cells1 = new Set(d1.cellIds);
     const ringOf = (s: Sim) => eventsState(s).ring.filter((e) => cells1.has(e.cell));
@@ -154,13 +156,13 @@ describe('metamorphic relations', () => {
     const ix = fx3Slice();
     ix.names = Object.fromEntries(Object.entries(ix.names!).map(([k, v]) => [`renamed-${k}`, v]));
     const b = make(busy, ix);
-    a.advance(WINDOWS);
-    b.advance(WINDOWS);
+    a.advance(MW);
+    b.advance(MW);
     expect(differing(recordOf(b), recordOf(a))).toEqual([]);
     // another world seed: other histories, the same distribution of what happens
     const counts = (seed: string): Record<string, number> => {
       const s = make(busy, fx3Slice(), seedOf(seed));
-      s.advance(WINDOWS);
+      s.advance(MW);
       const out: Record<string, number> = {};
       for (const o of occurrences(s)) if (o.gen === 0) out[o.kind] = (out[o.kind] ?? 0) + 1;
       return out;
@@ -178,7 +180,7 @@ describe('metamorphic relations', () => {
     const immigrants = (scale: number, tag: string): { n: number; views: string[] } => {
       const s = make(busy, fx3Slice(), seedOf(tag));
       s.k.settings.set({ cityScale: scale }, 0);
-      s.advance(WINDOWS);
+      s.advance(MW);
       const d = s.w.districts[0]!;
       return { n: occurrences(s).filter((o) => o.gen === 0).length, views: d.cellIds.flatMap((c) => s.people.residentsOfBlock(c)).slice(0, 15).map((r) => JSON.stringify(s.people.view(r))) };
     };
