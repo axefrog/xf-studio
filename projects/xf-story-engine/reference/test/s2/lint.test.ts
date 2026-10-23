@@ -95,6 +95,7 @@ const TRIPS: Trip[] = [
   { code: 'L-27', level: 'error', what: 'an obstacle with a single way past', mutate: (_p, s) => { s.beats!.wall = { play: 'pack:f-finish', kind: 'obstacle', links: [{ because: 'meet', on: 'yes' }], obstacle: { affordances: [ONE_AFFORD] }, leaves: [{ fact: 'stage', set: 3 }] }; } },
   { code: 'L-27', level: 'error', what: 'an obstacle with no way that is not combat', mutate: (_p, s) => { s.beats!.wall = { play: 'pack:f-finish', kind: 'obstacle', links: [{ because: 'meet', on: 'yes' }], obstacle: { affordances: [{ ...ONE_AFFORD, combat: true }, { ...ONE_AFFORD, combat: true }] }, leaves: [{ fact: 'stage', set: 3 }] }; } },
   { code: 'L-28', level: 'warning', what: 'a fragment whose channels the game cannot show', mutate: (_p, _s, w) => { w.port.channels.delete('message'); } },
+  { code: 'L-131a', level: 'error', what: 'an in-scene offer that does not follow another beat', mutate: (_p, s) => { s.beats!.ask = { play: 'pack:f-meet', inScene: true }; } },
   { code: 'L-30', level: 'warning', what: 'a beat that is not texture and leaves no fact', mutate: (_p, s) => { s.beats!.bye = { play: 'pack:f-finish', kind: 'exit', links: [{ because: 'finish', on: 'yes' }] }; } },
   { code: 'L-41', level: 'error', what: 'an exit beat with a role a short form could drop', mutate: (_p, s) => { s.beats!.bye = { play: 'pack:f-finish', kind: 'exit', role: 'texture', links: [{ because: 'finish', on: 'yes' }], leaves: [{ fact: 'stage', set: 3 }] }; } },
   { code: 'L-42', level: 'error', what: 'a fixed requirement naming more nodes than the engine watches', mutate: (_p, s) => {
@@ -177,7 +178,7 @@ describe('every core lint has a tripping seed, and the base passes it', () => {
   test('lint coverage: the matrix covers every code of the core', () => {
     const core = ['L-01', 'L-02', 'L-03', 'L-04', 'L-05', 'L-06', 'L-07', 'L-09', 'L-10', 'L-11', 'L-12', 'L-13', 'L-14', 'L-15', 'L-16', 'L-17', 'L-18', 'L-19',
       'L-20', 'L-21', 'L-27', 'L-28', 'L-30', 'L-41', 'L-42', 'L-43', 'L-44', 'L-52', 'L-56', 'L-57', 'L-58', 'L-59', 'L-60', 'L-61', 'L-62', 'L-63', 'L-72',
-      'L-73', 'L-74', 'L-76', 'L-89', 'L-93', 'L-94', 'L-95', 'L-97', 'L-98', 'L-99', 'L-100', 'L-101', 'L-109', 'L-111', 'L-114', 'L-115', 'L-116'];
+      'L-73', 'L-74', 'L-76', 'L-131a', 'L-89', 'L-93', 'L-94', 'L-95', 'L-97', 'L-98', 'L-99', 'L-100', 'L-101', 'L-109', 'L-111', 'L-114', 'L-115', 'L-116'];
     const covered = new Set<string>(TRIPS.map((t) => t.code));
     // L-02, L-10, L-11 and L-16 belong to the ladder profile and are tripped below.
     for (const c of ['L-02', 'L-10', 'L-11', 'L-16']) covered.add(c);

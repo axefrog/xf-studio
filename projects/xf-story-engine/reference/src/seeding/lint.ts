@@ -368,6 +368,13 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
     if ((b.kind === 'decision' || b.kind === 'aftermath' || b.kind === 'conclusion' || b.kind === 'exit') && b.role !== undefined) {
       out.error('L-41', `The ${b.kind} beat "${k}" has a "role", so a short form could drop it. These beats can never be dropped.`, `beats.${k}.role`);
     }
+    if (b.inScene) {
+      const follows = (b.links ?? []).some((l) => 'because' in l);
+      const offers = playOf(b).refs.some((r) => !!fragOf(r)?.offer);
+      if (!follows || !offers) {
+        out.error('L-131a', `The in-scene beat "${k}" has to be an offer that follows a running beat of the same scene: link it with "because" to that beat.`, `beats.${k}.inScene`);
+      }
+    }
     if (b.kind !== undefined && b.kind !== 'texture') {
       const writes = (b.leaves ?? []).length + frags.filter((f) => f.beat === k).reduce((n, f) => n + (f.frag.leaves ?? []).length + (f.frag.offer ? 1 : 0), 0);
       if (writes === 0) out.warn('L-30', `The ${b.kind} beat "${k}" leaves no fact, so nothing records that it happened.`, `beats.${k}`);

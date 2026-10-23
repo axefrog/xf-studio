@@ -76,7 +76,9 @@ export function linkState(l2: Layer2, inst: Instance, key: string, t: GameTime):
       flow.push({ sat: !!src && isFinal(src.state), never: false });
     } else {
       const src = inst.st.beats[l.because];
-      if (!src || !isFinal(src.state)) flow.push({ sat: false, never: false });
+      // An in-scene offer follows a beat whose scene is still running (S2 section 8.3): its source need not be final.
+      const sceneRunning = b.inScene === true && src?.state === 'running';
+      if (!src || (!isFinal(src.state) && !sceneRunning)) flow.push({ sat: false, never: false });
       else if (src.state === 'skipped' && src.skip === 'rejected') flow.push({ sat: false, never: true });
       else {
         // The condition is always evaluated, whether the source was done or omitted (S2 section 7.1, SF-60).
@@ -310,8 +312,9 @@ function deliverBeat(l2: Layer2, inst: Instance, key: string, gated?: { class: s
     l2.startDirect(inst, key);
     return;
   }
-  const opts: { what?: string; gated?: typeof gated } = {};
+  const opts: { what?: string; gated?: typeof gated; inScene?: boolean } = {};
   if (gated) opts.gated = gated;
+  if (inst.st.document.beats[key]!.inScene) opts.inScene = true;
   submitDelivery(l2, inst, key, frag, opts);
 }
 

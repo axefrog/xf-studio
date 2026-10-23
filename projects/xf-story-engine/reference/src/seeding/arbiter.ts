@@ -109,6 +109,7 @@ export interface SubmitOpts {
   bindings?: Record<string, Id>;
   purpose?: TimingRequest['purpose'];
   closing?: boolean;
+  inScene?: boolean;
 }
 
 export function submitDelivery(l2: Layer2, inst: Instance, beat: string | undefined, frag: Fragment | undefined, opts: SubmitOpts = {}): Delivery {
@@ -140,6 +141,7 @@ export function submitDelivery(l2: Layer2, inst: Instance, beat: string | undefi
   if (st.draws.mode) d.provenance.mode = st.draws.mode.value;
   if (st.draws.variant) d.provenance.variant = st.draws.variant.value;
   if (opts.gated) d.provenance.gated = [opts.gated];
+  if (opts.inScene) d.inScene = true;
   if (opts.purpose) d.timing.purpose = opts.purpose;
   const bd = beat ? st.document.beats[beat] : undefined;
   if (bd?.kind === 'aftermath') d.timing.purpose = 'escalate';
@@ -234,6 +236,12 @@ export function arbiterStep(l2: Layer2, s: number): void {
     const ch = l2.reg.channels.get(channel);
     const cls = ch?.class ?? d.timing.class;
     const closing = d.what === 'closing' || d.what === 'coda' || d.what === 'news';
+    // An offer made inside a running scene is part of that scene's content, not a new push: it skips every gate (S2 section 8.3).
+    if (d.inScene) {
+      const ch0 = l2.reg.channels.get(channel);
+      cands.push({ inst, d, frag, channel, cls: ch0?.class ?? d.timing.class, score: Number.POSITIVE_INFINITY, tie: ids.arbTie(l2.worldSeed, d.id) });
+      continue;
+    }
     // Tempo off: only pull deliveries, deliveries from authored seeds, and closing deliveries pass.
     if (settings.tempo === 'off' && !d.pull && !d.authored && !closing) continue;
     // Gate 1: no vanilla UI state is busy.
@@ -269,7 +277,10 @@ export function arbiterStep(l2: Layer2, s: number): void {
   let releasedMain = false;
   let releasedZero = false;
   let tries = 0;
+  // In-scene offers go straight into their running scene, whatever else is released this second.
+  for (const c of cands) if (c.d.inScene) prepareAndRelease(l2, c.inst, c.d, c.channel, c.cls, 0);
   for (const c of cands) {
+    if (c.d.inScene) continue;
     if (c.cls === 0 ? releasedZero : releasedMain) continue;
     if (tries >= l2.tun.prepareTries) break;
     tries++;

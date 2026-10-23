@@ -496,6 +496,8 @@ export interface Delivery {
   attempts: number;
   /** The bound ran out: the delivery is no longer pushed, and waits for pull (S2 section 8.5). */
   stopped?: boolean;
+  /** An offer made inside a scene that is already running: released straight into it, past every gate (S2 section 8.3). */
+  inScene?: boolean;
   /** Play seconds, session-relative: the offer lapses at this play time. */
   lapseAt?: number;
   /** Channels already tried for this logical delivery. */
