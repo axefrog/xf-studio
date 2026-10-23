@@ -13,7 +13,9 @@ import type { ScenePreparationProbe } from "./webgl-scene-preparation-probe-page
  * a cold V's programs link restarts its preparation after the restore, and the V is shown. The authored makeup reaches each runtime through
  * the production preview device (filled before preparing, connected at show). Profiles phase 4a-v-b adds two: a lighting setup never drawn,
  * asked of the shown V, is prepared while the setup before stays drawn and takes over with nothing left to link (a newer setup replaces it,
- * and the setup drawn asked again stops it); and every warm-up is drawn in pieces, with frames presented between them. The same page runs
+ * and the setup drawn asked again stops it); and every warm-up is drawn in pieces, with frames presented between them. The 4a-v-b review adds
+ * a context lost in the middle of GPU work, each recovering: a banded upload, a V's details waiting for a link slot, a lighting change
+ * prepared on the shown V, and a setup prepared before the loss asked again (staged, never drawn at once). The same page runs
  * again without the extension (the fallback), which must stay chunked and still report progress; its numbers are recorded, not gated.
  * Public CI has no GPU and skips; XFS_REQUIRE_ORACLES=1 turns the skip into a failure. XFS_PROBE_PRINT=1 prints both probes.
  */
@@ -23,10 +25,10 @@ const ORDER = ["core", "build", "details", "programs", "textures", "warm-up"];
 oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME} (set CHROME)`)("scene runtimes prepared before they are shown", () => {
   let parallel: ScenePreparationProbe, fallback: ScenePreparationProbe;
   beforeAll(async () => {
-    parallel = await runProbePage<ScenePreparationProbe>(PAGE, "", 240_000);
-    fallback = await runProbePage<ScenePreparationProbe>(PAGE, "?parallel=off", 240_000);
+    parallel = await runProbePage<ScenePreparationProbe>(PAGE, "", 420_000);
+    fallback = await runProbePage<ScenePreparationProbe>(PAGE, "?parallel=off", 420_000);
     if (process.env.XFS_PROBE_PRINT === "1") console.log(JSON.stringify({ parallel, fallback }, null, 1));
-  }, 540_000);
+  }, 900_000);
 
   test("both pages ran without a shader error, one with KHR_parallel_shader_compile and one without", () => {
     for (const probe of [parallel, fallback]) {
@@ -151,10 +153,48 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
-  test("closing everything returns the GPU objects and Three's programs to the baseline (4a-i's gate holds with preparation)", () => {
+  test("closing everything returns the GPU objects and Three's programs to the baseline (4a-i's gate holds with preparation); no fence outlives its preparation", () => {
     for (const probe of [parallel, fallback]) {
       expect(probe.closed.gl).toEqual(probe.baseline.gl);
       expect(probe.closed.programs).toEqual(probe.baseline.programs);
+      expect([probe.baseline.gl.sync, probe.closed.gl.sync]).toEqual([0, 0]);
+    }
+  });
+
+  test("a banded upload lost part-way starts again after the restore, from its bitmap: every texel is the bitmap's, no GL error (4a-v-b review 3)", () => {
+    for (const probe of [parallel, fallback]) {
+      const { bands } = probe.recovery;
+      expect(bands.before).toBe(3);
+      // Its storage and four bands of 512 rows again after the restore, done only after the last.
+      expect(bands.after).toBe(5);
+      expect(bands.texels).toEqual([bands.expected, bands.expected, bands.expected]);
+      expect(bands.error).toBe(0);
+      expect(bands.closed).toBe(true);
+    }
+  });
+
+  test("a V's details lost while they wait for a link slot stop with the context's generation, before the restore, and the V is shown after it (4a-v-b review 2)", () => {
+    expect(parallel.recovery.admission).toMatchObject({ trigger: "admission", viaAdmit: true });
+    expect(fallback.recovery.admission.trigger).toBe("compile");
+    for (const probe of [parallel, fallback]) {
+      const { admission } = probe.recovery;
+      expect(admission.stopMs).toBeGreaterThanOrEqual(0);
+      expect(admission.stopMs).toBeLessThanOrEqual(100);
+      expect(admission.restoredAfterStop).toBe(true);
+      expect(admission.outcome).toBe("shown");
+      expect(admission.frames).toBeGreaterThan(0);
+    }
+  });
+
+  test("a lighting change lost while prepared on the shown V takes over after the restore with nothing to link; a setup prepared before the loss is prepared again, never drawn at once (4a-v-b review 5)", () => {
+    for (const probe of [parallel, fallback]) {
+      const { staged } = probe.recovery;
+      expect(staged.stage).toBe("programs");
+      expect(staged.restarts).toBeGreaterThanOrEqual(1);
+      expect(staged.tookOver).toBe(true);
+      expect(staged.prepared).toBe(true);
+      expect(staged.firstFrame).toEqual({ links: 0, programs: 0 });
+      expect(staged.before).toEqual({ staged: true, tookOver: true, firstFrame: { links: 0, programs: 0 } });
     }
   });
 });

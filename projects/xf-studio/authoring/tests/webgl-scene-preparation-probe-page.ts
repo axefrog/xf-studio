@@ -21,6 +21,11 @@
  *    stays drawn, pixel for pixel, then takes over; the longest main-thread task from the change to 1 s after; links and programs made in
  *    its first frame; the frames presented while it was prepared; a newer setup asked meanwhile replacing it; and the setup drawn asked
  *    again stopping a preparation.
+ * 8. (After 7.) A context lost in the middle of GPU work, each recovering (4a-v-b review): a large map's banded upload (it starts again
+ *    from its bitmap and every texel is the bitmap's, with no GL error); a V's details waiting for a link slot (the wait ends with the
+ *    context's generation, before the restore, and the V is shown); a lighting change prepared on the shown V (restarted after the restore,
+ *    it takes over with nothing to link). Then a setup prepared before the loss, asked again, is staged and prepared again (Three dropped its
+ *    programs with the context), never drawn at once.
  * The cold V's warm-up (2) and the setup's (5) are drawn in pieces, with frames presented between them (`warmUpFrames`).
  * Results land in `window.probe` as plain data.
  */
@@ -40,6 +45,8 @@ import { syntheticCore, syntheticIdle, syntheticRecords } from "./webgl-syntheti
 import type { RuntimePreparationResult } from "../src/platform/scene/runtime-preparation";
 import { AuthoringDocument } from "../src/app/authoring/authoring-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
+import { offerUploadSource, uploadStep, UPLOAD_BITMAP_OPTIONS } from "../src/character/render/character-detail-loader";
+import { gpuGate } from "../src/platform/scene/gpu-gate";
 import { EYE_RASTER_REGION, freshWorkspace } from "./fixtures/eye-region";
 
 type Counts = { gl: GlObjectCounts; programs: string[] };
@@ -60,6 +67,16 @@ export type ScenePreparationProbe = {
   cancel: { stage: string; cancelMs: number; superseded: string; drawn: number; canvasUnchanged: boolean; disposed: boolean; before: Counts; after: Counts };
   /** The context lost while the V's programs linked: how the want ended, the restarts the preparation reported, and the frames it drew once shown. */
   contextLoss: { outcome: string; stage: string; restarts: number; frames: number; events: string[] };
+  /** 8: a context lost in the middle of GPU work, each recovering (4a-v-b review). */
+  recovery: {
+    /** A 2048² map's banded upload: steps before the loss and after it, texels read back (top, middle, bottom row), the GL error after, the bitmap closed. */
+    bands: { before: number; after: number; texels: number[][]; expected: number[]; error: number; errors: string[]; closed: boolean };
+    /** A V's details waiting for a link slot (`admission`; `compile` without the extension): from the lost event to the details stopping. */
+    admission: { trigger: string; viaAdmit: boolean; stopMs: number; restoredAfterStop: boolean; outcome: string; frames: number };
+    /** A lighting change on the shown V lost while prepared; then a setup prepared before the loss, asked again. */
+    staged: { stage: string; restarts: number; tookOver: boolean; prepared: boolean; firstFrame: { links: number; programs: number };
+      before: { staged: boolean; tookOver: boolean; firstFrame: { links: number; programs: number } } };
+  };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
   /** Diagnostics: GL calls that blocked the page for 20 ms or more, with where they came from, and each link with the stage it ran in. */
   slow: { call: string; ms: number; stage: string; via: string }[];
@@ -81,7 +98,7 @@ export type ScenePreparationProbe = {
   baseline: Counts; closed: Counts;
 };
 const probe: ScenePreparationProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
-  cancel: null as never, setup: null as never, contextLoss: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
+  cancel: null as never, setup: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
 /** Every animation frame's time while `recording` is set (frames presented: the GPU process presents none while it builds shaders). */
@@ -150,8 +167,9 @@ try {
       context[name] = (...args: unknown[]) => { calls.uploads++; if (watchUploads && probe.firstFrameUploads.length < 20) probe.firstFrameUploads.push(`${name} ${via()}`); return original(...args); };
     }
   }
-  const contextEvents: string[] = [];
-  const device = createRendererDevice(element, { context: gl, onContext: event => contextEvents.push(event) }), renderer = device.renderer;
+  const contextEvents: string[] = [], contextTimes: number[] = [];
+  const device = createRendererDevice(element, { context: gl, onContext: event => { contextEvents.push(event); contextTimes.push(performance.now()); } }),
+    renderer = device.renderer;
   probe.parallel = renderer.extensions.has("KHR_parallel_shader_compile");
   {
     const fromScene = THREE.PMREMGenerator.prototype.fromScene;
@@ -221,6 +239,8 @@ try {
   let current = null as { key: string; stage: string } | null;
   /** Restarts the preparations reported after a lost context (`acrossContextLoss`: the programs stage again, waiting on the GPU). */
   let restarts = 0;
+  /** When each want's details preparation (`prepareDetails`) ended. */
+  const detailsSettled = new Map<string, number>();
   const ports: ConstructorParameters<typeof SceneResidency<Want, SceneRuntime>>[0] = {
     build: async (want, signal, progress) => {
       progress({ stage: "build" });
@@ -240,7 +260,7 @@ try {
         // The V's details, made ready for their first frame and placed, as the head's own preparation does.
         progress({ stage: "details", fraction: 0, waiting: "files" });
         const loaded = await runtime.details.load(want.record === "a" ? recordA : recordB, { fetcher, reuse: null, signal });
-        await runtime.prepareDetails(loaded, signal);
+        try { await runtime.prepareDetails(loaded, signal); } finally { detailsSettled.set(want.key, performance.now()); }
         signal.throwIfAborted();
         runtime.setCharacterDetails(loaded);
         progress({ stage: "details", fraction: 1 });
@@ -256,7 +276,10 @@ try {
       }
     },
     prepared: runtime => runtime.prepared(),
-    prepareShown: async (runtime, _want, signal, progress) => { await runtime.prepare({ signal, report: report => { current = { key: `shown:${report.stage}`, stage: report.stage }; progress(report); } }); },
+    prepareShown: async (runtime, _want, signal, progress) => { await runtime.prepare({ signal, report: report => {
+      if (report.stage === "programs" && report.waiting === "gpu") restarts++;
+      current = { key: `shown:${report.stage}`, stage: report.stage }; progress(report);
+    } }); },
     show: runtime => {
       const start = performance.now();
       // As the head's show connects its surface: it keeps what it was filled with, brought up to date.
@@ -491,6 +514,157 @@ try {
     for (const [runtime, key] of runtimes) if (key === d.key) made = runtime;
     for (let i = 0; i < 600 && made && made.frameTiming().frames === 0; i++) await frame();
     probe.contextLoss = { outcome, stage, restarts, frames: made ? made.frameTiming().frames : -1, events: [...contextEvents] };
+    residency.dispose();
+    await sleep(100);
+  }
+  // 8. A context lost in the middle of GPU work, each recovering (4a-v-b review).
+  {
+    const lose = gl.getExtension("WEBGL_lose_context")!;
+    const count = (event: string) => contextEvents.filter(entry => entry === event).length;
+    const waitFor = async (event: string, n: number) => { for (let i = 0; i < 300 && count(event) < n; i++) await sleep(10); };
+    /** Lose the context, wait 200 ms, restore it. */
+    const cycle = async () => {
+      const lost = count("lost"), restored = count("restored");
+      lose.loseContext(); await waitFor("lost", lost + 1); await sleep(200);
+      lose.restoreContext(); await waitFor("restored", restored + 1);
+    };
+    probe.recovery = { bands: null as never, admission: null as never, staged: null as never };
+
+    // 8a. A 2048² map's banded upload, lost after its storage and two bands. The bitmap and the texture's own image differ in colour, so
+    // the texels say which one filled it: the bitmap, when the upload starts again from it after the restore.
+    {
+      const size = 2048;
+      const paint = (colour: string) => {
+        const canvas = document.createElement("canvas"); canvas.width = canvas.height = size;
+        const context = canvas.getContext("2d")!; context.fillStyle = colour; context.fillRect(0, 0, size, size);
+        return canvas;
+      };
+      const bitmap = await createImageBitmap(paint("#3080c0"), UPLOAD_BITMAP_OPTIONS);
+      const texture = new THREE.Texture(paint("#c04020"));
+      texture.needsUpdate = true;
+      offerUploadSource(texture, bitmap);
+      const gate = gpuGate(renderer);
+      const errors: string[] = [];
+      let steps = 0;
+      gl.getError();
+      const step = async () => {
+        while (!gate.idle()) await frame();
+        const done = uploadStep(texture, renderer);
+        const error = errors.length ? Number(errors[0]!.split(":")[0]) : gl.getError();
+        steps++;
+        if (error) errors.push(`${error}:step${steps}:${done}`);
+        gate.mark();
+        return done;
+      };
+      let before = 0;
+      while (before < 3 && !(await step())) before++;
+      await cycle();
+      { const error = gl.getError(); if (error) errors.push(`${error}:restored`); }
+      let after = 1;
+      while (after < 40 && !(await step())) after++;
+      while (!gate.idle()) await frame();
+      gate.dispose();
+      const error = gl.getError();
+      const handle = (renderer.properties.get(texture) as { __webglTexture?: WebGLTexture }).__webglTexture ?? null;
+      const framebuffer = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, handle, 0);
+      const texels = [0, size / 2, size - 1].map(row => { const out = new Uint8Array(4); gl.readPixels(7, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, out); return [...out]; });
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.deleteFramebuffer(framebuffer);
+      renderer.resetState();
+      texture.dispose();
+      probe.recovery.bands = { before, after, texels, expected: [0x30, 0x80, 0xc0, 255], error, errors, closed: bitmap.width === 0 };
+    }
+
+    // 8b. A V's details lost while they wait for a link slot (with the extension; without it, while they compile): the wait ends with the
+    // context's generation, before the restore, and the V is shown once the context is back.
+    residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
+    residency.subscribe(follow);
+    const e = want("v5", "female", "a", "studio");
+    {
+      let trigger = "", viaAdmit = false;
+      const hook = (kind: string) => {
+        if (trigger || stageNow() !== `${e.key}:details`) return;
+        const stack = new Error().stack ?? "";
+        if (kind === "admission" && !stack.includes("admit")) return;
+        trigger = kind; viaAdmit = stack.includes("admit");
+        lose.loseContext();
+      };
+      const context = gl as unknown as Record<string, (...args: unknown[]) => unknown>;
+      const parameter = context.getProgramParameter!, link = context.linkProgram!;
+      // COMPLETION_STATUS_KHR: a link asked whether it is done (the link pacer's admission, with the extension).
+      context.getProgramParameter = (...args: unknown[]) => { if (args[1] === 0x91b1) hook("admission"); return parameter(...args); };
+      context.linkProgram = (...args: unknown[]) => { if (!probe.parallel) hook("compile"); return link(...args); };
+      const lost = count("lost"), restored = count("restored");
+      const toE = residency.want(e).then(() => "shown", (error: Error) => error.name);
+      for (let i = 0; i < 60_000 && !trigger; i++) await sleep(1);
+      context.getProgramParameter = parameter; context.linkProgram = link;
+      await waitFor("lost", lost + 1);
+      const lostAt = contextTimes[contextEvents.lastIndexOf("lost")] ?? NaN;
+      for (let i = 0; i < 2000 && !detailsSettled.has(e.key); i++) await sleep(1);
+      const stoppedAt = detailsSettled.get(e.key) ?? NaN;
+      await sleep(200);
+      const restoredAfterStop = count("restored") === restored;
+      lose.restoreContext(); await waitFor("restored", restored + 1);
+      const outcome = await Promise.race([toE, sleep(90_000).then(() => "timeout")]);
+      let made: SceneRuntime | undefined;
+      for (const [runtime, key] of runtimes) if (key === e.key) made = runtime;
+      for (let i = 0; i < 600 && made && made.frameTiming().frames === 0; i++) await frame();
+      probe.recovery.admission = { trigger, viaAdmit, stopMs: stoppedAt - lostAt, restoredAfterStop, outcome, frames: made ? made.frameTiming().frames : -1 };
+      await settle();
+    }
+
+    // 8c. A lighting change on the shown V, lost while it is prepared: restarted after the restore, it takes over with nothing to link. Then
+    // the setup drawn before the loss (prepared then) asked again: staged and prepared again, never drawn at once.
+    {
+      const runtime = residency.shown();
+      const key = (source: LightingSource) => JSON.stringify(source);
+      const spots = (n: number): LightingSource => ({ kind: "setup", setup: { ...studio, lights: [...studio.lights, ...Array.from({ length: n }, (_, i) => ({
+        ...studio.lights[1]!, id: `late${n}-${i}`, name: `Late ${i}`, type: "spot" as const, position: [0.6 - i * 0.3, 1.7, -0.9] as [number, number, number],
+        intensity: 1.2, angle: 0.45, penumbra: 0.3, decay: 2, distance: 0, shadows: i === 0 }))] } });
+      /** Ask `source` of the shown V; resolves once it is drawn, with the links and programs made in its first frame under it. */
+      const takeOver = async (shown: SceneRuntime, source: LightingSource, during?: () => Promise<void>) => {
+        let adopted: { links: number; programs: number; frames: number } | null = null;
+        const setSource = shown.lighting.setSource.bind(shown.lighting);
+        shown.lighting.setSource = next => {
+          if (key(next) === key(source)) adopted = { links: calls.links, programs: counter.made().program, frames: shown.frameTiming().frames };
+          setSource(next);
+        };
+        try {
+          shown.setLighting(source);
+          const staged = shown.lightingEvidence().staged;
+          await during?.();
+          for (let i = 0; i < 20_000 && !adopted; i++) await frame();
+          const took = adopted as { links: number; programs: number; frames: number } | null;
+          for (let i = 0; i < 120 && took && shown.frameTiming().frames === took.frames; i++) await frame();
+          await frame();
+          return { staged, tookOver: !!took && key(shown.lighting.source) === key(source),
+            firstFrame: { links: took ? calls.links - took.links : -1, programs: took ? counter.made().program - took.programs : -1 } };
+        } finally { shown.lighting.setSource = setSource; }
+      };
+      const none = { links: -1, programs: -1 };
+      probe.recovery.staged = { stage: "none", restarts: 0, tookOver: false, prepared: false, firstFrame: none, before: { staged: false, tookOver: false, firstFrame: none } };
+      if (runtime) {
+        const drawnBefore = runtime.lighting.source;
+        // Prepared and drawn in this generation: the game's creator rig.
+        await takeOver(runtime, lightingOf("creator"));
+        await settle();
+        let stage = "none";
+        restarts = 0;
+        const lost = await takeOver(runtime, spots(3), async () => {
+          for (let i = 0; i < 60_000 && !(residency.preparation()?.change === "shown" && residency.preparation()?.stage === "programs"); i++) await sleep(1);
+          stage = residency.preparation()?.stage ?? "none";
+          await cycle();
+        });
+        await settle();
+        Object.assign(probe.recovery.staged, { stage, restarts, tookOver: lost.tookOver, prepared: runtime.prepared(), firstFrame: lost.firstFrame });
+        // The setup drawn before the loss: its programs went with the context, so it is staged and prepared again.
+        const again = await takeOver(runtime, drawnBefore);
+        probe.recovery.staged.before = { staged: again.staged, tookOver: again.tookOver, firstFrame: again.firstFrame };
+        await settle();
+      }
+    }
     residency.dispose();
     await sleep(100);
   }

@@ -154,3 +154,26 @@ test("a preparation's own abort still ends it while the context is lost, and a f
   await expect(acrossContextLoss(context, async () => { attempts++; throw Error("A part couldn't be compiled."); })).rejects.toThrow("A part couldn't be compiled.");
   expect(attempts).toBe(1);
 });
+
+test("a renderer's context generation ends when its context is lost, already when a loss is found before its event, and a restore begins the next (4a-v-b review)", async () => {
+  const { beginContextGeneration, contextGeneration, endContextGeneration } = await import("../src/platform/scene/context-generation");
+  let lost = false;
+  const renderer = { getContext: () => ({ isContextLost: () => lost }) };
+  const first = contextGeneration(renderer);
+  expect(contextGeneration(renderer)).toBe(first);
+  expect(first.aborted).toBe(false);
+  // Lost, its event still queued: the generation ends as soon as anyone asks.
+  lost = true;
+  expect(contextGeneration(renderer).aborted).toBe(true);
+  expect(first.reason).toMatchObject({ name: "ContextLostError" });
+  endContextGeneration(renderer);
+  lost = false;
+  beginContextGeneration(renderer);
+  const second = contextGeneration(renderer);
+  expect(second).not.toBe(first);
+  expect(second.aborted).toBe(false);
+  // A renderer no device drives (no context at all) has one generation.
+  const standIn = {};
+  expect(contextGeneration(standIn)).toBe(contextGeneration(standIn));
+  expect(contextGeneration(standIn).aborted).toBe(false);
+});
