@@ -26,7 +26,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
   // CET's ImGui, stubbed: 14 px text at 7 px a character, padding and gaps of 8 px (the theme's defaults when none is given),
   // so the text width (28 em) is 392 px. Each item's row width and the cursor's height are tracked; every call is recorded.
   const STUB = `
-    local calls, rows, keyRows = {}, {}, {}
+    local calls, rows, keyRows, tops = {}, {}, {}, {}
     local x, y, same, disabled = 0, 0, false, 0
     local frameTime = 10
     local any = setmetatable({}, { __index = function(_, k) return k end })
@@ -35,6 +35,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
     ImGuiKey = setmetatable({}, { __index = function(_, k) return k end })
     -- An item starts a new row (adding its height) unless SameLine came just before it.
     local function item(kind, label, width, h)
+      tops[tostring(label)] = y
       if not same then
         x = 0
         rows[#rows + 1] = 0
@@ -54,6 +55,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
       GetFontSize = function() return 14 end,
       GetTime = function() return frameTime end,
       GetCursorPosY = function() return y end,
+      SetCursorPosY = function(v) y = v end,
       CalcTextSize = function(s) return #s * 7, 14 end,
       Button = function(label) item("button", label, #(string.gsub(label, "##.*$", "")) * 7 + 16, 22); return false end,
       SameLine = function() calls[#calls + 1] = "sameline"; same = true; x = x + 8 end,
@@ -86,7 +88,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
     end
     -- Draws one frame; answers its calls and the index of the Keys heading.
     local function draw(s)
-      calls, rows, keyRows, x, y, same = {}, {}, {}, 0, 0, false
+      calls, rows, keyRows, tops, x, y, same = {}, {}, {}, {}, 0, 0, false
       frameTime = frameTime + 1
       panel.draw(s, queue, THEME)
       local from = nil
@@ -96,6 +98,46 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
       return calls, from
     end
   `;
+
+  test("UI-221 fix 5: question, answer, info and empty content keep Pause, Stop and Keys at the same height", () => {
+    const out = run(`${STUB}
+      local s = state({ pendingAsk = { id = 1, text = "Ready?", choices = { string.rep("A", 48), string.rep("B", 48) } } })
+      local function positions()
+        draw(s)
+        return table.concat({ tops["Pause changes"], tops["Stop the bridge"], tops["Keys"] }, ",")
+      end
+      local asked = positions()
+      s.pendingAsk = nil
+      s.answeredAsk = { id = 1, text = "Ready?", label = "Done" }
+      local answered = positions()
+      s.answeredAsk = nil
+      s.latestMessage = { text = "Thanks." }
+      local info = positions()
+      local repeated = positions()
+      s.latestMessage = nil
+      local empty = positions()
+      return tostring(asked == answered and asked == info and asked == repeated and asked == empty)`);
+    expect(out).toBe("true");
+  }, 10_000); // The shared Fengari host is loaded from disk on this file's first Lua test.
+
+  test("UI-221 fix 5: a taller question grows the slot; reopening lets shorter content shrink it", () => {
+    const out = run(`${STUB}
+      local s = state({ latestMessage = { text = "A short line." } })
+      draw(s)
+      local short = s.questionSlotHeight
+      s.pendingAsk = { id = 2, text = "Ready?", choices = { string.rep("A", 48), string.rep("B", 48), string.rep("C", 48) } }
+      draw(s)
+      local tall = s.questionSlotHeight
+      s.pendingAsk = nil
+      draw(s)
+      local held = s.questionSlotHeight
+      panel.opened(s)
+      local reset = s.layoutHeight == nil and s.layoutChangedAt == nil
+      draw(s)
+      return table.concat({ tostring(tall > short), tostring(held == tall), tostring(reset), tostring(s.questionSlotHeight == short) }, ",")`);
+    expect(out).toBe("true,true,true,true");
+    expect(read("cet", "xf_runtime_bridge", "init.lua")).toMatch(/registerForEvent\("onOverlayOpen", function\(\)\s+state.overlayOpen = true\s+if panel then panel.opened\(state\) end/);
+  });
 
   test("N1: the Stop key row never runs past the window's text width, with Reset shown, and the capture prompt's line keeps its height", () => {
     const out = run(`${STUB}

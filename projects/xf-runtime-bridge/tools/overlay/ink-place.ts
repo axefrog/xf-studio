@@ -81,12 +81,12 @@ const keepInside = (r: Rect, v: Rect, gap: number): Rect => ({
 });
 
 /** One zone's way out: along the anchor's own edge first (sideways for a top or bottom anchor), then the other axis, the nearer side first. */
-function slideOut(r: Rect, z: Rect, v: Rect, gap: number, sidewaysFirst: boolean): Rect | null {
+function slideOut(r: Rect, z: Rect, v: Rect, gap: number, sidewaysFirst: boolean, start: Rect): Rect | null {
   const across = [{ ...r, x: z.x - gap - r.w }, { ...r, x: z.x + z.w + gap }].sort((a, b) => Math.abs(a.x - r.x) - Math.abs(b.x - r.x));
   const along = [{ ...r, y: z.y - gap - r.h }, { ...r, y: z.y + z.h + gap }].sort((a, b) => Math.abs(a.y - r.y) - Math.abs(b.y - r.y));
   for (const c of sidewaysFirst ? [...across, ...along] : [...along, ...across]) {
     const kept = keepInside(c, v, gap);
-    if (!zoneHit(kept, z, gap)) return kept;
+    if (Math.abs(kept.x - start.x) <= start.w && Math.abs(kept.y - start.y) <= start.w && !zoneHit(kept, z, gap)) return kept;
   }
   return null;
 }
@@ -96,7 +96,7 @@ function nudge(r: Rect, zones: readonly Rect[], v: Rect, gap: number, sidewaysFi
   for (let pass = 0; pass < 4; pass++) {
     const z = zones.find((zone) => zoneHit(out, zone, gap));
     if (!z) break;
-    const moved = slideOut(out, z, v, gap, sidewaysFirst);
+    const moved = slideOut(out, z, v, gap, sidewaysFirst, r);
     if (!moved) break;
     out = moved;
   }
@@ -108,7 +108,8 @@ function nudge(r: Rect, zones: readonly Rect[], v: Rect, gap: number, sidewaysFi
  * title row with its icon, its hint strips, measured in the game from the controller's widgets), as XFInkStyle.Avoid does:
  * the asked place when it is clear; else the panel slides out of each zone it meets along its anchor's own edge first
  * (sideways for a top or bottom anchor, so bottom_right goes left of the menu, not up over it), then the other way, up to
- * four zones; if it still meets one, the first free corner, the anchor's own side first; then kept inside the visible
+ * four zones, staying within one panel width of the starting place (UI-221 fix 4); if it still meets one, the first free
+ * corner, the anchor's own side first, with the same slide limit; then kept inside the visible
  * screen, gap apart. `how` says which.
  */
 export function avoidZones(panel: Rect, zones: readonly Rect[], visible: Rect, gap: number, anchor: string = "bottom_right"): Rect & { how: ZoneHow } {
