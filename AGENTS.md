@@ -60,7 +60,9 @@ R&D is a permanent, first-class mandate, run like a research lab beside the prod
     - Before a restart, message the agent to checkpoint (commit or record where it is) and stop.
     - Afterwards, message it again to resume. The Codex thread keeps its context.
     - A detached launch remains an option for a long run that must keep going straight through a restart.
-  - The usual rules still apply: worktrees, the memory guard, stopping only your own processes, and no nested agents without approval.
+  - **Give it its worktree** with `cwd=` in the same line, for example `[codex model=gpt-6.1-sol effort=xhigh cwd=<absolute worktree path>]`, the worktree being `%USERPROFILE%/xfs-worktrees/<slug>` as usual. That folder becomes its working folder and its writable sandbox root. Without `cwd=` only the dispatching session's folder is writable.
+  - Its sandbox can't launch programs installed under the user's AppData (the Python interpreter, and with it the memory guard). So a Codex agent implements and runs targeted tests, and the dispatching chat runs the guarded full suite before merging.
+  - The usual rules still apply: worktrees, stopping only your own processes, and no nested agents without approval.
 - **Code review.** Before a branch merges, one independent read-only review of its diff by GPT-6.1 Sol at xhigh effort is enough to catch genuine problems. Run it through `codex:agent` (`[codex model=gpt-6.1-sol effort=xhigh]`), or the Codex CLI. Fix what it finds, then merge. Keep multi-model consensus reviews for genuinely complex, risky or uncharted paths that need real due diligence first. Open findings of Medium and above live in the [code-health ledger](research/authoring/code-health.md). More than 3 open High findings pauses feature merges until the count is back within budget.
 - **Commits and pushes** to the **public** `axefrog/xf-studio` repository are authorised as coherent verified checkpoints. Never force-push over remote work.
 
