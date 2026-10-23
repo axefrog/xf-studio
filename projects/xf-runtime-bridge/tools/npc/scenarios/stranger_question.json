@@ -1,0 +1,46 @@
+{
+  "scenario": "xfs_stranger_question",
+  "title": "A stranger with a question",
+  "requires": { "classes": ["npc"], "codeware": true, "v": "on foot, out of combat, 15 m of open pavement ahead" },
+  "actors": { "stranger": { "cast": "woman_corpo", "label": "Stranger" } },
+  "steps": [
+    { "do": "npc.spawn", "who": "stranger", "ahead_m": 12, "side_m": 4, "face": "v", "out_of_view": true },
+    { "wait": "npc.spawned", "who": "stranger", "max_s": 10 },
+    { "do": "npc.move", "who": "stranger", "to": "v", "gait": "walk", "stop_m": 1.6 },
+    { "wait": "npc.arrived", "who": "stranger", "max_s": 40 },
+    { "do": "npc.turn", "who": "stranger", "to": "v" },
+    { "do": "npc.look", "who": "stranger", "at": "v" },
+    { "do": "npc.face", "who": "stranger", "expression": "interested" },
+    { "do": "npc.say", "who": "stranger", "trigger": "greeting" },
+    { "pause": 1.5 },
+    { "do": "npc.say", "who": "stranger", "style": "subtitle", "seconds": 4,
+      "text": "Sorry to bother you. You look like someone who knows the city. Is the market still open?" },
+    { "do": "npc.act", "who": "stranger", "gesture": "talk" },
+    { "wait": "npc.said", "who": "stranger", "max_s": 6 },
+    { "do": "npc.choices", "who": "stranger", "title": "Stranger", "max_s": 60,
+      "choices": ["Two blocks down, still open.", "No idea. Ask someone else."] },
+    { "wait": "npc.choice", "who": "stranger", "max_s": 62, "as": "answer" },
+    { "on": "answer", "cases": {
+        "0": [
+          { "do": "npc.face", "who": "stranger", "expression": "joy" },
+          { "do": "npc.say", "who": "stranger", "style": "subtitle", "seconds": 3, "text": "Thanks, you're a lifesaver." },
+          { "do": "npc.act", "who": "stranger", "gesture": "wave" },
+          { "wait": "npc.said", "who": "stranger", "max_s": 5 },
+          { "do": "npc.release", "who": "stranger", "how": "walk_away" }
+        ],
+        "1": [
+          { "do": "npc.face", "who": "stranger", "expression": "disgust" },
+          { "do": "npc.say", "who": "stranger", "style": "subtitle", "seconds": 3, "text": "Wow. Okay. Have a nice night." },
+          { "do": "npc.look", "who": "stranger", "off": true },
+          { "wait": "npc.said", "who": "stranger", "max_s": 5 },
+          { "do": "npc.release", "who": "stranger", "how": "walk_away" }
+        ],
+        "timeout": [
+          { "do": "npc.say", "who": "stranger", "style": "subtitle", "seconds": 3, "text": "Never mind." },
+          { "wait": "npc.said", "who": "stranger", "max_s": 5 },
+          { "do": "npc.release", "who": "stranger", "how": "walk_away" }
+        ]
+    } },
+    { "wait": "npc.released", "who": "stranger", "max_s": 30 }
+  ]
+}

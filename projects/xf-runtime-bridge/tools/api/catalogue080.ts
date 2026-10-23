@@ -10,6 +10,7 @@
 
 import type { CommandContext, CommandDef, CommandResult } from "./catalogue.ts";
 import { bool, type JsonSchema } from "./schema.ts";
+import { NPC_REFUSALS } from "./catalogue080npc.ts";
 
 type Json = Record<string, any>;
 
@@ -227,6 +228,8 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "game.saves": ["unavailable", "game_not_ready"],
   "photo.scene.set": ["not_in_photo_mode", "unavailable", "write_mismatch"],
   "overlay.state": [],
+  // NPC direction (0.8, part B): its own map, kept beside its commands (catalogue080npc.ts).
+  ...NPC_REFUSALS,
 };
 
 /**

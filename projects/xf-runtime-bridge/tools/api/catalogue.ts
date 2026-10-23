@@ -15,6 +15,7 @@
 //   write-showroom   spawns, turns and removes XF Finish Showroom's test heads and light rigs (the test profile only)
 //   write-player     moves and turns V, turns her view, crouches, draws or holsters, opens menus (0.6; the test profile only)
 //   act-player       irreversible actions in the world: using devices, dialogue, consuming (0.6; reserved, no command yet)
+//   write-npc        brings in XF actors and directs NPCs near V: walking, lines, gaze, face, gestures, dialogue choices (0.8; the test profile only)
 //   control          changes only the bridge itself (the kill switch)
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
@@ -34,6 +35,7 @@ import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showro
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
+import { COMMANDS_080_NPC } from "./catalogue080npc.ts";
 import { applyCatalogue080 } from "./catalogue080.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
 import { decodePng } from "../capture/image.ts";
@@ -48,7 +50,7 @@ const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_no
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
 
-export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "control";
+export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "write-npc" | "control";
 
 export const PERMISSIONS: Record<Permission, { label: string; description: string }> = {
   read: { label: "Look", description: "Reads what the game is doing, or takes a screenshot of its window. Changes nothing." },
@@ -88,6 +90,11 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
     label: "Move V",
     description:
       "Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile.",
+  },
+  "write-npc": {
+    label: "Direct NPCs",
+    description:
+      "Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile.",
   },
   "act-player": {
     label: "Act for V",
@@ -1750,6 +1757,8 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   ...PLAYER_COMMANDS,
   // Bridge 0.7 (research/runtime/bridge-hook-inventory.md).
   ...COMMANDS_070,
+  // Bridge 0.8: NPC direction (research/runtime/npc-direction-design.md).
+  ...COMMANDS_080_NPC,
 ]);
 
 export function findCommand(name: string): CommandDef | undefined {

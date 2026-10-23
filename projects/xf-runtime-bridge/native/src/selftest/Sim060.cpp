@@ -165,6 +165,11 @@ EventLog& Sim060::Events()
     return m_events;
 }
 
+json Sim060::PlayerNow()
+{
+    return m_ops.player();
+}
+
 void Sim060::Register()
 {
     auto& st = *m_state;
@@ -374,6 +379,21 @@ void Sim060::Register()
                                        },
                                        "bridge.handover.player_stop");
                                }
+                               // 0.8: as the plugin, every NPC the bridge directs, released in this same request.
+                               json npcsReleased = nullptr;
+                               if (*on && self->m_hooks.releaseNpcs)
+                               {
+                                   try
+                                   {
+                                       RestoreScope restoring;
+                                       npcsReleased = RunGameTask(self->m_queue, std::chrono::milliseconds(1000), [self] { return self->m_hooks.releaseNpcs(); },
+                                                                  "bridge.handover.npc_release");
+                                   }
+                                   catch (const MethodError& e)
+                                   {
+                                       npcsReleased = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
+                                   }
+                               }
                                // 0.8.2: as the plugin, the rigs go after the write gate closed, in this same request.
                                json lightsCleared = nullptr;
                                if (lights == "clear" && self->m_hooks.clearShowroom)
@@ -382,7 +402,7 @@ void Sim060::Register()
                                    lightsCleared = self->m_hooks.clearShowroom("lights");
                                }
                                return json{{"simulated", true}, {"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released},
-                                           {"lights_cleared", lightsCleared},
+                                           {"npcs_released", npcsReleased}, {"lights_cleared", lightsCleared},
                                            {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}}};
                            }});
 

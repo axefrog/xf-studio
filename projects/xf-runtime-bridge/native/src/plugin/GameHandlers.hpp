@@ -20,6 +20,14 @@ void TickBehaviours(double aDt, bool aScriptsReady);
 // Game thread, from RestoreAfterKill (RB-90): writes back the first values photo.camera.preset saw for every camera preset
 // flat it rewrote this game run (TweakDB changes outlive loads until the game restarts), then forgets them.
 void RestorePresetsAfterKill();
+// Bridge 0.8 (HandlersNpc.cpp): the npc.* methods, their game-thread tick (timers, a poll four times a second while anything
+// is held, the automatic release) and the kill switch's release of every NPC the bridge holds.
+void RegisterMethodsNpc(Dispatcher& aDispatcher);
+void TickNpc(double aDt, bool aScriptsReady);
+void RestoreNpcAfterKill();
+// Bridge 0.8 (HandlersNpc.cpp): bridge.handover's release of every NPC the bridge directs, one game-thread step after the
+// handover flag is set (npc.auto_released with reason handover): {released, hub_withdrawn, voice_lines_hidden}.
+nlohmann::json ReleaseNpcsForHandover(const std::string& aCid);
 
 // Shared with Handlers060.cpp: a redscript layer call (XFRuntimeBridge.<class>.<function>(cid, ...) -> JSON), the game-thread
 // step timeout, and a write method marked for the kill switch's restore.

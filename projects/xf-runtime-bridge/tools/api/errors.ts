@@ -2,6 +2,8 @@
 // message says what happened and the one next step; the bridge's own technical message is kept
 // separately as `detail` for logs and bug reports.
 
+import { NPC_MESSAGES } from "./errors080npc.ts";
+
 /** cause (0.8.1): for a superseded command, the code it stopped with. */
 export type PlainError = { code: string; message: string; detail?: string; cause?: string };
 
@@ -24,7 +26,7 @@ export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
     "The game is loading (or still starting), so the bridge doesn't call into it until the loaded session's player is in; nothing was called or changed. Wait with game_wait for phase gameplay, then try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
   write_class_disabled:
-    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act; inventory stays off until the maintainer allows it, and showroom, player and act are listed only by the XF test profile's build). Nothing was changed.",
+    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act, npc; inventory stays off until the maintainer allows it, and showroom, player, act and npc are listed only by the XF test profile's build). Nothing was changed.",
   write_mismatch:
     "The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again.",
   writes_paused:
@@ -180,8 +182,9 @@ const BUSY_WORDS: Record<string, string> = {
   "locomotion:CrouchDodge": "dodging from a crouch",
 };
 
-export function plainBridgeError(code: string | undefined, detail?: string): PlainError {
-  const known = code && BRIDGE_MESSAGES[code];
+export function plainBridgeError(code: string | undefined, detail?: string, method?: string): PlainError {
+  // 0.8: the npc.* methods have their own wording first (a code like too_far means something else for the showroom).
+  const known = code && ((method?.startsWith("npc.") ? NPC_MESSAGES[code] : undefined) ?? BRIDGE_MESSAGES[code]);
   const state = code === "player_busy" ? busyState(detail) : null;
   const message = state
     ? `V is busy (${BUSY_WORDS[state] ?? state}; the game's state ${state}), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play.`

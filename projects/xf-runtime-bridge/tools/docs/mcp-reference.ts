@@ -81,6 +81,13 @@ export const AREAS: readonly Area[] = [
     match: prefix("showroom"),
   },
   {
+    id: "npc-direction",
+    title: "NPC direction",
+    intro:
+      "Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, turn, place, speak (voiced, text or holocall style), look, set a face, gesture, and offer V dialogue choices whose pick comes back as an event. Releasing, the kill switch, the pause, a handover or loading a save gives everything back.",
+    match: prefix("npc"),
+  },
+  {
     id: "capture-and-the-agents-view",
     title: "Capture and the agent's view",
     intro:
@@ -130,6 +137,7 @@ const GATES: Record<Permission, string> = {
   "write-showroom": "`allow_writes = true` and `showroom` listed by name (the test profile's build lists it).",
   "write-player": "`allow_writes = true` and `player` listed by name (the test profile's build lists it).",
   "act-player": "`allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet.",
+  "write-npc": "`allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL).",
 };
 
 // --- refusal codes -----------------------------------------------------------------------------------
@@ -172,6 +180,7 @@ const CLASS_CODES: Partial<Record<Permission, string[]>> = {
   "write-save": ["bridge_save_lock", "bridge_effects_active", "saving_locked", "no_free_slot", "save_failed", "save_uncertain", "save_not_found"],
   "write-showroom": ["codeware_missing", "showroom_missing", "not_in_world", "too_far", "no_such_piece", "not_spawned_yet", "spawn_refused", "not_ready"],
   "write-player": ["in_combat", "in_vehicle", "in_scene", "player_busy", "user_took_over", "no_ground", "not_streamed", "no_path"],
+  "write-npc": ["codeware_missing", "not_in_world", "in_combat", "in_vehicle", "in_scene", "npc_unknown", "npc_lost", "not_ours", "too_far", "limit"],
 };
 
 /** Plain wording for codes the tools answer themselves (the rest come from errors.ts). */

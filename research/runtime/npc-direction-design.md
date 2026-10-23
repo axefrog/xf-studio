@@ -1,6 +1,6 @@
-# NPC direction from the runtime bridge (bridge 0.8 design)
+# NPC direction from the runtime bridge (bridge 0.8, part B)
 
-**Status: offline research and design, 30 September 2026. Nothing is built and nothing has run in game.** The ask: drive a simple NPC scenario from the runtime bridge: choose or spawn an NPC, have them walk somewhere, say something, do something, and offer V dialogue choices whose answer comes back to the session. This page holds the findings with their evidence, the proposed 0.8 command set, a first scenario, the risks, a planned session-9 card and an effort estimate. The distilled facts are on the [NPC direction knowledge page](../../knowledge/npc-direction.md); crowd reactions, voicesets and overhead barks are on [NPC reactions](../../knowledge/npc-reactions.md).
+**Status: built offline on bridge 0.8.6 (branch `claude/bridge-080-npc`, build record `0.8.6+npc`); nothing has run in game yet.** The ask: drive a simple NPC scenario from the runtime bridge: choose or spawn an NPC, have them walk somewhere, say something, do something, and offer V dialogue choices whose answer comes back to the session. Since then the Story Engine asked for stand-ins that can be shot and for staging out of V's sight ([runtime requirements](../story-engine/runtime-requirements.md) V15 and V16), which are built too (§5.4); V13, a clean stand-in for a protected NPC, is not (§5.4). This page holds the findings with their evidence, the command set as built, a first scenario, the risks, the build's state and the open questions. The in-game rows are the [NPC direction section stacked onto session 15](runtime-bridge-test-card.md#npc-direction-stacked-onto-session-15). The distilled facts are on the [NPC direction knowledge page](../../knowledge/npc-direction.md); crowd reactions, voicesets and overhead barks are on [NPC reactions](../../knowledge/npc-reactions.md).
 
 Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]** decompiled game scripts, framework or mod source; **[resource]** game or mod resources and data; **[wiki]** Modding Docs; **[runtime]** seen in game; **[hypothesis]** not yet established. Game-script citations are paths inside the decompiled bundle; installed-mod citations are paths inside the mod's folder in the mod manager (`mods/<mod name>/`).
 
@@ -9,12 +9,12 @@ Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[sour
 1. [Sources and provenance](#1-sources-and-provenance)
 2. [Feasibility at a glance](#2-feasibility-at-a-glance)
 3. [Findings](#3-findings)
-4. [Proposed 0.8 command set](#4-proposed-08-command-set)
+4. [The 0.8 command set](#4-the-08-command-set)
 5. [How it fits the bridge](#5-how-it-fits-the-bridge)
 6. [The first scenario](#6-the-first-scenario)
 7. [Risks](#7-risks)
-8. [Session-9 test card (planned only)](#8-session-9-test-card-planned-only)
-9. [Effort estimate](#9-effort-estimate)
+8. [In-game checks](#8-in-game-checks)
+9. [What is built](#9-what-is-built)
 10. [Decisions for the maintainer](#10-decisions-for-the-maintainer)
 11. [Open questions](#11-open-questions)
 
@@ -27,7 +27,7 @@ Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[sour
 | [Codeware](https://github.com/psiberx/cp2077-codeware) (MIT) | clone `v1.20.4` (`613a1cb8`); installed 1.20.5 | `DynamicEntitySystem` and `DynamicEntitySpec` (`scripts/World/*.reds`), their save and restore logic (`src/App/World/DynamicEntitySystem.cpp`), `QuestsSystem.ExecuteNode`, the `ListChoiceHubData.hubPriority` field |
 | [TweakXL](https://github.com/psiberx/cp2077-tweak-xl) | `v1.11.4` (`f8da6be`) | `$base` record cloning (`src/App/Tweaks/Declarative/Yaml/YamlReader.cpp:8`) |
 | [ArchiveXL](https://github.com/psiberx/cp2077-archive-xl) | `v1.27.3` (`5474e34`) | `localization:` kinds `onscreens`, `subtitles`, `lipmaps`, `vomaps` (`src/App/Extensions/Localization/Config.cpp:8-36`) |
-| [Appearance Menu Mod](https://github.com/MaximiliumM/appearancemenumod) (no licence file; techniques only) | clone `1.8.4-167-g5427235`; installed 2.12.5 | Its Director (NPC scripts: spawn, move, teleport, voice trigger, facial reaction, look-at, pose), companion and follow commands, workspot playback, its NPC search |
+| [Appearance Menu Mod](https://github.com/MaximiliumM/appearancemenumod) (no licence file; techniques only) | clone `1.8.4-167-g5427235`; installed 2.12.5 | Its Director (NPC scripts: spawn, move, teleport, voice trigger, facial reaction, look-at, pose), companion and follow commands, workspot playback, its NPC search; its workspot catalogue (`Release/.../AppearanceMenuMod/db.sqlite3`, table `workspots`, columns `anim_name` and `anim_rig`) for the gesture clips' names per rig |
 | [Native Interactions Framework](https://github.com/justarandomguyintheinternet/nativeInteractions) (licence asks for credit or permission before code reuse; techniques only) | clone `041f17e`; installed f1.05b | Scenes started through a quest-phase fact channel, scene patching at load (choice node ids, choice text, node refs), scene end events on the player |
 | keanuWheeze's InteractionUI Lua module, as shipped inside Immersive V Dialogue Expanded (Nexus 24377, installed 1.1.0.0) | `mods/Immersive V Dialogue Expanded/bin/x64/plugins/cyber_engine_tweaks/mods/ImmersiveVDialogueExpanded/modules/interactionUI.lua` (413 lines) | A dialogue hub with arbitrary text added to the game's own dialogue UI at run time, navigated with the player's choice keys, answered through callbacks. The same module ships in at least five other installed CET mods |
 | Dark Future (Nexus 16300) | installed 2.0.3-for-2.31 | Encounter NPCs spawned non-persistent through Codeware (`r6/scripts/Dark Future/Gameplay/DFRandomEncounterSystem.reds:511-534`); reading the last choice from the blackboard (`DFInteractionSystem.reds:405-408, 1088-1101`) |
@@ -130,7 +130,7 @@ No mod code is copied into this design; AMM, NIF and InteractionUI are studied f
 - **Saves.** Non-persistent specs never reach a save [source] Codeware (§3.1); the bridge also holds its save lock from the first spawn ([bridge design §4](runtime-bridge-design.md#4-safety-model)). Attitude changes and god mode on our own actors vanish with them; 0.8 makes no persistent change to a picked NPC.
 - **Combat and police.** Actors are friendly to V and immortal (AMM's settings [source]); a reaction preset without crime reactions keeps a stray hit from calling the police [hypothesis: which preset is quietest is N5]. Moves set `ignoreInCombat = false` and `removeAfterCombat = true` so combat takes precedence [source: the fields].
 - **Busy NPCs.** A picked NPC in a workspot, a scene, a reaction or a vehicle is refused (`npc_busy`).
-- **Kill switch, pause and handover.** Everything an NPC command holds is remembered and given back by one stop step: withdraw the hub, hide lines, cancel commands, stop workspots, remove look-ats, reset faces, delete tagged actors ([§5.3](#53-undo-kill-switch-and-load)).
+- **Kill switch, pause and handover.** Everything an NPC command holds is remembered and given back by one stop step: withdraw the hub, hide lines, cancel commands, stop workspots, remove look-ats, reset faces, delete tagged actors ([§5.3](#53-undo-kill-switch-pause-handover-and-load)).
 
 ### 3.7 Prior art
 
@@ -144,9 +144,9 @@ No mod code is copied into this design; AMM, NIF and InteractionUI are studied f
 | Immersive Food Vendors, Immersive Bartenders | Dialogue with vendors and bartenders through scenes (archives only, no scripts) | Evidence that the scene route carries custom text (`localization: subtitles:`) [resource] |
 | Immersive Rippers | Not installed; not studied | — |
 
-## 4. Proposed 0.8 command set
+## 4. The 0.8 command set
 
-A new write class **`write-npc`** (config name `npc`) gates every NPC write; like `showroom` and `player` it is listed only in the test profile's -writes build. Reads stay `read`. Every write answers `undo {method, params}` or `undo: null` with a note, logs `write.done … undo=`, takes the save lock first and is refused while writes are paused or handed over.
+A write class **`write-npc`** (config name `npc`) gates every NPC write; like `showroom` and `player` it is listed only in the test profile's -writes build. Reads stay `read`. Every write answers `undo {method, params}` or `undo: null` with a note, logs `write.done … undo=`, takes the save lock first and is refused while writes are paused or handed over. Each command's refusal codes are in the catalogue (`NPC_REFUSALS`, joined to 0.8's `REFUSALS`) and in the [MCP reference](../../projects/xf-runtime-bridge/docs/mcp-reference.md#npc-direction); their plain words are `tools/api/errors080npc.ts`. The table is the design as first proposed; what the build adds or changes is in the notes under it.
 
 | Command | Class | What it does | Undo | Refuses with |
 |---|---|---|---|---|
@@ -166,9 +166,13 @@ A new write class **`write-npc`** (config name `npc`) gates every NPC write; lik
 | `npc.release {who, how}` | write-npc | Ends an actor or a pick: stops everything the bridge holds on it; `how`: `despawn` (default for actors), `walk_away` (walks 15 m away from V, then despawns), `leave` (a pick goes back to its own AI) | — | — |
 | `npc.status` | read | The session's actors and picks with their commands, lines, hub, look-at, face, gesture and last events | — | — |
 
-**Events** (into the session stream, returned by `session.wait` with `kinds`): `npc.spawned`, `npc.arrived`, `npc.move_failed`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.lost` (streamed out or deleted by the game), `npc.died` (Codeware's `Dead` event), `npc.auto_released {reason: combat | scene | load}`.
+**Picks, as built** (the Sol review's finding 1): `npc.pick` takes only a plain passer-by of the street crowd within 30 m of V, not busy (in a workspot, fighting, hostile to V), with no protection reason; every NPC outside the crowd is refused too, because quest reservation can't be read safely (`IsQuest()` sees only a quest mark or quest items). `npc.list` marks who would be taken (`pickable`). Each poll checks a pick again, and one that becomes busy or protected is given back at once (`npc.auto_released {reason: npc_busy | npc_protected}`). A pick only ever gets a gaze, a face, lines and dialogue choices; it is never moved, placed, turned, given a gesture or a stance, or removed; its gaze, face and lines are taken back on its release, the kill switch, the pause and a handover, and a load takes the NPC itself away. `npc.place` snaps its point to streamed, walkable ground within 2 m, as the spawn does, and refuses `not_walkable` or `not_streamed` otherwise (finding 3); a turn or a placement replaces any walk or follow the actor had, so an abandoned walk never reports `npc.arrived` (finding 4).
 
-**Behaviours** (the 0.6 model: one per target, stopped by the kill switch, pause and handover): `npc.move`, `npc.follow` and `npc.choices` run as behaviours with `max_s` (move 60, follow 300, choices 120).
+**As built.** `npc.spawn` takes `at` as a point, `{ahead_m, side_m}` or `"out_of_sight"` (with `min_m`, `max_m`), `variant` (a cast's own looks; the masked casts cover the mouth), `label`, and the stance options `attitude` (friendly, neutral, hostile), `immortal` and `reactions` (quiet, game) (§5.4). `npc.turn` takes `away_from` and `hold` (the facing is kept as V or the other NPC moves). `npc.say` without `who` is a voice with no body (style `ownerless`, the one subtitle type shown without a speaker entity, or `holocall` or `subtitle` carried by V). `npc.release` takes `how: "dissolve"` with `walk` and `distance_m` (§5.4). `npc.scenario` (tools side) runs a scene file (§6). The gesture list is talk, talk_hips, wave, shrug, nod, arms_crossed, facepalm and check_phone: each clip is listed under the same name for the Woman Average and Man Average rigs in AMM's workspot catalogue (its `db.sqlite3`, table `workspots`) [resource]; the carrier that would play them is not built (§9).
+
+**Events** (into the session stream, returned by `session.wait` with `kinds`): `npc.spawned`, `npc.arrived`, `npc.blocked` (no headway for 4 s, once per stall, or a walk that can't go on), `npc.move_failed`, `npc.follow_ended`, `npc.turned`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.dissolved`, `npc.handed_back`, `npc.lost` (streamed out or deleted by the game), `npc.died` (with `kept_body` for a mortal actor), `npc.auto_released {reason: combat | scene | vehicle | not_v | paused | handover | load | kill}`.
+
+**Limits and time-outs** (kept by the NPC service's own tick rather than the 0.6 behaviour runner): `npc.move` 60 s, `npc.follow` 300 s, `npc.choices` 120 s; a dissolve has no time limit.
 
 ## 5. How it fits the bridge
 
@@ -177,7 +181,7 @@ A new write class **`write-npc`** (config name `npc`) gates every NPC write; lik
 - **redscript** `XFRuntimeBridgeNpc.reds` (module `XFRuntimeBridge`, compiled only with Codeware, like the showroom file): the registry (a `ScriptableSystem`, new per game session), spawn and release, commands and their tracking, lines, look-at, faces, gestures, and the hub. A `ScriptableSystem` tick (or the plugin's existing drain) polls command states and distances four times a second and raises events through a native, as the answers do (`XFBridge_Event`).
 - **The hub** is a redscript port of InteractionUI's technique (wrap `OnDialogsData`, `OnDialogsSelectIndex`, `OnInteractionData`; an input listener for the three choice actions; blackboard index updates). No CET Lua is needed; if N8 shows a registered listener can't see or consume the choice keys, the fallback is the bridge's CET layer observing `PlayerPuppet.OnAction`, as the module does.
 - **TweakXL data** in the -writes package only: `Character.xfs_actor_<cast>` records (`$base` a base-game crowd record, `isCrowd: false`, the chosen reaction preset, `Factions.Unaffiliated`), so no vanilla record is ever changed. The gesture carrier (`xfs\bridge\npc\gesture_carrier.ent` and its `.workspot`) is a small archive in the same test package, built with WolvenKit.
-- **Plugin**: the new class `npc`, the method table, `undo` rules in `core/Writes.cpp`, restore on kill, and the self-test host's simulated NPC layer.
+- **Plugin**: the class `npc`; one service, `core/Npc.cpp`, shared by the plugin (`plugin/HandlersNpc.cpp` fills its game steps with calls into `XFRuntimeBridgeNpc.reds`), the self-test host's simulated street (`selftest/SimNpc.cpp`) and the unit checks (`selftest/UnitTestsNpc.cpp`): the parameter checks, the refusal order, the undos, the tick and the releases. No new native: events come from the tick's poll.
 - **Tools**: catalogue entries (one definition each, so MCP, CLI and session scripts get them), `session.wait` kinds, and a **scenario runner** (§6) that executes a declarative scenario, so a scenario is data an agent or a script can write, check and replay, not code.
 
 ### 5.2 Refusal order for every NPC write
@@ -189,7 +193,9 @@ A new write class **`write-npc`** (config name `npc`) gates every NPC write; lik
 5. Distances: spawn and move targets within 30 m of V and on walkable, streamed navmesh.
 6. Limits: 3 actors, one hub, one move or follow per actor.
 
-### 5.3 Undo, kill switch and load
+### 5.3 Undo, kill switch, pause, handover and load
+
+**On bridge 0.8.6's rules.** Every npc command runs as one game-thread step, which the dispatcher checks against the kill switch, the pause and a handover on the game thread right before it runs (0.8.1, RB-122: the check `Dispatcher::RunWrite` makes for each step of a multi-step write; an npc method can't call `RunWrite` itself, because it already runs on the game thread whose queue that call waits on). The poll reads only (finding 2): the tick's forward steps, a held facing's re-turn, an actor's first moment (its attitude and god mode, `XFNpc.PrepareActor`) and a gesture's start once its carrier exists (`XFNpc.StartGesture`), each check the same gate right before they are sent (`TickInput::writesOpen`); its put-back steps (lines hidden, a hub withdrawn, a walk stopped, a release) run inside a `RestoreScope`, so nothing that gives the game back is refused. **The kill switch** releases everything in one game step in its restore (`XFNpc.ReleaseAll`, then the tag delete), after the cleanup lane. **A handover** (`bridge.handover {on: true}`, on the control pipe) releases everything in its own request, right after its flag is set, inside a `RestoreScope` (`npcs_released` in its answer, a step in `session.handover`'s); the tick releases too if it sees the flag first, and the answer still names what went. **The pause** releases on the next tick. None of the npc commands is an emergency control: the kill switch, `player_stop` and the handover already reach everything they hold.
 
 | Held by the bridge | Given back by `npc.release`, the kill switch, pause-stop and handover |
 |---|---|
@@ -201,8 +207,19 @@ A new write class **`write-npc`** (config name `npc`) gates every NPC write; lik
 | Faces | Facial reaction reset (category 0) |
 | Gestures | `StopInDevice`, carrier deleted |
 | Picks | Look, face and line only; nothing else to restore |
+| Stand-ins handed back, bodies (§5.4) | Deleted like any actor by a release, the kill switch, a handover or a load; a fight doesn't remove them |
 
 A load needs nothing: the script gate refuses from the detach, Codeware drops every non-persistent entity at world detach, and the new session's registry starts empty [source]. The save lock stays from the first spawn until a save is loaded, as for every bridge write.
+
+### 5.4 Staging for the Story Engine (V15, V16; V13 not built)
+
+From the Story Engine's [runtime requirements](../story-engine/runtime-requirements.md) (V13 to V16), what falls out of the NPC layer cheaply:
+
+- **V15, stand-ins that can be shot.** `npc.spawn {attitude, immortal, reactions}`, defaulting to today's friendly, immortal and quiet. The attitude is set towards V once the actor exists (`SetAttitudeTowards` with `AIA_Friendly`, `AIA_Neutral` or `AIA_Hostile`) and god mode is added only when `immortal` [source: the same calls AMM's Director makes]. `reactions: "game"` spawns a second TweakXL record per cast, `Character.xfs_actor_<cast>_reactive`, whose only difference is the reaction preset of the crowd base every civilian derives from (`ReactionPresets.Civilian_Neutral`) [resource], so a shot passer-by reacts as one would (flees, cowers, may bring the police) [hypothesis]. A stand-in (mortal, or not friendly) is **handed back** when a fight begins: the bridge gives back what it holds on it (lines, gaze, face, gesture, walk, its dialogue choices) and stops directing it (`npc.handed_back`; later commands refuse `npc_handed_back`), instead of removing it as it removes friendly actors; it stays watched until released. **A mortal actor's body stays** when it dies (`npc.died {kept_body: true}`; commands refuse `npc_dead`) until `npc.release` (despawn, or dissolve once V can't see it). Whether a civilian clone with a hostile attitude fights, flees or only stands is for the game [hypothesis]; a fighting stand-in needs a combat-capable base record, which is later work.
+- **V16, out of sight.** `npc.spawn {at: "out_of_sight", min_m, max_m}` (the catalogue's `out_of_sight: true`) tries a bounded list of spots (at most 24 ground probes): behind the camera first, then round to the sides, never inside the view with a 10° margin, at `min_m`, the middle and `max_m` (12 and 25 m by default) from V, each snapped to walkable human navmesh within 2 m (`FindPointInSphereOnlyHumanNavmesh`, as the spawn itself snaps) and kept only while it is still out of sight; none found refuses `no_hidden_spot`. "Out of sight" is the view test (`core/Npc.cpp InView`: the camera's forward and field of view from `GetActiveCameraWorldTransform`, `GetActiveCameraForward`, `GetActiveCameraFOV` and `GetAspectRatio`, taking the wider of the two readings of the fov's axis, which `tools/scene/camera.ts` hasn't settled), or, inside the view, static geometry between the camera and both the head and the feet (`scene.read`'s occlusion ray, `SyncRaycastByCollisionGroup` on `Static`). Out of hearing is only distance: nothing here reads the sound system. **`npc.release {how: "dissolve"}`** gives back what the actor holds, walks it 20 m from V (or, `walk: false`, leaves it where it stands) and removes it only once it is at least `distance_m` (15 by default) from V and out of her sight, so walking away dissolves the scene without a pop; it has no time limit (`despawn` removes it at once). Joining a scene mid-phase, posed, with no visible fast-forward is not built.
+- **V13, a clean stand-in for a protected NPC: not built.** The idea: clone a picked NPC's look at its place (spawn its own record with its current appearance), hide the original for the scene and show it again on release, refused on quest-reserved NPCs. Two of its mechanisms are unshown: hiding someone else's NPC without removing it (switching its mesh components off, or an appearance change, while its AI and collision stay) and holding the original's own AI in place while hidden (crowd NPCs may not take commands, open question 1). Quest reservation can't be detected safely either: `IsQuest()` reads a quest mark or quest items, and a quest can use an unmarked community NPC, so the rule would be to refuse everything except plain crowd NPCs (crowd, no protection reason, autonomous AI, not in a scene, workspot or fight). It waits for those mechanisms to be researched and checked in the game.
+
+**Dialogue choices give way to the game** (finding 8): while ours show, a door or device prompt or the game's own dialogue choices withdraw them (the wraps of `OnInteractionData` and `OnDialogsData`), the widget is redrawn without them, and the tick ends them with `npc.choice {withdrawn: true, reason: "choices_busy"}`. A pick read at the moment `max_s` runs out still counts: the tick reads a pending answer before it expires a hub (finding 5).
 
 ## 6. The first scenario
 
@@ -254,7 +271,7 @@ A load needs nothing: the script gate refuses from the detach, Codeware drops ev
 }
 ```
 
-The `greeting` trigger adds a vanilla line in the actor's own voice before the subtitle (both show; whether they read well together is a session judgement, N10). Without the gesture carrier, `npc.act` is skipped with a warning, and the scenario still runs.
+The `greeting` trigger adds a vanilla line in the actor's own voice before the subtitle (both show; whether they read well together is a session judgement). Without the gesture carrier, `npc.act` is skipped with a warning, and the scenario still runs. The runner matches a choice wait to the choices it showed last for that actor (their hub), releases every actor it spawned, refuses to spawn a name whose actor is still out, and lets the bridge's main pipe go between its polls (findings 6, 7, 9). The bundled file is `projects/xf-runtime-bridge/tools/npc/scenarios/stranger_question.json`; `npc.scenario {name: "stranger_question"}` runs it, `dry_run` checks it.
 
 ## 7. Risks
 
@@ -273,44 +290,24 @@ The `greeting` trigger adds a vanilla line in the actor's own voice before the s
 | Gesture carrier resource shape wrong | Medium | No body gesture | Built and tested offline with WolvenKit; skipped cleanly when missing |
 | Save-file contamination | Very low | A spawned actor in a save | Non-persistent flags [source], save lock, session ends by loading its save |
 
-## 8. Session-9 test card (planned only)
+## 8. In-game checks
 
-**Not scheduled; for the sitting after session 8, once 0.8 is built and passes offline.** Build: 0.8.0 -writes (`--allow-npc`), Codeware and TweakXL, the XF actor records and the gesture carrier in the test package. Place: a quiet street at night in Japantown or Kabuki with 15 m of open pavement, V on foot, a fresh manual save. Friction log throughout. Evidence per row: the bridge log slice, `npc.status` JSON, a capture at the named moment, and the event stream.
+The rows are in the test card's [NPC direction section, stacked onto session 15](runtime-bridge-test-card.md#npc-direction-stacked-onto-session-15) (about 25 minutes): spawn, place, move, follow, stop, the three kinds of line, dialogue choices, look-at, face, the scenario twice, the stand-in in a fight, the out-of-sight spawn and the dissolve, and the kill switch, the pause and the handover each tearing everything down. It also answers the open questions below that only the game can.
 
-| # | Step (the coordinator drives) | Pass when | Records |
-|---|---|---|---|
-| N1 | `npc.list {radius: 20}` | Nearby NPCs listed with record, `crowd` and `protected`; no crash on any object | JSON; which reasons appear |
-| N2 | `npc.pick` on a crowd NPC; `npc.look at v`, `npc.face joy`, `npc.say {trigger: "greeting"}`, `npc.say {text, style: "overhead"}`; `npc.release` | Head turns to V, face changes, a voiced line and a bubble show; release returns the NPC to its walk | Capture at each; whether the crowd NPC stopped walking |
-| N3 | `npc.pick` on a vendor or a quest-marked NPC | Refused `npc_protected` with the reason | JSON |
-| N4 | `npc.spawn` three casts 10 m ahead: an XF clone (`isCrowd: false`), a crowd record, a non-crowd civilian | All three appear on the ground, out of view if asked; `npc.spawned` events | Capture; spawn time |
-| N5 | `npc.move` each to V (walk), then one run | The XF clone walks with its own locomotion and stops about 1.6 m from V; `npc.arrived`; which of the others moved | Video or captures every 2 s; command states over time; the distance at arrival |
-| N6 | `npc.follow v` while the player walks 20 m, then `npc.stop` | The actor follows at its distance and stops on command | Capture |
-| N7 | `npc.say` with each style: subtitle (speaker name), overhead, holocall | Each shows as expected and hides after its time | Captures; the subtitle setting |
-| N8 | `npc.choices` with two options; the player scrolls and picks the second | The game's own widget shows the title and two options; scrolling moves the highlight; the pick returns `npc.choice {index: 1}`; no world interaction fires | Capture; event; whether the choice keys reached the listener |
-| N9 | `npc.choices` near a door or vending machine | Refused `choices_busy`, or (if shown) no device action on Apply | JSON; friction note |
-| N10 | The §6 scenario, twice (pick each answer once) | Runs end to end; reactions differ; the actor walks away and despawns | Video; event stream; timings; how the vanilla greeting and the subtitle read together |
-| N11 | `npc.act talk`, `wave` on the XF actor | The gesture plays and ends; `npc.act_done` | Capture |
-| N12 | Mid-scenario kill switch | Hub gone, lines hidden, actors deleted, look-ats off; nothing left | Capture; log |
-| N13 | Spawn an actor, then start combat nearby (or draw and fire in the air) | `npc.auto_released {reason: "combat"}`; no police | Log; wanted level |
-| N14 | Spawn an actor, then load the session's save | The actor is gone after the load; `npc.status` empty; no refusals afterwards | JSON before and after |
-| N15 | Spawn an actor, then make a manual save through `game.save` with `override_lock`, load it | The loaded save has no actor (the non-persistent flags) | Capture after the load |
+## 9. What is built
 
-## 9. Effort estimate
+| Part | State |
+|---|---|
+| P0: the class, registry, list, pick, spawn, release, status, the XF actor records, kill and load clean-up, events | Built offline |
+| P1: move, follow, turn (hold, away from), place, stop, arrival and failure events, `npc.blocked`, the automatic release on combat or a scene | Built offline |
+| P2: lines (subtitle, overhead, holocall, a voice with no body), voiceset triggers, look, face | Built offline |
+| P3: dialogue choices in the game's own widget, `session.wait` kinds | Built offline |
+| P4: gestures | The command and its eight clip names are built; **the XF gesture carrier (a WolvenKit workspot entity) is not**, so `npc.act` answers `carrier_missing` in the game until a -writes package is made with `--npc-carrier` |
+| The scenario runner and "A stranger with a question" | Built offline |
+| V15, V16 (§5.4) | Built offline |
+| V13 (§5.4) | Not built: unshown mechanisms |
 
-Agent time, offline, including tests in the self-test host and redscript lint against the 2.31 bundle with Codeware; one agent.
-
-| Part | Scope | Estimate |
-|---|---|---|
-| P0 | Class `npc`, registry, `npc.list`, `npc.pick`, `npc.spawn`, `npc.release`, `npc.status`, XF actor records, kill and load clean-up, events plumbing | 1.5 days |
-| P1 | `npc.move`, `follow`, `turn`, `place`, `stop` with command tracking, arrival and failure events, auto-release on combat or scene | 1.5 days |
-| P2 | `npc.say` (text styles, voiceset triggers), `npc.look`, `npc.face` | 1 day |
-| P3 | `npc.choices`: the hub port, input listener, blackboard handling, `session.wait` kinds, the CET fallback | 2 days |
-| P4 | `npc.act`: the XF gesture carrier (WolvenKit `.ent`/`.workspot`, a clip list per rig) and playback | 1.5-2 days |
-| Runner | The declarative scenario runner, its schema and validation, the §6 scenario as a fixture | 1 day |
-| Docs and card | Test card rows, build record, knowledge updates | 0.5 day |
-| **Total** | | **9-9.5 days** (P0-P3 plus the runner: about 7) |
-
-The in-game session is about 60 minutes. A phase-2 XF conversation template scene (a generic scene with N option slots and line slots, driven through an ArchiveXL phase and one fact channel) is a separate estimate of about 4-6 days once 0.8 has shown what the runtime route can't do.
+Offline proof: the unit checks (`xfb_selftest --unit`, `UnitTestsNpc.cpp`), the self-test's NPC run (`tools/selftest.ts`, run 7) and `tools/test/npc.test.ts` against the self-test host's street, the redscript lint with and without Codeware. The counts and hashes are in the test card's [build record](runtime-bridge-test-card.md#build-record-bridge-086npc-branch-build-not-staged).
 
 ## 10. Decisions for the maintainer
 
@@ -331,5 +328,8 @@ The in-game session is about 60 minutes. A phase-2 XF conversation template scen
 6. Does the `Holocall` subtitle style render without a call in progress?
 7. Can a workspot carrier play vanilla gesture clips on every rig we cast, and which clip names are generic enough (talk, wave, nod)?
 8. Do a vanilla voiceset line and our subtitle collide on screen, and should `npc.say` choose one or queue them?
+9. Does a civilian clone with a hostile attitude fight, flee or only stand, and does the game's reaction preset (`reactions: "game"`) bring the police when one is shot?
+10. Does the view test agree with what the player sees (the fov's axis), and does a dissolve ever remove an actor the player can still see?
+11. How can a mod hide someone else's NPC for a scene and show it again (V13), and does a crowd NPC hold its place while hidden?
 </content>
 </invoke>

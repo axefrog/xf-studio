@@ -506,7 +506,7 @@ export class CommandApi {
     if (!response.ok && (response.error?.code === "disconnected" || response.error?.code === "client_timeout") && this.connection === connection) this.disconnect();
     if (this.connection && this.inFlight === 0) this.touch();
     if (response.ok) return { ok: true, result: response.result };
-    return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message) };
+    return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message, method) };
   }
 
   /**

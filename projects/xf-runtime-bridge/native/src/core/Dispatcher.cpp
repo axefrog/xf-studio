@@ -69,6 +69,8 @@ std::string_view AccessName(Access aAccess)
         return "write-player";
     case Access::ActPlayer:
         return "act-player";
+    case Access::WriteNpc:
+        return "write-npc";
     case Access::Notify:
         return "notify";
     case Access::Control:
@@ -102,6 +104,8 @@ uint32_t WriteClassBit(Access aAccess)
         return kWritePlayer;
     case Access::ActPlayer:
         return kActPlayer;
+    case Access::WriteNpc:
+        return kWriteNpc;
     default:
         return 0;
     }
@@ -127,6 +131,8 @@ std::string_view ConfigClassName(Access aAccess)
         return "player";
     case Access::ActPlayer:
         return "act";
+    case Access::WriteNpc:
+        return "npc";
     default:
         return {};
     }

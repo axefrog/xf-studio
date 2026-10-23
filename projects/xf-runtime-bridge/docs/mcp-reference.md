@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 88 tools, 47 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 104 tools, 60 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -18,6 +18,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [World](#world) (7)
 - [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (8)
 - [XF Finish Showroom](#xf-finish-showroom) (5)
+- [NPC direction](#npc-direction) (16)
 - [Capture and the agent's view](#capture-and-the-agents-view) (6)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
@@ -30,7 +31,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 33 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 36 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 15 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -39,6 +40,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | `write-save` | Save and load the game | 5 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
 | `write-showroom` | Set up the finish showroom | 5 | Yes | Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `showroom` listed by name (the test profile's build lists it). |
 | `write-player` | Move V | 6 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
+| `write-npc` | Direct NPCs | 13 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
 | `act-player` | Act for V | 0 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
 | `control` | Stop the bridge | 5 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
 
@@ -59,6 +61,7 @@ Each class's tools also refuse at moments that class cares about:
 - **`write-save`:** [`bridge_save_lock`](#refusal-bridge-save-lock), [`bridge_effects_active`](#refusal-bridge-effects-active), [`saving_locked`](#refusal-saving-locked), [`no_free_slot`](#refusal-no-free-slot), [`save_failed`](#refusal-save-failed), [`save_uncertain`](#refusal-save-uncertain), [`save_not_found`](#refusal-save-not-found).
 - **`write-showroom`:** [`codeware_missing`](#refusal-codeware-missing), [`showroom_missing`](#refusal-showroom-missing), [`not_in_world`](#refusal-not-in-world), [`too_far`](#refusal-too-far), [`no_such_piece`](#refusal-no-such-piece), [`not_spawned_yet`](#refusal-not-spawned-yet), [`spawn_refused`](#refusal-spawn-refused), [`not_ready`](#refusal-not-ready).
 - **`write-player`:** [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`user_took_over`](#refusal-user-took-over), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`no_path`](#refusal-no-path).
+- **`write-npc`:** [`codeware_missing`](#refusal-codeware-missing), [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), `npc_unknown`, `npc_lost`, `not_ours`, [`too_far`](#refusal-too-far), `limit`.
 
 ## Connection, session and answers
 
@@ -146,7 +149,7 @@ No parameters.
 
 ### `session_handover`
 
-**Hand the game to the player.** Gives the game to the player in one step: stops every behaviour, shows photo mode's menu and cursor again if the bridge hid them, clears the showroom's light rigs if lights is clear (so the player lights the heads with photo mode's own lights), then pauses the bridge and gives V back as player_stop does (every effect the bridge put on her, such as a crouch or a glide's movement hold, lifted; any look it started ended): every change it is asked for is refused until session_resume. A line in the game says so, and the session log records it. Reads, notes and the kill switch still work.
+**Hand the game to the player.** Gives the game to the player in one step: stops every behaviour, shows photo mode's menu and cursor again if the bridge hid them, clears the showroom's light rigs if lights is clear (so the player lights the heads with photo mode's own lights), then pauses the bridge and gives V back as player_stop does (every effect the bridge put on her, such as a crouch or a glide's movement hold, lifted; any look it started ended) and releases every NPC it directs (actors removed, dialogue choices and lines taken down): every change it is asked for is refused until session_resume. A line in the game says so, and the session log records it. Reads, notes and the kill switch still work.
 
 - **Command:** `session.handover`, run by the tools (it may call the bridge several times)
 - **Permission:** Stop the bridge (`control`)
@@ -257,7 +260,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `kinds` | array of string | 1 to 9 items; each `answer`, `comment`, `note`, `behaviour`, `kill`, `handover`, `resume`, `write`, `refused` | Event kinds that end the wait (default answer and comment). |
+| `kinds` | array of string | 1 to 24 items; each `answer`, `comment`, `note`, `behaviour`, `kill`, `handover`, `resume`, `write`, `refused`, `npc.spawned`, `npc.arrived`, `npc.blocked`, `npc.move_failed`, `npc.follow_ended`, `npc.turned`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.dissolved`, `npc.handed_back`, `npc.lost`, `npc.died`, `npc.auto_released` | Event kinds that end the wait (default answer and comment). |
 | `message_id` | integer | 1 to 1000000000 | Only the answer to this question (ui_message's id) ends the wait, even one given before the call; other kinds still count. |
 | `after` | integer | 0 to 1000000000000 | Wait for events after this sequence number (session_events' next); default: the newest when the call starts. |
 | `timeout_s` | number | 1 to 600 | Give up after this many seconds, 1 to 600. Default 120. |
@@ -1301,6 +1304,288 @@ Spawn, light, turn and clear the showroom's mannequin heads for close-up finish 
 
 No parameters.
 
+## NPC direction
+
+Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, turn, place, speak (voiced, text or holocall style), look, set a face, gesture, and offer V dialogue choices whose pick comes back as an event. Releasing, the kill switch, the pause, a handover or loading a save gives everything back.
+
+### `npc_list`
+
+**List the NPCs near V.** The NPCs within radius_m of V (default 15, at most 40): each one's id (for npc_pick), record, distance and place, whether it is part of the street crowd, whether it is protected (a quest character, a companion, a vendor, police, a child, a boss, or in a story scene) with the reasons, whether it is busy (sitting or leaning somewhere, fighting, hostile to V), whether npc_pick would take it (pickable: a plain passer-by of the street crowd, not busy), and which are the session's own. Changes nothing.
+
+- **Command:** `npc.list`, the bridge method `npc.list`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`codeware_missing`](#refusal-codeware-missing)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `radius_m` | number | 1 to 40 | How far from V to look, 1 to 40 metres. Default 15. |
+| `max` | integer | 1 to 40 | At most this many, 1 to 40. Default 20. |
+
+### `npc_pick`
+
+**Pick an NPC near V.** Adopts one plain passer-by of the street crowd within 30 m of V (its id from npc_list, pickable) so the bridge can make it look at someone, change its face and say a line; it is never moved, placed, turned, given a gesture or a stance, or removed, and it keeps walking its own way. Anyone else is refused: protected NPCs (story characters, companions, vendors, police, children, bosses, anyone in a scene) and every NPC outside the street crowd (a quest may use one without marking it), and busy ones (sitting or leaning somewhere, fighting, hostile to V). A pick that becomes busy or protected later is given back at once (npc.auto_released), and its gaze, face and lines are taken back on its release, the kill switch, the pause and a handover; a load takes the NPC itself away. Answers the NPC's handle (p1, p2, ...). Changes nothing by itself.
+
+- **Command:** `npc.pick`, the bridge method `npc.pick`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), [`codeware_missing`](#refusal-codeware-missing), `npc_protected`, `npc_busy`, `npc_not_found`, [`too_far`](#refusal-too-far), `limit`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` (required) | string | 1 to 64 characters | The NPC's id from npc_list. |
+
+### `npc_status`
+
+**Read the NPCs the bridge directs.** The session's actors and picked NPCs: each one's handle, cast or record, whether it has appeared, where it is, what it is doing (walking, following, turning), its lines still showing, its gaze, face and gesture; the dialogue choices showing, if any; and the limits (3 actors, 4 picks, 30 m). Changes nothing.
+
+- **Command:** `npc.status`, the bridge method `npc.status`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+
+No parameters.
+
+### `npc_spawn`
+
+**Bring in an XF actor.** Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Needs Codeware and the -writes package's actor records.
+
+- **Command:** `npc.spawn`, the bridge method `npc.spawn`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo releases the actor (npc_release with how despawn); the kill switch and loading a save remove it too.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `cast_unknown`, [`codeware_missing`](#refusal-codeware-missing), `record_missing`, [`not_ready`](#refusal-not-ready), [`not_streamed`](#refusal-not-streamed), `not_walkable`, [`spawn_refused`](#refusal-spawn-refused), [`too_far`](#refusal-too-far), `limit`, `no_hidden_spot`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `cast` (required) | string | `woman_corpo`, `man_corpo`, `woman_nightlife`, `man_youngster`, `woman_lowlife`, `man_lowlife`, `woman_masked`, `man_masked`, `research_crowd_record`, `research_npc_base` | Which actor: woman_corpo, man_corpo, woman_nightlife, man_youngster, woman_lowlife or man_lowlife; woman_masked or man_masked wear a mask or respirator over the mouth (for lines without lip movement); research_crowd_record and research_npc_base are for the session-9 comparison only. |
+| `ahead_m` | number | -30 to 30 | Metres along V's facing (negative: behind her), -30 to 30. |
+| `side_m` | number | -30 to 30 | Metres to V's right (negative: left), -30 to 30. Default 0. |
+| `at_point` | array of number | exactly 3 items | A world point instead of ahead_m and side_m. |
+| `face` | string | matches `^(v\|[ap][0-9]{1,5})$` | Face V ("v", the default) or another NPC (its handle). |
+| `face_point` | array of number | exactly 3 items | Face this world point instead. |
+| `appearance` | string | at most 96 characters; matches `^[A-Za-z0-9_]+$` | One of the actor's appearances by name (default: the cast's own look, or random). |
+| `variant` | integer | 0 to 31 | Which of the cast's own looks (npc_status lists them per cast), from 0. Default 0. |
+| `out_of_view` | boolean | `true`, `false` | Appear only when the spot isn't on screen. |
+| `out_of_sight` | boolean | `true`, `false` | Let the bridge pick a walkable spot V can't see (outside her view, or behind static geometry), instead of ahead_m or at_point. |
+| `min_m` | number | 3 to 30 | With out_of_sight: at least this far from V, 3 to 30 m. Default 12. |
+| `max_m` | number | 3 to 30 | With out_of_sight: at most this far from V, 3 to 30 m. Default 25. |
+| `attitude` | string | `friendly`, `neutral`, `hostile` | How it stands towards V: friendly (the default), neutral or hostile. |
+| `immortal` | boolean | `true`, `false` | Whether it can't be hurt or killed (default true); false makes a mortal stand-in. |
+| `reactions` | string | `quiet`, `game` | quiet (the default: no crime or panic reactions) or game (an ordinary passer-by's own reactions). |
+| `label` | string | 1 to 40 characters | The name its lines and dialogue choices show (default Stranger). |
+
+### `npc_move`
+
+**Walk an actor somewhere.** Sends one of the bridge's actors walking (or running) to V ("v"), to another NPC (its handle) or to a world point (to_point), stopping stop_m metres short (default 1.6) and turning to face V at the end when going to V (face_v). It uses the game's own walking along walkable ground. npc.arrived follows when it gets there; npc.blocked when it makes no headway for 4 seconds (it keeps trying) or can't go on; npc.move_failed with the reason (no path, interrupted, or max_s passed, default 60). A new move replaces the last one. Picked NPCs aren't moved.
+
+- **Command:** `npc.move`, the bridge method `npc.move`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** npc_stop halts the actor where it is; it doesn't walk back.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_not_spawned`, `npc_releasing`, `not_walkable`, [`too_far`](#refusal-too-far), `no_ai`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^[ap][0-9]{1,5}$` | The actor (a1, a2, a3). |
+| `to` | string | matches `^(v\|[ap][0-9]{1,5})$` | Where to: "v" or another NPC's handle. |
+| `to_point` | array of number | exactly 3 items | A world point instead. |
+| `gait` | string | `walk`, `run`, `sprint` | How it moves: walk (default), run or sprint. |
+| `stop_m` | number | 0.3 to 10 | Stop this far short of the target, 0.3 to 10 m. Default 1.6. |
+| `face_v` | boolean | `true`, `false` | Turn to face V on arrival (default true when going to V). |
+| `max_s` | number | 1 to 60 | Give up after this many seconds, 1 to 60. Default 60. |
+
+### `npc_follow`
+
+**Have an actor follow.** One of the bridge's actors follows V (the default) or another NPC at distance_m (default 2), matching its pace, until npc_stop or max_s (default 300 seconds); npc.follow_ended says when it stopped by itself.
+
+- **Command:** `npc.follow`, the bridge method `npc.follow`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** npc_stop ends the follow where the actor is.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_not_spawned`, `npc_releasing`, [`too_far`](#refusal-too-far), `no_ai`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^[ap][0-9]{1,5}$` | The actor. |
+| `target` | string | matches `^(v\|[ap][0-9]{1,5})$` | Follow V ("v") or another NPC (its handle). |
+| `distance_m` | number | 1 to 10 | Keep this far behind, 1 to 10 m. Default 2. |
+| `gait` | string | `walk`, `run`, `sprint` | How it moves: walk (default), run or sprint. |
+| `max_s` | number | 1 to 300 | Stop following after this many seconds, 1 to 300. Default 300. |
+
+### `npc_turn`
+
+**Turn an actor.** One of the bridge's actors turns on the spot to face V ("v"), another NPC (its handle) or a world point (to_point), or turns its back on one of them (away_from, away_from_point). hold keeps that facing (turning again whenever V or the other NPC moves round it, and after a walk ends) until npc_turn with off, a new turn or its release. npc.turned follows each turn.
+
+- **Command:** `npc.turn`, the bridge method `npc.turn`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** npc_stop ends a turn where it is; a held facing's undo is npc_turn with off.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_not_spawned`, `npc_releasing`, `no_ai`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^[ap][0-9]{1,5}$` | The actor. |
+| `to` | string | matches `^(v\|[ap][0-9]{1,5})$` | Face V ("v") or another NPC (its handle). |
+| `to_point` | array of number | exactly 3 items | Face this world point instead. |
+| `away_from` | string | matches `^(v\|[ap][0-9]{1,5})$` | Turn its back on V ("v") or another NPC (its handle). |
+| `away_from_point` | array of number | exactly 3 items | Turn its back on this world point. |
+| `hold` | boolean | `true`, `false` | Keep this facing until off, a new turn or the release. |
+| `off` | boolean | `true`, `false` | Stop holding a facing (it keeps facing where it faces). |
+
+### `npc_place`
+
+**Place an actor.** Puts one of the bridge's actors at a world point within 30 m of V, facing yaw degrees if given, at once (for staging a shot, not for drama). The answer's undo puts it back where it stood.
+
+- **Command:** `npc.place`, the bridge method `npc.place`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo places the actor back where it stood.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_releasing`, [`not_streamed`](#refusal-not-streamed), `not_walkable`, [`too_far`](#refusal-too-far), `no_ai`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^[ap][0-9]{1,5}$` | The actor. |
+| `at` (required) | array of number | exactly 3 items | The world point [x, y, z]. |
+| `yaw` | number | -360 to 360 | Its facing in degrees (the game's yaw). |
+
+### `npc_stop`
+
+**Stop an actor.** Stops one of the bridge's actors walking, following or turning; it stays where it is.
+
+- **Command:** `npc.stop`, the bridge method `npc.stop`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** Nothing to undo: the actor holds its place.
+- **Refusals:** `npc_unknown`, `not_ours`, `npc_releasing`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^[ap][0-9]{1,5}$` | The actor. |
+
+### `npc_say`
+
+**Give an NPC a line.** An NPC (an actor or a picked one) says something: text (up to 200 characters) shown as a subtitle with its name (style subtitle, the default), in a bubble above its head (overhead) or in the holocall style, for seconds seconds (default from its length); and/or trigger, one of the game's own voice lines for that NPC's voice (greeting, bump, stlh_curious_grunt, coop_irritation, battlecry_curse, fear_foll, fear_beg, fear_run, danger, vehicle_bump: the voice picks the words, not us). speaker changes the name shown for this line. Without who, speaker is a voice with no body speaking to V from elsewhere: its text shows with that name and no NPC (style ownerless, the default, or holocall or subtitle). The player's subtitle settings still apply. npc.said follows when the line's time ends. hide takes a shown line down by its id.
+
+- **Command:** `npc.say`, the bridge method `npc.say`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo hides the line; a voice line can't be taken back once it plays.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `npc_lost`, `npc_handed_back`, `npc_dead`, `line_too_long`, `trigger_unknown`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` | string | matches `^[ap][0-9]{1,5}$` | The NPC speaking (leave out for a voice with no body). |
+| `speaker` | string | 1 to 40 characters | The name shown with the line (a voice with no body needs one). |
+| `text` | string | 1 to 200 characters | The line, up to 200 characters. |
+| `trigger` | string | `greeting`, `bump`, `stlh_curious_grunt`, `coop_irritation`, `battlecry_curse`, `fear_foll`, `fear_beg`, `fear_run`, `danger`, `vehicle_bump` | A vanilla voice line in the NPC's own voice. |
+| `style` | string | `subtitle`, `overhead`, `holocall`, `ownerless` | How the text shows: subtitle (default for NPCs), overhead, holocall or ownerless (default for a voice with no body). |
+| `seconds` | number | 1 to 15 | How long the text shows, 1 to 15 seconds. |
+| `hide` | string | matches `^l[0-9]{1,9}$` | Take down this line (its id from an earlier answer, such as l3) instead. |
+
+### `npc_look`
+
+**Point an NPC's gaze.** An NPC (an actor or a picked one) looks at V ("v"), another NPC (its handle) or a world point (at_point), with its eyes, head and a little of its upper body; off: true gives its gaze back.
+
+- **Command:** `npc.look`, the bridge method `npc.look`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo gives the gaze back (or to the earlier target).
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_not_spawned`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^[ap][0-9]{1,5}$` | The NPC: its handle from npc_spawn (a1, a2, ...) or npc_pick (p1, ...). |
+| `at` | string | matches `^(v\|[ap][0-9]{1,5})$` | Look at V ("v") or another NPC (its handle). |
+| `at_point` | array of number | exactly 3 items | Look at this world point instead. |
+| `off` | boolean | `true`, `false` | Stop looking. |
+
+### `npc_face`
+
+**Set an NPC's expression.** An NPC (an actor or a picked one) shows a facial expression: neutral, joy, smile, sad, surprise, aggressive, anger, interested, disinterested, disappointed, disgust, nervous, fear; off: true relaxes it again.
+
+- **Command:** `npc.face`, the bridge method `npc.face`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo gives the face back.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `npc_lost`, `npc_handed_back`, `npc_dead`, `expression_unknown`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^[ap][0-9]{1,5}$` | The NPC: its handle from npc_spawn (a1, a2, ...) or npc_pick (p1, ...). |
+| `expression` | string | `neutral`, `joy`, `smile`, `sad`, `surprise`, `aggressive`, `anger`, `interested`, `disinterested`, `disappointed`, `disgust`, `nervous`, `fear` | The expression. |
+| `off` | boolean | `true`, `false` | Relax the face again. |
+
+### `npc_act`
+
+**Play a gesture.** One of the bridge's actors plays a body gesture standing where it is: talk, talk_hips, wave, shrug, nod, arms_crossed, facepalm, check_phone, for seconds (default the gesture's own length); npc.act_done follows. Needs the XF gesture carrier, which no package carries yet: until it is built every gesture is refused (carrier_missing), and lines, faces and looks still work. Not while it walks.
+
+- **Command:** `npc.act`, the bridge method `npc.act`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo ends the gesture.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_moving`, `gesture_unknown`, `rig_unsupported`, `carrier_missing`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^[ap][0-9]{1,5}$` | The actor. |
+| `gesture` | string | `talk`, `talk_hips`, `wave`, `shrug`, `nod`, `arms_crossed`, `facepalm`, `check_phone` | The gesture. |
+| `off` | boolean | `true`, `false` | End the gesture now. |
+| `seconds` | number | 0.5 to 30 | How long it plays, 0.5 to 30 seconds. |
+
+### `npc_choices`
+
+**Offer V dialogue choices.** Shows 2 to 4 dialogue choices for V in the game's own dialogue widget, titled with the NPC's name (or title), while V stands within 4 m of that NPC and the game shows no choices or interaction prompt of its own (choices_busy otherwise). The player picks with their usual keys; the pick arrives in the event stream as npc.choice with its index and text (session_wait with kinds npc.choice returns it), or with timeout after max_s (default 120), or walked_away when V leaves. One set at a time; withdraw takes one down by its hub number.
+
+- **Command:** `npc.choices`, the bridge method `npc.choices`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo withdraws the choices.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `npc_lost`, `npc_handed_back`, `npc_dead`, `choices_busy`, `one_hub_at_a_time`, [`too_far`](#refusal-too-far), `choice_too_long`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` | string | matches `^[ap][0-9]{1,5}$` | The NPC V is talking to. |
+| `title` | string | 1 to 40 characters | The widget's title (default the NPC's name). |
+| `choices` | array of string | 2 to 4 items; each 1 to 90 characters | What V can say: 2 to 4 short lines. |
+| `max_s` | number | 5 to 120 | Take the choices down after this many seconds, 5 to 120. Default 120. |
+| `withdraw` | integer | 1 to 2147483647 | Take down the choices with this hub number (an earlier answer's hub) instead. |
+
+### `npc_release`
+
+**Release an NPC.** Ends what the bridge does with an NPC: its lines, gaze, face, gesture, walk and dialogue choices are taken back, then an actor is removed (how despawn, the default), walks 15 m away from V first and is removed there (walk_away), or walks off and is removed only once V can't see it and it is at least distance_m from her (dissolve; with walk false it stays where it is until V walks away; no time limit, and despawn removes it at once), and a picked NPC goes back to its own business (leave). who all releases everyone. npc.released follows (and npc.dissolved for a dissolve).
+
+- **Command:** `npc.release`, the bridge method `npc.release`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** Nothing to undo; spawn a new actor if wanted.
+- **Refusals:** `npc_unknown`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `who` (required) | string | matches `^(all\|[ap][0-9]{1,5})$` | The NPC's handle, or all. |
+| `how` | string | `despawn`, `walk_away`, `dissolve`, `leave` | despawn (actors, default), walk_away (actors), dissolve (actors) or leave (picked NPCs). |
+| `walk` | boolean | `true`, `false` | With dissolve: walk off first (default true). |
+| `distance_m` | number | 5 to 30 | With dissolve: removed only this far from V, 5 to 30 m. Default 15. |
+
+### `npc_scenario`
+
+**Run an NPC scene.** Runs a short NPC scene written as data (tools/npc/scenarios): name picks a bundled one (stranger_question: an XF actor walks up to V, greets her, asks a question, offers two answers and reacts to the one the player picks), or file a scene file. Each step is an npc command or a wait for an event; the player's pick decides the branch. When the scene ends, fails or is stopped, every actor it brought in is released. dry_run checks the scene and lists its steps without touching the game. Answers the steps taken, the events, the player's answer and how long each part took.
+
+- **Command:** `npc.scenario`, run by the tools (it may call the bridge several times)
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The scene releases every actor it brought in when it ends, fails or is stopped; the kill switch and loading a save do too.
+- **Refusals:** `scenario_invalid`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `name` | string | `stranger_question` | A bundled scene. |
+| `file` | string | 1 to 400 characters | A scene file (JSON) instead. |
+| `dry_run` | boolean | `true`, `false` | Check the scene and list its steps; nothing reaches the game. |
+
 ## Capture and the agent's view
 
 Screenshots from outside the game (they work without the bridge), re-crops, bursts and contact sheets, and the scene report: the agent's own view of the shot without a screenshot.
@@ -1767,7 +2052,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-unsupported"></a>`unsupported` | This game doesn't offer a safe way to do that yet. |
 | <a id="refusal-unverified-index"></a>`unverified_index` | That face table index matches an expression only by its place in the list, which isn't reliable with an expression pack installed, so nothing was applied. Use an index photo_state found by name (table_index_verified), or pass force: true to apply it anyway. |
 | <a id="refusal-user-took-over"></a>`user_took_over` | The player took over (their own movement, jump, crouch, sprint, dodge, mouse or stick), so the glide or look stopped and gave V back. Nothing more was changed. Start it again once the player has let go. |
-| <a id="refusal-write-class-disabled"></a>`write_class_disabled` | This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act; inventory stays off until the maintainer allows it, and showroom, player and act are listed only by the XF test profile's build). Nothing was changed. |
+| <a id="refusal-write-class-disabled"></a>`write_class_disabled` | This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act, npc; inventory stays off until the maintainer allows it, and showroom, player, act and npc are listed only by the XF test profile's build). Nothing was changed. |
 | <a id="refusal-write-mismatch"></a>`write_mismatch` | The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again. |
 | <a id="refusal-writes-disabled"></a>`writes_disabled` | Changing the game is switched off in this setup. It is allowed only in the dedicated test profile, where the bridge's config.ini has allow_writes = true. |
 | <a id="refusal-writes-paused"></a>`writes_paused` | Changes are paused in the game's XF Runtime Bridge window (Cyber Engine Tweaks overlay). Nothing was changed. Resume them there to continue. |
@@ -1775,4 +2060,4 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 
 Codes the tools above name that have no shared wording yet; the answer's own message (from the tools) or its `detail` (from the game) explains each in context:
 
-`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `framing_bound`, `interrupted`, `key_unsupported`, `no_capture`, `no_projection`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_found`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `too_many`, `too_many_pins`, `tweakxl_missing`, `wait_timeout`.
+`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_projection`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `wait_timeout`.

@@ -7,6 +7,7 @@
 import type { CommandContext, CommandDef, CommandResult } from "./catalogue.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { point3 } from "./catalogue060.ts";
+import { NPC_WAIT_KINDS } from "./catalogue080npc.ts";
 import { HOLSTER_FIRST, runCyberwareChange } from "./catalogue080.ts";
 
 type Json = Record<string, any>;
@@ -48,7 +49,8 @@ const recordName = (description: string): JsonSchema => str(description, { patte
 
 // --- session.wait -----------------------------------------------------------------------------------
 
-export const WAIT_KINDS = ["answer", "comment", "note", "behaviour", "kill", "handover", "resume", "write", "refused"] as const;
+// 0.8: the npc.* events too (npc.choice brings the player's pick from npc_choices).
+export const WAIT_KINDS = ["answer", "comment", "note", "behaviour", "kill", "handover", "resume", "write", "refused", ...NPC_WAIT_KINDS] as const;
 
 /**
  * session.wait (0.7): blocks until the session's event stream has an event of the given kinds, then answers those events.

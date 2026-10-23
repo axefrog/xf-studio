@@ -276,6 +276,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             const double dt = std::chrono::duration<double>(now - last).count();
             last = now;
             TickBehaviours(dt, scriptsReady);
+            TickNpc(dt, scriptsReady); // 0.8: NPC direction's timers, poll and automatic release (plugin/HandlersNpc.cpp)
         }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
         // write can run after this undo; RestoreOnce runs it here directly, once, after a write,

@@ -9,6 +9,10 @@
 //   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
 //   r6/tweaks/XFRuntimeBridge/^xf_photo_mode_presets.yaml (TweakXL; diagnostic and writes packages only; the
 //                                                         "^" makes TweakXL read it last, after other mods' presets)
+//   r6/tweaks/XFRuntimeBridge/xf_npc_actors.yaml         (TweakXL; writes package only: the XF actor records npc.spawn
+//                                                         brings in, clones of base-game civilians, 0.8)
+//   archive/pc/mod/xfs_bridge_npc_gestures.archive       (writes package only, when built: the XF gesture carrier for
+//                                                         npc.act, --npc-carrier; not built yet, 0.8)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/init.lua   (CET; 0.8.2: the folder's name is CET's mod name,
 //                                                                          so its Bindings tab heads it "XF Runtime Bridge")
 //   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/panel.lua  (CET panel; diagnostic and writes packages only)
@@ -55,6 +59,10 @@ export const STAGING_NOTES: readonly string[] = [
  */
 export const CET_MOD_NAME = "XF_Runtime_Bridge";
 export const CET_DIR = `bin/x64/plugins/cyber_engine_tweaks/mods/${CET_MOD_NAME}`;
+/** 0.8: the XF actor records (TweakXL), in the -writes package only. */
+export const NPC_ACTORS_FILE = "r6/tweaks/XFRuntimeBridge/xf_npc_actors.yaml";
+/** 0.8: the XF gesture carrier's archive (npc.act), in the -writes package only and only when it has been built. */
+export const NPC_CARRIER_ARCHIVE = "archive/pc/mod/xfs_bridge_npc_gestures.archive";
 export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 export const THEME_FILE = `${CET_DIR}/theme.lua`;
 
@@ -102,11 +110,14 @@ function listFiles(dir: string): string[] {
 /** The variant's config.ini, from the project's (which must keep every switch off). */
 /**
  * The -writes package's write classes: inventory only with --allow-inventory (the maintainer's approval); showroom (XF Finish
- * Showroom's test heads and lights, bridge 0.5) and player (0.6: teleport, look, crouch, weapons, menus, glides) in every
- * -writes build, which only the dedicated test profile stages. act (irreversible actions for V) stays off: no command uses it yet.
+ * Showroom's test heads and lights, bridge 0.5), player (0.6: teleport, look, crouch, weapons, menus, glides) and npc (0.8: XF
+ * actors and NPC direction) in every -writes build, which only the dedicated test profile stages. act (irreversible actions
+ * for V) stays off: no command uses it yet.
  */
 export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
-  options.allowInventory ? ["photo", "world", "character", "inventory", "save", "showroom", "player"] : ["photo", "world", "character", "save", "showroom", "player"];
+  options.allowInventory
+    ? ["photo", "world", "character", "inventory", "save", "showroom", "player", "npc"]
+    : ["photo", "world", "character", "save", "showroom", "player", "npc"];
 
 /** The [bridge] section's enabled line (after the section's comment lines). */
 const BRIDGE_ENABLED = (on: boolean) => new RegExp(`^\\[bridge\\]\\n(?:;.*\\n)*enabled = ${on}$`, "m");
@@ -173,6 +184,8 @@ export type StageOptions = {
   allowInventory?: boolean;
   /** 0.8.7, -writes only: the companion probe (build/Release/xfb_companion_probe.exe beside the DLL unless given). */
   companion?: string;
+  /** -writes only (0.8): the built XF gesture carrier archive to include (--npc-carrier; not built yet); none when absent. */
+  npcCarrier?: string;
 };
 
 export type StagedFile = { path: string; bytes: number; sha256: string };
@@ -196,6 +209,10 @@ export type Manifest = {
   cet_panel: boolean;
   /** 0.7: whether the XF overlay host is on ([overlay] enabled): the test packages only. */
   overlay_host: boolean;
+  /** 0.8: whether the XF actor records (npc.spawn) are in the package: the -writes package only. */
+  npc_actors: boolean;
+  /** 0.8: whether the XF gesture carrier (npc.act) is in the package; without it gestures are refused carrier_missing. */
+  npc_gesture_carrier: boolean;
   /** 0.8: whether the XF box shows its diagnostic lines ([overlay] diagnostics): the diagnostic package only. */
   overlay_diagnostics: boolean;
   commit: string;
@@ -241,6 +258,10 @@ export function stageVariant(options: StageOptions): Manifest {
     }
     put(options.companion ?? join(dirname(dll), COMPANION_FILE), `${PLUGIN_DIR}/${COMPANION_FILE}`);
   }
+  // 0.8: the XF actor records and (when built) the gesture carrier: the test profile's -writes package only.
+  if (variant === "writes") put(join(projectDir, "tweaks", "test-profile", "xf_npc_actors.yaml"), NPC_ACTORS_FILE);
+  const carrier = variant === "writes" && options.npcCarrier ? options.npcCarrier : undefined;
+  if (carrier) put(carrier, NPC_CARRIER_ARCHIVE);
 
   const files = listFiles(stageDir).map((path) => ({
     path: relative(stageDir, path).replaceAll("\\", "/"),
@@ -263,6 +284,8 @@ export function stageVariant(options: StageOptions): Manifest {
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",
     overlay_host: variant !== "default",
+    npc_actors: variant === "writes",
+    npc_gesture_carrier: carrier !== undefined,
     overlay_diagnostics: variant === "diagnostic",
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
@@ -272,7 +295,7 @@ export function stageVariant(options: StageOptions): Manifest {
       redscript: "0.5.31",
       cet: "1.37.1",
       tweakxl: "1.11.4 (optional; the data marker and the test profile's camera presets need it)",
-      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather and Equipment-EX's route need it)",
+      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather, Equipment-EX's route and NPC direction need it)",
     },
     files,
   };

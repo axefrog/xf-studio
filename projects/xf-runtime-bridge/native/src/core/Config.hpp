@@ -23,6 +23,7 @@ inline constexpr uint32_t kWriteSave = 16;     // manual saves and loading
 inline constexpr uint32_t kWriteShowroom = 32; // XF Finish Showroom props and light rigs (showroom.*); the test profile only
 inline constexpr uint32_t kWritePlayer = 64;   // 0.6: reversible player changes (player.*, behaviours that move V); "player"
 inline constexpr uint32_t kActPlayer = 128;    // 0.6: irreversible actions in the world (devices, dialogue, consuming); "act"
+inline constexpr uint32_t kWriteNpc = 256;     // 0.8: NPC direction (npc.*: XF actors, commands, lines, gestures, choices); "npc", test profile only
 
 // 0.8.5: the game's own new-message sound (MessengerDialogViewController plays it through AudioSystem.Play when a message
 // arrives in an open conversation; 2.31 scripts).

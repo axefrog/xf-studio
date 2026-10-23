@@ -133,6 +133,21 @@ json BridgeHandover(const MethodContext& aContext)
             released = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
         }
     }
+    // 0.8: every NPC the bridge directs, released in this same request once writes are refused (its lines, look, face,
+    // gesture, walk and dialogue choices given back, its actors removed), so the player has the street to themselves.
+    json npcsReleased = nullptr;
+    if (*on)
+    {
+        try
+        {
+            RestoreScope restoring;
+            npcsReleased = ReleaseNpcsForHandover(aContext.cid);
+        }
+        catch (const MethodError& e)
+        {
+            npcsReleased = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
+        }
+    }
     json lightsCleared = nullptr;
     if (lights == "clear")
     {
@@ -149,7 +164,7 @@ json BridgeHandover(const MethodContext& aContext)
             lightsCleared = json{{"error", e.code}, {"message", e.what()}};
         }
     }
-    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released}, {"lights_cleared", lightsCleared},
+    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released}, {"npcs_released", npcsReleased}, {"lights_cleared", lightsCleared},
                 {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}},
                 {"undo_note", *on ? "bridge.handover {on: false} (session.resume) gives the bridge its writes back; what the handover lifted from V stays lifted" : "bridge.handover {on: true} hands over again"}};
 }

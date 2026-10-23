@@ -38,6 +38,7 @@
 #include "core/Writes.hpp"
 #include "selftest/Sim060.hpp"
 #include "selftest/Sim070.hpp"
+#include "selftest/SimNpc.hpp"
 
 #include <functional>
 #include <limits>
@@ -445,6 +446,8 @@ int wmain(int argc, wchar_t** argv)
     sim.codeware = codeware;
     // Bridge 0.6's simulated world (selftest/Sim060.cpp): scene.read, the handover, behaviours, player control, input.probe.
     static std::unique_ptr<xfb::selftest::Sim060> sim060;
+    // Bridge 0.8's simulated street for npc.* (selftest/SimNpc.cpp).
+    static std::unique_ptr<xfb::selftest::SimNpc> simNpc;
     static xfb::writes::RestoreOnce restore;
     // 0.8.4: test.save.delay's one-shot hold of the next simulated save.
     static std::atomic<int32_t> simSaveHoldMs{0};
@@ -2121,6 +2124,10 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              held.push_back(hold);
                                          }
+                                         for (const auto& hold : simNpc ? simNpc->Holds() : json::array())
+                                         {
+                                             held.push_back(hold); // 0.8: XF actors (XFGame.BridgeHolds' NPC line)
+                                         }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
                                          {
@@ -2162,6 +2169,10 @@ int wmain(int argc, wchar_t** argv)
                                          for (const auto& hold : xfb::selftest::Sim070Holds())
                                          {
                                              held.push_back(hold);
+                                         }
+                                         for (const auto& hold : simNpc ? simNpc->Holds() : json::array())
+                                         {
+                                             held.push_back(hold); // 0.8: XF actors (XFGame.BridgeHolds' NPC line)
                                          }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
@@ -2561,6 +2572,10 @@ int wmain(int argc, wchar_t** argv)
             sim.wardrobeSnapshot = nullptr;
         }
         xfb::selftest::Sim070RestoreAfterKill(out); // 0.7: a weather the bridge held
+        if (simNpc)
+        {
+            simNpc->RestoreAfterKill(out); // 0.8: every NPC the bridge directs
+        }
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
         sim.hudHidden = false;
@@ -2628,6 +2643,8 @@ int wmain(int argc, wchar_t** argv)
             out["what"] = aWhat;
             return out;
         };
+        // 0.8: the handover releases every NPC the bridge directs (simNpc is made below, before the bridge starts).
+        hooks.releaseNpcs = [] { return simNpc ? simNpc->ReleaseForHandover() : json(nullptr); };
         sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
         sim060->Register();
     }
@@ -2650,6 +2667,38 @@ int wmain(int argc, wchar_t** argv)
         hooks070.killed = [&bridge] { return bridge.GetDispatcher().IsKilled(); };
         hooks070.weaponDrawn = [] { return sim060 && sim060->WeaponDrawn(); };
         xfb::selftest::RegisterSim070(dispatcher, queue, config, std::move(hooks070));
+    }
+    {
+        // Bridge 0.8's NPC direction against a simulated street (selftest/SimNpc.cpp), with the plugin's shared service.
+        xfb::selftest::SimNpcHooks hooksNpc;
+        hooksNpc.phase = [] {
+            std::scoped_lock _(sim.mutex);
+            return sim.phase;
+        };
+        hooksNpc.player = [] { return sim060->PlayerNow(); };
+        hooksNpc.markWrite = [] { restore.MarkWrite(); };
+        hooksNpc.takeSaveLock = [] {
+            std::scoped_lock _(sim.mutex);
+            sim.gameSaveLock = true;
+        };
+        hooksNpc.scriptsReady = [] { return simLayer.Ready(); };
+        hooksNpc.detaches = [] { return simLayer.Describe().value("detaches", uint64_t{0}); };
+        hooksNpc.killed = [&dispatcher] { return dispatcher.IsKilled(); };
+        hooksNpc.paused = [&dispatcher] { return dispatcher.WritesPaused(); };
+        hooksNpc.handedOver = [&dispatcher] { return dispatcher.HandedOver(); };
+        hooksNpc.writesOpen = [&dispatcher] {
+            try
+            {
+                dispatcher.RequireWritesOpen();
+                return true;
+            }
+            catch (const xfb::MethodError&)
+            {
+                return false;
+            }
+        };
+        hooksNpc.events = &sim060->Events();
+        simNpc = std::make_unique<xfb::selftest::SimNpc>(dispatcher, std::move(hooksNpc));
     }
 
     if (!bridge.Start(error))
@@ -2710,6 +2759,7 @@ int wmain(int argc, wchar_t** argv)
                 static auto last = std::chrono::steady_clock::now();
                 const auto now = std::chrono::steady_clock::now();
                 sim060->Tick(std::chrono::duration<double>(now - last).count());
+                simNpc->Tick(std::chrono::duration<double>(now - last).count()); // 0.8: the plugin's TickNpc
                 last = now;
             }
             {
@@ -2762,6 +2812,7 @@ int wmain(int argc, wchar_t** argv)
                 {
                     simLayer.OnDetach();
                     sim060->OnDetach();
+                    simNpc->OnDetach(); // Codeware drops non-persistent entities with the world
                 }
                 else if (sim.loadTicks == 2)
                 {
