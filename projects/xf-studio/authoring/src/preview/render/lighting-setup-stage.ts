@@ -15,6 +15,7 @@ import { createStudioEnvironment, type StudioEnvironment } from "./studio-enviro
 import { DEFAULT_STUDIO_STAGE } from "../studio-lighting";
 import { resolveLightingSource, studioStageSetup, type LightingSetup, type LightingSource, type SetupLight } from "../lighting-setups";
 import { applyRendererState, SCENE_RENDERER_STATE, type RendererState } from "../../platform/scene/renderer-state";
+import { linkedPrograms, releaseShadersWithPrograms, type LinkedProgram } from "../../materials/render/linked-programs";
 
 /** What the lighting device reports (read-only; the presentation turns it into plain text). `preset` is the shown setup's display. */
 export type LightingStageStatus = {
@@ -255,11 +256,18 @@ export function createLightingSetupStage(options: {
    * The depth material Three's shadow pass (WebGLShadowMap `getDepthMaterial`, three r186) draws `mesh` with for `material` under a
    * directional or spot light, with the fields that pass sets on it: the mesh's own `customDepthMaterial`, else the default depth
    * material or a per-material variant of it (alpha-tested, displaced or clipped materials). Every field it copies is part of a program key.
+   * A mesh's own `customDepthMaterial` is live (the contact prepass draws with it): its fields as they were go to `touched` before the
+   * first write, so the caller puts every one back once it has compiled (`restoreTouched`) and compiling ahead changes nothing drawn.
    */
-  function shadowDepthMaterial(mesh: THREE.Mesh, material: THREE.Material): THREE.Material {
+  function shadowDepthMaterial(mesh: THREE.Mesh, material: THREE.Material, touched: Map<THREE.Material, Record<string, unknown>>): THREE.Material {
     const source = material as THREE.MeshStandardMaterial & { clipShadows?: boolean; linewidth?: number; wireframeLinewidth?: number };
     let result = mesh.customDepthMaterial as THREE.MeshDepthMaterial | undefined;
-    if (!result) {
+    if (result) {
+      if (!touched.has(result)) {
+        const fields = result as unknown as Record<string, unknown>;
+        touched.set(result, Object.fromEntries(DEPTH_FIELDS.map(field => [field, fields[field]])));
+      }
+    } else {
       const variant = (renderer.localClippingEnabled && source.clipShadows === true && Array.isArray(source.clippingPlanes) && source.clippingPlanes.length !== 0)
         || (!!source.displacementMap && source.displacementScale !== 0) || (!!source.alphaMap && source.alphaTest > 0) || (!!source.map && source.alphaTest > 0)
         || source.alphaToCoverage === true;
@@ -349,6 +357,8 @@ export function createLightingSetupStage(options: {
      */
     prepare(object: THREE.Object3D, camera: THREE.Camera): { ready: Promise<void>; textures: THREE.Texture[]; programs(): LinkedProgram[] } {
       const pending: Promise<unknown>[] = [], materials = new Set<THREE.Material>();
+      /** The meshes' own depth materials as they were before a shadow variant was compiled with them (`shadowDepthMaterial`). */
+      const touched = new Map<THREE.Material, Record<string, unknown>>();
       const meshes: THREE.Mesh[] = [];
       object.traverse(child => { if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh); });
       // Compiled with this scene's state: Three keys a program on the tone mapping, output colour space and shadow switches, and on
@@ -379,14 +389,17 @@ export function createLightingSetupStage(options: {
           renderer.setRenderTarget(target ?? depthTarget());
           for (const mesh of meshes) if (mesh.castShadow) {
             for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-              if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material));
+              if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material, touched));
             }
             // The maps are redrawn inside the contact prepass too (its draw is the frame's first, while every caster wears its depth
             // material), so Three's shadow pass then picks a depth material for the depth material itself: that variant as well.
-            if (contactOn) compileAs(mesh, shadowDepthMaterial(mesh, contact.casterMaterial(mesh)));
+            if (contactOn) compileAs(mesh, shadowDepthMaterial(mesh, contact.casterMaterial(mesh), touched));
           }
         }
-      } finally { renderer.setRenderTarget(previous); }
+      } finally {
+        renderer.setRenderTarget(previous);
+        restoreTouched(touched);
+      }
       const textures = new Set<THREE.Texture>();
       const collect = (value: unknown) => {
         if ((value as THREE.Texture | null)?.isTexture) textures.add(value as THREE.Texture);
@@ -471,43 +484,16 @@ export function createLightingSetupStage(options: {
 }
 export type LightingSetupStage = ReturnType<typeof createLightingSetupStage>;
 
-/**
- * A program Three linked: its first use reads its uniforms and attributes back from the driver (a synchronous round trip that waits
- * for whatever the GPU still has queued), which a caller preparing ahead takes between frames instead of inside the first frame.
- */
-export type LinkedProgram = { getUniforms(): unknown; getAttributes(): unknown;
-  /** Whether the driver has finished linking it, asked without waiting (true at once without KHR_parallel_shader_compile). */
-  isReady?(): boolean };
-/** Every program Three holds for `materials` (a transparent two-sided material has one per side). */
-export function linkedPrograms(renderer: THREE.WebGLRenderer, materials: Iterable<THREE.Material>): LinkedProgram[] {
-  const programs = new Set<LinkedProgram>();
-  for (const material of materials) {
-    const owned = (renderer.properties.get(material) as { programs?: Map<string, LinkedProgram> }).programs;
-    for (const program of owned?.values() ?? []) programs.add(program);
+/** Every field `shadowDepthMaterial` sets on a depth material, as Three's shadow pass sets them. */
+const DEPTH_FIELDS = ["visible", "wireframe", "side", "alphaMap", "alphaTest", "map", "clipShadows", "clippingPlanes", "clipIntersection",
+  "displacementMap", "displacementScale", "displacementBias", "wireframeLinewidth", "linewidth"] as const;
+/** Put back what compiling a shadow variant wrote on live depth materials (only the fields that differ: `alphaTest` bumps a version). */
+function restoreTouched(touched: Map<THREE.Material, Record<string, unknown>>) {
+  for (const [material, fields] of touched) {
+    const target = material as unknown as Record<string, unknown>;
+    for (const [field, value] of Object.entries(fields)) if (target[field] !== value) target[field] = value;
   }
-  return [...programs];
-}
-
-/** Programs whose release frees their shaders too (`releaseShadersWithPrograms`). */
-const shaderOwners = new WeakSet<object>();
-/**
- * Programs compiled ahead may be released without ever being drawn (a preparation superseded, a part let go before it showed). Three
- * deletes a program's shaders at its first use only, so a program released unused would leave both shaders on the driver for good (three
- * r186 `WebGLProgram.destroy`). Their release deletes them too: deleting a shader already deleted at first use does nothing.
- */
-export function releaseShadersWithPrograms(renderer: THREE.WebGLRenderer, programs: Iterable<LinkedProgram>): void {
-  const gl = renderer.getContext();
-  for (const program of programs) {
-    const owned = program as LinkedProgram & { destroy?: () => void; vertexShader?: WebGLShader; fragmentShader?: WebGLShader };
-    if (shaderOwners.has(owned) || typeof owned.destroy !== "function") continue;
-    shaderOwners.add(owned);
-    const destroy = owned.destroy.bind(owned);
-    owned.destroy = () => {
-      if (owned.vertexShader) gl.deleteShader(owned.vertexShader);
-      if (owned.fragmentShader) gl.deleteShader(owned.fragmentShader);
-      destroy();
-    };
-  }
+  touched.clear();
 }
 
 /**

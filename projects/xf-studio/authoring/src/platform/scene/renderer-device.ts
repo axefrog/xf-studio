@@ -96,11 +96,18 @@ export function createRendererDevice(host: HTMLElement, options: RendererDeviceO
   releases.push(() => scheduler.dispose());
   // Pointer and wheel input on the canvas (hover highlights, handle drags) and a restored context draw the shown runtime.
   releases.push(bindRenderTriggers(invalidate, { element: canvas }));
+  // The context's lifetime as a signal: it aborts when the context is lost, and a new one starts once it is restored (work on the GPU in
+  // flight across a loss, such as a preparation's links, stops on it and starts again after the restore).
+  const contextLostError = () => new DOMException("The WebGL context was lost.", "ContextLostError");
+  let life = new AbortController();
+  const waiting = new Set<() => void>();
   const restored = () => {
+    life = new AbortController();
     options.onContext?.("restored");
     for (const entry of [...entries]) entry.scene.contextRestored();
+    for (const resume of [...waiting]) resume();
   };
-  const lost = () => options.onContext?.("lost");
+  const lost = () => { life.abort(contextLostError()); options.onContext?.("lost"); };
   canvas.addEventListener("webglcontextrestored", restored);
   canvas.addEventListener("webglcontextlost", lost);
   releases.push(() => { canvas.removeEventListener("webglcontextrestored", restored); canvas.removeEventListener("webglcontextlost", lost); });
@@ -167,6 +174,25 @@ export function createRendererDevice(host: HTMLElement, options: RendererDeviceO
       const entry = slot ? slots.get(slot) : null;
       if (slot && (!entry || !entries.has(entry))) throw Error("That scene isn't on this renderer device.");
       show(entry ?? null);
+    },
+    /**
+     * A signal for the context as it is now: it aborts (a `ContextLostError`) when the context is lost, and is aborted already while it is
+     * lost. Work that holds GPU objects across frames stops on it; `contextReady` says when to start again.
+     */
+    contextSignal(): AbortSignal {
+      return renderer.getContext().isContextLost() && !life.signal.aborted ? AbortSignal.abort(contextLostError()) : life.signal;
+    },
+    /** Resolves once the context is usable (at once when it is; after a restore, once every runtime restored its own); rejects with `signal.reason` once aborted. */
+    contextReady(signal?: AbortSignal): Promise<void> {
+      if (!renderer.getContext().isContextLost() && !life.signal.aborted) return Promise.resolve();
+      return new Promise<void>((resolve, reject) => {
+        const done = () => { waiting.delete(resume); signal?.removeEventListener("abort", aborted); };
+        const resume = () => { done(); resolve(); };
+        const aborted = () => { done(); reject(signal!.reason); };
+        if (signal?.aborted) { reject(signal.reason); return; }
+        waiting.add(resume);
+        signal?.addEventListener("abort", aborted, { once: true });
+      });
     },
     /** Frames drawn, requests and recent frame timings for the device's loop; `running: false` means it draws nothing now. */
     stats: (): RenderStats => scheduler.stats(),

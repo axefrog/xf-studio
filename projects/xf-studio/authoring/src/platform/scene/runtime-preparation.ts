@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { LinkedProgram } from "../../preview/render/lighting-setup-stage";
+import type { LinkedProgram } from "../../materials/render/linked-programs";
 import { uploadTexture } from "../../character/render/character-detail-loader";
 import { PREPARE_FRAME_MS } from "./character-renderer";
 
@@ -19,7 +19,8 @@ import { PREPARE_FRAME_MS } from "./character-renderer";
  *    never shows it. A fence then waits for the GPU to finish it.
  *
  * Every step checks the signal: an abort stops at the next step and rejects with `signal.reason` (links already sent finish on the
- * driver's threads either way). Progress goes to `report` as the stage, how far into it, and what it waits on.
+ * driver's threads either way). Progress goes to `report` as the stage, how far into it, and what it waits on. A lost context is one
+ * such abort: `acrossContextLoss` runs the preparation under the context's signal and starts it again after the restore.
  */
 export type RuntimePreparationStage = "programs" | "textures" | "warm-up";
 export type RuntimePreparationReport = { stage: RuntimePreparationStage; fraction: number; waiting: "driver" | "gpu" | null };
@@ -146,4 +147,32 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   check();
   report("warm-up", 1);
   return { programs: programs.length, uploads, frames, parallel, warmedUp };
+}
+
+/** The renderer device's view of its context (renderer-device.ts `contextSignal`, `contextReady`). */
+export type PreparationContext = {
+  /** Aborts when the context is lost (aborted already while it is lost). */
+  contextSignal(): AbortSignal;
+  /** Resolves once the context is usable again and every runtime restored its own; rejects with `signal.reason` once aborted. */
+  contextReady(signal?: AbortSignal): Promise<void>;
+};
+
+/**
+ * Run a preparation (`attempt`) so that a lost context never leaves it waiting for good: a program compiled before the loss holds a handle
+ * the restored context doesn't know, and its link never completes. Each attempt runs under the context's own signal as well as the
+ * caller's, so a loss stops it at its next step, dropping every program it held; once the context is back the preparation starts again
+ * from the beginning, against the restored renderer. Only the caller's abort (or a failure that isn't the loss) ends it unfinished.
+ */
+export async function acrossContextLoss<T>(context: PreparationContext, attempt: (signal: AbortSignal) => Promise<T>,
+  options: { signal?: AbortSignal; report?(report: RuntimePreparationReport): void } = {}): Promise<T> {
+  for (;;) {
+    options.signal?.throwIfAborted();
+    const lost = context.contextSignal(), signal = options.signal ? AbortSignal.any([options.signal, lost]) : lost;
+    try { return await attempt(signal); }
+    catch (error) {
+      if (options.signal?.aborted || !lost.aborted) throw error;
+      options.report?.({ stage: "programs", fraction: 0, waiting: "gpu" });
+      await context.contextReady(options.signal);
+    }
+  }
 }

@@ -4,9 +4,11 @@
  * - **Built hidden** (`buildBrowserHead`, with an `AbortSignal`): the body's core prepared, the scene built on the pane's renderer device,
  *   and the head's own services made over it: the stage theme, the V's detail service, the saved-V and preview services, the motion
  *   service. The scene shown meanwhile stays drawn; nothing reaches the application yet.
+ * - **Prepared** (`prepare`, profiles phase 4a-v): still hidden, the V's details placed, the layered surfaces filled with the authored
+ *   makeup as it is now, and the scene prepared with them, so its first shown frame has nothing left to compile, composite or upload.
  * - **Shown** (`show`): the head is drawn and becomes the one the application and the V's context use. Its services are attached, the
- *   layered surfaces connected and the on-head editor mounted on it, it follows the V's context (catching up with what changed while it
- *   was hidden), and it restores the scene's motion and the view's camera.
+ *   layered surfaces connected (keeping what they were filled with, brought up to date) and the on-head editor mounted on it, it follows
+ *   the V's context (catching up with what changed while it was hidden), and it restores the scene's motion and the view's camera.
  * - **Hidden** (`hide`): its camera pose goes to the view's camera node and its motion is released, then everything `show` connected is let
  *   go, newest first. A hidden head is warm: it stops following its V and catches up when shown again.
  *
@@ -58,7 +60,7 @@ export type LayeredSurfaceWiring = {
   feature: string;
   /** The surface on a loaded head (the feature renderer's). */
   surface(scene: Scene): LayeredMakeupSurface | undefined;
-  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers">;
+  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers" | "fillScene" | "releaseScene">;
   /** The on-head editor's hooks into the authoring core, for the one surface being edited. */
   editor?: Parameters<ViewportDevice["mountSurface"]>[1];
 };
@@ -116,8 +118,9 @@ export type AttachedHead = {
   readonly shown: boolean;
   /**
    * Make the head ready to be shown while it is hidden (profiles phase 4a-v): the V's details loaded and made ready for their first frame,
-   * then the whole scene prepared (programs compiled ahead, maps uploaded, one hidden warm-up draw; scene-host.ts `prepare`), reporting its
-   * stages. Rejects with `signal.reason` once aborted. A detail failure doesn't stop it: the head shows without them, as it would anyway.
+   * the layered surfaces filled with the authored makeup as it is now (each wiring's `fillScene`), then the whole scene prepared (programs
+   * compiled ahead, maps uploaded, one hidden warm-up draw; scene-host.ts `prepare`), reporting its stages. Rejects with
+   * `signal.reason` once aborted. A detail failure doesn't stop it: the head shows without them, as it would anyway.
    */
   prepare(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
   /** Whether a warm head is still prepared (nothing that decides its programs changed since): shown again, it needs nothing more. */
@@ -167,7 +170,12 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
       follow();
       releases.push(quality.subscribe(follow));
     }
-    for (const wiring of ports.layered) if (!wiring.surface(scene)) throw Error(`The ${wiring.feature} renderer is not composed.`);
+    for (const wiring of ports.layered) {
+      const makeup = wiring.surface(scene);
+      if (!makeup) throw Error(`The ${wiring.feature} renderer is not composed.`);
+      // What the surface was filled with while hidden (`prepare`) or left with when hidden goes with it.
+      releases.push(() => wiring.preview.releaseScene(makeup));
+    }
     // Skin, face details, eyes, brows, lashes, hair, piercings and body follow the V's context while this head is shown (`show`).
     const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, undefined, ports.warmStart));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
@@ -224,6 +232,10 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
           await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }));
         }
         progress({ stage: "details", fraction: 1 });
+        // The authored makeup as it is now, so the plate's composite, its masks and maps and their programs are prepared with the scene.
+        // The surface holds this snapshot until show connects it, which brings only what changed since.
+        prepareSignal.throwIfAborted();
+        for (const wiring of ports.layered) wiring.preview.fillScene(wiring.surface(scene)!);
         // Every lighting setup a view of this scene shows (phase 4a draws the main view; its own setup is the scene's now).
         const setups: LightingSource[] = [];
         if (ports.graph) {

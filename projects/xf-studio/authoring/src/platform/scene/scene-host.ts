@@ -27,7 +27,7 @@ import { createCameraSettle } from "./camera-settle";
 import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler";
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
 import type { RendererDevice } from "./renderer-device";
-import { prepareRuntime, type RuntimePreparationReport, type RuntimePreparationResult } from "./runtime-preparation";
+import { acrossContextLoss, prepareRuntime, type RuntimePreparationReport, type RuntimePreparationResult } from "./runtime-preparation";
 
 /**
  * The scene host (feature-module platform §5): one scene runtime, the platform's 3D scene of one subject, drawn by the window's renderer
@@ -65,7 +65,7 @@ export type SceneHostOptions = {
   signal?: AbortSignal;
 };
 /** What a runtime uses of the renderer device. */
-export type SceneDevice = Pick<RendererDevice, "renderer" | "measure" | "resize" | "add" | "stats" | "warmUp">;
+export type SceneDevice = Pick<RendererDevice, "renderer" | "measure" | "resize" | "add" | "stats" | "warmUp" | "contextSignal" | "contextReady">;
 /** A stored orbit, in neutral head space (workspace-state.ts `CameraState` has the same shape). */
 export type SceneCameraState = { position: number[]; target: number[]; fov: number };
 export type SceneRuntime = Awaited<ReturnType<typeof createSceneRuntime>>;
@@ -341,8 +341,14 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   /** See `api.prepare`. */
   async function prepare(options: { signal?: AbortSignal; report?: (report: RuntimePreparationReport) => void;
     setups?: readonly LightingSource[] } = {}): Promise<RuntimePreparationResult> {
+    // A context lost part-way starts the preparation again once the context is back (runtime-preparation.ts `acrossContextLoss`).
+    const result = await acrossContextLoss(device, signal => prepareAttempt(signal, options), options);
+    preparedKey = programKey();
+    return result;
+  }
+  async function prepareAttempt(signal: AbortSignal, options: { report?: (report: RuntimePreparationReport) => void; setups?: readonly LightingSource[] }) {
     // The feature renderers' own passes first (eye makeup's composite), then their surfaces as the first frame draws them.
-    const base = { renderer, scene, camera, lighting, frame: nextFrame, signal: options.signal, features: (signal?: AbortSignal) => features?.prepare(signal) };
+    const base = { renderer, scene, camera, lighting, frame: nextFrame, signal, features: (signal?: AbortSignal) => features?.prepare(signal) };
     // Other setups a view of this scene shows: their programs too, while hidden (a shown runtime keeps drawing its own setup).
     if (options.setups?.length && !drawn.shown) {
       const own = lighting.source, key = JSON.stringify(own);
@@ -354,9 +360,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
         }
       } finally { lighting.setSource(own); }
     }
-    const result = await prepareRuntime({ ...base, report: options.report, warmUp: () => device.warmUp(drawn) });
-    preparedKey = programKey();
-    return result;
+    return prepareRuntime({ ...base, report: options.report, warmUp: () => device.warmUp(drawn) });
   }
   const api = {
     /** Whose core head this scene shows. */

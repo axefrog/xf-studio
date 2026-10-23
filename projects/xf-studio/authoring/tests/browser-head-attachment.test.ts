@@ -3,6 +3,11 @@ import { buildBrowserHead, type LayeredSurfaceWiring } from "../src/preview/brow
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import type { CameraState } from "../src/app/workspace/workspace-state";
 import { contextOf, harness } from "./fixtures/fake-heads";
+import * as THREE from "three";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
+import type { RasterPort } from "../src/legacy/eye-makeup/browser/raster-client";
+import { createMakeupStack, EYE_RASTER_REGION, freshWorkspace } from "./fixtures/eye-region";
 
 // PREV-20: everything wired to a head is released together when a later step fails, so "Try again" starts clean: no doubled theme
 // bindings, service attachments, subscriptions, camera listeners, surface editors or leftover canvases.
@@ -72,6 +77,7 @@ test("every composed layered surface is connected and presented while its head i
       connectScene: () => { events.push("cheek:connect"); return { accepted: true } as ReturnType<LayeredSurfaceWiring["preview"]["connectScene"]>; },
       disconnectScene: () => { events.push("cheek:disconnect"); },
       presentInitialLayers: () => { events.push("cheek:present"); },
+      fillScene: () => { events.push("cheek:fill"); }, releaseScene: () => { events.push("cheek:release"); },
     } };
   const head = await buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, second] });
   expect(events).toEqual([]);
@@ -143,4 +149,108 @@ test("the camera pose round-trips through hide and show: the hidden head writes 
   // Camera jumps and orbits record no View and lighting step.
   expect(h.graph.history().depth).toBe(0);
   a.dispose(); b.dispose();
+});
+
+/** A real preview device (a fake worker and canvases that count their paints) and a real makeup stack per scene, as the root wires them. */
+function layeredMakeup() {
+  const authoring = new AuthoringDocument(freshWorkspace());
+  const worker: RasterPort = { onmessage: null, onerror: null, postMessage() {}, terminate() {} };
+  const paints = new Map<unknown, number>();
+  const createCanvas = (size: number) => {
+    const canvas = { width: size, height: size, getContext: () => ({ putImageData: () => paints.set(canvas, (paints.get(canvas) ?? 0) + 1) }) };
+    return canvas as unknown as HTMLCanvasElement;
+  };
+  const device = createBrowserPreviewDevice({ region: EYE_RASTER_REGION, document: authoring, initialSize: 512, makeWorker: () => worker,
+    frame: run => run(), refresh: () => {}, refreshSelection: () => {}, refreshQuality: () => {}, drawUV: () => {}, report: () => {}, measurement: () => {},
+    createCanvas, createPixels: (data, size) => ({ data, width: size, height: size }) as ImageData });
+  let version = 0;
+  const publish = () => device.coordinator.publish({ i: 0, size: 512, version: ++version, ms: 1, data: new Uint8ClampedArray(512 * 512 * 4) });
+  const stacks = new Map<unknown, ReturnType<typeof createMakeupStack>>();
+  const stackOf = (scene: unknown) => {
+    let stack = stacks.get(scene);
+    if (!stack) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
+      geometry.setAttribute("uv", new THREE.Float32BufferAttribute([0.3, 0.3, 0.6, 0.3, 0.3, 0.6], 2));
+      const anchor = new THREE.SkinnedMesh(geometry), root = new THREE.Group(); root.add(anchor);
+      anchor.skeleton = new THREE.Skeleton([new THREE.Bone()], [new THREE.Matrix4()]);
+      stack = createMakeupStack(anchor, 4);
+      stacks.set(scene, stack);
+    }
+    return stack;
+  };
+  const wiring: LayeredSurfaceWiring = { feature: "eye-makeup", preview: device,
+    surface: scene => { const stack = stackOf(scene); return { layers: stack, surface: stack.plate, maxTextureSize: 4096 }; } };
+  /** What a frame would compile, composite or upload for a stack: its slots' materials and textures, their versions, and its blend. */
+  const state = (scene: unknown) => {
+    const stack = stackOf(scene);
+    return { materials: [...stack.materials], textures: [...stack.textures], images: stack.textures.map(texture => texture.image),
+      versions: [...stack.materials.map(material => material.version), ...stack.textures.map(texture => texture.version)],
+      dirty: stack.blendDiagnostics().dirty, visible: stack.plates.map(plate => plate.visible) };
+  };
+  return { device, publish, stackOf, wiring, state, paints, canvas: () => device.canvases[0]! };
+}
+
+test("4a-v: a cold V's authored makeup is on its surface before its scene is prepared, and its first shown frame has nothing left to compile, composite or upload", async () => {
+  const h = harness(), makeup = layeredMakeup();
+  // The authored layer's mask, completed while no head is shown.
+  makeup.publish();
+  const head = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  let atPrepare: ReturnType<typeof makeup.state> | undefined;
+  // The scene's preparation, as scene-host.ts does it for the plate: the feature renderers bring the stack up to date ahead (its composite).
+  (head.scene as unknown as { prepare(): Promise<void> }).prepare = async () => {
+    makeup.stackOf(head.scene).prepareBlend({} as THREE.WebGLRenderer);
+    atPrepare = makeup.state(head.scene);
+  };
+  await head.prepare(new AbortController().signal, () => {});
+  // Preparation saw the authored layer: one slot, its mask the completed 512² canvas, drawn.
+  expect(atPrepare?.textures).toHaveLength(1);
+  expect((atPrepare!.images[0] as HTMLCanvasElement).width).toBe(512);
+  expect(atPrepare!.visible).toEqual([true]);
+  expect(atPrepare!.dirty).toBe(false);
+  head.show();
+  // Shown: the same slots, materials, textures and images, no version moved (no program change, no upload), no composite pending.
+  const shown = makeup.state(head.scene);
+  expect(shown.materials).toEqual(atPrepare!.materials);
+  for (const [i, material] of shown.materials.entries()) expect(material).toBe(atPrepare!.materials[i]!);
+  for (const [i, texture] of shown.textures.entries()) expect(texture).toBe(atPrepare!.textures[i]!);
+  expect(shown.images).toEqual(atPrepare!.images);
+  expect(shown.versions).toEqual(atPrepare!.versions);
+  expect(shown.dirty).toBe(false);
+  // The live binding afterwards: the next completed mask reaches the shown surface (a new upload, a composite).
+  makeup.publish();
+  expect(makeup.state(head.scene).versions).not.toEqual(atPrepare!.versions);
+  expect(makeup.state(head.scene).dirty).toBe(true);
+  head.dispose();
+});
+
+test("4a-v: a surface filled ahead keeps its snapshot while a newer mask completes, and show brings only that slot up to date", async () => {
+  const h = harness(), makeup = layeredMakeup();
+  makeup.publish();
+  const shownHead = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  shownHead.show();
+  const hidden = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  await hidden.prepare(new AbortController().signal, () => {});
+  const filled = makeup.state(hidden.scene), heldCanvas = filled.images[0];
+  expect(heldCanvas).toBe(makeup.canvas());
+  const paints = makeup.paints.get(heldCanvas) ?? 0;
+  // A mask completes while the hidden head holds the canvas: it is painted on a new canvas, never over the held one.
+  makeup.publish();
+  expect(makeup.canvas()).not.toBe(heldCanvas);
+  expect(makeup.paints.get(heldCanvas) ?? 0).toBe(paints);
+  expect(makeup.state(hidden.scene).images[0]).toBe(heldCanvas);
+  // The shown head follows it live.
+  expect(makeup.state(shownHead.scene).images[0]).toBe(makeup.canvas());
+  // Shown: the held slot takes the new mask (same slot, material and texture; the texture is uploaded again), nothing is rebuilt.
+  shownHead.hide(); hidden.show();
+  const after = makeup.state(hidden.scene);
+  expect(after.materials[0]).toBe(filled.materials[0]!);
+  expect(after.textures[0]).toBe(filled.textures[0]!);
+  expect(after.images[0]).toBe(makeup.canvas());
+  // Hidden again, then shown: it kept what it had, so nothing changes.
+  hidden.hide();
+  const kept = makeup.state(hidden.scene);
+  shownHead.show(); shownHead.hide(); hidden.show();
+  expect(makeup.state(hidden.scene).versions).toEqual(kept.versions);
+  shownHead.dispose(); hidden.dispose();
 });

@@ -400,3 +400,38 @@ test("the research finishes' programs are made ahead only while research tools s
     features.dispose();
   } finally { jest.useRealTimers(); }
 });
+
+test("4a-v: a superseded composite preparation stops waiting on its links at once, and its unused programs free their shaders on release (review 4)", async () => {
+  const { ctx } = context();
+  // The driver never finishes linking here; each compiled pass gets a program of its own, as Three keeps them per material.
+  const properties = new WeakMap<object, { programs?: Map<string, unknown> }>(), deleted: unknown[] = [], programs: { destroy(): void }[] = [];
+  Object.assign(ctx.renderer, {
+    properties: { get: (object: object) => properties.get(object) ?? properties.set(object, {}).get(object)! },
+    getContext: () => ({ deleteShader: (shader: unknown) => deleted.push(shader) }),
+    compileAsync: (scene: THREE.Object3D) => {
+      scene.traverse(child => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const own = properties.get(mesh.material as object) ?? properties.set(mesh.material as object, {}).get(mesh.material as object)!;
+        const program = { vertexShader: { id: programs.length, kind: "vertex" }, fragmentShader: { id: programs.length, kind: "fragment" }, destroy() {} };
+        programs.push(program);
+        (own.programs ??= new Map()).set(`p${programs.length}`, program);
+      });
+      return new Promise(() => {});
+    },
+  });
+  const features = createFeatureRenderers(ctx, [EYE_MAKEUP_RENDERER]);
+  const controller = new AbortController();
+  const prepared = features.prepare(controller.signal);
+  const started = performance.now();
+  setTimeout(() => controller.abort(new DOMException("Superseded.", "AbortError")), 20);
+  // Released at the abort, not when the links end (they never do here).
+  const outcome = await Promise.race([prepared.then(() => "released"), new Promise(resolve => setTimeout(() => resolve("still waiting"), 500))]);
+  expect(outcome).toBe("released");
+  expect(performance.now() - started).toBeLessThan(120);
+  // The composite's three passes were compiled; released unused, each program deletes its two shaders with it.
+  expect(programs).toHaveLength(3);
+  for (const program of programs) program.destroy();
+  expect(deleted).toHaveLength(6);
+  features.dispose();
+});

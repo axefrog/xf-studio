@@ -6,7 +6,7 @@ import { maskAlphaKey, previewOpticalKey } from "../../../engines/layered-makeup
 import { createRasterClient, type RasterPort } from "./raster-client";
 import type { RasterResponse, GlitterStats } from "../../../engines/layered-makeup/raster-processor";
 import type { Layer } from "../../../engines/layered-makeup/recipe";
-import type { PreviewTextureSize } from "../preview/preview-quality";
+import { assessPreviewQuality, type PreviewTextureSize } from "../preview/preview-quality";
 import type { RasterRegion } from "../../../engines/layered-makeup/region";
 import type { ReadonlyDeep } from "../../../platform/api/read-only";
 import type { LayeredMakeupSurface } from "../../../engines/layered-makeup/render/makeup-stack";
@@ -17,6 +17,13 @@ type CompleteRaster = Extract<RasterResponse, { data: unknown }>;
 type PreviewOptics = NonNullable<CompleteRaster["optics"]>;
 type PreviewAlbedo = NonNullable<CompleteRaster["albedo"]>;
 type PendingOptics = { key: string; data?: PreviewOptics; albedo?: PreviewAlbedo };
+/**
+ * What a surface not shown now holds (profiles phase 4a-v): filled ahead of its show (`fillScene`), or left as it was when it stopped
+ * being shown. Per slot, the canvas its mask texture reads, the layer it was given and the optical maps it was given them with. While a
+ * surface holds a canvas, a completed mask is painted into a new canvas rather than over that one, so the surface keeps exactly what it
+ * was filled with (a detached snapshot) until it is brought up to date.
+ */
+type HeldLayers = { accepted: boolean; ids: string[]; slots: { canvas: HTMLCanvasElement; layer: string; optics: PendingOptics | undefined }[] };
 
 export { previewOpticalKey };
 
@@ -48,9 +55,14 @@ export function createBrowserPreviewDevice(options: {
   const makeEmptyCanvas = () => createCanvas(1);
   const canvases = authoring.recipe.layers.map(makeEmptyCanvas);
   const emptyCanvases = () => authoring.recipe.layers.map(makeEmptyCanvas);
-  let initialOptics: (PendingOptics | undefined)[] = [];
+  /** Each slot's latest optical maps, by their identity: what a surface connected or filled later is given with its mask. */
+  let optics: (PendingOptics | undefined)[] = [];
   let viewer: Scene | undefined;
   let initialQuality: ReturnType<AuthoringPreviewCoordinator["assess"]> | undefined;
+  /** The slots the connected surface still needs presented (`presentInitialLayers`): every one, or those changed since it was filled. */
+  let presenting: number[] = [];
+  const held = new Map<Scene, HeldLayers>();
+  const isHeld = (canvas: HTMLCanvasElement) => { for (const entry of held.values()) if (entry.slots.some(slot => slot.canvas === canvas)) return true; return false; };
   let coordinator: AuthoringPreviewCoordinator;
   let scheduler: AuthoringRenderScheduler;
   const client = createRasterClient(options.makeWorker,
@@ -60,7 +72,7 @@ export function createBrowserPreviewDevice(options: {
     maxTextureSize: () => viewer?.maxTextureSize ?? 4096,
     resourceSize: i => canvases[i]?.width ?? 0,
     needsOptics: (i, layer, size) => viewer ? viewer.layers.needsOptics(i, layer, size)
-      : initialOptics[i]?.key !== opticalKey(layer, size),
+      : !(optics[i]?.key === opticalKey(layer, size) && optics[i]?.data),
     needsPresentationMaps: (i, layer, size) => !!viewer &&
       (viewer.layers.needsOptics(i, layer, size) || viewer.layers.needsAlbedo(i, layer, size)),
     queue: () => client.diagnostics(),
@@ -68,7 +80,7 @@ export function createBrowserPreviewDevice(options: {
     replaceResources: () => {
       // Dispose the previous tier or stack before allocating its replacement.
       canvases.splice(0, canvases.length, ...emptyCanvases());
-      initialOptics = [];
+      optics = [];
       viewer?.layers.setCanvases(canvases, authoring.recipe.layers.map(layer => layer.id));
     },
     reconcileResources: (previous, current) => {
@@ -78,12 +90,12 @@ export function createBrowserPreviewDevice(options: {
         .map(index => previous[index]?.id).filter((id): id is string => !!id));
       client.reset();
       const oldSlots = new Map(previous.map((layer, i) => [layer.id, i]));
-      const priorCanvases = [...canvases], priorOptics = [...initialOptics];
+      const priorCanvases = [...canvases], priorOptics = [...optics];
       canvases.splice(0, canvases.length, ...current.map(layer => {
         const old = oldSlots.get(layer.id);
         return old === undefined ? makeEmptyCanvas() : priorCanvases[old];
       }));
-      initialOptics = current.map(layer => {
+      optics = current.map(layer => {
         const old = oldSlots.get(layer.id);
         return old === undefined ? undefined : priorOptics[old];
       });
@@ -94,22 +106,23 @@ export function createBrowserPreviewDevice(options: {
       if (canvases[i].width !== 1) {
         canvases[i] = makeEmptyCanvas(); viewer?.layers.setLayerCanvas(i, canvases[i]);
       }
-      initialOptics[i] = undefined; viewer?.layers.updateLayer(i, layer);
+      optics[i] = undefined; viewer?.layers.updateLayer(i, layer);
     },
     request: (i, layer, priority, size, needsOptics) => client.request(i, layer, priority, size, needsOptics),
     updateLayer: (i, layer) => { viewer?.layers.updateLayer(i, layer); },
-    publish: ({ i, data, size, optics, albedo, glitterStats }, layer) => {
-      if (canvases[i].width !== size) {
+    publish: ({ i, data, size, optics: maps, albedo, glitterStats }, layer) => {
+      // A surface not shown holds this canvas: the new mask goes on a canvas of its own (HeldLayers).
+      if (canvases[i].width !== size || isHeld(canvases[i])) {
         canvases[i] = createCanvas(size);
       }
       canvases[i].getContext("2d")!.putImageData(createPixels(data, size), 0, 0);
-      viewer?.layers.setLayerCanvas(i, canvases[i]);
-      if (viewer) { viewer.layers.updateLayer(i, layer, optics, albedo, true); initialOptics[i] = undefined; }
-      else if (optics || albedo) {
-        const key = opticalKey(layer, size), prior = initialOptics[i];
-        initialOptics[i] = { key, data: optics ?? (prior?.key === key ? prior.data : undefined), albedo };
+      if (maps || albedo) {
+        const key = opticalKey(layer, size), prior = optics[i];
+        optics[i] = { key, data: maps ?? (prior?.key === key ? prior.data : undefined), albedo: albedo ?? (prior?.key === key ? prior.albedo : undefined) };
       }
-      else if (!layer.enabled || !["shimmer", "glitter"].includes(canonicalFinish(layer.finish))) initialOptics[i] = undefined;
+      else if (!layer.enabled || !["shimmer", "glitter"].includes(canonicalFinish(layer.finish))) optics[i] = undefined;
+      viewer?.layers.setLayerCanvas(i, canvases[i]);
+      viewer?.layers.updateLayer(i, layer, maps, albedo, true);
       if (glitterStats && layer.finish === "glitter" && isIrregular(layer.flakes))
         options.measurement(layer, size, glitterStats);
       options.drawUV();
@@ -119,6 +132,34 @@ export function createBrowserPreviewDevice(options: {
     refreshQuality: options.refreshQuality,
     report: options.report,
   });
+  /** The layers as they are now, as a surface given them holds them. */
+  const snapshot = (accepted: boolean): HeldLayers => ({ accepted, ids: authoring.recipe.layers.map(layer => layer.id),
+    slots: authoring.recipe.layers.map((layer, i) => ({ canvas: canvases[i], layer: JSON.stringify(layer), optics: optics[i] })) });
+  /**
+   * Bring `scene`'s slots to the layers as they are now, and say which slots need presenting: from what it holds, only the slots whose
+   * mask, layer or maps changed; without a usable hold (none, another stack, another tier), every slot afresh.
+   */
+  function bring(scene: Scene, accepted: boolean): number[] {
+    const ids = authoring.recipe.layers.map(layer => layer.id), from = held.get(scene);
+    if (!accepted || !from?.accepted || from.ids.length !== ids.length || from.ids.some((id, i) => id !== ids[i])) {
+      scene.layers.setCanvases(accepted ? canvases : emptyCanvases(), ids);
+      return ids.map((_, i) => i);
+    }
+    const changed: number[] = [];
+    authoring.recipe.layers.forEach((layer, i) => {
+      const slot = from.slots[i]!, canvas = slot.canvas !== canvases[i];
+      if (canvas) scene.layers.setLayerCanvas(i, canvases[i]);
+      if (canvas || slot.layer !== JSON.stringify(layer) || slot.optics !== optics[i]) changed.push(i);
+    });
+    return changed;
+  }
+  /** Give `scene` slot `i`'s layer with its mask and, when they match it, its optical maps. */
+  function present(scene: Scene, i: number) {
+    const layer = authoring.recipe.layers[i], stored = optics[i];
+    if (layer.finish === "glitter" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)) && canvases[i].width < 32) return;
+    const valid = stored?.key === opticalKey(layer, canvases[i].width);
+    scene.layers.updateLayer(i, layer, valid ? stored?.data : undefined, valid ? stored?.albedo : undefined, true);
+  }
   scheduler = new AuthoringRenderScheduler(authoring, {
     frame: options.frame, render: i => coordinator.render(i), refreshSelection: options.refreshSelection,
   });
@@ -127,35 +168,47 @@ export function createBrowserPreviewDevice(options: {
     canvases,
     emptyCanvases,
     queueDiagnostics: () => client.diagnostics(),
-    /** Connect after the scene discovers its actual texture limit. */
+    /**
+     * Connect a surface to be shown: it follows the layers from now on. A surface that holds layers already (filled ahead of its show, or
+     * shown before) keeps them, and only the slots that changed since are brought up to date, so a prepared surface's first shown frame
+     * compiles, composites and uploads nothing more; any other is given every layer.
+     */
     connectScene(scene: Scene) {
       viewer = scene;
       initialQuality = coordinator.assess();
-      scene.layers.setCanvases(initialQuality.accepted ? canvases : emptyCanvases(),
-        authoring.recipe.layers.map(layer => layer.id));
+      presenting = bring(scene, initialQuality.accepted);
+      held.delete(scene);
       if (!initialQuality.accepted) coordinator.rejectInitialCapacity();
       return initialQuality;
     },
-    /** Forget an unloaded scene; layer work continues on the UV canvases. */
+    /** Forget an unloaded scene; layer work continues on the UV canvases. The surface keeps what it was given (HeldLayers). */
     disconnectScene(scene: Scene) {
       if (viewer !== scene) return;
       viewer = undefined;
+      held.set(scene, snapshot(initialQuality?.accepted === true));
       initialQuality = undefined;
+      presenting = [];
     },
     /** Publish the preloaded maps once saved appearance, pose and scene settings are restored. */
     presentInitialLayers() {
       if (!viewer) throw Error("The head scene must load before publishing preview layers.");
       if (!initialQuality) throw Error("The initial preview tier has not been assessed.");
-      for (let i = 0; i < authoring.recipe.layers.length; i++) {
-        const layer = authoring.recipe.layers[i], stored = initialOptics[i];
-        if (initialQuality.accepted && !(layer.finish === "glitter" &&
-          (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)) && canvases[i].width < 32)) {
-          const valid = stored?.key === opticalKey(layer, canvases[i].width);
-          viewer.layers.updateLayer(i, layer, valid ? stored?.data : undefined,
-            valid ? stored?.albedo : undefined, true);
-        }
-        initialOptics[i] = undefined;
-      }
+      if (initialQuality.accepted) for (const i of presenting) present(viewer, i);
+      presenting = [];
     },
+    /**
+     * Fill a surface that isn't shown with the layers as they are now (profiles phase 4a-v), so its scene is prepared with them: their
+     * masks and maps uploaded and the merged plate composited before it is shown. It holds a detached snapshot (HeldLayers) until it is
+     * connected, which brings it up to date; filling it again brings only what changed. The surface shown now is the live one already.
+     */
+    fillScene(scene: Scene) {
+      if (scene === viewer) return;
+      const accepted = assessPreviewQuality(authoring.recipe, coordinator.size, scene.maxTextureSize).accepted;
+      const changed = bring(scene, accepted);
+      if (accepted) for (const i of changed) present(scene, i);
+      held.set(scene, snapshot(accepted));
+    },
+    /** A surface goes (its head is released): it holds nothing any more. */
+    releaseScene(scene: Scene) { held.delete(scene); },
   };
 }

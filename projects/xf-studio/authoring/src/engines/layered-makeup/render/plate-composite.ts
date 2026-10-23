@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { compositeTargetSize, MODE1_FULL_TILT, FACET_ZERO, type BlendWindow } from "./plate-blend";
 import { halfFloatRenderable } from "../../../preview/render/linear-display";
+import { linkedPrograms, releaseShadersWithPrograms } from "../../../materials/render/linked-programs";
 
 /**
  * The makeup plate's composite pass (renderer adapter): the export's merged decal and its faceted mip chain, drawn on the GPU
@@ -268,19 +269,21 @@ export function createPlateComposite(window: BlendWindow, options: { precision?:
     },
     /**
      * Compile the composite's three passes ahead (profiles phase 4a-v), each bound to a target as `update` binds one, so its first update
-     * links nothing on the page's thread. Three's `compileAsync`: resolves once the driver has linked them.
+     * links nothing on the page's thread. Three's `compileAsync`: resolves once the driver has linked them. Released unused (the scene
+     * goes before its first composite), their shaders go with them (`releaseShadersWithPrograms`).
      */
     compile(renderer: THREE.WebGLRenderer): Promise<void> {
       const previousTarget = renderer.getRenderTarget(), stand = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
-      const pending: Promise<unknown>[] = [];
+      const pending: Promise<unknown>[] = [], passes = [layerPass, resolvePass, roughnessPass];
       try {
         renderer.setRenderTarget(stand);
-        for (const pass of [layerPass, resolvePass, roughnessPass]) { mesh.material = pass; pending.push(renderer.compileAsync(scene, camera)); }
+        for (const pass of passes) { mesh.material = pass; pending.push(renderer.compileAsync(scene, camera)); }
       } finally {
         mesh.material = layerPass;
         renderer.setRenderTarget(previousTarget);
         stand.dispose();
       }
+      releaseShadersWithPrograms(renderer, linkedPrograms(renderer, passes));
       return Promise.all(pending).then(() => undefined);
     },
     /** GPU bytes held by the composite: the accumulation target (10 channels), and the merged target (10) and roughness chain (1) with their mips. */

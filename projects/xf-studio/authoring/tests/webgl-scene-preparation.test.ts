@@ -9,7 +9,9 @@ import type { ScenePreparationProbe } from "./webgl-scene-preparation-probe-page
  * heads in a fresh headless Chrome (a cold program cache): a cold V prepared while another is shown keeps the page's thread free (no task
  * over 50 ms with KHR_parallel_shader_compile), draws nothing and leaves the shown V's pixels as they were until it is shown, and its first
  * shown frame links and uploads nothing; a warm switch draws its first frame within 100 ms; a superseded preparation stops within 100 ms
- * and leaves nothing behind; progress only moves forward; closing everything returns the GPU objects to the baseline. The same page runs
+ * and leaves nothing behind; progress only moves forward; closing everything returns the GPU objects to the baseline; a context lost while
+ * a cold V's programs link restarts its preparation after the restore, and the V is shown. The authored makeup reaches each runtime through
+ * the production preview device (filled before preparing, connected at show). The same page runs
  * again without the extension (the fallback), which must stay chunked and still report progress; its numbers are recorded, not gated.
  * Public CI has no GPU and skips; XFS_REQUIRE_ORACLES=1 turns the skip into a failure. XFS_PROBE_PRINT=1 prints both probes.
  */
@@ -94,6 +96,17 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
       expect(cold.at(-1)!.stage).toBe("warm-up");
       // Chunked: the programs stage reported more than one step on its way.
       expect(new Set(cold.filter(state => state.stage === "programs").map(state => state.fraction)).size).toBeGreaterThan(1);
+    }
+  });
+
+  test("a context lost while a cold V's programs link: the preparation starts again after the restore, and the V is shown and draws (4a-v review 2)", () => {
+    for (const probe of [parallel, fallback]) {
+      const loss = probe.contextLoss;
+      expect(loss.stage).toBe("programs");
+      expect(loss.events).toEqual(["lost", "restored"]);
+      expect(loss.restarts).toBeGreaterThanOrEqual(1);
+      expect(loss.outcome).toBe("shown");
+      expect(loss.frames).toBeGreaterThan(0);
     }
   });
 

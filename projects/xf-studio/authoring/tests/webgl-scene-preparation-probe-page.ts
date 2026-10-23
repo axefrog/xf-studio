@@ -1,7 +1,9 @@
 /**
  * Browser page for tests/webgl-scene-preparation.test.ts (profiles phase 4a-v, experiments/043-scene-runtimes §11): scene runtimes prepared
  * before they are shown, on one renderer device, on synthetic heads (no game files), under `SceneResidency` with the production ports'
- * shape: build, then the runtime's `prepare` (programs compiled ahead, maps uploaded, one hidden warm-up draw), then show. A fresh Chrome
+ * shape: build, then the runtime's `prepare` (programs compiled ahead, maps uploaded, one hidden warm-up draw), then show. The authored
+ * makeup layer reaches each runtime as in production: the preview device fills the hidden surface before it is prepared and connects it at
+ * show (browser-head-attachment.ts), never set on the stack by the probe. A fresh Chrome
  * profile per run, so the browser's program cache starts cold. With `?parallel=off` the page behaves like a browser without
  * KHR_parallel_shader_compile (the fallback). It measures:
  * 1. The first V (nothing shown yet): how long its preparation takes and the longest main-thread task meanwhile.
@@ -13,6 +15,8 @@
  *    superseding want to the preparation stopping, nothing of it drawn, and the GPU objects back where they were once it is disposed.
  * 5. Every progress state, per want: stages and fractions, which must only move forward.
  * 6. Closing everything: the GPU objects and Three's programs back at the baseline (4a-i's gate, with preparation).
+ * 7. A context lost while a cold V's programs link (after 6, since a lost context's objects are never deleted): its preparation starts
+ *    again once the context is back, and the V is shown and draws.
  * Results land in `window.probe` as plain data.
  */
 import * as THREE from "three";
@@ -29,6 +33,9 @@ import { countGlObjects, type GlObjectCounts } from "./webgl-gl-objects";
 import { SceneResidency, type PreparationState, type ResidencyWant } from "../src/preview/scene-residency";
 import { syntheticCore, syntheticIdle, syntheticRecords } from "./webgl-synthetic-head";
 import type { RuntimePreparationResult } from "../src/platform/scene/runtime-preparation";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
+import { EYE_RASTER_REGION, freshWorkspace } from "./fixtures/eye-region";
 
 type Counts = { gl: GlObjectCounts; programs: string[] };
 type Want = ResidencyWant & { body: "female" | "male"; record: "a" | "b"; lighting: "studio" | "creator" | "many" };
@@ -39,6 +46,8 @@ export type ScenePreparationProbe = {
     canvasUnchanged: boolean; firstFrame: { links: number; programs: number; uploads: number }; result: RuntimePreparationResult | null };
   warm: { switchesMs: number[]; builds: number; preparations: number };
   cancel: { stage: string; cancelMs: number; superseded: string; drawn: number; canvasUnchanged: boolean; disposed: boolean; before: Counts; after: Counts };
+  /** The context lost while the V's programs linked: how the want ended, the restarts the preparation reported, and the frames it drew once shown. */
+  contextLoss: { outcome: string; stage: string; restarts: number; frames: number; events: string[] };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
   /** Diagnostics: GL calls that blocked the page for 20 ms or more, with where they came from, and each link with the stage it ran in. */
   slow: { call: string; ms: number; stage: string; via: string }[];
@@ -60,7 +69,7 @@ export type ScenePreparationProbe = {
   baseline: Counts; closed: Counts;
 };
 const probe: ScenePreparationProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
-  cancel: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
+  cancel: null as never, contextLoss: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
 
@@ -120,7 +129,8 @@ try {
       context[name] = (...args: unknown[]) => { calls.uploads++; if (watchUploads && probe.firstFrameUploads.length < 20) probe.firstFrameUploads.push(`${name} ${via()}`); return original(...args); };
     }
   }
-  const device = createRendererDevice(element, { context: gl }), renderer = device.renderer;
+  const contextEvents: string[] = [];
+  const device = createRendererDevice(element, { context: gl, onContext: event => contextEvents.push(event) }), renderer = device.renderer;
   probe.parallel = renderer.extensions.has("KHR_parallel_shader_compile");
   {
     const fromScene = THREE.PMREMGenerator.prototype.fromScene;
@@ -167,6 +177,15 @@ try {
   const { fetcher, recordA, recordB } = await syntheticRecords();
   const mask = document.createElement("canvas"); mask.width = mask.height = 16;
   mask.getContext("2d")!.fillRect(0, 0, 16, 16);
+  // The authored makeup as production feeds it: the preview device (a raster worker that never answers) holding one completed 512² mask.
+  const layers = createBrowserPreviewDevice({ region: EYE_RASTER_REGION, document: new AuthoringDocument(freshWorkspace()), initialSize: 512,
+    makeWorker: () => ({ onmessage: null, onerror: null, postMessage() {}, terminate() {} }), frame: run => run(), refresh: () => {}, refreshSelection: () => {},
+    refreshQuality: () => {}, drawUV: () => {}, report: () => {}, measurement: () => {} });
+  {
+    const data = new Uint8ClampedArray(512 * 512 * 4);
+    for (let i = 3; i < data.length; i += 4) data[i] = 255;
+    if (!layers.coordinator.publish({ i: 0, size: 512, version: 1, ms: 1, data })) throw Error("The probe's mask wasn't taken.");
+  }
   const studio = studioStageSetup(DEFAULT_STUDIO_STAGE);
   const lightingOf = (kind: Want["lighting"]): LightingSource => kind === "creator" ? { kind: "game", calibration: { ...DEFAULT_CREATOR_LIGHTING } }
     : kind === "studio" ? { kind: "setup", setup: studio }
@@ -179,7 +198,9 @@ try {
   const runtimes = new Map<SceneRuntime, string>();
   let stopped = null as { key: string; stage: string; at: number } | null;
   let current = null as { key: string; stage: string } | null;
-  const residency = new SceneResidency<Want, SceneRuntime>({
+  /** Restarts the preparations reported after a lost context (`acrossContextLoss`: the programs stage again, waiting on the GPU). */
+  let restarts = 0;
+  const ports: ConstructorParameters<typeof SceneResidency<Want, SceneRuntime>>[0] = {
     build: async (want, signal, progress) => {
       progress({ stage: "build" });
       const options: SceneHostOptions = { renderers: STUDIO_RENDERERS, loadCore: async () => ({ ...syntheticCore(), body: want.body }), loadMotion: motion(),
@@ -189,9 +210,6 @@ try {
       probe.timings.builds.push(performance.now() - built);
       runtimes.set(runtime, want.key);
       runtime.setLighting(lightingOf(want.lighting));
-      const makeup = runtime.feature(EYE_MAKEUP_RENDERER)!;
-      makeup.layers.setCanvases([mask], ["one"]);
-      makeup.layers.updateLayer(0, initialRecipe().layers[0]!, undefined, undefined, true);
       return runtime;
     },
     prepare: async (runtime, want, signal, progress) => {
@@ -203,18 +221,30 @@ try {
         signal.throwIfAborted();
         runtime.setCharacterDetails(loaded);
         progress({ stage: "details", fraction: 1 });
-        results.set(want.key, await runtime.prepare({ signal, report: report => { current = { key: want.key, stage: report.stage }; progress(report); } }));
+        // The authored makeup on the hidden surface, as the head's preparation fills it.
+        layers.fillScene(runtime.feature(EYE_MAKEUP_RENDERER)!);
+        results.set(want.key, await runtime.prepare({ signal, report: report => {
+          if (report.stage === "programs" && report.waiting === "gpu") restarts++;
+          current = { key: want.key, stage: report.stage }; progress(report);
+        } }));
       } catch (error) {
         if (signal.aborted) stopped = { key: want.key, stage: current?.key === want.key ? current.stage : "details", at: performance.now() };
         throw error;
       }
     },
     prepared: runtime => runtime.prepared(),
-    show: runtime => { const start = performance.now(); device.show(runtime.slot); runtime.requestRender(); probe.timings.shows.push(performance.now() - start); },
-    hide: () => {},
-    dispose: runtime => { runtimes.delete(runtime); runtime.dispose(); },
-  }, { warm: 1 });
-  residency.subscribe(() => {
+    show: runtime => {
+      const start = performance.now();
+      // As the head's show connects its surface: it keeps what it was filled with, brought up to date.
+      const makeup = runtime.feature(EYE_MAKEUP_RENDERER)!;
+      layers.connectScene(makeup); layers.presentInitialLayers();
+      device.show(runtime.slot); runtime.requestRender(); probe.timings.shows.push(performance.now() - start);
+    },
+    hide: runtime => layers.disconnectScene(runtime.feature(EYE_MAKEUP_RENDERER)!),
+    dispose: runtime => { layers.releaseScene(runtime.feature(EYE_MAKEUP_RENDERER)!); runtimes.delete(runtime); runtime.dispose(); },
+  };
+  let residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
+  const follow = () => {
     const state: PreparationState | null = residency.preparation();
     if (state) (probe.progress[state.key] ??= []).push({ stage: state.stage, fraction: state.fraction, waiting: state.waiting });
     const label = state ? `${state.key}:${state.stage}` : "idle";
@@ -231,7 +261,8 @@ try {
     }
     stageLabel = label;
     stageLog.push({ at: performance.now(), label });
-  });
+  };
+  residency.subscribe(follow);
   const want = (subject: string, body: Want["body"], record: Want["record"], lighting: Want["lighting"]): Want =>
     ({ scene: "s1", key: `s1|${subject}|${body}|${lighting}`, body, record, lighting });
   /** Want `target`; resolves with the time from the want to the first presented frame of it (the frame after the one that drew it). */
@@ -338,6 +369,29 @@ try {
   residency.dispose();
   await sleep(100);
   probe.closed = counts();
+
+  // 7. The context lost while a cold V's programs link (the masculine head under more lights: never linked here), then restored.
+  {
+    residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
+    residency.subscribe(follow);
+    const lose = gl.getExtension("WEBGL_lose_context")!;
+    const waitFor = async (event: string) => { for (let i = 0; i < 300 && !contextEvents.includes(event); i++) await sleep(10); };
+    const d = want("v4", "male", "b", "many");
+    const toD = residency.want(d).then(() => "shown", (error: Error) => error.name);
+    for (let i = 0; i < 4000 && !(current?.key === d.key && current.stage === "programs"); i++) await sleep(1);
+    const stage = current?.key === d.key ? current.stage : "none";
+    restarts = 0;
+    lose.loseContext(); await waitFor("lost");
+    await sleep(200);
+    lose.restoreContext(); await waitFor("restored");
+    const outcome = await Promise.race([toD, sleep(180_000).then(() => "timeout")]);
+    let made: SceneRuntime | undefined;
+    for (const [runtime, key] of runtimes) if (key === d.key) made = runtime;
+    for (let i = 0; i < 600 && made && made.frameTiming().frames === 0; i++) await frame();
+    probe.contextLoss = { outcome, stage, restarts, frames: made ? made.frameTiming().frames : -1, events: [...contextEvents] };
+    residency.dispose();
+    await sleep(100);
+  }
   probe.stages = stageLog.map(entry => ({ at: Math.round(entry.at), label: entry.label }));
   probe.longTasks = tasks.filter(task => task.duration >= 30).map(task => ({ ms: Math.round(task.duration), at: Math.round(task.start),
     stage: [...stageLog].reverse().find(entry => entry.at <= task.start)?.label ?? "before" }));
