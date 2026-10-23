@@ -21,7 +21,7 @@ import type { CreatorCatalogue } from "../../character/creator-catalogue";
 import { CollectionOwner, type CollectionVersionsPort } from "../../library/collection-owner";
 import { LookSessions } from "../../library/look-sessions";
 import type { LookRef } from "../../library/collection-documents";
-import { MAIN_VIEW, type ViewGraphData } from "../../platform/api/view-graph";
+import type { ViewGraphData } from "../../platform/api/view-graph";
 import { documentKey } from "../../platform/api/document-commands";
 import { CHARACTER_KIND } from "../../platform/api/characters";
 import type { ViewGraph, ViewGraphOwner } from "../../platform/core/view-graph";
@@ -72,12 +72,10 @@ export function createProfileServices(deps: { documents: DocumentStorePort; outb
  * views (the composition's rules and recovery), recording through the session; `stored` is the graph as the session stores it.
  */
 export function openProfileSession(workspace: WorkspaceState, services: Pick<ProfileServices, "profiles" | "collections">,
-  deps: { history: HistoryService; graph(data: ViewGraphData, owner: ViewGraphOwner): ViewGraph; stored?(graph: ViewGraph): ViewGraphData;
-    drawn?(): string | undefined },
+  deps: { history: HistoryService; graph(data: ViewGraphData, owner: ViewGraphOwner): ViewGraph; stored?(graph: ViewGraph): ViewGraphData },
   random: () => number = hostRandom().next): { state: ProfileSessions; stored: boolean } {
   const open = (profile: string, data: ProfileSessionData) =>
-    new ProfileSessions({ profile, data, history: deps.history, graph: deps.graph, ...(deps.stored ? { stored: deps.stored } : {}),
-      ...(deps.drawn ? { drawn: deps.drawn } : {}), random });
+    new ProfileSessions({ profile, data, history: deps.history, graph: deps.graph, ...(deps.stored ? { stored: deps.stored } : {}), random });
   const sessions = workspace.profiles?.sessions ?? {}, first = Object.keys(sessions)[0];
   if (workspace.migration?.state === "done" && first) return { state: open(first, sessions[first]!), stored: true };
   const profile = services.profiles.list()[0];
@@ -196,10 +194,19 @@ export function createTargetResolver(deps: { state: ProfileSessions; history: Pi
   });
 }
 
-/** The scene the window draws first: the main view's, else the first view's (empty: a session with no view). */
-export function drawnScene(state: ProfileSessions): string {
-  const graph = state.graph, view = graph.has(MAIN_VIEW) ? MAIN_VIEW : graph.viewIds()[0];
-  return view === undefined ? "" : graph.node(view, "scene").id;
+/**
+ * The view the window draws (experiment 044 P2-iii): the shown tab's most recently focused view, else its first (undefined: the shown tab
+ * holds no view, or the session has no tab). It follows the shown tab: showing another tab, focusing another of its views, or closing the
+ * view drawn moves it.
+ */
+export function drawnView(state: Pick<ProfileSessions, "graph" | "focus" | "tabId">): string | undefined {
+  const graph = state.graph, tab = state.tabId(), views = graph.viewIds().filter(view => graph.tabOf(view) === tab);
+  return state.focus.topView(views) ?? views[0];
+}
+/** The scene the window draws (empty: none, the shown tab holding no view). */
+export function drawnScene(state: Pick<ProfileSessions, "graph" | "focus" | "tabId">): string {
+  const view = drawnView(state);
+  return view === undefined ? "" : state.graph.node(view, "scene").id;
 }
 
 /**

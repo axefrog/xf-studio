@@ -121,11 +121,6 @@ export interface HistoryTarget {
   /** Why the target can't move now (a V whose last session's changes are still being restored), or undefined: Undo and Redo wait. */
   unavailable?(): string | undefined;
   /**
-   * Why the target won't show `values` now although they are consistent (a rule that holds for a while, such as a view still being drawn),
-   * or undefined. Asked before a move changes anything: a refused move changes nothing and keeps every step, unlike `apply` returning false.
-   */
-  refusal?(values: Readonly<Record<string, unknown | undefined>>, cause: HistoryCause): string | undefined;
-  /**
    * A cheap token that changes whenever the content may have: while it is what the last Undo or Redo left, Redo stays valid
    * without comparing content. Without it, Redo validity compares the fingerprint every time.
    */

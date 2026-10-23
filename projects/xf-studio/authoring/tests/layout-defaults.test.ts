@@ -9,7 +9,7 @@
  * - **Own defaults** are saved, updated, renamed, deleted (a tombstone) and restored through the outbox, survive a restart before and after
  *   the library has them, and a write two windows make to one default is a conflict, resolved either way.
  * - **Validation on read**: a newer build's or a damaged own default is listed as unavailable with the reason, and no tab is made from it.
- * - **Reset** fills a tab from its default again; until P2-iii the tab holding the drawn view refuses, plainly.
+ * - **Reset** fills a tab from its default again, the tab holding the drawn view included (P2-iii).
  */
 import { describe, expect, test } from "bun:test";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
@@ -20,7 +20,7 @@ import { buildIssues, fillOf, fragmentIssues, fragmentOfTab, instantiateFragment
   type SubstitutionChoice, type SubstitutionContext } from "../src/app/profiles/layout-fragment";
 import { contributedDefaultIssues, contributedDefaults, LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, LayoutDefaults } from "../src/app/profiles/layout-defaults";
 import { TabDefaults } from "../src/app/profiles/tab-defaults";
-import { substitutionContext } from "../src/app/profiles/profile-window";
+import { drawnView, substitutionContext } from "../src/app/profiles/profile-window";
 import { profileSessionOf } from "../src/app/profiles/profile-session";
 import type { ProfileSessions } from "../src/app/profiles/profile-sessions";
 import { layoutFragment, sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
@@ -49,13 +49,13 @@ async function quiet(outbox: DocumentOutbox) { for (let i = 0; i < 200 && (outbo
 type Profile = { subjects: { kind: string; id: string }[]; looks: string[] };
 let windows = 0;
 /** A window: its outbox over the library, its defaults, its session (tab 1 shows V1 wearing LOOK) and the tabs' actions. */
-function windowOn(documents = storeDocuments(), storage = memoryOutboxStorage(), options: { drawn?: () => string | undefined; profile?: Profile } = {}) {
+function windowOn(documents = storeDocuments(), storage = memoryOutboxStorage(), options: { profile?: Profile } = {}) {
   const outbox = new DocumentOutbox(documents, storage, { retryMs: 5 });
   outbox.open();
   // Each window its own source of randomness, as each page has: two windows saving in the same millisecond never make the same ID.
   const defaults = new LayoutDefaults({ documents, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(11 + ++windows) });
   const s = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "Layout 1", character: V1.id, look: LOOK }, seededRandom(1)),
-    { random: seededRandom(7), ...(options.drawn ? { drawn: options.drawn } : {}) });
+    { random: seededRandom(7) });
   const profile: Profile = options.profile ?? { subjects: [V1], looks: [LOOK.look, OTHER_LOOK.look] };
   /** Vs deleted since (still members of the profile, design §1.4). */
   const deleted = new Set<string>();
@@ -432,13 +432,16 @@ describe("own defaults: Save as default, update, rename, delete and restore, thr
 });
 
 describe("reset to default", () => {
-  test("a tab resets to the default it was made from (or one named); what it held is a closed fragment; the drawn view's tab refuses plainly", () => {
-    let drawn: string | undefined;
-    const w = windowOn(undefined, undefined, { drawn: () => drawn });
+  test("a tab resets to the default it was made from (or one named); what it held is a closed fragment; the drawn view's tab resets too", () => {
+    const w = windowOn();
     expect(act(w, { kind: "tabs.reset", tab: w.s.tabId() })).toBe("This tab wasn't made from a default. Choose one to reset it to.");
-    drawn = w.s.graph.viewIds()[0];
-    expect(act(w, { kind: "tabs.reset", tab: w.s.tabId(), default: EYE })).toBe("The 3D view draws a view in this tab, so the tab can't be reset yet.");
-    drawn = undefined;
+    // The tab holding the view the window draws (its only view) resets; the window then draws the view the default made (P2-iii).
+    const first = w.s.tabId(), drawnBefore = drawnView(w.s);
+    expect(act(w, { kind: "tabs.reset", tab: first, default: EYE })).toBeUndefined();
+    expect(w.s.graph.has(drawnBefore!)).toBe(false);
+    expect(w.s.graph.tabOf(drawnView(w.s)!)).toBe(first);
+    expect(w.s.graph.undo()).toBe(true);
+    expect(drawnView(w.s)).toBe(drawnBefore);
     expect(act(w, { kind: "tabs.new", default: "poses/default", choice: { scenes: { scene1: null } } })).toBeUndefined();
     const tab = w.s.tabId(), before = json(w.s.session());
     w.s.arrange(tab, dockOf(["presets"]));

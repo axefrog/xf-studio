@@ -18,10 +18,8 @@ export function seededRandom(seed = 1): () => number {
   };
 }
 
-export function openSession(data: ProfileSessionData, options: { profile?: string; history?: HistoryService; preview?: PreviewState; random?: () => number;
-  drawn?: () => string | undefined } = {}) {
+export function openSession(data: ProfileSessionData, options: { profile?: string; history?: HistoryService; preview?: PreviewState; random?: () => number } = {}) {
   const preview = options.preview ?? freshWorkspace().preview;
   return new ProfileSessions({ profile: options.profile ?? "p-1", data, history: options.history ?? createHistoryService(),
-    graph: (views, owner) => createStudioViewGraph(preview, views, owner), stored: sessionViewGraph, random: options.random ?? seededRandom(),
-    ...(options.drawn ? { drawn: options.drawn } : {}) });
+    graph: (views, owner) => createStudioViewGraph(preview, views, owner), stored: sessionViewGraph, random: options.random ?? seededRandom() });
 }

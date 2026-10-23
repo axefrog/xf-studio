@@ -5,7 +5,7 @@ import { isDirectGlint } from "../../../engines/layered-makeup/direct-glint-sett
 import { maskAlphaKey, previewOpticalKey } from "../../../engines/layered-makeup/makeup-dependencies";
 import { createRasterClient, type RasterPort } from "./raster-client";
 import type { RasterResponse, GlitterStats } from "../../../engines/layered-makeup/raster-processor";
-import type { Layer } from "../../../engines/layered-makeup/recipe";
+import type { Layer, Recipe } from "../../../engines/layered-makeup/recipe";
 import { assessPreviewQuality, type PreviewTextureSize } from "../preview/preview-quality";
 import type { RasterRegion } from "../../../engines/layered-makeup/region";
 import type { ReadonlyDeep } from "../../../platform/api/read-only";
@@ -21,9 +21,11 @@ type PendingOptics = { key: string; data?: PreviewOptics; albedo?: PreviewAlbedo
  * What a surface not shown now holds (profiles phase 4a-v): filled ahead of its show (`fillScene`), or left as it was when it stopped
  * being shown. Per slot, the canvas its mask texture reads, the layer it was given and the optical maps it was given them with. While a
  * surface holds a canvas, a completed mask is painted into a new canvas rather than over that one, so the surface keeps exactly what it
- * was filled with (a detached snapshot) until it is brought up to date.
+ * was filled with (a detached snapshot) until it is brought up to date. `look` is the look those layers are (the document's when held) and
+ * `size` the tier they were rastered at: when the document shows that look again, the hold gives its masks and maps back (`showLook`).
  */
-type HeldLayers = { accepted: boolean; ids: string[]; slots: { canvas: HTMLCanvasElement; layer: string; optics: PendingOptics | undefined }[] };
+type HeldLayers = { accepted: boolean; look: string | undefined; size: number; ids: string[];
+  slots: { canvas: HTMLCanvasElement; layer: string; optics: PendingOptics | undefined }[] };
 
 export { previewOpticalKey };
 
@@ -31,6 +33,11 @@ export { previewOpticalKey };
 export function createBrowserPreviewDevice(options: {
   /** Where the surface's layers come from (the live feature's authoring document). */
   document: PreviewLayerSource;
+  /**
+   * Which look the document shows now, as a key (undefined: none, or unknown): what a surface's hold is tagged with, so a warm head's makeup
+   * is given back when the document shows its look again (experiment 044 decision D3).
+   */
+  look?: () => string | undefined;
   /** The live feature's region (its mirror and fine-Glitter scope), for the raster worker and optical identities. */
   region: RasterRegion;
   initialSize: PreviewTextureSize;
@@ -133,7 +140,7 @@ export function createBrowserPreviewDevice(options: {
     report: options.report,
   });
   /** The layers as they are now, as a surface given them holds them. */
-  const snapshot = (accepted: boolean): HeldLayers => ({ accepted, ids: authoring.recipe.layers.map(layer => layer.id),
+  const snapshot = (accepted: boolean): HeldLayers => ({ accepted, look: options.look?.(), size: coordinator.size, ids: authoring.recipe.layers.map(layer => layer.id),
     slots: authoring.recipe.layers.map((layer, i) => ({ canvas: canvases[i], layer: JSON.stringify(layer), optics: optics[i] })) });
   /**
    * Bring `scene`'s slots to the layers as they are now, and say which slots need presenting: from what it holds, only the slots whose
@@ -224,5 +231,22 @@ export function createBrowserPreviewDevice(options: {
     },
     /** A surface goes (its head is released): it holds nothing any more. */
     releaseScene(scene: Scene) { held.delete(scene); },
+    /**
+     * The document shows another look (experiment 044 decision D3). When a surface not shown holds that look's layers at this tier (a warm
+     * head's, kept with it and released with it, so bounded by residency), its masks and maps become the device's again and only the layers
+     * changed since are rastered: switching back to a warm look rasters, uploads and composites nothing. Otherwise (or while a surface is
+     * connected: it is given every layer) every layer is rastered afresh, as before. Answers whether a hold was given back.
+     */
+    showLook(): boolean {
+      const look = options.look?.(), size = coordinator.size;
+      const from = viewer || look === undefined ? undefined : [...held.values()].find(entry => entry.look === look && entry.accepted && entry.size === size);
+      if (!from) { coordinator.resetStack(); return false; }
+      // Work queued for the look shown before must not paint the slots taken back (their indices name its layers).
+      client.reset();
+      canvases.splice(0, canvases.length, ...from.slots.map(slot => slot.canvas));
+      optics = from.slots.map(slot => slot.optics);
+      coordinator.syncStack({ layers: from.slots.map(slot => JSON.parse(slot.layer) as Layer) } as Recipe);
+      return true;
+    },
   };
 }

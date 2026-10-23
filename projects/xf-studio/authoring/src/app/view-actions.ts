@@ -79,9 +79,7 @@ export class ViewActions {
       const undo = action.kind === "view.undo", history = this.graph.history();
       if (!(undo ? history.depth : history.redoDepth))
         return refusal("invalid_value", undo ? "There is no view or lighting change to undo." : "There is no undone view or lighting change to redo.");
-      // A move its owner refuses for now (it would close the view the 3D view draws), with the reason.
-      const blocked = this.graph.historyBlocked(undo ? "undo" : "redo");
-      return blocked ? refusal("incompatible_mode", blocked) : { available: true };
+      return { available: true };
     }
     if (action.kind === "view.endEdit") return { available: true };
     if (typeof action.view !== "string") return refusal("missing_target", "Open a 3D view to use this.");

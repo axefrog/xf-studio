@@ -47,7 +47,7 @@ function gates() {
 }
 
 function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = [], previews: SceneHeadsPorts["previews"] = null,
-  views: Record<string, { scene: string; subject: string }> = {}, editors?: SceneHeadsPorts["editors"]) {
+  views: Record<string, { scene: string; subject: string }> = {}, editors?: SceneHeadsPorts["editors"], document?: SceneHeadsPorts["document"]) {
   const scene = { subject: Object.keys(bodies)[0]! };
   const preparations: (PreparationState | null)[] = [];
   const gate = gates(), h = harness({ build: gate.build, failBuild }), people = characterOwner(bodies);
@@ -58,12 +58,13 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
   const heads = createBrowserSceneHeads({
     head: { ...h.ports },
     scenes: { view: () => "main", of: view => view === "main" ? "s1" : views[view]?.scene,
+      has: scene => scene === "s1" || Object.values(views).some(view => view.scene === scene),
       subject: id => Object.values(views).find(view => view.scene === id)?.subject ?? scene.subject, ensureSubject: async () => scene.subject,
       subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
     characters: people.port,
     prepareCore: (body, _pending, signal) => { prepared.push({ body, signal }); return prepare(body, signal); },
     pending: message => pending.push(message), notice: text => notices.push(text), preparation: state => preparations.push(state),
-    shown: head => shown.push(head), previews, ...(editors ? { editors } : {}),
+    shown: head => shown.push(head), previews, ...(editors ? { editors } : {}), ...(document ? { document } : {}),
     onContext: listener => { contextListeners.add(listener); return () => { contextListeners.delete(listener); }; },
   });
   return { h, gate, people, heads, shown, notices, pending, prepared, scene, listeners, preparations,
@@ -356,21 +357,111 @@ test("4a-vi: each view's on-head editor is mounted on the head shown for it, and
   expect(log.at(-1)).toBe("unmount:2:" + side);
 });
 
-test("4a-vi: until phase 2, show(view) of a view whose scene shows another look than the edited one is refused, with nothing changed", async () => {
-  const views: Record<string, { scene: string; subject: string }> = {}, log: string[] = [];
-  const o = owner({ v1: "female", v2: "female" }, [], null, views, { mount: (_head, view) => { log.push(`mount:${view}`); return () => log.push(`unmount:${view}`); },
-    refusal: view => view === side ? "That view shows a different look." : undefined });
+/**
+ * Per-view editing (experiment 044 P2-iii, decision D3) over the owner: a document that follows the drawn view's look, and a log of the
+ * editor's mounts and of the layered surface's connections, so the order of a look switch can be read.
+ */
+function lookSwitching() {
+  const views: Record<string, { scene: string; subject: string }> = {}, log: string[] = [], looks: Record<string, string> = { main: "A" };
+  let edited = "A";
+  const id = (head: AttachedHead) => (head.scene.slot as unknown as { id: number }).id;
+  const o = owner({ v1: "female", v2: "female" }, [], null, views,
+    { mount: (head, view) => { log.push(`mount:${id(head)}:${view}`); return () => log.push(`unmount:${id(head)}:${view}`); } },
+    { shows: view => looks[view] === edited, follow: view => { edited = looks[view]!; log.push(`follow:${edited}`); } });
+  // The fake layered surface's connections, logged by head.
+  const preview = o.h.ports.layered[0]!.preview, { connectScene, disconnectScene } = preview;
+  const headOf = (surface: unknown) => [...o.h.surfaces].find(([, item]) => item === surface)?.[0] as { slot: { id: number } } | undefined;
+  preview.connectScene = surface => { log.push(`connect:${headOf(surface)?.slot.id}`); return connectScene(surface); };
+  preview.disconnectScene = surface => { if (o.h.connected === surface) log.push(`hold:${headOf(surface)?.slot.id}`); disconnectScene(surface); };
   const side = o.h.ports.graph!.addView("main", {}, { label: "Side" });
-  views[side] = { scene: "s2", subject: "v2" };
+  views[side] = { scene: "s2", subject: "v2" }; looks[side] = "B";
+  return { o, log, side, edited: () => edited, looks, views };
+}
+
+test("P2-iii: a view of another look: the editor is settled, the head on screen holds its layers, and only then does the document switch; the target takes over with the new look", async () => {
+  const { o, log, side, edited } = lookSwitching();
+  await o.heads.load();
+  const first = o.heads.shown()!;
+  expect(log).toEqual(["connect:1", "mount:1:main"]);
+  log.length = 0;
+  o.gate.open.female = false;
+  const shown = o.heads.show(side);
+  // Before anything is built: the editor unmounted, then the head on screen holds what it shows, then the document shows look B.
+  expect(log).toEqual(["unmount:1:main", "hold:1", "follow:B"]);
+  expect(edited()).toBe("B");
+  await settle();
+  // While the side head is made ready, the head on screen draws with nothing connected: no surface follows look B's layers.
+  expect(o.heads.shown()).toBe(first);
+  expect(o.h.connected).toBeUndefined();
+  expect(o.heads.shownView()).toBe(side);
+  o.gate.release("female");
+  await shown;
+  const second = o.heads.shown()!;
+  expect(second).not.toBe(first);
+  expect(log.slice(3)).toEqual(["connect:2", "mount:2:" + side]);
+  expect(o.h.connected).toBe(o.h.surfaces.get(second.scene));
+  o.heads.dispose();
+});
+
+test("P2-iii: back before the takeover, the document shows the first look again and the head on screen follows it, with nothing built shown", async () => {
+  const { o, log, side, edited } = lookSwitching();
+  await o.heads.load();
+  const first = o.heads.shown()!;
+  o.gate.open.female = false;
+  const away = o.heads.show(side);
+  await settle();
+  log.length = 0;
+  await o.heads.show("main");
+  await expect(away).rejects.toMatchObject({ name: "AbortError" });
+  expect(log).toEqual(["follow:A", "connect:1", "mount:1:main"]);
+  expect(edited()).toBe("A");
+  expect(o.heads.shown()).toBe(first);
+  expect(o.h.connected).toBe(o.h.surfaces.get(first.scene));
+  expect(o.heads.snapshot()).toMatchObject({ building: null, residents: [{ key: "s1|v1|female", state: "shown" }] });
+  o.gate.release("female");
+  await settle();
+  expect(o.heads.shown()).toBe(first);
+  o.heads.dispose();
+});
+
+test("P2-iii: a view of the same look switches no document and keeps the head on screen connected until the takeover", async () => {
+  const { o, log, side, looks } = lookSwitching();
+  looks[side] = "A";
+  await o.heads.load();
+  log.length = 0;
+  o.gate.open.female = false;
+  const shown = o.heads.show(side);
+  await settle();
+  expect(log).toEqual(["unmount:1:main"]);
+  expect(o.h.connected).toBe(o.h.surfaces.get(o.heads.shown()!.scene));
+  o.gate.release("female");
+  await shown;
+  expect(log.slice(1)).toEqual(["hold:1", "connect:2", "mount:2:" + side]);
+  o.heads.dispose();
+});
+
+test("P2-iii: nothing drawn keeps the head warm (drawn again with no build); a head whose view went is hidden at once, and its runtime goes once another is shown", async () => {
+  const { o, side, views } = lookSwitching();
   await o.heads.load();
   const first = o.heads.shown()!, builds = o.h.builds;
-  await expect(o.heads.show(side)).rejects.toThrow("That view shows a different look.");
-  // The drawn view, the head, its editor and the residency are as they were: nothing was wanted or built.
-  expect(o.heads.shownView()).toBe("main");
+  await o.heads.show(undefined);
+  expect([o.heads.shown(), o.heads.shownView()]).toEqual([undefined, undefined]);
+  expect(o.heads.snapshot().residents).toMatchObject([{ key: "s1|v1|female", state: "warm" }]);
+  await o.heads.show("main");
+  expect([o.heads.shown(), o.h.builds]).toEqual([first, builds]);
+  // The side view is drawn, then its tab closes: its scene goes, and the window draws the main view again.
+  await o.heads.show(side);
+  const second = o.heads.shown()!;
+  o.h.ports.graph!.closeView(side);
+  delete views[side];
+  o.gate.open.female = false;
+  const back = o.heads.show("main");
+  // The main view's head is warm: shown at once; the side head, hidden, goes with its scene.
+  await back;
+  await settle();
   expect(o.heads.shown()).toBe(first);
-  expect(o.h.builds).toBe(builds);
-  expect(o.heads.preparation()).toBeNull();
-  expect(log).toEqual(["mount:main"]);
+  expect(o.heads.snapshot().residents.map(item => item.key)).toEqual(["s1|v1|female"]);
+  expect(o.h.log).toContain(`scene:dispose:${(second.scene.slot as unknown as { id: number }).id}`);
   o.heads.dispose();
 });
 

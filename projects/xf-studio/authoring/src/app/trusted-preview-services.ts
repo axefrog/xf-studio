@@ -107,8 +107,16 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
           const camera = shown.storedCamera() ?? initial.camera;
           if (camera) shown.restoreSavedCamera(camera);
         },
-        /** Another head takes the view: this one's camera pose goes to the camera node, then its motion is released. */
-        hide() { shown.storeCamera(); motion.release(); shown.draw(null); } };
+        /**
+         * Another head takes the view: this one's camera pose goes to the camera node, then its motion is released. A view that no longer
+         * exists (its tab closed while it was drawn) keeps nothing.
+         */
+        hide() {
+          const kept = graph.has(shown.view());
+          if (kept) shown.storeCamera();
+          motion.release(kept);
+          shown.draw(null);
+        } };
     },
   };
 }

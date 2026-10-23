@@ -5,13 +5,13 @@
  */
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { ANOTHER_LOOK, createSceneEditors, type SceneEditorPorts } from "../src/preview/browser/scene-editors";
+import { createSceneEditors, type SceneEditorPorts } from "../src/preview/browser/scene-editors";
 import type { AttachedHead } from "../src/preview/browser/browser-head-attachment";
 
 function editors() {
   const log: string[] = [], attached: Record<string, unknown> = {};
-  // The look the look editor's document shows.
-  let edited: { collection: string; look: string } | undefined = { collection: "c", look: "look-of-main" };
+  // The view drawn now (none: the shown tab holds no view).
+  let drawn: string | undefined = "main";
   const layer = { id: "L1" };
   let hooks: Record<string, (...args: unknown[]) => unknown> = {};
   let controls = true;
@@ -19,22 +19,23 @@ function editors() {
   const plate = { geometry: new THREE.PlaneGeometry(1, 1) };
   const factory = { feature: "eye-makeup" };
   const ports = {
-    surfaces: new Map([["eye-makeup", factory]]), look: { feature: "eye-makeup", preview: {}, ref: () => edited },
+    surfaces: new Map([["eye-makeup", factory]]), look: { feature: "eye-makeup", preview: {} },
     core: { geometry: { layer: () => layer, recipe: () => ({ layers: [layer] }) }, presentation: { selected: 0, layer: () => layer, selectedField: () => ({ id: "F1" }) },
       app: { dispatch: (action: { kind: string; instance?: string }) => { log.push(`dispatch:${action.kind}@${action.instance}`); return { ok: true }; },
         beginGesture: (source: string, id: string, look?: { look: string }) => { log.push(`begin:${source}:${id}:${look?.look}`); return true; },
         applyGesture: (source: string) => { log.push(`apply:${source}`); return true; }, endGesture: (source: string, cancel?: boolean) => { log.push(`end:${source}:${!!cancel}`); },
         surfaceEdge: () => null } },
     // The input layer names a view's look and its actions (here after the view).
-    naming: { look: (view: string) => view === "empty" ? undefined : ({ collection: "c", look: view === "twin" ? "look-of-main" : `look-of-${view}` }), complete: (action: object, view: string) => ({ ...action, instance: view }) },
-    drawn: () => "main",
+    naming: { look: (view: string | undefined) => view === undefined || view === "empty" ? undefined : ({ collection: "c", look: view === "twin" ? "look-of-main" : `look-of-${view}` }),
+      complete: (action: object, view: string | undefined) => ({ ...action, instance: view }) },
+    drawn: () => drawn,
     viewport: { mountSurface: (_surface: unknown, given: typeof hooks) => { hooks = given; log.push("mount"); return { setEnabled: (on: boolean) => log.push(`enabled:${on}`) }; },
       unmountSurface: () => log.push("unmount") },
     attach: (services: Record<string, unknown>) => Object.assign(attached, services), message: (source: string, text: string) => log.push(`message:${source}:${text}`),
   } as unknown as SceneEditorPorts;
   const head = { scene: { feature: (renderer: unknown) => renderer === factory ? { surface: plate } : undefined },
     surfaceControls: () => controls, onSurfaceControls: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; } } as unknown as AttachedHead;
-  return { made: createSceneEditors(ports), log, attached, head, hooks: () => hooks, listeners, edit(ref: typeof edited) { edited = ref; },
+  return { made: createSceneEditors(ports), log, attached, head, hooks: () => hooks, listeners, draw(view: string | undefined) { drawn = view; },
     setControls(on: boolean) { controls = on; for (const listener of [...listeners]) listener(); } };
 }
 
@@ -70,16 +71,11 @@ test("a head whose scene has no edited surface mounts nothing; the UV editor nam
   expect(e.log).toEqual(["begin:uv:L1:look-of-main"]);
 });
 
-test("until phase 2 one look is edited: a view whose scene shows another look is refused plainly, one showing the edited look is not", () => {
-  const e = editors();
-  expect(e.made.refusal("main")).toBeUndefined();
-  // Another view of a scene showing the same look.
-  expect(e.made.refusal("twin")).toBeUndefined();
-  // Another look, or none while one is edited: the editor would name it while showing the edited look's layers.
-  expect(e.made.refusal("side")).toBe(ANOTHER_LOOK);
-  expect(e.made.refusal("empty")).toBe(ANOTHER_LOOK);
-  // No look edited: only a view showing none.
-  e.edit(undefined);
-  expect(e.made.refusal("empty")).toBeUndefined();
-  expect(e.made.refusal("main")).toBe(ANOTHER_LOOK);
+test("P2-iii: the UV editor follows the drawn view (its look named at each gesture), and names none while no view is drawn", () => {
+  const e = editors(), uv = e.made.uvHooks();
+  e.draw("side");
+  uv.begin!();
+  e.draw(undefined);
+  uv.begin!(); uv.select!(1);
+  expect(e.log).toEqual(["begin:uv:L1:look-of-side", "begin:uv:L1:undefined", "dispatch:point.select@undefined"]);
 });

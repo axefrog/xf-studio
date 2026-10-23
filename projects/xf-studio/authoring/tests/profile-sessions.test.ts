@@ -11,7 +11,8 @@
  *   focus numbers, D13); an Undo can never put a view into a missing tab.
  * - **Persistence:** the session stores, with its tabs, closed fragments and shown tab, through the workspace's own serialisation and reads
  *   back byte-identical (sessions are workspace data, design §1.2; library documents go through the outbox).
- * - **Review P2-1's findings**, one test or more each: the drawn view can't close and every refusal changes nothing; listeners hear a
+ * - **Review P2-1's findings**, one test or more each: every refusal changes nothing (and, since P2-iii, the view the window draws may close:
+ *   the drawn view follows the shown tab, `drawnView`); listeners hear a
  *   settled session; replays keep what Undo doesn't hold; the dock relay; tab operations as the editing context; IDs across a restart.
  *   The model's content identities, what it keeps outside Undo and its listener checks extend T1 to the same ground.
  */
@@ -21,7 +22,7 @@ import { sessionOfWorkspace, workspaceProfiles } from "../src/app/profiles/profi
 import { PROFILES_MIGRATION } from "../src/app/profiles/profile-session";
 import { type ProfileSessions, type TabContent } from "../src/app/profiles/profile-sessions";
 import { UIPreferenceActions, type DockLayout } from "../src/app/ui-preferences";
-import { relayDockSaves } from "../src/app/profiles/profile-window";
+import { drawnView, relayDockSaves } from "../src/app/profiles/profile-window";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
@@ -611,34 +612,42 @@ describe("persistence", () => {
 });
 
 describe("refusals change nothing (review P2-1, finding 1)", () => {
-  test("the view the window draws can't close: its tab can't close or be reset, it can't close, and each refusal says why", () => {
-    const s = openSession(startData(41), { random: seededRandom(41), drawn: () => MAIN_VIEW }), [first, second] = s.tabList();
-    // A listener reading the drawn view on every change, as the 3D view's does: it must never find it gone.
-    s.graph.subscribe(() => { s.graph.node(MAIN_VIEW, "scene"); });
-    expect(s.capability({ kind: "tabs.close", tab: first!.id })).toEqual({ available: false, code: "incompatible_mode",
-      reason: "The 3D view draws a view in this tab, so the tab can't close yet." });
-    expect(() => s.close(first!.id)).toThrow("The 3D view draws a view in this tab, so the tab can't close yet.");
-    expect(() => s.reset(first!.id, contentFrom(s, MAIN_VIEW, false))).toThrow("The 3D view draws a view in this tab, so the tab can't be reset yet.");
-    expect(() => s.closeView(MAIN_VIEW)).toThrow("The 3D view draws this view, so it can't close yet.");
-    // Another tab, and a view beside the drawn one, close as before.
+  test("P2-iii: the view the window draws may close; the drawn view follows the shown tab to another of its views, or to none", () => {
+    const s = openSession(startData(41), { random: seededRandom(41) }), [first, second] = s.tabList();
+    // The window draws the shown tab's most recently focused view (`drawnView`); a listener reading it on every change, as the window's
+    // does, always finds a view of the shown tab, or none.
+    const drawn: (string | undefined)[] = [];
+    const follow = () => { const view = drawnView(s); expect(view === undefined || s.graph.tabOf(view) === s.tabId()).toBe(true); drawn.push(view); };
+    s.subscribe(follow);
     const beside = s.graph.viewIds().find(view => view !== MAIN_VIEW && s.graph.tabOf(view) === first!.id)!;
+    expect(drawnView(s)).toBe(beside);
+    expect(s.capability({ kind: "tabs.close", tab: first!.id })).toEqual({ available: true });
+    // The drawn view closes: the tab's other view is drawn.
     s.closeView(beside);
-    s.close(second!.id);
-    expect(s.tabList().map(tab => tab.id)).toEqual([first!.id]);
+    expect(drawnView(s)).toBe(MAIN_VIEW);
+    // The tab holding it resets: the tab's new view is drawn.
+    s.reset(first!.id, contentFrom(s, MAIN_VIEW, false));
+    const made = drawnView(s)!;
+    expect([made !== MAIN_VIEW, s.graph.tabOf(made)]).toEqual([true, first!.id]);
+    // The tab closes: the other tab is shown, and its most recently focused view drawn.
+    s.close(first!.id);
+    expect(s.tabList().map(tab => tab.id)).toEqual([second!.id]);
+    expect(s.graph.tabOf(drawnView(s)!)).toBe(second!.id);
+    // A tab without a view draws none.
+    for (const view of s.graph.viewIds()) s.closeView(view);
+    expect(drawnView(s)).toBeUndefined();
+    expect(drawn.at(-1)).toBeUndefined();
     invariants(s);
   });
 
   test("every refused operation leaves the session, its history and every listener untouched", () => {
-    const history = createHistoryService(), s = openSession(startData(43), { history, random: seededRandom(43), drawn: () => MAIN_VIEW });
+    const history = createHistoryService(), s = openSession(startData(43), { history, random: seededRandom(43) });
     const [first, second] = s.tabList();
     s.rename(second!.id, "Renamed");
     let heard = 0;
     s.subscribe(() => heard++); s.graph.subscribe(() => heard++); s.focus.subscribe(() => heard++); history.subscribe(() => heard++);
     const content = () => contentFrom(s, MAIN_VIEW, false), main = s.graph.data().views.find(view => view.id === MAIN_VIEW) as ViewRecord;
     const refusals: [string, () => unknown][] = [
-      ["close the drawn view's tab", () => s.close(first!.id)],
-      ["reset the drawn view's tab", () => s.reset(first!.id, content())],
-      ["close the drawn view", () => s.closeView(MAIN_VIEW)],
       ["close a closed tab", () => s.close("t-gone")],
       ["reset a closed tab", () => s.reset("t-gone", content())],
       ["reset with IDs taken", () => s.reset(second!.id, { ...content(), views: [{ ...main, id: MAIN_VIEW }] })],
@@ -675,39 +684,27 @@ describe("refusals change nothing (review P2-1, finding 1)", () => {
     expect(s.tab(second!.id)!.name).not.toBe("Renamed");
   });
 
-  test("an Undo or Redo that would close the drawn view waits, with the reason, and keeps every step", () => {
-    let drawn = MAIN_VIEW;
-    const history = createHistoryService(), s = openSession(startData(47), { history, random: seededRandom(47), drawn: () => drawn });
+  test("P2-iii: an Undo or Redo that closes the drawn view runs, and the drawn view moves to another view of the shown tab", () => {
+    const history = createHistoryService(), s = openSession(startData(47), { history, random: seededRandom(47) });
     const core = createTrustedAuthoringCore({ ...freshWorkspace() }, { history, views: s.graph, resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
-    const scope = history.scope(viewScope("p-1"))!;
-    // Undo of a new view that is drawn now.
+    // Undo of a new view that is drawn now (focused, as a press in its pane focuses it).
     const added = s.addView(MAIN_VIEW, { scene: true });
-    drawn = added;
-    let before = json(s), steps = s.graph.history();
-    const undo = "Undoing this would close the view the 3D view draws, so it can't be undone yet.";
-    expect(s.graph.historyBlocked("undo")).toBe(undo);
-    expect(scope.capability({ kind: "history.undo" })).toEqual({ available: false, code: "incompatible_mode", reason: undo });
-    expect(core.app.capability({ kind: "view.undo" })).toMatchObject({ available: false, reason: undo });
-    expect(s.graph.undo()).toBe(false);
-    expect(scope.jumpTo(scope.timeline().startId)).toBe(false);
-    expect([json(s), s.graph.history()]).toEqual([before, steps]);
-    drawn = MAIN_VIEW;
+    s.focus.focusView(added);
+    expect(drawnView(s)).toBe(added);
+    expect(core.app.capability({ kind: "view.undo" })).toEqual({ available: true });
     expect(s.graph.undo()).toBe(true);
     expect(s.graph.has(added)).toBe(false);
+    expect([drawnView(s) !== undefined, s.graph.tabOf(drawnView(s)!)]).toEqual([true, s.tabId()]);
     // Redo of closing a view that is drawn now.
     const other = s.addView(MAIN_VIEW, { scene: true });
     s.closeView(other);
     expect(s.graph.undo()).toBe(true);
-    drawn = other;
-    before = json(s); steps = s.graph.history();
-    const redo = "Redoing this would close the view the 3D view draws, so it can't be redone yet.";
-    expect(s.graph.historyBlocked("redo")).toBe(redo);
-    expect(scope.capability({ kind: "history.redo" })).toEqual({ available: false, code: "incompatible_mode", reason: redo });
-    expect(s.graph.redo()).toBe(false);
-    expect([json(s), s.graph.history()]).toEqual([before, steps]);
-    drawn = MAIN_VIEW;
+    s.focus.focusView(other);
+    expect(drawnView(s)).toBe(other);
     expect(s.graph.redo()).toBe(true);
     expect(s.graph.has(other)).toBe(false);
+    expect(drawnView(s)).not.toBe(other);
+    invariants(s);
   });
 });
 

@@ -22,8 +22,6 @@
  * - **Settled before anyone hears.** An operation validates whole before it changes anything (a refusal changes nothing), and the graph's,
  *   focus's and the session's notifications are held until it has settled (tabs, views, focus and its step); an Undo or Redo too. Each
  *   listener is isolated from the others, so one that throws can't leave the session half changed.
- * - **The drawn view stays** (until P2-iii makes the drawn view follow the shown tab): closing or resetting the tab that holds it, closing
- *   it, and an Undo or Redo that would remove it are refused with the reason, and the steps are kept.
  * - **Replays keep what Undo doesn't hold.** A step holds a tab's arrangement and instances, its scenes' targets and its views' focus
  *   numbers as they were when it was recorded; a tab or fragment an Undo or Redo brings in takes them from what it takes away instead,
  *   matched by its content's identity (`@content`, session-only: never stored or read out, given afresh when the session opens).
@@ -133,11 +131,6 @@ export type ProfileSessionsDeps = {
   stored?(graph: ViewGraph): ViewGraphData;
   /** Default: the platform's cryptographic source. Tests pass a seeded one. */
   readonly random?: () => number;
-  /**
-   * The view the window draws (undefined: none). Until P2-iii makes the drawn view follow the shown tab, nothing may close it: an
-   * operation, Undo or Redo that would is refused with the reason, and nothing changes.
-   */
-  readonly drawn?: () => ViewId | undefined;
 };
 
 export class ProfileSessions {
@@ -160,7 +153,6 @@ export class ProfileSessions {
   /** Releases the notifications held while an Undo or Redo settles (from `apply` to `settled`). */
   private releaseReplay?: () => void;
   private readonly random: () => number;
-  private readonly drawn?: () => ViewId | undefined;
   private readonly storedGraph: (graph: ViewGraph) => ViewGraphData;
   private scope!: HistoryScope;
   private graphTarget!: HistoryTarget;
@@ -173,7 +165,6 @@ export class ProfileSessions {
     const { data } = deps;
     this.profile = deps.profile;
     this.random = deps.random ?? hostRandom().next;
-    this.drawn = deps.drawn;
     this.focus = deps.history.focus;
     this.storedGraph = deps.stored ?? (graph => graph.data());
     const { schema: _schema, tabs: _tabs, views: _views, focus: _focus, closed: _closed, seq: _seq, ...extra } = data as ProfileSessionData & Record<string, unknown>;
@@ -339,7 +330,7 @@ export class ProfileSessions {
    */
   close(tab: TabId) {
     const at = this.index(tab);
-    this.checkClosable(tab, "close");
+    this.checkClosable(tab);
     const fragment = this.fragment(this.tabs[at]!, at);
     this.operate("Close tab", "tabs.close", () => {
       if (fragment.views.length) this.graph.restructure({ remove: fragment.views.map(item => item.view.id) }, { label: "Close tab" });
@@ -387,7 +378,7 @@ export class ProfileSessions {
   /** Reset a tab to `content` (a default's, instantiated): what it held becomes a closed fragment ("before reset"), and it shows the content. */
   reset(tab: TabId, content: TabContent) {
     const at = this.index(tab);
-    this.checkClosable(tab, "reset");
+    this.checkClosable(tab);
     this.checkContent(content);
     const fragment = { ...this.fragment(this.tabs[at]!, at), reset: true as const }, added = this.contentNodes(content);
     this.operate("Reset tab", "tabs.reset", () => {
@@ -408,7 +399,6 @@ export class ProfileSessions {
   }
   closeView(view: ViewId) {
     if (!this.graph.has(view)) throw new TabRefusal("missing_target", "That view is closed.");
-    if (view === this.drawnView()) throw new TabRefusal("incompatible_mode", "The 3D view draws this view, so it can't close yet.");
     this.operate("Close view", "tabs.closeView", () => this.graph.closeView(view, { label: "Close view" }));
   }
 
@@ -450,7 +440,7 @@ export class ProfileSessions {
       const issue = typeof action.name === "string" ? nameIssue(action.name.trim()) : "Name the tab.";
       if (issue) throw new TabRefusal("invalid_value", issue);
     } else if (action.kind === "tabs.move" && !Number.isSafeInteger(action.to)) throw new TabRefusal("invalid_value", "Choose a place for the tab.");
-    else if (action.kind === "tabs.close") this.checkClosable(action.tab, "close");
+    else if (action.kind === "tabs.close") this.checkClosable(action.tab);
     else if (action.kind === "tabs.arrange" && action.layout !== null && (typeof action.layout !== "object" || !action.layout))
       throw new TabRefusal("invalid_value", "That arrangement can't be read.");
   }
@@ -531,7 +521,6 @@ export class ProfileSessions {
         return undefined;
       },
       clear: () => scope().clear(), seal: () => scope().seal(), undo: () => scope().undo(), redo: () => scope().redo(), state: () => scope().state(),
-      blocked: (direction, count) => scope().blocked(direction, count),
       withoutHistory: apply => scope().withoutHistory(apply),
       get recording() { return scope().recording; },
     };
@@ -543,13 +532,6 @@ export class ProfileSessions {
   private historyTarget(): HistoryTarget {
     return {
       read: key => sessionKey(key) ? this.readKey(key) : this.graphTarget.read(key),
-      // Until P2-iii, the view the window draws can't close: a move that would close it waits, its steps kept.
-      refusal: (values, cause) => {
-        const drawn = this.drawnView(), structure = values[STRUCTURE] as { views: readonly ViewRecord[] } | undefined;
-        if (!drawn || !structure || structure.views.some(view => view.id === drawn)) return undefined;
-        return cause === "redo" ? "Redoing this would close the view the 3D view draws, so it can't be redone yet."
-          : "Undoing this would close the view the 3D view draws, so it can't be undone yet.";
-      },
       apply: (values, cause) => {
         const keys = Object.keys(values), graphValues = Object.fromEntries(keys.filter(key => !sessionKey(key)).map(key => [key, values[key]]));
         const tabs = values[TABS] as Tabs | undefined, order = tabs ? tabs.order : this.tabs.map(tab => tab.id);
@@ -645,17 +627,15 @@ export class ProfileSessions {
   private closedFragment(closed: TabId | undefined): HeldClosed | undefined {
     return closed === undefined ? this.closed.at(-1) : [...this.closed].reverse().find(item => item.tab.id === closed);
   }
-  /** Throws a refusal (with the reason) when the tab's views can't go: one is a newer build's, or one is the view the window draws. */
-  checkClosable(tab: TabId, verb: "close" | "reset") {
+  /**
+   * Throws a refusal (with the reason) when the tab's views can't go: one is a newer build's. The view the window draws may go: the window
+   * then draws another view of the shown tab, or none (experiment 044 P2-iii).
+   */
+  checkClosable(tab: TabId) {
     if (this.keptTabs.has(tab)) throw new TabRefusal("incompatible_mode", "This tab holds a view from a newer version of XF Studio. Close or reset it there.");
-    const drawn = this.drawnView();
-    if (drawn && this.graph.tabOf(drawn) === tab)
-      throw new TabRefusal("incompatible_mode", `The 3D view draws a view in this tab, so the tab can't ${verb === "close" ? "close" : "be reset"} yet.`);
   }
   /** A tab with a new content identity (a new, duplicated or reset tab's, or one read from storage). */
   private held(tab: LayoutTab): HeldTab { return { ...tab, [CONTENT_ID]: ++this.contents }; }
-  /** The view the window draws, while it is in the graph. */
-  private drawnView(): ViewId | undefined { const view = this.drawn?.(); return view !== undefined && this.graph.has(view) ? view : undefined; }
   /** The tab beside place `at` once the tab there went: the next, else the last (undefined: none). */
   private neighbour(at: number): TabId | undefined { return (this.tabs[Math.min(at, this.tabs.length - 1)] ?? this.tabs.at(-1))?.id; }
   /** A tab as a closed fragment: it, its views and a value copy of every node they name (each with its place), and their focus numbers. */

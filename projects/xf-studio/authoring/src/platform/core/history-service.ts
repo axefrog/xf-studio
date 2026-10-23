@@ -22,8 +22,6 @@
  *   owner, the profile session, makes it the editing context when it records a tab operation (`ProfileSessions`).
  * - **One move at a time.** An Undo, Redo or jump asked for while a move is settling (from a listener) waits and runs once it has
  *   settled, so each move applies and publishes whole.
- * - **Refusals for now.** A target may refuse a move that is sound but can't happen yet (`HistoryTarget.refusal`, read from the values
- *   the move would show before anything moves, `blocked`): the move changes nothing and every step stays.
  * - **Documents.** `documents` is the `DocumentHistory` API over the `doc:*` scopes: a step keeps the document's value after it
  *   by reference (no copy, whatever its size), and moving hands back the value to restore.
  */
@@ -101,11 +99,6 @@ export interface HistoryScope {
   revertTransaction(step: HistoryEntryId | undefined): boolean;
   undo(): boolean;
   redo(): boolean;
-  /**
-   * Why the next `count` steps' Undo or Redo is refused now though they are sound (the target's `refusal`), or undefined. A refused move
-   * changes nothing and keeps every step.
-   */
-  blocked(direction: "undo" | "redo", count?: number): string | undefined;
   /** Go to the state right after step `stepId` (or the start) as one change. */
   jumpTo(stepId: string): boolean;
   plan(stepId: string): HistoryJumpPlan | undefined;
@@ -247,17 +240,13 @@ class Scope implements HistoryScope {
     const held = this.target.unavailable?.();
     if (held) return refusal(held, "not_ready");
     if (this.options.capability) return this.options.capability(action);
-    const blocked = (direction: "undo" | "redo", count = 1): Capability => {
-      const reason = this.blocked(direction, count);
-      return reason ? refusal(reason, "incompatible_mode") : { available: true };
-    };
     if (action.kind === "history.jumpTo") {
       const plan = this.plan(action.entryId);
       return !plan ? refusal("That history step no longer exists.", "missing_target") :
-        plan.direction === "none" ? refusal("This is already the current step.") : blocked(plan.direction, plan.count);
+        plan.direction === "none" ? refusal("This is already the current step.") : { available: true };
     }
-    if (action.kind === "history.undo") return this.stack.canUndo ? blocked("undo") : refusal("There is no change to undo.");
-    return this.redoValid() ? blocked("redo") : refusal("There is no undone change to redo.");
+    if (action.kind === "history.undo") return this.stack.canUndo ? { available: true } : refusal("There is no change to undo.");
+    return this.redoValid() ? { available: true } : refusal("There is no undone change to redo.");
   }
   state(): HistoryState {
     if (this.options.state) return this.options.state(this.timeline());
@@ -277,16 +266,8 @@ class Scope implements HistoryScope {
       redoCount: undone.length, trimmed: this.stack.trimmed, ...(documentLabel === undefined ? {} : { documentLabel }) };
   }
 
-  blocked(direction: "undo" | "redo", count = 1): string | undefined {
-    if (!this.target.refusal || (direction === "redo" && !this.redoValid())) return undefined;
-    const values = this.stack.peek(direction, count);
-    return values && this.target.refusal(values, direction);
-  }
-
   private move(plan: HistoryJumpPlan): boolean {
     if (this.target.unavailable?.()) return false;
-    // A refusal that holds for a while (a view still drawn): nothing moves and every step stays.
-    if (plan.direction !== "none" && this.blocked(plan.direction, plan.count)) return false;
     let moved: { parts: Record<string, unknown> } | undefined;
     if (plan.direction === "undo") {
       if (this.stack.depth < plan.count) return false;

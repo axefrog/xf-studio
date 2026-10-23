@@ -47,7 +47,7 @@ type KeptEntry = { at: number; record: KeptView };
 /** The views, and every node's place in the stored order (so a step that brings a node back puts it where it was). */
 type Structure = { views: ViewRecord[]; order?: string[] };
 /** What the graph's history needs from its scope. */
-export type ViewHistoryScope = Pick<HistoryScope, "checkpoint" | "clear" | "seal" | "undo" | "redo" | "blocked" | "state" | "withoutHistory" | "recording">;
+export type ViewHistoryScope = Pick<HistoryScope, "checkpoint" | "clear" | "seal" | "undo" | "redo" | "state" | "withoutHistory" | "recording">;
 /**
  * The graph's owner (a profile session, profiles design §4.1): it holds the View and lighting scope the graph records into, over a target
  * that includes the graph's (`history`), and names every new view and node (`freshId`), so its own operations and the graph's edits share
@@ -504,8 +504,6 @@ export class ViewGraph {
   seal() { this.scope.seal(); }
   undo(): boolean { return this.scope.undo(); }
   redo(): boolean { return this.scope.redo(); }
-  /** Why the next Undo or Redo is refused now though its steps are sound (the owner's rule, such as a view still drawn), if it is. */
-  historyBlocked(direction: "undo" | "redo"): string | undefined { return this.scope.blocked(direction); }
   /** The View and lighting history's value of a node (by ID) or of the views (`structure`), detached. */
   private readHistory(key: string): unknown {
     if (key === STRUCTURE) return { views: clone(this.views), order: [...this.nodes.keys()] } satisfies Structure;

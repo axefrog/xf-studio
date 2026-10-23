@@ -272,15 +272,6 @@ export class HistoryStack {
     }
     return { parts: this.settle(state), pushed };
   }
-  /** The values `undo(count)` or `redo(count)` would show, without moving (undefined without enough steps). */
-  peek(direction: "undo" | "redo", count = 1): LookParts | undefined {
-    const list = direction === "undo" ? this.entries.map(entry => entry.before) : this.redoList.map(step => step.after);
-    if (count < 1 || list.length < count) return undefined;
-    // The steps nearest the current state first: each further step's values take the keys over, as a move leaves them.
-    const refs: Refs = {};
-    for (const step of list.slice(-count).reverse()) Object.assign(refs, step);
-    return this.materialize(refs);
-  }
   get redoDepth() { return this.redoList.length; }
   /** Every step identity the stack still holds: kept, redo-able and the one a step at the limit displaced. */
   heldIds(): Set<HistoryEntryId> {

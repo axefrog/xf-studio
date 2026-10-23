@@ -5,7 +5,6 @@
  * - **`tabs.new`** makes a tab from a default: its substitution (`substitutionOf`) over the profile's subjects and looks and the session's
  *   scenes, with the person's choices, instantiated with the session's fresh IDs. A V another tab shows is shared by default (M2).
  * - **`tabs.reset`** fills a tab with a default again (default: the one it was made from); what it held is kept as a closed fragment.
- *   Until P2-iii, the tab holding the drawn view can't be reset, and the refusal says so.
  * - **`tabs.saveAsDefault`** saves a tab as an own default (a `layout-default` document, through the outbox) and makes it the tab's
  *   origin; **`tabs.updateDefault`** saves the tab over the own default it was made from (never a module's).
  * - **`defaults.rename`, `defaults.delete`, `defaults.restore`** act on own defaults; a module's are read-only.
@@ -74,7 +73,7 @@ export class TabDefaults {
       }
       case "tabs.reset": {
         const id = this.resetDefault(act.tab, act.default);
-        sessions.checkClosable(act.tab, "reset");
+        sessions.checkClosable(act.tab);
         const { view, substitution } = this.plan(id, act.choice);
         sessions.reset(act.tab, instantiateFragment(view.fragment, fillOf(substitution), sessions, { name: sessions.tab(act.tab)!.name, origin: view.id }));
         break;
@@ -102,7 +101,7 @@ export class TabDefaults {
     const { sessions, defaults } = this.deps;
     switch (action.kind) {
       case "tabs.new": this.plan(action.default, action.choice); return;
-      case "tabs.reset": sessions.checkClosable(this.existing(action.tab), "reset"); this.plan(this.resetDefault(action.tab, action.default), action.choice); return;
+      case "tabs.reset": sessions.checkClosable(this.existing(action.tab)); this.plan(this.resetDefault(action.tab, action.default), action.choice); return;
       case "tabs.saveAsDefault": throwIf(defaults.capability({ kind: "create", name: action.name, fragment: this.fragment(action.tab, action.name) })); return;
       case "tabs.updateDefault": { const origin = this.ownOrigin(action.tab); throwIf(defaults.capability({ kind: "update", id: origin.id, fragment: this.fragment(action.tab, origin.name) })); return; }
       case "defaults.rename": throwIf(defaults.capability({ kind: "rename", id: action.default, name: action.name })); return;
