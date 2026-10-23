@@ -1,6 +1,6 @@
 # Experiment 043: scene runtimes (profiles phase 4a)
 
-**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9), 4a-iv (§10) and 4a-v with its G2 follow-up 4a-v-b (§11) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
+**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9), 4a-iv (§10) and 4a-v with its G2 follow-ups 4a-v-b (§11) and 4a-v-c (§12) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `72369156` (phase 1 merged). Tests are in `projects/xf-studio/authoring/tests/`.
 
@@ -130,7 +130,7 @@ Each real-data run uses an isolated server and scratch caches, as S2 did: never 
 
 ## 6. Open risks, ranked
 
-1. **Variants built at draw time** (shadow depth, ANGLE input layouts) defeat compile-ahead. The hidden warm-up draw is the mitigation; G2 decides whether it is enough.
+1. **Variants built at draw time** (shadow depth, ANGLE input layouts) defeat compile-ahead. Answered by G2: the hidden warm-up draw readies Three's own variants, and ANGLE's (several outputs, integer vertex inputs) are removed at their source (§12).
 2. **GPU memory of a warm whole-body runtime** on smaller cards. It is a tunable budget, warm runtimes are dropped first under pressure, and the cost is measured in G3.
 3. **Unknown leaks beyond those read in the code.** The GL-object count in 4a-i finds them, rather than relying on `renderer.info`.
 4. **Renderer-global state between runtimes** (shadow `needsUpdate`, exposure, clear colour). Every draw opens with the runtime's full state record, and the A-B-A pixel gate checks it.
@@ -637,8 +637,8 @@ G2's first run (23 October, the "before" column below) failed on six findings. T
 - **Which programs.** Those are the skin scatter's input variants (skin, brows, face decals, mouth), plus the layered bakes and the makeup composite, which draw to two targets.
 - **How long each build takes.** On real data a skin variant took 1.1 s under the studio setup and 5.9 s under the creator rig; on synthetic heads, up to 13–15 s. Nothing is presented meanwhile, so the shown V and the progress line freeze for that long.
 - **No variant can be made ahead.** Binding a three-target stand-in while linking changes nothing, because ANGLE takes the layout from the shader, not from the bound framebuffer.
-- **The cache doesn't keep them.** Chrome caches a program's binary when it is linked, before these draw-time variants exist, so a warm profile probably builds them again in every session (not yet measured).
-- **What would fix it.** Split the scatter input so the lit, heavy program writes one target and the albedo and metalness go through a cheap program of their own. That is a renderer change with a parity check (§2.3's risk 1, now measured), and it is not in this part.
+- **A kept profile doesn't build them again** (measured in 4a-v-c, §12): the second session on a profile built one of them, the third none.
+- **What fixed it** (4a-v-c, §12): every program writes one output, and every joint index is a float.
 
 Pieces cut the freeze from the whole warm-up to the longest single build. G2 still fails its "progress keeps repainting" gate on that one build.
 
@@ -785,7 +785,7 @@ One run's first read of the GL error after the banded upload found an `INVALID_O
 
 **What 4a-vi needs from this.**
 
-- **The three-target builds.** Split the skin scatter's input into a lit single-output program and a cheap albedo-and-metalness program. Also measure whether a warm Chrome profile builds them again. This is the last G2 failure, and it needs its own chunk with a G1 parity run. The layered bakes and the makeup composite draw to two targets too: smaller builds, the same cause.
+- **The three-target builds.** Done in 4a-v-c (§12).
 - **The head's morph-target texture** is built inside the first warm-up piece's draw (about 30 ms of the 52 ms task). Three builds it at a mesh's first draw and offers no other way to make it.
 - **The S2 gates in their final test form** (`tests/webgl-scene-runtimes.test.ts`). The preparation probe already measures the preparation half: warm switch, cancel, stray frames, long tasks, links and uploads in the first frame, the shown runtime's setup change, and the warm-up's frames.
 - **Routing by named view** can use `heads.show(view)` and `scenes.of(view)`: a tab switch is then a want, and the view's preview and motion services follow the runtime shown.
@@ -795,3 +795,97 @@ One run's first read of the GL error after the banded upload found an `INVALID_O
   - links in parallel saturating the cores;
   - uploads that wait for a busy GPU process;
   - per-program compile steps.
+
+## 12. Chunk 4a-v-c: no frame gap from multi-target programs (built)
+
+It closes G2's last failure: frames stopped being presented while a body or setup was prepared (1.8 s on a body switch, 15–19 s with the creator rig). Every build ANGLE made on the GPU process's main thread at a draw is now gone at its source, so no frame is held back for one.
+
+**What the GPU process built at a draw.** Each G2 switch was traced (`G2_TRACE=all` in `measure.ts`), and every `D3DCompile` sorted by thread: on ANGLE's worker threads at link time, or on the GPU process's main thread (`CrGpuMain`, inside `CommandBufferService:PutChanged`) at a draw, where nothing is presented until it ends. Two causes, both ANGLE on Direct3D 11:
+
+- **A program that writes several outputs.** ANGLE links a program's pixel shader for its first output only (`GetDefaultOutputLayoutFromShader`), and builds the one for the bound targets at the program's first draw into them.
+- **Integer joint indices.** Three declares `skinIndex` (and our `joints_1`) as `vec4` and feeds a glTF's `UNSIGNED_SHORT` JOINTS as they are. ANGLE links the vertex shader for float input, and at the first draw builds another that reads `uint4` and converts. That is once per program per skinned mesh, so each of a skin's passes paid it again. It is not a multi-output program, but it is the same mechanism, and with the first cause gone it would have held frames for 25–70 ms at a time.
+
+**Inventory** (base `a0091847`, fresh profile, real data, RTX 4070; builds on the GPU process's main thread):
+
+| Program | Role | Drawn | Outputs | Build at its first draw | Decision |
+|---|---|---|---|---|---|
+| Skin scatter input variants (`skin-scatter.ts`), one per distinct drawn material: skin, face decals lit as skin, the makeup plate, brows, and occluders (eyes, hair, lashes, clothing) | S0 lit irradiance and depth, S1 √albedo and slot, S2 metalness | every drawn frame while the scatter runs | 3 | studio setup: skin 136–148 ms, face decals 136 ms, plate 593–615 ms, brows 21 ms, eyes, hair and occluders 2–4 ms; creator rig: skin 1.05–1.19 s, decals 1.05–1.18 s, plate 5.1–5.8 s, brows 42–46 ms. A body switch built 9 (1.7 s), the creator setup 16–17 (17.9–21.1 s) | **(a) split**: three passes, one target each |
+| Layered bake (`layered-material.ts`): the layer pass, the resolve, the clear | a part's packed maps | once per bake (piercings, eyes) | 3, 2, 3 | 14.8, 5.5 and 1.2 ms, once per renderer | **(a) split** the layer pass and the resolve; **(c)** the clear program goes (the targets are cleared) |
+| Makeup composite (`plate-composite.ts`): the layer pass, the resolve | the merged plate | each composite update (a layer or the plan changed) | 3, 3 | 7.4 and 3.0 ms, once per renderer | **(a) split** |
+| Every skinned program (not multi-output) | | every draw | 1 | a vertex shader for integer joints: 25–70 ms each; 24 (1.3 s) on a body switch, 37–39 (1.7–1.8 s) with the creator rig, 46 (1.9 s) on the first load | **joint indices as floats** at load (`floatJointIndices`) |
+
+**(b), drawing ahead hidden, was not used.** The traces show the build inside the draw's own command-buffer task on the GPU process's main thread, whatever target the draw writes, so a hidden draw holds presentation exactly as a shown one does (4a-v-b's pieces only made the hold one build long). No hidden draw is needed once (a) applies.
+
+**What changed.**
+
+- **The skin scatter's input is three passes** (`platform/scene/skin-scatter.ts`). Each target (S0, S1, S2) has its own variant swap (`scatterInputPass(target)`) and is drawn in turn. They share one depth texture, cleared before each pass, so each target is drawn exactly as the one three-target draw drew it: the same scene, sort and depth test. A material writes its three values through `xfsScatterWrite( s0, s1, s2 )` (`SCATTER_INPUT_WRITE`, `platform/api/scene.ts`), which keeps only its pass's; the S1 and S2 passes are marked by `XFS_SCATTER_S1` and `XFS_SCATTER_S2`. An occluder writes zero to every target, so its three variants share one program. `variantOf` became `variantsOf`, and the lighting stage compiles each variant in a step of its own. The 36 bytes per pixel are unchanged.
+- **S1 and S2 carry no light.** The skin, the face decals and the plate write S1 and S2 before the light (`scatterUnlitWrite`, placed before `#include <lights_physical_fragment>`). For the plate it goes after the colour-shifting tint, and its residual's later discard never fires on a fragment that passed the coverage test (its alpha is at least the coverage, which is at least 0.001). Without this the split doubled the driver threads' link work: S1 and S2 compiled as slowly as S0 (13–14 s each for the plate under the creator rig), and the creator setup's programs stage took 25 s instead of 17 s. Now a skin S1 variant compiles in 4–13 ms.
+- **The layered bake** draws the layer once per accumulation target and the resolve once per kept map. Each list of programs shares its uniforms, the accumulation targets are cleared instead of drawn, and each target's framebuffer is still checked once (PREV-75). `LayeredHandle.target` became `maps`, a pair of targets.
+- **The makeup composite** draws each layer into each accumulation target in turn, then the resolve into each merged target, with one shared set of uniforms per pass. Its textures and its `stats` (one per layer, as before) are unchanged.
+- **Joint indices are floats** (`floatJointIndices`, `materials/render/skin.ts`), converted where the core and detail loaders restore the skin weights; the rigid binder and the eyes' rig make them as floats.
+- **The warm-up's lone pieces went** (`drawsMultiTarget`): nothing builds a long shader at a draw now, so pieces only start small and double.
+- **`measure.ts`** gates a frame gap of 100 ms (was 500), records a kept profile's session (`G2_WARM=1`, which first puts the V and setup back), traces several switches with light categories (`G2_TRACE=all`, `G2_TRACE_CATEGORIES`) and runs a subset (`G2_SWITCHES`). **`scene-parity.ts`** waits for a setup's preparation before a capture: since 4a-v-b a setup never drawn is prepared with the one before still drawn, and the first capture of this chunk caught the studio setup under "Lighting: getting ready…".
+
+**Gates.**
+
+- **No multi-output program** (`tests/single-output-programs.test.ts`): no shader in `src/` declares an output past location 0 or uses `gl_FragData[n]`, and no render target has more than one colour attachment.
+- **Joint indices** (`tests/skin.test.ts`): integer sets become floats with the same values; floats and weights are left alone.
+- **Shader text** (`tests/skin-material.test.ts`, `tests/face-decal-material.test.ts`, `tests/plate-blend.test.ts`, `tests/shader-assembly.test.ts`): each material writes through the macro, S1 and S2 before the light (for the plate, after the tint), and every scatter variant assembles with one output.
+- **Bake and composite** (`tests/layered-material.test.ts`, `tests/plate-blend.test.ts`, `tests/scene-feature-renderers.test.ts`): five bake programs with one output each, eight framebuffer checks, and the composite's draws and seven compiled passes.
+- **T2** (`tests/webgl-scene-preparation.test.ts`, new gate): with KHR_parallel_shader_compile, no presentation gap over 100 ms from a cold V's want to its show, or while a setup never drawn is prepared on the shown V; with or without the extension, none during either warm-up.
+- **The real-GPU probes** keep their parity: the skin scatter against its CPU reference, the composite against the export's bytes, the layered bake against its CPU twin.
+
+**Results** (23–24 October 2026; RTX 4070, ANGLE D3D11, headless Chrome 155; synthetic runs under the 3 GB guard).
+
+| T2 gate (synthetic heads, with the extension) | Before (4a-v-b) | After |
+|---|---|---|
+| Cold V: longest gap between presented frames, want to show | 13.9 s (warm-up) | 19.4 ms (warm-up 18.2 ms) |
+| Setup on the shown V: longest gap while prepared | 4.0 s | 18.7 ms |
+| Cold V: want to first presented frame; setup: change to takeover | 30.0 s; 7.4 s | 25–27 s; 5.2–5.3 s |
+| Without the extension: longest gap in either warm-up | 13.3 s; 3.9 s | 18 ms; 18 ms (its page tasks stay long, as before) |
+
+The preparation probe passes 15 of 15, and the other WebGL probes pass too: skin scatter, plate composite, display, renderer device, scene host, scene dispose, studio lighting, body, clothing, eye, contact shadow, choice preview (peaks 0.9–2.0 GB).
+
+**G1 parity** (as §8: `tools/scene-parity.ts`, real V, both presets, 1K and 2K, isolated server, against G1's base captures of `72369156`): **20 of 20 pass**, 15 identical and 5 within noise (one step on 1–6 pixels; worst `board3-studio-2048`, 6 of 460,192, 0.0013 %). Captures in the ignored `evidence/screenshots/043-p4a5c/`. The chunk's earlier commits gave 17 and 19 identical, the rest within noise.
+
+**G2 on real data** (`measure.ts`, a fresh profile per run, isolated server with scratch caches). Before is `a0091847` (one traced run here; 4a-v-b's own runs agree). After is the last commit of this chunk, two runs, the first traced.
+
+| Switch | Before | After (runs 1, 2) |
+|---|---|---|
+| Builds on the GPU process's main thread: A, B, C | 33 (3.0 s), 53 (19.6 s), 56 (22.9 s) | 0, 0, 0 |
+| **A: body.** Longest frame gap during preparation | 1.8 s | 67 ms, 50 ms |
+| A: from the programs stage to the first presented frame | 4.9 s | 2.2 s, 2.2 s |
+| A: tasks of 50 ms or more during preparation | 1 (55 ms, details) | 1 (66 ms: see below), 0 |
+| **B: lighting.** Longest frame gap | 15.3 s | 24 ms, 24 ms |
+| B: request to the new setup's first frame | 37.9 s | 18.1 s, 18.0 s |
+| **C: body and lighting.** Longest frame gap | 17.1 s | 19 ms, 20 ms |
+| C: request to first presented frame | 43.7 s | 21.5 s, 21.5 s |
+| B and C: tasks of 50 ms or more | 0 | 0 |
+| Links in any first shown frame; tasks of 50 ms or more in the second after it | 0; 0 | 0; 0 |
+| Programs linked during preparation: A, B, C | 28, 53, 56 | 42, 75, 80 |
+| Link-time pixel shader builds on the driver's threads: B, C | 83 s, 94 s of CPU | 82 s, 97 s |
+
+**Verdict: B and C pass every gate in both runs; A passes in run 2.** In run 1 A had one page task of 66 ms just before its warm-up, where Three builds the head's morph-target texture at its first draw in the first warm-up piece (a CPU profile of the same task: 77 % in Three's morph-target update, over half of that the `texSubImage3D` upload). It is not a shader build and not new: On the base it came in 2 of 5 A runs (70 and 72 ms); after, in 7 of 12 (50–102 ms, twice holding one frame for 101–104 ms). It is 4a-vi's item below. A's `details` stage can also give a task of 50–62 ms (the skin's underlay read back), as before.
+
+**A kept profile** (the brief's question, asked before any 4a-v-b number was used). Chrome's program cache keeps the draw-time builds: on the base, a second session on the same profile built 1 of the body switch's 33 (a 43 ms vertex shader), and a third built none of the creator rig's 56. So the gaps were a first-session cost: a new install, a browser or driver update, or a cleared cache. The base's warm sessions still failed G2 on page tasks (one of 73 ms, a frame gap of 102–123 ms). After the change a kept profile gives A 6.6 s, B 9.5 s, frame gaps of 23–79 ms and no task of 50 ms or more.
+
+**What it costs.**
+
+- **Drawing.** The scatter's input is drawn three times a frame. Measured with the verification hooks (`xfStudioCreatorRig.frameMs` and `scatterPassMs`, the minimum of six alternations, as [the skin reference §11.5](../../research/materials/shader-skin.md#115-performance)) at 466 × 688 and 806 × 1188 drawing-buffer pixels: the scatter's passes 0.75 → 2.2 ms, a frame with the scatter 2.5 → 4.1–4.2 ms (without it 1.3 ms, unchanged). The cost is draw calls, not pixels (the default V draws 28 materials in each pass), so it doesn't grow with the canvas. It is paid only by drawn frames: on change, and continuously while the idle plays.
+- **Programs.** 14–24 more per switch (S1 and S2 variants), cheap to link since they carry no light: B's link work on the driver's threads is as before.
+- **Joint data.** Twice the bytes for joint indices (16 rather than 8 per vertex and set).
+
+**Decisions and caveats.**
+
+- **Three passes rather than a lit pass and an unlit two-target pass.** Any program with two outputs is built again at its first draw, cheap or not. One output per program is a rule a test can hold.
+- **Each pass redraws the whole input scene against a cleared depth buffer** rather than testing S1 and S2 against S0's depth. Reusing S0's depth would drop the occluders' draws, but it relies on two programs computing the same depth to the last bit. Three doesn't declare `invariant gl_Position`, and the unlit programs keep fewer varyings.
+- **Program count.** The occluders share one program across passes. The extra skin and decal programs are cheap to link and are compiled ahead in the `programs` stage like the rest.
+
+**What 4a-vi needs from this.**
+
+- **The head's morph-target texture** is the last page task over 50 ms in G2 (A, about half the cold runs). Three builds and uploads it whole at a mesh's first draw and offers no other way to make it: a step of its own, with the texture built ahead or uploaded in layers, would need to reach into Three.
+- **The knowledge page on program linking in WebGL** should take this chunk's findings too:
+  - ANGLE's draw-time builds for several outputs and for integer vertex inputs, both on the GPU process's main thread;
+  - Chrome's program cache keeping them across sessions;
+  - unreachable lighting compiled out of S1 and S2 (`scatterUnlitWrite`).
+- **The scatter's draw cost** (about 1.4 ms a frame) could fall by drawing S1 and S2 only for skin and decals against S0's depth (with an invariant position), or with fewer, merged draws. It is noted on the performance track, not needed for a gate.
