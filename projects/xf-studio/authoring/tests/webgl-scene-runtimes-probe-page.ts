@@ -32,6 +32,11 @@
  *    normal deltas), made ahead in steps (morph-textures.ts, as a preparation runs them) as a first load does, before any morph mesh was
  *    drawn on the renderer, its program compiled ahead, then drawn; then its twin drawn as Three builds it at the draw: each step's time,
  *    the first draw's, Three's draw, and whether Three kept the texture made ahead, byte for byte its own.
+ * 6d. A warm runtime keeps its look's makeup (experiment 044 P2-iii, decision D3): two scenes, each showing its own look, switched as the
+ *    runtime owner switches them (the shown surface holds its layers, the document shows the other look, the preview device gives a warm
+ *    surface's makeup back, then the runtime is wanted). Each warm switch: the time from the switch to the first presented frame, the links
+ *    and programs made, the raster requests, and the makeup composite's draws on the runtime shown (none: nothing is redrawn). Then the
+ *    least recently shown runtime is evicted by a third: its look is held no more, and once everything closes the GPU objects are back.
  * 7. A context lost while a cold V's programs link (after 6, since a lost context's objects are never deleted): its preparation starts
  *    again once the context is back, and the V is shown and draws.
  * 5. (After 4.) A lighting setup never drawn, asked of the shown V (profiles phase 4a-v-b): it is staged and prepared while the setup before
@@ -61,6 +66,7 @@ import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
 import { studioStageSetup, type LightingSource } from "../src/preview/lighting-setups";
 import { DEFAULT_STUDIO_STAGE } from "../src/preview/studio-lighting";
 import { initialRecipe } from "./fixtures/eye-region";
+import { emptyLookHistory } from "../src/platform/core/look-history";
 import { countGlObjects, type GlObjectCounts } from "./webgl-gl-objects";
 import { SceneResidency, type PreparationState, type ResidencyWant } from "../src/preview/scene-residency";
 import { syntheticCore, syntheticIdle, syntheticRecords } from "./webgl-synthetic-head";
@@ -126,6 +132,10 @@ export type SceneRuntimesProbe = {
     handed: boolean; identical: boolean; tasksOver50: number;
     /** Diagnostics: the long tasks from the first step to our draw, each against when the steps began (`at`), and each step's start. */
     tasks: { at: number; ms: number }[]; stepsAt: number[] };
+  /** 6d: switches between warm runtimes showing different looks, and the kept makeup released on eviction. */
+  lookSwitch: { cold: { adopted: boolean; ms: number }; switches: { look: string; adopted: boolean; ms: number; links: number; programs: number; rasters: number;
+    compositeDraws: number; firstFrame: { links: number; programs: number } }[];
+    evicted: string; evictedLookKept: boolean; before: Counts; after: Counts };
   /** What the context showed of programs with several outputs and targets with several colour attachments (none), and how much it saw. */
   singleOutput: { issues: string[]; fragments: number; attachments: number };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
@@ -150,7 +160,7 @@ export type SceneRuntimesProbe = {
 };
 const probe: SceneRuntimesProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
   staleMakeup: null as never, editorRemount: null as never,
-  cancel: null as never, setup: null as never, supersede: null as never, closeSubject: null as never, morph: null as never, singleOutput: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
+  cancel: null as never, setup: null as never, supersede: null as never, closeSubject: null as never, morph: null as never, lookSwitch: null as never, singleOutput: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
 /** Every animation frame's time while `recording` is set (frames presented: the GPU process presents none while it builds shaders). */
@@ -283,10 +293,13 @@ try {
   const { fetcher, recordA, recordB } = await syntheticRecords();
   const mask = document.createElement("canvas"); mask.width = mask.height = 16;
   mask.getContext("2d")!.fillRect(0, 0, 16, 16);
-  // The authored makeup as production feeds it: the preview device (a raster worker that never answers) holding one completed 512² mask.
+  // The authored makeup as production feeds it: the preview device (a raster worker that never answers, counting what it is asked) holding
+  // one completed 512² mask. `documentLook` is the look the document shows (6d switches it).
   const authoring = new AuthoringDocument(freshWorkspace());
-  const layers = createBrowserPreviewDevice({ region: EYE_RASTER_REGION, document: authoring, initialSize: 512,
-    makeWorker: () => ({ onmessage: null, onerror: null, postMessage() {}, terminate() {} }), frame: run => run(), refresh: () => {}, refreshSelection: () => {},
+  let documentLook = "A", rasterRequests = 0;
+  const layers = createBrowserPreviewDevice({ region: EYE_RASTER_REGION, document: authoring, initialSize: 512, look: () => documentLook,
+    makeWorker: () => ({ onmessage: null, onerror: null, postMessage(message) { if (!("cancel" in message)) rasterRequests++; }, terminate() {} }),
+    frame: run => run(), refresh: () => {}, refreshSelection: () => {},
     refreshQuality: () => {}, drawUV: () => {}, report: () => {}, measurement: () => {} });
   {
     const data = new Uint8ClampedArray(512 * 512 * 4);
@@ -818,6 +831,55 @@ try {
       handed: !!made && kept === made, identical, tasksOver50, tasks: morphTasks, stepsAt };
     theirs.dispose(); ours.dispose(); material.dispose(); target.dispose();
     await sleep(50);
+  }
+
+  // 6d. A warm runtime keeps its look's makeup (see the header).
+  {
+    const before = counts();
+    residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
+    residency.subscribe(follow);
+    const scene = (id: string, subject: string): Want => ({ ...want(subject, "female", "a", "studio"), scene: id, key: `${id}|${subject}|female|studio` });
+    const sceneA = scene("s3", "v1"), sceneB = scene("s4", "v2"), third = scene("s5", "v3");
+    // Look A is what the document shows now; look B the same layers under other IDs and another colour.
+    const lookA = structuredClone(authoring.recipe), lookB = { ...lookA, layers: lookA.layers.map((layer, i) => ({ ...layer, id: `b-${i + 1}`, color: "#3060c0" })) };
+    const mask512 = () => { const data = new Uint8ClampedArray(512 * 512 * 4); for (let i = 3; i < data.length; i += 4) data[i] = 255; return data; };
+    let version = 100;
+    const draws = (runtime: SceneRuntime) => { const stats = (runtime.feature(EYE_MAKEUP_RENDERER)!.evidence!() as { plate: { compositeDraws: { layerDraws: number; resolves: number; levelDraws: number } } }).plate.compositeDraws;
+      return stats.layerDraws + stats.resolves + stats.levelDraws; };
+    /** As the runtime owner switches looks: the shown surface holds its layers, the document shows the look, the device gives a held one back. */
+    const showLook = (look: "A" | "B") => {
+      const shown = residency.shown();
+      if (shown) layers.disconnectScene(shown.feature(EYE_MAKEUP_RENDERER)!);
+      documentLook = look;
+      authoring.restore({ recipe: structuredClone(look === "A" ? lookA : lookB), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() });
+      return layers.showLook();
+    };
+    await switchTo(sceneA); await settle();
+    // B, cold: its look rastered (the mask completes here), built, prepared and shown.
+    const coldStart = performance.now(), coldAdopted = showLook("B");
+    if (!layers.coordinator.publish({ i: 0, size: 512, version: ++version, ms: 1, data: mask512() })) throw Error("Look B's mask wasn't taken.");
+    await switchTo(sceneB); await settle();
+    const cold = { adopted: coldAdopted, ms: performance.now() - coldStart };
+    const switches: SceneRuntimesProbe["lookSwitch"]["switches"] = [];
+    for (let i = 0; i < 4; i++) for (const [target, look] of [[sceneA, "A"], [sceneB, "B"]] as const) {
+      const runtime = runtimeOf(target.key)!, drawsBefore = draws(runtime), rasters = rasterRequests;
+      const at = { links: calls.links, programs: counter.made().program }, start = performance.now();
+      const adopted = showLook(look), lookMs = performance.now() - start;
+      const switched = await measuredSwitch(target);
+      // From the switch (the document showing the look) to the first presented frame of the runtime.
+      switches.push({ look, adopted, ms: lookMs + switched.ms, links: calls.links - at.links, programs: counter.made().program - at.programs,
+        rasters: rasterRequests - rasters, compositeDraws: draws(runtime) - drawsBefore, firstFrame: switched.firstFrame });
+      await settle();
+    }
+    // A third scene evicts the least recently shown (A): its look is held no more.
+    showLook("B");
+    await switchTo(third); await settle();
+    const evicted = residency.snapshot().residents.some(item => item.key === sceneA.key) ? "" : sceneA.key;
+    const evictedLookKept = showLook("A");
+    residency.dispose();
+    showLook("A");
+    await sleep(100);
+    probe.lookSwitch = { cold, switches, evicted, evictedLookKept, before, after: counts() };
   }
 
   // 7. The context lost while a cold V's programs link (the masculine head under more lights: never linked here), then restored.

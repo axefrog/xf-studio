@@ -20,6 +20,7 @@ import type { SceneRuntimesProbe } from "./webgl-scene-runtimes-probe-page";
  * | Warm residency | a hidden runtime holds none of its frame-sized targets (display, skin scatter, contact shadows), and switching back and forth leaves the live GL objects flat |
  * | Memory returned | closing a subject (`close(scene)`) and closing everything leave the GPU objects and Three's programs at the baseline |
  * | One output | every program the page's runtimes build writes one output into one colour attachment, as the driver is asked |
+ * | Look switch (P2-iii) | between warm runtimes showing different looks: ≤ 100 ms to the first presented frame, no raster, no composite draw, no link; eviction releases the kept makeup |
  *
  * The page's other steps are 4a-v's and its reviews' (preparation, the lighting change on the shown V, context loss in the middle of GPU
  * work): a cold V prepared while another is shown keeps the page's thread free and draws nothing until it is shown; a lighting setup never
@@ -276,6 +277,25 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
+  test("P2-iii: a look switch between warm runtimes takes ≤ 100 ms with no makeup redraw (no raster, no composite draw) and no link; eviction releases the kept makeup", () => {
+    for (const probe of [parallel, fallback]) {
+      const { cold, switches, evicted, evictedLookKept, before, after } = probe.lookSwitch;
+      // The cold look was rastered afresh (nothing held it); every warm switch took its look back from the warm runtime's hold.
+      expect(cold.adopted).toBe(false);
+      expect(switches).toHaveLength(8);
+      for (const item of switches) {
+        expect(item.adopted).toBe(true);
+        expect(item.ms).toBeLessThanOrEqual(100);
+        expect([item.links, item.programs, item.rasters, item.compositeDraws]).toEqual([0, 0, 0, 0]);
+        expect(item.firstFrame).toEqual({ links: 0, programs: 0 });
+      }
+      // The least recently shown runtime went with its look's makeup; once everything closed the GPU objects and programs are as before.
+      expect([evicted, evictedLookKept]).toEqual(["s3|v1|female|studio", false]);
+      expect(after.gl).toEqual(before.gl);
+      expect(after.programs).toEqual(before.programs);
+    }
+  });
+
   test("closing everything returns the GPU objects and Three's programs to the baseline (4a-i's gate holds with preparation); no fence outlives its preparation", () => {
     for (const probe of [parallel, fallback]) {
       expect(probe.closed.gl).toEqual(probe.baseline.gl);
@@ -346,6 +366,10 @@ function gateTable(probe: SceneRuntimesProbe) {
       pass: warm.targets.every(entry => same(entry.hidden, [0, 0, 0])) && warm.gl.every((counts, i) => i < 2 || same(counts, warm.gl[i - 2])) },
     "memory returned": { value: `${closeSubject.after.programs.length} programs after closing a subject`,
       pass: same(closeSubject.after, closeSubject.before) && same(probe.closed.gl, probe.baseline.gl) && same(probe.closed.programs, probe.baseline.programs) },
+    "look switch (P2-iii)": { value: `${Math.round(Math.max(...probe.lookSwitch.switches.map(item => item.ms)) * 10) / 10} ms (worst of ${probe.lookSwitch.switches.length}); `
+      + `${probe.lookSwitch.switches.reduce((sum, item) => sum + item.rasters + item.compositeDraws + item.links, 0)} rasters, composite draws and links`,
+      pass: probe.lookSwitch.switches.every(item => item.adopted && item.ms <= 100 && item.rasters === 0 && item.compositeDraws === 0 && item.links === 0 && item.programs === 0)
+        && same(probe.lookSwitch.after.gl, probe.lookSwitch.before.gl) },
     "one output": { value: `${probe.singleOutput.fragments} fragment shaders, ${probe.singleOutput.attachments} attachments`, pass: probe.singleOutput.issues.length === 0 },
   };
 }
