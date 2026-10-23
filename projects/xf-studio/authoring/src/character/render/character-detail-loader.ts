@@ -8,12 +8,13 @@ import { CPU_READ_SIZE, hasReducedImage, materialAdapter, setReducedImage, textu
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture, UNCOVERED_BODY, withdrawUncoveredBody } from "../render-detail";
 import { renderTemplate } from "../../materials/render-templates";
-import { restoreFirstWeights } from "../../materials/render/skin";
+import { floatJointIndices, releaseFullSkinDepth, restoreFirstWeights } from "../../materials/render/skin";
 import type { DetailLimit } from "../detail-limits";
 import { prepareEyeballGeometry, type EyeballHandle, type EyeShellHandle } from "../../materials/render/eye-material";
 import type { FaceDecalHandle } from "../../materials/render/face-decal-material";
 import type { LayeredHandle } from "../../materials/render/layered-material";
 import { transferDeltas, VertexGrid } from "../../materials/render/decal-underlay";
+import { contextGeneration, inGeneration } from "../../platform/scene/context-generation";
 
 /**
  * Renderer device port for the resolved character details (head skin, face details, brows, lashes, hair, eyes, piercings): it reads the host's
@@ -127,6 +128,8 @@ export function releaseDetailObject(root: THREE.Object3D, keep?: ReadonlySet<THR
   root.traverse(object => {
     if (object instanceof THREE.Mesh && !keep?.has(object.geometry)) object.geometry.dispose();
     if (object instanceof THREE.SkinnedMesh) object.skeleton?.dispose();
+    // A shadow-casting part's full-skin depth material is the mesh's own (the character renderer makes it when the part is prepared).
+    releaseFullSkinDepth(object);
   });
 }
 /**
@@ -275,6 +278,7 @@ export async function parseDetailGeometry(buffer: ArrayBuffer): Promise<ParsedGe
   const weights = new Map<string, Float32Array>();
   gltf.scene.traverse(object => {
     if (!(object instanceof THREE.SkinnedMesh)) return;
+    floatJointIndices(object.geometry);
     const found = raw.get(gltf.parser.json.meshes[gltf.parser.associations.get(object)?.meshes ?? -1]?.name);
     if (found) weights.set(object.name, found);
   });
@@ -316,7 +320,7 @@ export function plannedReads(record: CharacterDetail): { component: RenderCompon
  */
 export function bindRigid(mesh: THREE.Mesh, root: THREE.Object3D, options: { follow?: boolean } = {}): THREE.SkinnedMesh {
   const geometry = mesh.geometry, count = geometry.getAttribute("position").count;
-  geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
+  geometry.setAttribute("skinIndex", new THREE.Float32BufferAttribute(new Float32Array(count * 4), 4));
   geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(Float32Array.from({ length: count * 4 }, (_, i) => i % 4 ? 0 : 1), 4));
   const skinned = new THREE.SkinnedMesh(geometry, mesh.material);
   skinned.name = mesh.name;
@@ -383,7 +387,7 @@ function withdrawUploadSource(texture: THREE.Texture) {
   const waiting = (uploadWaiting.get(bitmap) ?? 1) - 1;
   if (waiting > 0) uploadWaiting.set(bitmap, waiting); else { uploadWaiting.delete(bitmap); bitmap.close(); }
 }
-const released = (event: { target: THREE.Texture }) => withdrawUploadSource(event.target);
+const released = (event: { target: THREE.Texture }) => { banded.delete(event.target); withdrawUploadSource(event.target); };
 /** A texture's first upload can come from `bitmap` (see `uploadTexture`; the loader offers each map's, tests their own). */
 export function offerUploadSource(texture: THREE.Texture, bitmap: ImageBitmap) {
   if (uploadSources.has(texture)) return;
@@ -399,6 +403,73 @@ export function offerUploadSource(texture: THREE.Texture, bitmap: ImageBitmap) {
   }
 }
 const uploadWatched = new WeakSet<THREE.Texture>();
+
+/** Decoded maps of at least this many texels are uploaded in bands of rows (`uploadStep`): a 4096² map whole took 35–63 ms of the page. */
+const BANDED_TEXELS = 2048 * 2048;
+/** Rows per band: 512 rows of a 4096-wide map are 8 MB, about 5–10 ms. */
+const BAND_ROWS = 512;
+/**
+ * Large maps part-way through their first upload: the next band, the bitmap they are copied from (and a texture of its own around it), and
+ * the context generation their storage was made in (context-generation.ts): storage of a lost context is gone, so its band state is too.
+ */
+type Banded = { next: number; bitmap: ImageBitmap; source: THREE.Texture; rows: number; generation: AbortSignal };
+const banded = new WeakMap<THREE.Texture, Banded>();
+/** Whether `texture`'s first upload is under way in bands (its storage is made, some rows aren't copied yet): it still needs `uploadStep`. */
+export const uploadUnfinished = (texture: THREE.Texture) => { const pending = banded.get(texture); return !!pending && !pending.generation.aborted; };
+/**
+ * Whether a banded upload can go on where it stopped: its storage is still the texture's (made in this context generation, and Three hasn't
+ * uploaded the texture again meanwhile: a newer version, or a restored context, would upload it whole from its image and close the bitmap),
+ * and its bitmap is still open (a closed one reads 0 by 0).
+ */
+function bandsHold(texture: THREE.Texture, pending: Banded, renderer: THREE.WebGLRenderer) {
+  const stored = renderer.properties ? (renderer.properties.get(texture) as { __version?: number }).__version : texture.version;
+  return inGeneration(renderer, pending.generation) && stored === texture.version && pending.bitmap.width > 0 && pending.bitmap.height > 0;
+}
+/**
+ * One step of `texture`'s first upload (profiles phase 4a-v-b), with `renderer`: the whole map at once (`uploadTexture`), or, for a large
+ * map with a decoded bitmap, its storage first and then one band of rows per step (`copyTextureToTexture` from the bitmap; the last band
+ * makes the mipmaps). Every caller continues a banded upload where another left it, so one stopped part-way (a preparation superseded)
+ * is finished by the next that needs the map. One whose storage didn't hold (a context lost and restored, the texture changed) starts
+ * again, from its bitmap while it is open and otherwise as an ordinary upload from its image. A map larger than the renderer's textures
+ * goes whole (Three makes it smaller first), never in bands of the bitmap's size. Returns true once the map is uploaded, never before.
+ */
+export function uploadStep(texture: THREE.Texture, renderer: THREE.WebGLRenderer): boolean {
+  let pending = banded.get(texture);
+  if (pending && !bandsHold(texture, pending, renderer)) {
+    banded.delete(texture);
+    pending = undefined;
+  }
+  if (!pending) {
+    let bitmap = uploadSources.get(texture);
+    // A closed bitmap can't be uploaded from: its image is, as Three would.
+    if (bitmap && !(bitmap.width > 0 && bitmap.height > 0)) { withdrawUploadSource(texture); bitmap = undefined; }
+    const largest = renderer.capabilities?.maxTextureSize ?? Infinity;
+    if (!bitmap || bitmap.width * bitmap.height < BANDED_TEXELS || bitmap.width > largest || bitmap.height > largest
+      || typeof renderer.copyTextureToTexture !== "function") {
+      uploadTexture(texture, map => renderer.initTexture(map));
+      return true;
+    }
+    // Its storage, all mip levels, without its texels (Three's `dataReady`); the bitmap stays (no `onUpdate` withdrawal yet).
+    const image = texture.image, onUpdate = texture.onUpdate;
+    texture.image = bitmap; texture.source.dataReady = false; texture.onUpdate = null as unknown as typeof texture.onUpdate;
+    try { renderer.initTexture(texture); }
+    finally { texture.image = image; texture.source.dataReady = true; texture.onUpdate = onUpdate; }
+    banded.set(texture, { next: 0, bitmap, source: new THREE.Texture(bitmap), rows: bitmap.height, generation: contextGeneration(renderer) });
+    return false;
+  }
+  const { next, bitmap, source, rows } = pending, height = Math.min(BAND_ROWS, rows - next), last = next + height >= rows;
+  // Three makes the mipmaps after a copy into level 0 when the texture asks for them: only after the last band.
+  const mipmaps = texture.generateMipmaps;
+  texture.generateMipmaps = last && mipmaps;
+  try {
+    renderer.copyTextureToTexture(source, texture, new THREE.Box2(new THREE.Vector2(0, next), new THREE.Vector2(bitmap.width, next + height)),
+      new THREE.Vector2(0, next));
+  } finally { texture.generateMipmaps = mipmaps; }
+  if (!last) { pending.next += height; return false; }
+  banded.delete(texture);
+  withdrawUploadSource(texture);
+  return true;
+}
 /** Whether `texture` has a decoded bitmap waiting for its first upload (tests). */
 export const hasUploadSource = (texture: THREE.Texture) => uploadSources.has(texture);
 

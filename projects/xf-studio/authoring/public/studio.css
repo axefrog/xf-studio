@@ -1172,7 +1172,13 @@ span.category { border-color: transparent; background: transparent; padding-left
 .viewport-detail-status[hidden] { display: none; }
 .viewport-detail-text { flex: 1 1 16ch; min-width: 0; }
 .viewport-detail-status .btn { pointer-events: auto; flex: none; }
-.viewport-detail-status[data-tone="progress"]::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--stage-updating); animation: pulse 1s steps(2) infinite; }
+.viewport-detail-status[data-tone="progress"]::before, .viewport-detail-status[data-tone="preparing"]::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--stage-updating); animation: pulse 1s steps(2) infinite; }
+/* The next V being made ready while the shown one stays (profiles phase 4a-v): one fixed width for every stage, so the line never resizes, and a
+   thin bar along its foot for how far it is. */
+.viewport-detail-status[data-tone="preparing"] { width: min(40ch, 60%); padding-bottom: 7px; }
+.viewport-detail-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--stage-track); }
+.viewport-detail-progress[hidden] { display: none; }
+.viewport-detail-progress .progress-fill { background: var(--stage-updating); }
 .viewport-tools .btn.ghost { color: var(--stage-text-muted); }
 .viewport-tools .btn.ghost:hover:not(:disabled) { background: var(--stage-hover); color: var(--stage-strong); }
 .viewport-tools .btn.ghost[aria-pressed="true"] { color: var(--stage-signal); background: var(--stage-signal-bg); }

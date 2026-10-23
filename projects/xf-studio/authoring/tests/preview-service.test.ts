@@ -1,14 +1,13 @@
 import { expect, test } from "bun:test";
 import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
+import { localMotionScene } from "../src/animation/scene-motion";
 import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
 import { SavedAppearanceActions } from "../src/character/saved-appearance-actions";
 import type { SavedV } from "../src/saves/save-reader";
-import { freshWorkspace } from "./fixtures/eye-region";
 
 test("motion service restores composition before clock, preserves pause phase and explains disabled actions", () => {
-  const calls: string[] = [], preview = freshWorkspace().preview;
-  preview.idle = true; preview.idlePaused = true; preview.idleTime = 2.5;
-  preview.idleBody = false; preview.idleFace = true;
+  const calls: string[] = [];
+  const scene = localMotionScene({ idle: true, idlePaused: true, idleTime: 2.5, idleBody: false, idleFace: true });
   const idle = { enabled: false, time: 0, paused: false, bodyEnabled: true, faceEnabled: true,
     seek(time: number) { this.time = time; calls.push(`seek:${time}`); } };
   const port: MotionPort = { available: true, blink: { available: true }, idle,
@@ -16,7 +15,7 @@ test("motion service restores composition before clock, preserves pause phase an
     setIdlePaused: paused => { idle.paused = paused; calls.push(`pause:${paused}`); },
     setIdleContributions: (body, face) => { idle.bodyEnabled = body; idle.faceEnabled = face; calls.push(`parts:${body}:${face}`); },
     setBlink: value => calls.push(`blink:${value}`), animateBlink: playing => calls.push(`play:${playing}`) };
-  const actions = new MotionActions(preview, port);
+  const actions = new MotionActions(port, scene);
   actions.restore();
   expect(calls).toEqual(["parts:false:true", "idle:true", "seek:2.5", "pause:true"]);
   expect(actions.snapshot()).toMatchObject({ idle: true, idlePaused: true, idleTime: 2.5, idleBody: false, blink: 0 });

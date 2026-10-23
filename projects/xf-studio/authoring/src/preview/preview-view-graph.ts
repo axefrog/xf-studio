@@ -7,6 +7,9 @@
  * build before the graph reads the main view exactly as before; the graph itself (`WorkspaceState.views`) is written only when it
  * differs from the default one-view graph, so a workspace that never adds a view keeps its bytes. On read, the legacy fields win
  * for the main view's nodes: the main view looks exactly as the `preview` block says (no appearance change).
+ *
+ * The scene's motion (`SceneState.motion`, animation/scene-motion.ts) is the exception: it is never mirrored. A scene node holds it once
+ * stored; the main view's scene stored without it takes it once from the legacy `preview` fields, which are then left as they were read.
  */
 import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules, type ViewRecord } from "../platform/api/view-graph";
 import { parseViewGraph, ViewGraph } from "../platform/core/view-graph";
@@ -17,12 +20,15 @@ import { DEFAULT_CREATOR_LIGHTING, LIGHTING_PRESETS, readCreatorLighting, stored
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import { DEFAULT_SETUP_LIBRARY, legacyStudioStage, migrateLegacyLighting, parseSetupLibrary, rigKindOf, type SetupLibrary } from "./lighting-setups";
 import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
+import { MOTION_SETTING_NAMES, previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../animation/scene-motion";
 
 /**
- * A character scene's state: the head's eye shape, the V's material studies and body mode (design §3.1), and whether its dangles simulate
- * (`physics`: one setting per scene, so every view of the scene shows the same hair; hair-physics-plan.md §3.6).
+ * A character scene's state: the head's eye shape, the V's material studies and body mode (design §3.1), whether its dangles simulate
+ * (`physics`: one setting per scene, so every view of the scene shows the same hair; hair-physics-plan.md §3.6), and the subject's motion
+ * (`motion`: the idle, the blink and the pose; scene-motion.ts). The motion records no View and lighting step and Undo never changes it;
+ * a scene stored before it moved here has none (the main view's then takes the workspace's legacy fields once, `workspaceViewGraph`).
  */
-export type SceneState = { eyeShape: number; normals: boolean; eyeOwnRoughness?: boolean; uncensored?: boolean; physics?: boolean };
+export type SceneState = { eyeShape: number; normals: boolean; eyeOwnRoughness?: boolean; uncensored?: boolean; physics?: boolean; motion?: SceneMotion };
 /** An orbit camera's pose in the scene's neutral subject space (absent until one is saved). Aspect belongs to each view. */
 export type CameraNodeState = { pose?: CameraState };
 /**
@@ -99,12 +105,13 @@ export function validCameraPose(value: unknown): value is CameraState {
   return distance >= CAMERA_DISTANCE_RANGE.min - .001 && distance <= CAMERA_DISTANCE_RANGE.max + .001;
 }
 
-const scene: NodeCodec = { kinds: ["character"], parse: state => {
-  const s = state as Partial<SceneState>;
+const scene: NodeCodec = { kinds: ["character"], unrecorded: ["motion"], parse: state => {
+  const s = state as Partial<SceneState>, motion = s.motion === undefined ? undefined : sceneMotionOf(s.motion);
   if (!inRange(s.eyeShape, EYE_SHAPE_RANGE.min, EYE_SHAPE_RANGE.max) || !bool(s.normals) || !optional(s.eyeOwnRoughness, bool) ||
-    !optional(s.uncensored, bool) || !optional(s.physics, bool)) return;
+    !optional(s.uncensored, bool) || !optional(s.physics, bool) || (s.motion !== undefined && !motion)) return;
   return { eyeShape: Math.round(s.eyeShape), normals: s.normals, ...(s.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: s.eyeOwnRoughness }),
-    ...(s.uncensored === undefined ? {} : { uncensored: s.uncensored }), ...(s.physics === undefined ? {} : { physics: s.physics }) };
+    ...(s.uncensored === undefined ? {} : { uncensored: s.uncensored }), ...(s.physics === undefined ? {} : { physics: s.physics }),
+    ...(motion ? { motion } : {}) };
 } };
 const camera: NodeCodec = { kinds: ["orbit"], parse: state => {
   if (state.pose !== undefined && !validCameraPose(state.pose)) return;
@@ -171,13 +178,13 @@ export const STUDIO_VIEW_GRAPH_RULES: ViewGraphRules = Object.freeze({
   scenes: [{ kind: "character", cameras: ["orbit"], rigs: [...LIGHTING_PRESETS] }],
 });
 
-/** The main view's node states as the legacy `preview` block holds them. */
+/** The main view's node states as the legacy `preview` block holds them (the scene's motion as it held it before motion moved). */
 function mainNodes(preview: PreviewState) {
   const lights = previewLights(preview);
   return {
     scene: { eyeShape: preview.eyeShape, normals: preview.normals, ...(preview.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: preview.eyeOwnRoughness }),
       ...(preview.uncensored === undefined ? {} : { uncensored: preview.uncensored }),
-      ...(preview.physics === undefined ? {} : { physics: preview.physics }) } satisfies SceneState,
+      ...(preview.physics === undefined ? {} : { physics: preview.physics }), motion: previewMotion(preview) } satisfies SceneState,
     camera: (preview.camera ? { pose: structuredClone(preview.camera) } : {}) satisfies CameraNodeState,
     // Read through the codec, so the node holds the setups (a workspace saved before them migrates here).
     lights: lights satisfies LightsState,
@@ -199,21 +206,52 @@ export function defaultViewGraph(preview: PreviewState): ViewGraphData {
 
 /**
  * The graph a workspace holds: its stored `views` when valid (with the main view's nodes taken from the legacy `preview` fields,
- * which always mirror them), else the default one-view graph.
+ * which always mirror them), else the default one-view graph. The main view's scene keeps the motion it stores; one stored before motion
+ * moved into the scene takes the legacy fields' (read once: from then on the node holds it).
  */
 export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData | undefined): ViewGraphData {
-  const parsed = stored && parseViewGraph(stored, STUDIO_VIEW_GRAPH_RULES);
+  const parsed = stored && parseViewGraph(recoverScenes(stored), STUDIO_VIEW_GRAPH_RULES);
   if (!parsed) return defaultViewGraph(preview);
   const main = parsed.views.find(view => view.id === MAIN_VIEW) as ViewRecord, nodes = mainNodes(preview);
   // The legacy fields hold only Surface controls and Plate wireframe: every other tool the main view has stays as stored (CORE-97).
   const storedTools = parsed.tools.find(node => node.id === main.tools)?.on as ToolsState["on"] | undefined;
   const tools: ToolsState = { on: { ...storedTools, ...nodes.tools.on } };
+  const storedMotion = parsed.scenes.find(node => node.id === main.scene)?.motion as SceneMotion | undefined;
+  const sceneState: SceneState = { ...nodes.scene, motion: storedMotion ?? nodes.scene.motion };
   const overlay = <T extends { id: string; kind?: string }>(list: readonly T[], id: string, state: object, kind?: string) =>
     list.map(node => node.id === id ? { id, ...(node.kind === undefined ? {} : { kind: kind ?? node.kind }), ...state } : node);
-  return parseViewGraph({ ...parsed, scenes: overlay(parsed.scenes, main.scene, nodes.scene),
+  return parseViewGraph({ ...parsed, scenes: overlay(parsed.scenes, main.scene, sceneState),
     cameras: overlay(parsed.cameras, main.camera, nodes.camera), lights: overlay(parsed.lights, main.lights, nodes.lights, nodes.rig),
     display: overlay(parsed.display, main.display, nodes.display), tools: overlay(parsed.tools, main.tools, tools) },
   STUDIO_VIEW_GRAPH_RULES) ?? defaultViewGraph(preview);
+}
+
+/** A scene's optional switches as the person knows them (their controls' labels), for a plain note when one is reset. */
+const SWITCH_NAMES = Object.freeze({ eyeOwnRoughness: "eye's own roughness", uncensored: "showing V uncensored", physics: "hair physics" });
+/** The restore note for one scene whose settings couldn't be read and were reset (one line per scene; the person's names, never fields). */
+export const VIEW_SETTINGS_RESET = "Some 3D view settings couldn't be read and were reset";
+export const viewSettingsReset = (settings: readonly string[]) => `${VIEW_SETTINGS_RESET}: ${settings.join(", ")}.`;
+/**
+ * A stored graph with each character scene's optional settings recovered field by field (a damaged motion field at its default, a damaged
+ * optional switch at its default by being left out): the scene codec refuses them on an edit, but on read one bad optional value must never
+ * cost its scene, and with it the whole graph. A scene whose required settings are damaged is still refused. An unreadable value can't be
+ * honoured, so it isn't kept; `reset` hears, per scene, the settings that were reset, by the person's names, so the restore can say so.
+ */
+export function recoverScenes(stored: ViewGraphData, reset?: (settings: readonly string[]) => void): ViewGraphData {
+  if (!Array.isArray(stored.scenes)) return stored;
+  return { ...stored, scenes: stored.scenes.map(node => {
+    if (!node || typeof node !== "object" || node.kind !== "character") return node;
+    const { motion, eyeOwnRoughness, uncensored, physics, ...rest } = node as typeof node & Partial<SceneState>, names = new Set<string>();
+    const switches = { eyeOwnRoughness, uncensored, physics };
+    for (const [key, value] of Object.entries(switches)) if (value !== undefined && !bool(value)) names.add(SWITCH_NAMES[key as keyof typeof SWITCH_NAMES]);
+    const recovered = recoverSceneMotion(motion, setting => names.add(MOTION_SETTING_NAMES[setting]));
+    if (motion !== undefined && !recovered) for (const name of Object.values(MOTION_SETTING_NAMES)) names.add(name);
+    // A scene with nothing damaged is kept exactly as stored (the codec reads it as before).
+    if (!names.size) return node;
+    reset?.([...names]);
+    return { ...rest, ...(bool(eyeOwnRoughness) ? { eyeOwnRoughness } : {}), ...(bool(uncensored) ? { uncensored } : {}),
+      ...(bool(physics) ? { physics } : {}), ...(recovered ? { motion: recovered } : {}) };
+  }) };
 }
 
 /** A graph service for a workspace's preview (and its stored views, if any). */
@@ -222,31 +260,8 @@ export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphD
 }
 
 /**
- * Whether a graph is the default one-view graph: its structure is the default one and everything its main view holds is mirrored
- * into `preview`. A main view with a tool state the legacy fields can't hold (any tool but Surface controls and Plate wireframe)
- * is not the default, so the graph is stored and the state survives a save (CORE-97).
- */
-export function isDefaultViewGraph(data: ViewGraphData): boolean {
-  const [view, ...rest] = data.views;
-  if (rest.length || !view || view.kind !== "3d" || view.id !== MAIN_VIEW || view.title !== undefined || data.focused !== MAIN_VIEW ||
-    view.scene !== DEFAULT_NODES.scene || view.camera !== DEFAULT_NODES.camera || view.lights !== DEFAULT_NODES.lights ||
-    view.display !== DEFAULT_NODES.display || view.tools !== DEFAULT_NODES.tools) return false;
-  const mirrored = new Set<string>(Object.values(LEGACY_TOOL_FIELDS));
-  const on = data.tools.find(node => node.id === DEFAULT_NODES.tools)?.on as Record<string, unknown> | undefined;
-  return !!on && Object.keys(on).every(id => mirrored.has(id));
-}
-
-/**
- * What the workspace stores for a graph: nothing for the default graph (its state is the mirrored `preview`), else the graph, with each
- * lights node's calibration in its stored form (the untouched token), as `preview` has it, so every view keeps following a refit (PREV-135).
- */
-export function storedViewGraph(graph: ViewGraph): ViewGraphData | undefined {
-  const data = graph.data();
-  return isDefaultViewGraph(data) ? undefined : storedGraphData(data);
-}
-/**
  * A graph as a profile session stores it (profiles design §1.1): always whole (the session is its only home), each lights node's
- * calibration in its stored form, as `storedViewGraph` writes it.
+ * calibration in its stored form (the untouched token), as `preview` has it, so every view keeps following a refit (PREV-135).
  */
 export function sessionViewGraph(graph: ViewGraph): ViewGraphData { return storedGraphData(graph.data()); }
 function storedGraphData(data: ViewGraphData): ViewGraphData {

@@ -1,24 +1,32 @@
 /**
- * One loaded 3D head and everything connected to it, released together. The composition root
- * calls `attachBrowserHead` once the prepared preview is ready: it loads the scene, then binds the
- * stage theme, attaches the scene-backed services to the application, subscribes autosave and
- * status, connects the layer canvases, mounts the surface editor and listens to the camera.
- * Each connection registers its release as it is made. A failure part-way through releases them
- * all, newest first, including the scene's renderer and canvas, so "Try again" starts from nothing
- * instead of doubling listeners (PREV-20). `dispose()` does the same for a head that loaded.
+ * One scene runtime's head and everything connected to it (profiles phase 4a-iv, experiment 043 §10), in three steps:
+ *
+ * - **Built hidden** (`buildBrowserHead`, with an `AbortSignal`): the body's core prepared, the scene built on the pane's renderer device,
+ *   and the head's own services made over it: the stage theme, the V's detail service, the saved-V and preview services, the motion
+ *   service. The scene shown meanwhile stays drawn; nothing reaches the application yet.
+ * - **Prepared** (`prepare`, profiles phase 4a-v): still hidden, the V's details placed, the layered surfaces filled with the authored
+ *   makeup as it is now, and the scene prepared with them, so its first shown frame has nothing left to compile, composite or upload.
+ * - **Shown** (`show`): the head is drawn and becomes the one the application and the V's context use. Its services are attached, the
+ *   layered surfaces connected (keeping what they were filled with, brought up to date), it follows the V's context (catching up with what
+ *   changed while it was hidden), and it restores the scene's motion and the view's camera. The on-head editor is the view's, mounted on the
+ *   head shown for it by the scene editors (scene-editors.ts).
+ * - **Hidden** (`hide`): its camera pose goes to the view's camera node and its motion is released, then everything `show` connected is let
+ *   go, newest first. A hidden head is warm: it stops following its V and catches up when shown again.
+ *
+ * `dispose` releases everything, hidden first when shown. Every connection registers its release as it is made, so a failure part-way
+ * through releases what was made, newest first (PREV-20). The V's context is not this head's: it outlives every head (its owner hands it
+ * over, browser-scene-heads.ts).
  */
 import { createBrowserCharacterDetailDevice } from "../../character/browser/browser-character-detail-device";
-import { createBrowserChoicePreviewDevice } from "../../character/browser/browser-choice-preview-device";
-import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { CharacterDetailActions } from "../../character/character-detail-actions";
 import type { CharacterWarmStart } from "../../character/browser/character-warm-start";
 import type { CharacterContextActions } from "../../character/character-context-actions";
-import type { CharacterScenePorts } from "../../character/character-service";
 import type { CoreBody } from "../../character/render-detail";
 import type { SavedV } from "../../saves/save-reader";
 import { followCharacter } from "../../character/character-follow";
 import type { createBrowserPreviewDevice } from "../../legacy/eye-makeup/browser/browser-preview-device";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
+import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import type { MotionActions } from "../../animation/motion-actions";
 import type { PreviewActions } from "../preview-actions";
 import type { SavedAppearanceActions } from "../../character/saved-appearance-actions";
@@ -27,11 +35,15 @@ import { createTrustedPreviewServices } from "../../app/trusted-preview-services
 import type { WorkspaceState } from "../../app/workspace/workspace-state";
 import type { ViewGraph } from "../../platform/core/view-graph";
 import type { LayeredMakeupSurface } from "../../engines/layered-makeup/render/makeup-stack";
-import { surfaceOutline, type SurfaceOutline } from "../../engines/layered-makeup/surface-edge";
+import type { SurfaceOutline } from "../../engines/layered-makeup/surface-edge";
+import type { PreparationProgress } from "../scene-residency";
+import type { ViewId } from "../../platform/api/view-graph";
+import { previewFields } from "../preview-view-graph";
+import { lightingSource, type LightingSource } from "../lighting-setups";
 
 type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
 type PreviewDevice = ReturnType<typeof createBrowserPreviewDevice>;
-type Scene = Awaited<ReturnType<ViewportDevice["loadHead"]>>;
+type Scene = Awaited<ReturnType<ViewportDevice["buildHead"]>>;
 
 /** The head-bound services the application holds; `undefined` disconnects one. */
 export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; characterDetails?: CharacterDetailActions;
@@ -40,26 +52,28 @@ export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewA
   surfaceOutline?: SurfaceOutline };
 
 /**
- * One layered-makeup surface on the loaded head and the devices that drive it (UI-76): the preview device that fills its layers, and
- * the on-head editor's hooks when this is the surface being edited. A scene's surface setup (scene-surfaces.ts) builds one per registered
- * surface its look editor edits, so neither it nor this module names a feature.
+ * One layered-makeup surface on the loaded head and the device that fills its layers (UI-76), and whether it is the surface the on-head
+ * editor edits. The scene editors (scene-editors.ts) build one per registered surface a look editor edits, so neither they nor this module
+ * name a feature.
  */
 export type LayeredSurfaceWiring = {
   /** The feature whose renderer draws the surface (for messages). */
   feature: string;
   /** The surface on a loaded head (the feature renderer's). */
   surface(scene: Scene): LayeredMakeupSurface | undefined;
-  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers">;
-  /** The on-head editor's hooks into the authoring core, for the one surface being edited. */
-  editor?: Parameters<ViewportDevice["mountSurface"]>[1];
+  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers" | "fillScene" | "holdsCurrent" | "releaseScene">;
+  /** The surface the on-head editor edits (at most one): its guides and parts are prepared with the head (`prepare`). */
+  edited?: boolean;
 };
 
 export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
-  /** The workspace's view graph (it outlives any one head): the head restores its main view and follows it. */
+  /** The workspace's view graph (it outlives any one head): the head restores the view it is made for and follows the view it draws. */
   graph?: ViewGraph;
-  viewport: Pick<ViewportDevice, "loadHead" | "unloadHead" | "mountSurface">;
-  /** Every layered-makeup surface to connect, in composition order; at most one carries the on-head editor. */
+  /** The view the head is made for (its runtime owner's drawn view when it was wanted); `show` may draw it for another view of the scene. */
+  view?: ViewId;
+  viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
+  /** Every layered-makeup surface to connect, in composition order; at most one is the on-head editor's. */
   layered: readonly LayeredSurfaceWiring[];
   /**
    * The UI theme preference and the OS colour scheme the stage backdrop follows; the research tools preference the feature renderers
@@ -77,20 +91,15 @@ export type HeadAttachmentPorts = {
   /** Tells the presentation that device status changed. */
   changed(): void;
   /**
-   * The V this head shows (profiles design §7): its body, the decoded save it comes from, and its context, which the character's owner
-   * makes on this head's scene ports (`CharacterService.context`) and lets go with the head (`release`). The context shares the page's
-   * creator catalogue, and its Undo history is the character's (`character:<id>`), so a head made again keeps both.
+   * The V this head shows (profiles design §7): the body it is built for, the decoded save it comes from now, and its context, which
+   * outlives this head (the character's owner made it; browser-scene-heads.ts binds its scene ports to the head shown).
    */
-  character: { body: CoreBody; save?: SavedV; context(ports: CharacterScenePorts): CharacterContextActions; release(context: CharacterContextActions): void;
-    /** Choice previews on this head's scene (default: the page's worker). */
-    previews?: CharacterScenePorts["previews"] | null };
+  character: { body: CoreBody; save?: SavedV; context: CharacterContextActions };
   /**
-   * Make sure a body's core head is prepared before it loads (the masculine V's is prepared on first use); rejects when it can't
-   * be, and the feminine head is shown instead. Absent: the core is taken as prepared.
+   * Make sure a body's core head is prepared before it is built (the masculine V's is prepared on first use); rejects when it can't be,
+   * and the feminine head is built instead, or with `signal.reason` once aborted (decision D1). Absent: the core is taken as prepared.
    */
-  prepareCore?(body: CoreBody): Promise<void>;
-  /** The shown V now has the other body: load the head again (with the workspace as it is now), which re-attaches everything. */
-  reload?(): void;
+  prepareCore?(body: CoreBody, signal: AbortSignal): Promise<void>;
   /** A plain notice for the person (the masculine head couldn't be prepared, so the feminine one shows). */
   notice?(text: string): void;
   /** The page's warm start (character-warm-start.ts): the V's files read while the head loaded, and the request remembered for next time. */
@@ -99,40 +108,80 @@ export type HeadAttachmentPorts = {
 
 export type AttachedHead = {
   scene: Scene;
+  /** The body this head was built for (its scene's `body` is the feminine one when the masculine core couldn't be prepared). */
+  body: CoreBody;
   savedAppearance: SavedAppearanceActions;
   preview: PreviewActions;
   motion: MotionActions;
   /** Resolved skin, face details, eyes, brows, lashes, hair, piercings and body of the shown V (default or loaded save). */
   characterDetails: CharacterDetailActions;
-  /** Which V is shown and every creator choice set on it (CORE-58). */
+  /** Which V is shown and every creator choice set on it (CORE-58); the V's, not this head's. */
   characterContext: CharacterContextActions;
-  /** Releases every head-bound connection and the scene. Safe to call more than once. */
+  /** Whether the head is the one shown now. */
+  readonly shown: boolean;
+  /**
+   * Make the head ready to be shown while it is hidden (profiles phase 4a-v): the V's details loaded and made ready for their first frame,
+   * the layered surfaces filled with the authored makeup as it is now (each wiring's `fillScene`), then the whole scene prepared (programs
+   * compiled ahead, maps uploaded, one hidden warm-up draw; scene-host.ts `prepare`), reporting its stages. Rejects with
+   * `signal.reason` once aborted. A detail failure doesn't stop it: the head shows without them, as it would anyway.
+   */
+  prepare(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
+  /**
+   * Whether a warm head is still prepared, so shown again it needs nothing more: nothing that decides its programs changed since (the scene's
+   * own record), and each layered surface still holds the authored makeup as it is now (a layer enabled or edited while the head was warm
+   * would bring new materials and uploads at show: it is filled and prepared again first).
+   */
+  prepared(): boolean;
+  /**
+   * Prepare the shown head for a change it was asked to draw and isn't prepared for (a lighting setup whose programs aren't linked: the
+   * scene stages it and keeps drawing the setup before: scene-host.ts), reporting its stages; the change is drawn once ready.
+   * Rejects with `signal.reason` once aborted.
+   */
+  prepareShown(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
+  /** Hear the shown head needing `prepareShown` (or no longer needing it). Returns the unsubscribe. */
+  onUnprepared(listener: () => void): () => void;
+  /** Whether the view this head draws has its Surface controls tool on (withdrawn tools off), and hearing it change: the on-head editor follows. */
+  surfaceControls(): boolean;
+  onSurfaceControls(listener: () => void): () => void;
+  /**
+   * Draw this head for `view` (default: the view it drew last, or was made for) and connect it (see the module header). Throws, having let
+   * go of what it connected, when a step fails.
+   */
+  show(view?: ViewId): void;
+  /** The shown head draws another view of its scene: its camera to the old view's node, the new view's settings, motion and camera. */
+  draw(view: ViewId): void;
+  /** Hand over to the head shown next: its camera to the node, its motion released, its connections let go. Safe to call when hidden. */
+  hide(): void;
+  /** Show a save's V on this head (the V's context asks while this head is shown): null for the default V. */
+  showSave(save: SavedV | null): void;
+  /** Releases everything, hidden first when shown. Safe to call more than once. */
   dispose(): void;
 };
 
+/** Run releases newest first; one failing never stops the rest. */
+const releaseAll = (releases: (() => void)[]) => {
+  for (const release of releases.splice(0).reverse()) {
+    try { release(); } catch (error) { console.error(error); }
+  }
+};
 
-export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<AttachedHead> {
+/** Build a head, hidden (see the module header); a build aborted or failing part-way releases what it made. */
+export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: AbortSignal = new AbortController().signal): Promise<AttachedHead> {
   const releases: (() => void)[] = [];
-  const dispose = () => {
-    for (const release of releases.splice(0).reverse()) {
-      try { release(); } catch (error) { console.error(error); }
-    }
-  };
   try {
-    // A load that fails releases what it made itself (createScene does), so there is nothing to
-    // unload until it returns. The scene (with its surface editor) is released last, after
-    // everything that uses it, and only if it is still the loaded head (UI-36).
-    // The head is the shown V's body's own core (the masculine V's head is prepared on first use). The body comes from the stored
-    // context and the restored save, as the character context below decides it. If the masculine head can't be prepared, the feminine
-    // head shows (with a notice) so the Character panel stays usable, and the other body is tried again when the V changes body.
+    signal.throwIfAborted();
+    if (ports.layered.filter(wiring => wiring.edited).length > 1) throw Error("Only one layered surface can carry the on-head editor.");
+    // The head is the V's body's own core (the masculine V's head is prepared on first use). If the masculine head can't be prepared, the
+    // feminine head is built (with a notice) so the Character panel stays usable; the other body is tried again when the V changes body.
     const wanted = ports.character.body;
     let body: CoreBody = wanted, unavailable: string | null = null;
     if (wanted !== "female" && ports.prepareCore) {
-      try { await ports.prepareCore(wanted); }
-      catch (error) { body = "female"; unavailable = (error as Error)?.message || ""; }
+      try { await ports.prepareCore(wanted, signal); }
+      catch (error) { if (signal.aborted) throw signal.reason; body = "female"; unavailable = (error as Error)?.message || ""; }
     }
-    const scene = await ports.viewport.loadHead(body);
-    releases.push(() => ports.viewport.unloadHead(scene));
+    // A build that fails releases what it made itself (createSceneRuntime does), so there is nothing to dispose until it returns.
+    const scene = await ports.viewport.buildHead(body, signal);
+    releases.push(() => ports.viewport.disposeHead(scene));
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     {
       const preferences = ports.preferences, follow = () => scene.setResearchTools?.(preferences.snapshot().researchTools === true);
@@ -144,111 +193,209 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
       follow();
       releases.push(quality.subscribe(follow));
     }
-    let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined;
-    let savedAppearance: SavedAppearanceActions | undefined;
-    // Skin, face details, eyes, brows, lashes, hair, piercings and body follow the character context: the restored or newly loaded save, else
-    // the default V, with the creator choices set on it. A save switch replaces them completely (CharacterDetailActions supersedes the
-    // previous V); a changed choice on the same V keeps it on screen. It starts following once the preview services have restored the
-    // workspace.
-    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, undefined, ports.warmStart));
-    releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
-    // The head takes the V's save (its facial shapes and body) before anything else follows it.
-    const services = createTrustedPreviewServices({ ...ports.workspace, savedV: ports.character.save }, createBrowserScenePreviewPorts(scene, {
-      setSurfaceControls: enabled => surface?.setEnabled(enabled),
-    }), ports.graph);
-    savedAppearance = services.savedAppearance;
-    ports.attach({ savedV: savedAppearance });
-    releases.push(() => ports.attach({ savedV: undefined }));
-    releases.push(savedAppearance.subscribe(ports.persist), savedAppearance.subscribe(ports.changed));
-    if (ports.layered.filter(wiring => wiring.editor).length > 1) throw Error("Only one layered surface can carry the on-head editor.");
     for (const wiring of ports.layered) {
       const makeup = wiring.surface(scene);
       if (!makeup) throw Error(`The ${wiring.feature} renderer is not composed.`);
-      wiring.preview.connectScene(makeup);
-      releases.push(() => wiring.preview.disconnectScene(makeup));
-      if (wiring.editor) {
-        surface = ports.viewport.mountSurface(makeup.surface, wiring.editor);
-        // The anchor's rest positions and UVs, read per element (glTF attributes may be interleaved).
-        const geometry = makeup.surface.geometry, uv = geometry?.getAttribute("uv"), position = geometry?.getAttribute("position");
-        if (uv && position) {
-          const uvs = new Float64Array(uv.count * 2), positions = new Float64Array(position.count * 3);
-          for (let i = 0; i < uv.count; i++) { uvs[2 * i] = uv.getX(i); uvs[2 * i + 1] = uv.getY(i); }
-          for (let i = 0; i < position.count; i++) { positions[3 * i] = position.getX(i); positions[3 * i + 1] = position.getY(i); positions[3 * i + 2] = position.getZ(i); }
-          ports.attach({ surfaceOutline: surfaceOutline({ positions, uvs, index: geometry!.index?.array ?? null }) });
-          releases.push(() => ports.attach({ surfaceOutline: undefined }));
-        }
-      }
+      // What the surface was filled with while hidden (`prepare`) or left with when hidden goes with it.
+      releases.push(() => wiring.preview.releaseScene(makeup));
     }
-    const { preview, motion } = services.finish();
+    // Skin, face details, eyes, brows, lashes, hair, piercings and body follow the V's context while this head is shown (`show`).
+    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, undefined, ports.warmStart));
+    releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
+    // The head takes the V's save (its facial shapes and body) before anything else follows it.
+    // The view's Surface controls tool, which the on-head editor mounted on this head follows (scene-editors.ts).
+    let surfaceEnabled = true;
+    const surfaceListeners = new Set<() => void>();
+    const services = createTrustedPreviewServices({ ...ports.workspace, savedV: ports.character.save }, createBrowserScenePreviewPorts(scene, {
+      setSurfaceControls: enabled => { surfaceEnabled = enabled; for (const listener of [...surfaceListeners]) listener(); },
+    }), ports.graph ? { graph: ports.graph, view: ports.view ?? ports.graph.viewIds()[0]! } : undefined);
+    const savedAppearance = services.savedAppearance;
+    const restored = services.finish();
+    const { preview, motion } = restored;
     releases.push(() => preview.dispose());
-    ports.attach({ preview, motion });
-    releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
-    releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));
-    for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
-    ports.attach({ characterDetails });
-    releases.push(() => ports.attach({ characterDetails: undefined }));
-    releases.push(characterDetails.subscribe(ports.changed), characterDetails.subscribe(ports.persist));
-    // The character context: the V's document (its source, with its decoded save, and every choice set on it), made by the V's owner on
-    // this head's scene ports. A save loaded later becomes its V as one undoable step; its Undo shows an earlier V through the saved-V
-    // service. Its Try again also retries a V whose preparation failed (PREV-86).
-    const saved = savedAppearance;
-    const characterContext = ports.character.context({
-      showSave: save => { if (save) saved.dispatch({ kind: "savedV.restore", value: save }); else if (saved.hasSavedV()) saved.dispatch({ kind: "savedV.clear" }); },
-      details: { failed: () => characterDetails.failed(), retry: () => void characterDetails.retry(),
-        preload: (request, signal) => characterDetails.preload(request, signal) },
-      ...(ports.character.previews === null ? {} : { previews: ports.character.previews ?? createBrowserChoicePreviewDevice() }) });
-    releases.push(() => ports.character.release(characterContext));
-    ports.attach({ characterContext });
-    releases.push(() => ports.attach({ characterContext: undefined }));
-    // The Body switch decides whether the body is prepared at all (PREV-108), and the uncensored setting how the game would draw it: the
-    // context's request follows both.
-    const followBody = () => {
-      const shown = preview.snapshot();
-      characterContext.setBodyShown(shown.body !== false);
-      characterContext.setUncensored(shown.uncensored === true);
-    };
-    followBody();
-    releases.push(preview.subscribe(followBody));
-    // The creator's idles are authored for the creator puppet's lifted feet; while one plays, the request draws V's bare feet that way
-    // (knowledge/body-animation.md §4). The inventory's idle, Still and a photo-mode pose (the photo-mode puppet is V's own body) stand on
-    // the feet her footwear gives her.
-    const followPuppet = () => {
-      const shown = motion.snapshot();
-      characterContext.setCreatorPuppet(shown.idle && !shown.pose && shown.idles.find(entry => entry.id === shown.idleClip)?.puppet === "creator");
-    };
-    followPuppet();
-    releases.push(motion.subscribe(followPuppet));
-    releases.push(savedAppearance.subscribe(() => characterContext.followSave(saved.snapshot().savedV)));
-    // The V's own makeup shows or hides at once: the prepared parts of the makeup rows are hidden in the view, nothing is prepared again.
-    let hiddenOptions: readonly string[] | null = null;
-    const followMakeup = () => {
-      const next = characterContext.hiddenOptions();
-      if (next !== hiddenOptions) { hiddenOptions = next; scene.setHiddenOptions(next); }
-    };
-    followMakeup();
-    releases.push(characterContext.subscribe(followMakeup));
-    // The shown details and the head's facial shape follow the context's V and choices (character-follow.ts), on a head of its body.
-    releases.push(followCharacter({ context: characterContext, details: characterDetails, savedV: savedAppearance,
-      setFaceMorphs: morphs => scene.setFaceMorphs(morphs), headBody: scene.body }));
-    // A V of the other body (a masculine save loaded, the other Default V, a preset) needs that body's head: the head loads again.
-    // The reload runs after the change that asked for it has finished (it releases this context), and never for a released head.
-    let shownBody = wanted, released = false;
-    releases.push(() => { released = true; });
-    releases.push(characterContext.subscribe(() => {
-      const next = characterContext.shownBody();
-      if (next === shownBody) return;
-      shownBody = next;
-      if (next !== scene.body) setTimeout(() => { if (!released) ports.reload?.(); }, 0);
-    }));
     if (unavailable !== null) ports.notice?.(`The masculine V's head couldn't be prepared from your Cyberpunk 2077 files, so the feminine head is shown. ${unavailable}`.trim());
-    releases.push(characterContext.subscribe(ports.changed), characterContext.subscribe(ports.persist));
-    characterContext.start();
-    const cameraMoved = () => ports.persist();
-    scene.controls.addEventListener("change", cameraMoved);
-    releases.push(() => scene.controls.removeEventListener("change", cameraMoved));
-    return { scene, savedAppearance, preview, motion, characterDetails, characterContext, dispose };
+    signal.throwIfAborted();
+
+    const context = ports.character.context;
+    /** What `show` connected, released by `hide`. */
+    const shownReleases: (() => void)[] = [];
+    let shown = false, disposed = false;
+    /** The save this head's saved-V service shows (the one it was built with, then each one shown on it). */
+    let savedShown: SavedV | null = ports.character.save ?? null;
+    const showSave = (save: SavedV | null) => {
+      savedShown = save;
+      if (save) savedAppearance.dispatch({ kind: "savedV.restore", value: save });
+      else if (savedAppearance.hasSavedV()) savedAppearance.dispatch({ kind: "savedV.clear" });
+    };
+    const hide = () => {
+      if (!shown) return;
+      shown = false;
+      // The camera pose to the camera node, then the motion handed over (its idle's phase stored), before anything is let go.
+      try { restored.hide(); } catch (error) { console.error(error); }
+      releaseAll(shownReleases);
+    };
+    const head: AttachedHead = {
+      scene, body: wanted, savedAppearance, preview, motion, characterDetails, characterContext: context,
+      get shown() { return shown; },
+      showSave,
+      async prepare(prepareSignal, progress) {
+        if (disposed) throw Error("The head was released.");
+        prepareSignal.throwIfAborted();
+        // The V's own details on a head of its body (the feminine head standing in for an unavailable masculine one shows none), with its
+        // own makeup hidden as the view hides it, as show would place them.
+        // The view's Body switch and uncensored setting decide what the V's request draws (as `show` follows them). They are the view's,
+        // the same for every head of the scene, so setting them now asks for no other V than the shown head already shows, and the body
+        // isn't loaded only to be dropped at show.
+        const view = preview.snapshot();
+        context.setBodyShown(view.body !== false);
+        context.setUncensored(view.uncensored === true);
+        const request = context.detailRequest();
+        if (request.bodyGender === scene.body) {
+          scene.setHiddenOptions(context.hiddenOptions());
+          progress({ stage: "details", fraction: 0, waiting: "host" });
+          await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }));
+        }
+        progress({ stage: "details", fraction: 1 });
+        // The authored makeup as it is now, so the plate's composite, its masks and maps and their programs are prepared with the scene.
+        // The surface holds this snapshot until show connects it, which brings only what changed since.
+        prepareSignal.throwIfAborted();
+        for (const wiring of ports.layered) wiring.preview.fillScene(wiring.surface(scene)!);
+        // Every lighting setup another view of this scene shows (the view it draws is the scene's own now).
+        const setups: LightingSource[] = [];
+        if (ports.graph) {
+          const graph = ports.graph, drawn = preview.view(), own = graph.node(drawn, "scene").id;
+          for (const view of graph.viewIds()) if (view !== drawn && graph.node(view, "scene").id === own) {
+            const lights = previewFields(graph, view).lights;
+            setups.push(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
+          }
+        }
+        // The on-head editor, which show mounts: its guides compiled with the scene (their first frame links nothing), and its parts (the
+        // surface map and occlusion trees) made ahead between frames, so mounting it makes none of them.
+        const edited = ports.layered.find(wiring => wiring.edited), viewport = ports.viewport;
+        const guides = edited && viewport.surfaceGuides ? () => viewport.surfaceGuides!(scene) : undefined;
+        const work = edited && viewport.surfaceSteps ? () => viewport.surfaceSteps!(scene, edited.surface(scene)!.surface) : undefined;
+        await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
+          ...(work ? { work } : {}) });
+      },
+      prepared: () => (scene.prepared?.() ?? true) && ports.layered.every(wiring => wiring.preview.holdsCurrent(wiring.surface(scene)!)),
+      async prepareShown(prepareSignal, progress) {
+        if (disposed) throw Error("The head was released.");
+        await scene.prepare?.({ signal: prepareSignal, report: report => progress(report) });
+      },
+      onUnprepared: listener => scene.onUnprepared?.(listener) ?? (() => {}),
+      surfaceControls: () => surfaceEnabled,
+      onSurfaceControls: listener => { surfaceListeners.add(listener); return () => { surfaceListeners.delete(listener); }; },
+      draw(view) {
+        if (!shown || disposed || view === preview.view()) return;
+        // The camera to the old view's node and the motion handed over, then the new view's settings, motion and camera.
+        restored.hide();
+        restored.show(view);
+      },
+      show(view) {
+        if (shown || disposed) return;
+        shown = true;
+        const add = (release: () => void) => { shownReleases.push(release); };
+        try {
+          ports.viewport.showHead(scene);
+          add(() => ports.viewport.hideHead(scene));
+          // Catch up with the V as it is now: a save shown or cleared while this head was hidden (or since it was built).
+          const save = context.shownSave();
+          if (save !== savedShown && wanted === context.shownBody()) showSave(save);
+          ports.attach({ savedV: savedAppearance, preview, motion, characterDetails });
+          add(() => ports.attach({ savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined }));
+          add(savedAppearance.subscribe(ports.persist)); add(savedAppearance.subscribe(ports.changed));
+          for (const wiring of ports.layered) {
+            const makeup = wiring.surface(scene)!;
+            wiring.preview.connectScene(makeup);
+            add(() => wiring.preview.disconnectScene(makeup));
+          }
+          add(preview.subscribe(ports.persist)); add(motion.subscribe(ports.persist)); add(preview.subscribe(ports.changed));
+          for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
+          add(characterDetails.subscribe(ports.changed)); add(characterDetails.subscribe(ports.persist));
+          // The scene's motion, then the view's camera (where the head shown before left it).
+          restored.show(view);
+          // The Body switch decides whether the body is prepared at all (PREV-108), and the uncensored setting how the game would draw it: the
+          // context's request follows both.
+          const followBody = () => {
+            const state = preview.snapshot();
+            context.setBodyShown(state.body !== false);
+            context.setUncensored(state.uncensored === true);
+          };
+          followBody();
+          add(preview.subscribe(followBody));
+          // The creator's idles are authored for the creator puppet's lifted feet; while one plays, the request draws V's bare feet that way
+          // (knowledge/body-animation.md §4). The inventory's idle, Still and a photo-mode pose (the photo-mode puppet is V's own body) stand
+          // on the feet her footwear gives her.
+          const followPuppet = () => {
+            const state = motion.snapshot();
+            context.setCreatorPuppet(state.idle && !state.pose && state.idles.find(entry => entry.id === state.idleClip)?.puppet === "creator");
+          };
+          followPuppet();
+          add(motion.subscribe(followPuppet));
+          add(savedAppearance.subscribe(() => context.followSave(savedAppearance.snapshot().savedV)));
+          // The V's own makeup shows or hides at once: the prepared parts of the makeup rows are hidden in the view, nothing is prepared again.
+          let hiddenOptions: readonly string[] | null = null;
+          const followMakeup = () => {
+            const next = context.hiddenOptions();
+            if (next !== hiddenOptions) { hiddenOptions = next; scene.setHiddenOptions(next); }
+          };
+          followMakeup();
+          add(context.subscribe(followMakeup));
+          // The shown details and the head's facial shape follow the context's V and choices (character-follow.ts), on a head of its body.
+          add(followCharacter({ context, details: characterDetails, savedV: savedAppearance, setFaceMorphs: morphs => scene.setFaceMorphs(morphs),
+            headBody: scene.body }));
+          const cameraMoved = () => ports.persist();
+          scene.controls.addEventListener("change", cameraMoved);
+          add(() => scene.controls.removeEventListener("change", cameraMoved));
+        } catch (error) {
+          shown = false;
+          releaseAll(shownReleases);
+          throw error;
+        }
+      },
+      hide,
+      dispose() {
+        if (disposed) return;
+        hide();
+        disposed = true;
+        releaseAll(releases);
+      },
+    };
+    return head;
   } catch (error) {
-    dispose();
-    throw error;
+    releaseAll(releases);
+    throw signal.aborted ? signal.reason : error;
   }
+}
+
+/**
+ * Wait until the detail service has settled `request` (shown, failed or waiting for WolvenKit, with no change on it still updating), asking
+ * for it first (asking again for the request asked last is a no-op). Reports the host's progress while it prepares. Rejects with
+ * `signal.reason` once aborted.
+ */
+function detailsSettled(details: CharacterDetailActions, request: Parameters<CharacterDetailActions["setCharacter"]>[0], signal: AbortSignal,
+  progress: (fraction: number, waiting: "host" | "files" | null) => void): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let done = false;
+    const end = (error?: unknown) => {
+      if (done) return;
+      done = true;
+      stop(); signal.removeEventListener("abort", aborted);
+      if (error === undefined) resolve(); else reject(error);
+    };
+    const aborted = () => end(signal.reason);
+    const check = (finished = false) => {
+      const status = details.snapshot();
+      if ((status.phase === "ready" && !status.updating) || status.phase === "failed") { end(); return; }
+      // Its own work ended without a result to wait for (the service was released meanwhile).
+      if (finished && status.phase !== "preparing" && !status.updating) { end(); return; }
+      const step = status.phase === "preparing" ? status.progress : null;
+      progress(step && step.total > 0 ? Math.min(0.9, step.index / step.total) : status.updating ? 0.5 : 0, step ? "host" : "files");
+    };
+    const stop = details.subscribe(() => check());
+    if (signal.aborted) { aborted(); return; }
+    signal.addEventListener("abort", aborted, { once: true });
+    void details.setCharacter(request).then(() => check(true), () => check(true));
+    check();
+  });
 }

@@ -4,9 +4,9 @@ import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_SCHEMA, parseIdleCatal
 import { IdleAnimation } from "../src/animation/render/idle-animation";
 import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
 import { bodyStateFor, creatorPuppetFeet } from "../src/character/character-detail-plan";
-import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
-import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { graphMotionScene } from "../src/app/trusted-preview-services";
+import { MAIN_VIEW } from "../src/platform/api/view-graph";
+import { createStudioViewGraph, sessionViewGraph, type SceneState } from "../src/preview/preview-view-graph";
 import { freshWorkspace } from "./fixtures/eye-region";
 import type { CcoResource } from "../src/character/cco-model";
 
@@ -38,7 +38,7 @@ function motionPort(idles: IdleEntry[], outcome: "ok" | "fail" = "ok", asked: st
 test("choosing an idle shows it at once, loads it behind, and a failed load puts the previous one back", async () => {
   const idles = [entry("closeup"), entry("fullbody"), entry("inventory", { puppet: null, screen: "inventory" })];
   const asked: string[] = [];
-  const motion = new MotionActions(freshWorkspace().preview, motionPort(idles, "ok", asked));
+  const motion = new MotionActions(motionPort(idles, "ok", asked));
   expect(motion.snapshot()).toMatchObject({ idleClip: "closeup", idleLoading: false });
   expect(motion.snapshot().idles.map(item => item.id)).toEqual(["closeup", "fullbody", "inventory"]);
   expect(motion.capability({ kind: "motion.setIdleClip", view: "main", clip: "nope" })).toMatchObject({ available: false });
@@ -47,31 +47,26 @@ test("choosing an idle shows it at once, loads it behind, and a failed load puts
   await Bun.sleep(0);
   expect(motion.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: false });
   expect(asked).toEqual(["inventory"]);
-  const failing = new MotionActions(freshWorkspace().preview, motionPort(idles, "fail"));
+  const failing = new MotionActions(motionPort(idles, "fail"));
   failing.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "fullbody" });
   expect(failing.snapshot().idleClip).toBe("fullbody");
   await Bun.sleep(0);
   expect(failing.snapshot()).toMatchObject({ idleClip: "closeup", idleLoading: false });
 });
 
-test("the chosen idle is stored only when it isn't the default, and a stored one is played again on restore", async () => {
+test("the chosen idle is stored in the scene node only when it isn't the default, and a stored one is played again on restore", async () => {
   const idles = [entry("closeup"), entry("inventory", { puppet: null })];
-  const workspace = freshWorkspace();
-  const port = motionPort(idles);
-  const motion = new MotionActions(workspace.preview, port);
-  const compose = () => new WorkspaceComposer(workspace, { editor: () => ({}) as never, uvView: () => workspace.uvView, savedV: () => workspace.savedV,
-    collections: () => workspace.collections, quality: () => 512, preview: () => ({ ...workspace.preview, camera: { position: [0, 0, 1], target: [0, 0, 0], fov: 30 } }),
-    motion: () => motion.snapshot() });
-  const composer = compose(); composer.setPreviewReady();
-  expect("idleClip" in composer.capture().preview).toBe(false);
+  const workspace = freshWorkspace(), graph = createStudioViewGraph(workspace.preview);
+  const motion = new MotionActions(motionPort(idles), graphMotionScene(graph, () => undefined, () => MAIN_VIEW));
+  const sceneMotion = () => graph.state<SceneState>(MAIN_VIEW, "scene").motion!;
+  expect("idleClip" in sceneMotion()).toBe(false);
   motion.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "inventory" });
-  const stored = composer.capture();
-  expect(stored.preview.idleClip).toBe("inventory");
-  // Read back through the workspace reader and restored: the stored idle is asked for again.
-  const reread = { state: parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(stored, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS) };
-  expect(reread.state.preview.idleClip).toBe("inventory");
+  expect(sceneMotion().idleClip).toBe("inventory");
+  // Stored with the session's graph and read back: the stored idle is asked for again.
+  const stored = JSON.parse(JSON.stringify(sessionViewGraph(graph)));
+  const reread = createStudioViewGraph(workspace.preview, stored);
   const asked: string[] = [];
-  const restored = new MotionActions(reread.state.preview, motionPort(idles, "ok", asked));
+  const restored = new MotionActions(motionPort(idles, "ok", asked), graphMotionScene(reread, () => undefined, () => MAIN_VIEW));
   restored.restore();
   expect(restored.snapshot().idleClip).toBe("inventory");
   expect(asked).toEqual(["inventory"]);

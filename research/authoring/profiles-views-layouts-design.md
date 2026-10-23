@@ -373,7 +373,7 @@ Key bindings and palette commands resolve targets in the input layer, then dispa
   - Scene-editing view actions name `scene` together with `sceneGen`.
   - The presentation port is the input layer: it fills targets the UI leaves out. `StudioApplication` validates every named target in one place and refuses a stale one with `missing_target`. Dispatch and captures share one currency check (`TargetResolver.check()` and `current()`).
   - Base revisions travel in captures, not on every immediate action.
-  - View actions that act through the drawn head (camera, motion, and preview's eye shape, detail and hair) refuse any view that doesn't show the drawn scene, until phase 4a's runtimes.
+  - View actions are routed to the scene runtime that holds the view they name (phase 4a-vi, §4.5): an action naming a view no runtime draws never reaches the shown one.
 - **Resolution and captures.**
   - Resolution is pure (`app/profiles/bindings.ts`), and panel contributions declare their `context` (§5).
   - Context menus capture their targets when they open.
@@ -381,12 +381,11 @@ Key bindings and palette commands resolve targets in the input layer, then dispa
   - File pickers name their target when they are asked.
 - **History.** The View and lighting scope is `view:<profile>`. Undo acts only on the scope it names; with no editing context it reads "Nothing to undo here yet". The Undo and Redo tooltips and the History list say "Changes to <name>".
 - **Session data** (§4.1). Reading a session validates tab IDs, instance IDs (duplicates are dropped), bindings, scene references and generations, and focus.
-- **Boundary test.** It lists no family that still defaults a target. It also forbids reading focus below the input layer, naming `sceneGen` without `scene`, and naming the live feature in the root. The `liveSurface` row of §7 is built as `preview/browser/scene-surfaces.ts`.
+- **Boundary test.** It lists no family that still defaults a target. It also forbids reading focus below the input layer, naming `sceneGen` without `scene`, and naming the live feature in the root. The `liveSurface` row of §7 is built as `preview/browser/scene-editors.ts` (phase 4a-vi).
 - **Deferred.**
   - The History panel's list of other recent scopes waits for a UI decision (phase 3).
   - `layout.set` gives way to phase 2's `tabs.*`.
   - Shell menus other than context menus get captures in phase 3.
-  - The root's editor hooks and save loaders are UI-boundary exception 17, until phase 4a.
 
 ## 4. Layouts
 
@@ -480,6 +479,15 @@ Phase 4a therefore splits the scene host into one **renderer device** per window
 - *The first-draw shader-link freeze:* closed by preparing ahead.
 
 Both were queued as beta blockers. Phase 4a is where they are fixed and gated, so phase 2's tabs never inherit them.
+
+**Built in phase 4a** ([experiment 043](../../experiments/043-scene-runtimes/README.md) §7–§13; G3, the gate table on real data, comes before the merge):
+
+- **One renderer device per window, a scene runtime per (scene, subject, body)**, built hidden with an `AbortSignal`, disposed without context loss (043 §7–§8).
+- **Motion in the scene node** (043 §9). **Residency** is one owner (`preview/scene-residency.ts`): the newest want wins, the shown runtime plus one warm, least recently shown evicted first; `reloadHead` and its `not_ready` refusal are gone (043 §10).
+- **Prepared before shown**, with typed progress in the head pane, programs linked on the driver's threads and paced, uploads gated on the GPU process, warm-ups in pieces, and no program that ANGLE builds again at its first draw (043 §11–§12; [WebGL program linking](../../knowledge/webgl-program-linking.md)).
+- **View actions routed by the view they name** (`preview/view-routes.ts`, 043 §13). The application sends camera, preview and motion actions to the runtime holding the named view, and says how it holds it. Framing (Front view, Whole body, the creator cameras, the lens) needs a device drawing the view and is refused plainly (`not_ready`) otherwise; a restore, an orbit step, Back and Forward edit the view's camera node. Preview settings are checked against the head of the view's V, a warm one included, else against the stored ranges. Motion acts only for a view whose scene is on screen. `heads.show(view)` draws a view: the head of another view of the same scene is redrawn for it.
+- **Editors per view** (`preview/browser/scene-editors.ts`): the runtime owner mounts the on-head editor on the head shown for the drawn view, naming that view's look; loaders are ready per V (a head shows the V the request names). UI-boundary exception 17 is gone.
+- **The S2 gate table** runs on synthetic heads as `tests/webgl-scene-runtimes.test.ts` (T2), and on real data as `measure.ts` in experiment 043 (G2, G3).
 
 ## 5. Panel ownership
 

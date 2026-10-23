@@ -12,6 +12,7 @@ import { poseClip, rotationToGltf, translationToGltf } from "../src/animation/re
 import { clipMotion } from "../src/animation/host/pose-catalogue-host";
 import type { PoseSample } from "../src/animation/pose-catalogue";
 import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
+import { localMotionScene } from "../src/animation/scene-motion";
 import { freshWorkspace } from "./fixtures/eye-region";
 import type { AnimClip, AnimRig } from "../src/native/anim-set";
 
@@ -143,7 +144,7 @@ function motionPort(calls: string[], options: { fail?: boolean } = {}) {
 
 test("the motion service holds a pose at once, lets a newer choice supersede it, rolls back on failure and leaves it for Still", async () => {
   const calls: string[] = [];
-  const motion = new MotionActions(freshWorkspace().preview, motionPort(calls));
+  const motion = new MotionActions(motionPort(calls));
   let resolve!: (value: PoseSample) => void;
   const slow = new Promise<PoseSample>(done => { resolve = done; });
   const first = motion.holdPose({ id: "PhotoModePoses.a", label: "A", moves: false }, slow);
@@ -162,19 +163,18 @@ test("the motion service holds a pose at once, lets a newer choice supersede it,
   expect(calls.slice(-2)).toEqual(["idle.false", "pose.none"]);
   expect(motion.snapshot().pose).toBeNull();
   // A failing pose puts the previous body source back and rejects.
-  const failing = new MotionActions(freshWorkspace().preview, motionPort(calls, { fail: true }));
+  const failing = new MotionActions(motionPort(calls, { fail: true }));
   await expect(failing.holdPose({ id: "PhotoModePoses.c", label: "C", moves: false }, Promise.resolve(sample()))).rejects.toThrow("no");
   expect(failing.snapshot().pose).toBeNull();
 });
 
 test("a stored pose waits for the Poses module and can be dropped; without a motion rig poses are refused in plain words", () => {
-  const preview = { ...freshWorkspace().preview, pose: { id: "PhotoModePoses.a", label: "A" } };
-  const motion = new MotionActions(preview, motionPort([]));
+  const motion = new MotionActions(motionPort([]), localMotionScene({ pose: { id: "PhotoModePoses.a", label: "A" } }));
   expect(motion.pendingPose()).toEqual({ id: "PhotoModePoses.a", label: "A" });
   expect(motion.snapshot()).toMatchObject({ pose: { id: "PhotoModePoses.a" }, poseLoading: true });
   motion.dropPendingPose();
   expect(motion.snapshot().pose).toBeNull();
-  const none = new MotionActions(freshWorkspace().preview, { ...motionPort([]), setPose: undefined });
+  const none = new MotionActions({ ...motionPort([]), setPose: undefined });
   expect(none.poseCapability().reason).toContain("Poses play on V");
 });
 

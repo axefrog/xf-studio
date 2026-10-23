@@ -225,7 +225,7 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
     const renderer = {
       capabilities: { isWebGL2: true }, extensions: { has: (name: string) => options.halfFloat !== false || name === "OES_texture_float_linear" },
       getContext: () => gl, getRenderTarget: () => target, setRenderTarget: (next: THREE.WebGLRenderTarget | null) => { target = next; },
-      autoClear: true, getClearColor: (colour: THREE.Color) => colour, getClearAlpha: () => 1, setClearColor: () => {},
+      autoClear: true, getClearColor: (colour: THREE.Color) => colour, getClearAlpha: () => 1, setClearColor: () => {}, clear: () => {},
       render: (scene: THREE.Scene) => { scene.traverse(object => { if (object instanceof THREE.Mesh) materials.push(object.material as THREE.Material); });
         if (options.error) error = options.error; },
       properties: { get: () => ({ currentProgram: { diagnostics: { runnable: options.runnable ?? true, programLog: "ERROR: 0:12: 'xfsTiled' : no matching function" } } }) },
@@ -258,7 +258,7 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
     // Colour with roughness in alpha, the normal with metalness in alpha: two packed 8-bit maps.
     expect(good.material.roughnessMap).toBe(good.material.map);
     expect(good.material.metalnessMap).toBe(good.material.normalMap);
-    expect(good.handle.target!.textures.map(texture => [texture.type, texture.colorSpace])).toEqual([[THREE.UnsignedByteType, THREE.SRGBColorSpace],
+    expect(good.handle.maps!.map(({ texture }) => [texture.type, texture.colorSpace])).toEqual([[THREE.UnsignedByteType, THREE.SRGBColorSpace],
       [THREE.UnsignedByteType, THREE.NoColorSpace]]);
     expect(good.handle.evidence()).toMatchObject({ state: "baked", bytes: Math.round(8 * 8 * 8 * 4 / 3), shared: false });
   });
@@ -269,15 +269,17 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
     a.handle.bake(renderer);
     const passes = new Set(materials);
     b.handle.bake(renderer); c.handle.bake(renderer);
-    // Every bake drew with the same three programs (clear, layer pass, resolve).
+    // Every bake drew with the same five programs (the layer pass for each accumulation target, the resolve for each kept map), each
+    // writing one output (experiment 043 §12); the accumulation targets are cleared, not drawn.
     expect(new Set(materials).size).toBe(passes.size);
-    expect(passes.size).toBe(3);
+    expect(passes.size).toBe(5);
+    for (const material of passes) expect((material as THREE.RawShaderMaterial).fragmentShader).not.toMatch(/location\s*=\s*[1-9]/);
     // The identical stack shares the first bake's maps; another size bakes its own.
-    expect(b.handle.target).toBe(a.handle.target);
+    expect(b.handle.maps).toBe(a.handle.maps);
     expect(b.handle.evidence()).toMatchObject({ shared: true, bytes: 0 });
-    expect(c.handle.target).not.toBe(a.handle.target);
+    expect(c.handle.maps).not.toBe(a.handle.maps);
     let disposed = 0;
-    a.handle.target!.addEventListener("dispose", () => disposed++);
+    a.handle.maps![0].addEventListener("dispose", () => disposed++);
     a.material.dispose();
     expect(disposed).toBe(0);
     b.material.dispose();
@@ -288,20 +290,50 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
     const { renderer } = fakeRenderer();
     const made = createLayeredMaterial(input());
     made.handle.bake(renderer);
-    const before = made.handle.target;
+    const before = made.handle.maps;
     layeredContextRestored(renderer);
     made.handle.contextRestored();
     expect(made.handle.state).toBe("pending");
     expect(made.material.visible).toBe(false);
-    expect(made.handle.target).toBeNull();
+    expect(made.handle.maps).toBeNull();
     expect(made.handle.bake(renderer)).toBe(true);
-    expect(made.handle.target).not.toBe(before);
+    expect(made.handle.maps).not.toBe(before);
     expect(made.material.visible).toBe(true);
     // A failed bake stays failed.
     const failed = createLayeredMaterial(input());
     failed.handle.bake(fakeRenderer({ runnable: false }).renderer);
     failed.handle.contextRestored();
     expect(failed.handle.state).toBe("failed");
+  });
+
+  test("a part baked before a loss and restore it never heard about (being prepared: neither shown nor kept) is baked again before its maps are read or reused (4a-v-b review 2, finding 1)", async () => {
+    const { beginContextGeneration, endContextGeneration } = await import("../src/platform/scene/context-generation");
+    let lost = false;
+    const { renderer, materials } = fakeRenderer({ lost: () => lost });
+    const incoming = createLayeredMaterial(input());
+    expect(incoming.handle.bake(renderer)).toBe(true);
+    const before = incoming.handle.maps;
+    // Lost and restored while its preparation waited for a frame: no `contextRestored` reaches it, and the shared bakes aren't forgotten.
+    lost = true; endContextGeneration(renderer); lost = false; beginContextGeneration(renderer);
+    // Its first read finds the maps gone: pending and hidden, its old target dropped.
+    expect(incoming.handle.state).toBe("pending");
+    expect(incoming.material.visible).toBe(false);
+    expect(incoming.handle.maps).toBeNull();
+    // Placing it bakes again: new draws, a new target.
+    const draws = materials.length;
+    expect(incoming.handle.bake(renderer)).toBe(true);
+    expect(materials.length).toBeGreaterThan(draws);
+    expect(incoming.handle.maps).not.toBe(before);
+    // A twin baked after the restore shares the new maps, never the old ones.
+    const twin = createLayeredMaterial(input());
+    expect(twin.handle.bake(renderer)).toBe(true);
+    expect(twin.handle.maps).toBe(incoming.handle.maps);
+    // While the context is lost (its event still queued), the maps already count as gone, and a bake waits for the restore.
+    lost = true;
+    expect(incoming.handle.state).toBe("pending");
+    expect(incoming.handle.bake(renderer)).toBe(false);
+    lost = false; beginContextGeneration(renderer);
+    expect(incoming.handle.bake(renderer)).toBe(true);
   });
 
   test("a bake while the context is lost stays pending; one that failed because the context was lost is tried again (PREV-73)", () => {
@@ -328,8 +360,8 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
     const { renderer, queries } = fakeRenderer();
     const many = { ...input(), layers: Array.from({ length: 12 }, (_, i) => ({ parameters: params(i), textures: {} })) };
     expect(createLayeredMaterial(many).handle.bake(renderer)).toBe(true);
-    // The two accumulation targets and the kept maps; errors drained once, then after the clear, the layers and the resolve.
-    expect(queries.checkFramebufferStatus).toBe(3);
+    // The six accumulation targets and the two kept maps, once each; errors drained once, then after the clears, the layers and the resolve.
+    expect(queries.checkFramebufferStatus).toBe(8);
     expect(queries.getError).toBe(4);
     // An error raised by any layer is still caught.
     const failing = fakeRenderer({ error: 0x502 });
@@ -348,8 +380,8 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
     // A non-square bake keeps both sides within the limits, and its evidence and bytes follow it.
     const made = createLayeredMaterial({ ...input(8), height: 4 });
     made.handle.bake(fakeRenderer().renderer);
-    expect(made.handle.target!.width).toBe(8);
-    expect(made.handle.target!.height).toBe(4);
+    expect(made.handle.maps![0].width).toBe(8);
+    expect(made.handle.maps![0].height).toBe(4);
     expect(made.handle.evidence()).toMatchObject({ size: 8, height: 4, bytes: Math.round(8 * 4 * 8 * 4 / 3) });
   });
 

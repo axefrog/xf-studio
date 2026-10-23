@@ -838,14 +838,16 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       };
       // The shown eye shape is the preview's own state; the view keeps no default of its own (UI-93).
       eyeShape.setOptions(shapes.map(choice => ({ value: String(choice.index), label: String(Number(choice.number)), name: shapeLabel(choice.index) })));
-      eyeShape.update(preview ? String(preview.eyeShape) : undefined, undefined, !preview || !shapes.length
+      // The shape the head shows: the scene's choice, or its base shape when this head lacks it (the note says so; the choice is kept).
+      const shownShape = state.eyeShapeOptions?.shown ?? preview?.eyeShape;
+      eyeShape.update(preview ? String(shownShape) : undefined, undefined, !preview || !shapes.length
         ? { disabled: true, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ?? (preview ? "This head has no eye shapes." : "The 3D view is still loading.") } : {});
       const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "These work once the 3D view is ready.";
       const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
         ? `Your V's own is ${shapeLabel(saved.suggestedEyeShape)}; this changes the 3D view only.` : "";
       // Before the 3D view is ready the panel's Your V line already says why everything waits: the eye shape's reason stays in its
       // tip, and this line says nothing (one place per panel, release-readiness-audit.md C-17).
-      setText(eyeNote, !preview ? "" : overriding);
+      setText(eyeNote, !preview ? "" : state.eyeShapeOptions?.fallback ?? overriding);
       // The game's own nudity setting, as the viewer chooses; off is the game's censored look (knowledge/body-rendering.md §3).
       const uncensoredOn = preview?.uncensored === true, uncensoredAllowed = port.authoring.capability({ kind: "preview.setUncensored", enabled: !uncensoredOn });
       uncensored.update(!!preview && uncensoredOn, { disabled: !preview || !uncensoredAllowed.available, reason: uncensoredAllowed.reason ?? loading });

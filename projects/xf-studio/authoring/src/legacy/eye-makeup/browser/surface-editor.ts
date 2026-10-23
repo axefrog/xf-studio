@@ -13,7 +13,7 @@ import {
   type Anchor,
   type UV,
 } from "./surface-map";
-import type { SceneHost } from "../../../platform/scene/scene-host";
+import type { SceneRuntime } from "../../../platform/scene/scene-host";
 import { tangentFrame, tangentWorld, tangentRayUV, type TangentFrame } from "./surface-tangent";
 import { createSurfaceOcclusion } from "./surface-occlusion";
 import type { StudioGestureProposal } from "../../../app/studio-application";
@@ -56,24 +56,93 @@ type Hooks = {
 const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", tangent: "tangent", origin: "warp-origin", field: "warp-vector" };
 
 /** What the on-head editor uses of the loaded head: the scene host's view and input, and the layered-makeup surface it edits. */
-export type SurfaceViewer = Pick<SceneHost, "renderer" | "scene" | "camera" | "head" | "eyes" | "controls"
+export type SurfaceViewer = Pick<SceneRuntime, "renderer" | "scene" | "camera" | "head" | "eyes" | "controls"
   | "cameraInput" | "onFrame" | "requestRender"> & { plate: THREE.SkinnedMesh };
 
-/** Face controls operate on the same recipe as the UV editor. No baked geometry edits. */
+/** Round handles without external bitmap dependencies (one function, so every guide material shares its program: Three keys on its text). */
+function roundHandles(shader: THREE.WebGLProgramParametersWithUniforms) {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    "#include <clipping_planes_fragment>",
+    "#include <clipping_planes_fragment>\nif (distance(gl_PointCoord, vec2(0.5)) > 0.5) discard;",
+  );
+}
+/** The guides' materials: the handles (points) and the outlines and tangent connectors (lines), each also drawn without depth. */
+export type GuideMaterials = ReturnType<typeof guideMaterials>;
+function guideMaterials() {
+  const point = new THREE.PointsMaterial({
+    size: 10,
+    sizeAttenuation: false,
+    vertexColors: true,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+  });
+  point.onBeforeCompile = roundHandles;
+  const tangentPoint = point.clone();
+  tangentPoint.depthTest = false;
+  tangentPoint.onBeforeCompile = roundHandles;
+  const tangentLine = new THREE.LineBasicMaterial({ color: 0xb9d0c2, transparent: true, opacity: .65, depthTest: false, depthWrite: false });
+  const line = new THREE.LineBasicMaterial({ color: 0xb9d0c2, transparent: true, opacity: 0.65, depthWrite: false });
+  return { point, tangentPoint, line, tangentLine };
+}
+
+/**
+ * The guides' materials for one head, and stand-ins for the guides the editor adds to its scene once mounted (profiles phase 4a-v-b): the
+ * same materials on a points and a lines object of the same attributes, so a head prepared before it is shown compiles the guides' programs
+ * ahead (their first frame links nothing). Not drawn. The editor mounted on the head draws with these very materials
+ * (`createSurfaceEditor`'s `guides`), so every program variant they were ever drawn or compiled with (one per lighting setup: Three keys
+ * even an unlit material's program on the scene's light counts) stays linked while the head lives, whatever the editor's mounts and
+ * unmounts: Three frees a program only when the last material holding it is disposed.
+ */
+export function surfaceGuideStandIns(): { objects: readonly THREE.Object3D[]; materials: GuideMaterials; dispose(): void } {
+  const materials = guideMaterials();
+  const points = new THREE.BufferGeometry(), lines = new THREE.BufferGeometry();
+  points.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(3), 3));
+  points.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(3), 3));
+  lines.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(6), 3));
+  const objects = [new THREE.Points(points, materials.point), new THREE.LineSegments(lines, materials.line)];
+  return { objects, materials, dispose() { points.dispose(); lines.dispose(); for (const material of Object.values(materials)) material.dispose(); } };
+}
+
+/**
+ * What the editor works with on a head besides the scene: the plate's surface map (its UV lookup, eye openings bridged) and the head's and
+ * eyes' occlusion trees. Each takes tens of milliseconds to make, so a head prepared before it is shown makes them then, one per step
+ * (`steps`, profiles phase 4a-v-b), and its editor, mounted at show, takes them made (`createSurfaceEditor`'s `parts`).
+ */
+export type SurfaceEditorParts = { readonly head: SurfaceOcclusion; readonly eyes: SurfaceOcclusion; readonly map: SurfaceMap; readonly steps: readonly (() => void)[] };
+type SurfaceOcclusion = ReturnType<typeof createSurfaceOcclusion>;
+export function surfaceEditorParts(head: THREE.Mesh, eyes: THREE.Mesh, plate: THREE.SkinnedMesh): SurfaceEditorParts {
+  let map: SurfaceMap | undefined;
+  const headOcclusion = createSurfaceOcclusion(head), eyeOcclusion = createSurfaceOcclusion(eyes);
+  // Interior UV holes (the eye openings) are bridged, so drags and controls cross the opening (see surface-map.ts).
+  const surfaceMap = () => map ??= new SurfaceMap(plate.geometry, { bridgeHoles: true });
+  return {
+    head: headOcclusion, eyes: eyeOcclusion,
+    get map() { return surfaceMap(); },
+    // Make each ahead, one per step: the map, then the head's tree, then the eyes' (each sampled at the pose they are in now).
+    steps: [() => void surfaceMap(), () => headOcclusion.warm(), () => eyeOcclusion.warm()],
+  };
+}
+
+/**
+ * Face controls operate on the same recipe as the UV editor. No baked geometry edits. `parts`: made ahead for this head and plate. `guides`:
+ * the head's guide materials (`surfaceGuideStandIns`), which the head owns and the editor never disposes; without them the editor makes its
+ * own and disposes them with itself.
+ */
 export function createSurfaceEditor(
   viewer: SurfaceViewer,
   hooks: Hooks,
+  parts: SurfaceEditorParts = surfaceEditorParts(viewer.head, viewer.eyes, viewer.plate),
+  guides?: GuideMaterials,
 ) {
   const { renderer, scene, camera, plate, head, controls } = viewer,
     canvas = renderer.domElement;
   const listeners = new AbortController();
-  // Interior UV holes (the eye openings) are bridged, so drags and controls cross the opening (see surface-map.ts).
-  const map = new SurfaceMap(plate.geometry, { bridgeHoles: true }),
-    group = new THREE.Group();
-  const headVisibility=createSurfaceOcclusion(head);
+  const map = parts.map, group = new THREE.Group();
+  const headVisibility=parts.head;
   /** A plate vertex where it is drawn now (morphs, skin and world transform). */
   const plateVertex=(i:number)=>plate.getVertexPosition(i,new THREE.Vector3()).applyMatrix4(plate.matrixWorld);
-  const eyeVisibility=createSurfaceOcclusion(viewer.eyes);
+  const eyeVisibility=parts.eyes;
   scene.add(group);
   const pointGeometry = new THREE.BufferGeometry(),
     lineGeometry = new THREE.BufferGeometry();
@@ -94,40 +163,14 @@ export function createSurfaceEditor(
       THREE.DynamicDrawUsage,
     ),
   );
-  const pointMaterial = new THREE.PointsMaterial({
-    size: 10,
-    sizeAttenuation: false,
-    vertexColors: true,
-    transparent: true,
-    depthTest: true,
-    depthWrite: false,
-  });
-  // Round handles without external bitmap dependencies.
-  pointMaterial.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
-      "#include <clipping_planes_fragment>",
-      "#include <clipping_planes_fragment>\nif (distance(gl_PointCoord, vec2(0.5)) > 0.5) discard;",
-    );
-  };
+  const materials = guides ?? guideMaterials(), pointMaterial = materials.point, tangentMaterial = materials.tangentPoint;
   const points = new THREE.Points(pointGeometry, pointMaterial);
   const tangentGeometry = pointGeometry.clone(), tangentLineGeometry = new THREE.BufferGeometry();
   tangentLineGeometry.setAttribute("position",new THREE.Float32BufferAttribute(new Float32Array(4*2*3),3).setUsage(THREE.DynamicDrawUsage));
   tangentGeometry.setDrawRange(0,0);tangentLineGeometry.setDrawRange(0,0);
-  const tangentMaterial = pointMaterial.clone();
-  tangentMaterial.depthTest=false;
-  tangentMaterial.onBeforeCompile=pointMaterial.onBeforeCompile;
   const tangentPoints=new THREE.Points(tangentGeometry,tangentMaterial),
-    tangentLines=new THREE.LineSegments(tangentLineGeometry,new THREE.LineBasicMaterial({
-      color:0xb9d0c2,transparent:true,opacity:.65,depthTest:false,depthWrite:false}));
-  const lines = new THREE.LineSegments(
-    lineGeometry,
-    new THREE.LineBasicMaterial({
-      color: 0xb9d0c2,
-      transparent: true,
-      opacity: 0.65,
-      depthWrite: false,
-    }),
-  );
+    tangentLines=new THREE.LineSegments(tangentLineGeometry,materials.tangentLine);
+  const lines = new THREE.LineSegments(lineGeometry, materials.line);
   points.frustumCulled = lines.frustumCulled = false;
   tangentPoints.frustumCulled=tangentLines.frustumCulled=false;
   // Editor guides draw after the transparent makeup and detail cards (10–101).
@@ -820,8 +863,7 @@ export function createSurfaceEditor(
     if (typeof offFrame === "function") offFrame();
     scene.remove(group);
     pointGeometry.dispose(); lineGeometry.dispose(); tangentGeometry.dispose(); tangentLineGeometry.dispose();
-    pointMaterial.dispose(); tangentMaterial.dispose();
-    (lines.material as THREE.Material).dispose(); (tangentLines.material as THREE.Material).dispose();
+    if (!guides) for (const material of Object.values(materials)) material.dispose();
   }
   publishInput();
   return {

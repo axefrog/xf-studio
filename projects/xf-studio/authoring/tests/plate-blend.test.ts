@@ -155,6 +155,12 @@ describe("the plate material", () => {
       expect(f.indexOf("xfsDecal += xfsShiftColor")).toBeLessThan(f.indexOf("vec3 xfsRoot"));
       expect(f).not.toContain("XFS_PLATE_FRESNEL");
       expect(f.slice(0, f.indexOf("xfsDecal += xfsShiftColor"))).toContain("if ( xfsShiftIntensity > 0.0 ) {");
+      // Lit as skin, the S1 and S2 scatter variants write after that tint and before any light, so they carry none (experiment 043 §12).
+      const early = f.indexOf("xfsScatterWrite( vec4( 0.0 ), vec4( clamp( xfsSqrtDecal, 0.0, 1.0 ), xfsCoverage )");
+      if (skinLight) {
+        expect(early).toBeGreaterThan(f.indexOf("xfsDecal += xfsShiftColor"));
+        expect(early).toBeLessThan(f.indexOf("#include <lights_physical_fragment>"));
+      } else expect(early).toBe(-1);
     }
   });
 
@@ -247,17 +253,18 @@ describe("the makeup stack's plate", () => {
     expect(evidence.halfFloat).toBe(true);
     expect(evidence.layers.map(layer => layer.ownPlate)).toEqual([false, false, true, false]);
     expect(stack.materials.map(material => material.visible)).toEqual([false, false, true, false]);
-    // One draw per carried layer, one resolve of the merged decal, and one draw per level of its roughness chain (33 × 9: 6 levels).
+    // Each carried layer and the resolve of the merged decal, into each of the three targets (one output per program, experiment 043 §12),
+    // and one draw per level of its roughness chain (33 × 9: 6 levels): 3 × 3 + 3 + 6 draws.
     expect(evidence.plate.compositeDraws).toEqual({ layerDraws: 3, resolves: 1, levelDraws: 6 });
-    expect(draws()).toBe(10);
+    expect(draws()).toBe(18);
     // Idle: nothing changed, nothing runs.
     stack.prepareBlend(renderer);
-    expect(draws()).toBe(10);
+    expect(draws()).toBe(18);
     expect(reads).toBe(1);
     // A layer's mask changed: the composite is redrawn, the skin is not read again.
     stack.setLayerCanvas(0, { width: 64, height: 64 } as HTMLCanvasElement);
     stack.prepareBlend(renderer);
-    expect(draws()).toBe(20);
+    expect(draws()).toBe(36);
     expect(reads).toBe(1);
     // A new skin is read once, on the next frame; its light arrives with it.
     stack.setUnderlaySource(() => { reads++; return underlay(); });

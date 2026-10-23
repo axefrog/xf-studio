@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
+import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
-import type { PreviewPort } from "../src/preview/preview-actions";
+import { eyeShapeFallback, type PreviewPort } from "../src/preview/preview-actions";
 import type { MotionPort } from "../src/animation/motion-actions";
 import type { SavedV } from "../src/saves/save-reader";
 import { bodySexOf, SavedAppearanceActions } from "../src/character/saved-appearance-actions";
@@ -57,7 +58,11 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   });
   expect(services.restoredSavedAppearance?.suggestedEyeShape).toBe(9);
   expect(calls.slice(0, 4)).toEqual(["save", "optics", "eye:4", "wire"]);
-  const { preview: actions, motion: motionActions } = services.finish();
+  const finished = services.finish();
+  // Built: nothing of the motion or camera yet. Shown: the motion, then the camera.
+  expect(calls).not.toContain("parts");
+  finished.show();
+  const { preview: actions, motion: motionActions } = finished;
   expect(calls.indexOf("surface")).toBeLessThan(calls.indexOf("parts"));
   expect(calls.indexOf("parts")).toBeLessThan(calls.indexOf("idle"));
   expect(calls.indexOf("idle")).toBeLessThan(calls.indexOf("seek"));
@@ -186,4 +191,32 @@ test("the eye's own roughness is on by default, also for a workspace that stored
   off.preview.eyeOwnRoughness = false;
   start(off);
   expect(values.at(-1)).toBe(false);
+});
+
+test("a head that lacks the scene's eye shape shows its base shape and leaves the node's choice for the heads that have it (4a-iv)", async () => {
+  const { createStudioViewGraph } = await import("../src/preview/preview-view-graph");
+  const workspace = freshWorkspace();
+  workspace.preview.eyeShape = 5;
+  const graph = createStudioViewGraph(workspace.preview), shapes: number[] = [], noop = () => {};
+  const preview: PreviewPort = { cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
+    endFovGesture: noop, restoreCamera: noop, setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop, setHair: noop,
+    setEyeShape: index => shapes.push(index), setPiercings: noop, setDetail: noop,
+    eyeShapeOptions: () => ({ choices: [{ index: 0, label: "Base" } as never], eyesFollow: false, eyeSource: null }) };
+  const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
+  const head = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion }, { graph, view: MAIN_VIEW }).finish();
+  head.show();
+  expect(shapes).toEqual([0]);
+  expect(graph.state<{ eyeShape: number }>("main", "scene").eyeShape).toBe(5);
+  // The status says what the head shows and why; the scene's choice is still the one stored (and mirrored).
+  expect(head.preview.eyeShapeOptions()).toMatchObject({ shown: 0, fallback: eyeShapeFallback(5, 0) });
+  // One sentence naming both shapes, by the numbers the selector shows.
+  expect(eyeShapeFallback(23, 0)).toBe("This head has no shape 24, so it shows shape 1; your choice comes back on a head that has it.");
+  expect(head.preview.snapshot().eyeShape).toBe(5);
+  // Another runtime of the scene choosing a shape this head lacks: this head shows its base shape again, never the missing one.
+  graph.edit("main", "scene", { state: { eyeShape: 7 } }, { label: "Eye shape" });
+  expect(shapes).toEqual([0, 0]);
+  // A shape it has: shown, with no fallback.
+  graph.edit("main", "scene", { state: { eyeShape: 0 } }, { label: "Eye shape" });
+  expect(head.preview.eyeShapeOptions()).toMatchObject({ shown: 0 });
+  expect(head.preview.eyeShapeOptions().fallback).toBeUndefined();
 });

@@ -70,7 +70,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     read(): SavedV | undefined;
     /** Show a save's V on `character` (the V the request named when it was asked). */
     load(bytes: Uint8Array, character: string): Readonly<SavedAppearanceState>;
-    ready(): boolean;
+    /** Whether a save can be shown on `character` now (a 3D view shows that V). */
+    ready(character: string): boolean;
     unavailableReason?(): string | undefined;
   };
 }) {

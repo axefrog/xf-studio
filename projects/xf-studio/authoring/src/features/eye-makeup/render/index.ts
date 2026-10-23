@@ -12,6 +12,7 @@ import type * as THREE from "three";
 import { invalidating, type FeatureRendererFactory, type SceneHostPort, type SurfaceUnderlay } from "../../../platform/api/scene";
 import { createMakeupStack, type LayeredSurfaceRenderer, type MakeupLayers } from "../../../engines/layered-makeup/render/makeup-stack";
 import { MAX_LAYERS } from "../../../engines/layered-makeup/recipe";
+import { abortable } from "../../../platform/api/abortable";
 import { EYE_MAKEUP_ID } from "..";
 import { EYE_MAKEUP_REGION } from "../region";
 
@@ -75,6 +76,12 @@ function createEyeMakeupRenderer(host: SceneHostPort): EyeMakeupRenderer {
     plates: stack.plates, materials: stack.materials,
     // The composite, only after a layer or the skin changed (plate-blend.ts).
     beforeDraw: () => stack.prepareBlend(host.renderer),
+    // Before the scene is shown: the composite's passes linked ahead, then the merged plate made as the first frame draws it. A superseded
+    // preparation stops waiting on the links at once, so its runtime can go (the driver finishes them; their release frees their shaders).
+    async prepare(signal) {
+      await abortable(stack.preparePasses(host.renderer), signal);
+      stack.prepareBlend(host.renderer);
+    },
     setNormals: stack.setNormals,
     setResearchTools(enabled: boolean) {
       if (enabled === research) return;

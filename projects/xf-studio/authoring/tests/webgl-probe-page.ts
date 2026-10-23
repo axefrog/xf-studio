@@ -29,7 +29,7 @@ import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters }
 import { stageBackdropPixels } from "../src/preview/stage-backdrop";
 import { createStudioEnvironment } from "../src/preview/render/studio-environment";
 import { hideHalfFloatRendering } from "./webgl-harness-page";
-import { accumulateLayer, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters, layerMapUv, resolveSurface, type LayerAccumulator } from "../src/materials/render/layered-material";
+import { accumulateLayer, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters, layerMapUv, resolveSurface, type BakedMaps, type LayerAccumulator } from "../src/materials/render/layered-material";
 import type { RenderLayer } from "../src/character/render-detail";
 import { initialRecipe } from "./fixtures/eye-region";
 import { createMakeupStack } from "./fixtures/eye-region";
@@ -407,9 +407,9 @@ try {
     });
     const cpu = resolveSurface(acc, globalNormal(globalXy, 0.5));
     // The packed maps read back as bytes.
-    const readBytes = (target: THREE.WebGLRenderTarget, x: number, y: number, index: number) => {
+    const readBytes = (maps: BakedMaps, x: number, y: number, index: number) => {
       const pixel = new Uint8Array(4);
-      renderer.readRenderTargetPixels(target, x, y, 1, 1, pixel, undefined, index);
+      renderer.readRenderTargetPixels(maps[index]!, x, y, 1, 1, pixel);
       return [...pixel];
     };
     const srgbByte = (linear: number) => byte(linear <= 0.0031308 ? linear * 12.92 : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055);
@@ -417,7 +417,7 @@ try {
       normal: [...surface.normal.map(value => byte(value * 0.5 + 0.5)), byte(surface.metalness)] });
     const expected = expectedBytes(cpu);
     probe.layered = { state: made.handle.state, ...(made.handle.evidence().error ? { error: made.handle.evidence().error } : {}), drawn: made.handle.evidence().layers,
-      gpu: baked ? { colour: readBytes(made.handle.target!, 3, 3, 0), normal: readBytes(made.handle.target!, 3, 3, 1) } : { colour: [], normal: [] },
+      gpu: baked ? { colour: readBytes(made.handle.maps!, 3, 3, 0), normal: readBytes(made.handle.maps!, 3, 3, 1) } : { colour: [], normal: [] },
       cpu: expected, parity: { texels: 0, colour: 0, normal: 0 }, bytes: made.handle.evidence().bytes };
     // Non-constant maps: an 8×8 sRGB colour map, a 4×4 roughness map, tile 2 with an offset, and a mask that differs by row and column
     // (its orientation), baked at 16² over the unit domain with nearest sampling, compared at every texel.
@@ -459,7 +459,7 @@ try {
         local = accumulateLayer(local, stack[1]!.parameters, { colour: [q(0.25), q(0.25), q(0.25)], normal: [0, 0], roughness: 1, metalness: 0,
           microblend: [0.5, 0.5, 1, 1], mask: 1 }, true);
         const want = expectedBytes(resolveSurface(local));
-        const got = { colour: readBytes(tiled.handle.target!, x, y, 0), normal: readBytes(tiled.handle.target!, x, y, 1) };
+        const got = { colour: readBytes(tiled.handle.maps!, x, y, 0), normal: readBytes(tiled.handle.maps!, x, y, 1) };
         colourGap = Math.max(colourGap, ...want.colour.map((value, k) => Math.abs(value - got.colour[k]!)));
         normalGap = Math.max(normalGap, ...want.normal.map((value, k) => Math.abs(value - got.normal[k]!)));
         texels++;

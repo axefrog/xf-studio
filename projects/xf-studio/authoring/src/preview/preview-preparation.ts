@@ -27,7 +27,10 @@ export type PreviewState = {
 /** `preview.rebuild` discards the prepared files and prepares them again (a damaged preview). */
 export type PreviewAction = { kind: "preview.refresh" } | { kind: "preview.prepare" } | { kind: "preview.cancel" } | { kind: "preview.rebuild" };
 /** `body` names another body's core (the masculine V's); without it the feminine core, which the rest of this module follows. */
-export type PreviewTransport = (action: "refresh" | "prepare" | "cancel" | "rebuild", body?: CoreBody) => Promise<{ ok: boolean; data: unknown }>;
+export type PreviewTransport = (action: PreviewTransportAction, body?: CoreBody, options?: PreviewTransportOptions) => Promise<{ ok: boolean; data: unknown }>;
+export type PreviewTransportAction = "refresh" | "prepare" | "cancel" | "rebuild";
+/** `signal` cuts the request off. */
+export type PreviewTransportOptions = { signal?: AbortSignal };
 export type PreviewOutcome = { ok: true } | { ok: false; message: string };
 
 export function isPreviewState(value: unknown): value is PreviewState {
@@ -117,6 +120,8 @@ export const shouldAutoStart = (state: PreviewState, alreadyAttempted: boolean) 
 
 export class PreviewPreparationActions {
   private readonly host: PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">;
+  /** Ends every `ensureBody` call still waiting when the service is disposed. */
+  private readonly life = new AbortController();
   constructor(private readonly transport: PreviewTransport, private readonly pollMs = 700, private readonly timers?: HostTimers) {
     this.host = new PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">({ transport, isState: isPreviewState, working: state => state.phase === "preparing",
       refresh: "refresh", pollMs, timers, messages: {
@@ -141,32 +146,54 @@ export class PreviewPreparationActions {
     if (!allowed.available) return { ok: false, message: allowed.reason! };
     return this.host.request(action.kind.slice("preview.".length) as "refresh" | "prepare" | "cancel" | "rebuild");
   }
-  dispose() { this.host.dispose(); }
+  /** The service is gone: polling stops, and every `ensureBody` call still waiting rejects with an `AbortError`. */
+  dispose() {
+    this.life.abort(new DOMException("The 3D view was closed.", "AbortError"));
+    this.host.dispose();
+  }
 
   /**
    * Make sure a body's core is prepared before its head loads: the feminine core is the one this service follows, so it is
    * taken as ready; another body's (the masculine V's) is prepared on first use, reporting progress through `pending`.
    * Rejects with a `HeadLoadError` (`body_unavailable`) when the host can't prepare it (a game version it doesn't support,
    * a failed or cancelled preparation, or lost contact), so the caller can show the feminine head instead.
+   *
+   * `signal`: the page no longer wants this body (a newer subject or body change superseded it; experiment 043 decision D1). A request
+   * in flight is cut off, polling stops at once, and the call rejects with the signal's reason; so does every call still waiting when the
+   * service is disposed. Only the page stops waiting: the host's preparation, once started, runs to completion and is cached for the next
+   * request (one job per body, which every page that asks joins), because a one-time cached job is worth finishing and no page can tell
+   * whether another still wants it.
    */
-  async ensureBody(body: CoreBody, pending: (message: string, progress: number | null) => void = () => {}): Promise<void> {
+  async ensureBody(body: CoreBody, pending: (message: string, progress: number | null) => void = () => {}, wanted?: AbortSignal): Promise<void> {
+    const signal = wanted ? AbortSignal.any([wanted, this.life.signal]) : this.life.signal;
+    signal.throwIfAborted();
     if (body === "female") return;
-    const wait = () => new Promise<void>(done => { (this.timers ?? { set: (run: () => void, ms: number) => setTimeout(run, ms) }).set(done, this.pollMs); });
+    const timers = this.timers ?? { set: (run: () => void, ms: number) => setTimeout(run, ms), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
+    const wait = () => new Promise<void>(done => {
+      const handle = timers.set(finish, this.pollMs);
+      function finish() { signal.removeEventListener("abort", early); done(); }
+      function early() { timers.clear(handle); finish(); }
+      signal.addEventListener("abort", early, { once: true });
+    });
+    /** This call asked for a preparation (once). */
+    let asked = false;
     const read = async (action: "refresh" | "prepare") => {
       let reply: { ok: boolean; data: unknown };
-      try { reply = await this.transport(action, body); }
-      catch (error) { throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D view service.", { cause: error }); }
+      try { reply = await this.transport(action, body, { signal }); }
+      catch (error) { signal.throwIfAborted(); throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D view service.", { cause: error }); }
+      signal.throwIfAborted();
       if (!isPreviewState(reply.data)) throw new HeadLoadError("body_unavailable", "The 3D view state is unavailable.");
       return reply.data;
     };
-    let state = await read("refresh"), asked = false;
+    let state = await read("refresh");
     for (let polls = 0; polls < 2000; polls++) {
       if (state.phase === "ready") return;
       if (state.phase === "preparing" || (!state.canPrepare && !asked && state.phase === "idle")) {
-        // Preparing this body, or waiting for another body's preparation to finish.
+        // Preparing this body (for this page or another), or waiting for another body's preparation to finish.
         const progress = state.progress ? Math.min(1, Math.max(0, (state.progress.index + 0.5) / state.progress.total)) : null;
         pending(state.message, progress);
         await wait();
+        signal.throwIfAborted();
         state = await read("refresh");
         continue;
       }
@@ -182,10 +209,11 @@ export class PreviewPreparationActions {
 
 /** `endpoint` is the host's preparation service: `/api/preview-core` on localhost, `/api/desktop/preview` on desktop. */
 export function createBrowserPreviewPreparation(endpoint: string) {
-  return new PreviewPreparationActions(async (action, body) => {
-    const response = action === "refresh" ? await fetch(body ? `${endpoint}?body=${body}` : endpoint, { cache: "no-store" }) : await fetch(endpoint, {
-      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body ? { action, body } : { action }) });
+  return new PreviewPreparationActions(async (action, body, options = {}) => {
+    const signal = options.signal;
+    const response = action === "refresh" ? await fetch(body ? `${endpoint}?body=${body}` : endpoint, { cache: "no-store", ...(signal ? { signal } : {}) })
+      : await fetch(endpoint, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...(signal ? { signal } : {}),
+        body: JSON.stringify({ action, ...(body ? { body } : {}) }) });
     return { ok: response.ok, data: await response.json() };
   });
 }

@@ -83,7 +83,7 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect([...(probe.skin.drawn as string[])].sort()).toEqual(["eyes", "face", "skin"]);
   });
 
-  test("disposing the host removes its canvas and every feature renderer", () => {
-    expect(probe.disposed).toEqual({ canvases: 0, features: 0 });
+  test("disposing the runtime releases every feature renderer and leaves the device's canvas, hidden; the device takes the canvas", () => {
+    expect(probe.disposed).toEqual({ canvases: 0, features: 0, kept: 1, hidden: true });
   });
 });

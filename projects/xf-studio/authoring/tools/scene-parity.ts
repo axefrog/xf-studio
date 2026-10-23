@@ -10,48 +10,64 @@
  * overlaid controls (a new toolbar button) that is not the 3D view; the report names it.
  *
  * Capture the code before the change (twice or more: the first creator frame can differ between runs of the same build by a few pixels
- * one step apart) and after it, then compare: every frame after must match one of the base captures pixel for pixel (PREV-98). Outputs
- * are private renders of local game assets: keep them in the ignored evidence/screenshots tree.
+ * one step apart) and after it, then compare. The parity rule (experiment 043 §8, revised for GPU noise): a frame passes when it matches
+ * one of the base captures within noise, that is, it differs from that base by at most one channel step (1/255), on fewer than 0.01 % of
+ * its pixels. Two captures of one build differ by that much, so byte identity can't be asked of a GPU path that isn't deterministic.
+ * The report gives each frame's figures against its nearest base and the worst frame's. Outputs are private renders of local game
+ * assets: keep them in the ignored evidence/screenshots tree.
  */
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { decodePng } from "../src/formats/png";
 import { launch, startServer } from "./cdp";
+import { PARITY_MAX_SHARE, PARITY_MAX_STEP, withinNoise } from "./parity-rule";
 
 const argv = process.argv.slice(2), ignoreAt = argv.indexOf("--ignore");
 const ignore = ignoreAt >= 0 ? argv.splice(ignoreAt, 2)[1]!.split(",").map(Number) as [number, number, number, number] : null;
 if (ignore && (ignore.length !== 4 || ignore.some(n => !Number.isInteger(n)))) throw Error("--ignore takes x0,y0,x1,y1");
 const [mode, first, second, ...more] = argv;
 
-/** How two frames differ: `size` when their sizes do, else the differing pixels and the largest channel step. */
+/** How two frames differ: `size` when their sizes do, else the differing pixels, the largest channel step and the pixels compared. */
 function difference(a: ReturnType<typeof decodePng>, b: ReturnType<typeof decodePng>) {
-  if (a.width !== b.width || a.height !== b.height) return { size: `${a.width}x${a.height} vs ${b.width}x${b.height}`, pixels: -1, max: 0 };
-  let pixels = 0, max = 0;
+  if (a.width !== b.width || a.height !== b.height) return { size: `${a.width}x${a.height} vs ${b.width}x${b.height}`, pixels: -1, max: 0, total: 0 };
+  let pixels = 0, max = 0, total = 0;
   for (let i = 0; i < a.data.length; i += 4) {
     const x = (i >> 2) % a.width, y = Math.floor((i >> 2) / a.width);
     if (ignore && x >= ignore[0] && x <= ignore[2] && y >= ignore[1] && y <= ignore[3]) continue;
+    total++;
     const d = Math.max(Math.abs(a.data[i]! - b.data[i]!), Math.abs(a.data[i + 1]! - b.data[i + 1]!), Math.abs(a.data[i + 2]! - b.data[i + 2]!));
     if (d) { pixels++; max = Math.max(max, d); }
   }
-  return { size: null, pixels, max };
+  return { size: null, pixels, max, total };
 }
 
 if (mode === "compare") {
   if (!first || !second) throw Error("Usage: bun tools/scene-parity.ts compare <after dir> <base dir> [<another base dir> …]");
   const bases = [second, ...more];
   const frames = readdirSync(resolve(first)).filter(file => file.endsWith(".png")).sort();
-  let failed = 0;
+  let failed = 0, identical = 0;
+  /** The worst frame: the one whose nearest base differs most (by share of pixels, then by step). */
+  let worst: { file: string; base: string; pixels: number; max: number; total: number } | null = null;
+  const share = (pixels: number, total: number) => `${(100 * pixels / Math.max(1, total)).toFixed(4)} %`;
   for (const file of frames) {
     const after = decodePng(readFileSync(resolve(first, file)));
     const results = bases.map(base => ({ base, ...difference(after, decodePng(readFileSync(resolve(base, file)))) }));
-    const match = results.find(result => !result.size && result.pixels === 0);
-    if (!match) failed++;
-    const nearest = results.reduce((best, result) => result.size ? best : !best || result.pixels < best.pixels ? result : best, undefined as typeof results[number] | undefined);
-    console.log(`${file.padEnd(40)} ${match ? `identical to ${bases.length > 1 ? match.base : "the base"}`
-      : nearest ? `DIFFERS: ${nearest.pixels} pixels, max ${nearest.max} (nearest ${nearest.base})` : `DIFFERS: size ${results[0]!.size}`}`);
+    const nearest = results.reduce((best, result) => result.size ? best
+      : !best || result.pixels < best.pixels || (result.pixels === best.pixels && result.max < best.max) ? result : best, undefined as typeof results[number] | undefined);
+    const passes = !!nearest && withinNoise(nearest);
+    if (!passes) failed++;
+    if (nearest?.pixels === 0) identical++;
+    if (nearest && (!worst || nearest.pixels / nearest.total > worst.pixels / worst.total || (nearest.pixels === worst.pixels && nearest.max > worst.max)))
+      worst = { file, base: nearest.base, pixels: nearest.pixels, max: nearest.max, total: nearest.total };
+    const against = bases.length > 1 && nearest ? ` (${nearest.base})` : "";
+    console.log(`${file.padEnd(40)} ${!nearest ? `DIFFERS: size ${results[0]!.size}`
+      : nearest.pixels === 0 ? `identical${against}`
+      : `${passes ? "within noise" : "DIFFERS"}: ${nearest.pixels} pixels (${share(nearest.pixels, nearest.total)}), max step ${nearest.max}${against}`}`);
   }
-  console.log(`${frames.length} frames, ${failed} match none of ${bases.length} base capture${bases.length > 1 ? "s" : ""}` +
-    (ignore ? ` (pixels ${ignore[0]}–${ignore[2]} × ${ignore[1]}–${ignore[3]} left out)` : ""));
+  console.log(`${frames.length} frames: ${identical} identical, ${frames.length - identical - failed} within noise, ${failed} outside it ` +
+    `(rule: at most ${PARITY_MAX_STEP} channel step on fewer than ${PARITY_MAX_SHARE * 100} % of the pixels, against the nearest of ${bases.length} base capture${bases.length > 1 ? "s" : ""})` +
+    (ignore ? `; pixels ${ignore[0]}–${ignore[2]} × ${ignore[1]}–${ignore[3]} left out` : ""));
+  if (worst) console.log(`Worst frame: ${worst.file}, ${worst.pixels} of ${worst.total} pixels (${share(worst.pixels, worst.total)}), max step ${worst.max}, against ${worst.base}`);
   process.exit(failed ? 1 : 0);
 }
 
@@ -77,10 +93,17 @@ const sizes = [1024, 2048] as const;
 const { server } = await startServer(port);
 const page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1600, height: 900, scheme: "dark", debugPort: port + 5000 });
 const run = (action: object) => page.evaluate(`window.xfStudioShell.runtime.dispatch(${JSON.stringify(action)})`);
-const settle = async () => {
+/**
+ * Wait until every asynchronous input of the look has taken effect, in the order they arrive: the layers at the preview size; the lighting
+ * asked for drawn (a setup never drawn is prepared on the shown V first, with the setup before drawn meanwhile: experiment 043 §11, 4a-v-b);
+ * then, for the creator preset, its grade, which the stage asks the host for only once the setup is drawn (the neutral grade shows until
+ * then: a settle that read the grade before the takeover saw it still `idle`, §14); then the frames that show them all.
+ */
+const settle = async (preset: typeof presets[number]) => {
   await page.waitFor("window.xfStudioPresentation.previewReadiness.snapshot().phase === 'ready'", 120000);
-  // The creator preset's grade arrives from the host after the preset turns on; the neutral grade shows until then.
-  await page.waitFor("window.xfStudioPresentation.authoring.previewState().lighting?.lut.phase !== 'loading'", 60000);
+  await page.waitFor(`(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && !e.residency.preparation && !e.lighting.staged && e.lighting.preset === "${preset}"; })()`, 600000);
+  if (preset === "creator") await page.waitFor("window.xfStudioPresentation.authoring.previewState().lighting?.lut.phase === 'ready'", 60000);
+  await page.waitFor("window.xfStudioPresentation.previewReadiness.snapshot().phase === 'ready'", 120000);
   await page.wait(800);
   await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return e && !e.frames.running; })()", 30000);
   await page.wait(300);
@@ -109,7 +132,7 @@ try {
       for (const preset of presets) {
         await run({ kind: "preview.setLightingPreset", preset });
         await run({ kind: "camera.restore", camera });
-        await settle();
+        await settle(preset);
         const name = `${recipe}-${preset}-${size}`;
         await page.screenshot(resolve(out, `${name}.png`), rect);
         evidence[name] = await page.evaluate(`window.xfStudioSceneEvidence()?.plateBlend ?? null`);

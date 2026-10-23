@@ -51,17 +51,15 @@ test("empty and stale form transactions cannot consume an unrelated Undo entry",
   expect(document.history.state().depth).toBe(1);
 });
 
-test("workspace composer keeps pre-preview restoration safe and later uses typed snapshots", () => {
+test("workspace composer keeps pre-preview restoration safe, later uses typed snapshots, and writes the motion fields back as read", () => {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
+  workspace.preview.blink = .25; workspace.preview.idleFace = false; workspace.preview.idleClip = "inventory";
   const preview = { ...workspace.preview, wire: true,
     camera: { position: [0, 0, 1], target: [0, 0, 0], fov: 42 } };
-  const motion = { ...workspace.preview, available: true, faceAvailable: true, blinkAvailable: true, blinkRepeatSeconds: 2.45, blink: .4, blinkPlaying: false,
-    idle: false, idleTime: 4, idlePaused: false, idleBody: true, idleFace: false, idleClip: "closeup", idles: [], idleLoading: false,
-    physics: false, physicsAvailable: false, physicsParts: 0, pose: null, poseLoading: false };
   const composer = new WorkspaceComposer(workspace, {
     editor: () => document.export(), uvView: () => workspace.uvView,
     savedV: () => workspace.savedV, collections: () => workspace.collections,
-    quality: () => 512, preview: () => preview, motion: () => motion,
+    quality: () => 512, preview: () => preview,
   });
   const early = composer.capture();
   expect(early.preview.textureSize).toBe(512);
@@ -70,8 +68,8 @@ test("workspace composer keeps pre-preview restoration safe and later uses typed
   const ready = composer.capture();
   expect(ready.preview.wire).toBe(true);
   expect(ready.preview.camera?.fov).toBe(42);
-  expect(ready.preview.blink).toBe(.4);
-  expect(ready.preview.idleFace).toBe(false);
+  // The motion lives in the scene node (scene-motion.ts): the legacy fields stay as they were read, for builds before the move.
+  expect(ready.preview).toMatchObject({ blink: .25, idleFace: false, idleClip: "inventory", idle: false });
   expect("panels" in ready).toBe(false);
   ready.recipe.layers[0].color = "#123456";
   expect(document.recipe.layers[0].color).not.toBe("#123456");
@@ -89,7 +87,7 @@ test("UV-only saves preserve stored camera and motion until a head actually load
     editor: () => ({ recipe: workspace.recipe, active: 0, selected: 0, history: [], fieldSelection: {} }),
     uvView: () => ({ ...workspace.uvView, span: .25 }),
     savedV: () => workspace.savedV, collections: () => workspace.collections,
-    quality: () => 512, preview: () => undefined, motion: () => undefined,
+    quality: () => 512, preview: () => undefined,
   });
   const saved = composer.capture();
   expect(saved.preview.camera).toEqual(workspace.preview.camera);

@@ -1,7 +1,10 @@
 /** Isolated lit-head study. Deliberately imports no workspace, library or editor
  * controller; never edits production recipes or the material's skinning hooks. */
 import * as THREE from "three";
-import {createSceneHost as createScene} from "../src/platform/scene/scene-host";
+import {createSceneRuntime,type SceneHostOptions} from "../src/platform/scene/scene-host";
+import {createRendererDevice} from "../src/platform/scene/renderer-device";
+/** One scene runtime on its own renderer device in `host`, shown. */
+const createScene=async(host:HTMLElement,options:SceneHostOptions)=>{const device=createRendererDevice(host),scene=await createSceneRuntime(device,options);device.show(scene.slot);return scene;};
 import {STUDIO_RENDERERS} from "../src/compose/renderers";
 import {EYE_MAKEUP_RENDERER,type EyeMakeupRenderer} from "../src/features/eye-makeup/render";
 import {createRasterJob} from "../src/engines/layered-makeup/recipe";

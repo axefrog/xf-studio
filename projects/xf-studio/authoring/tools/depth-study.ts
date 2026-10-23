@@ -1,6 +1,13 @@
 // Run on the isolated /build/depth-study.html page; never reads/writes workspace or library data.
 import * as THREE from "three";
-import { createSceneHost as createScene } from "../src/platform/scene/scene-host";
+import { createSceneRuntime, type SceneHostOptions } from "../src/platform/scene/scene-host";
+import { createRendererDevice } from "../src/platform/scene/renderer-device";
+/** One scene runtime on its own renderer device in `host`, shown. */
+const createScene = async (host: HTMLElement, options: SceneHostOptions) => {
+  const device = createRendererDevice(host), scene = await createSceneRuntime(device, options);
+  device.show(scene.slot);
+  return scene;
+};
 import { STUDIO_RENDERERS } from "../src/compose/renderers";
 import { EYE_MAKEUP_RENDERER } from "../src/features/eye-makeup/render";
 import { extendSkin } from "../src/materials/render/skin";

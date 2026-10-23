@@ -14,6 +14,7 @@ import type { CharacterContextAction } from "../character/character-context";
 import type { CharacterContextActions } from "../character/character-context-actions";
 import type { MotionAction, MotionActions } from "../animation/motion-actions";
 import type { PreviewAction, PreviewActions } from "../preview/preview-actions";
+import { motionRefusal, type ViewRuntimes } from "../preview/view-routes";
 import type { PreviewQualityActions, QualityAction } from "../legacy/eye-makeup/preview/preview-quality-actions";
 import type { TransitionAction, TransitionSettings } from "../platform/core/transition-settings";
 import { type ViewId, viewTitles } from "../platform/api/view-graph";
@@ -129,7 +130,14 @@ type Services = { document: AuthoringDocument;
    */
   targetCheck?: { check(named: { view?: string; scene?: string; sceneGen?: number }): StudioCapability };
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
-  collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
+  collection?: CollectionService; files?: StudioFileOperations;
+  /** The shown runtime's preview and motion services: what the presentation reads (the drawn view's). */
+  preview?: PreviewActions; motion?: MotionActions;
+  /**
+   * The resident runtimes, by the view an action names (view-routes.ts): camera, preview and motion actions go to the runtime holding the
+   * named view. Without it (fixtures) they go to `preview` and `motion`.
+   */
+  runtimes?: ViewRuntimes;
   /** How a held expression's changes animate (platform/core/transition-settings.ts); the composition root attaches it at start. */
   transitions?: TransitionSettings;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions;
@@ -654,6 +662,8 @@ export class StudioApplication {
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);
   }
+  /** The runtime holding the view an action names (view-routes.ts); undefined without runtimes or a view (the attached services answer). */
+  private route(view: unknown) { return typeof view === "string" ? this.services.runtimes?.route(view) : undefined; }
   /** The workspace lease's refusal while another page holds this workspace; undefined while this page may write. */
   private denied() { return this.services.access?.refusal(); }
   /** A request that only reads (the library list) stays available in a read-only page; `open` replaces the draft, so it doesn't. */
@@ -851,13 +861,16 @@ export class StudioApplication {
         capability: action => app.services.collection?.actionCapability(action) ?? missing("Collection is still loading."),
         dispatch: action => { app.services.collection!.dispatch(action); return undefined; },
       },
+      // Routed by the view each action names (view-routes.ts): the runtime holding it, and how.
       preview: {
-        capability: action => app.services.preview?.check(action) ?? missing("Preview is still loading."),
-        dispatch: action => app.services.preview!.dispatch(action),
+        capability: action => { const route = app.route(action.view); return route ? route.preview.check(action, route.reach)
+          : app.services.preview?.check(action) ?? missing("Preview is still loading."); },
+        dispatch: action => { const route = app.route(action.view); return route ? route.preview.dispatch(action, route.reach) : app.services.preview!.dispatch(action); },
       },
       motion: {
-        capability: action => app.services.motion?.capability(action) ?? missing("Motion preview is still loading."),
-        dispatch: action => app.services.motion!.dispatch(action),
+        capability: action => { const route = app.route(action.view); return route ? motionRefusal(route.reach) ?? route.motion.capability(action)
+          : app.services.motion?.capability(action) ?? missing("Motion preview is still loading."); },
+        dispatch: action => { const route = app.route(action.view); return (route ? route.motion : app.services.motion!).dispatch(action); },
       },
       transitions: {
         capability: action => app.services.transitions?.capability(action) ?? missing("Animated changes aren't available here."),

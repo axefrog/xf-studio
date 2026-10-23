@@ -13,7 +13,7 @@ export const STUDIO_RENDERERS: readonly FeatureRendererFactory[] = Object.freeze
 
 /**
  * The composed renderers that draw a layered-makeup surface, by feature (UI-76): the root registers them all, and each scene connects
- * those its look editor edits (preview/browser/scene-surfaces.ts); neither names a feature. A second layered feature adds its renderer
+ * those its look editor edits (preview/browser/scene-editors.ts); neither names a feature. A second layered feature adds its renderer
  * here and in `STUDIO_RENDERERS`.
  */
 export const STUDIO_LAYERED_SURFACES: ReadonlyMap<string, FeatureRendererFactory<LayeredSurfaceRenderer>> =

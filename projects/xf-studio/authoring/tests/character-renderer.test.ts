@@ -235,7 +235,7 @@ test("new parts are made ready ahead of their first frame: maps a few per frame,
   const preparation = { frame: async () => { frames++; }, compile: (object: THREE.Object3D) => {
     compiled++;
     expect(object).toBe(hair.root);
-    return { ready: Promise.resolve(), textures: [map("uniform-only")], programs: () => [program] };
+    return { steps: [() => {}], result: () => ({ ready: Promise.resolve(), textures: [map("uniform-only")], programs: () => [program] }) };
   } };
   await character.prepareDetails(v("a", [hair]), preparation);
   // Every map, the ones only the compiled programs sample included, one frame at a time; the program's first use taken ahead.
@@ -265,10 +265,10 @@ test("a skin the core head wears is prepared as the head drawn with its material
   const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => [] });
   const wearable = skinned(quad(), "skin chunk"), material = wearable.material as THREE.MeshStandardMaterial;
   const compiled: { object: THREE.Object3D; material: THREE.Material | THREE.Material[] }[] = [];
-  const preparation = { frame: async () => {}, compile: (object: THREE.Object3D) => {
-    compiled.push({ object, material: (object as THREE.Mesh).material });
-    return { ready: Promise.resolve(), textures: [], programs: () => [] };
-  } };
+  // What each step compiles is read as the step runs (the head wears the skin's material for the step only).
+  const preparation = { frame: async () => {}, compile: (object: THREE.Object3D) => ({
+    steps: [() => { compiled.push({ object, material: (object as THREE.Mesh).material }); }],
+    result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) }) };
   const details = v("a", [skinComponent([wearable])]);
   await character.prepareDetails(details, preparation);
   // The head, drawn with the skin's material (extended for the head's skin sets), was compiled; the never-drawn chunk was not touched.
@@ -296,7 +296,7 @@ test("a stopped preparation doesn't wait for the driver's links, and leaves its 
   const preparation = { frame: async () => {}, signal: controller.signal, compile: () => {
     compiled++;
     // A link that never finishes while the change is waited for.
-    return { ready: new Promise<void>(() => {}), textures: [], programs: () => [{ getUniforms: () => { used++; }, getAttributes() {} }] };
+    return { steps: [], result: () => ({ ready: new Promise<void>(() => {}), textures: [], programs: () => [{ getUniforms: () => { used++; }, getAttributes() {} }] }) };
   } };
   const preparing = character.prepareDetails(v("a", [hair]), preparation);
   await new Promise(resolve => setTimeout(resolve, 10));
@@ -305,9 +305,74 @@ test("a stopped preparation doesn't wait for the driver's links, and leaves its 
   expect([compiled, used]).toEqual([1, 0]);
   // A later change prepares it again (its programs, already linking, are Three's cached ones).
   await character.prepareDetails(v("b", [hair]), { ...preparation, signal: undefined, compile: () => {
-    compiled++; return { ready: Promise.resolve(), textures: [], programs: () => [] };
+    compiled++; return { steps: [], result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) };
   } });
   expect(compiled).toBe(2);
+});
+
+test("a preparation waiting for a link slot stops when it is superseded and when the context's generation ends; a restored context prepares the parts again (4a-v-b review 2)", async () => {
+  const { linksInFlight } = await import("../src/platform/scene/link-pacing");
+  const { beginContextGeneration, endContextGeneration } = await import("../src/platform/scene/context-generation");
+  const rig = headRig(), scene = new THREE.Scene();
+  const renderer = { capabilities: { getMaxAnisotropy: () => 8 }, properties: { get: () => ({}) }, initTexture() {},
+    extensions: { has: (name: string) => name === "KHR_parallel_shader_compile" },
+    getContext: () => ({ fenceSync: () => ({}), flush() {}, getSyncParameter: () => 1, deleteSync() {}, isContextLost: () => false, SIGNALED: 1, SYNC_STATUS: 2, SYNC_GPU_COMMANDS_COMPLETE: 3 }),
+  } as unknown as THREE.WebGLRenderer;
+  const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => [] });
+  const hair = component("hair", "hairstyle", [skinned(quad(), "strands")]);
+  let steps = 0, frames = 0, linked = false;
+  // Ten steps, each asking for a program: links that never finish (a lost context's) fill the limit, and the next step waits for a slot.
+  const compile = () => {
+    const made: { isReady(): boolean }[] = [];
+    return { steps: Array.from({ length: 10 }, () => () => { steps++; made.push({ isReady: () => linked }); }), programs: () => made,
+      result: () => ({ ready: linked ? Promise.resolve() : new Promise<void>(() => {}), textures: [], programs: () => [] }) };
+  };
+  /** Frames that stop the waiting at the fifth (`stop`); past 200 the wait would have been for good, and the frame fails it. */
+  const frameUntil = (stop: () => void) => async () => {
+    if (++frames === 5) stop();
+    if (frames > 200) throw Error("The preparation waited for links that never finish.");
+  };
+  // Superseded while it waits for a slot.
+  const controller = new AbortController();
+  await character.prepareDetails(v("a", [hair]), { compile, signal: controller.signal, frame: frameUntil(() => controller.abort()) });
+  expect([steps, frames]).toEqual([linksInFlight(), 5]);
+  // The context lost while it waits (no signal of its own): it stops with the context's generation.
+  steps = 0; frames = 0;
+  await character.prepareDetails(v("b", [hair]), { compile, frame: frameUntil(() => endContextGeneration(renderer)) });
+  expect([steps, frames]).toEqual([linksInFlight(), 5]);
+  // Neither marked the part prepared. Restored: it is prepared again, and once prepared it isn't again in the same generation.
+  beginContextGeneration(renderer);
+  linked = true; steps = 0;
+  await character.prepareDetails(v("c", [hair]), { compile, frame: async () => {} });
+  expect(steps).toBe(10);
+  await character.prepareDetails(v("d", [hair]), { compile, frame: async () => {} });
+  expect(steps).toBe(10);
+  // Its readiness was of that generation only: after another loss and restore it is prepared again.
+  endContextGeneration(renderer); beginContextGeneration(renderer);
+  await character.prepareDetails(v("e", [hair]), { compile, frame: async () => {} });
+  expect(steps).toBe(20);
+});
+
+test("the upload gate's last fence is deleted when the renderer goes (4a-v-b review 7)", async () => {
+  const rig = headRig(), scene = new THREE.Scene();
+  const fences: { deleted: boolean }[] = [];
+  const entries = new WeakMap<object, Record<string, unknown>>();
+  const entry = (object: object) => entries.get(object) ?? entries.set(object, {}).get(object)!;
+  const renderer = { capabilities: { getMaxAnisotropy: () => 8 }, properties: { get: entry },
+    initTexture(texture: THREE.Texture) { entry(texture).__version = texture.version; },
+    getContext: () => ({ fenceSync: () => { const fence = { deleted: false }; fences.push(fence); return fence; }, flush() {},
+      getSyncParameter: () => 0x9119, deleteSync: (fence: { deleted: boolean }) => { fence.deleted = true; }, isContextLost: () => false,
+      SIGNALED: 0x9119, UNSIGNALED: 0x9118, SYNC_STATUS: 0x9114, SYNC_GPU_COMMANDS_COMPLETE: 0x9117 }),
+  } as unknown as THREE.WebGLRenderer;
+  const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => [] });
+  const map = () => { const texture = new THREE.Texture({ width: 4, height: 4 }); texture.needsUpdate = true; return texture; };
+  const hair = component("hair", "hairstyle", [skinned(quad(), "strands")], { textures: [map(), map()] });
+  await character.prepareDetails(v("a", [hair]), { frame: async () => {}, compile: () => ({ steps: [],
+    result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) }) });
+  // A fence after each upload; all but the last are deleted as the gate passes them (the drains' own go with each drain).
+  expect(fences.filter(fence => !fence.deleted)).toHaveLength(1);
+  character.dispose();
+  expect(fences.every(fence => fence.deleted)).toBe(true);
 });
 
 test("a face option's hair strands (the beard's cards) draw with the hair's order and cast like hair; its decals keep the face order (render gap plans §6)", () => {

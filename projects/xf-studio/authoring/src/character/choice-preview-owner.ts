@@ -24,11 +24,12 @@ export class ChoicePreviewOwner {
     const port: ChoicePreviewPort = {
       sources: (request, option, kind, positions, derive, signal) => ended() ? refuse()
         : device.sources(request, option, kind, positions, derive, AbortSignal.any([signal, life.signal])),
-      subject: body => ended() ? refuse() : device.subject(body),
-      stored: key => ended() ? refuse() : device.stored(key),
+      // Every question carries the lease's lifetime: one still waiting for the device is refused when the requester goes.
+      subject: body => ended() ? refuse() : device.subject(body, life.signal),
+      stored: key => ended() ? refuse() : device.stored(key, life.signal),
       render: async (source, key, frames) => {
         if (ended()) throw new PreviewSuperseded();
-        const drawn = await device.render(source, key, frames);
+        const drawn = await device.render(source, key, frames, life.signal);
         // A picture drawn after its lease ended is let go at once and never handed on.
         if (ended()) { device.release?.(drawn.url); throw new PreviewSuperseded(); }
         urls.add(drawn.url);
@@ -49,12 +50,12 @@ export class ChoicePreviewOwner {
         if (ended()) return Promise.reject(new PreviewSuperseded());
         this.live = token;
         this.turn++;
-        return live.start(source);
+        return live.start(source, life.signal);
       },
       frame: async (angle, measure) => {
         const turn = this.turn, mine = () => this.live === token && this.turn === turn && !ended();
         if (!mine()) throw new PreviewSuperseded();
-        const drawn = await live.frame(angle, measure);
+        const drawn = await live.frame(angle, measure, life.signal);
         if (!mine()) { drawn.bitmap?.close?.(); throw new PreviewSuperseded(); }
         return drawn;
       },
