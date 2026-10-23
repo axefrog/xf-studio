@@ -157,6 +157,44 @@ describe('SF1-Q-2: the audits catch', () => {
     expect(lintSources([{ path: 'proc-acts.ts', text: 'const owned = c.sim.gameOwnedNow(cell);' }])).toEqual([]);
   });
 
+  test('a tier-1 process reading V\u2019s cell or position, however it writes it (the string is kept for the rule that needs it)', () => {
+    const kinds = (found: ReturnType<typeof lintSources>) => [...new Set(found.map((f) => f.audit))];
+    for (const text of [
+      "const c = sim.k.value(sim.w.vState, 'cell');",
+      'const c = val(sim.w.vState, "position", t);',
+      "const slot = 'cell'; const c = val(sim.w.vState, slot, t);",
+      'const c = k.value(sim.w.vState, `cell`);',
+      "const p = k.value(sim.w.v, 'position');",
+    ]) expect(kinds(lintSources([{ path: 'proc-stocks.ts', text }])), text).toEqual(['coarse-independence']);
+    // the line the review named, put into the real file
+    const real = files.find((f) => f.path === 'proc-stocks.ts')!;
+    const found = lintSources([{ path: 'proc-stocks.ts', text: `${real.text}\nconst c = sim.k.value(sim.w.vState, 'cell');\n` }]);
+    expect(kinds(found)).toEqual(['coarse-independence']);
+    expect(found.every((f) => f.where === `proc-stocks.ts:${real.text.split('\n').length + 1}`)).toBe(true);
+    // V's district and wanted level may be read by the tier that needs them, and the fine tier may read its cell
+    expect(lintSources([{ path: 'proc-mirror.ts', text: "const d = val(sim.w.vState, 'district', t);" }])).toEqual([]);
+    expect(lintSources([{ path: 'proc-norms.ts', text: "const w = val(sim.w.vState, 'wanted', t);" }])).toEqual([]);
+    expect(lintSources([{ path: 'proc-acts.ts', text: "const c = sim.k.value(sim.w.vState, 'cell');" }])).toEqual([]);
+    // a word in a string is not a read
+    expect(lintSources([{ path: 'proc-stocks.ts', text: "throw new Error('the cell of V is not read here');" }])).toEqual([]);
+  });
+
+  test('a read of a believer\u2019s beliefs that does not test memorable close by, whatever else the file says', () => {
+    const far = 'const a = k.beliefs.activeOf(x);\n\n\n\n\n\nconst keep = b.memorable;';
+    const found = lintSources([{ path: 'tie-policy.ts', text: far }]);
+    expect(found.map((f) => f.audit)).toEqual(['forbidden-policy']);
+    expect(found[0]!.where).toBe('tie-policy.ts:1');
+    expect(lintSources([{ path: 'tie-policy.ts', text: 'for (const b of k.beliefs.activeOf(x)) {\n  if (!b.memorable) continue;\n}' }])).toEqual([]);
+    expect(lintSources([{ path: 'tie-policy.ts', text: 'const m = k.beliefs.activeOf(x).filter((b) => b.memorable);' }])).toEqual([]);
+  });
+
+  test('the policies that hear events ignore the director\u2019s kinds in both places', () => {
+    const real = files.find((f) => f.path === 'policies.ts')!;
+    expect(lintSources([real])).toEqual([]);
+    const once = real.text.replace(/ev\.kind\.startsWith\('meta:'\)/g, 'false');
+    expect(lintSources([{ path: 'policies.ts', text: once }]).map((f) => f.audit)).toContain('meta-inert');
+  });
+
   test('two writers of one slot', () => {
     const found = auditWriters({ ...PROCESS_WRITES, 'order.stocks': [...PROCESS_WRITES['order.stocks']!, 'pin:xf:cell.band'] });
     expect(found.map((f) => f.audit)).toEqual(['one-writer']);

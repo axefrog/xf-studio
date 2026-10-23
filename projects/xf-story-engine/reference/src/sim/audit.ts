@@ -2,8 +2,9 @@
 // is a pure function of the structure it checks, so a test can hand it a faulty structure and see exactly the fault reported. Zero
 // findings is the pass. They report to P9 and run at every build.
 //
-// The source lint reads the text of the model's own files with comments and the contents of strings removed. The files it is given are
-// the decision code of S1 (everything in `src/sim/` except the table generator, the game-side port and this file).
+// The source lint reads the text of the model's own files with comments removed. Most rules read it with the contents of strings blanked, so
+// a word in a message is not a finding; the rules that must see a string (a slot named by a literal) read it with the strings kept. The files
+// it is given are the decision code of S1 (everything in `src/sim/` except the table generator, the game-side port and this file).
 
 import type { ProcessOp } from '../evolution.ts';
 import type { SchemaDefs } from '../schema-types.ts';
@@ -28,8 +29,11 @@ export interface SourceFile {
 
 // ---- source text without comments and strings ----
 
-/** The code of a TypeScript file: comments removed and the contents of string and template literals blanked, line structure kept. */
-export function codeOf(text: string): string {
+/**
+ * The code of a TypeScript file: comments removed and, unless `keepStrings`, the contents of string and template literals blanked, line
+ * structure kept.
+ */
+export function codeOf(text: string, keepStrings = false): string {
   let out = '';
   let i = 0;
   const n = text.length;
@@ -49,8 +53,12 @@ export function codeOf(text: string): string {
       out += c;
       i++;
       while (i < n && text[i] !== c) {
-        if (text[i] === '\\') i++;
-        if (text[i] === '\n') out += '\n';
+        if (text[i] === '\\') {
+          if (keepStrings) out += text[i]!;
+          i++;
+        }
+        if (keepStrings && i < n) out += text[i]!;
+        else if (text[i] === '\n') out += '\n';
         i++;
       }
       out += c;
@@ -82,13 +90,16 @@ const EXEMPT: Record<string, string[]> = {
 /** The tier 0 to 2 processes: they read neither the game's ownership, V's cell or position, nor demand (S1-I-5). */
 export const COARSE_FILES = ['proc-events.ts', 'proc-stocks.ts', 'proc-mirror.ts', 'proc-norms.ts', 'proc-groups.ts', 'ledger.ts'];
 
-const RULES: Array<{ audit: string; re: RegExp; only?: string[]; detail: (m: string) => string }> = [
+const RULES: Array<{ audit: string; re: RegExp; only?: string[]; /** Read the text with its strings kept: the rule needs a literal. */ literal?: true; detail: (m: string) => string }> = [
   { audit: 'arithmetic', re: /\bMath\.(exp|expm1|pow|log|log1p|log2|log10|sinh|cosh|tanh|asinh|acosh|atanh|cbrt|hypot)\s*\(/g, detail: (m) => `${m.replace(/\s*\($/, '')} in a decision; only the functions of S1 1.2 may be used` },
   { audit: 'arithmetic', re: /\b(gamma|lgamma|fma)\s*\(/g, detail: (m) => `${m.replace(/\s*\($/, '')}: a gamma function or a fused multiply-add` },
   { audit: 'arithmetic', re: /[A-Za-z_)\]][\w)\]]*\s*\*\*\s*[\w(]|\d\s*\*\*\s*[A-Za-z_(]/g, detail: () => 'the ** operator (a power) in a decision' },
   { audit: 'no-load-reads', re: /\b(epoch|loadCount|loadClass|playClock|playTotal|wallClock|hrtime)\b|\bDate\.now\b|\bnew Date\b|\bperformance\.now\b|\bMath\.random\b/g, detail: (m) => `${m}: the epoch, a load, the play clock, the wall clock or a random source` },
   { audit: 'keys', re: /(?<![.\w])(rand|procRand)\s*\(|\bpctx\.(rand|procRand)\s*\(|(?<![\w.])pr\s*\(/g, detail: (m) => `${m.replace(/\s*\($/, '')} called outside the key registry` },
-  { audit: 'coarse-independence', re: /\b(gameOwnedNow|demanded|demandTier|demandRoots|vFrames|demandLookback)\b|\bvState\s*,\s*'(cell|position)'/g, only: COARSE_FILES, detail: (m) => `${m} read by a process of tier 0 to 2` },
+  { audit: 'coarse-independence', re: /\b(gameOwnedNow|demanded|demandTier|demandRoots|vFrames|demandLookback)\b/g, only: COARSE_FILES, detail: (m) => `${m} read by a process of tier 0 to 2` },
+  // V's cell and position: no slot of that name in a coarse file, and V's mirrored state is read only for its district and its wanted level (SIM audit round 1)
+  { audit: 'coarse-independence', re: /['"`](cell|position)['"`]/g, literal: true, only: COARSE_FILES, detail: (m) => `${m}: V's cell or position named by a process of tier 0 to 2` },
+  { audit: 'coarse-independence', re: /\bvState\b(?!\s*,\s*['"`](district|wanted)['"`])/g, literal: true, only: COARSE_FILES, detail: () => "V's mirrored state used other than to read its district or its wanted level, in a process of tier 0 to 2" },
   { audit: 'firewall', re: /\b(director|orientation|bond)\b/gi, detail: (m) => `${m}: the director's beliefs about V, an orientation or a bond are outside S1's read sets` },
   { audit: 'source-lint', re: /\b(heritage|gender|ethnic\w*|nationality|nameOrigin)\b/gi, detail: (m) => `${m}: an attribute that never feeds a decision` },
   { audit: 'forbidden-policy', re: /\b(guilt\w*|streak\w*|nsfw|explicit)\b/gi, detail: (m) => `${m}: a forbidden mechanic` },
@@ -101,33 +112,42 @@ export function lintSources(files: SourceFile[]): Finding[] {
   const out: Finding[] = [];
   for (const f of files) {
     const code = codeOf(f.text);
+    const literal = codeOf(f.text, true);
     const exempt = EXEMPT[f.path] ?? [];
     for (const rule of RULES) {
       if (exempt.includes(rule.audit)) continue;
       if (rule.only && !rule.only.includes(f.path)) continue;
       if (rule.audit === 'keys' && f.path === 'keys.ts') continue;
+      const text = rule.literal ? literal : code;
       rule.re.lastIndex = 0;
-      for (let m = rule.re.exec(code); m !== null; m = rule.re.exec(code)) {
-        out.push({ audit: rule.audit, where: `${f.path}:${lineOf(code, m.index)}`, detail: rule.detail(m[0].trim()) });
+      for (let m = rule.re.exec(text); m !== null; m = rule.re.exec(text)) {
+        out.push({ audit: rule.audit, where: `${f.path}:${lineOf(text, m.index)}`, detail: rule.detail(m[0].trim()) });
         if (m[0].length === 0) rule.re.lastIndex++;
       }
     }
   }
   // the policies that hear events ignore the director's kinds
   const policies = files.find((f) => f.path === 'policies.ts');
-  if (policies && (policies.text.match(/startsWith\('meta:'\)/g) ?? []).length < 2) {
+  if (policies && (codeOf(policies.text, true).match(/startsWith\(['"`]meta:['"`]\)/g) ?? []).length < 2) {
     out.push({ audit: 'meta-inert', where: 'policies.ts', detail: 'the policies do not ignore every meta: kind (witness and absorb)' });
   }
-  // a decision that reads beliefs reads memorable ones
+  // a decision that reads beliefs reads memorable ones: every read of a believer's beliefs tests it within a few lines
   for (const f of files) {
     if (EXEMPT[f.path]) continue;
     const code = codeOf(f.text);
-    if (/\.activeOf\(/.test(code) && !/\.memorable\b|memorable\(\)/.test(code)) {
-      out.push({ audit: 'forbidden-policy', where: f.path, detail: 'reads beliefs and never tests whether they are memorable' });
+    const lines = code.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (!/\.activeOf\(/.test(lines[i]!)) continue;
+      if (!/\bmemorable\b/.test(lines.slice(i, i + MEMORABLE_REACH).join('\n'))) {
+        out.push({ audit: 'forbidden-policy', where: `${f.path}:${i + 1}`, detail: 'reads beliefs and does not test whether they are memorable' });
+      }
     }
   }
   return out;
 }
+
+/** How many lines after a read of a believer's beliefs the test for `memorable` may come. */
+const MEMORABLE_REACH = 3;
 
 // ---- the registry audits ----
 
