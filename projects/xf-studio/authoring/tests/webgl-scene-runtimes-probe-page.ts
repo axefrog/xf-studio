@@ -101,7 +101,9 @@ export type SceneRuntimesProbe = {
   closeSubject: { before: Counts; opened: Counts; after: Counts; shownAfter: boolean };
   /** 6c: Three's own morph texture build at a draw, against the same texture made ahead in steps. */
   morph: { vertices: number; targets: number; mapKnown: boolean; threeDrawMs: number; steps: number; stepMaxMs: number; totalMs: number; drawMs: number;
-    handed: boolean; identical: boolean; tasksOver50: number };
+    handed: boolean; identical: boolean; tasksOver50: number;
+    /** Diagnostics: the long tasks from Three's draw to ours, each against when its draw ended (`three`) and when the steps began (`at`), and each step's start. */
+    tasks: { at: number; ms: number }[]; stepsAt: number[]; threeEndedAt: number };
   /** What the context showed of programs with several outputs and targets with several colour attachments (none), and how much it saw. */
   singleOutput: { issues: string[]; fragments: number; attachments: number };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
@@ -648,18 +650,18 @@ try {
     };
     const mapKnown = !!morphTextureMap(renderer);
     await frame();
-    const threeDrawMs = drawOnly(a);
+    const threeDrawMs = drawOnly(a), threeEnded = performance.now();
     await settle();
     // Ahead, as a preparation runs the steps: a frame let through whenever a step used its share, each upload once the GPU caught up.
     const steps = morphTextureSteps(renderer, ours);
-    const gate = gpuGate(renderer), times: number[] = [];
+    const gate = gpuGate(renderer), times: number[] = [], stepsAt: number[] = [];
     const started = performance.now();
     if (steps) for (let done = false; !done;) {
       await frame();
       while (!gate.idle()) await frame();
       const start = performance.now();
       done = steps.step();
-      times.push(performance.now() - start);
+      times.push(performance.now() - start); stepsAt.push(start - started);
       gate.mark();
     }
     while (!gate.idle()) await frame();
@@ -670,12 +672,15 @@ try {
     const drawMs = drawOnly(b), drawnAt = performance.now();
     const kept = morphTextureMap(renderer)?.get(ours);
     const own = morphTextureMap(renderer)?.get(theirs);
+    // The comparison below is the probe's own work, in a task of its own after the draw's.
+    await frame();
     const left = (made?.texture.image.data ?? new Float32Array()) as Float32Array, right = (own?.texture.image.data ?? new Float32Array(1)) as Float32Array;
     let identical = left.length === right.length;
     for (let i = 0; identical && i < left.length; i++) if (left[i] !== right[i]) identical = false;
     await sleep(200);
     probe.morph = { vertices, targets, mapKnown, threeDrawMs, steps: times.length, stepMaxMs: Math.max(0, ...times), totalMs, drawMs,
-      handed: !!made && kept === made, identical, tasksOver50: over50(started, drawnAt) };
+      handed: !!made && kept === made, identical, tasksOver50: over50(started, drawnAt),
+      tasks: within(threeEnded - 200, drawnAt).map(task => ({ at: task.start - started, ms: task.duration })), stepsAt, threeEndedAt: threeEnded - started };
     theirs.dispose(); ours.dispose(); material.dispose(); target.dispose();
     await sleep(50);
   }

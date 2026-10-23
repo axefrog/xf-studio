@@ -889,3 +889,97 @@ The preparation probe passes 15 of 15, and the other WebGL probes pass too: skin
   - Chrome's program cache keeping them across sessions;
   - unreachable lighting compiled out of S1 and S2 (`scatterUnlitWrite`).
 - **The scatter's draw cost** (about 1.4 ms a frame) could fall by drawing S1 and S2 only for skin and decals against S0's depth (with an invariant position), or with fewer, merged draws. It is noted on the performance track, not needed for a gate.
+
+## 13. Chunk 4a-vi: routing by named view, editors per view, the S2 gates (built)
+
+The last chunk of phase 4a. After it come G3 (the gate table on real data, §5), a final review and the merge.
+
+**What changed.**
+
+- **View actions are routed by the view they name** (`preview/view-routes.ts`). The application asks the scene runtime owner which resident runtime holds the named view, and how (`heads.runtimes.route(view)`, `StudioApplication` `runtimes`), and sends camera, preview and motion actions there with that reach:
+  - `drawn`: the shown runtime draws the view;
+  - `scene`: the shown runtime draws the view's scene through another view;
+  - `warm`: a hidden resident runtime holds the scene's current V and body;
+  - `loading`: none does, and one is being built or prepared for that scene;
+  - `absent`: none does. With `loading` and `absent` the shown runtime's services take graph edits only.
+
+  Nothing reaches the shown runtime's device for a view it doesn't draw. The owner reads only contexts it already made, so routing never makes a V's context.
+- **What each family does** (decided in this chunk):
+
+  | Reach | Camera | Preview: eye shape, details, hair; light and display settings | Motion |
+  |---|---|---|---|
+  | `drawn` | the device frames it | checked against the head, applied | applied |
+  | `scene` | camera node only, unless the view shares the drawn view's camera node | checked against the shown head, applied | applied (one scene, one motion) |
+  | `warm` | camera node only | checked against the warm head, applied; it follows hidden and shows it when shown | refused (`not_ready`) |
+  | `loading`, `absent` | camera node only | checked against the stored ranges only, applied | refused (`not_ready`) |
+
+  - **Camera:** framing (Front view, Whole body, the creator cameras, the lens) is computed by a device from its live camera, lens and subject. A view not drawn has none to compute with, so framing is refused plainly ("That 3D view isn't shown now. Show it first.", or "That view's V is still loading."). A restore, an orbit step, Back and Forward edit the view's camera node, and the runtime that draws the view later starts there (decision D3).
+  - **Preview settings** are graph edits a runtime follows. A resident head of the view's V and body checks them against what it offers. With none resident, the stored ranges are checked, and the head built later shows its own fallback while the node keeps the choice (§10).
+  - **Motion** is what a device plays now (the idle's clip and phase, a pose loading, the blink), and its checks read the device. A hidden runtime's motion is released until it is shown, when it restores the scene node's motion. Applying an action to it would bypass those checks, so it is refused plainly. One scene has one motion, so any view of the drawn scene acts on the shown runtime.
+- **A device follows the view it draws.** `PreviewActions` takes a view (`view()`), and `draw(view)` draws another view of the same scene (its lights, display and tools at once) or marks the device hidden (`draw(null)`). The head is made for the drawn view, shown for it (`show(view)`), and redrawn for another view of its scene (`draw(view)`: the camera to the old view's node, the motion handed over, then the new view's). `heads.show(view)` of a view whose scene the shown head already draws redraws that head. `graphMotionScene` reads the drawn view's scene.
+- **Removed:** `NOT_DRAWN`, `DRAWN_CHECKS`, `drawsScene` and `MotionScene.draws`; the `MAIN_VIEW` seeds in `trusted-preview-services.ts` (the head names its view) and in the head's preparation (the setups of the other views of the drawn view's scene); `scenes.drawn` in the owner's port (it takes the drawn view and `of(view)`); `preview/browser/scene-surfaces.ts`; the head's own mount of the on-head editor.
+- **Loaders ready per V.** A save is ready to load on the V a request names once a head shows that V (`heads.showing(character)`; `savedVReady(character)`), and its answer is that head's. The character-preset loader already went through `character.setSource`.
+- **Editors per view** (`preview/browser/scene-editors.ts`, `createSceneEditors`). It registers the composed layered surfaces and wires the one the look editor edits, as `scene-surfaces.ts` did. It builds the on-head and UV editors' hooks that the root used to build. The runtime owner mounts the on-head editor on the head shown for the drawn view (`editors.mount(head, view)`), after the head connected its surface, and unmounts it before the head is hidden or redrawn for another view (the viewport device's new `unmountSurface` settles an open gesture). The editor names the look that view's scene shows, through the input layer's naming for the view (`naming`: the resolution of the view's panel, which only the input layer reads). It follows the head's Surface controls tool (`surfaceControls`, `onSurfaceControls`) and attaches the surface's outline while mounted. The UV editor stays a panel until view graph P6: its hooks name the drawn view's look. **UI-boundary exception 17 is removed.**
+- **The S2 gate table as a T2 test** (`tests/webgl-scene-runtimes.test.ts`, page `tests/webgl-scene-runtimes-probe-page.ts`, renamed from the preparation probe so each row is read from the one page that covers it). The page gained:
+  - **6b:** the superseding body switch, a build coming back after it was superseded (its last step can't be stopped), eviction, and a V in a scene of its own opened and closed. These moved from the renderer device probe's section 7, which is gone.
+  - **6c:** the morph-target texture, below.
+  - **The single-output rule over the whole run.** The context records every fragment shader, framebuffer attachment and draw-buffer list it is given (`tests/fixtures/single-output.ts`).
+- **Sol's two gate findings (4a-v-c review), fixed.**
+  - (a) The presentation-gap gate counts the interval that ends at the takeover (`tools/frame-gaps.ts`, used by `measure.ts`). Samples at 0, 16 and 1,016 ms with the takeover at 1,016 ms now fail (`tests/frame-gaps.test.ts`).
+  - (b) The single-output gate (`tests/single-output-programs.test.ts`) draws the passes that once wrote several targets (the skin scatter's input, the makeup composite, the layered bake) and the frame's other targets (contact shadows, the scene-linear display) through a real Three renderer over a recording context (`tests/fixtures/recording-gl.ts`, shared with the shader-assembly test). It checks the assembled fragment shaders' outputs, the framebuffer attachments and the draw-buffer lists. The source scan reads whole files, so a multiline `layout` is caught, and refuses any `count` option in a module that makes a render target. Negative fixtures cover both bypasses, in the recording and in the scan.
+- **The morph-target texture is made ahead** (`platform/scene/morph-textures.ts`). Three builds a geometry's morph targets into one float array texture at the first draw of a mesh that uses it, filled and uploaded whole in the draw's task, and keeps it in a map private to the renderer. The preparation's textures stage now makes the same texture ahead, as Three fills it, a few layers per step within the step budget. Each batch of layers is uploaded on its own (`DataArrayTexture.layerUpdates`, behind the GPU gate). The finished texture goes into Three's map with the entry Three would make, so the first draw finds it ready. The map is found from the first morph draw on a renderer (a warm-up piece, `watchMorphMap`): of the `WeakMap`s read with that geometry as the key during the draw, the one holding Three's entry afterwards. It belongs to its context's generation (Three makes a new map on restore), and the Three revision is checked (186); otherwise Three builds its own at the draw, as before. The first runtime on a renderer still pays its own build (the first load, outside the switch gates).
+- **A knowledge page:** [WebGL program linking and draw-time builds in Chrome on Windows](../../knowledge/webgl-program-linking.md). ANGLE, Chromium and KHR_parallel_shader_compile are credited.
+
+**Gates.**
+
+- **T1:** `tests/view-routes.test.ts` (an action naming a hidden view never touches the shown runtime: framing and motion refused, neither device moved; a restore, Back and an orbit step edit the hidden view's camera node only; preview settings checked against the warm head and applied to its view; the stored ranges for a view whose V is loading or absent; a device's own reach without a router; a device drawn for another view of its scene). The owner's routing and per-view mounting (`tests/browser-scene-heads.test.ts`, two new tests). `tests/scene-editors.test.ts` (2). `tests/morph-textures.test.ts` (3: the map found from a draw, a texture byte for byte Three's in small steps whose draw builds nothing, and stopping part-way). `tests/frame-gaps.test.ts` (2). `tests/single-output-programs.test.ts` (4). Saved-V readiness per V (`tests/studio-file-operations.test.ts`).
+- **T2, the S2 gate table** (`tests/webgl-scene-runtimes.test.ts`, synthetic heads, with and without KHR_parallel_shader_compile).
+- **The boundary and ratchet tests** follow the root: `createSceneEditors` registers the surfaces, the root names no feature and reads the resolver only as the input layer does.
+
+**Results** (24 October 2026; RTX 4070, ANGLE D3D11, headless Chrome 155, a fresh profile per run; under the 3 GB guard).
+
+| S2 row (T2, with the extension) | Result |
+|---|---|
+| Warm switch, want to first presented frame (≤ 100 ms) | 3.2–8.2 ms (8 switches) |
+| Cancel (≤ 100 ms): a preparation superseded while it compiles; a body switch's build superseded in its core | 5.6 ms; 0.3 ms |
+| No stray frames | the cold V 0 frames before shown, the cancelled V 0, the late build 0; the shown V's pixels unchanged throughout |
+| No late result | the build that came back after it was superseded was disposed (`AbortError`) and never shown |
+| Last choice | female, male, then female 150 ms later: female shown, the male build stopped in its core and never built |
+| No first-draw stall | the cold V's first shown frame links 0 programs and makes 0; the longest presentation gap 19 ms (cold V) and 19 ms (a setup on the shown V); no task of 50 ms or more |
+| Memory returned | a V in a scene of its own, opened (+48 textures, +33 programs) and closed: GPU objects and Three's programs as before; closing everything: at the baseline |
+| One output | 528 fragment shaders and 591 framebuffer attachments over the run: none with a second output or attachment, no draw-buffer list of two |
+
+The page passes its 22 tests in the last run (peak 2.0 GB). Without the extension, warm switches took 3.4–10.8 ms and the cancels 0.1 and 0.2 ms; its page tasks stay long (recorded, not gated), as before.
+
+**The morph-target texture** (page step 6c: a geometry of the real head's morph size, 6,800 vertices and 105 targets of position and normal deltas, 22.8 MB of float texels; Three's own build drawn first, then its twin made ahead and drawn):
+
+| | With the extension | Without |
+|---|---|---|
+| Three's build inside the draw (the last run; 50–102 ms over four) | 54.9 ms | 58.8 ms |
+| Made ahead: steps, longest step, wall time paced over frames | 11 steps, 8.1 ms, 1.1 s | 11, 8.2 ms, 2.0 s |
+| The draw that follows | 7.8 ms, nothing built (Three kept the texture made ahead) | 9.9 ms, the same |
+| Byte for byte Three's | yes | yes |
+| Tasks of 50 ms or more from the first step to the draw | 0 | 0 |
+
+The real head's figure in G2 was 50–102 ms (§12); G3 measures it again on real data.
+
+| Other runs | Result |
+|---|---|
+| Targeted tests: preview, motion, view, scene, profiles, camera, pose, lighting, application, presentation, idle, blink, startup, head, character, history, workspace, input, action, catalogue, panel, expression, boundary, audit, editor, surface, gesture, file, single-output, shader and frame tests | 178 files (morph, preparation, residency and link-pacing tests added): 1,418 pass, 12 skip (real-game oracles), 0 fail (peak 1.6 GB) |
+| WebGL probes: renderer device (section 7 moved out), scene dispose, scene host | 7, 4, 7: all pass (peak 1.2 GB) |
+| `bun run check` | passes |
+
+**Decisions and caveats.**
+
+- **Refuse rather than apply on a hidden runtime, for framing and motion.** Applying would have meant computing a camera from a lens and subject no one sees, or storing motion past the checks that read what a device plays. Both are one show away, and refusing names the view.
+- **Routing reads no context it hasn't made.** A V whose context was never made has no head, so it can't be warm.
+- **The map behind the morph texture is Three's, reached from outside.** Three r186 exposes no way to make a geometry's morph texture or to reach the map it keeps. The capture wraps `WeakMap.prototype.get` for the length of one watched draw per renderer and context generation, and keeps a map only if it then holds Three's entry for a geometry drawn. A Three upgrade that changes the entry's shape, or the revision, falls back to Three's own build at the draw. `tests/morph-textures.test.ts` holds the shape and the bytes against Three's own build.
+- **The UV editor names the drawn view's look.** It is a panel until view graph P6. The on-head editor names the look of the view it is mounted for.
+- **The ratchet's scene-host importers** (`tests/view-graph-audit.test.ts`) are unchanged: the plan's row expected the list to shrink, but none of its four importers moved in this chunk. The device's runtimes are still scene hosts by type.
+- **Not changed here:** face shadows and skin scatter switches on the shown V still recompile inside its next frame (§11, 4a-v-b); the first runtime's room prefilter (§11); the scatter's draw cost (§12).
+- **No UI change.** Nothing visible changed: a view other than the main one can't be drawn until phase 2's tabs, and the refusals name views the UI doesn't offer yet. No UI review is needed for this chunk.
+
+**What's left before the merge.**
+
+1. **G3** (§5): the S2 gate table on real data, warm cache and then a fresh profile, with the whole-body part, by the coordinator. The presentation-gap gate now counts the interval ending at the takeover, and the morph texture made ahead should remove A's last page task over 50 ms.
+2. Sol's review of the chunk, then the coordinator's merge.
