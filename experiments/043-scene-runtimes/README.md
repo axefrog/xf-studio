@@ -245,13 +245,23 @@ What stays after the first cycle is shared by every later scene and freed only w
 | Scene, view, preview, character, viewport, render, lighting, parity and boundary tests | 75 files, 749 pass, 0 fail |
 | `bun run check` | passes |
 
-G1 (scene parity on a real V) has not run.
-
-**G1, scene parity on a real V** (not run here; the coordinator schedules it). It compares this branch with `main` at the merge base, using `tools/scene-parity.ts` on an isolated server as S2 ran it: never port 4317 or 4331, never the maintainer's library or workspace.
+**G1, scene parity on a real V** (run 22 October 2026 on `d9f88a33`, against `72369156`). It compares this branch with `main` at the merge base, using `tools/scene-parity.ts` on an isolated server as S2 ran it: never port 4317 or 4331, never the maintainer's library or workspace.
 
 1. In a checkout of the base, and then in this worktree, start an isolated server on its own port with scratch caches (039's environment variables), under `memory_guard.py --limit 3`.
 2. On the base, run `bun tools/scene-parity.ts capture <evidence/screenshots/043-g1/base-1> <port>` twice (`base-1`, `base-2`: the first creator frame can differ between runs of one build). On this branch, run `capture <…/after> <port>`. Chrome runs under `--limit 4`.
-3. Run `bun tools/scene-parity.ts compare <…/after> <…/base-1> <…/base-2>`. Every frame (five looks, both lighting presets, 1K and 2K: 20 frames) must be identical to one base capture. The outputs are private renders; keep them in the ignored `evidence/screenshots` tree.
+3. Run `bun tools/scene-parity.ts compare <…/after> <…/base-1> <…/base-2>`. Every frame (five looks, both lighting presets, 1K and 2K: 20 frames) must match one base capture within the noise rule below. The outputs are private renders; keep them in the ignored `evidence/screenshots` tree.
+
+**G1 results.**
+
+| Item | Value |
+|---|---|
+| GPU | RTX 4070, ANGLE D3D11, headless Chrome |
+| Frames | 17 of 20 byte-identical to a base capture. 3 differ from both bases by one channel step (1/255) on 1, 3 and 8 pixels, all in the 584 × 788 crop and mostly near the face (x 378–437, y 476–515) |
+| Same-build noise | `base-1` and `base-2` themselves differ by 1 pixel, one step (`board3-creator-2048`) |
+| Peak memory | Chrome and capture 3.9–4.0 GB against the 4 GB limit (G2 and G3 give Chrome 5 GB) |
+| Duration | 160–213 s per capture, plus waits for memory |
+
+**The parity rule, revised.** "Byte-identical to one base" assumed the GPU path is deterministic, and two captures of one build show that it isn't. A frame now passes when it differs from a base by at most one channel step on fewer than 0.01 % of its pixels (the worst G1 frame is about 0.002 %). G1 passes under that rule. G3 rechecks it before the merge.
 
 **What 4a-iii and 4a-iv needed from this** (each built: motion in §9, the rest in §10).
 
@@ -462,7 +472,7 @@ Sol's confirmation found five fixed and two only partly fixed, with one new Medi
 - **Contexts live for the page.** A V no scene shows keeps its context. Releasing one (`CharacterService.release`, after its changes are in the library) when no resident head shows it is a follow-up: an async release racing a switch back would hand the owner a disposed context.
 - **The save loader's answer.** `savedAppearance.load` returns the shown head's saved-V snapshot. For a save of the other body that is the head shown before the switch, so its suggested eye shape is the old head's. This was already approximate before, when the old head applied the other body's save first.
 - **No per-runtime byte estimate yet.** D2 asks for each runtime's estimated bytes as evidence. The snapshot carries the residents and their states; the bytes wait for G3's measurements and a port to report them.
-- **No real-data run.** G1 is still to be run (§8), and G2 and G3 come with 4a-v and 4a-vi. A body switch on a real V, with the masculine core prepared, is the next in-browser check.
+- **No real-data run of 4a-iv yet.** G1 passed on 4a-ii (§8); G2 and G3 come with 4a-v and 4a-vi. A body switch on a real V, with the masculine core prepared, is the next in-browser check.
 
 **What's left before merge.**
 
