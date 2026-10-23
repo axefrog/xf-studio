@@ -117,6 +117,34 @@ describe('SF1-M-1 and SF1-M-2: the derivation table; creator, cause and time', (
   });
 });
 
+describe('SF1-M-1, the journal rows: a finished or failed entry gives a gig-outcome and raises its district\'s counters', () => {
+  test('finished: done, family gig; failed: failed, family hustle; the derived event cites the entry and is size 1', () => {
+    const { sim, port } = mirrorSim('SF1-M-1j');
+    const district = sim.w.districts[0]!.id;
+    port.submit([
+      { t: 0, op: 'reading', node: 'journal:g1', slot: 'family', value: 'gig' },
+      { t: 0, op: 'reading', node: 'journal:g1', slot: 'district', value: district },
+      { t: 0, op: 'reading', node: 'journal:h1', slot: 'family', value: 'hustle' },
+      { t: 0, op: 'reading', node: 'journal:h1', slot: 'district', value: district },
+      { t: 700, op: 'event', kind: 'game.journal.finished', participants: [{ who: 'journal:g1', role: 'entry' }] },
+      { t: 800, op: 'event', kind: 'game.journal.failed', participants: [{ who: 'journal:h1', role: 'entry' }] },
+    ]);
+    sim.advance(5);
+    const ok = derivedOf(rawId(sim, 700));
+    const bad = derivedOf(rawId(sim, 800));
+    expect(sim.k.value(ok, 'kind')).toBe('gig-outcome');
+    expect(sim.k.value(ok, 'outcome')).toBe('done');
+    expect(sim.k.value(bad, 'kind')).toBe('gig-outcome');
+    expect(sim.k.value(bad, 'outcome')).toBe('failed');
+    expect(participantsOf(sim, ok)).toEqual([{ who: port.node('journal:g1'), role: 'entry' }]);
+    const facts = sim.digestOf<MirrorDigest>('city.mirror')!.facts.windows.flatMap((w) => w.items);
+    expect(facts.find((f) => f.id === ok)!.size).toBe(1);
+    expect(sim.stateOf<MirrorState>('city.mirror')!.counters[district]).toEqual({ gig: 1, hustle: 1, failed: 1 });
+    // a derived event never refused by the gate and drawing no offspring: the mirror feeds only the facts
+    expect(sim.record.log.filter((e) => e.kind === 'gate').length).toBe(0);
+  });
+});
+
 describe('SF1-M-3: a raw death; save before and after; exempt from the gate and admission', () => {
   test('one derived event with the raw event as cause, even for a minor victim, identical after a reload', () => {
     const lines: ReplayLine[] = [
