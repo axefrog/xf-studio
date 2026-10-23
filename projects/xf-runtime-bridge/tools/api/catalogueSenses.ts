@@ -4,7 +4,7 @@
 // (catalogue060.ts).
 //
 //   world.facts     up to 128 named quest facts in one call, or a named preset (main_story: the 93 facts of
-//                   research/story-engine/main-story-facts.json; final_boards: the 25 the game's final boards read)
+//                   research/story-engine/main-story-facts.json; final_boards: the 29 the game's final boards read)
 //   world.district  V's district, subdistrict and place from the game's own district system
 //   player.status   health, level, street cred, money, wanted level, current vehicle, an inventory summary and the scanner
 
@@ -27,7 +27,7 @@ export const FACT_PRESETS: Readonly<Record<string, FactPreset>> = {
     facts: MAIN_STORY_FACTS.map((f) => f.name),
   },
   final_boards: {
-    description: "The facts the game's own final boards read (25): whose fate matters for the ending.",
+    description: "The facts the game's own final boards read (29): whose fate matters for the ending.",
     facts: FINAL_BOARDS_FACTS,
   },
 };
@@ -60,12 +60,14 @@ export function annotateFacts(value: unknown, input: Record<string, unknown>): u
 
 export const STATUS_PARTS = ["vitals", "progress", "money", "heat", "vehicle", "inventory", "scanner"] as const;
 
+const NOT_READY = " With no world to read it is refused game_loading (the bridge's gate, on the main menu, between sessions and during a load) or, if the gate is open but the game has no world yet, game_not_ready.";
+
 export const SENSES_COMMANDS: CommandDef[] = [
   {
     name: "world.facts",
     title: "Read quest facts in a batch",
     description:
-      `Reads many named quest facts in one call: facts (a list of at most ${MAX_FACTS} names) and/or preset. The preset main_story is the ${MAIN_STORY_FACTS.length} main-story facts of the 2.31 quest data (research/story-engine/main-story-facts.json; the answer also groups them by category), final_boards the ${FINAL_BOARDS_FACTS.length} the game's final boards read. Names are letters, digits, _ and . only. A fact the game never set reads 0, the same as one set to 0. Read only; world_state reads up to 16 facts beside the clock and weather.`,
+      `Reads many named quest facts in one call: facts (a list of at most ${MAX_FACTS} names) and/or preset. The preset main_story is the ${MAIN_STORY_FACTS.length} main-story facts of the 2.31 quest data (research/story-engine/main-story-facts.json; the answer also groups them by category), final_boards the ${FINAL_BOARDS_FACTS.length} the game's final boards read. Names are letters, digits, _ and . only. A fact the game never set reads 0, the same as one set to 0. Read only; world_state reads up to 16 facts beside the clock and weather.${NOT_READY}`,
     permission: "read",
     input: obj({
       facts: { type: "array", description: `Quest fact names to read (at most ${MAX_FACTS}).`, items: str("A fact name.", { pattern: "^[A-Za-z0-9_.]+$", maxLength: 96 }), maxItems: MAX_FACTS },
@@ -77,7 +79,7 @@ export const SENSES_COMMANDS: CommandDef[] = [
     name: "world.district",
     title: "Read V's district",
     description:
-      "Where V is in Night City's own terms, from the game's district system (the one the minimap and the police use): the innermost area, and above it the subdistrict and district (a place such as Kabuki_NoTellMotel inside Kabuki inside Watson), each with its name, type, crime multiplier and gangs, the police preset in force, Dogtown and Badlands flags, and the map's own location text as a cross-check. District is not position: player_state has the coordinates. Refused with no_district for a moment after a load, until the game has told its district system where V is. Read only.",
+      "Where V is in Night City's own terms, from the game's district system (the one the minimap and the police use): the innermost area, and above it the subdistrict and district (a place such as Kabuki_NoTellMotel inside Kabuki inside Watson), each with its name, type, crime multiplier and gangs, the police preset in force, Dogtown and Badlands flags, and the map's own location text as a cross-check. District is not position: player_state has the coordinates. Refused with no_district for a moment after a load, until the game has told its district system where V is. Read only." + NOT_READY,
     permission: "read",
     input: obj({}),
     bridge: { method: "world.district" },
@@ -86,7 +88,7 @@ export const SENSES_COMMANDS: CommandDef[] = [
     name: "player.status",
     title: "Read V's status",
     description:
-      "V's life state in one read: health (points, maximum, percent), level and street cred with their experience, money (eddies), the wanted level (the police system's heat stage, the star state and whether the police chase V, beside the two quest facts for comparison), the vehicle V is in (mounted or not, which record, driver or passenger), an inventory summary (counts and quantities by item type, not a list), and the scanner (whether V is in scanner mode, how far the scan is, and what the scanner is on). parts picks some of vitals, progress, money, heat, vehicle, inventory and scanner (default all). Read only; player_state has V's position and movement.",
+      "V's life state in one read: health (points, maximum, percent), level and street cred with their experience, money (eddies), the wanted level (the police system's heat stage, the star state and whether the police chase V, beside the two quest facts for comparison), the vehicle V is in (mounted or not, which record, driver or passenger), an inventory summary (counts and quantities by item type, not a list; at most 1500 stacks are read, and total_stacks and truncated say when more were left), and the scanner (whether V is in scanner mode, how far the scan is, and what the scanner is on). parts picks some of vitals, progress, money, heat, vehicle, inventory and scanner (default all). Read only; player_state has V's position and movement." + NOT_READY,
     permission: "read",
     input: obj({
       parts: { type: "array", description: "Which parts (default all): vitals, progress, money, heat, vehicle, inventory, scanner.", items: oneOf("A part.", STATUS_PARTS), maxItems: STATUS_PARTS.length },

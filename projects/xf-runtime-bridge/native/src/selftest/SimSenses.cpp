@@ -128,7 +128,7 @@ void RegisterSimSenses(Dispatcher& aDispatcher, SimSensesHooks aHooks)
                               }
                               if (has("inventory"))
                               {
-                                  out["inventory"] = {{"stacks", 3}, {"quest_stacks", 1}, {"types", json::array({{{"type", "Gen_Misc"}, {"stacks", 1}, {"quantity", 12345}},
+                                  out["inventory"] = {{"stacks", 3}, {"total_stacks", 3}, {"truncated", false}, {"quest_stacks", 1}, {"other_stacks", 0}, {"types", json::array({{{"type", "Gen_Misc"}, {"stacks", 1}, {"quantity", 12345}},
                                                                                                                     {{"type", "Wea_Handgun"}, {"stacks", 2}, {"quantity", 2}}})}};
                               }
                               if (has("scanner"))

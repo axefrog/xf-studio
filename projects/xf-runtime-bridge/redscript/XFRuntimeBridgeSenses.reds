@@ -8,8 +8,10 @@
 //   scene.read's npc_detail (XFSenses.Characters) each NPC's character record: affiliation, type, rarity, archetype, crowd
 //                                      flags, attitude group (looked up by the record name the scene read already gave)
 //
-// Each read refuses while the game has no world to read (the main menu, a loading screen) with game_not_ready, and runs
-// inside the plugin's live guard like every game-thread method. The world-object rule holds (XFScene.Identity): on a world
+// With no world to read, a caller sees one of two refusals. The plugin's gate (the script layer, checked on the game thread
+// before any script is called) answers game_loading on the main menu, between sessions and during a load, so the script is
+// never reached then. This script's own game_not_ready (NotReady) is for when the gate is open but the game's phase has no
+// world (starting, main_menu, loading, shutting_down). Every read runs inside that gate like any game-thread method. The world-object rule holds (XFScene.Identity): on a world
 // object of unknown type (the vehicle, the scanned object) every native's answer is kept in a local before any text is built.
 //
 // Sources [source] 2.31 (the game's scripts, decompiled with redscript-cli 0.5.31 from final.redscripts, SHA-256
@@ -72,13 +74,16 @@ public abstract class XFSenses {
     out += ",\"gangs\":[";
     let count = record.GetGangsCount();
     let i = 0;
+    let emitted = 0;
     while i < count {
       let gang = record.GetGangsItem(i);
+      // The separator follows the entries written, not the index: a skipped record must not leave a comma behind.
       if IsDefined(gang) {
-        if i > 0 {
+        if emitted > 0 {
           out += ",";
         }
         out += XFJson.Name(gang.EnumName());
+        emitted += 1;
       }
       i += 1;
     }
@@ -260,8 +265,20 @@ public abstract class XFSenses {
     return "{\"mounted\":true,\"record\":" + XFJson.Str(record) + ",\"id\":" + XFJson.Str(entityId) + ",\"class\":" + XFJson.Name(className) + ",\"driver\":" + XFJson.Flag(driver) + ",\"player_vehicle\":" + XFJson.Flag(ownedByV) + ",\"position\":" + XFScene.Arr(at) + "}";
   }
 
+  // The inventory summary reads at most this many stacks (the list itself is the game's, built whole by GetItemList; what is
+  // bounded is the per-stack native calls made on the game thread). A bigger inventory is cut and says so (truncated).
+  public static func InventoryCap() -> Int32 {
+    return 1500;
+  }
+
+  // Item types are indexed by their enum value in plain arrays (no search); a value outside this range is counted as other.
+  public static func InventoryTypeLimit() -> Int32 {
+    return 512;
+  }
+
   // Counts by item type (the game's gamedataItemType names), not a list: stacks (entries in the inventory) and the quantity
   // summed over them, plus how many stacks carry the Quest tag. Money is an item too, so its type's quantity is the eddies.
+  // Bounded work (InventoryCap): the first stacks only, with total_stacks, stacks (the ones read) and truncated saying how much.
   public static func Inventory(game: GameInstance, player: ref<PlayerPuppet>) -> String {
     let transactions = GameInstance.GetTransactionSystem(game);
     if !IsDefined(transactions) {
@@ -269,42 +286,53 @@ public abstract class XFSenses {
     }
     let items: array<wref<gameItemData>>;
     if !transactions.GetItemList(player, items) {
-      return "{\"stacks\":0,\"quest_stacks\":0,\"types\":[]}";
+      return "{\"stacks\":0,\"total_stacks\":0,\"truncated\":false,\"quest_stacks\":0,\"other_stacks\":0,\"types\":[]}";
     }
-    let names: array<String>;
+    let total = ArraySize(items);
+    let limit = XFSenses.InventoryCap();
+    let truncated = total > limit;
+    if !truncated {
+      limit = total;
+    }
+    let typeLimit = XFSenses.InventoryTypeLimit();
     let stacks: array<Int32>;
     let quantity: array<Int32>;
     let quest = 0;
-    let total = 0;
+    let read = 0;
+    let other = 0;
     let i = 0;
-    while i < ArraySize(items) {
+    while i < limit {
       let item = items[i];
       if IsDefined(item) {
-        let name = EnumValueToString("gamedataItemType", Cast<Int64>(EnumInt(item.GetItemType())));
-        let count = item.GetQuantity();
-        let at = ArrayFindFirst(names, name);
-        if at < 0 {
-          ArrayPush(names, name);
-          ArrayPush(stacks, 1);
-          ArrayPush(quantity, count);
+        let type = EnumInt(item.GetItemType());
+        if type >= 0 && type < typeLimit {
+          while ArraySize(stacks) <= type {
+            ArrayPush(stacks, 0);
+            ArrayPush(quantity, 0);
+          }
+          stacks[type] += 1;
+          quantity[type] += item.GetQuantity();
         } else {
-          stacks[at] += 1;
-          quantity[at] += count;
+          other += 1;
         }
         if item.HasTag(n"Quest") {
           quest += 1;
         }
-        total += 1;
+        read += 1;
       }
       i += 1;
     }
-    let out = "{\"stacks\":" + IntToString(total) + ",\"quest_stacks\":" + IntToString(quest) + ",\"types\":[";
+    let out = "{\"stacks\":" + IntToString(read) + ",\"total_stacks\":" + IntToString(total) + ",\"truncated\":" + XFJson.Flag(truncated) + ",\"quest_stacks\":" + IntToString(quest) + ",\"other_stacks\":" + IntToString(other) + ",\"types\":[";
+    let emitted = 0;
     i = 0;
-    while i < ArraySize(names) {
-      if i > 0 {
-        out += ",";
+    while i < ArraySize(stacks) {
+      if stacks[i] > 0 {
+        if emitted > 0 {
+          out += ",";
+        }
+        out += "{\"type\":" + XFJson.Str(EnumValueToString("gamedataItemType", Cast<Int64>(i))) + ",\"stacks\":" + IntToString(stacks[i]) + ",\"quantity\":" + IntToString(quantity[i]) + "}";
+        emitted += 1;
       }
-      out += "{\"type\":" + XFJson.Str(names[i]) + ",\"stacks\":" + IntToString(stacks[i]) + ",\"quantity\":" + IntToString(quantity[i]) + "}";
       i += 1;
     }
     return out + "]}";

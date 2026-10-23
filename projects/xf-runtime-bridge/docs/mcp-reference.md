@@ -825,13 +825,13 @@ No parameters.
 
 ### `player_status`
 
-**Read V's status.** V's life state in one read: health (points, maximum, percent), level and street cred with their experience, money (eddies), the wanted level (the police system's heat stage, the star state and whether the police chase V, beside the two quest facts for comparison), the vehicle V is in (mounted or not, which record, driver or passenger), an inventory summary (counts and quantities by item type, not a list), and the scanner (whether V is in scanner mode, how far the scan is, and what the scanner is on). parts picks some of vitals, progress, money, heat, vehicle, inventory and scanner (default all). Read only; player_state has V's position and movement.
+**Read V's status.** V's life state in one read: health (points, maximum, percent), level and street cred with their experience, money (eddies), the wanted level (the police system's heat stage, the star state and whether the police chase V, beside the two quest facts for comparison), the vehicle V is in (mounted or not, which record, driver or passenger), an inventory summary (counts and quantities by item type, not a list; at most 1500 stacks are read, and total_stacks and truncated say when more were left), and the scanner (whether V is in scanner mode, how far the scan is, and what the scanner is on). parts picks some of vitals, progress, money, heat, vehicle, inventory and scanner (default all). Read only; player_state has V's position and movement. With no world to read it is refused game_loading (the bridge's gate, on the main menu, between sessions and during a load) or, if the gate is open but the game has no world yet, game_not_ready.
 
 - **Command:** `player.status`, the bridge method `player.status`
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
-- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`not_in_gameplay`](#refusal-not-in-gameplay)
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`not_in_gameplay`](#refusal-not-in-gameplay), [`game_loading`](#refusal-game-loading)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1077,28 +1077,28 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 
 ### `world_facts`
 
-**Read quest facts in a batch.** Reads many named quest facts in one call: facts (a list of at most 128 names) and/or preset. The preset main_story is the 93 main-story facts of the 2.31 quest data (research/story-engine/main-story-facts.json; the answer also groups them by category), final_boards the 25 the game's final boards read. Names are letters, digits, _ and . only. A fact the game never set reads 0, the same as one set to 0. Read only; world_state reads up to 16 facts beside the clock and weather.
+**Read quest facts in a batch.** Reads many named quest facts in one call: facts (a list of at most 128 names) and/or preset. The preset main_story is the 93 main-story facts of the 2.31 quest data (research/story-engine/main-story-facts.json; the answer also groups them by category), final_boards the 29 the game's final boards read. Names are letters, digits, _ and . only. A fact the game never set reads 0, the same as one set to 0. Read only; world_state reads up to 16 facts beside the clock and weather. With no world to read it is refused game_loading (the bridge's gate, on the main menu, between sessions and during a load) or, if the gate is open but the game has no world yet, game_not_ready.
 
 - **Command:** `world.facts`, the bridge method `world.facts`
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
-- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`unavailable`](#refusal-unavailable)
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`unavailable`](#refusal-unavailable), [`game_loading`](#refusal-game-loading)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `facts` | array of string | at most 128 items; each at most 96 characters; matches `^[A-Za-z0-9_.]+$` | Quest fact names to read (at most 128). |
-| `preset` | string | `main_story`, `final_boards` | A named list of facts, read with any extra facts: main_story (The main-story facts of the 2.31 quest data (93), grouped in the answer by category.) final_boards (The facts the game's own final boards read (25): whose fate matters for the ending.) |
+| `preset` | string | `main_story`, `final_boards` | A named list of facts, read with any extra facts: main_story (The main-story facts of the 2.31 quest data (93), grouped in the answer by category.) final_boards (The facts the game's own final boards read (29): whose fate matters for the ending.) |
 
 ### `world_district`
 
-**Read V's district.** Where V is in Night City's own terms, from the game's district system (the one the minimap and the police use): the innermost area, and above it the subdistrict and district (a place such as Kabuki_NoTellMotel inside Kabuki inside Watson), each with its name, type, crime multiplier and gangs, the police preset in force, Dogtown and Badlands flags, and the map's own location text as a cross-check. District is not position: player_state has the coordinates. Refused with no_district for a moment after a load, until the game has told its district system where V is. Read only.
+**Read V's district.** Where V is in Night City's own terms, from the game's district system (the one the minimap and the police use): the innermost area, and above it the subdistrict and district (a place such as Kabuki_NoTellMotel inside Kabuki inside Watson), each with its name, type, crime multiplier and gangs, the police preset in force, Dogtown and Badlands flags, and the map's own location text as a cross-check. District is not position: player_state has the coordinates. Refused with no_district for a moment after a load, until the game has told its district system where V is. Read only. With no world to read it is refused game_loading (the bridge's gate, on the main menu, between sessions and during a load) or, if the gate is open but the game has no world yet, game_not_ready.
 
 - **Command:** `world.district`, the bridge method `world.district`
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
-- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`no_district`](#refusal-no-district), [`unavailable`](#refusal-unavailable)
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`no_district`](#refusal-no-district), [`unavailable`](#refusal-unavailable), [`game_loading`](#refusal-game-loading)
 
 No parameters.
 

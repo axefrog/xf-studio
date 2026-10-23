@@ -11,7 +11,7 @@ import { CATALOGUE, findCommand } from "../api/catalogue.ts";
 import { FINAL_BOARDS_FACTS, MAIN_STORY_FACTS } from "../api/fact-presets.ts";
 import { expandFacts, FACT_PRESETS, MAX_FACTS, SENSES_COMMANDS } from "../api/catalogueSenses.ts";
 import { validate } from "../api/schema.ts";
-import { FACTS_JSON, finalBoards, mainStory, PRESETS_OUT, render } from "../gen-fact-presets.ts";
+import { FACTS_JSON, finalBoards, finalBoardsFrom, mainStory, PRESETS_OUT, render } from "../gen-fact-presets.ts";
 import { HOOK_TIMEOUT_MS, projectDir, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
 type Any = any;
@@ -52,9 +52,42 @@ describe("the fact presets stay in step with the research data", () => {
 
   test("final_boards is the page's list of what the final boards read", () => {
     expect([...FINAL_BOARDS_FACTS]).toEqual(finalBoards());
-    expect(FINAL_BOARDS_FACTS).toHaveLength(25);
     expect(FINAL_BOARDS_FACTS).toContain("q114_done");
     expect(FINAL_BOARDS_FACTS).toContain("q306_finale_deal_done");
+  });
+
+  // The Sol review of the senses (finding 2): the page writes "the four `q115_*_romance_chosen` facts" and the first generator
+  // read only plain names, so it dropped them without a word (25 instead of 29), and the check above used the same parser.
+  // These assertions do not use the parser: the count is counted by hand from the page's list, the four names come from the
+  // research table, and the page's backticked entries are counted separately.
+  test("final_boards holds all 29, the four romance facts among them (independent of the generator's parser)", () => {
+    expect(FINAL_BOARDS_FACTS).toHaveLength(29);
+    expect(new Set(FINAL_BOARDS_FACTS).size).toBe(29);
+    for (const who of ["panam", "judy", "kerry", "river"]) {
+      const name = `q115_${who}_romance_chosen`;
+      expect(FINAL_BOARDS_FACTS, name).toContain(name);
+      expect(MAIN_STORY_FACTS.map((f) => f.name), `${name} is in the research table`).toContain(name);
+    }
+    // 25 plain names on the page plus the one pattern that stands for four: 25 + 4 = 29.
+    const page = readFileSync(join(projectDir, "..", "..", "knowledge", "main-story-state.md"), "utf8").replace(/\r\n/g, "\n");
+    const start = page.indexOf("The final boards phase reads");
+    const list = page.slice(start, page.indexOf("That list is", start));
+    const entries = [...list.matchAll(/`([^`]*)`/g)].map((m) => m[1]!);
+    const patterns = entries.filter((e) => e.includes("*"));
+    expect(patterns).toEqual(["q115_*_romance_chosen"]);
+    expect(entries.length - patterns.length + 4).toBe(29);
+  });
+
+  test("the generator refuses an entry it cannot read instead of dropping it", () => {
+    const original = readFileSync(join(projectDir, "..", "..", "knowledge", "main-story-state.md"), "utf8");
+    // finalBoards() reads the real page; the refusal is exercised through the same function on altered copies of the page text,
+    // altered inside the final boards paragraph (the page names some of these facts elsewhere too).
+    const at = original.indexOf("The final boards phase reads");
+    const inList = (from: string, to: string) => original.slice(0, at) + original.slice(at).replace(from, to);
+    expect(() => finalBoardsFrom(inList("`sq017_done`", "`Sq017 Done`"))).toThrow(/cannot read the entry/);
+    expect(() => finalBoardsFrom(inList("`q115_*_romance_chosen`", "`q999_*_nothing`"))).toThrow(/matches no fact/);
+    expect(() => finalBoardsFrom(inList("`q115_*_romance_chosen`", "`q115_*_*_chosen`"))).toThrow(/cannot read the entry/);
+    expect(finalBoardsFrom(original)).toHaveLength(29);
   });
 
   test("every preset name is a valid fact name and a preset fits in one read", () => {
@@ -68,7 +101,7 @@ describe("the fact presets stay in step with the research data", () => {
   test("expanding: a preset, extra facts merged without repeats, the cap, an unknown preset, nothing", () => {
     expect(expandFacts({ preset: "main_story" }).facts).toHaveLength(93);
     const merged = expandFacts({ preset: "final_boards", facts: ["q114_done", "my_own_fact"] }).facts;
-    expect(merged).toHaveLength(26);
+    expect(merged).toHaveLength(30);
     expect(merged.at(-1)).toBe("my_own_fact");
     const many = Array.from({ length: MAX_FACTS + 1 }, (_, i) => `fact_${i}`);
     expect(() => expandFacts({ facts: many })).toThrow(/at most 128/);
@@ -100,6 +133,54 @@ describe("the senses are read-only", () => {
       expect(listed!.refusals?.length, command.name).toBeGreaterThan(0);
       expect(listed!.refusals).toContain("game_not_ready");
     }
+  });
+});
+
+// The Sol review of the senses: the redscript layer has no test host of its own, so these read the source, as the rest of this
+// file does.
+describe("the Sol review's fixes in the redscript layer", () => {
+  const source = readFileSync(join(projectDir, "redscript", "XFRuntimeBridgeSenses.reds"), "utf8").replace(/\r\n/g, "\n");
+  const code = source.replace(/\/\/.*$/gm, "");
+  const body = (name: string) => {
+    const start = code.indexOf(`func ${name}(`);
+    expect(start, name).toBeGreaterThan(0);
+    const next = code.indexOf("  public static func ", start + 10);
+    return code.slice(start, next > 0 ? next : undefined);
+  };
+
+  test("finding 1: the inventory read is bounded, indexed by type and says when it was cut", () => {
+    const inventory = body("Inventory");
+    expect(inventory).toContain("XFSenses.InventoryCap()");
+    expect(inventory).toMatch(/while i < limit \{/);
+    expect(inventory).toContain("\\\"truncated\\\":");
+    expect(inventory).toContain("\\\"total_stacks\\\":");
+    // No linear search per stack; the stacks are counted in arrays indexed by the item type's enum value.
+    expect(code).not.toContain("ArrayFindFirst");
+    expect(inventory).toMatch(/stacks\[type\] \+= 1;/);
+    // The only per-stack native calls are the three the summary needs.
+    const loop = inventory.slice(inventory.indexOf("while i < limit {"), inventory.indexOf("let out ="));
+    expect([...loop.matchAll(/item\.(\w+)\(/g)].map((m) => m[1]).sort()).toEqual(["GetItemType", "GetQuantity", "HasTag"]);
+    const cap = /func InventoryCap\(\) -> Int32 \{\s*return (\d+);/.exec(code);
+    expect(cap).not.toBeNull();
+    expect(Number(cap![1])).toBeLessThanOrEqual(2000);
+    expect(Number(cap![1])).toBeGreaterThan(0);
+  });
+
+  test("finding 3: a separator follows the entries written, never the source index, wherever a loop skips entries", () => {
+    expect(body("DistrictRecordJson")).toMatch(/emitted > 0/);
+    expect(body("DistrictRecordJson")).not.toMatch(/if i > 0/);
+    // Any loop that skips entries (an `if IsDefined(` inside a while) and writes a comma must count what it wrote.
+    const loops = code.split(/\n\s*while /).slice(1);
+    let checked = 0;
+    for (const loop of loops) {
+      const text = loop.slice(0, loop.indexOf("\n    }\n") > 0 ? loop.indexOf("\n    }\n") + 8 : undefined);
+      if (/\bif IsDefined\(/.test(text) && /out \+= ","/.test(text)) {
+        checked += 1;
+        expect(text, text.slice(0, 60)).toMatch(/emitted > 0/);
+        expect(text, text.slice(0, 60)).not.toMatch(/if i > 0/);
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -191,6 +272,52 @@ describe("the senses through the self-test host", () => {
     }
     await phase(api, "gameplay");
     expect((await ok(api, "world.facts", { facts: ["q000_done"] })).facts.q000_done).toBe(1);
+  });
+
+  // The Sol review of the senses (finding 4): in the game the dispatcher's gate (the script layer) refuses first, so on the main
+  // menu, between sessions and during a load a caller sees game_loading; game_not_ready is only the script's own answer when the
+  // gate is open and the game has no world (the test above). Both are real, and the docs name both.
+  test("while the script layer is detached or a load is requested, every sense is refused game_loading by the gate, before the script", async () => {
+    const layer = async (event: string) => {
+      const response = await api.callBridge("selftest.script_layer", { event }, "t-layer");
+      expect(response.ok, JSON.stringify(response)).toBe(true);
+      return response.ok ? (response.result as { state: string; ready: boolean }) : null;
+    };
+    const reads = async (where: string) => {
+      expect(await refused(api, "world.facts", { facts: ["q000_done"] }), `facts ${where}`).toBe("game_loading");
+      expect(await refused(api, "world.district"), `district ${where}`).toBe("game_loading");
+      expect(await refused(api, "player.status"), `status ${where}`).toBe("game_loading");
+      expect(await refused(api, "scene.read", { parts: ["npcs"], npc_detail: true }), `npc_detail ${where}`).toBe("game_loading");
+    };
+    await phase(api, "gameplay");
+    expect((await ok(api, "world.facts", { facts: ["q000_done"] })).facts.q000_done).toBe(1);
+    expect((await layer("detach"))?.ready).toBe(false);
+    await reads("after a detach");
+    // The phase says gameplay here, so the refusal can only be the gate's.
+    await layer("attach");
+    await reads("attached, the player not yet in");
+    await layer("player_attach");
+    expect((await ok(api, "world.district")).levels).toBeGreaterThan(0);
+    expect((await layer("load_requested"))?.ready).toBe(false);
+    await reads("with a load requested");
+    await layer("detach");
+    await layer("attach");
+    await layer("player_attach");
+    expect((await ok(api, "player.status", { parts: ["money"] })).money).toBe(12345);
+  });
+
+  test("the catalogue and the docs name both refusals: game_loading (the gate) and game_not_ready (the script)", () => {
+    for (const command of SENSES_COMMANDS) {
+      expect(command.description, command.name).toMatch(/game_loading/);
+      expect(command.description, command.name).toMatch(/game_not_ready/);
+    }
+    expect(readFileSync(join(projectDir, "redscript", "XFRuntimeBridgeSenses.reds"), "utf8")).toMatch(/game_loading.*gate/s);
+  });
+
+  test("the inventory summary says how much it read", async () => {
+    await phase(api, "gameplay");
+    const inventory = (await ok(api, "player.status", { parts: ["inventory"] })).inventory;
+    expect(inventory).toMatchObject({ stacks: 3, total_stacks: 3, truncated: false, quest_stacks: 1, other_stacks: 0 });
   });
 
   test("scene.read: npc_detail adds each NPC's character record, and only when asked", async () => {

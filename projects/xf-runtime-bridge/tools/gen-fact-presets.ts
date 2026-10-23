@@ -21,13 +21,35 @@ export function mainStory(): { name: string; category: string }[] {
 }
 
 export function finalBoards(): string[] {
-  const page = readFileSync(STATE_PAGE, "utf8").replace(/\r\n/g, "\n");
+  return finalBoardsFrom(readFileSync(STATE_PAGE, "utf8"));
+}
+
+/** finalBoards() on the page's text (the tests feed it altered copies). */
+export function finalBoardsFrom(pageText: string): string[] {
+  const page = pageText.replace(/\r\n/g, "\n");
   const start = page.indexOf("The final boards phase reads");
   if (start < 0) throw new Error("knowledge/main-story-state.md no longer has the paragraph 'The final boards phase reads'");
   // Only the list itself: the paragraph goes on to say what the list is for and how the bridge reads it.
   const end = page.indexOf("That list is", start);
   const paragraph = page.slice(start, end > start ? end : page.indexOf("\n", start));
-  const names = [...paragraph.matchAll(/`([a-z0-9_]+)`/g)].map((m) => m[1]!);
+  // Every backticked entry is either a fact name or a pattern with one `*` that expands against the main-story table (the page
+  // writes "the four `q115_*_romance_chosen` facts"). An entry that is neither throws, and so does a pattern that matches
+  // nothing, so no entry is dropped silently.
+  const table = mainStory().map((f) => f.name);
+  const names: string[] = [];
+  for (const match of paragraph.matchAll(/`([^`]*)`/g)) {
+    const entry = match[1]!;
+    if (/^[a-z0-9_]+$/.test(entry)) {
+      names.push(entry);
+    } else if (/^[a-z0-9_]*\*[a-z0-9_]*$/.test(entry)) {
+      const [head, tail] = entry.split("*") as [string, string];
+      const expanded = table.filter((name) => name.length > head.length + tail.length && name.startsWith(head) && name.endsWith(tail));
+      if (expanded.length === 0) throw new Error(`final boards: the pattern \`${entry}\` matches no fact in main-story-facts.json`);
+      names.push(...expanded);
+    } else {
+      throw new Error(`final boards: cannot read the entry \`${entry}\` in knowledge/main-story-state.md (a fact name, or a pattern with one *)`);
+    }
+  }
   return [...new Set(names)];
 }
 
