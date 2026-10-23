@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.11, 23 October 2026.
+**Status:** v4.12, 23 October 2026.
+- v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (from the reference model's first v4 build, [notes](../../../projects/xf-story-engine/reference/SPEC-NOTES.md) 58 and 62).
 - v4.11 adds three clarifications from S1 v0.2 (V4-47 to V4-49).
 - v4.10 adds eight clarifications from writing [S1](simulation.md) (V4-39 to V4-46).
 - v4.9 completes the process interface for S1 (V4-35 to V4-38), from the [P3](../p3-simulation-layer.md) design.
@@ -824,10 +825,10 @@ type Change =
   | { c: 'minted'; node: Id; kind: KindId }
   | { c: 'contribution'; contribution: Contribution; ended: boolean }
   | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value }    // a game reading that changed a value
-  | { c: 'frame'; frame: Id; actor: Id; level: string; old: string; new: string };   // a frame status change (v4)
+  | { c: 'frame'; frame: Id; actor: Id; level: string; focus: Id[]; old: string; new: string };   // a frame status change (v4)
 ```
 
-A `frame` change is produced when a frame's `status` changes. Weight and parent changes produce none.
+A `frame` change is produced when a frame's `status` changes to a different value. Weight and parent changes produce none. It carries the frame's focus nodes, because its bindings are the actor and each focus node, and a matcher sees only the change.
 
 Cache fills, regeneration and save replay produce no changes.
 
@@ -1263,14 +1264,14 @@ The [reference model](../../../projects/xf-story-engine/README.md) is on `main`:
 
 ## 20. Version 4 additions
 
-v4 adds what the seeding layer and sifting need. None of the additions changes a result the reference model produces today: the determinism digest stays valid. Each is marked "v4" where it appears.
+v4 adds what the seeding layer and sifting need. Two additions change the frozen determinism digest's results if they are switched on: the v4 core schema names one more function (`derive:age-class@1`), which changes every saved record's `meta.versions`, and the `frame` change (V4-4) adds changes wherever the digest's script changes frame status. So the digest is defined on the **v3 schema with frame changes off**. An implementation reproduces it in that configuration, and the v4 behaviour separately, through the v4 fixtures (§16.1, F-16 onward). Each is marked "v4" where it appears.
 
 | # | Addition | Section | Needed by | Reference model |
 |---|---|---|---|---|
 | V4-1 | Derives receive the query time `t` | §2.1 | S1 urgency and deadlines ([DS-66](../design-seeds.md)) | To implement; existing derives ignore `t` |
 | V4-2 | `core:game-fact`, `core:seed-fact`, `core:seed`, the `core:cast` edge, and event kinds `offer`, `response`, `seed-outcome` | §2.6 | S2 §0.4 | To implement (schema only) |
 | V4-3 | Optional `outcome` and `served` on events | §9.2 | Sifting ([dossier 6](../craft/d06-sifting-tellability.md) G-3) | To implement (schema only) |
-| V4-4 | A `frame` change on frame status changes, with its bindings | §10.5 | Sifting (G-2); closure and reversals | To implement. It adds changes, so relevance can grow; the digest's fixtures produce no status changes, so it is unaffected |
+| V4-4 | A `frame` change on frame status changes, with its bindings | §10.5 | Sifting (G-2); closure and reversals | Built. It adds changes, so relevance can grow. The digest's script does change frame status, so the digest runs with frame changes off (see above) |
 | V4-5 | Relevance on seed frames reaches layer 2 | §10.5 | S2 §4 | To implement (delivery only) |
 | V4-6 | Dilemma recipients stated | §10.8 | S2 §9, S3 (G-5) | A clarification |
 | V4-7 | Any layer may keep `SeedRecord`s under its own ids | §14.1 | S2 §12, S3's promoted matches (G-8) | Already true |
