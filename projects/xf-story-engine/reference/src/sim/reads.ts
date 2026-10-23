@@ -12,6 +12,7 @@ import { BAND_NAMES, PRICE_NAMES } from './proc-events.ts';
 import type { GroupDigest } from './proc-groups.ts';
 import type { LedgerDigest } from './ledger.ts';
 import type { NormsDigest } from './proc-norms.ts';
+import type { SimReadPort } from '../seeding/registries.ts';
 import type { Sim } from './sim.ts';
 
 export interface ReadDeps {
@@ -31,6 +32,8 @@ export interface ReadTransition {
 export interface S1Read {
   name: string;
   version: number;
+  /** False for a read that is registered and always answers `maybe`: its phase is not built. */
+  built: boolean;
   deps: ReadDeps;
   eval(args: unknown[], t: GameTime): string;
   transitions(args: unknown[], from: GameTime, to: GameTime): ReadTransition[];
@@ -97,12 +100,17 @@ export class Reads {
     return d ? d.transitions(args, from, to) : [{ t: from, value: MAYBE }];
   }
 
-  private add(def: S1Read): void {
-    this.defs.set(def.name, def);
+  private add(def: Omit<S1Read, 'built'> & { built?: boolean }): void {
+    this.defs.set(def.name, { built: true, ...def });
   }
 
   private single(name: string, deps: ReadDeps, f: (args: unknown[], t: GameTime) => string): void {
     this.add({ name, version: 1, deps, eval: f, transitions: (args, from) => [{ t: from, value: f(args, from) }] });
+  }
+
+  /** A read whose phase is not built: registered, and `maybe` until it is (S1 9.1). */
+  private unbuilt(name: string, deps: ReadDeps): void {
+    this.add({ name, version: 1, built: false, deps, eval: () => MAYBE, transitions: (_a, from) => [{ t: from, value: MAYBE }] });
   }
 
   private fed(name: string, deps: ReadDeps, digestId: string, key: (args: unknown[]) => string | undefined, current: (args: unknown[]) => string, feed: (d: never) => Feed<Transition> | undefined): void {
@@ -129,11 +137,11 @@ export class Reads {
       (a) => { const c = this.cellId(a[0]); const d = this.dg<EventsDigest>('city.events'); return c && d ? BAND_NAMES[d.bands[c]?.band ?? 0]! : MAYBE; },
       (d: EventsDigest) => d?.changes);
 
-    this.single('heatRank', ev(), () => MAYBE);
-    this.single('tension', none, () => MAYBE);
-    this.single('reach', none, () => MAYBE);
-    this.single('protected', none, () => MAYBE);
-    this.single('contract', none, () => MAYBE);
+    this.unbuilt('heatRank', ev());
+    this.unbuilt('tension', none);
+    this.unbuilt('reach', none);
+    this.unbuilt('protected', none);
+    this.unbuilt('contract', none);
 
     // regime(scope) and regimeIs(scope, kind)
     const regimeNow = (a: unknown[]): string => {
@@ -161,7 +169,7 @@ export class Reads {
     });
 
     // priceLevel(district)
-    this.fed('priceLevel', ev(), 'city.events', (a) => { const d = this.districtOf(a[0]); return d ? `price|${d}` : undefined; },
+    this.fed('priceLevel', { ...ev(), interests: [{ kind: 'core:event', slot: '*' }] }, 'city.events', (a) => { const d = this.districtOf(a[0]); return d ? `price|${d}` : undefined; },
       (a) => { const d = this.districtOf(a[0]); const dg = this.dg<EventsDigest>('city.events'); return d && dg ? PRICE_NAMES[dg.price[d] ?? sim.w.district(d).priceAnchor]! : MAYBE; },
       (d: EventsDigest) => d?.changes);
 
@@ -220,6 +228,18 @@ export class Reads {
       (a) => (typeof a[0] === 'string' ? `group-gap|${a[0]}` : undefined),
       (a) => { const dg = this.dg<GroupDigest>('group.decide'); const g = typeof a[0] === 'string' ? dg?.groups[a[0]] : undefined; return g ? (g.D < sim.data.groups.gapBands.low ? 'low' : g.D < sim.data.groups.gapBands.mid ? 'mid' : 'high') : MAYBE; },
       (d: GroupDigest) => d?.changes);
+  }
+
+  /** What layer 2 asks of these reads (S2 2.16, 2.17, 4.1): which it may call, the answer, and what each depends on. */
+  port(): SimReadPort {
+    return {
+      builds: (name) => this.defs.get(name)?.built === true,
+      eval: (name, args, t) => this.eval(name, args, t),
+      deps: (name) => {
+        const d = this.defs.get(name);
+        return { interests: d ? d.deps.interests.map((i) => ({ ...i })) : [], boundary: d?.deps.boundary === true };
+      },
+    };
   }
 
   tied(a: Id, b: Id): string {

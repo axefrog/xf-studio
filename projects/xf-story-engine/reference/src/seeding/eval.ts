@@ -11,6 +11,7 @@ import { canonicalKey } from '../canon.ts';
 import * as ids from './ids.ts';
 import type { Instance, Layer2 } from './layer2.ts';
 import { compare, kAll, kAny, kNot, verdictOf } from './pred.ts';
+import { readCall, resolveReadArgs } from './reads.ts';
 import type {
   Cmp, EventPattern, ExposureGrade, ExposurePattern, Pred, RolePredicate, Verdict,
 } from './types.ts';
@@ -458,7 +459,19 @@ function ex(l2: Layer2, ctx: EvalCtx, p: Pred, depth: number, explain: boolean):
     if (!f) return done('maybe', `the function ${p.fn.name}@${p.fn.version} is not registered`);
     return done(f.eval(p.args, { now: ctx.t }));
   }
-  // clock, city and social are later capabilities; compile refuses them (section 0.3).
+  if ('city' in p || 'social' in p) {
+    // The simulation layer's reads (S2 2.16, 2.17): a read it builds is asked of it, and answers `maybe` until it has a reading for the scope.
+    const call = readCall(p);
+    if ('error' in call) return done('maybe', call.error);
+    const port = l2.reg.sim;
+    if (!port?.builds(call.name)) return done('maybe', `the ${call.family} read "${call.name}" is not supported yet`);
+    const args = resolveReadArgs(call, ctx.inst);
+    if (args === undefined) return done('maybe', 'a role of the read is not cast');
+    const value = port.eval(call.name, args, ctx.t);
+    if (value === 'maybe') return done('maybe', `the simulation layer has no reading of ${call.name} yet`);
+    return done(verdictOf(p.is.includes(value)));
+  }
+  // clocks are a later capability; compile refuses them (section 0.3).
   return done('maybe', 'a later capability, not supported yet');
 }
 

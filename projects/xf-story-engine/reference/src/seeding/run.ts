@@ -10,6 +10,7 @@ import { applyEffects } from './effects.ts';
 import { consumeEvent } from './consume.ts';
 import { evalPred, gameTick, planPlayFrom, roleVerdict, sincePlayFrom, stateSince } from './eval.ts';
 import * as ids from './ids.ts';
+import { readCall, resolveReadArgs } from './reads.ts';
 import type { Instance, Layer2, Trigger } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
 import type { Rejection } from './watch.ts';
@@ -448,6 +449,11 @@ export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
   for (const s of sites) {
     for (const { atom } of atoms(s.pred)) {
       if ('believes' in atom) believes = true;
+      else if ('city' in atom || 'social' in atom) {
+        // a read that depends on beliefs, which emit no Changes, is looked at again at every boundary (S2 4.1)
+        const call = readCall(atom);
+        if (!('error' in call) && l2.reg.sim?.builds(call.name) && l2.reg.sim.deps(call.name).boundary) believes = true;
+      }
       else if ('hour' in atom) { hours.add(atom.hour[0]); hours.add(atom.hour[1]); }
       else if ('since' in atom && 'atLeast' in atom) {
         if (atom.atLeast.clock === 'play') {
@@ -536,6 +542,18 @@ export function addPredInterests(l2: Layer2, p: Pred, inst: Instance | undefined
         if (r.fact) factInterest(r.fact);
         else if (r.node) add({ slot: '*', scope: { nodes: [r.node] } });
         else if (r.role) roleInterest(r.role);
+      }
+    } else if ('city' in atom || 'social' in atom) {
+      // A read declares what it depends on (S1 9.1); a dependency that names no kind watches the nodes the read is made of.
+      const call = readCall(atom);
+      const port = l2.reg.sim;
+      if ('error' in call || !port?.builds(call.name)) continue;
+      const args = resolveReadArgs(call, inst);
+      const nodes = (args ?? []).filter((a): a is Id => typeof a === 'string' && /^[0-9a-f]{32}$/.test(a));
+      for (const dep of port.deps(call.name).interests) {
+        if (dep.kind === undefined && dep.slot === '*') {
+          if (nodes.length > 0) add({ slot: '*', scope: { nodes } });
+        } else add({ ...(dep.kind !== undefined ? { kind: dep.kind } : {}), slot: dep.slot });
       }
     }
   }

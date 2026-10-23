@@ -64,7 +64,22 @@ export interface PredFn {
   eval(args: unknown[], ctx: { now: number }): Verdict;
 }
 
+/**
+ * What layer 2 asks of the simulation layer's registered reads (S2 2.16, 2.17, 4.1). Layer 2 holds none of that layer's code: the
+ * simulation layer implements this and is attached to the registry. A read it does not build is refused at compile as not supported yet.
+ */
+export interface SimReadPort {
+  /** Whether the simulation layer builds the read. */
+  builds(read: string): boolean;
+  /** The answer of a read at a time: one of the read's registered strings, or `maybe`. */
+  eval(read: string, args: unknown[], t: number): string;
+  /** The kernel values a read depends on, and whether it must be looked at again at every boundary (beliefs emit no Changes). */
+  deps(read: string): { interests: Array<{ kind?: string; slot: string }>; boundary: boolean };
+}
+
 export class L2Registry {
+  /** The simulation layer's reads, once it is attached (S1 9.1). Without it every `city` and `social` atom is a later capability. */
+  sim?: SimReadPort;
   readonly classes = new Map<ClassId, ContentClassDef>();
   readonly channels = new Map<ChannelId, ChannelDef>();
   private fns = new Map<string, PredFn>();
