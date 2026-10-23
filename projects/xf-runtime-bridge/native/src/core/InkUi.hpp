@@ -52,15 +52,26 @@ struct HudSettings
     double x = 40.0;
     double y = 360.0;
     double scale = 1.0;
-    std::string layer = "hud"; // hud (inkHUDLayer, hidden with the game's HUD), notifications, top (research: inkWatermarksLayer)
+    // hud (inkHUDLayer, hidden with the game's HUD), notifications, top (research: inkWatermarksLayer). 0.8.6: photo_menu (the
+    // default, [ui] layer): the HUD layer in play and, while photo mode is open, a layer of the bridge's own under photo mode's
+    // menu (knowledge/photo-mode.md §15.6), so the ink panel stays the status surface there and the XF box is the fallback.
+    std::string layer = "photo_menu";
     bool nameplates = true;    // Demo B
     bool cetLabel = true;      // the CET layer's CET line and message lines ([ui] cet_label)
+    // 0.8.6 (§15's row 9 and 10, a research switch): while the panel is inside photo mode's menu, it pushed one ModalPopup
+    // game context, said to hold off photo mode's own keys [community]; session 14 showed it held neither the camera keys nor
+    // the exit. 0.8.7: the panel holds photo mode's exit (its OnTryExitPhotomode); the camera keys can't be held. Never from
+    // config.ini; the kill switch drops it.
+    bool modal = false;
 };
 json ToJson(const HudSettings& aSettings);
 bool AnchorOk(const std::string& aAnchor);
 bool LayerOk(const std::string& aLayer);
 
-// ui.hud: {show, anchor, x, y, scale, layer, nameplates, cet_label, reset}. Every key is optional; none reads the settings
+// The layer ui.hud names, as the overlay mounts it: photo_menu is the HUD layer outside photo mode (0.8.6).
+bool LayerIsHud(const std::string& aLayer);
+
+// ui.hud: {show, anchor, x, y, scale, layer, nameplates, cet_label, modal, reset}. Every key is optional; none reads the settings
 // without changing them. reset: true goes back to aDefaults ([ui] in config.ini), and cannot be combined with values.
 // Throws MethodError bad_params.
 HudSettings ApplyHudParams(const HudSettings& aCurrent, const HudSettings& aDefaults, const json& aParams);
@@ -86,6 +97,9 @@ struct BridgeView
 // 0.8.3: the names by appearance (session 10: "CET line" and "XF box" read alike), and None: no XF surface while
 // no game session is live (a loading screen, the press-any-key screen after a load, the start-up screens), session 10's
 // finding that the XF box drew over the press-any-key screen.
+// 0.8.6 (the maintainer: the ink panel inside photo mode's menu, the XF box the fallback): in photo mode the ink panel is
+// the copy under photo mode's menu (XFRuntimeBridgePhotoPanel.reds), which reports itself drawn the same way; the XF box
+// shows there only when that panel can't (ui.hud's layer hud, or the route failing).
 enum class StatusSurface
 {
     InkPanel,
@@ -156,10 +170,14 @@ struct MessageLine
 // 0.8: "answered<TAB>id<TAB>label" once the player has answered (the ink panel draws "Answered: <label>" where the keys
 // were, until the next message), and "inkask<TAB>id" while the ink panel reports drawing that question on screen
 // (XFBridge_InkDrawn), which tells the CET label to show only the status and the answer keys.
+// 0.8.6 (the Sol review: with answer_keys = IK_F6 a two-answer question showed one answer to click): the frame carries every
+// choice, and one beyond the configured keys has this key, which no key press matches; the panels show its label alone.
+inline constexpr const char* kNoKey = "-";
+
 struct AskView
 {
     uint64_t id = 0;
-    std::vector<std::pair<std::string, std::string>> keyed; // (key, label) per choice
+    std::vector<std::pair<std::string, std::string>> keyed; // (key, label) per choice; 0.8.6: every choice, kNoKey without a key
     uint64_t answeredId = 0;
     std::string answeredLabel;
     uint64_t inkShown = 0;
@@ -168,7 +186,9 @@ struct AskView
 
 // 0.8.2 (the review: the XF box showed "F6 Done" while no key could answer): the line under a question on the overlay
 // panel and the CET line: its answer keys while they answer it (the ink panel holds the question with its keys), else
-// where to answer instead.
+// where to answer instead. 0.8.6 (the UI review's fix 6, UI-186): one notation wherever a key is pressed, the game's own
+// prompt style "[F6] Done" (the ink panel, the XF box, the CET line); a button names its key after the label ("Done (F6)",
+// the XF Runtime Bridge window).
 std::string AnswerHint(const std::vector<std::string>& aChoices, const std::vector<std::string>& aAnswerKeys, bool aKeysArmed);
 
 // XFBridge_Hud()'s answer: one record per line, fields separated by tabs, first line "xfhud<TAB>1". The redscript layer
@@ -195,6 +215,15 @@ std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, Me
                        uint64_t aInkShownAsk, StatusSurface aSurface = StatusSurface::CetLine, uint64_t aKeysAsk = 0);
 // A key's name as the panels show it ("IK_F6" to "F6").
 std::string KeyLabel(const std::string& aKey);
+// 0.8.6: "[F6] Done", a key the player presses with what it answers (the UI review's fix 6).
+std::string KeyPrompt(const std::string& aKey, const std::string& aLabel);
+
+// 0.8.6: the ink layer's own events into the session's event stream (XFBridge_InkEvent): ink_tree (photo mode's menu root
+// and the XF layer under it, on each open and once laid out), ink_pointer (the photo-menu panel's hover and clicks) and
+// ink_input (its hold on the camera's mouse, taken and released; 0.8.7: photo mode's exit held by modal). Anything else is refused.
+bool InkEventKindOk(const std::string& aKind);
+// The event's data: the script's JSON object, or {raw: the first 200 characters} when it isn't one.
+json InkEventData(const std::string& aText);
 
 // The panel's settings, shared by the pipe (ui.hud) and the game thread (XFBridge_Hud). Thread-safe.
 class HudPanel
@@ -205,6 +234,8 @@ public:
     HudSettings Defaults() const;
     // ui.hud: {settings, previous, changed, undo: {method: "ui.hud", params: previous}}.
     json Configure(const json& aParams);
+    // 0.8.6: the kill switch drops ui.hud's modal (the frame never carries it while stopped, and Reconnect starts without it).
+    void DropModal();
 
 private:
     mutable std::mutex m_mutex;
@@ -218,12 +249,17 @@ inline constexpr size_t kMaxPins = 8;
 inline constexpr size_t kMaxLabelChars = 48;
 inline constexpr double kMaxCoordinate = 20000.0; // metres; Night City fits well inside
 inline constexpr double kMaxLift = 5.0;
-inline constexpr double kPieceLift = 0.25; // 0.8: a head pin's default height above its eyes
+// 0.8.4 (session 11's G4: over a head 2 m away the game's marker sat about a head's height above the crown, the XF mark
+// higher still): a head pin's default height above its eyes is now its crown, 0.12 m up [hypothesis: the anatomical eye-to-
+// vertex height]. 0.25 put the point about 0.13 m above the crown, and the game draws its marker above that point at a size
+// that grows near the camera (WorldMappinUIProfile.Quest and .Default: scaleByDistance true, worldOffset and screenOffset 0
+// [source] TweakDB 2.31), with the XF mark above the marker. Pins at V and at a position are unchanged.
+inline constexpr double kPieceLift = 0.12;
 
 // world.pin: exactly one of position [x, y, z] (a world point), piece (a showroom head's index: the pin stands above its
 // eyes and follows the head) or at "v" (above V); label (1-48 characters after cleaning); variant (the vanilla mappin
 // variant whose map filter and fallback icon it uses: custom, apartment, clothes, default, interaction); lift_m (metres above the point;
-// default 0 for a position, 0.25 above a head's eyes (0.8: kPieceLift, just above its crown) or 0.45 above V's head).
+// default 0 for a position, 0.12 above a head's eyes (0.8.4: kPieceLift, its crown) or 0.45 above V's head).
 struct PinRequest
 {
     enum class Target

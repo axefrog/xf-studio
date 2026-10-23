@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <mutex>
 #include <thread>
 
 #include "core/Dispatcher.hpp"
+#include "core/Log.hpp"
 
 namespace xfb::writes
 {
@@ -1241,8 +1243,24 @@ private:
 };
 } // namespace
 
+// 0.8.7 (the Sol review of 0.8.7, finding 1): every save, a client's game.save and the XF Runtime Bridge window's Save anyway,
+// has one owner from its first check to the relock, so no second save can run while the first holds the bridge's lock
+// released (a held test.save.delay stretches that window) or shares its status and relock steps. A second one is refused.
+static std::mutex& SaveOwner()
+{
+    static std::mutex owner;
+    return owner;
+}
+
 json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
 {
+    // Declared before the relock below, so the relock runs while the owner is still held.
+    std::unique_lock<std::mutex> owner(SaveOwner(), std::try_to_lock);
+    if (!owner.owns_lock())
+    {
+        throw MethodError("save_in_progress", "another save is being made right now (game_save, or Save anyway in the XF Runtime Bridge "
+                                              "window); nothing was saved by this request. Try again when it has finished");
+    }
     if (aOps.guard)
     {
         aOps.guard();
@@ -1275,6 +1293,21 @@ json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
     if (!released)
     {
         relock.Disarm();
+    }
+    // 0.8.4, the test hook: the save held in its prepare step, the kill switch and pause checked every 50 ms (the guard throws,
+    // and the relock above takes a released lock back on the way out).
+    if (const int32_t holdMs = aOps.hold ? std::clamp(aOps.hold(), 0, kMaxSaveDelayMs) : 0; holdMs > 0)
+    {
+        log::Info("game.save.held", "ms=" + std::to_string(holdMs) + " (test.save.delay)");
+        const auto until = Now(aOps.now) + std::chrono::milliseconds(holdMs);
+        while (Now(aOps.now) < until)
+        {
+            if (aOps.guard)
+            {
+                aOps.guard();
+            }
+            aOps.sleep(std::chrono::milliseconds(50));
+        }
     }
     // From here on, every way out of this function takes the released lock back.
     if (released)
@@ -1700,5 +1733,66 @@ json StatusWhileLoading(const std::string& aPhase, const json& aLayer)
                              : "the game is loading; the bridge refuses game calls until the loaded session's player is in "
                                "(game.wait with phase gameplay)"}};
 }
+
+json TestSaveDelay(const json& aParams, bool aAllowed, std::atomic<int32_t>& aSlot)
+{
+    params::RequireOnly(aParams, {"ms"});
+    if (!aAllowed)
+    {
+        throw MethodError("test_hooks_off", "test hooks are off in this build's config.ini ([bridge] allow_test_hooks); only the -writes "
+                                            "package for the dedicated test profile turns them on");
+    }
+    const auto ms = params::CheckInteger(aParams, "ms", 0, kMaxSaveDelayMs);
+    if (!ms)
+    {
+        throw MethodError("bad_params", "'ms' is required: how long to hold the next save after its prepare step, 0 to " +
+                                            std::to_string(kMaxSaveDelayMs) + " ms (0 disarms)");
+    }
+    const auto previous = aSlot.exchange(static_cast<int32_t>(*ms));
+    log::Info("test.save.delay", "armed_ms=" + std::to_string(*ms) + " previous_ms=" + std::to_string(previous));
+    return json{{"armed_ms", *ms},
+                {"previous_ms", previous},
+                {"note", *ms > 0 ? "the next game.save waits this long after its prepare step (once), checking the kill switch every 50 ms"
+                                 : "no hold: the next game.save runs straight through"},
+                {"undo", json{{"method", "test.save.delay"}, {"params", json{{"ms", previous}}}}}};
+}
+
+std::string SaveAnywayFailureCopy(const std::string& aCode)
+{
+    if (aCode == "save_in_progress" || aCode == "busy")
+    {
+        return "Another save is still being made. Try again in a moment.";
+    }
+    if (aCode == "not_in_gameplay")
+    {
+        return "A manual save works only in normal play. Leave the menu or photo mode, then try again.";
+    }
+    if (aCode == "bridge_effects_active")
+    {
+        return "The bridge is still holding something on V. Use Stop the bridge to put it back, then save from the game's own menu.";
+    }
+    if (aCode == "saving_locked" || aCode == "bridge_save_lock")
+    {
+        return "The game still refuses to save here. Try again in a moment, or load a save.";
+    }
+    if (aCode == "save_failed")
+    {
+        return "The game said the save failed, and nothing new was saved. Try again in a moment.";
+    }
+    if (aCode == "save_uncertain")
+    {
+        return "The game took the save but didn't confirm it. Look in the load menu before you save again.";
+    }
+    if (aCode == "killed")
+    {
+        return "The bridge has been stopped, so it can't save. Use the game's own save, or load a save.";
+    }
+    if (aCode == "game_not_ready")
+    {
+        return "The game isn't ready to save yet. Try again once V is back in the world.";
+    }
+    return "The save didn't go through. Try again in a moment, or load a save.";
+}
+
 
 } // namespace xfb::writes

@@ -5,10 +5,10 @@ import { openConfirmPopover, type Capability } from "../menu";
 /**
  * Conflict notice (style guide t-conflict, Component library "Conflict notice"): a document this window changed was changed in another
  * window too. First in the owning section, in the warning tone: the lead-in "Changed in another window.", the owner's sentence (what it
- * is, what differs, the question), and the three ways out as small buttons in the order mine, theirs, both. Keep both shows only where
+ * is, what differs, the question), and the three ways out as small buttons in the order mine, other window's, both. Keep both shows only where
  * a copy can be made. Each button's tooltip says what it keeps; an unavailable one says why (the owner's capability).
  *
- * Keep mine and Use theirs each throw one version away for good, so each asks first, in place (the confirm popover, c-confirm): it
+ * Keep mine and Use other window's each throw one version away for good, so each asks first, in place (the confirm popover, c-confirm): it
  * names the document and what goes, with focus on Cancel. Keep both loses nothing and acts at once.
  */
 export type ConflictKeep = "mine" | "theirs" | "both";
@@ -29,7 +29,8 @@ export const CONFLICT_TITLES: Record<ConflictKeep, string> = {
   theirs: "Show the other window's version here (asks first: this window's changes are discarded)",
   both: "Keep this window's version as a copy, and show the other window's here",
 };
-const LABELS: Record<ConflictKeep, string> = { mine: "Keep mine", theirs: "Use theirs", both: "Keep both" };
+/** "Use other window's", never "Use theirs": the other version is another window's, not another person's. */
+const LABELS: Record<ConflictKeep, string> = { mine: "Keep mine", theirs: "Use other window's", both: "Keep both" };
 
 /** What each confirmation asks, naming the document and what goes (t-conflict). */
 export function conflictConfirmation(keep: "mine" | "theirs", subject: string): { title: string; message: string; confirm: string } {

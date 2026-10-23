@@ -364,7 +364,7 @@ Built on `claude/choice-previews-2` (27 September 2026), awaiting the UI/UX gate
 ## 12. Open questions, with proposed defaults
 
 **Decided 27 September 2026:** all proposed defaults accepted, with two refinements:
-- **Spin (Q5):** besides the slow spin on hover, pressing and dragging on a preview grabs and turns it directly, so nobody waits for the automatic spin.
+- **Spin (Q5):** besides the slow spin on hover, pressing and dragging on a preview grabs and turns it directly, so nobody waits for the automatic spin. The drag follows the hand: the surface under the pointer moves with it (`dragTurn`), while the hover spin keeps its own leftward turn.
 - **Preparation (Q7): no manual "load previews" step.** Smart scheduling decides what to prepare, in this priority order:
   1. the active selection;
   2. the choice under the pointer;

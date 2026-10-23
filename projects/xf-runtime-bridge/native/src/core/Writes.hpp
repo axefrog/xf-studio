@@ -195,8 +195,18 @@ struct SaveOps
     std::function<void()> relock;
     std::function<void(std::chrono::milliseconds)> sleep;
     Clock now;
+    // 0.8.4, test hook (test.save.delay, the -writes package only): milliseconds to hold the save after prepare, taken once
+    // (the hook is one-shot); 0 or unset for none. While held the guard is checked every 50 ms, so the kill switch lands
+    // inside the save's prepare step (session 11's L1: a forced save took 0.33 s, too quick for a kill to land in it).
+    std::function<int32_t()> hold;
 };
 inline constexpr int32_t kSaveUnlockWaitMs = 3000;
+inline constexpr int32_t kMaxSaveDelayMs = 10000;
+
+// test.save.delay {ms} (0.8.4, a test hook): arms a one-shot hold of the next game.save after its prepare step (ms 0
+// disarms). Refused test_hooks_off unless config.ini's [bridge] allow_test_hooks is true, which only the -writes package
+// sets. Answers {armed_ms, previous_ms, undo}.
+json TestSaveDelay(const json& aParams, bool aAllowed, std::atomic<int32_t>& aSlot);
 
 // game.save: prepare, wait for a released lock to go (kSaveUnlockWaitMs), save, then wait for the game's
 // answer (aRequest.timeoutMs). saved: {saved: true, ...}; failed: save_failed; no answer: save_uncertain.
@@ -209,7 +219,13 @@ inline constexpr int32_t kSaveUnlockWaitMs = 3000;
 // queue's running grace, GameThreadQueue::kDefaultRunningGrace; 2000 + 1000 ms by default): prepare T, the unlock wait kSaveUnlockWaitMs plus one status step T, save T, the answer wait
 // timeoutMs plus one status step T, and the relock T: timeoutMs + kSaveUnlockWaitMs + 5 T. The tools'
 // client timeout is derived from this (tools/api/catalogue.ts, saveClientTimeoutMs).
+// 0.8.7: one save at a time, from its first check to its relock; a second, from any entry point, is refused save_in_progress.
 json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps);
+
+// 0.8.11 (UI review of 0.8.11, fix 2): what the XF Runtime Bridge window says when Save anyway doesn't go through: plain words and
+// one next step for each reason code a save can fail with, never the raw reason (one of them names game_save). Unknown codes get
+// the general line.
+std::string SaveAnywayFailureCopy(const std::string& aCode);
 
 struct LoadOps
 {

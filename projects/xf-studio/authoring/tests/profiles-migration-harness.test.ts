@@ -6,16 +6,16 @@
  * processes really killed, is experiment 038's `tools/s3-migration.ts`.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { MIGRATION_POINTS } from "../src/app/profiles/host/profiles-migrate";
 import { WORKSPACE_POINTS } from "../src/app/profiles/profiles-migration";
 import { canonicalJson } from "../src/platform/api";
 import { alpha2Library, alpha2SaveNamed, COLLECTION, documentRows, documentsHash, integrity, realWorkspace, releasedHash } from "./fixtures/profiles-migration-fixtures";
 import { HarnessHost, HarnessWorkspace, migrateUntilDone, outcome } from "./fixtures/profiles-migration-harness";
+import { tempDir } from "./temp-dir";
 
-const scratch = mkdtempSync(join(tmpdir(), "xfs-s3-"));
+const scratch = tempDir("xfs-s3-");
 afterAll(() => { try { rmSync(scratch, { recursive: true, force: true }); } catch { /* A file a failed test left open; the system cleans its temp folder. */ } });
 let runs = 0;
 function setup(divergent: boolean) {

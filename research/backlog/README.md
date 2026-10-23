@@ -14,8 +14,15 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### In flight
 - **Open High findings:** 1, CORE-03; feature merges run. The core review follows profiles phase 2. *22 Oct*
-- **Profiles phase 4a, scene runtimes** (the single primary focus, next): per-scene runtimes, prepared before switching, with progress, residency and leak-free disposal ([design §4.5](../authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a)). It fixes the body-switch and first-draw bugs that the view-switch spike found. Phase 1 merged on 22 Oct (`35e3c5b6`): the lease, the outbox, the `profiles-1` migration, explicit targets with captures, the focus service and editing-context history. Each chunk went through Sol reviews; the design review was PASS WITH CONDITIONS, with UI-187..190 in the polish lane. *22 Oct*
-- **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
+- **Profiles phase 4a, scene runtimes** (the single primary focus, `claude/profiles-4a`): per-scene runtimes, prepared before switching, with progress, residency and leak-free disposal ([design §4.5](../authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a)). It fixes the body-switch and first-draw bugs that the view-switch spike found. Six chunks, one at a time:
+  1. 4a-i: disposal frees every GPU object (done);
+  2. 4a-ii: one renderer device, runtimes built hidden (done; the real-V parity run, G1, is pending);
+  3. 4a-iii: motion moves into the scene node (done);
+  4. 4a-iv: residency and the superseding subject change (built; in review);
+  5. 4a-v: prepare before switching, with progress;
+  6. 4a-vi: routing by the named view, and the gates.
+
+  Phase 1 merged on 22 Oct (`35e3c5b6`): the lease, the outbox, the `profiles-1` migration, explicit targets with captures, the focus service and editing-context history. Each chunk went through Sol reviews; the design review was PASS WITH CONDITIONS, with UI-187..190 in the polish lane. *22 Oct*
 
 ### Beta blockers
 - **Profiles, views and layouts: the whole proposal is pre-beta** (decided 21 Oct; [design](../authoring/profiles-views-layouts-design.md)). Order:
@@ -27,36 +34,48 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
   6. tab duplication, reopen history, orphan handling.
 
   Spikes S1–S3 come first. About 40–49 agent-days, re-estimated after the spikes. *21 Oct*
-- **Choice thumbnails turn the wrong way when dragged** ([small bugs](#small-bugs-and-friction)). *21 Oct*
 - **Speed budgets** ([performance](performance.md)), including:
   - the restart to V (2 s budget; PREV-196);
   - the first V after a code change (about 12 s; 26.7 s for a save V, with clothing through WolvenKit);
   - first-run preparation;
   - Build's verifier and first plate cut (PIPE-130). *29 Sep*
 - **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). *29 Sep*
-- **Body switch shows the wrong V and drops the request** (found by spike S2, 21 Oct; [experiment 039](../../experiments/039-view-switch-spike/README.md) on `claude/spike-views`). Switching the default V's body leaves the pane empty for 0.2–1.2 s with no message, the superseded V is shown and stays, and the newer request is refused ("The creator options are still loading.") and lost. Fixed properly by profiles phase 4a. Before that, the request must never be dropped and the old V should stay shown with progress. *21 Oct*
-- **First draw of a lighting preset freezes for up to 94 s** on a fresh browser profile: 40 shader programs link in one blocking task. A preset change pays the same, and a desktop first run would hit it. Prepare (compile) programs ahead in small steps, with the previous view kept on screen ([performance](performance.md)). *21 Oct*
+- **Body switch shows the wrong V and drops the request** (found by spike S2, 21 Oct; [experiment 039](../../experiments/039-view-switch-spike/README.md) on `claude/spike-views`). Switching the default V's body leaves the pane empty for 0.2–1.2 s with no message, the superseded V is shown and stays, and the newer request is refused ("The creator options are still loading.") and lost. Fixed in code by profiles 4a-iv: the old V stays drawn, the newest request wins, and nothing superseded is shown. It closes when 4a merges after its browser gates. *21 Oct*
+- **First draw of a lighting preset freezes for up to 94 s** on a fresh browser profile: 40 shader programs link in one blocking task. A preset change pays the same, and a desktop first run would hit it. Prepare (compile) programs ahead in small steps, with the previous view kept on screen ([performance](performance.md)). 23 Oct, profiles 4a G2 on real data: a body switch is now prepared with progress, but a lighting change on the shown V still blocks for 92–104 s (PREV-209). Profiles 4a-v-b prepares it ahead. *21 Oct*
 - **Make the Save Explorer worth having** (21 Oct). Today it's an early-access curiosity that lets you look inside a save, read-only ([save editor design](../save/save-editor-design.md)). When this comes up, an agent studies it and reports back:
   - what players and modders would actually use it for;
   - its gaps;
   - which ideas are cheap to build and turn it into a real value-add for the first release, such as finding which mods a save depends on, explaining what changed between two saves, or checking a save before a mod update.
 
   Then the maintainer decides: build the chosen ideas, or move the panel behind research tools for the beta, in line with the "exportable first" bar. *21 Oct*
-- **Consistency leftovers:** UI-142's build steps, and repeated layer names (CORE-125) ([readiness](../../docs/release-readiness.md)). *29 Sep*
+- **Consistency leftovers:** UI-142's build steps ([readiness](../../docs/release-readiness.md)). *29 Sep*
 
 ### Polish lane (before 1.0)
-- **Profiles phase 1 UI follow-ups** (from its design review; they don't block the merge):
-  - the workspace notice as a library component;
-  - "Save version" crowding the header crumbs at about 1,100 px;
-  - progress for Taking over, Waiting and Restoring, and a way back from Waiting;
-  - wording leftovers: the "Autosaved draft" chip, the "Draft" glossary entry, and three names for reopening a collection;
-  - "aren't protected" should say its consequence;
-  - save-toast and read-only-fade polish. *22 Oct*
-- **Tests leave temporary folders behind** (`xfs-part-2-library-*`, `xfs-locked-library-*`, `xfs-ui-data-*` and others pile up in the system temp folder). Every test removes what it creates. *22 Oct*
+- **In-game styling spec for the bridge surfaces** (the XF Runtime Bridge window, the XF box and the CET line). A coat of slickness, with CharLi's CET plugin as the reference: dense ImGui theming, type hierarchy through font scale, styled value bars, child panels and subtle pulses. It never comes ahead of function. The UI track writes the spec in the style guide for the in-game theme generator (`projects/xf-runtime-bridge/tools/overlay/theme.ts`), and XF · Runtime bridge builds it. CharLi is credited if we borrow ideas. The XF box's text size stays, since it matches other CET windows. *22 Oct*
+- **Polish batch 2 follow-ups** (from its design review; they don't block it):
+  - "Back to XF Studio" in the interface guide opens a second, read-only Studio on localhost. Close the tab when the Studio opened it; elsewhere, label it as the site.
+  - The unprotected warning's edge cases:
+    - it says "couldn't" when a desktop backup copy is only more than 2 s late;
+    - it stays after the library already has the changes;
+    - it doesn't name storage-full when that is the known cause;
+    - "Back up" now also means export in Help.
+  - Stale style-guide copy:
+    - the c-chips "Open now" button;
+    - the t-saved specimen;
+    - a Try again reason that says "recorded";
+    - the Recent drafts help, the draft rows and the glossary's "Draft" disagree.
+  - Package's tooltip should name the button once its label is hidden, and the workspace notice's buttons should come in one order in every state.
+  - "Export this window's copy" has a tooltip that says "Save … to a file", which collides with Save version. Use "Write … to a file … Nothing goes to your library."
+  - The style guide's chip reference and specimens should show "Version N".
+  - The desktop save-failure message still points to Export collection, the export that saves first. Point it at "Export this window's copy".
+  - Optional: in verification workspaces, move the verification label so it doesn't float in the chip's gap.
+  - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there.
+
+  *22 Oct*
+- **Profiles phase 1 UI follow-ups** (from its design review): progress for Taking over, Waiting and Restoring, and a way back from Waiting (a Cancel that leaves the window read-only). Polish batch 2 (`claude/polish-2`) did the rest: the header keeps the names readable, the workspace notice is a library component, the wording leftovers, "couldn't be backed up", and the save-toast, open-row, "Use other window's", read-only-fade and Interface guide polish; its design review passed with conditions (the follow-ups above). *22 Oct*
 - **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
-- **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, collection tie order, the masculine plate warning, Build wording, receipt matching. *21 Oct*
+- **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, receipt matching. *21 Oct*
 - **A check that pure engine code never reads the clock, randomness or timers** (`engines/layered-makeup/raster-processor.ts` does today). *21 Oct*
-- **Flaky tests:** the mottle raster budget under full-suite load, and "Recent drafts" ordering of saves in the same millisecond. *21 Oct*
 - **A Show in folder route for the workspace file** (desktop). *21 Oct*
 
 ### Next tracks (ranked)
@@ -65,6 +84,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
 
 ### R&D (runs only while the polish lane is moving)
+- **Game update 2.5 adds official mod support.** When its details are published, send the meta-coordinator a research request covering what it changes for the export pipeline: archive and resource versions, ArchiveXL and TweakXL compatibility, any official install route, and the beta's framework guidance. *23 Oct*
 Research questions from any chat go to the meta-coordinator's [research queue](research-queue.md). This lane lists the R&D build tracks, each kept by the chat that owns it.
 
 - **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
@@ -307,13 +327,8 @@ Existing brow, lash, hair and piercing *preview context* is not permission to bu
 Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
 
 - **Starter eye-makeup shapes** (21 October 2026, polish before 1.0). A new look and a new layer start from a lopsided wing whose control points every design first drags back into place. Following the contributed-defaults convention (AGENTS.md, UX policy), eye makeup contributes several natural starter shapes as read-only choices: a soft lid wash along the upper lash line, a classic wing, a crease or smoky shape, and a lower-lash smudge. The person can save any layer's shape as their own starter, and choose which starter New layer and New look use. The current starter (`starterRecipe()` and the new-layer shape in `src/features/eye-makeup/region.ts`) stays intact for existing drafts. Check each starter on the default and the reference V, in both eye modes.
-- **Choice thumbnails turn the wrong way when dragged** (21 October 2026). Dragging a hairstyle thumbnail left or right turns it opposite to the hand. The drag sets `angle = start + dx·360/(width·1.5)` in `src/studio-ui/components/choice-preview.ts` (`PreviewSpin`, about line 238). Flip the sign so the surface under the pointer follows it, check the frame order in `turntableYaw` agrees, and keep the hover spin's direction consistent with the drag.
 - **Build has no Stop.** A Build runs for many seconds and can't be stopped from the Mod panel; the host already stops a Build whose request is dropped, so the panel only needs a Stop button.
 - **Two windows overwrite each other's draft.** Two Studio tabs or windows on one workspace each autosave over the other's draft; the second should see the first's changes, or at least warn.
-- **Collection order on a tie** (LIB-01): two saves in the same millisecond list in random order (`src/library/host/collection-store.ts` orders by `created_at`, then a random UUID); add a stable insertion tie-break.
-- **Repeated layer names** (CORE-125): a new layer is named `Layer <count+1>`, so it can repeat a name after a removal (`src/engines/layered-makeup/layer-stack.ts`); skip names in use, as presets already do.
-- **A damaged masculine plate blocks the feminine export** (PIPE-122): it reaches `refuse("invalid_collection")` in `src/features/eye-makeup/export/index.ts`; treat it as unavailable with a warning instead.
-- **Developer wording in localhost Build reasons** (PIPE-134): `src/host/package-server.ts` names `bun tools/setup-wolvenkit.ts`, `XFS_PACKAGE_*` overrides and "Game input".
 - **Install receipts matched on name and size** (CORE-118): an archive not hashed within the problem report's budget matches a receipt on name and size alone (`src/diagnostics/host/mod-identity.ts`).
 - **WebView2 runs with `--disable-web-security`** (DESK-09): Electrobun's native wrapper hard-codes the flag and no setting removes it; the CSP, session cookie and navigation rules still hold. Raise it upstream, or bundle CEF at the cost of a much larger installer.
 

@@ -15,6 +15,7 @@
 //   write-showroom   spawns, turns and removes XF Finish Showroom's test heads and light rigs (the test profile only)
 //   write-player     moves and turns V, turns her view, crouches, draws or holsters, opens menus (0.6; the test profile only)
 //   act-player       irreversible actions in the world: using devices, dialogue, consuming (0.6; reserved, no command yet)
+//   write-npc        brings in XF actors and directs NPCs near V: walking, lines, gaze, face, gestures, dialogue choices (0.8; the test profile only)
 //   control          changes only the bridge itself (the kill switch)
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
@@ -34,6 +35,8 @@ import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showro
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
+import { COMMANDS_080_NPC } from "./catalogue080npc.ts";
+import { SENSES_COMMANDS } from "./catalogueSenses.ts";
 import { applyCatalogue080 } from "./catalogue080.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
 import { decodePng } from "../capture/image.ts";
@@ -48,7 +51,7 @@ const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_no
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
 
-export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "control";
+export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "write-npc" | "control";
 
 export const PERMISSIONS: Record<Permission, { label: string; description: string }> = {
   read: { label: "Look", description: "Reads what the game is doing, or takes a screenshot of its window. Changes nothing." },
@@ -88,6 +91,11 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
     label: "Move V",
     description:
       "Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile.",
+  },
+  "write-npc": {
+    label: "Direct NPCs",
+    description:
+      "Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile.",
   },
   "act-player": {
     label: "Act for V",
@@ -638,7 +646,9 @@ export const SAVE_DETAILS_WAIT_MS = 3000; // writes::kSaveDetailsWaitMs (0.8: a 
 /** The pipe's round trip and the bridge thread's own work, on top of the server's worst case. */
 export const CLIENT_SLACK_MS = 2000;
 /** game.save: timeout_ms + the unlock wait + 5 steps (prepare, a status overshoot twice, save, relock). */
-export const saveClientTimeoutMs = (timeoutMs = 20000) => timeoutMs + SAVE_UNLOCK_WAIT_MS + 5 * SERVER_STEP_MS + CLIENT_SLACK_MS;
+/** 0.8.4: test.save.delay's longest hold (core/Writes.hpp kMaxSaveDelayMs); a save may carry one. */
+export const MAX_SAVE_DELAY_MS = 10000;
+export const saveClientTimeoutMs = (timeoutMs = 20000) => timeoutMs + SAVE_UNLOCK_WAIT_MS + MAX_SAVE_DELAY_MS + 5 * SERVER_STEP_MS + CLIENT_SLACK_MS;
 /** game.load: the list wait + the details wait + 4 steps (list, a status overshoot, the last details try, load). */
 export const loadClientTimeoutMs = () => SAVE_LIST_WAIT_MS + SAVE_DETAILS_WAIT_MS + 4 * SERVER_STEP_MS + CLIENT_SLACK_MS;
 
@@ -885,6 +895,10 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
           throw planError("wait_timeout", `The game didn't reach ${wanted.join(" or ")} within ${Math.round(timeout / 1000)} s; it is in ${last}.`);
         }
         if (signal?.aborted) throw planError("interrupted", "Stopped before the game reached the phase.");
+        // 0.8.4 (session 11's E finding: another process's game_status was refused bridge_busy for 8 s while this waited): the
+        // main pipe takes one client at a time, so the connection is let go between polls, as session_wait does, and the next
+        // poll opens it again.
+        api.release();
         // The pause ends at once when the signal aborts (an emergency control, RB-121; the session runner's Ctrl+C).
         await new Promise<void>((r) => {
           const timer = setTimeout(done, 500);
@@ -1468,6 +1482,66 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     bridge: { method: "game.save", timeoutMs: (input) => saveClientTimeoutMs((input.timeout_ms as number | undefined) ?? 20000) },
   },
   {
+    // 0.8.4 (session 11's L1: a forced save took 0.33 s, too quick for the kill switch to land inside it).
+    name: "test.save.delay",
+    title: "Hold the next save (test hook)",
+    description:
+      "Test hook for the session checks, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off): the next game_save, once, waits ms milliseconds right after its prepare step (where it has checked the moment and, with override_lock, released the bridge's save lock), checking the kill switch every 50 ms, so a bridge_kill sent meanwhile lands inside the save and nothing is saved. ms 0 disarms. Changes nothing in the game. Needs the save permission.",
+    permission: "write-save",
+    input: obj({ ms: int("How long to hold the next save, in milliseconds (0 to 10000; 0 disarms).", 0, 10000) }, ["ms"]),
+    undo: "test.save.delay with the previous ms (the result's undo); the hold is used up by the next save anyway.",
+    bridge: { method: "test.save.delay" },
+  },
+  {
+    // 0.8.7, session 15: the game-events probe (knowledge/game-events.md §12 and its session rows 4 to 16).
+    name: "test.events",
+    title: "Read the event probes' records (test probe)",
+    description:
+      "Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off). Reads the records of the game-events and save-identity probes from their own ring (512 records, at most 20 a second per kind; what goes over is counted in dropped and in the kind's next record), apart from the session's events: kinds session (each lifecycle point of a load or save, with restored, pre_game and the probe's test facts), death, defeated, knockdown, combat, heat (wanted_level, wanted_chase_active), zone (CityAreaType), district (the innermost district's enum name, previous, new_location_discovered), interior (a 2 Hz poll's flips), vehicle (mount and unmount with the seat), vehicle.stolen, vehicle.acquired, journal (hash, class, change type, state; no text), dialogue.hub (hub ids, states and choice counts; no text), dialogue.index (only when the highlight or hub changes), call (contact, phase; only a change), time (a jump of the clock, or the menu's skip), status.count and stim.count (the noisy hooks, counted every 5 s). Every record carries game_s and sim_s; death and defeated also carry the victim's attitude towards V. since reads on from a cursor (next); kinds keeps only those kinds. stims: true switches on the stim tap (row 16), false off. Changes nothing in the game.",
+    permission: "read",
+    input: obj({
+      since: int("Read records from this sequence number on (the last answer's next); 0 or none from the oldest.", 0),
+      limit: int("At most this many records (1 to 500, default 200).", 1, 500),
+      stims: bool("true switches the stim tap on (allow-listed stims counted every 5 s), false off."),
+      kinds: { type: "array", description: "Only these kinds (a family such as dialogue takes dialogue.hub and dialogue.index); next still moves past the rest.", items: str("A probe kind.", { minLength: 1, maxLength: 40, pattern: "^[a-z0-9_.:/]+$" }), minItems: 1, maxItems: 32 },
+    }),
+    undo: "stims: false switches the stim tap off again; reading changes nothing.",
+    bridge: { method: "test.events" },
+  },
+  {
+    // 0.8.7, session 15: the save-identity probe (knowledge/save-identity.md's session card).
+    name: "test.save.identity",
+    title: "Write or read the save-identity test facts (test probe)",
+    description:
+      "Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off). mode write sets the probe's test facts, all named xfs_probe_* so they can never be taken for the real save key: a and b (xfs_probe_a, xfs_probe_b), and pin {c0, c1, b, n} (xfs_probe_sk_c0, _c1, _b, _n, with the check xfs_probe_sk_k worked out by the plugin and written last), or pin \"clear\" to set them all to 0; arm_before_save: true makes Codeware's Session/BeforeSave write a fresh xfs_probe_b before every save (save-identity row 4), false stops it; persist {value, kib} fills the probe's persistent system (rows 11 and 12; kib 0 to 4096). mode read answers the facts, whether the pin's check holds, and the persistent system (present false once its file is removed from the staged mod). The facts go into any save made after; they are test facts and harmless. Takes no save lock. Needs the save permission.",
+    permission: "write-save",
+    input: obj({
+      mode: oneOf("write or read (default read).", ["write", "read"]),
+      a: int("xfs_probe_a's value (0 to 2147483647).", 0, 2147483647),
+      b: int("xfs_probe_b's value (0 to 2147483647).", 0, 2147483647),
+      pin: { description: "The pin {c0, c1, b, n} (each 0 to 2147483647), or \"clear\".", anyOf: [{ ...obj({ c0: int("Campaign id, high part.", 0, 2147483647), c1: int("Campaign id, low part.", 0, 2147483647), b: int("Branch id.", 0, 2147483647), n: int("Sequence number.", 0, 2147483647) }), description: "The pin." }, { type: "string", enum: ["clear"], description: "Every test fact back to 0." }] },
+      arm_before_save: bool("true: Session/BeforeSave writes a fresh xfs_probe_b before each save; false stops it."),
+      persist: { ...obj({ value: int("The persistent field's value.", 0, 2147483647), kib: int("The persistent array's size in KiB (0 to 4096).", 0, 4096) }), description: "Fills the probe's persistent system: {value, kib}." },
+    }),
+    undo: "pin \"clear\" sets every test fact back to 0; arm_before_save: false stops the BeforeSave write.",
+    bridge: { method: "test.save.identity" },
+  },
+  {
+    // 0.8.7, session 15: the companion probe (XF Core's O4 and companion@1's containment, xf-core-architecture §7.6).
+    name: "test.companion.probe",
+    title: "Run the companion probe (test probe)",
+    description:
+      "Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks, and the package's xfb_companion_probe.exe; elsewhere refused). Launches the bundled companion from the plugin's own folder the way companion@1 will: opened against writers and hashed (sha256), created suspended with no window in a job named at creation (route atomic; assigned if the system refused that, with the reason), the job kill-on-close with one process, a memory cap (memory_mb, default 64) and UI limits, its only inherited handle the pipe for its output, checked in the job before it resumes (else ended), a fixed command line, no shell. mode probe (default): the plugin lists the game's archive/pc/mod folder as the game sees it and asks the companion about its first archive and that folder; the answer has the companion's report (in_job, kill_on_close, active_process_limit, memory_limit_mb, file_seen, folder_archives), plugin_view, and vfs_reaches_child (true when the companion sees what the game sees: MO2's virtual files reach a child of the game). mode sleep starts one that waits seconds (default 600) and keeps its job, so quitting the game should end it (kill-on-close); mode stop ends it now. Changes nothing in the game.",
+    permission: "write-world",
+    input: obj({
+      mode: oneOf("probe (default), sleep or stop.", ["probe", "sleep", "stop"]),
+      seconds: int("sleep only: how long it waits, 1 to 3600 (default 600).", 1, 3600),
+      memory_mb: int("The job's memory cap in MB, 16 to 1024 (default 64).", 16, 1024),
+    }),
+    undo: "mode stop ends a sleeping companion; quitting the game ends it too.",
+    bridge: { method: "test.companion.probe" },
+  },
+  {
     name: "game.load",
     title: "Load a save",
     description:
@@ -1519,7 +1593,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "ui.hud",
     title: "Show, hide or move the ink panel in the game",
     description:
-      "Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
+      "Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: photo_menu (default, 0.8.6: the HUD in play and, while photo mode is open, inside photo mode's own menu, where it fades with the menu for the hide-UI key, photo_hud_hide and screenshots, and its answers can also be clicked; there the anchors have no HUD floors, and 0.8.7 keeps the panel out of photo mode's own menu, top bar and hint strips, measured from photo mode's widgets), hud (the HUD only, hidden wherever the game hides it: menus, photo mode, the appearance screen, so the XF box shows in photo mode), notifications or top (research). modal (0.8.7) makes the panel inside photo mode's menu hold photo mode's exit while photo mode is open (Esc and the exit hint do nothing); photo mode's camera keys are read natively and can't be held from a contained route, so they keep moving the camera (0.8.6's ModalPopup context held neither, session 14); it takes effect only there, and the kill switch drops it. The panel in photo mode reports to session_log as ink_tree (photo mode's menu root and the XF layer: on each open, and once laid out with the root's width and rectangles), ink_pointer (hover taken, refused while a mouse button is held, replayed, left; presses with their route and actions, answer clicks and ignored releases with the pointer's position) and ink_input (the camera's mouse taken and released; photo mode's exit held by modal). Its laid-out ink_tree event also gives photo mode's zones and the panel's rectangle. nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
     permission: "notify",
     input: obj({
       show: bool("true shows the panel, false hides it."),
@@ -1527,9 +1601,10 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
       x: num("Horizontal distance inwards from the anchor's edge (from the middle for center), in the HUD's design units, 3840 across a 16:9 screen (-4000 to 4000). Default 40.", -4000, 4000),
       y: num("Vertical distance inwards from the anchor's edge (from the middle for center), in the same units. Default 360.", -4000, 4000),
       scale: num("Size, 0.5 to 2.5. Default 1.", 0.5, 2.5),
-      layer: oneOf("Where the panel draws: hud (default), notifications or top (research).", ["hud", "notifications", "top"]),
+      layer: oneOf("Where the panel draws: photo_menu (default: the HUD in play, inside photo mode's menu while it is open), hud (the HUD only; the XF box in photo mode), notifications or top (research).", ["photo_menu", "hud", "notifications", "top"]),
       nameplates: bool("Show each XF Finish Showroom head's preset name on its pedestal."),
       cet_label: bool("Show the CET line (Cyber Engine Tweaks' status line with a coloured dot, far top left) and its message lines."),
+      modal: bool("While the panel is inside photo mode's menu, hold photo mode's exit (Esc does nothing); photo mode's camera keys can't be held and keep working (0.8.7, session 14). false lets it go; the kill switch drops it."),
       reset: bool("Go back to the configured settings (alone)."),
     }),
     undo: "the result's undo: ui.hud with the earlier settings.",
@@ -1567,7 +1642,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "world.pin",
     title: "Place an XF map pin",
     description:
-      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands just above its eyes, 0.25 m by default; placed there, so turning the head leaves it and clearing the heads removes it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.25 above a head's eyes, 0.45 above V). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
+      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin's point is at its crown, 0.12 m above its eyes by default, and the game draws its marker just above that point; placed there, so turning the head leaves it and clearing the heads removes it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.12 above a head's eyes, 0.45 above V). ui_state's pins[].xf_mark gives where the XF mark is (px, its top-left corner in window pixels) and where the pin's own point is (point_px). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
     permission: "write-world",
     input: obj(
       {
@@ -1684,6 +1759,10 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   ...PLAYER_COMMANDS,
   // Bridge 0.7 (research/runtime/bridge-hook-inventory.md).
   ...COMMANDS_070,
+  // Bridge 0.8: NPC direction (research/runtime/npc-direction-design.md).
+  ...COMMANDS_080_NPC,
+  // The senses for the Story Engine (read-only): quest facts in a batch, V's district, V's status.
+  ...SENSES_COMMANDS,
 ]);
 
 export function findCommand(name: string): CommandDef | undefined {

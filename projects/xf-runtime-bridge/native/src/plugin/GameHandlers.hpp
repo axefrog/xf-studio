@@ -15,11 +15,23 @@ void RegisterMethods060(Dispatcher& aDispatcher);
 // Bridge 0.7 (Handlers070.cpp): cyberware, world state and probes, the weather, ui.state, game.saves, photo.scene.set and the
 // overlay host's state.
 void RegisterMethods070(Dispatcher& aDispatcher);
+// The senses for the Story Engine (HandlersSenses.cpp): world.facts, world.district, player.status. Called by RegisterMethods.
+void RegisterMethodsSenses(Dispatcher& aDispatcher);
+// scene.read's npc_detail (HandlersSenses.cpp): gives each NPC row of aOut its character record's detail when aWanted.
+void AddNpcDetail(nlohmann::json& aOut, bool aWanted, const std::string& aCid);
 // Game thread, every Running tick: runs the behaviours (core/Behaviours.hpp) through the redscript layer.
 void TickBehaviours(double aDt, bool aScriptsReady);
 // Game thread, from RestoreAfterKill (RB-90): writes back the first values photo.camera.preset saw for every camera preset
 // flat it rewrote this game run (TweakDB changes outlive loads until the game restarts), then forgets them.
 void RestorePresetsAfterKill();
+// Bridge 0.8 (HandlersNpc.cpp): the npc.* methods, their game-thread tick (timers, a poll four times a second while anything
+// is held, the automatic release) and the kill switch's release of every NPC the bridge holds.
+void RegisterMethodsNpc(Dispatcher& aDispatcher);
+void TickNpc(double aDt, bool aScriptsReady);
+void RestoreNpcAfterKill();
+// Bridge 0.8 (HandlersNpc.cpp): bridge.handover's release of every NPC the bridge directs, one game-thread step after the
+// handover flag is set (npc.auto_released with reason handover): {released, hub_withdrawn, voice_lines_hidden}.
+nlohmann::json ReleaseNpcsForHandover(const std::string& aCid);
 
 // Shared with Handlers060.cpp: a redscript layer call (XFRuntimeBridge.<class>.<function>(cid, ...) -> JSON), the game-thread
 // step timeout, and a write method marked for the kill switch's restore.
@@ -48,4 +60,8 @@ void ReleaseCursorAfterIdle();
 // Game thread, each Running tick: takes the bridge's save lock back when a game.save with override_lock
 // couldn't retake it through the queue (State::relockOwed; RB-52). Throws on a failed script call.
 void RetakeOwedSaveLock();
+
+// 0.8.7: the XF Runtime Bridge window's Save anyway (XFBridge_SaveAnyway): one manual save past the bridge's save lock, refused
+// only once the bridge is stopped. Blocks for the save's steps; never call it on the game thread.
+nlohmann::json PlayerSaveAnyway(const std::string& aCid);
 } // namespace xfb::plugin

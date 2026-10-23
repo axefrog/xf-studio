@@ -28,6 +28,11 @@ export type StudioFileAction =
   | { kind: "characterPreset.import"; character: string }
   | { kind: "characterPreset.export" }
   | { kind: "collection.import" | "collection.export" | "collection.plan" | "package.check" | "package.build" }
+  /**
+   * The recovery export: this page's own copy of the open collection, its changes the library doesn't have yet included, written as
+   * the portable collection file without saving or reading anything (the workspace notice's recovery export button).
+   */
+  | { kind: "collection.exportWindowCopy" }
   /** Bring back an earlier draft: `draft` (its collection ID, from the recent-drafts list) names one, else the previous one. */
   | { kind: "collection.recover"; draft?: string };
 export type StudioFileOutcome = { ok: true; code: string; message: string;
@@ -147,6 +152,7 @@ export class StudioFileOperations {
           : "Character presets need the 3D view.";
         return reason ? { available: false, reason } : { available: true };
       }
+      case "collection.exportWindowCopy": return this.collection?.windowCopyCapability() ?? { available: false, reason: "Collection is still loading." };
       case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen", collection: this.collection.draftIdentity()?.collectionId ?? "",
         ...(action.draft !== undefined ? { draft: action.draft } : {}) }) ??
         { available: false, reason: "Collection is still loading." };
@@ -224,10 +230,15 @@ export class StudioFileOperations {
             saved.personal ? `${saved.personal} item${saved.personal === 1 ? "" : "s"} naming a personal folder or address ${saved.personal === 1 ? "was" : "were"} left out.` : ""].filter(Boolean);
           outcome = { ok: true, code: "exported", message: [`Character preset saved with ${saved.values} choice${saved.values === 1 ? "" : "s"}.`, ...notes].join(" ") }; break;
         }
+        case "collection.exportWindowCopy": {
+          const copy = this.collection!.exportWindowCopy();
+          this.port.download(new Blob([copy.json], { type: "application/json" }), copy.name);
+          outcome = { ok: true, code: "exported", message: copy.message }; break;
+        }
         case "collection.recover":
           this.sources.recoverCollection(action.draft);
           outcome = { ok: true, code: "recovered", message: action.draft !== undefined
-            ? "That draft is back. The one you had open is first under Recent drafts." : "Previous collection draft restored." }; break;
+            ? "Reopened that draft. The one you had open is first under Recent drafts." : "Reopened the previous collection." }; break;
         default: {
           let request: CollectionRequest;
           if (action.kind === "collection.import") {

@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runWorkerCheck } from "../../src/platform/export/check-runner";
 import { desktopPackageRequest } from "../package";
@@ -11,8 +10,9 @@ import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-wind
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
 import { preparePackageCollection } from "../../tests/fixtures/eye-exporter";
+import { tempDir } from "../../tests/temp-dir";
 
-const directory = mkdtempSync(resolve(tmpdir(), "xfs-check-worker-"));
+const directory = tempDir("xfs-check-worker-");
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 const request = (collection: unknown) => new Request("http://127.0.0.1:4317/api/package", {
   method: "POST", headers: { "Content-Type": "application/json" },
@@ -56,7 +56,7 @@ test("aborting an in-flight Check discards its worker result", async () => {
 });
 
 test("the standalone packaged Bun worker runs the shared preflight", async () => {
-  const output = mkdtempSync(resolve(tmpdir(), "xfs-packaged-check-"));
+  const output = tempDir("xfs-packaged-check-");
   try {
     const built = await Bun.build({ entrypoints: [resolve(import.meta.dir, "../check-worker.ts")],
       target: "bun", outdir: output });

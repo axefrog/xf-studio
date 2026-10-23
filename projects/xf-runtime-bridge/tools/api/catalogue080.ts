@@ -10,6 +10,7 @@
 
 import type { CommandContext, CommandDef, CommandResult } from "./catalogue.ts";
 import { bool, type JsonSchema } from "./schema.ts";
+import { NPC_REFUSALS } from "./catalogue080npc.ts";
 
 type Json = Record<string, any>;
 
@@ -180,11 +181,15 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "cc.confirm": ["creator_leave_disabled", "not_in_character_menu", "busy"],
   "inventory.equip": [...INVENTORY, "timeout"],
   "inventory.list": ["unavailable", "game_not_ready"],
+  "test.save.delay": ["test_hooks_off"],
+  "test.events": ["test_hooks_off"],
+  "test.save.identity": ["test_hooks_off", "game_not_ready"],
+  "test.companion.probe": ["test_hooks_off", "not_in_this_package", "companion_running", "failed"],
   "wardrobe.state": ["not_in_gameplay", "unavailable"],
   "wardrobe.equip": [...INVENTORY, "no_active_outfit", "outfit_managed_elsewhere", "script_outfit_api_changed", "timeout"],
   "inventory.unequip": [...INVENTORY, "not_added_by_bridge", "timeout"],
   "cc.back": ["creator_leave_disabled", "not_in_character_menu"],
-  "game.save": ["bridge_save_lock", "bridge_effects_active", "saving_locked", "no_free_slot", "save_failed", "save_uncertain", "not_in_gameplay"],
+  "game.save": ["bridge_save_lock", "bridge_effects_active", "saving_locked", "no_free_slot", "save_failed", "save_uncertain", "not_in_gameplay", "save_in_progress"],
   "game.load": ["not_in_gameplay", "save_not_found", "metadata_pending", "unavailable", "timeout"],
   "game.continue": ["no_safe_route"],
   "ui.message": [],
@@ -217,12 +222,18 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "cyberware.equip": [...INVENTORY, "arms_drawn", "not_equippable", "unavailable"],
   "cyberware.unequip": [...INVENTORY, "arms_drawn", "not_added_by_bridge"],
   "world.state": ["game_not_ready"],
+  // The senses for the Story Engine (catalogueSenses.ts): game_not_ready on the main menu and during a load.
+  "world.facts": ["game_not_ready", "unavailable"],
+  "world.district": ["game_not_ready", "no_district", "unavailable"],
+  "player.status": ["game_not_ready", "not_in_gameplay"],
   "world.probe": ["unavailable"],
   "world.weather.set": ["codeware_missing", "quest_scene", "not_in_gameplay", "call_failed", "unavailable"],
   "ui.state": ["game_not_ready"],
   "game.saves": ["unavailable", "game_not_ready"],
   "photo.scene.set": ["not_in_photo_mode", "unavailable", "write_mismatch"],
   "overlay.state": [],
+  // NPC direction (0.8, part B): its own map, kept beside its commands (catalogue080npc.ts).
+  ...NPC_REFUSALS,
 };
 
 /**

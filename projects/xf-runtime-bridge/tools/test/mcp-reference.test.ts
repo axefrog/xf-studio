@@ -61,13 +61,13 @@ describe("MCP reference", () => {
 
   test("a new command changes the reference, and lands in Other tools until an area claims it", () => {
     const extra: CommandDef = {
-      name: "npc.wave",
+      name: "crowd.wave",
       title: "Wave at V",
       description: "A test command the catalogue doesn't have.",
       permission: "write-player",
       input: obj({ style: oneOf("How to wave.", ["small", "big"]) }, ["style"]),
       undo: "Nothing to put back.",
-      bridge: { method: "npc.wave" },
+      bridge: { method: "crowd.wave" },
     };
     expect(areaOf(extra).id).toBe("other-tools");
     const text = renderReference([...CATALOGUE, extra]);

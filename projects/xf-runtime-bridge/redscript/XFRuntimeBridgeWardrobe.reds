@@ -171,8 +171,23 @@ public abstract class XFWardrobe {
     return out + "}";
   }
 
+  // 0.8.11: the item a script outfit shows in the area (invalid when none does).
+  public static func ScriptItem(area: gamedataEquipmentArea) -> ItemID {
+    return XFScriptOutfit.ItemFor(XFInventory.Player(), area);
+  }
+
+  // The item the outfit shows in the area: a script outfit's part, else the wardrobe set's overridden visual.
+  public static func OutfitItem(data: ref<EquipmentSystemPlayerData>, area: gamedataEquipmentArea) -> ItemID {
+    let part = XFWardrobe.ScriptItem(area);
+    return ItemID.IsValid(part) ? part : data.GetSlotOverridenVisualItem(area);
+  }
+
   // What an area shows now: "outfit" (the active outfit's item), "hidden", "equipped" or "empty".
   public static func Shows(data: ref<EquipmentSystemPlayerData>, area: gamedataEquipmentArea) -> String {
+    // 0.8.11: a script outfit (Equipment-EX) draws its own parts and clears the vanilla flags, so the part decides first.
+    if ItemID.IsValid(XFWardrobe.ScriptItem(area)) {
+      return "outfit";
+    }
     if data.IsSlotHidden(area) {
       return "hidden";
     }
@@ -192,7 +207,7 @@ public abstract class XFWardrobe {
     if Equals(shows, "equipped") || Equals(shows, "empty") {
       return "";
     }
-    return ",\"outfit\":{" + XFWardrobe.ManagerJson(data) + ",\"set\":" + IntToString(XFWardrobe.ActiveSet()) + ",\"area\":" + XFJson.Str(XFInventory.AreaName(area)) + ",\"shows\":" + XFJson.Str(shows) + ",\"outfit_item\":" + XFJson.Str(XFInventory.ItemName(data.GetSlotOverridenVisualItem(area))) + "}";
+    return ",\"outfit\":{" + XFWardrobe.ManagerJson(data) + ",\"set\":" + IntToString(XFWardrobe.ActiveSet()) + ",\"area\":" + XFJson.Str(XFInventory.AreaName(area)) + ",\"shows\":" + XFJson.Str(shows) + ",\"outfit_item\":" + XFJson.Str(XFInventory.ItemName(XFWardrobe.OutfitItem(data, area))) + "}";
   }
 
   // wardrobe.state (read).
@@ -212,7 +227,7 @@ public abstract class XFWardrobe {
       if i > 0 {
         out += ",";
       }
-      out += "{\"area\":" + XFJson.Str(XFInventory.AreaName(areas[i])) + ",\"shows\":" + XFJson.Str(XFWardrobe.Shows(data, areas[i])) + ",\"outfit_item\":" + XFJson.Str(XFInventory.ItemName(data.GetSlotOverridenVisualItem(areas[i]))) + ",\"hidden\":" + XFJson.Flag(data.IsSlotHidden(areas[i])) + ",\"equipped\":" + XFJson.Str(XFInventory.ItemName(data.GetActiveItem(areas[i]))) + "}";
+      out += "{\"area\":" + XFJson.Str(XFInventory.AreaName(areas[i])) + ",\"shows\":" + XFJson.Str(XFWardrobe.Shows(data, areas[i])) + ",\"outfit_item\":" + XFJson.Str(XFInventory.ItemName(XFWardrobe.OutfitItem(data, areas[i]))) + ",\"hidden\":" + XFJson.Flag(data.IsSlotHidden(areas[i])) + ",\"equipped\":" + XFJson.Str(XFInventory.ItemName(data.GetActiveItem(areas[i]))) + "}";
       i += 1;
     }
     out += "],\"sets\":[";

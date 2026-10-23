@@ -1,7 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { USER_FACING_JARGON } from "../src/app/alpha-availability";
 import type { DotNetInstall } from "../src/setup/host/dotnet-runtime";
@@ -11,6 +10,7 @@ import { isWolvenKitSetupState, wolvenKitCard, wolvenKitConsent, wolvenKitLinkUr
 import { WOLVENKIT_RELEASE, type ManagedToolRelease } from "../src/setup/wolvenkit-release";
 import { WOLVENKIT_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { makeZip } from "./zip-fixture";
+import { tempDir } from "./temp-dir";
 
 // A stand-in release: the same shape as WolvenKit's console ZIP, served by a local fixture server.
 const RUNTIMECONFIG = JSON.stringify({ runtimeOptions: { tfm: "net10.0", framework: { name: "Microsoft.NETCore.App", version: "10.0.0" } } });
@@ -39,7 +39,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
 } });
 const roots: string[] = [];
 afterAll(() => { server.stop(true); for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-wolvenkit-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-wolvenkit-"); roots.push(root); return root; };
 
 const release = (asset = "ok.zip"): ManagedToolRelease => ({ ...WOLVENKIT_RELEASE, version: "9.9.9-fixture", asset,
   url: `http://127.0.0.1:${server.port}/${asset}`, archiveBytes: ZIP.length, archiveSha256: sha(ZIP),

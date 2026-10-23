@@ -88,7 +88,7 @@ The structure is the same at every scale, from the city down to the words on a b
 
 ### 5.1 Drives: what governs relevance
 
-The top of every chain is a set of **drives**, the kinds of thing that make anything matter to an actor. This catalogue is the key design surface. It is data, so content packs can extend it. A first draft, to be replaced by P1's motivation dossier:
+The top of every chain is a set of **drives**, the kinds of thing that make anything matter to an actor. This catalogue is the key design surface. It is data, so content packs can extend it. The draft below shows the shape. It is superseded by **catalogue v1** in [dossier 1](craft/d01-motivation-drives.md): 39 drives in ten families, plus group, director and seed drives, with urgency derived from timestamped facts, never ticked ([DS-66](design-seeds.md)).
 
 | Family | Drives | Typical localities they make relevant |
 |---|---|---|
@@ -241,28 +241,15 @@ The [four layers](plan.md#2-the-system-at-first-level) stay as ownership boundar
 | 4. Authored content | Contributions and pins, as data, in packs |
 | Tooling | Explanation is tracing provenance |
 
-## 8. Formal grounding
+## 8. Comparisons with outside work
 
-To be researched in P3, so the model stays honest. We implement a small toolkit, not a general prover.
+The model is the project's own. Some outside formalisms resemble parts of it. They are useful as comparisons when checking the design, and are not its sources:
+- **Structure:** category theory (objects and maps), ologs, and sheaves (local views that agree on overlaps).
+- **Computation:** lazy, memoised random choice and conditioning, as in probabilistic programming languages.
+- **Context and relevance:** goal hierarchies in agent architectures, top-down expectation in script theory, and incremental rule matching.
+- **Search:** constraint satisfaction, interval bounds and spatial indexing.
 
-- **Structure: applied category theory.**
-  - Dimensions are objects and maps are morphisms.
-  - Ologs are a way of writing down knowledge.
-  - Sheaves capture consistency between local resolutions ([DS-51](design-seeds.md)).
-- **Computation: probabilistic programming.**
-  - Open addresses are random variables and contributions are factors.
-  - Sampling is lazy and memoised by address, as in Church's stochastic memoisation.
-  - Canon is conditioning on observations.
-- **Context and relevance:**
-  - agent architectures: belief–desire–intention agents, goal-oriented action planning, hierarchical task networks;
-  - scripts and frames (Schank and Abelson) for top-down expectation;
-  - scope chains and persistent data structures for cheap parent-plus-increment frames;
-  - incremental rule matching (the Rete algorithm; incremental story sifting) for finding who cares about an event;
-  - motivation research: Maslow, Reiss's basic desires, self-determination theory, Schwartz's basic values; and needs models in games such as The Sims;
-  - groups: role theory and role conflict, cross-pressure from multiple memberships, social identity theory, and principal–agent theory for leaders, members and contractors;
-  - perspectives: attribution theory and the fundamental attribution error, theory of mind, rumour transmission, and reputation systems;
-  - Doran and Parberry's finding that game quests derive from NPC motivations.
-- **Search:** constraint satisfaction, interval bounds and hierarchical spatial indexing for queries.
+We implement a small toolkit, not a general framework.
 
 ## 9. The reference model and the compromise ledger
 
@@ -276,9 +263,10 @@ To be researched in P3, so the model stays honest. We implement a small toolkit,
 | # | The model says | We do instead | Why | Revisit when |
 |---|---|---|---|---|
 | C-01 | Canon conditions the whole world's distribution on what V observed | Generate, then justify: construct causes consistent with the pins ([DS-29](design-seeds.md)) | Inference over the whole world is far too expensive | Constructed causes contradict each other or read as implausible |
-| C-02 | A believer's view is a full perspective over every dimension | Beliefs are sparse records formed by fixed attribution rules ([kernel §11](spec/kernel.md#11-beliefs-and-perspectives)) | Full per-actor perspectives cost too much | A story needs an NPC to reason about something no rule covers |
-| C-03 | Relevance follows from what matters to each actor | Fixed match weights per index type and key type ([kernel §10.4](spec/kernel.md#104-the-interest-registry-and-matching)) | Simple and cheap; tunable | Evaluation shows misplaced attention that tuning can't fix |
-| C-04 | Text is a dimension like any other | Text is sampled by grammar with bounded retries under constraints ([kernel §5.1](spec/kernel.md#51-algorithm)) | Inverse cumulative distribution over all strings is impractical | Constrained text generation fails or repeats noticeably |
+| C-02 | A believer's view is a full perspective over every dimension | Beliefs are sparse records; their forming, telling and fading are simulation policies ([kernel §11](spec/kernel.md#11-beliefs-and-perspectives)) | Full per-actor perspectives cost too much | A story needs an NPC to reason about something no rule covers |
+| C-03 | Relevance follows from what matters to each actor | Fixed match weights per interest type and specificity, set by calibration fixtures ([kernel §10.5](spec/kernel.md#105-changes-and-matching)) | Simple and cheap | Evaluation shows misplaced attention that tuning can't fix |
+| C-04 | Every dimension is sampled the same way | Draws enumerate at most a set number of values; large lists are split by an earlier slot; text and vectors are derived, mirrored or pinned, never drawn ([kernel §5.4](spec/kernel.md#54-the-draw-flat-gumbel-max)) | Drawing over huge domains per sample is impractical | A dimension can't be split this way |
+| C-05 | Pins propagate both ways through everything | Backward narrowing only through unary preimages and structural counts; dependencies follow declaration order and the owner chain, and refs are not dependencies ([kernel §2.3](spec/kernel.md#23-dependencies-are-well-founded)) | Termination and simplicity | A later fact must constrain an earlier one in a way these can't express |
 
 ## 10. Worked example: one vendor
 

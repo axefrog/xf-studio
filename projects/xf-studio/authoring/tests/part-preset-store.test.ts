@@ -4,8 +4,7 @@
  */
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { CollectionLibrary } from "../src/library/host/collection-store";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
@@ -17,6 +16,7 @@ import { openTestLibrary } from "./fixtures/library-file";
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { parseRecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
+import { tempDir } from "./temp-dir";
 
 const expression = (controls: Record<string, number>) => ({ schema: "xfs/expression-part-1", body: { controls, links: {} } });
 
@@ -29,7 +29,7 @@ function presetLibrary(path: string, newId?: () => string) {
 }
 
 function library() {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-part-presets-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfs-part-presets-"), path = join(dir, "library.sqlite");
   beforePresets(path).close();
   return { path, cleanup: () => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } } };
 }

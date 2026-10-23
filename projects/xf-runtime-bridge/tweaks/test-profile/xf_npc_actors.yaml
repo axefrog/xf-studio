@@ -1,0 +1,221 @@
+# XF Runtime Bridge 0.8: the XF actors npc.spawn brings in (research/runtime/npc-direction-design.md §5.1). The test
+# profile's -writes package only.
+#
+# Each is our own TweakXL clone ($base) of a base-game crowd civilian, so no vanilla record is ever changed (AMM changes
+# vanilla records in place, which affects every NPC of that record for the session). What each clone changes:
+#   isCrowd: false          a full AI puppet that takes AI commands, not a crowd-lane walker [hypothesis: session 9, N4-N5]
+#   entityTemplatePath      the base game's own citizen template, so no clone needs Phantom Liberty (the vanilla crowd
+#                           records use the ep1 variant when it is installed)
+#   reactionPreset          Civilian_NoReaction: calm, no crime or panic reactions. It does NOT stop the look-at reaction
+#                           (the aggressive face and the "greeting" bark when V comes close; session 15): the bridge's
+#                           script layer holds that back for these quiet actors (XFRuntimeBridgeNpc.reds, 0.8.9)
+#   affiliation             Factions.Unaffiliated (no gang or faction ties)
+#   priority                Regular, as the game's own _quest crowd variants use, so the population budget keeps it
+#   objectActions: []       no Talk prompt when V looks at it (it would block npc.choices as choices_busy)
+#   items: []               no umbrellas, phones or cans from the crowd props
+#   savable: false          never saved (the spawn is non-persistent anyway)
+# The records and fields are from the game's REDmod TweakDB sources (characters/bases/base_records.tweak:42-68,
+# characters/npcs/records/crowds/communities.tweak, personalities/base_values.tweak:372, factions/factions.tweak:323,
+# characters/spawnable_object_priority.tweak:10) [resource].
+
+XFRuntimeBridge.Npc.actorsVersion: 2
+
+Character.xfs_actor_woman_corpo:
+  $base: Character.CorpoWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__corporat_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_corpo:
+  $base: Character.CorpoMan
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__corporat_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_woman_nightlife:
+  $base: Character.NightlifeWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__nightlife_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_youngster:
+  $base: Character.YoungsterMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__youngster_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_woman_lowlife:
+  $base: Character.LowlifeWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_lowlife:
+  $base: Character.LowlifeMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+# Masked (casting data for text lines without lip sync): the same clones, from templates whose appearances cover the mouth.
+# npc.spawn picks the masked appearance by name (core/Npc.cpp Casts()): the woman's is citizen__creole_wa_caribbean_29
+# (an h1_051 headkerchief mask), the man's are king_of_the_stoop_ma 012 (an h1_031 hazmat respirator), 03 and 014
+# (h1_051 and h1_050 headkerchief masks) [resource: the base game's citizen__creole_wa.ent and citizen__lowlife_ma.ent and
+# their .app garments; how well each hides the mouth in game is session 9's N16].
+Character.xfs_actor_woman_masked:
+  $base: Character.CreoleWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__creole_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_masked:
+  $base: Character.LowlifeMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+# Session 9's comparison (N4): the plain NPC base (never a crowd record) with the same civilian template, attitude and
+# preset, to tell whether a crowd record's clone behaves differently from a non-crowd one. research_crowd_record spawns the
+# vanilla Character.CorpoWoman itself (no record needed here).
+Character.xfs_actor_research_npc_base:
+  $base: Character.NPC_Base
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__corporat_wa.ent'
+  baseAttitudeGroup: civilian
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+# V15 (the Story Engine's mortal and hostile stand-ins): each cast again with the game's own civilian reactions, for
+# npc.spawn {reactions: "game"}. Only reactionPreset differs: ReactionPresets.Civilian_Neutral, the preset of the crowd base
+# every civilian derives from (characters/bases/base_records.tweak:42-68) [resource], so a stand-in that is shot reacts as a
+# passer-by would (flees, cowers, may bring the police) instead of standing calm [hypothesis: session 15's NPC rows].
+# Attitude and god mode are set at spawn, not here.
+Character.xfs_actor_woman_corpo_reactive:
+  $base: Character.CorpoWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__corporat_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_corpo_reactive:
+  $base: Character.CorpoMan
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__corporat_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_woman_nightlife_reactive:
+  $base: Character.NightlifeWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__nightlife_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_youngster_reactive:
+  $base: Character.YoungsterMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__youngster_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_woman_lowlife_reactive:
+  $base: Character.LowlifeWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_lowlife_reactive:
+  $base: Character.LowlifeMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_woman_masked_reactive:
+  $base: Character.CreoleWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__creole_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_masked_reactive:
+  $base: Character.LowlifeMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_Neutral
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false

@@ -1,7 +1,6 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/setup/local-settings";
 import { LocalSettingsStore } from "../../src/setup/host/local-settings-store";
@@ -22,8 +21,9 @@ import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
 import { preparePackageCollection } from "../../tests/fixtures/eye-exporter";
+import { tempDir } from "../../tests/temp-dir";
 
-const root = realpathSync.native(mkdtempSync(resolve(tmpdir(), "xfs-desktop-build-test-"))); // Canonical: CI temp folders use 8.3 short names.
+const root = realpathSync.native(tempDir("xfs-desktop-build-test-")); // Canonical: CI temp folders use 8.3 short names.
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));

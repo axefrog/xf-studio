@@ -70,6 +70,12 @@ export function previewTile(options: { label: string; glyph: IconName }): Previe
 
 /** Turntable timing: the dwell before a resting pointer starts the spin, one slow turn, and how far a drag turns (one turn per 1.5 frame widths). */
 export const SPIN = Object.freeze({ dwellMs: 400, turnMs: 8000, dragWidths: 1.5, dragThreshold: 4 });
+/**
+ * The turn (degrees) after a horizontal drag of `dx` px across a picture `width` px wide. A larger turn moves the turntable camera to its
+ * right (`turntableYaw`, `previewCamera`), so the facing surface moves left on screen: the turn goes down as the pointer goes right, and
+ * the surface under the pointer follows the hand. The hover spin (turn going up) keeps its leftward turn.
+ */
+export const dragTurn = (start: number, dx: number, width: number) => start - (dx * 360) / (Math.max(1, width) * SPIN.dragWidths);
 /** Measurement (tools and `?verify=1` sessions read it from the page as `xfsSpinMeasures`): ms from the pointer arriving to the first turn shown. */
 export const spinMeasures: number[] = [];
 (globalThis as { xfsSpinMeasures?: number[] }).xfsSpinMeasures = spinMeasures;
@@ -238,8 +244,7 @@ export class PreviewSpin {
       this.stop();
       try { this.host.setPointerCapture(drag.id); } catch { /* A pointer already gone. */ }
     }
-    const width = this.host.clientWidth || 1;
-    this.angle = drag.start + (dx * 360) / (width * SPIN.dragWidths);
+    this.angle = dragTurn(drag.start, dx, this.host.clientWidth);
     this.paint();
   }
   private up(event: PointerEvent) {

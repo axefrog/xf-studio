@@ -506,7 +506,7 @@ export class CommandApi {
     if (!response.ok && (response.error?.code === "disconnected" || response.error?.code === "client_timeout") && this.connection === connection) this.disconnect();
     if (this.connection && this.inFlight === 0) this.touch();
     if (response.ok) return { ok: true, result: response.result };
-    return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message) };
+    return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message, method) };
   }
 
   /**
@@ -529,6 +529,14 @@ export class CommandApi {
     this.idleTimer = setTimeout(() => this.disconnect(), this.idleCloseMs);
     // Don't keep a CLI process alive just for the idle timer.
     (this.idleTimer as { unref?: () => void }).unref?.();
+  }
+
+  /**
+   * 0.8.4: lets the main pipe go while nothing of this API is in flight on it, so a long local wait (game.wait,
+   * session.wait) holds it only during each poll and another process's XF tools can call between polls.
+   */
+  release() {
+    if (this.inFlight === 0) this.disconnect();
   }
 
   disconnect() {

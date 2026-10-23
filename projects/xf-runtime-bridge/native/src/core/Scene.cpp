@@ -17,7 +17,7 @@ const std::vector<std::string>& Parts()
 
 ReadRequest ParseRead(const json& aParams)
 {
-    params::RequireOnly(aParams, {"parts", "radius", "max_npcs", "occlusion", "points", "piece_eyes"});
+    params::RequireOnly(aParams, {"parts", "radius", "max_npcs", "occlusion", "points", "piece_eyes", "npc_detail"});
     ReadRequest request;
     if (const auto it = aParams.find("parts"); it != aParams.end() && !it->is_null())
     {
@@ -40,6 +40,7 @@ ReadRequest ParseRead(const json& aParams)
     request.radius = static_cast<float>(params::CheckNumber(aParams, "radius", 0.0, 60.0).value_or(20.0));
     request.maxNpcs = static_cast<int32_t>(params::CheckInteger(aParams, "max_npcs", 0, 32).value_or(8));
     request.occlusion = params::CheckBoolean(aParams, "occlusion").value_or(true);
+    request.npcDetail = params::CheckBoolean(aParams, "npc_detail").value_or(false);
     if (const auto it = aParams.find("points"); it != aParams.end() && !it->is_null())
     {
         if (!it->is_array() || it->size() > 32)

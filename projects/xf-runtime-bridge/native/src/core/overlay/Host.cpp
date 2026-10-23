@@ -158,6 +158,49 @@ std::string LimitToGlyphs(const std::string& aText)
     return out;
 }
 
+std::pair<float, float> PanelOrigin(const std::string& aAnchor, double aX, double aY, float aScreenW, float aScreenH, float aBoxW, float aBoxH)
+{
+    // The floors of tools/overlay/ink-place.ts FLOORS and redscript XFInkStyle.Floor (session 10's capture at 3840 x 1600).
+    struct Floor
+    {
+        const char* anchor;
+        float x;
+        float y;
+    };
+    static constexpr Floor kFloors[] = {{"top_left", 0, 300},  {"top_center", 0, 140},     {"top_right", 860, 0},
+                                        {"center_left", 0, 0}, {"center", 0, 0},           {"center_right", 860, 0},
+                                        {"bottom_left", 0, 520}, {"bottom_center", 0, 480}, {"bottom_right", 860, 480}};
+    float fx = 0.0f;
+    float fy = 0.0f;
+    bool known = false;
+    for (const auto& floor : kFloors)
+    {
+        if (aAnchor == floor.anchor)
+        {
+            fx = floor.x;
+            fy = floor.y;
+            known = true;
+        }
+    }
+    const std::string anchor = known ? aAnchor : std::string("top_left");
+    const auto endsWith = [&anchor](const char* aSuffix) {
+        const std::string suffix(aSuffix);
+        return anchor.size() >= suffix.size() && anchor.compare(anchor.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+    const float px = endsWith("_right") ? 1.0f : (endsWith("_center") || anchor == "center") ? 0.5f : 0.0f;
+    const float py = anchor.rfind("bottom_", 0) == 0 ? 1.0f : anchor.rfind("center", 0) == 0 ? 0.5f : 0.0f;
+    const float unit = aScreenW > 0.0f ? aScreenW / 3840.0f : 1.0f;
+    const float hud = aScreenH > 0.0f ? aScreenH / 2160.0f : 1.0f;
+    const float ox = fx > 0.0f ? std::max(static_cast<float>(aX) * unit, fx * hud) : static_cast<float>(aX) * unit;
+    const float oy = fy > 0.0f ? std::max(static_cast<float>(aY) * unit, fy * hud) : static_cast<float>(aY) * unit;
+    float left = px * aScreenW + (px > 0.9f ? -ox : ox) - px * aBoxW;
+    float top = py * aScreenH + (py > 0.9f ? -oy : oy) - py * aBoxH;
+    const float margin = 8.0f * unit;
+    left = std::clamp(left, margin, std::max(margin, aScreenW - margin - aBoxW));
+    top = std::clamp(top, margin, std::max(margin, aScreenH - margin - aBoxH));
+    return {left, top};
+}
+
 const char* PhaseName(Phase aPhase)
 {
     switch (aPhase)

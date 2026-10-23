@@ -671,6 +671,12 @@ export class StudioApplication {
     const route = this.routes.routeAsync(kind);
     return kind !== "open" && route.ok && (route.descriptor as { effect?: string }).effect === "read";
   }
+  /**
+   * A read-only page refuses every dispatch (profiles design §2.3) except the recovery export: it writes nothing to the library or
+   * the lease's documents, only this page's own copy out to a file, and it is how a page that kept or lost the workspace gets
+   * its work out.
+   */
+  private readOnlyFile(kind: string) { return kind === "collection.exportWindowCopy"; }
   capability(action: StudioAction): StudioCapability {
     const s = this.services, route = this.routes.route(action.kind);
     if (!route.ok) return unknownCommand();
@@ -1120,12 +1126,12 @@ export class StudioApplication {
   fileDescriptor(kind: string) { return this.routes.asyncDescriptors("files")[kind] as FileDescriptor | undefined; }
   /** A file workflow's capability, routed by the registry to the `files` family (the workflow's own answer). */
   fileCapability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
-    const denied = this.denied();
+    const denied = this.readOnlyFile(action.kind) ? undefined : this.denied();
     if (denied) return denied;
     return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.capability(action) : unknownCommand();
   }
   executeFile(action: StudioFileAction): Promise<StudioFileOutcome> {
-    const denied = this.denied();
+    const denied = this.readOnlyFile(action.kind) ? undefined : this.denied();
     if (denied) return Promise.resolve({ ok: false, code: denied.code!, message: denied.reason! });
     return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.execute(action)
       : Promise.resolve({ ok: false, code: "invalid_value", message: "Unknown command." });

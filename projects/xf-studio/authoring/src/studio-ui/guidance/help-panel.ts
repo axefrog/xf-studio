@@ -53,7 +53,7 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
   const linkRows: { label: string; detail: string | HTMLElement; run(): void; className?: string }[] = [
     { label: "Check for updates", detail: updateDetail, className: "help-check-updates",
       run: () => { if (!isUnavailable(updateButton)) void checkForUpdatesNow(rt, false); } },
-    ...HELP_LINKS.map(item => ({ label: item.label, detail: item.detail, run: () => void open(item.link) }))];
+    ...HELP_LINKS.map(item => ({ label: item.label, detail: item.detail, className: "className" in item ? item.className : undefined, run: () => void open(item.link) }))];
   // Settings, where everything about this computer is chosen (UI-109).
   const settings = h("li", {}, h("button", { class: "link-button help-settings", type: "button", text: "Settings", onclick: () => rt.settings.open() }),
     h("small", { class: "muted", text: "Your game, mod manager, saves, tools, appearance and diagnostics." }));

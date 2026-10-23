@@ -7,12 +7,14 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/Api/v1/Sdk.hpp>
 
 #include "core/Behaviours.hpp"
 #include "core/LayoutGuard.hpp"
+#include "core/PinViews.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
 #include "core/Player.hpp"
@@ -23,6 +25,7 @@
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
 #include "core/OptionsExchange.hpp"
+#include "core/Probes.hpp"
 #include "core/ScriptLayer.hpp"
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
@@ -84,6 +87,8 @@ struct State
     // ui.message: the coordinator's short messages under the in-game label, read by the CET layer
     // (XFBridge_Messages). Cleared by the kill switch; a killed bridge shows none.
     MessageBoard messages;
+    // 0.8.5: which questions have had their sound ([ui] question_sound); the Running tick's only (game thread).
+    QuestionChime questionChime;
 
     // Bridge 0.6: the session event stream (session.events; XFBridge_Note adds notes from the game), the behaviour runner
     // (behave.*, ticked on the game thread from the Running update) and player.teleport's pacer (2 a second).
@@ -121,6 +126,15 @@ struct State
 
     // 0.8.3: the bridge's own kill key's press detection (game thread only; Main.cpp PollKillKey).
     killkey::Watch killKeyWatch;
+    // 0.8.4: the kill key can be changed from the XF Runtime Bridge window (XFBridge_KillKey) while the game runs, so after
+    // load config.killKey is read and written only under this lock, with what else may react to it (core FindConflicts).
+    std::mutex killKeyMutex;
+    killkey::Conflicts killKeyConflicts;
+    std::atomic<bool> killKeyChanged{false}; // the press detection starts afresh (a release first) after a change
+    killkey::Chord KillKey();
+
+    // 0.8.4, test hook (test.save.delay; the -writes package only): the next game.save's hold after prepare, in ms; taken once.
+    std::atomic<int32_t> saveHoldMs{0};
 
     // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].
     xfb::overlay::OverlayHost overlayHost;
@@ -131,7 +145,26 @@ struct State
     std::atomic<bool> rearmRequested{false};
     std::atomic<uint64_t> rearmRequestedAt{0}; // running tick of the request
     std::mutex rearmMutex;
-    nlohmann::json lastRearm; // {ok, message, at_tick} or null; guarded by rearmMutex
+    nlohmann::json lastRearm; // {ok, code (0.8.6), message, at_tick} or null; guarded by rearmMutex
+
+    // 0.8.7: the player's own saves refused while the bridge's save lock held (XFBridge_SaveRefused: how many, when, in steady
+    // milliseconds), and the XF Runtime Bridge window's Save anyway (XFBridge_SaveAnyway): one at a time, on its own thread
+    // (joined at unload), with its outcome for the window (a sequence number and plain text, under saveAnywayMutex).
+    std::atomic<uint64_t> saveRefusals{0};
+    std::atomic<int64_t> saveRefusedAtMs{0};
+    std::atomic<bool> saveAnywayRunning{false};
+    std::mutex saveAnywayMutex;
+    std::thread saveAnywayThread;
+    uint64_t saveAnywaySeq = 0;
+    std::string saveAnywayLast;
+
+    // 0.8.7, test probes ([bridge] allow_test_hooks; core/Probes.hpp): the game-events and save-identity probes' ring
+    // (XFBridge_Event, test.events), and their switches (XFBridge_ProbeFlags: 2 the stim tap, 4 the BeforeSave write armed).
+    probes::ProbeRing probeEvents;
+    std::atomic<int32_t> probeSwitches{0};
+
+    // 0.8.9 (the Sol review, finding 3): the views that have drawn each XF pin, OR-ed under one lock (XFBridge_PinDrawn).
+    PinViews pinViews;
 };
 
 State& Get();
@@ -141,4 +174,15 @@ nlohmann::json InfoJson();
 std::string HudFrame();
 // 0.8: the bridge's state as every panel's status line reads it (core/InkUi.hpp Summarize).
 inkui::BridgeView BridgeViewNow();
+// 0.8.4: what else may react to a kill key, from the game's input files and CET's hotkeys (read only).
+killkey::Conflicts ReadKillKeyConflicts(const killkey::Chord& aChord);
+// 0.8.4: bridge_info's kill_key: the key, its config.ini spelling, the default, and the warnings and notes about it.
+nlohmann::json KillKeyJson();
+// 0.8.4 (XFBridge_KillKey): sets the kill key from a chord's text (the window's Change..., or the default for Reset), saves it
+// to config.ini's [ui] kill_key, and answers {ok, kill_key, saved, save_error?, why?}. A refused text changes nothing.
+nlohmann::json SetKillKey(const std::string& aText, const std::string& aSource);
+// 0.8.7: whether the XF Runtime Bridge window offers Save anyway now, and bridge_info's save_lock (the offer, the refusals of
+// the player's saves, the last outcome of Save anyway).
+bool SaveAnywayOffered();
+nlohmann::json SaveLockJson();
 } // namespace xfb::plugin

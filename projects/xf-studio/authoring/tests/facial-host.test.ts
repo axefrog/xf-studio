@@ -5,8 +5,7 @@
  * No game data, no Python: the solver process is a fake (CI runs on Linux).
  */
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createFacialHandler, facialSetupSource, FacialHost, IN_APP_SOLVER, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
   type FacialSolverProcess, type FacialSolverSpawner } from "../src/animation/host/facial-host";
@@ -16,6 +15,7 @@ import { FACE_MOTION_SCHEMA, type FaceMotionClip } from "../src/platform/api/fac
 import { depotHash } from "../src/game/depot-path";
 import type { Installation } from "../src/game/host/resolver-host";
 import { cn, cr2w, fixtureInstallation, handle, rh } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
 const SET = "base\\animations\\ui\\photomode\\test_faces.anims";
 const MAIN = ["eye_l_blink", "eye_r_blink", "lips_l_corner_up", "lips_r_corner_up", "jaw_mid_open", "lips_tighten_up"];
@@ -155,7 +155,7 @@ function toyFace(frames: readonly Float32Array[]) {
 
 test("the face is solved with the facial setup V's face rig names for its skeleton (design D1), the female head's own on request", async () => {
   for (const [source, expected] of [["face-rig", "h0_001_ma_c__player_rigsetup.facialsetup"], ["female-head", "h0_000_pwa_c__basehead_rigsetup.facialsetup"]] as const) {
-    const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+    const root = tempDir("xfs-facial-");
     try {
       const { host } = world(root, { maleFaceRig: true, setupSource: source });
       host.expressions(); await host.settled(); await Promise.resolve();
@@ -164,7 +164,7 @@ test("the face is solved with the facial setup V's face rig names for its skelet
     } finally { rmSync(root, { recursive: true, force: true }); }
   }
   // A face rig that names no setup for this skeleton leaves the female head's own.
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const { host } = world(root, { setupSource: "face-rig" });
     host.expressions(); await host.settled(); await Promise.resolve();
@@ -184,7 +184,7 @@ test("readFaceRigSetup: the face_rig for the given skeleton, a later patch winni
 });
 
 test("the face rig, blink and installed expressions come from the winning files; the table's winner is followed", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const { host, extractions } = world(root);
     expect(host.state()).toMatchObject({ rig: { phase: "preparing" }, expressions: { phase: "preparing" } });
@@ -214,7 +214,7 @@ test("the face rig, blink and installed expressions come from the winning files;
 });
 
 test("solves run one at a time, newest first: a request still waiting is answered superseded; the blink composes before the solve", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const { host, solves } = world(root);
     host.expressions(); await host.settled(); await Promise.resolve();
@@ -239,7 +239,7 @@ test("solves run one at a time, newest first: a request still waiting is answere
 });
 
 test("without a game folder the host says so plainly; the solver is found only where it is put, never at a developer path", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const host = new FacialHost({ cacheRoot: root, resolverCache: root, solver: () => ({ missing: SOLVER_MISSING }),
       settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });
@@ -283,7 +283,7 @@ function fakeProcess(options: { ready?: boolean; hang?: boolean } = {}) {
 const ready = async (host: FacialHost) => { host.expressions(); await host.settled(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
 test("a solver program that can't be started says plainly that it isn't set up, and the installed expressions still load (CORE-99)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const { host } = world(root, { spawn: () => { throw Error("ENOENT: python"); } });
     await ready(host);
@@ -303,7 +303,7 @@ test("a solver program that can't be started says plainly that it isn't set up, 
 });
 
 test("a solve that doesn't come back in time fails plainly, and the solver is started again for the next solve (CORE-100)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const processes = [fakeProcess({ hang: true }), fakeProcess()];
     let spawned = 0;
@@ -318,7 +318,7 @@ test("a solve that doesn't come back in time fails plainly, and the solver is st
 });
 
 test("a crashed solver is started again within a budget that refills; past it the state says so instead of ready (CORE-101)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     let clock = 1_000_000, spawned = 0;
     const made: ReturnType<typeof fakeProcess>[] = [];
@@ -344,7 +344,7 @@ test("a crashed solver is started again within a budget that refills; past it th
 });
 
 test("pages take turns: a newer pose replaces only the same page's waiting one (CORE-104)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const { host, solves } = world(root);
     await ready(host);
@@ -365,7 +365,7 @@ test("pages take turns: a newer pose replaces only the same page's waiting one (
 });
 
 test("the solve endpoint reads its body within the limit and refuses JSON that isn't a pose (CORE-106)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const { host } = world(root);
     await ready(host);
@@ -380,7 +380,7 @@ test("the solve endpoint reads its body within the limit and refuses JSON that i
 });
 
 test("the facial cache is bounded, counted and cleared with the prepared game files, and crash leftovers are swept (CORE-102)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     // A temporary folder a host left mid-extraction two hours ago, and an old animation set nobody uses.
     const leftover = join(root, "facial", "tmp", "facial-1-old");
@@ -409,7 +409,7 @@ test("the facial cache is bounded, counted and cleared with the prepared game fi
 });
 
 test("start points are read again when an animation set's archive changes, not served from an older installation's cache (CORE-103)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const first = world(root);
     await ready(first.host);
@@ -423,7 +423,7 @@ test("start points are read again when an animation set's archive changes, not s
 });
 
 test("the real protocol over a process's pipes: split and joined lines, a printed warning, a lost answer, and a crash mid-request (CORE-100)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     // Any program that speaks the protocol: Bun itself runs a stand-in for the Python server, so the test needs no Python.
     const script = join(root, "solver.js");
@@ -468,7 +468,7 @@ test("the real protocol over a process's pipes: split and joined lines, a printe
 });
 
 test("a clear keeps the stopped preparation current until its files are gone, so a question meanwhile can't lose a new one's files (CORE-108)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     // The first preparation's extraction waits until released; everything after answers at once.
     let release!: () => void, entered!: () => void;
@@ -492,7 +492,7 @@ test("a clear keeps the stopped preparation current until its files are gone, so
 });
 
 test("a failed preparation is tried again on a later question, not kept for its installation (CORE-108)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     let now = 1_000_000;
     const { host } = world(root, { now: () => now, gate: async n => { if (n === 1) throw Error("The archive was busy."); } });
@@ -513,7 +513,7 @@ test("a failed preparation is tried again on a later question, not kept for its 
 const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 
 test("the idle's face and the blink read only the face: the installed expressions wait until something asks for them (PREV-179)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const { host, extractions } = world(root, { solvable: true, inApp: true });
     const source = await host.faceSource();
@@ -535,7 +535,7 @@ test("the idle's face and the blink read only the face: the installed expression
 });
 
 test("the game's blink solved by XF Studio's own solver: the clip at 60 Hz and the closure in 21 steps, through its endpoint (PREV-181)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const { host } = world(root, { solvable: true, inApp: true });
     const blink = await host.blink();
@@ -565,7 +565,7 @@ test("the game's blink solved by XF Studio's own solver: the clip at 60 Hz and t
 });
 
 test("with XF Studio's own solver the face's documents are let go even when the setup doesn't compile (PREV-180)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     const held = (host: FacialHost) => (host as unknown as { current: { rigData?: { documents?: unknown; compiled: unknown } } }).current.rigData;
     // The toy setup has no poses, so XF Studio's solver can't take it.
@@ -583,7 +583,7 @@ test("with XF Studio's own solver the face's documents are let go even when the 
 });
 
 test("a drawer that opens mid-prefetch joins the read: one read, started at background priority, shown as preparing until it ends", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  const root = tempDir("xfs-facial-");
   try {
     let open!: () => void, reached!: () => void;
     const held = new Promise<void>(resolve => { open = resolve; }), atSet = new Promise<void>(resolve => { reached = resolve; });

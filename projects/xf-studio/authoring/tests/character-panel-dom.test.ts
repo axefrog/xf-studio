@@ -184,8 +184,8 @@ describe("the Character panel's DOM", () => {
     expect(notice.hidden).toBe(false);
     expect(notice.textContent).toContain("Changed in another window. You changed this V here too.");
     const buttons = notice.querySelectorAll("button");
-    expect(buttons.map(button => [button.textContent, button.hidden])).toEqual([["Keep mine", false], ["Use theirs", false], ["Keep both", false]]);
-    // Use theirs discards this window's changes, so it asks first, in place, naming the V (the popover places itself in a window).
+    expect(buttons.map(button => [button.textContent, button.hidden])).toEqual([["Keep mine", false], ["Use other window's", false], ["Keep both", false]]);
+    // Use other window's discards this window's changes, so it asks first, in place, naming the V (the popover places itself in a window).
     const globals = globalThis as { window?: unknown }, had = globals.window;
     globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} };
     try {

@@ -3,16 +3,16 @@
 // garment flags are two bytes per vertex where WolvenKit reads four), so the arm was drawn with vanilla UVs over the framework's
 // full-body atlas: a foot on the forearm. Small fixtures only; the real resources stay private.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { archiveExportSource, createGameAssetExporter, type GeometryRepair, type UncookRun } from "../src/game/host/game-asset-export";
 import { createWolvenKitMeshRepair, uncookArguments } from "../src/game/host/game-asset-export-wolvenkit";
 import { GARMENT_FLAG_BYTES, MESH_EXPORT_REPAIR_VERSION, repairMeshForExport } from "../src/game/mesh-export-repair";
 import type { JsonObject } from "../src/game/red-json";
 import type { runWolvenKit } from "../src/host/wolvenkit-cli";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-substitution-"));
+const root = tempDir("xfs-substitution-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 let serial = 0;
 const temporary = () => { const dir = join(root, `t${serial++}`); mkdirSync(dir, { recursive: true }); return dir; };

@@ -9,7 +9,8 @@ import { badge } from "../controls";
  *   pushed under it or cut off (C-30).
  * - **The meta line wraps only between facts:** each fact ("1 preset", "version 3", a date) keeps its words together, so a narrow
  *   panel breaks the line at a "·", never inside a date.
- * - **One action**, at the row's end, vertically centred; the owner builds it (a Button) so its capability and reason are its own.
+ * - **One action**, at the row's end, vertically centred; the owner builds it (a Button) so its capability and reason are its own. A row
+ *   with nothing to do (the collection open now) has none, rather than an unavailable button.
  * - The current row (the one open now) has the signal background.
  *
  * `update(records)` rebuilds the rows; the owner keys it on what it shows, so an unchanged list is left alone (focus stays).
@@ -22,8 +23,8 @@ export type RecordRow = {
   badge?: { text: string; tone: "neutral" | "accent" | "info" | "success" | "warning" | "error" };
   /** The row open now: the signal background. */
   current?: boolean;
-  /** The row's one action (a small Button). */
-  action: HTMLElement;
+  /** The row's one action (a small Button); none where there is nothing to do with the row (the one open now). */
+  action?: HTMLElement;
 };
 export type RecordListOptions = { label: string; className?: string };
 
@@ -41,7 +42,7 @@ export class RecordList {
           h("div", { class: "record-name-line" }, h("strong", { class: "record-name", title: record.name, text: record.name }),
             record.badge ? badge(record.badge.text, record.badge.tone) : null),
           meta.length ? h("p", { class: "record-meta" }, ...meta) : null),
-        record.action);
+        record.action ?? null);
     }));
   }
 }

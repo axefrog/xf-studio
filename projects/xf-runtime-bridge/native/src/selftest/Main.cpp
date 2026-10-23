@@ -38,6 +38,8 @@
 #include "core/Writes.hpp"
 #include "selftest/Sim060.hpp"
 #include "selftest/Sim070.hpp"
+#include "selftest/SimNpc.hpp"
+#include "selftest/SimSenses.hpp"
 
 #include <functional>
 #include <limits>
@@ -146,6 +148,7 @@ int wmain(int argc, wchar_t** argv)
     uint32_t idleSeconds = 120;
     bool cet = true;
     bool allowLivePose = false;
+    bool allowTestHooks = false;
     int rearmAfterMs = -1;
     bool codeware = true;
     std::wstring modDir; // 0.8.3: the folder showroom.staged reads as the game's archive/pc/mod (tests pass their own)
@@ -194,6 +197,10 @@ int wmain(int argc, wchar_t** argv)
         {
             allowLivePose = true;
         }
+        else if (arg == L"--allow-test-hooks")
+        {
+            allowTestHooks = true;
+        }
         else if (arg == L"--rearm-after-ms" && i + 1 < argc)
         {
             rearmAfterMs = std::clamp(std::stoi(argv[++i]), 0, 60000);
@@ -240,6 +247,7 @@ int wmain(int argc, wchar_t** argv)
         xfb::ParseConfig("[bridge]\nallow_write_classes = " + xfb::win32::Narrow(writeClasses) + "\n").writeClasses;
     config.allowCreatorLeave = allowCreatorLeave;
     config.allowLivePose = allowLivePose;
+    config.allowTestHooks = allowTestHooks;
     config.maxRequestsPerSecond = 20;
     config.requestTimeoutMs = 1000;
     config.idleDisconnectSeconds = idleSeconds;
@@ -439,7 +447,11 @@ int wmain(int argc, wchar_t** argv)
     sim.codeware = codeware;
     // Bridge 0.6's simulated world (selftest/Sim060.cpp): scene.read, the handover, behaviours, player control, input.probe.
     static std::unique_ptr<xfb::selftest::Sim060> sim060;
+    // Bridge 0.8's simulated street for npc.* (selftest/SimNpc.cpp).
+    static std::unique_ptr<xfb::selftest::SimNpc> simNpc;
     static xfb::writes::RestoreOnce restore;
+    // 0.8.4: test.save.delay's one-shot hold of the next simulated save.
+    static std::atomic<int32_t> simSaveHoldMs{0};
     // The script layer's readiness (RB-76), as the plugin keeps it: the simulated session is up from the start;
     // selftest.script_layer moves it, and the simulated load detaches, attaches and lets the player in. With
     // detach_before_next_task, the next game-thread task sees the detach first, as session 5's game.status did.
@@ -2113,6 +2125,10 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              held.push_back(hold);
                                          }
+                                         for (const auto& hold : simNpc ? simNpc->Holds() : json::array())
+                                         {
+                                             held.push_back(hold); // 0.8: XF actors (XFGame.BridgeHolds' NPC line)
+                                         }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
                                          {
@@ -2155,6 +2171,10 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              held.push_back(hold);
                                          }
+                                         for (const auto& hold : simNpc ? simNpc->Holds() : json::array())
+                                         {
+                                             held.push_back(hold); // 0.8: XF actors (XFGame.BridgeHolds' NPC line)
+                                         }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
                                          {
@@ -2189,10 +2209,14 @@ int wmain(int argc, wchar_t** argv)
                                          sim.unlockTicks = -1;
                                      };
                                      ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
+                                     ops.hold = [] { return simSaveHoldMs.exchange(0); };
                                      auto out = w::GameSave(request, ops);
                                      out["simulated"] = true;
                                      return out;
                                  }));
+    // 0.8.4: the plugin's test hook, from the same core function ([bridge] allow_test_hooks as --allow-test-hooks).
+    dispatcher.Register({"test.save.delay", xfb::Access::WriteSave, xfb::RunOn::BridgeThread, "Test hook: holds the next save (simulated).",
+                         [&config](const xfb::MethodContext& aContext) { return w::TestSaveDelay(aContext.params, config.allowTestHooks, simSaveHoldMs); }});
     dispatcher.Register(simWrite("game.load", xfb::Access::WriteSave, xfb::RunOn::BridgeThread, "Load (simulated).",
                                  [&queue, &dispatcher](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseGameLoad(aContext.params);
@@ -2549,6 +2573,10 @@ int wmain(int argc, wchar_t** argv)
             sim.wardrobeSnapshot = nullptr;
         }
         xfb::selftest::Sim070RestoreAfterKill(out); // 0.7: a weather the bridge held
+        if (simNpc)
+        {
+            simNpc->RestoreAfterKill(out); // 0.8: every NPC the bridge directs
+        }
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
         sim.hudHidden = false;
@@ -2616,6 +2644,8 @@ int wmain(int argc, wchar_t** argv)
             out["what"] = aWhat;
             return out;
         };
+        // 0.8: the handover releases every NPC the bridge directs (simNpc is made below, before the bridge starts).
+        hooks.releaseNpcs = [] { return simNpc ? simNpc->ReleaseForHandover() : json(nullptr); };
         sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
         sim060->Register();
     }
@@ -2638,6 +2668,45 @@ int wmain(int argc, wchar_t** argv)
         hooks070.killed = [&bridge] { return bridge.GetDispatcher().IsKilled(); };
         hooks070.weaponDrawn = [] { return sim060 && sim060->WeaponDrawn(); };
         xfb::selftest::RegisterSim070(dispatcher, queue, config, std::move(hooks070));
+        // The senses for the Story Engine (selftest/SimSenses.cpp).
+        xfb::selftest::SimSensesHooks senses;
+        senses.phase = [] {
+            std::scoped_lock _(sim.mutex);
+            return sim.phase;
+        };
+        xfb::selftest::RegisterSimSenses(dispatcher, std::move(senses));
+    }
+    {
+        // Bridge 0.8's NPC direction against a simulated street (selftest/SimNpc.cpp), with the plugin's shared service.
+        xfb::selftest::SimNpcHooks hooksNpc;
+        hooksNpc.phase = [] {
+            std::scoped_lock _(sim.mutex);
+            return sim.phase;
+        };
+        hooksNpc.player = [] { return sim060->PlayerNow(); };
+        hooksNpc.markWrite = [] { restore.MarkWrite(); };
+        hooksNpc.takeSaveLock = [] {
+            std::scoped_lock _(sim.mutex);
+            sim.gameSaveLock = true;
+        };
+        hooksNpc.scriptsReady = [] { return simLayer.Ready(); };
+        hooksNpc.detaches = [] { return simLayer.Describe().value("detaches", uint64_t{0}); };
+        hooksNpc.killed = [&dispatcher] { return dispatcher.IsKilled(); };
+        hooksNpc.paused = [&dispatcher] { return dispatcher.WritesPaused(); };
+        hooksNpc.handedOver = [&dispatcher] { return dispatcher.HandedOver(); };
+        hooksNpc.writesOpen = [&dispatcher] {
+            try
+            {
+                dispatcher.RequireWritesOpen();
+                return true;
+            }
+            catch (const xfb::MethodError&)
+            {
+                return false;
+            }
+        };
+        hooksNpc.events = &sim060->Events();
+        simNpc = std::make_unique<xfb::selftest::SimNpc>(dispatcher, std::move(hooksNpc));
     }
 
     if (!bridge.Start(error))
@@ -2698,6 +2767,7 @@ int wmain(int argc, wchar_t** argv)
                 static auto last = std::chrono::steady_clock::now();
                 const auto now = std::chrono::steady_clock::now();
                 sim060->Tick(std::chrono::duration<double>(now - last).count());
+                simNpc->Tick(std::chrono::duration<double>(now - last).count()); // 0.8: the plugin's TickNpc
                 last = now;
             }
             {
@@ -2750,6 +2820,7 @@ int wmain(int argc, wchar_t** argv)
                 {
                     simLayer.OnDetach();
                     sim060->OnDetach();
+                    simNpc->OnDetach(); // Codeware drops non-persistent entities with the world
                 }
                 else if (sim.loadTicks == 2)
                 {

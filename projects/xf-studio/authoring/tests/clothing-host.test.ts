@@ -1,15 +1,15 @@
 // The clothing host's ports (PIPE-101): item records from a synthetic TweakDB blob (every value type the resolver reads), the save's
 // record IDs, the cooked preset's table, and the preset read's failure and cache paths (NATIVE-25, NATIVE-31, PIPE-100). Asset-free.
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { clothingPorts, itemRecords, PRESET_PATHS, PRESET_RETRY_MS, presetOf, presetTable, resetPresetMemory, tweakIdOf } from "../src/character/host/clothing-host";
 import { depotHash, fnv1a64 } from "../src/game/depot-path";
 import type { ResourceGraph } from "../src/game/resource-graph";
 import { TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/game/tweakdb-flats";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-clothing-host-"));
+const root = tempDir("xfs-clothing-host-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const utf8 = (text: string) => new TextEncoder().encode(text);
 

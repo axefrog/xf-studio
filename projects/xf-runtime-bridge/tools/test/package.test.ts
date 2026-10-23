@@ -1,10 +1,10 @@
 // What each package carries (tools/packaging.ts), staged into temporary folders with a stand-in DLL,
 // and the test preload that keeps key input off. This file deliberately imports nothing from
-// helpers.ts, so the first test proves bunfig.toml's preload ran (RB-41).
+// helpers.ts, so the first test proves bunfig.toml's preload ran (RB-41); its scratch folder comes from temp-dir.ts.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tempDir } from "./temp-dir.ts";
 import { join, resolve } from "node:path";
 import { OLD_PRESETS_FILE, PANEL_FILE, PLUGIN_DIR, PRESETS_FILE, stageVariant, variantConfig, VARIANTS, type Variant } from "../packaging.ts";
 
@@ -13,14 +13,15 @@ const projectDir = resolve(import.meta.dir, "..", "..");
 describe("test preload", () => {
   test("key input is off in every test process, before any test file sets it itself", () => {
     expect(process.env.XFB_NO_INPUT).toBe("1");
-    expect(readFileSync(join(projectDir, "bunfig.toml"), "utf8")).toMatch(/preload\s*=\s*\[\s*"\.\/tools\/test\/preload\.ts"\s*\]/);
+    expect(readFileSync(join(projectDir, "bunfig.toml"), "utf8")).toMatch(/preload\s*=\s*\[\s*"\.\/tools\/test\/preload\.ts"\s*,\s*"\.\/tools\/test\/temp-dir-sweep\.ts"\s*\]/);
   });
 });
 
 describe("packages", () => {
-  const work = mkdtempSync(join(tmpdir(), "xfb-package-"));
+  const work = tempDir("xfb-package-");
   const dll = join(work, "XFRuntimeBridge.dll");
   writeFileSync(dll, "stand-in DLL XFB_BUILD=0000000000000000000000000000000000000000;dirty=0");
+  writeFileSync(join(work, "xfb_companion_probe.exe"), "stand-in companion probe");
   const staged = Object.fromEntries(
     VARIANTS.map((variant) => {
       const stageDir = join(work, variant);
@@ -28,6 +29,25 @@ describe("packages", () => {
       return [variant, { stageDir, manifest, config: readFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), "utf8") }];
     }),
   ) as Record<Variant, { stageDir: string; manifest: ReturnType<typeof stageVariant>; config: string }>;
+
+  test("0.8.7: only the -writes package carries the test probes (their scripts and the companion), the others none of them", () => {
+    const probeFiles = (variant: Variant) => staged[variant].manifest.files.map((f) => f.path).filter((p) => /XFRuntimeBridgeProbe|xfb_companion_probe/.test(p));
+    expect(probeFiles("default")).toEqual([]);
+    expect(probeFiles("diagnostic")).toEqual([]);
+    expect(probeFiles("writes").sort()).toEqual(
+      [
+        `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbeEvents.reds`,
+        `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbePersist.reds`,
+        `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbeSave.reds`,
+        `${PLUGIN_DIR}/xfb_companion_probe.exe`,
+      ].sort(),
+    );
+    expect(staged.writes.manifest.test_probes.length).toBe(3);
+    expect(staged.default.manifest.test_probes).toEqual([]);
+    expect(staged.diagnostic.manifest.test_probes).toEqual([]);
+    expect(staged.writes.config).toMatch(/^allow_test_hooks = true$/m);
+    expect(staged.diagnostic.config).toMatch(/^allow_test_hooks = false$/m);
+  });
 
   test("the default package has the bridge off, no camera presets, no panel, no carrier and every switch off", () => {
     const { stageDir, manifest, config } = staged.default;
@@ -39,6 +59,7 @@ describe("packages", () => {
     expect(config).toMatch(/^allow_writes = false$/m);
     expect(config).toMatch(/^allow_creator_leave = false$/m);
     expect(config).toMatch(/^allow_live_pose = false$/m);
+    expect(config).toMatch(/^allow_test_hooks = false$/m);
     // Every permission switch is off. [ui] (0.5.3) holds display switches only (the ink panel, the CET label, nameplates),
     // which draw nothing while the bridge is off; they are checked separately.
     const [permissions, display = ""] = config.split(/^\[ui\]\s*$/m);
@@ -50,6 +71,7 @@ describe("packages", () => {
       allow_writes: false,
       allow_creator_leave: false,
       allow_live_pose: false,
+      allow_test_hooks: false,
       photo_mode_presets: null,
       cet_panel: false,
       write_classes: [],
@@ -64,8 +86,9 @@ describe("packages", () => {
     expect(config).toMatch(/^allow_writes = false$/m);
     expect(config).toMatch(/^allow_creator_leave = false$/m);
     expect(config).toMatch(/^allow_live_pose = false$/m);
+    expect(config).toMatch(/^allow_test_hooks = false$/m);
     expect(existsSync(join(stageDir, PANEL_FILE))).toBe(true);
-    expect(manifest).toMatchObject({ bridge_enabled: true, allow_writes: false, allow_creator_leave: false, allow_live_pose: false, cet_panel: true });
+    expect(manifest).toMatchObject({ bridge_enabled: true, allow_writes: false, allow_creator_leave: false, allow_live_pose: false, allow_test_hooks: false, cet_panel: true });
   });
 
   test("only the writes package allows writes and leaving the creator, and says so at the top", () => {
@@ -74,19 +97,20 @@ describe("packages", () => {
     expect(config).toMatch(/^allow_writes = true$/m);
     expect(config).toMatch(/^allow_creator_leave = true$/m);
     expect(config).toMatch(/^allow_live_pose = true$/m);
+    expect(config).toMatch(/^allow_test_hooks = true$/m); // 0.8.4: test.save.delay (card row L1), this package only
     expect(config).toContain("THIS COPY ALLOWS WRITES");
     expect(existsSync(join(stageDir, PANEL_FILE))).toBe(true);
     expect(manifest.files.some((f) => /\.archive/.test(f.path))).toBe(false); // the carrier is its own test package
-    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, cet_panel: true, write_classes: ["photo", "world", "character", "save", "showroom", "player"], inventory_writes: false });
+    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, allow_test_hooks: true, cet_panel: true, write_classes: ["photo", "world", "character", "save", "showroom", "player", "npc"], inventory_writes: false });
     // Bridge 0.4: saves and loading are allowed; V's inventory is not, until the maintainer approves it.
-    expect(config).toMatch(/^allow_write_classes = photo, world, character, save, showroom, player$/m);
+    expect(config).toMatch(/^allow_write_classes = photo, world, character, save, showroom, player, npc$/m);
   });
 
   test("only --allow-inventory adds the inventory class to the writes package, and the manifest records it", () => {
     const stageDir = join(work, "writes-inventory");
     const manifest = stageVariant({ projectDir, variant: "writes", dll, stageDir, version: "0.0.0", commit: "0".repeat(40), allowInventory: true });
-    expect(readFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), "utf8")).toMatch(/^allow_write_classes = photo, world, character, inventory, save, showroom, player$/m);
-    expect(manifest).toMatchObject({ inventory_writes: true, write_classes: ["photo", "world", "character", "inventory", "save", "showroom", "player"] });
+    expect(readFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), "utf8")).toMatch(/^allow_write_classes = photo, world, character, inventory, save, showroom, player, npc$/m);
+    expect(manifest).toMatchObject({ inventory_writes: true, write_classes: ["photo", "world", "character", "inventory", "save", "showroom", "player", "npc"] });
     const diagnostic = stageVariant({ projectDir, variant: "diagnostic", dll, stageDir: join(work, "diag-inventory"), version: "0.0.0", commit: "0".repeat(40), allowInventory: true });
     expect(diagnostic).toMatchObject({ allow_writes: false, inventory_writes: false, write_classes: [] });
   });

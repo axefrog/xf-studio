@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { buildMountPlan, DepotIndex } from "../src/game/archive-precedence";
 import { readArchiveXlConfig } from "../src/game/archivexl-config";
 import { dangleSpecKey, serveDangle } from "../src/animation/host/dangle-host";
 import { refFromPath } from "../src/game/depot-path";
 import { ResourceGraph } from "../src/game/resource-graph";
+import { tempDir } from "./temp-dir";
 
 // A dangle rig and graph in the resolver's JSON shape (as tests/dangle-spec.test.ts builds them, reduced to one link).
 const cn = (value: string) => ({ $type: "CName", $storage: "string", $value: value });
@@ -47,7 +47,7 @@ const specOf = (store: string, file: string) => JSON.parse(readFileSync(join(sto
 const A = "a".repeat(64), B = "b".repeat(64), C = "c".repeat(64);
 
 const stores: string[] = [];
-const newStore = () => { const dir = mkdtempSync(join(tmpdir(), "xfs-dangle-host-")); stores.push(dir); return dir; };
+const newStore = () => { const dir = tempDir("xfs-dangle-host-"); stores.push(dir); return dir; };
 afterEach(() => { for (const dir of stores.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 describe("dangle spec cache key", () => {

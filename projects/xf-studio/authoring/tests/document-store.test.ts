@@ -4,8 +4,7 @@
  */
 import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { createDocumentsHandler } from "../src/platform/persistence/document-store";
 import { browserDocuments } from "../src/app/browser/browser-documents-device";
@@ -18,13 +17,14 @@ import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { readRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { ManualClock, memoryOutboxStorage, settle, storeDocuments } from "./fixtures/platform-doubles";
 import { openTestLibrary } from "./fixtures/library-file";
+import { tempDir } from "./temp-dir";
 
 async function until(done: () => boolean, ms = 3000) {
   const end = Date.now() + ms;
   while (!done()) { if (Date.now() > end) throw Error("Timed out."); await new Promise(resolve => setTimeout(resolve, 5)); }
 }
 const folders: string[] = [];
-function library(): string { const dir = mkdtempSync(join(tmpdir(), "xfs-documents-")); folders.push(dir); return join(dir, "library.sqlite"); }
+function library(): string { const dir = tempDir("xfs-documents-"); folders.push(dir); return join(dir, "library.sqlite"); }
 afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recursive: true, force: true }); } catch { /* closing */ } });
 
 test("a write names the revision it read; a stale one changes nothing and answers the current document", () => {

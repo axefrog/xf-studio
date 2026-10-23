@@ -38,10 +38,11 @@ The tools fall into areas, each with its own section in the reference:
 | [Connection, session and answers](mcp-reference.md#connection-session-and-answers) | `bridge_ping`, `game_status`, `game_wait`; ask the player with `ui_message` and wait for the answer with `session_wait`; follow the session with `session_log`; hand the game to the player with `session_handover` |
 | [Photo mode](mcp-reference.md#photo-mode) | Open it with the player's own key (`photo_open`), frame V automatically (`photo_frame`), set the camera, lights, expression, pose and scene rows, hide the menu for a clean shot |
 | [Appearance screen](mcp-reference.md#appearance-screen-character-creator) | Read V's creator options, open the creator from normal play, change an option by its on-screen label, confirm or back out |
-| [Player](mcp-reference.md#player) and [behaviours](mcp-reference.md#behaviours) | Read V's state; teleport with ground checks, turn her view, crouch; routines that run in the game at frame rate (a turntable, a smooth look, a glide along a walkable path) |
-| [World](mcp-reference.md#world) | The clock, a freeze, the weather, streaming and ground probes |
+| [Player](mcp-reference.md#player) and [behaviours](mcp-reference.md#behaviours) | Read V's state and her status (`player_status`: health, level and street cred, money, wanted level, vehicle, an inventory summary, the scanner); teleport with ground checks, turn her view, crouch; routines that run in the game at frame rate (a turntable, a smooth look, a glide along a walkable path) |
+| [World](mcp-reference.md#world) | The clock, a freeze, the weather, streaming and ground probes; quest facts in a batch (`world_facts`, with a main-story preset) and V's district (`world_district`) |
 | [Wardrobe, clothing and cyberware](mcp-reference.md#wardrobe-clothing-and-cyberware) | Read what V wears; equip and unequip through the game's own requests (off unless explicitly allowed) |
 | [XF Finish Showroom](mcp-reference.md#xf-finish-showroom) | Mannequin heads wearing XF makeup presets, with light rigs, for close-up finish checks |
+| [NPC direction](mcp-reference.md#npc-direction) | Bring in XF's own passers-by (never saved), walk them up to V, give them lines, a gaze, a face and dialogue choices whose pick comes back to `session_wait`, run a short scene written as data (`npc_scenario`); stand-ins that can be shot, spawns out of V's sight and a release that waits until she can't see them (the `+npc` branch build only) |
 | [Capture and the agent's view](mcp-reference.md#capture-and-the-agents-view) | Screenshots with named crops, re-crops, bursts for flicker checks, contact sheets; `scene_report`, the agent's own view of the shot (where each subject sits in the frame, whether it is blocked, which lights reach it) with pre-capture checks that refuse a bad shot |
 | [Saves](mcp-reference.md#saves) | List saves, make a new manual save, load one |
 | [Overlay and in-game UI](mcp-reference.md#overlay-and-in-game-ui) | The game's UI state, the XF overlay's state, placing the XF panel |
@@ -119,6 +120,7 @@ The bridge is built so that a mistake, a confused model or a crash can't damage 
 | `read`, `notify`, `control` | Nothing in the game (messages to the player; stopping or pausing the bridge's own work) | Every build that has the bridge on |
 | `write-photo`, `write-world`, `write-character` | Photo mode; the clock, a freeze, the weather, XF map pins; the appearance screen | The test profile's `-writes` build |
 | `write-save`, `write-showroom`, `write-player` | A new manual save or a load; XF Finish Showroom's test heads; V's position, view and stance | The `-writes` build, listed by name |
+| `write-npc` | XF's own actors, the NPCs it picks near V, their lines and the dialogue choices it shows | The `-writes` build (0.8.8 on), listed by name |
 | `write-inventory` | V's clothing and cyberware | Off in every build unless the `-writes` build is made with `--allow-inventory` |
 | `act-player` | Irreversible actions for V (dialogue, devices, consumables) | Reserved: no tool uses it |
 
@@ -126,13 +128,14 @@ The bridge is built so that a mistake, a confused model or a crash can't damage 
 
 **Every change can be undone.** Each change answers with an `undo`: the exact command that puts back what it changed (or a plain note when there is nothing to put back). Each tool's undo is in the reference. The session's event stream (`session_log`) records every change with its undo, every refusal and every note.
 
-**The kill switch.** `bridge_kill`, the bridge's own kill key in the game (End by default, `[ui] kill_key` in `config.ini`; it works in play, photo mode, menus and loading screens while CET's overlay is closed), **Stop the bridge** in the XF Runtime Bridge window, a CET hotkey you bind, or a `KILL` file beside the bridge's session file. Each one stops the bridge at once and cancels anything still queued, then puts back what it left on: a frozen world, a hidden photo-mode menu, a held weather, V's cyberware and wardrobe, the effects it put on V, its showroom heads and pins. After that nothing reaches the game until you press **Reconnect** in the XF Runtime Bridge window or restart the game. The kill switch is always available, in every MCP configuration.
+**The kill switch.** `bridge_kill`, the bridge's own stop key in the game (Ctrl + Shift + End by default, `[ui] kill_key` in `config.ini`, changed on the XF Runtime Bridge window's Keys section; it works in play, photo mode, menus and loading screens while CET's overlay is closed), **Stop the bridge** in the XF Runtime Bridge window, a CET hotkey you bind, or a `KILL` file beside the bridge's session file. Each one stops the bridge at once and cancels anything still queued, then puts back what it left on: a frozen world, a hidden photo-mode menu, a held weather, V's cyberware and wardrobe, the effects it put on V, its showroom heads and pins, and every NPC it directs (its actors removed, lines and dialogue choices taken down, gazes and faces given back). After that nothing reaches the game until you press **Reconnect** in the XF Runtime Bridge window or restart the game. The kill switch is always available, in every MCP configuration.
 
-**Pause and handover.** **Pause changes** in the XF Runtime Bridge window refuses every change until you resume. An AI client can also hand the game to you (`session_handover`): it stops its routines, gives V back and refuses changes until `session_resume`.
+**Pause and handover.** **Pause changes** in the XF Runtime Bridge window refuses every change until you resume. An AI client can also hand the game to you (`session_handover`): it stops its routines, gives V back, releases every NPC it directs and refuses changes until `session_resume`. The pause releases the NPCs too.
 
 **Saves are protected.** Nothing saves the game except `game_save`, which makes one new manual save and never overwrites one. From the bridge's first change until a save is loaded, the bridge holds its own save lock:
 - `game_save` refuses (`bridge_save_lock`) unless told to override it;
-- it also refuses while the bridge still holds something a save would keep (`bridge_effects_active`).
+- it also refuses while the bridge still holds something a save would keep (`bridge_effects_active`);
+- your own saves in the game are refused too; from 0.8.7 the status surface then says why ("XF Runtime Bridge is holding saves because of a test change…"), and the XF Runtime Bridge window offers **Save anyway**, which makes one manual save past the lock on your say-so (the test profile's `-writes` build only; no tool can ask for it).
 
 Loading a save (`game_load`) discards progress, so it needs `discard_unsaved: true`.
 
@@ -148,8 +151,10 @@ Loading a save (`game_load`) discards progress, so it needs `discard_unsaved: tr
 
 A session doesn't need you at the keyboard of the AI client. The AI client asks with `ui_message` at `level: "ask"`, optionally with `choices` (one to four labels of up to 24 characters; one Done button by default). You see the question in two places:
 
-- **On the game's screen**: in the **ink panel** (the game-style panel with the red edge, top left by default; needs Codeware) while the game shows its HUD, or in the **XF box** (the small dark box with the yellow heading) in photo mode and menus. Each answer has a key beside it: F6, F7, F8 and F11 by default (`answer_keys` in `config.ini`). Press the key to answer without leaving the game. Only one status surface shows at a time, and none on a loading screen.
+- **On the game's screen**: in the **ink panel** (the game-style panel with the red edge, top left by default; needs Codeware) while the game shows its HUD and, from 0.8.6, inside photo mode's own menu while photo mode is open, where you can also click an answer (0.8.7: clicks there work; 0.8.6's were ignored); otherwise in the **XF box** (the small dark box with the yellow heading), in menus and wherever the ink panel can't show. Each answer has its key in front of it, as the game writes its own prompts: `[F6] Done` (F6, F7, F8 and F11 by default, `answer_keys` in `config.ini`). Press the key to answer without leaving the game. Only one status surface shows at a time, and none on a loading screen.
 - **The XF Runtime Bridge window** in CET's overlay (test builds). It has a button per answer and a comment box for free text (Ctrl+Enter sends).
+
+The ink panel inside photo mode's menu also reports to `session_log`: `ink_tree` (photo mode's menu and the XF layer under it, on each open and once laid out), `ink_pointer` (the pointer entering it, the camera's mouse taken or refused while a button is held, answer clicks) and `ink_input` (what it holds from photo mode, and when it gives it back). `ui_hud {layer: "hud"}` keeps the panel out of photo mode, so the XF box shows there instead. `ui_hud {modal: true}` holds photo mode's exit while it shows (0.8.7); photo mode's camera keys can't be held and keep moving the camera. The window's answer buttons name no key: CET takes the keyboard while its overlay is open.
 
 One question shows at a time: a new question withdraws the one still waiting, and it stays on screen until you answer it, it is withdrawn or its time runs out. `session_wait` returns your answer (its label, and whether it came from a key or a button), or any comment you type. An answer you gave before the AI client started waiting still counts. **Mark this moment** in the XF Runtime Bridge window drops a marker into the session log, for "look at this".
 
@@ -212,6 +217,9 @@ Every code, with its exact wording, is in the reference's [refusal codes](mcp-re
 - **Stdio and one client.** The server runs beside one AI client on the same machine, and the bridge's main pipe takes one connection at a time (the emergency controls have their own).
 - **Opening photo mode needs the game window in front.** Every other tool works with the game in the background.
 - **Inventory changes are off** until explicitly allowed, and `act-player` has no tools yet.
+- **The senses (0.8.8, checked in session 15; 0.8.9 fixes two reads):** `world_facts`, `world_district`, `player_status` and `scene_read`'s `npc_detail` read the game's own scripts' state for the Story Engine and change nothing. On the main menu, between sessions and during a load the bridge's gate refuses them with `game_loading`; `game_not_ready` is the script's own answer when the gate is open but the game has no world. `player_status`'s inventory part reads at most 1500 stacks and says `truncated` when more were left. Session 15 compared them with the screens ([card](../../../research/runtime/runtime-bridge-test-card.md#session-15-checks-bridge-088)); 0.8.9's inventory counts only what the backpack shows (with `equipped` apart), and `heat.bar` follows the wanted bar itself. An NPC's entity template path is not among them: the scripts cannot turn a resource reference into a path.
+- **Test probes (0.8.7, for session 15):** `test_events`, `test_save_identity` and `test_companion_probe` work only with the test profile's `-writes` build and are refused elsewhere (`test_hooks_off`). They come out, or move into XF Lab, once XF Core's first tracks land.
+- **NPC direction ran first in session 15** (0.8.8) and again in session 16 (0.8.9); 0.8.11 stops a walk to V from leaving V as the facing target for the next walk (`npc_move`'s `face_v` is off unless asked) and holds a smile by sending it again; 0.8.10 turns an actor to her way before a walk away from V (`turns_first`), keeps a spawn asked for relative to V in V's sight (`moved_for_sight`, `no_visible_spot`), and a scene speaks only subtitles. 0.8.9 holds back an actor's own look-at reaction while it is directed, refuses choices at a device's screen, and adds `npc_say`'s `near_m`; body gestures (`npc_act`) are refused until the XF gesture carrier is built.
 - **Some tools are research tools** and say so in their descriptions (for example `photo_camera_place`, `pose_live_apply`, `input_probe`). A few are known not to work in the game yet: photo mode puts its camera back after `photo_camera_place`. The [test card](../../../research/runtime/runtime-bridge-test-card.md) tracks each command's in-game result.
 
 ### What is proven where
@@ -221,7 +229,7 @@ Every code, with its exact wording, is in the reference's [refusal codes](mcp-re
   - the creator opened from the street, options changed by label, backing out;
   - equipping items, loading saves, the showroom's heads;
   - questions answered from inside the game, one at a time, on one status surface at a time;
-  - the kill switch's restore, and the bridge's own kill key in play, photo mode and the pause menu;
+  - the kill switch's restore, and the bridge's own stop key in play, photo mode and the pause menu;
   - emergency controls from a second process while another waits on the main pipe;
   - world pins with the XF mark, and the staged showroom found without naming its build.
 

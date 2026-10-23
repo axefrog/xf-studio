@@ -79,6 +79,31 @@ nlohmann::json UiMessageUndo(const nlohmann::json& aPosted);
 // ui.ask.state {id}'s answer (RB-96, RB-103).
 nlohmann::json AskStateJson(uint64_t aId, const AskState& aState);
 
+// 0.8.5: the soft sound for a new question ([ui] question_sound, played by the plugin's Running tick). Take answers true once
+// for each new question: a pending ask newer than any it has answered for (message ids only grow). Info lines are never
+// asks, a question already sounded or answered stays quiet, and 0 means none is pending. Skip marks the questions up to
+// aPendingAskId as sounded without a sound (the switch off, the bridge stopped), so they don't sound late.
+class QuestionChime
+{
+public:
+    bool Take(uint64_t aPendingAskId)
+    {
+        if (aPendingAskId == 0 || aPendingAskId <= m_last)
+        {
+            return false;
+        }
+        m_last = aPendingAskId;
+        return true;
+    }
+    void Skip(uint64_t aPendingAskId)
+    {
+        m_last = aPendingAskId > m_last ? aPendingAskId : m_last;
+    }
+
+private:
+    uint64_t m_last = 0;
+};
+
 class MessageBoard
 {
 public:
@@ -118,6 +143,14 @@ public:
     // is {ok: true, message_id, choice, label, text}; otherwise {ok: false, why} (no such ask showing, already answered,
     // choice out of range).
     nlohmann::json Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow = Clock::now());
+    // 0.8.9 (session 15: a stray F6 just after a question changed answered the new one): an answer by a key (aByKey) within
+    // kKeyGuard of the question appearing is ignored, {ok: false, why, too_soon: true}; buttons and clicks aren't held back.
+    nlohmann::json Answer(uint64_t aId, int32_t aChoice, bool aByKey, Clock::time_point aNow = Clock::now());
+    static constexpr std::chrono::milliseconds kKeyGuard{500};
+    // 0.8.11 (UI review of 0.8.11, fix 6: a question that waited behind the phone, a hidden menu or a loading screen arrived with
+    // no guard): the guard also starts again whenever the question's keys become armed on a surface (its first draw, a re-show
+    // after the phone or photo mode's menu), told here by the ink panel's report (XFBridge_InkDrawn).
+    void NoteArmed(uint64_t aId, Clock::time_point aNow = Clock::now());
     // RB-96/RB-103: what became of ask aId (session.wait reads it through ui.ask.state).
     AskState StateOf(uint64_t aId, Clock::time_point aNow = Clock::now());
     static constexpr size_t kAnsweredKept = 64;
@@ -130,6 +163,8 @@ private:
         std::string level;
         Clock::time_point expires;
         std::vector<std::string> choices; // an unanswered ask's; empty once answered
+        Clock::time_point posted{};       // 0.8.9: when it appeared (the answer keys' guard)
+        Clock::time_point armed{};        // 0.8.11: when its keys last became armed on a surface (the guard starts again)
         std::string answered;             // 0.8: an answered ask's answer label (its text stays the question)
     };
     void DropExpired(Clock::time_point aNow);

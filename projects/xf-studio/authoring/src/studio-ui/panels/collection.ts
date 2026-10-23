@@ -29,7 +29,7 @@ import { PANEL_META } from "../panel-meta";
 const DRAFT_STATE: Record<"never" | "same" | "edited" | "unknown", (revision?: number) => string> = {
   never: () => "Draft · no version yet",
   same: revision => `Draft · same as saved version ${revision}`,
-  edited: revision => `Draft · edited since version ${revision}, not saved`,
+  edited: revision => `Draft · changed since version ${revision}`,
   unknown: revision => `Draft · started from version ${revision}`,
 };
 
@@ -67,8 +67,13 @@ export function libraryState(frame: Frame) {
     return { tone: "info" as const, label: "Changed since last version",
       detail: `Changed since version ${draft.revision}: ${what}. Save version makes version ${draft.revision + 1}.` };
   }
-  return { tone: "neutral" as const, label: "Autosaved draft",
-    detail: `Last saved as version ${draft.revision}. Your work saves itself as you go; Save version keeps a new version.` };
+  // The last version couldn't be read back, so nothing can be compared: the chip names the version and makes no claim about changes. It is
+  // read again on the next library refresh (c-chips).
+  if (persistence?.baseline === "unavailable") return { tone: "neutral" as const, label: `Version ${draft.revision}`,
+    detail: `Your work saves itself as you go. Version ${draft.revision} couldn't be read back from your library to compare with, so XF Studio can't say what changed since; Save version keeps a new version.` };
+  // The last version's content is being read back to compare with: the library is at work (c-chips' words). Only while that read runs.
+  return { tone: "info" as const, label: "Working…",
+    detail: `Comparing your work with version ${draft.revision} in your library. Your work saves itself as you go.` };
 }
 
 export function presetsPanel(rt: StudioRuntime): PanelController {
@@ -191,12 +196,13 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
 }
 
 /**
- * “Undo open/import” shows the collection that was shown before the request again, but only while that is still the one to go back to;
- * otherwise it would show the wrong one. Nothing is replaced by opening or importing: the collection shown before stays in the library.
+ * “Reopen previous”, on the toast after an open or import, shows the collection that was shown before the request again, but only while
+ * that is still the one to go back to; otherwise it would show the wrong one. Nothing is replaced by opening or importing: the collection
+ * shown before stays in the library. Reopen is the one name for this, wherever it is offered (style guide glossary).
  */
-export function undoReplaceAction(rt: StudioRuntime, label: string): FeedbackAction {
+export function reopenPreviousAction(rt: StudioRuntime): FeedbackAction {
   const before = rt.port.library.summary().draft?.id;
-  return { label, run: () => {
+  return { label: "Reopen previous", run: () => {
     if (!before || rt.port.library.summary().draft?.previous?.id !== before) {
       rt.feedback.toast("warning", "Library", "The collection from before that change is no longer the one to go back to. Open it from the Library panel.");
       return;
@@ -206,7 +212,7 @@ export function undoReplaceAction(rt: StudioRuntime, label: string): FeedbackAct
 }
 /** Shared by the Library panel and the command palette. */
 export function importCollection(rt: StudioRuntime, _anchor?: MenuAnchor) {
-  void rt.file({ kind: "collection.import" }, { actions: [undoReplaceAction(rt, "Undo import")] });
+  void rt.file({ kind: "collection.import" }, { actions: [reopenPreviousAction(rt)] });
 }
 
 export function libraryPanel(rt: StudioRuntime): PanelController {
@@ -222,9 +228,9 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   const syncList = () => { if (port.authoring.requestCapability({ kind: "refresh" }).available) void port.library.execute({ kind: "refresh" }); };
   window.addEventListener("focus", syncList);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncList(); });
-  // Recent drafts, newest first (item 13): the library's other collections never saved as a version, each shown again with its Recover.
+  // Recent drafts, newest first (item 13): the library's other collections never saved as a version, each shown again with its Reopen.
   const drafts = new RecordList({ label: "Recent drafts" });
-  const draftsSection = section({ title: "Recent drafts", help: ["Collections in your library that were never saved as a version: an import, or an earlier draft. Recover shows one; the collection you have open stays in your library.",
+  const draftsSection = section({ title: "Recent drafts", help: ["Collections in your library that were never saved as a version: an import, or an earlier draft. Reopen shows one; the collection you have open stays in your library.",
     "Each line says it has no version yet, so a draft is never mistaken for a saved collection of the same name."] }, drafts.element);
   let draftsSignature = "";
   const saved = new RecordList({ label: "Saved collections" });
@@ -266,7 +272,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       if (draftsKey !== draftsSignature) {
         draftsSignature = draftsKey;
         drafts.update(queue.map(entry => {
-          const recover = button({ label: "Recover", icon: "undo", small: true, title: `Show “${entry.name}”; the collection you have open stays in your library`,
+          const recover = button({ label: "Reopen", icon: "undo", small: true, title: `Reopen “${entry.name}”; the collection you have open stays in your library`,
             onClick: () => void rt.file({ kind: "collection.recover", draft: entry.id }) });
           applyCapability(recover, port.files.capability({ kind: "collection.recover", draft: entry.id }));
           return { id: entry.id, name: entry.name, meta: [...DRAFT_STATE[entry.saved](entry.revision).split(" · "), plural(entry.presets, "preset")], action: recover };
@@ -277,12 +283,13 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
         savedSignature = signature;
         saved.update(library.summaries.map(item => {
           const current = item.id === draft?.id;
-          // The row open now says so with its badge and background; its Open is unavailable, with the same weight as every other row's.
+          // The row open now says so with its badge and background, and offers no Open: there is nothing to do with it here (C5).
+          const meta = [plural(item.count, "preset"), `version ${item.revision}`, recordTime(item.updatedAt)];
+          if (current) return { id: item.id, name: item.name, current, meta, badge: { text: "Open now", tone: "info" as const } };
           const open = button({ label: "Open", small: true,
-            onClick: () => void rt.request({ kind: "open", id: item.id }, { actions: [undoReplaceAction(rt, "Undo open")] }) });
+            onClick: () => void rt.request({ kind: "open", id: item.id }, { actions: [reopenPreviousAction(rt)] }) });
           applyCapability(open, port.authoring.requestCapability({ kind: "open", id: item.id }));
-          return { id: item.id, name: item.name, current, meta: [plural(item.count, "preset"), `version ${item.revision}`, recordTime(item.updatedAt)],
-            ...(current ? { badge: { text: "Open now", tone: "info" as const } } : {}), action: open };
+          return { id: item.id, name: item.name, meta, action: open };
         }));
       }
       savedEmpty.hidden = library.summaries.length > 0;

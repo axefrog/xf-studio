@@ -94,6 +94,8 @@ A hash becomes a name by hashing candidate names (the vanilla RTTI, the installe
 | CET Lua mods | **Not the save:** each mod's `db.sqlite3` and files. psiberx's CET Kit `GameSession` joins a per-save Lua file to its save through a session-key fact (`_psxgs_session_key`), as Stock Market and News System does | [source: CET `LuaSandbox.cpp`; Stock Market `modules/external/GameSession.lua`] |
 | TweakXL and ArchiveXL additions | Not the save; the save references their records (TweakDBIDs) and resources (hashes) | [source] |
 
+How a mod ties such state to one save, and what happens to it on a new game, an older save or a deleted save, is on [save identity and lineage](save-identity.md).
+
 So a save's mod data can be read with **no per-mod schema**: the package names every class and field, and the save's type database settles which types are enums. Readable labels for hashes and enum members can come from the user's installed `r6/cache/final.redscripts`, which holds every compiled script class, field (with its `persistent` flag) and enum, vanilla and modded [source: redscript `crates/io`]. What happens to a removed mod's data on the next save is untested [hypothesis].
 
 ## 5. Editing safely
@@ -118,7 +120,7 @@ So a save's mod data can be read with **no per-mod schema**: the package names e
 2. What are the type database's 8-byte section, the high bits of each property record and the header's u64?
 3. Does the game re-save a removed mod's classes, drop them, or fail?
 4. Does the game read `TypeDatabase_v2` when loading, and what happens if a package uses a type it doesn't list?
-5. How many fact names can be recovered by hashing names found in the installed quest resources and scripts?
+5. How many fact names can be recovered by hashing names found in the installed quest resources and scripts? The main-story quest, phase and scene resources alone yield 3,687 distinct names ([main story as game state](main-story-state.md)); how many of a real save's hashes they cover is not yet measured.
 6. Which nodes does the game rewrite on every save even when nothing changed (the baseline an editor's diff is judged against)?
 
 ## In-game test asks
@@ -127,4 +129,4 @@ Batched in the [save editor design §11](../research/save/save-editor-design.md#
 
 ## Related pages
 
-[Save editor design](../research/save/save-editor-design.md) · [Save write-back design](../research/character-customization/save-writeback-design.md) · [Save import](../research/eye-artistry/save-import.md) · [Worn clothing](clothing.md) · [CC file chain](cc-file-chain.md) · [Archive and resource formats](archive-format.md) · [Runtime access](runtime-access.md)
+[Save identity and lineage](save-identity.md) · [Save editor design](../research/save/save-editor-design.md) · [Save write-back design](../research/character-customization/save-writeback-design.md) · [Save import](../research/eye-artistry/save-import.md) · [Worn clothing](clothing.md) · [CC file chain](cc-file-chain.md) · [Archive and resource formats](archive-format.md) · [Runtime access](runtime-access.md)

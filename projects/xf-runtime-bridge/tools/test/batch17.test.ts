@@ -44,7 +44,9 @@ describe("0.8.3 B1, B2: where the ink panel goes", () => {
   test("the redscript says what ink-place.ts says (the model, the plausibility check and every floor)", () => {
     const reds = readFileSync(join(projectDir, "redscript", "XFRuntimeBridgeInk.reds"), "utf8");
     expect(reds).toContain("return new Vector4(0.0, 0.0, rootWidth, screen.Y * rootWidth / screen.X);");
-    expect(reds).toContain("WidgetUtils.GlobalToLocal(this.m_root, new Vector2(0.0, 0.0))");
+    // 0.8.6: the measurement moved to XFInkStyle.MeasureVisible, shared with the panel inside photo mode's menu.
+    expect(reds).toContain("WidgetUtils.GlobalToLocal(local, new Vector2(0.0, 0.0))");
+    expect(reds).toContain("XFInkStyle.MeasureVisible(this.m_root, this.m_screen, this.m_width, this.m_height)");
     expect(reds).toContain("let hud = v.W / 2160.0;");
     expect(reds).toContain("return start + fraction * length + offset - fraction * size;");
     const floorFn = reds.slice(reds.indexOf("public static func Floor(name: String) -> Vector2 {"), reds.indexOf("public static func AnchorPoint"));

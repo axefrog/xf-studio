@@ -235,6 +235,29 @@ public abstract class XFScriptOutfit {
     return api.ok && XFScriptOutfit.Flag(api, api.isActive);
   }
 
+  // 0.8.11 (session 17: every area read "hidden" while V wore the outfit): the outfit part that shows in a vanilla clothing
+  // area. Equipment-EX clears the vanilla areas' visuals while its outfit is on, so the engine's own flags (hidden, overridden)
+  // say nothing about what the outfit shows; the part is the item attached to one of its outfit slots whose record's equip
+  // area is this one. An invalid ID when the outfit is off, empty there, or Equipment-EX's API is not the checked one.
+  public static func ItemFor(player: ref<PlayerPuppet>, area: gamedataEquipmentArea) -> ItemID {
+    let none: ItemID;
+    let api = XFScriptOutfit.Api();
+    if !api.ok || !IsDefined(player) || !XFScriptOutfit.Flag(api, api.isActive) {
+      return none;
+    }
+    let transactions = GameInstance.GetTransactionSystem(GetGameInstance());
+    for slot in XFScriptOutfit.Slots(api) {
+      let object = transactions.GetItemInSlot(player, slot);
+      if IsDefined(object) {
+        let item = object.GetItemID();
+        if Equals(XFInventory.ItemArea(ItemID.GetTDBID(item)), area) {
+          return item;
+        }
+      }
+    }
+    return none;
+  }
+
   // The outfit's parts: each used outfit slot and the item attached there (read through the transaction system, which
   // is where the outfit's visuals live); id is the item's exact identity (its combined hash) for the undo.
   public static func PartsJson(api: ref<XFOutfitApi>, player: ref<PlayerPuppet>) -> String {
@@ -396,6 +419,11 @@ public abstract class XFScriptOutfit {
 
   public static func Active() -> Bool {
     return false;
+  }
+
+  public static func ItemFor(player: ref<PlayerPuppet>, area: gamedataEquipmentArea) -> ItemID {
+    let none: ItemID;
+    return none;
   }
 
   public static func StateJson(player: ref<PlayerPuppet>) -> String {

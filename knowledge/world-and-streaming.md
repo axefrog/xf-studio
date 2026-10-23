@@ -346,4 +346,4 @@ The [runtime bridge](runtime-access.md) could later preview additions in game un
 
 ## Related pages
 
-[Archive and resource formats](archive-format.md) · [Mod loading](mod-loading.md) · [Runtime access](runtime-access.md) · [Terminals and arcade](terminals-and-arcade.md) · [World and interactive ideas](../research/backlog/world-and-interactive-ideas.md)
+[Archive and resource formats](archive-format.md) · [Mod loading](mod-loading.md) · [Runtime access](runtime-access.md) · [Terminals and arcade](terminals-and-arcade.md) · [World and interactive ideas](../research/backlog/world-and-interactive-ideas.md) · [Population and affiliations](population-and-affiliations.md) · [Places](places.md)

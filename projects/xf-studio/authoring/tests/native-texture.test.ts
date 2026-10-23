@@ -1,8 +1,7 @@
 // Native texture reader (phase 3): BCn decoding, the `.xbm` layout and its refusals, the served mip, the PNG stream, the worker's texture
 // message and the native-first exporter. Synthetic data only; the real-data comparison with WolvenKit is tools/native-texture-oracle.ts.
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { depotHash } from "../src/game/depot-path";
 import { archiveExportSource, type ExportAnswer, type ExportRequest, type GameAssetExporter } from "../src/game/host/game-asset-export";
@@ -18,10 +17,11 @@ import { decodeMip, servedMip, textureLayout } from "../src/native/xbm-texture";
 import { decodePng, encodePng, encodePngRows } from "../src/formats/png";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const tempRoot = () => { const root = mkdtempSync(join(tmpdir(), "xfs-native-texture-")); roots.push(root); return root; };
+const tempRoot = () => { const root = tempDir("xfs-native-texture-"); roots.push(root); return root; };
 const texel = (data: Uint8Array, i: number) => [...data.subarray(i * 4, i * 4 + 4)];
 
 /** A BC1 block: two RGB565 colours and 16 2-bit indices. */

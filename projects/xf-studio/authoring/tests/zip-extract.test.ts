@@ -1,13 +1,13 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { extractZip, readZip, safeEntryName, ZipError } from "../src/setup/host/zip-extract";
 import { makeZip } from "./zip-fixture";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-zip-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-zip-"); roots.push(root); return root; };
 const limits = { maxEntries: 100, maxTotalBytes: 1_000_000 };
 
 test("stored and deflated entries extract with their folders, sizes and hashes", () => {

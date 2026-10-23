@@ -7,7 +7,7 @@
  * Full screenshots go to evidence/screenshots/ (ignored); asset-free masked copies
  * go to evidence/ui-overhaul-2026-09-24/ for review.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { launch, MASK_VIEWPORTS, MOD, saveJson, startServer, UNMASK_VIEWPORTS, type Session } from "./cdp";
@@ -231,8 +231,9 @@ try {
     await js(`${P}.authoring.dispatch({ kind: 'quality.set', size: 1024 })`); await ready();
   });
 
-  await step("files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Undo import", async () => {
+  await step("files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Reopen previous", async () => {
     const dir = join(tmpdir(), `xfs-ui-downloads-${Date.now()}`);
+    process.once("exit", () => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
     await page.downloadTo(dir);
     await js(`${S}.dock.reveal('library')`); await page.wait(250);
     const clickButton = async (label: string) => {
@@ -265,9 +266,9 @@ try {
     if (confirm) { await js(`[...document.querySelectorAll('.menu .menu-item')].find(i => i.textContent.includes('Continue')).click()`); }
     await page.wait(900);
     const imported = await js<{ name: string; presets: number }>(`({ name: ${P}.library.summary().draft.name, presets: ${P}.library.summary().draft.presets.length })`);
-    await js(`[...document.querySelectorAll('.toast button')].find(b => b.textContent === 'Undo import')?.click()`); await page.wait(700);
+    await js(`[...document.querySelectorAll('.toast button')].find(b => b.textContent === 'Reopen previous')?.click()`); await page.wait(700);
     const restored = await js<string>(`${P}.library.summary().draft.name`);
-    record("files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Undo import",
+    record("files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Reopen previous",
       /^xfs\/recipe-/.test(recipe.schema) && collection.presets?.length === presetsBefore && size.w === 2048 && size.h === 2048 &&
       presetsAfter.length === presetsBefore + 1 && presetsAfter.includes("xfs.recipe") && imported.name === collection.name && imported.presets === collection.presets.length &&
       restored === "Renamed before import",

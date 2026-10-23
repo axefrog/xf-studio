@@ -18,7 +18,7 @@ import { NO_3D_PREVIEW_IN_ALPHA } from "../app/alpha-availability";
 import type { PreviewPreparationActions } from "../preview/preview-preparation";
 import { PreviewSetupActions } from "../preview/preview-setup";
 import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from "../setup/wolvenkit-setup";
-import { PROJECT_LINKS, type ProjectLink } from "../app/project-links";
+import { LOCAL_PROJECT_PAGES, PROJECT_LINKS, type ProjectLink } from "../app/project-links";
 import { createBrowserLocalSetup } from "../setup/browser/browser-local-setup-device";
 import { createBrowserInstallDetection } from "../installation/browser/browser-install-detection-device";
 import { createBrowserSaveExplorerDevice, savesLocationSignal } from "../saves/browser/browser-save-explorer-device";
@@ -589,9 +589,9 @@ function legacyAutostart(storage: Pick<Storage, "getItem">, verification: boolea
   try { return storage.getItem("xfs.preview.autostart") !== "off"; } catch { return true; }
 }
 
-/** Localhost opens XF Studio's own public pages in a new tab. */
+/** Localhost opens XF Studio's own public pages in a new tab (its own copy of a page it serves, such as the interface guide). */
 function openProjectLinkInNewTab(link: ProjectLink) {
-  const opened = window.open(PROJECT_LINKS[link], "_blank");
+  const opened = window.open(LOCAL_PROJECT_PAGES[link] ?? PROJECT_LINKS[link], "_blank");
   if (!opened) throw Error("Your browser blocked the new tab. Allow pop-ups for XF Studio, then try again.");
   opened.opener = null;
 }

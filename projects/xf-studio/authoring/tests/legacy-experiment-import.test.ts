@@ -5,16 +5,16 @@
  */
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { openTestLibrary } from "./fixtures/library-file";
 import { importLegacyExperiments, LEGACY_HAIR_GROOM_KIND as HAIR_GROOM_KIND } from "../src/platform/persistence/legacy-experiment-import";
 
 import { EXPERIMENT_FLAGS } from "../src/platform/api/experiments";
+import { tempDir } from "./temp-dir";
 
 const folders: string[] = [];
-function library(): string { const dir = mkdtempSync(join(tmpdir(), "xfs-legacy-")); folders.push(dir); return join(dir, "library.sqlite"); }
+function library(): string { const dir = tempDir("xfs-legacy-"); folders.push(dir); return join(dir, "library.sqlite"); }
 afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recursive: true, force: true }); } catch { /* closing */ } });
 
 /** The old log's tables, as development libraries have them. */

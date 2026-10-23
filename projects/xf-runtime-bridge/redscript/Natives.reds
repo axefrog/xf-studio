@@ -42,3 +42,24 @@ public static native func XFBridge_CetOverlay(open: Bool) -> Bool
 // Bridge 0.8 (the UI review): the ink panel reports the question it draws and whether it is on screen now, about five times a
 // second, so the CET label shows only the status and the answer keys instead of the question a third time.
 public static native func XFBridge_InkDrawn(id: Int32, shown: Bool) -> Bool
+// 0.8.4: the kill key chosen in the XF Runtime Bridge window (CET): action get, set (key: a chord such as Ctrl+Shift+End) or
+// reset; answers JSON with the key and what else may react to it. Saved to config.ini's [ui] kill_key.
+public static native func XFBridge_KillKey(action: String, key: String) -> String
+// Bridge 0.8.6: the panel inside photo mode's menu (XFRuntimeBridgePhotoPanel.reds). An event into the session's stream
+// (kind ink_tree, ink_pointer or ink_input; data a JSON object as text); and whether a mouse button is held now (its hover
+// guard: no hover is taken from photo mode's camera mid-drag).
+public static native func XFBridge_InkEvent(kind: String, text: String, data: String) -> Bool
+public static native func XFBridge_MouseHeld() -> Bool
+// Bridge 0.8.7: the player's own save refused while the bridge's save lock held (ours: whether that lock is among the
+// reasons), so the status surface says why; and the XF Runtime Bridge window's Save anyway, the player's say-so to save past
+// the lock (the plugin offers it only where writes and the save class are allowed; it answers JSON, {started} or {why}).
+public static native func XFBridge_SaveRefused(ours: Bool) -> Bool
+public static native func XFBridge_SaveAnyway(source: String) -> String
+// Bridge 0.8.7, test probes (the -writes package's redscript-probes; refused unless [bridge] allow_test_hooks): one record
+// into the probe's own ring (test.events; kind a-z, 0-9, _ . : /; data a JSON object as text), and the probe's switches (bit
+// 1 the hooks on, 2 the stim tap, 4 the save-identity probe's BeforeSave write armed).
+public static native func XFBridge_Event(kind: String, data: String) -> Bool
+public static native func XFBridge_ProbeFlags() -> Int32
+// Bridge 0.8.9 (the Sol review, finding 3): world.pin's drawn_by, OR-ed natively under one lock: ORs bits into the pin's views
+// and answers those before; bits 0 reads them, below 0 clears them (a new pin under a used id).
+public static native func XFBridge_PinDrawn(pin: Int32, bits: Int32) -> Int32

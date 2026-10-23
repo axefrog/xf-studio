@@ -4,8 +4,7 @@
  * own table and face rig come from the base archives only (PIPE-119), and damaged inputs refuse plainly. Synthetic documents only.
  */
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { refFromPath } from "../src/game/depot-path";
 import { encodeStaticFace } from "../src/engines/facial-rig/clip";
@@ -17,6 +16,7 @@ import type { Installation } from "../src/game/host/resolver-host";
 import { ExportRefusal, PrerequisiteStale } from "../src/platform/api";
 import { EXPRESSIONS_EXPORTER } from "../src/features/expressions/export";
 import { EXPRESSIONS_GAME_PREREQUISITE, readGameInputs } from "../src/features/expressions/export/game";
+import { tempDir } from "./temp-dir";
 
 const TRACKS = ["env_a", "jaw_mid_open", "lips_l_corner_up"];
 const JOINTS = new Uint8Array(2 * 16).fill(3);
@@ -55,7 +55,7 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 
 /** A prerequisite over the synthetic game, with a gate each extraction waits on and a record of every extraction and work folder. */
 function harness(fingerprint = { value: "install-A" }) {
-  const cacheRoot = mkdtempSync(join(tmpdir(), "xfs-expr-game-"));
+  const cacheRoot = tempDir("xfs-expr-game-");
   roots.push(cacheRoot);
   const calls: { archive: string; work: string }[] = [];
   let open: () => void = () => {}, gate = Promise.resolve();
@@ -164,7 +164,7 @@ test("the game's own table and face rig come from the base archives, never Archi
 
 test("damaged game inputs refuse plainly, and a damaged prepared file is stale for the builder (PIPE-118)", async () => {
   expect(() => readGameInputs({ schema: "nope" })).toThrow(ExportRefusal);
-  const cacheRoot = mkdtempSync(join(tmpdir(), "xfs-expr-damaged-"));
+  const cacheRoot = tempDir("xfs-expr-damaged-");
   roots.push(cacheRoot);
   const file = join(cacheRoot, "prepared.json");
   writeFileSync(file, JSON.stringify({ plan: { schema: "xfs/expressions-game-1" } }));

@@ -2,6 +2,8 @@
 // message says what happened and the one next step; the bridge's own technical message is kept
 // separately as `detail` for logs and bug reports.
 
+import { NPC_MESSAGES } from "./errors080npc.ts";
+
 /** cause (0.8.1): for a superseded command, the code it stopped with. */
 export type PlainError = { code: string; message: string; detail?: string; cause?: string };
 
@@ -9,6 +11,11 @@ export type PlainError = { code: string; message: string; detail?: string; cause
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   bad_request: "The game bridge didn't understand the request. This is a bug in the tool that sent it.",
   bad_params: "Some of the values given aren't valid for this action.",
+  test_hooks_off: "Test hooks are off in this build. Only the -writes package for the dedicated XF test profile has them ([bridge] allow_test_hooks in its config.ini).",
+  not_in_this_package:
+    "This package doesn't carry that test probe. Only the -writes package for the dedicated XF test profile has it (the companion probe's xfb_companion_probe.exe beside the plugin).",
+  save_in_progress: "Another save is being made right now (game_save, or Save anyway in the XF Runtime Bridge window). Nothing was saved by this request; try again when it has finished.",
+  companion_running: "A sleeping companion probe is already running. End it with test_companion_probe {mode: \"stop\"}, or quit the game, which ends it.",
   bad_version: "The game bridge speaks a different protocol version. Update XF Runtime Bridge and the XF tools together.",
   unauthorized: "The game bridge refused the connection key. Restart the game so the bridge writes a fresh session file.",
   killed:
@@ -19,7 +26,7 @@ export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
     "The game is loading (or still starting), so the bridge doesn't call into it until the loaded session's player is in; nothing was called or changed. Wait with game_wait for phase gameplay, then try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
   write_class_disabled:
-    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act; inventory stays off until the maintainer allows it, and showroom, player and act are listed only by the XF test profile's build). Nothing was changed.",
+    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act, npc; inventory stays off until the maintainer allows it, and showroom, player, act and npc are listed only by the XF test profile's build). Nothing was changed.",
   write_mismatch:
     "The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again.",
   writes_paused:
@@ -135,6 +142,7 @@ export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   expectation_failed: "The pre-capture check failed, so no screenshot was taken. The answer lists which check failed and why; fix the framing or light and try again, or pass on_fail: warn to capture anyway.",
   unsupported: "This game doesn't offer a safe way to do that yet.",
   unavailable: "That part of the game isn't available right now.",
+  no_district: "The game hasn't told its district system where V is yet. It does so when V crosses an area border, so a moment after a load, or once V moves, it will.",
   failed: "Something went wrong inside the game bridge. The plugin log has the details.",
   disconnected: "The connection to the game closed. Is the game still running?",
   client_timeout: "The game bridge didn't answer. The game may be frozen or loading; try again shortly.",
@@ -175,8 +183,9 @@ const BUSY_WORDS: Record<string, string> = {
   "locomotion:CrouchDodge": "dodging from a crouch",
 };
 
-export function plainBridgeError(code: string | undefined, detail?: string): PlainError {
-  const known = code && BRIDGE_MESSAGES[code];
+export function plainBridgeError(code: string | undefined, detail?: string, method?: string): PlainError {
+  // 0.8: the npc.* methods have their own wording first (a code like too_far means something else for the showroom).
+  const known = code && ((method?.startsWith("npc.") ? NPC_MESSAGES[code] : undefined) ?? BRIDGE_MESSAGES[code]);
   const state = code === "player_busy" ? busyState(detail) : null;
   const message = state
     ? `V is busy (${BUSY_WORDS[state] ?? state}; the game's state ${state}), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play.`

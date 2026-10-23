@@ -29,6 +29,8 @@ public abstract class XFUi {
     let popupModal = IsDefined(gameData) && gameData.GetBool(defs.UIGameData.Popup_IsModal);
     let out = "{\"ok\":true,\"phase\":" + XFJson.Str(phase) + ",\"menu_open\":" + XFJson.Flag(menuOpen) + ",\"popup\":{\"shown\":" + XFJson.Flag(popupShown) + ",\"modal\":" + XFJson.Flag(popupModal) + "}";
     out += ",\"character_menu\":" + XFJson.Flag(XFBridgeActions.CharacterMenuOpen()) + ",\"photo_mode\":" + XFJson.Flag(photo);
+    // 0.8.9: a phone screen on the HUD (contacts, the messenger, a message being read); the ink panel steps aside meanwhile.
+    out += ",\"phone_open\":" + XFJson.Flag(XFInkStyle.PhoneOpen());
     let registry = XFBridgeRegistry.Get();
     if IsDefined(registry) {
       out += ",\"photo_ui_hidden\":" + XFJson.Flag(registry.IsPhotoUiHidden()) + ",\"cursor_hidden_by_bridge\":" + XFJson.Flag(registry.IsCursorHidden());

@@ -14,6 +14,8 @@ body.guide { overflow: auto; height: auto; }
 .guide-top h1 { margin: 0; font: 600 var(--fs-lg)/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; }
 .guide-top .meta { color: var(--text-muted); font-size: var(--fs-sm); }
 .guide-controls { margin-left: auto; display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
+.guide-back { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--accent-text); font-size: var(--fs-sm); text-underline-offset: 2px; white-space: nowrap; }
+.guide-back:hover { text-decoration-thickness: 2px; }
 .guide-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--sp-7); padding: var(--sp-6) var(--sp-7) 80px; max-width: 1560px; margin: 0 auto; }
 .guide-toc { position: sticky; top: 72px; align-self: start; max-height: calc(100vh - 90px); overflow: auto; font-size: var(--fs-sm); }
 .guide-toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -178,6 +180,7 @@ ${input.css}
 </head>
 <body class="guide">
 <header class="guide-top"><span class="brand-mark" aria-hidden="true">XF</span><h1>Studio interface guide</h1><span class="meta">Authoritative reference · generated ${input.generated}</span>
+  <a class="guide-back" href="./" title="XF Studio, where Help › Interface guide opens this page">${i("chevronLeft")}<span>Back to XF Studio</span></a>
   <div class="guide-controls" role="group" aria-label="Guide display">
     <div class="segmented" role="group" aria-label="Theme"><button type="button" class="segment" data-theme-choice="system" aria-pressed="true">${i("monitor")}<span>System</span></button><button type="button" class="segment" data-theme-choice="light" aria-pressed="false">${i("sun")}<span>Light</span></button><button type="button" class="segment" data-theme-choice="dark" aria-pressed="false">${i("moon")}<span>Dark</span></button></div>
     <label class="toggle"><input type="checkbox" role="switch" class="switch" id="compare-themes"><span class="switch-track" aria-hidden="true"></span><span class="toggle-label">Light and dark side by side</span></label>

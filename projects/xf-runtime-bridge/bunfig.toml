@@ -1,5 +1,6 @@
-# Bun settings for this project. Run the tests from this folder (bun test tools) so the preload applies.
+# Bun settings for this project. Run the tests from this folder (bun test tools) so the preloads apply.
 [test]
 # Before any test file loads: switch key input off (XFB_NO_INPUT=1), so no test, whatever it imports,
-# can ever press a key on this machine's desktop (RB-41).
-preload = ["./tools/test/preload.ts"]
+# can ever press a key on this machine's desktop (RB-41); and (0.8.9) remove any scratch folder a test left
+# behind once the whole run ends (tools/test/temp-dir.ts).
+preload = ["./tools/test/preload.ts", "./tools/test/temp-dir-sweep.ts"]

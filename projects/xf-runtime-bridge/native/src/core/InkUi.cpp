@@ -129,7 +129,7 @@ json ToJson(const HudSettings& aSettings)
 {
     return json{{"show", aSettings.show},   {"anchor", aSettings.anchor}, {"x", aSettings.x},
                 {"y", aSettings.y},         {"scale", aSettings.scale},   {"layer", aSettings.layer},
-                {"nameplates", aSettings.nameplates}, {"cet_label", aSettings.cetLabel}};
+                {"nameplates", aSettings.nameplates}, {"cet_label", aSettings.cetLabel}, {"modal", aSettings.modal}};
 }
 
 bool AnchorOk(const std::string& aAnchor)
@@ -139,12 +139,17 @@ bool AnchorOk(const std::string& aAnchor)
 
 bool LayerOk(const std::string& aLayer)
 {
-    return aLayer == "hud" || aLayer == "notifications" || aLayer == "top";
+    return aLayer == "hud" || aLayer == "photo_menu" || aLayer == "notifications" || aLayer == "top";
+}
+
+bool LayerIsHud(const std::string& aLayer)
+{
+    return aLayer == "hud" || aLayer == "photo_menu";
 }
 
 HudSettings ApplyHudParams(const HudSettings& aCurrent, const HudSettings& aDefaults, const json& aParams)
 {
-    RequireOnly(aParams, {"show", "anchor", "x", "y", "scale", "layer", "nameplates", "cet_label", "reset"}, "ui.hud");
+    RequireOnly(aParams, {"show", "anchor", "x", "y", "scale", "layer", "nameplates", "cet_label", "modal", "reset"}, "ui.hud");
     if (Has(aParams, "reset") && Boolean(aParams, "reset"))
     {
         if (aParams.size() > 1)
@@ -183,7 +188,7 @@ HudSettings ApplyHudParams(const HudSettings& aCurrent, const HudSettings& aDefa
         next.layer = Word(aParams, "layer", 16);
         if (!LayerOk(next.layer))
         {
-            Bad("'layer' must be hud, notifications or top");
+            Bad("'layer' must be photo_menu, hud, notifications or top");
         }
     }
     if (Has(aParams, "nameplates"))
@@ -193,6 +198,10 @@ HudSettings ApplyHudParams(const HudSettings& aCurrent, const HudSettings& aDefa
     if (Has(aParams, "cet_label"))
     {
         next.cetLabel = Boolean(aParams, "cet_label");
+    }
+    if (Has(aParams, "modal"))
+    {
+        next.modal = Boolean(aParams, "modal");
     }
     return next;
 }
@@ -215,7 +224,7 @@ Status Summarize(const BridgeView& aView)
     }
     else if (aView.killed)
     {
-        whole("killed", "Stopped. Reconnect in the XF Runtime Bridge window (CET overlay), or restart the game.");
+        whole("killed", "Stopped. Reconnect in the XF Runtime Bridge window (open the CET overlay), or restart the game.");
         out.connection = "Stopped.";
     }
     else if (!aView.listening)
@@ -537,6 +546,30 @@ std::string KeyLabel(const std::string& aKey)
     return aKey.rfind("IK_", 0) == 0 ? aKey.substr(3) : aKey;
 }
 
+std::string KeyPrompt(const std::string& aKey, const std::string& aLabel)
+{
+    return "[" + KeyLabel(aKey) + "] " + aLabel;
+}
+
+bool InkEventKindOk(const std::string& aKind)
+{
+    return aKind == "ink_tree" || aKind == "ink_pointer" || aKind == "ink_input";
+}
+
+json InkEventData(const std::string& aText)
+{
+    if (aText.empty())
+    {
+        return nullptr;
+    }
+    auto parsed = json::parse(aText, nullptr, false);
+    if (parsed.is_object())
+    {
+        return parsed;
+    }
+    return json{{"raw", CleanMessageText(aText, 200)}};
+}
+
 std::string CleanField(const std::string& aText)
 {
     std::string out = aText;
@@ -567,6 +600,8 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
     out += "tone\t" + status.tone + "\n";
     out += "status\t" + CleanField(ForInk(status.text)) + "\n";
     out += std::string("surface\t") + SurfaceName(aSurface) + "\n";
+    // 0.8.6: ui.hud's modal for the photo-menu panel (0.8.7: it holds photo mode's exit), never while stopped.
+    out += std::string("modal\t") + (aSettings.modal && !aView.killed && aView.pluginEnabled ? "1" : "0") + "\n";
     if (!aView.killed)
     {
         for (const auto& message : aMessages)
@@ -603,9 +638,9 @@ std::string AnswerHint(const std::vector<std::string>& aChoices, const std::vect
     std::string hint;
     for (size_t i = 0; aKeysArmed && i < aChoices.size() && i < aAnswerKeys.size(); ++i)
     {
-        hint += (hint.empty() ? "" : "   ") + KeyLabel(aAnswerKeys[i]) + " " + aChoices[i];
+        hint += (hint.empty() ? "" : "   ") + KeyPrompt(aAnswerKeys[i], aChoices[i]);
     }
-    return hint.empty() ? "Answer in the XF Runtime Bridge window (CET overlay)." : hint;
+    return hint.empty() ? "Answer in the XF Runtime Bridge window (open the CET overlay)." : hint;
 }
 
 std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, MessageBoard& aBoard, const std::vector<std::string>& aAnswerKeys,
@@ -623,9 +658,11 @@ std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, Me
         if (aBoard.Pending(pending))
         {
             ask.id = pending.id;
-            for (size_t i = 0; i < pending.choices.size() && i < aAnswerKeys.size(); ++i)
+            // 0.8.6 (the Sol review): every choice, with its key where [ui] answer_keys gives one, kNoKey where it doesn't, so a
+            // panel that can be clicked shows them all whatever the keys.
+            for (size_t i = 0; i < pending.choices.size(); ++i)
             {
-                ask.keyed.emplace_back(aAnswerKeys[i], pending.choices[i]);
+                ask.keyed.emplace_back(i < aAnswerKeys.size() ? aAnswerKeys[i] : std::string(kNoKey), pending.choices[i]);
             }
             ask.inkShown = aInkShownAsk == pending.id ? aInkShownAsk : 0;
             ask.keysArmed = aKeysAsk == pending.id;
@@ -694,7 +731,7 @@ json ParseFrame(const std::string& aFrame)
         {
             out["scale"] = std::stod(fields[1]);
         }
-        else if ((key == "show" || key == "nameplates" || key == "cet_label" || key == "live") && fields.size() >= 2)
+        else if ((key == "show" || key == "nameplates" || key == "cet_label" || key == "live" || key == "modal") && fields.size() >= 2)
         {
             out[key] = fields[1] == "1";
         }
@@ -728,6 +765,12 @@ HudSettings HudPanel::Defaults() const
 {
     std::scoped_lock _(m_mutex);
     return m_defaults;
+}
+
+void HudPanel::DropModal()
+{
+    std::scoped_lock _(m_mutex);
+    m_current.modal = false;
 }
 
 json HudPanel::Configure(const json& aParams)
@@ -782,7 +825,7 @@ PinRequest ParsePin(const json& aParams)
         }
         request.target = PinRequest::Target::Piece;
         request.piece = static_cast<int32_t>(piece.get<int64_t>());
-        request.lift = kPieceLift; // 0.8: just above the crown (session 8 G5 asked for "just above its eyes")
+        request.lift = kPieceLift; // 0.8.4: at the crown; the game draws its marker above the point (session 11's G4)
     }
     else
     {

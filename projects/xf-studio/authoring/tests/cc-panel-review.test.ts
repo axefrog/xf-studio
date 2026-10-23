@@ -2,8 +2,7 @@
 // limit rule, the structural derivation, identities of pages, same-named choices, the quick action's home, generation tags, gating,
 // kept preset entries, the tried-style migration, the follower of the context and the host search. Asset-free fixtures only.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { buildCatalogue, CatalogueIndex, readCcoWithPresentation } from "../src/character/cc-catalogue";
 import { type CatalogueLabels, LABELS_NEED_WOLVENKIT, LABELS_RETRY } from "../src/character/host/cc-catalogue-host";
@@ -22,8 +21,9 @@ import { CREATOR_LIMITS, isCreatorName, isOptionId } from "../src/character/crea
 import { appearance, creator, fixtureSource, switcher } from "./cc-fixtures";
 import { fixtureInstallation } from "./resolver-fixtures";
 import { vHistory } from "./fixtures/character-steps";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-ccpanel-"));
+const root = tempDir("xfs-ccpanel-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const settle = (ms = 10) => new Promise(resolve => setTimeout(resolve, ms));
 const set = (option: string, choice: string, extra: Partial<CharacterChoice> = {}): CharacterChoice => ({ part: "head", option, choice, ...extra });

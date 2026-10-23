@@ -369,6 +369,8 @@ The top of the dock, measured live in a 640 px and a 1440 px window:
 | An unprotected change arriving mid-drag | moved 33 px during the drag | 0 px during the drag; the notice opens when the drag ends |
 | A state that needs action (restoring for 5 s, unprotected, missing save) | — | opens the notice: 33 px wide, 52.6 px narrow (message row, then the buttons' row) |
 
+`tools/polish-2-captures.ts` takes the captures for polish batch 2, the review's follow-ups (the header at 1,100, 1,280 and 1,440 px with and without the verification label, the kept-the-workspace line, the restoring status bar, the conflict sentence, the library rows, the read-only fade, Help's Interface guide link and the style guide's specimens), with the same isolation. `--tag before --root <checkout>` takes the same states from an earlier commit. Results go to `generated/polish-2/` (ignored, with an `index.md`).
+
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 
 - **A1, freeze on send.** From its first send, an outbox entry's command ID, bases and values never change. Every resend, after a timeout, a host restart or a renderer restart, reuses the ID.

@@ -4,6 +4,10 @@
 #include <RED4ext/Version.hpp>
 
 #include "core/BuildInfo.hpp"
+#include "core/Win32.hpp"
+
+#include <fstream>
+#include <sstream>
 
 namespace xfb::plugin
 {
@@ -97,7 +101,12 @@ std::string HudFrame()
 {
     // 0.8: made in one place (core BuildFrame), shared with the self-test's selftest.hud.
     auto& state = Get();
-    return inkui::BuildFrame(state.hud.Current(), BridgeViewNow(), state.messages, state.config.answerKeys, state.InkShownAsk(),
+    const auto view = BridgeViewNow();
+    if (view.killed)
+    {
+        state.hud.DropModal(); // 0.8.6: the kill switch ends ui.hud's modal; Reconnect starts without it
+    }
+    return inkui::BuildFrame(state.hud.Current(), view, state.messages, state.config.answerKeys, state.InkShownAsk(),
                              static_cast<inkui::StatusSurface>(state.statusSurface.load()), state.InkKeysAsk());
 }
 
@@ -122,6 +131,9 @@ nlohmann::json InfoJson()
         {"allow_creator_leave", state.config.allowCreatorLeave},
         {"allow_live_pose", state.config.allowLivePose},
         {"restore_pending", state.restore.Pending()},
+        // 0.8.4 (the UI review's fix 7): whether the bridge changed the game this run, so the window says saving stays
+        // locked only when it does.
+        {"writes_used", state.restore.WritesUsed()},
         {"script_layer", state.scriptLayer.Describe()},
         {"rearm_pending", state.rearmRequested.load()},
         // 0.7: the overlay host's switches (the CET window takes its theme from here) and the answer keys.
@@ -134,11 +146,178 @@ nlohmann::json InfoJson()
         // 0.8.2: which status surface shows now (0.8.3's names: ink_panel, xf_box, cet_line, or none while loading).
         {"status_surface", inkui::SurfaceName(static_cast<inkui::StatusSurface>(state.statusSurface.load()))},
         {"answer_keys", state.config.answerKeys},
-        // 0.8.3: the bridge's own kill key ([ui] kill_key); the XF Runtime Bridge window names it beside Stop.
-        {"kill_key", {{"enabled", state.config.killKey.enabled}, {"label", state.config.killKey.label}, {"setting", "[ui] kill_key in config.ini"}}},
+        // 0.8.3: the bridge's own kill key ([ui] kill_key); the XF Runtime Bridge window names it beside Stop. 0.8.4: the window
+        // changes it; the answer adds its spelling, the default, and what else may react to it.
+        {"kill_key", KillKeyJson()},
+        // 0.8.5: the sound a new question plays ([ui] question_sound), or off.
+        {"question_sound", state.config.questionSound.empty() ? std::string("off") : state.config.questionSound},
+        // 0.8.7: the bridge's save lock as the player meets it: whether the window offers Save anyway, refusals, the outcome.
+        {"save_lock", SaveLockJson()},
         {"last_rearm", [&state] {
              std::scoped_lock _(state.rearmMutex);
              return state.lastRearm;
          }()}};
+}
+bool SaveAnywayOffered()
+{
+    auto& state = Get();
+    if (!state.config.allowWrites || (state.config.writeClasses & kWriteSave) == 0 || !state.bridge)
+    {
+        return false;
+    }
+    const auto& dispatcher = state.bridge->GetDispatcher();
+    // Only while the bridge runs and its lock is (as far as the plugin knows) held: it is taken before the first change, and a
+    // refused save of the player's says so.
+    return !dispatcher.IsKilled() && (state.restore.WritesUsed() || state.saveRefusals.load() > 0);
+}
+
+nlohmann::json SaveLockJson()
+{
+    auto& state = Get();
+    std::scoped_lock _(state.saveAnywayMutex);
+    nlohmann::json out{{"save_anyway", SaveAnywayOffered()}, {"running", state.saveAnywayRunning.load()}, {"refusals", state.saveRefusals.load()},
+                       {"last_seq", state.saveAnywaySeq}};
+    if (!state.saveAnywayLast.empty())
+    {
+        out["last"] = state.saveAnywayLast;
+    }
+    return out;
+}
+
+killkey::Chord State::KillKey()
+{
+    std::scoped_lock _(killKeyMutex);
+    return config.killKey;
+}
+
+namespace
+{
+std::string ReadSmall(const std::filesystem::path& aPath)
+{
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(aPath, ec) || std::filesystem::file_size(aPath, ec) > 8u * 1024 * 1024 || ec)
+    {
+        return {};
+    }
+    std::ifstream in(aPath, std::ios::binary);
+    std::ostringstream text;
+    text << in.rdbuf();
+    return text.str();
+}
+
+// The game's folder: the plugin sits in <game>/red4ext/plugins/XFRuntimeBridge.
+std::filesystem::path GameRoot()
+{
+    return Get().pluginDir.parent_path().parent_path().parent_path();
+}
+} // namespace
+
+killkey::Conflicts ReadKillKeyConflicts(const killkey::Chord& aChord)
+{
+    const auto root = GameRoot();
+    const auto files = killkey::InputMappingFiles(root);
+    return killkey::FindConflicts(aChord, files, ReadSmall(root / L"bin" / L"x64" / L"plugins" / L"cyber_engine_tweaks" / L"bindings.json"));
+}
+
+nlohmann::json KillKeyJson()
+{
+    auto& state = Get();
+    std::scoped_lock _(state.killKeyMutex);
+    const auto& chord = state.config.killKey;
+    const killkey::Chord fallback;
+    return nlohmann::json{{"enabled", chord.enabled},
+                          {"label", chord.label},
+                          {"spelling", killkey::Spelling(chord)},
+                          {"default", fallback.label},
+                          {"is_default", killkey::Spelling(chord) == killkey::Spelling(fallback)},
+                          {"setting", "[ui] kill_key in config.ini (the XF Runtime Bridge window's Change... sets it)"},
+                          {"warnings", state.killKeyConflicts.warnings},
+                          {"notes", state.killKeyConflicts.notes},
+                          {"unseen", killkey::kUnseenNote}};
+}
+
+nlohmann::json SetKillKey(const std::string& aText, const std::string& aSource)
+{
+    auto& state = Get();
+    killkey::Chord chord;
+    std::string why;
+    if (!killkey::Parse(aText, chord, why))
+    {
+        return nlohmann::json{{"ok", false}, {"why", "That key can't stop the bridge (" + why + "). Pick another key."}, {"kill_key", KillKeyJson()}};
+    }
+    // 0.8.4 (the UI review): the bridge's own answer keys are refused in place (pressing one to answer would stop the bridge);
+    // keys the game or CET use are warned about, never refused (the maintainer's brief).
+    if (chord.enabled && !chord.ctrl && !chord.shift && !chord.alt)
+    {
+        for (const auto& name : state.config.answerKeys)
+        {
+            killkey::Chord answerKey;
+            std::string ignored;
+            if (killkey::Parse(name, answerKey, ignored) && answerKey.vk == chord.vk)
+            {
+                return nlohmann::json{{"ok", false}, {"why", chord.label + " answers XF Studio's questions. Pick another key, or hold Ctrl, Shift or Alt with it."}, {"kill_key", KillKeyJson()}};
+            }
+        }
+    }
+    if (!chord.enabled)
+    {
+        // The window offers no Off (the UI review): the in-game stop stays; off is config.ini's choice only.
+        return nlohmann::json{{"ok", false}, {"why", "The stop key can only be switched off in config.ini. Pick a key."}, {"kill_key", KillKeyJson()}};
+    }
+    auto conflicts = ReadKillKeyConflicts(chord);
+    {
+        std::scoped_lock _(state.killKeyMutex);
+        state.config.killKey = chord;
+        state.killKeyConflicts = conflicts;
+    }
+    state.killKeyChanged.store(true);
+    // Saved into config.ini's [ui] kill_key, so it lasts across launches (under MO2 the file is the mod's own copy).
+    const auto path = state.pluginDir / L"config.ini";
+    // The review of 0.8.4: only after a whole, successful read, then read back; any failure keeps the old config.ini as it was.
+    // 0.8.5 (session 12's K5): the old file is kept in the bridge's runtime folder (the last 3), not beside config.ini, where
+    // MO2 put the new file into its overwrite folder, which every profile shares (core win32::ReplaceSettingsFile).
+    std::string saveError;
+    win32::SettingsReplace replaced;
+    {
+        std::string before;
+        std::string ioWhy;
+        bool missing = false;
+        const auto runtime = win32::RuntimeDirectory();
+        if (!win32::ReadFileExact(path, before, missing, ioWhy))
+        {
+            saveError = missing ? "config.ini isn't there, so the key lasts only until the game closes"
+                                : "config.ini couldn't be read (" + ioWhy + "), so it was left as it is and the key lasts only until the game closes";
+        }
+        else if (runtime.empty())
+        {
+            saveError = "the bridge's runtime folder isn't known, so config.ini was left as it is and the key lasts only until the game closes";
+        }
+        else if (!win32::ReplaceSettingsFile(path, killkey::WithKillKey(before, killkey::Spelling(chord)), runtime / L"settings-backups", 3, replaced, ioWhy))
+        {
+            saveError = "config.ini wasn't changed: " + ioWhy + "; the key lasts only until the game closes";
+        }
+    }
+    log::Warn("bridge.kill_key_changed", "key=" + killkey::Spelling(chord) + " from=" + aSource + " saved=" + (saveError.empty() ? "true" : "false") +
+                                             " warnings=" + std::to_string(conflicts.warnings.size()) + " backup=" +
+                                             (replaced.backup.empty() ? std::string("none") : win32::Narrow(replaced.backup.filename().wstring())) +
+                                             " temp=" + (replaced.tempBeside ? "beside" : "runtime"));
+    for (const auto& warning : conflicts.warnings)
+    {
+        log::Warn("bridge.kill_key_warning", warning);
+    }
+    nlohmann::json answer{{"ok", true}, {"saved", saveError.empty()}, {"kill_key", KillKeyJson()}};
+    if (!replaced.backup.empty())
+    {
+        // 0.8.5: where the old config.ini is kept (the XF Runtime Bridge window says so), and whether the temporary file had to
+        // go beside config.ini (another volume).
+        answer["backup"] = win32::Narrow(replaced.backup.wstring());
+        answer["backup_folder"] = R"(%LOCALAPPDATA%\XFStudio\runtime-bridge\settings-backups)";
+        answer["temp_beside"] = replaced.tempBeside;
+    }
+    if (!saveError.empty())
+    {
+        answer["save_error"] = saveError;
+    }
+    return answer;
 }
 } // namespace xfb::plugin

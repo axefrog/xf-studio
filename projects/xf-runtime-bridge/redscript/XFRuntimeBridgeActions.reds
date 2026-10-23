@@ -834,11 +834,15 @@ protected cb func OnShow(reversedUI: Bool) -> Bool {
     registry.SetPhotoUiHidden(false);
     registry.SetCursorHidden(false);
   }
+  // 0.8.6: the ink panel inside photo mode's menu (XFRuntimeBridgePhotoPanel.reds), after the game's own OnShow.
+  this.XFBridgePhotoPanelShow();
   return result;
 }
 
 @wrapMethod(gameuiPhotoModeMenuController)
 protected cb func OnHide() -> Bool {
+  // 0.8.6: the photo-menu panel gives back the camera's mouse and its input callbacks before photo mode closes.
+  this.XFBridgePhotoPanelHide();
   let registry = XFBridgeRegistry.Get();
   if IsDefined(registry) {
     // Give the cursor back before photo mode closes, so no later menu inherits a hidden cursor.
@@ -3387,4 +3391,36 @@ public func XFBridgeLoad(index: Int32, modded: Bool) -> Void {
   } else {
     this.LoadSaveInGame(index);
   }
+}
+
+// 0.8.5: a soft sound when a new question appears ([ui] question_sound), so a missed prompt is rarer. The plugin calls this
+// once per question from its Running tick, only while a game session is live. eventName is a game sound event: by default
+// ui_messenger_recieved, the sound MessengerDialogViewController plays through the same AudioSystem.Play when a message
+// arrives in an open conversation (the game's 2.31 scripts). Plays on the UI, not at a place in the world.
+public abstract class XFBridgeSound {
+  public static func Question(cid: String, eventName: String) -> String {
+    let game = GetGameInstance();
+    if !GameInstance.IsValid(game) {
+      return "{\"ok\":false,\"code\":\"game_unavailable\",\"message\":\"the game isn't running a session\"}";
+    }
+    let audio = GameInstance.GetAudioSystem(game);
+    if !IsDefined(audio) {
+      return "{\"ok\":false,\"code\":\"game_unavailable\",\"message\":\"the game's audio system isn't there\"}";
+    }
+    audio.Play(StringToName(eventName));
+    XFBridgeLog.Info(cid, "question sound: " + eventName);
+    return "{\"ok\":true}";
+  }
+}
+
+// 0.8.7 (session 14's friction: after a bridge change the player's own save got only the game's "You can't save right now"):
+// every refused save the player tries (the pause menu's Save, a quick-save, the main menu's) builds its notice here
+// (ingameUINotification.script:119; pauseMenu.script:132-150, inGameMenuGameController.script:531-544). The game's notice is
+// unchanged; the plugin is told whether the bridge's own lock was among the reasons, and then says why on the status surface
+// and offers Save anyway in the XF Runtime Bridge window.
+@wrapMethod(UIInGameNotificationEvent)
+public final static func CreateSavingLockedEvent(const locks: script_ref<array<gameSaveLock>>) -> ref<UIInGameNotificationEvent> {
+  let result = wrappedMethod(locks);
+  XFBridge_SaveRefused(XFBridgeActions.OwnSaveLockHeld());
+  return result;
 }

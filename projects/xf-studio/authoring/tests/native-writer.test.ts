@@ -3,8 +3,7 @@
 // capture), which needs the ignored oracle folder, the game's Oodle (XFS_RESOLVER_GAME_ROOT) and XF Studio's texture compressor.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { readCr2w } from "../src/native/cr2w-reader";
 import { readResourceJson } from "../src/native/resource-document";
@@ -26,6 +25,7 @@ import { encodeDds } from "../src/engines/layered-makeup/flat-mip-chain";
 import { EYE_MAKEUP_WRITER_ORACLE, TEXTURE_GROUP_SETTINGS } from "../src/legacy/eye-makeup/export/host/package-resource-builder";
 import type { ResourceTools, TextureImportSettings } from "../src/platform/api";
 import { oracleDescribe } from "./optional-oracles";
+import { tempDir } from "./temp-dir";
 
 const raw = (bytes: Uint8Array) => bytes;
 const noDecompress = () => { throw Error("nothing here is compressed"); };
@@ -258,7 +258,7 @@ describe("the archive packer", () => {
 
 describe("the Build's tools write natively and send refusals to WolvenKit", () => {
   const folders: string[] = [];
-  const temp = () => { const dir = mkdtempSync(join(tmpdir(), "xfs-native-tools-")); folders.push(dir); return dir; };
+  const temp = () => { const dir = tempDir("xfs-native-tools-"); folders.push(dir); return dir; };
   const fakeWolvenKit = (calls: string[]): ResourceTools => ({
     identity: "wolvenkit:9.0.1:0123456789abcdef",
     async importTextures(input, output) { calls.push(`import ${readdirSync(input).join(",")}`); for (const name of readdirSync(input)) writeFileSync(join(output, name.replace(/\.dds$/, ".xbm")), "wk"); return { exitCode: 0, log: "wk import" }; },

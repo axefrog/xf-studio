@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { applyColourMatrix, type ChoicePreviewSource, compositeChannels, isPreviewKey, parsePreviewSource, PREVIEW_STYLES, previewCamera, previewColourMatrix,
   previewKey, previewKeyInput, previewKindOf, previewSourceOf, type PreviewTokens, TURNTABLE, turntableYaw } from "../src/character/choice-preview";
@@ -18,6 +17,7 @@ import { PreviewSpin } from "../src/studio-ui/components/choice-preview";
 import { h } from "../src/studio-ui/dom";
 import { installLightDom, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
+import { tempDir } from "./temp-dir";
 
 /** Choice previews phase 1 (research/character-customization/choice-previews-design.md §10): keys, sources, theming, camera, store, endpoint, scheduling. */
 const hex = (n: number) => n.toString(16).padStart(64, "0");
@@ -144,7 +144,7 @@ describe("the row's camera", () => {
 describe("the host store", () => {
   const webp = new Uint8Array([...new TextEncoder().encode("RIFF"), 8, 0, 0, 0, ...new TextEncoder().encode("WEBPVP8L"), 0, 0, 0, 0]);
   test("keeps WebP images by key, refuses other bytes and keys, and clears", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-previews-"));
+    const root = tempDir("xfs-previews-");
     try {
       const store = new ChoicePreviewStore(root);
       expect(store.putImage(hex(1), webp)).toBe(true);
@@ -161,7 +161,7 @@ describe("the host store", () => {
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
   test("a source is reused only while its choice's manifest is unchanged", () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-previews-"));
+    const root = tempDir("xfs-previews-");
     try {
       const manifests = join(root, "choices"), key = "a".repeat(40);
       require("node:fs").mkdirSync(manifests);
@@ -183,7 +183,7 @@ describe("the host store", () => {
 });
 
 describe("the preview endpoint", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-previews-"));
+  const root = tempDir("xfs-previews-");
   const store = new ChoicePreviewStore(root);
   const asked: unknown[] = [];
   const handler = createChoicePreviewHandler({ previews: store, previewSources: async input => { asked.push(input); return input.positions.map(position => ({ position, state: "unprepared" as const })); } });

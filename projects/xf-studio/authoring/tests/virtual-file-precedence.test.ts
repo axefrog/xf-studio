@@ -6,14 +6,14 @@
  * script-bundle search) orders copies by it.
  */
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildMountPlan, visibleCopy, type ArchiveFile, type VirtualCopy } from "../src/game/archive-precedence";
 import { mo2ProviderFolders, parseMo2Modlist } from "../src/installation/mo2-instance";
 import { discoverSources } from "../src/game/host/source-discovery";
 import { gameFileProviders } from "../src/saves/host/saves-host-sources";
 import { defaultLocalSettings } from "../src/setup/local-settings";
+import { tempDir } from "./temp-dir";
 
 const copy = (id: string, extra: Partial<VirtualCopy> = {}): VirtualCopy =>
   ({ id, provider: "game", providerName: id, active: true, priority: null, ...extra });
@@ -67,7 +67,7 @@ test("MO2 provider folders: overwrite, enabled mods by priority, then the game; 
 });
 
 test("the source inventory, the script-bundle search and the resolver agree on a loose file's visible copy", () => {
-  const base = mkdtempSync(join(tmpdir(), "xfs-precedence-"));
+  const base = tempDir("xfs-precedence-");
   try {
     const game = join(base, "game"), mo2 = join(base, "mo2");
     const put = (path: string, text = "x") => { mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, text); };

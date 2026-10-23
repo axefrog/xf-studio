@@ -9,12 +9,18 @@
 //   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
 //   r6/tweaks/XFRuntimeBridge/^xf_photo_mode_presets.yaml (TweakXL; diagnostic and writes packages only; the
 //                                                         "^" makes TweakXL read it last, after other mods' presets)
+//   r6/tweaks/XFRuntimeBridge/xf_npc_actors.yaml         (TweakXL; writes package only: the XF actor records npc.spawn
+//                                                         brings in, clones of base-game civilians, 0.8)
+//   archive/pc/mod/xfs_bridge_npc_gestures.archive       (writes package only, when built: the XF gesture carrier for
+//                                                         npc.act, --npc-carrier; not built yet, 0.8)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/init.lua   (CET; 0.8.2: the folder's name is CET's mod name,
 //                                                                          so its Bindings tab heads it "XF Runtime Bridge")
 //   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/panel.lua  (CET panel; diagnostic and writes packages only)
 // The live-pose carrier is a separate test package (tools/live-pose/build-carrier.ts), never in these.
 //   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json, RED4ext.SDK and Dear ImGui, MIT)
 //   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
+//   red4ext/plugins/XFRuntimeBridge/Scripts/XFRuntimeBridgeProbe*.reds  (0.8.7, test probes from redscript-probes/; writes only)
+//   red4ext/plugins/XFRuntimeBridge/xfb_companion_probe.exe              (0.8.7, the companion probe; writes only)
 
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -53,8 +59,21 @@ export const STAGING_NOTES: readonly string[] = [
  */
 export const CET_MOD_NAME = "XF_Runtime_Bridge";
 export const CET_DIR = `bin/x64/plugins/cyber_engine_tweaks/mods/${CET_MOD_NAME}`;
+/** 0.8: the XF actor records (TweakXL), in the -writes package only. */
+export const NPC_ACTORS_FILE = "r6/tweaks/XFRuntimeBridge/xf_npc_actors.yaml";
+/** 0.8: the XF gesture carrier's archive (npc.act), in the -writes package only and only when it has been built. */
+export const NPC_CARRIER_ARCHIVE = "archive/pc/mod/xfs_bridge_npc_gestures.archive";
 export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 export const THEME_FILE = `${CET_DIR}/theme.lua`;
+
+/** 0.8.7: the companion probe's executable, beside the plugin in the -writes package only. */
+export const COMPANION_FILE = "xfb_companion_probe.exe";
+/** 0.8.7: the test probes (methods and what they carry), the -writes package only. */
+export const TEST_PROBES: readonly string[] = [
+  "test.events (the game-events probe: knowledge/game-events.md §12's hooks, log-only, in a ring of their own)",
+  "test.save.identity (the save-identity probe: the xfs_probe_* test facts and the lifecycle points)",
+  "test.companion.probe (xfb_companion_probe.exe under companion@1's containment)",
+];
 
 export const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -91,11 +110,14 @@ function listFiles(dir: string): string[] {
 /** The variant's config.ini, from the project's (which must keep every switch off). */
 /**
  * The -writes package's write classes: inventory only with --allow-inventory (the maintainer's approval); showroom (XF Finish
- * Showroom's test heads and lights, bridge 0.5) and player (0.6: teleport, look, crouch, weapons, menus, glides) in every
- * -writes build, which only the dedicated test profile stages. act (irreversible actions for V) stays off: no command uses it yet.
+ * Showroom's test heads and lights, bridge 0.5), player (0.6: teleport, look, crouch, weapons, menus, glides) and npc (0.8: XF
+ * actors and NPC direction) in every -writes build, which only the dedicated test profile stages. act (irreversible actions
+ * for V) stays off: no command uses it yet.
  */
 export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
-  options.allowInventory ? ["photo", "world", "character", "inventory", "save", "showroom", "player"] : ["photo", "world", "character", "save", "showroom", "player"];
+  options.allowInventory
+    ? ["photo", "world", "character", "inventory", "save", "showroom", "player", "npc"]
+    : ["photo", "world", "character", "save", "showroom", "player", "npc"];
 
 /** The [bridge] section's enabled line (after the section's comment lines). */
 const BRIDGE_ENABLED = (on: boolean) => new RegExp(`^\\[bridge\\]\\n(?:;.*\\n)*enabled = ${on}$`, "m");
@@ -106,6 +128,7 @@ export function variantConfig(base: string, variant: Variant, options: { allowIn
   if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
   if (/^allow_creator_leave = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_creator_leave = false");
   if (!/^allow_live_pose = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_live_pose = false");
+  if (!/^allow_test_hooks = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_test_hooks = false");
   // 0.7: two sections now have an "enabled" key, so both checks name their section.
   if (!BRIDGE_ENABLED(false).test(config)) throw new Error("native/config/config.ini must keep enabled = false");
   if (!/^\[overlay\]\n(?:;.*\n)*enabled = false$/m.test(config)) throw new Error("native/config/config.ini must keep [overlay] enabled = false");
@@ -138,6 +161,9 @@ export function variantConfig(base: string, variant: Variant, options: { allowIn
     // writing the XF carrier clip's keys, in the test profile only, with the separate carrier test package.
     config = config.replace(/^allow_live_pose = false$/m, "allow_live_pose = true");
     if (!/^allow_live_pose = true$/m.test(config)) throw new Error("writes config did not allow the live-pose carrier");
+    // 0.8.4: the session checks' test hooks (test.save.delay, card row L1), in the test profile's package only.
+    config = config.replace(/^allow_test_hooks = false$/m, "allow_test_hooks = true");
+    if (!/^allow_test_hooks = true$/m.test(config)) throw new Error("writes config did not allow the test hooks");
     const warning = "; THIS COPY ALLOWS WRITES: stage it only in the dedicated XF test MO2 profile, never an everyday one.";
     config = config.replace(/^(\[bridge\])$/m, `${warning}\n$1`);
     if (!config.includes(warning)) throw new Error("writes config lost its warning");
@@ -156,6 +182,10 @@ export type StageOptions = {
   commit: string;
   /** -writes only: also allow the inventory write class (only with the maintainer's approval). */
   allowInventory?: boolean;
+  /** 0.8.7, -writes only: the companion probe (build/Release/xfb_companion_probe.exe beside the DLL unless given). */
+  companion?: string;
+  /** -writes only (0.8): the built XF gesture carrier archive to include (--npc-carrier; not built yet); none when absent. */
+  npcCarrier?: string;
 };
 
 export type StagedFile = { path: string; bytes: number; sha256: string };
@@ -170,12 +200,19 @@ export type Manifest = {
   inventory_writes: boolean;
   allow_creator_leave: boolean;
   allow_live_pose: boolean;
+  allow_test_hooks: boolean;
+  /** 0.8.7: the test probes this package carries (the -writes package only). */
+  test_probes: string[];
   photo_mode_presets: string | null;
   /** Steps and consequences for staging by hand (RB-65); empty for the default package, which carries no presets. */
   staging_notes: string[];
   cet_panel: boolean;
   /** 0.7: whether the XF overlay host is on ([overlay] enabled): the test packages only. */
   overlay_host: boolean;
+  /** 0.8: whether the XF actor records (npc.spawn) are in the package: the -writes package only. */
+  npc_actors: boolean;
+  /** 0.8: whether the XF gesture carrier (npc.act) is in the package; without it gestures are refused carrier_missing. */
+  npc_gesture_carrier: boolean;
   /** 0.8: whether the XF box shows its diagnostic lines ([overlay] diagnostics): the diagnostic package only. */
   overlay_diagnostics: boolean;
   commit: string;
@@ -213,6 +250,18 @@ export function stageVariant(options: StageOptions): Manifest {
   if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "panel.lua"), PANEL_FILE);
   // 0.7: the panel's XF Studio theme (generated from the Studio's tokens, tools/overlay/theme.ts) goes with the panel.
   if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "theme.lua"), THEME_FILE);
+  // 0.8.7: the test probes (the game-events, save-identity and companion probes, behind [bridge] allow_test_hooks): only the
+  // -writes package carries their scripts and the companion. They come out, or move into XF Lab, when XF Core's C1 to C3 land.
+  if (variant === "writes") {
+    for (const name of readdirSync(join(projectDir, "redscript-probes"))) {
+      if (name.endsWith(".reds")) put(join(projectDir, "redscript-probes", name), `${PLUGIN_DIR}/Scripts/${name}`);
+    }
+    put(options.companion ?? join(dirname(dll), COMPANION_FILE), `${PLUGIN_DIR}/${COMPANION_FILE}`);
+  }
+  // 0.8: the XF actor records and (when built) the gesture carrier: the test profile's -writes package only.
+  if (variant === "writes") put(join(projectDir, "tweaks", "test-profile", "xf_npc_actors.yaml"), NPC_ACTORS_FILE);
+  const carrier = variant === "writes" && options.npcCarrier ? options.npcCarrier : undefined;
+  if (carrier) put(carrier, NPC_CARRIER_ARCHIVE);
 
   const files = listFiles(stageDir).map((path) => ({
     path: relative(stageDir, path).replaceAll("\\", "/"),
@@ -229,10 +278,14 @@ export function stageVariant(options: StageOptions): Manifest {
     inventory_writes: variant === "writes" && options.allowInventory === true,
     allow_creator_leave: variant === "writes",
     allow_live_pose: variant === "writes",
+    allow_test_hooks: variant === "writes",
+    test_probes: variant === "writes" ? [...TEST_PROBES] : [],
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",
     overlay_host: variant !== "default",
+    npc_actors: variant === "writes",
+    npc_gesture_carrier: carrier !== undefined,
     overlay_diagnostics: variant === "diagnostic",
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
@@ -242,7 +295,7 @@ export function stageVariant(options: StageOptions): Manifest {
       redscript: "0.5.31",
       cet: "1.37.1",
       tweakxl: "1.11.4 (optional; the data marker and the test profile's camera presets need it)",
-      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather and Equipment-EX's route need it)",
+      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather, Equipment-EX's route and NPC direction need it)",
     },
     files,
   };

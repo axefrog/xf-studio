@@ -4,8 +4,7 @@
  * masculine plate prerequisite, what Check and Build say when he can't be included, and the verifier's per-body checks.
  */
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import {
@@ -14,8 +13,8 @@ import {
 } from "../src/legacy/eye-makeup/export/package-resources";
 import { expectedPaths } from "../src/legacy/eye-makeup/export/archive-inventory";
 import { plateTopology, weldedSeams } from "../src/legacy/eye-makeup/plate/eye-plate-verify";
-import { AUDIENCE_BOTH, AUDIENCE_FEMININE, CHECK_BUILD_DECIDES_NOTE, CHECK_MASCULINE_NOTE, EYE_MAKEUP_EXPORTER, MASCULINE_NOT_PREPARED,
-  MASCULINE_WINDOW } from "../src/features/eye-makeup/export";
+import { AUDIENCE_BOTH, AUDIENCE_FEMININE, CHECK_BUILD_DECIDES_NOTE, CHECK_MASCULINE_NOTE, EYE_MAKEUP_EXPORTER, MASCULINE_DAMAGED,
+  MASCULINE_NOT_PREPARED, MASCULINE_WINDOW } from "../src/features/eye-makeup/export";
 import { PLATE_REACH_UNCHECKED_NOTE, describePackageBuild } from "../src/legacy/eye-makeup/export/package-filter";
 import { EYE_PLATE_HEAD_SETTING } from "../src/legacy/eye-makeup/plate/eye-plate-head-choice";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
@@ -28,13 +27,14 @@ import { EYE_PLATE_MASCULINE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-p
 import { runProductCommand, type ProductCommandOptions } from "../src/platform/export/product-builder";
 import { verifyProductBuildResult } from "../src/platform/export/product-host";
 import { checkProducts } from "../src/platform/export/product-check";
-import type { PackageBuildResult } from "../src/platform/api";
+import { PrerequisiteStale, type PackageBuildResult, type PackageCheckResult } from "../src/platform/api";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, sha, writePlate } from "./fixtures/product-fixture";
+import { tempDir } from "./temp-dir";
 
 const app = resolve(import.meta.dir, "..");
 const fixture = JSON.parse(readFileSync(resolve(app, "../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
-const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-masculine-export-")));
+const root = realpathSync.native(tempDir("xfs-masculine-export-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const feminine = planCollection(fixture), both = planCollection(fixture, { masculine: true });
@@ -239,7 +239,7 @@ test("Check: his plate ready, not yet known, unavailable, or on other texture co
   // the developer's words for his head; the head-choice step says it covers both V's and names the setting as Settings does.
   const reasons = ["plate_source_missing", "plate_source_unsupported", "plate_source_modded", "plate_source_incomplete", "plate_tool_failed"]
     .map(code => masculineUnavailable(code).unavailable).concat([masculineUnavailable("plate_source_incomplete", ["broken_head.archive"]).unavailable]);
-  for (const { message } of [...reasons, { message: MASCULINE_WINDOW.text }]) {
+  for (const { message } of [...reasons, { message: MASCULINE_WINDOW.text }, { message: MASCULINE_DAMAGED.text }]) {
     expect(message).toMatch(/^[A-Z][^;]*; [^;]*[.]$/); // one sentence: the reason; the step
     expect(message.length).toBeLessThanOrEqual(150);
     expect(message).toContain("masculine V");
@@ -255,6 +255,57 @@ test("Check: his plate ready, not yet known, unavailable, or on other texture co
   expect(masculineUnavailable("plate_source_incomplete", ["broken_head.archive"]).unavailable.message).toContain("“broken_head.archive”");
   expect(masculineUnavailable("plate_source_incomplete", ["broken_head.archive"]).unavailable.message).toContain("reinstall or remove it");
 });
+
+test("PIPE-122: a damaged masculine plate leaves him out with a warning; her looks still check and build, and Check and Build agree", async () => {
+  const plan = (his: unknown) => EYE_MAKEUP_EXPORTER.plan({ collection: fixture, diagnostics: false,
+    prerequisites: { [EYE_PLATE_PREREQUISITE]: plateReachInput(FOOTPRINT), [EYE_PLATE_MASCULINE_PREREQUISITE]: his } });
+  const without = plan(masculineUnavailable("plate_source_unsupported"));
+  // A damaged value in any plan (Check's, the host's Build plan, the builder's): her mod exactly as without him, and one warning.
+  for (const damaged of [{ footprint: FOOTPRINT, sha256: "not a hash" }, { footprint: { broken: true }, sha256: "e".repeat(64) }, {}]) {
+    const outcome = plan(damaged);
+    expect(outcome.check.audience).toBe(AUDIENCE_FEMININE);
+    expect(outcome.check.warnings).toEqual([MASCULINE_DAMAGED]);
+    expect(outcome.check.details.bodies).toEqual(["female"]);
+    expect(outcome.plan.masculine).toBeUndefined();
+    expect(outcome.check.presets).toEqual(without.check.presets);
+    expect(outcome.packaged).toBe(without.packaged);
+    expect(outcome.inventory).toEqual(without.inventory);
+  }
+  // A Check on his prepared plate whose recorded footprint no longer reads: the same answer, not a refusal.
+  const checked = setup("ready");
+  writeFileSync(join(checked.dir, "pma", PLATE_UV_FILE), "{ damaged");
+  const result = await runProductCommand({ ...checked.options, check: true }) as PackageCheckResult;
+  expect(result.products[0].features[0]).toMatchObject({ audience: AUDIENCE_FEMININE, warnings: [MASCULINE_DAMAGED] });
+  expect(result.products[0].features[0].details.bodies).toEqual(["female"]);
+  // A Build that finds his files changed since his manifest: stale, so the host discards his plate and prepares it afresh once
+  // (PIPE-37's retry); her plate is never touched.
+  const built = setup("ready");
+  writeFileSync(join(built.his.plate, "xfs_eye_plate_pma.morphtarget"), "changed since the manifest");
+  const stale = await runProductCommand(built.options).then(() => null, error => error);
+  expect(stale).toBeInstanceOf(PrerequisiteStale);
+  expect(stale.prerequisite).toBe(EYE_PLATE_MASCULINE_PREREQUISITE);
+}, 60_000);
+
+test("PIPE-122: a truncated masculine plate manifest is the same damage in Check and Build: stale, never a raw parse error, and her export still builds", async () => {
+  const checked = setup("ready"), built = setup("ready");
+  for (const target of [checked, built]) writeFileSync(target.his.manifestFile, '{"schema": "xfs/eye-plate-1", "files": {');
+  // Check leaves him out with the warning.
+  const result = await runProductCommand({ ...checked.options, check: true }) as PackageCheckResult;
+  expect(result.products[0].features[0]).toMatchObject({ audience: AUDIENCE_FEMININE, warnings: [MASCULINE_DAMAGED] });
+  expect(result.products[0].features[0].details.bodies).toEqual(["female"]);
+  // Build reads the same damage as a stale prerequisite, which the host answers by discarding his plate and preparing it afresh once.
+  const stale = await runProductCommand(built.options).then(() => null, error => error);
+  expect(stale).toBeInstanceOf(PrerequisiteStale);
+  expect(stale.prerequisite).toBe(EYE_PLATE_MASCULINE_PREREQUISITE);
+  // The host's second attempt finds him unavailable: her mod builds without him, and says so.
+  const options = { ...built.options, prerequisites: { ...built.options.prerequisites,
+    [EYE_PLATE_MASCULINE_PREREQUISITE]: masculineUnavailable("plate_source_unsupported") } };
+  const again = await runProductCommand(options) as PackageBuildResult;
+  const [feature] = again.products[0].features;
+  expect(feature.audience).toBe(AUDIENCE_FEMININE);
+  expect(feature.warnings).toEqual([{ text: masculineUnavailable("plate_source_unsupported").unavailable.message,
+    next: masculineUnavailable("plate_source_unsupported").unavailable.next }]);
+}, 60_000);
 
 test("the masculine plate prerequisite never stops a Build: a failure becomes the reason he is left out; cancelling still cancels", async () => {
   const dir = resolve(root, crypto.randomUUID()), game = join(dir, "game"), cacheRoot = join(dir, "cache");

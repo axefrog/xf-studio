@@ -70,7 +70,14 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 | [First-level plan](plan.md) | Quality bar, subsystems, workstreams, milestones and the second-level plans |
 | [P1. Research method](p1-research-method.md) | How the craft research finds every relevant discipline and merges it into the composite |
 | [P2. Game substrate research](p2-game-substrate.md) | What the engine must learn about the game itself, and how |
+| [P3. The simulation layer](p3-simulation-layer.md) | Layer 1 beyond the kernel: who exists, routines and city events, groups and order, beliefs and telling, drives, NPC change, mirroring the game; Kabuki as the first district |
+| [P4. Seeding layer and seed language](p4-seeding-layer.md) | Layer 2's design: seeds as partly resolved quests, roles, windows, beats, offers, profiles, casting, the lifecycle and the arbiter, traced to the dossiers |
+| [P5. The procedural engine](p5-procedural-engine.md) | Layer 3's design: the director, sowing, fitting and sifting, with the bounded hooks S2 calls, traced to the dossiers |
 | [S0. Kernel specification](spec/kernel.md) | Exactly how the dimensional model works: data, algorithms, invariants, test vectors |
+| [S1. Simulation layer](spec/simulation.md) | Exactly how the world runs for the first district: processes, policies, the event catalogue, the mirror, the production gate, and what it exposes |
+| [S2. Seed language and seeding layer](spec/seeding.md) | Exactly how seeds are written, compiled, cast, run, offered and persisted; its lint, fit report, invariants and fixtures |
+| [S3. Procedural engine](spec/procedural.md) | Exactly how layer 3 fits, paces, sifts and sows, for the core; its invariants and fixtures |
+| [Quest corpus statistics](quest-corpus-statistics.md) | Node types, phase sizes, fact usage, branching, scenes per quest and graph shape of the game's authored quests, generated from the corpus database ([how it is built](../consumers/quest-corpus/scripts/README.md)) |
 | [Design seeds](design-seeds.md) | Fine-grained design points, each waiting for the plan that will absorb it |
 | [Runtime requirements](runtime-requirements.md) | The senses and verbs the system needs in game, and their status |
 
@@ -79,5 +86,6 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 - **Want first, then work backwards.** Each subsystem decides what it needs without regard to what exists today. The [runtime requirements](runtime-requirements.md) then work out whether the bridge, an XF Core plugin or a standalone mod should provide it.
 - **Evidence.** Knowledge about the game follows the [knowledge base grades](../../knowledge/README.md#rules-for-knowledge-pages). Craft research uses grades defined by the research method. Offline simulation never proves in-game behaviour.
 - **Credits.** Every published work, practitioner, mod or tool that teaches us something gets an entry in the [community credits](../../docs/community-credits.md) during the work that used it.
+- **The engine's concepts are first-party.** Its core concepts (context and relevance, the dimensional model, groups and perspectives) are the project's own. Outside systems and research may be cited as comparisons, never as sources, and are not credited for them. The public documents describe only what has been shared for publication.
 - **No spoilers for the player.** Design documents describe mechanisms and use made-up examples. Stories generated for the maintainer to play stay in `local/story-engine/`, out of chat reports and commit messages.
 - **Write current truth.** Plans are revised in place as decisions land. The design seeds register shows where each fine point went.

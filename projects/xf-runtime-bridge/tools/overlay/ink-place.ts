@@ -69,3 +69,110 @@ export function place(anchor: Anchor, offset: Vec2, panel: Vec2, visible: Rect, 
   top = Math.min(Math.max(top, visible.y + margin), Math.max(visible.y + margin, visible.y + visible.h - margin - panel.y));
   return { x: left, y: top };
 }
+
+export type ZoneHow = "kept" | "nudged" | `corner:${"top_left" | "top_right" | "bottom_left" | "bottom_right"}` | "overlapping";
+
+const zoneHit = (r: Rect, z: Rect, gap: number) => r.x < z.x + z.w + gap && r.x + r.w + gap > z.x && r.y < z.y + z.h + gap && r.y + r.h + gap > z.y;
+const keepInside = (r: Rect, v: Rect, gap: number): Rect => ({
+  x: Math.min(Math.max(r.x, v.x + gap), Math.max(v.x + gap, v.x + v.w - gap - r.w)),
+  y: Math.min(Math.max(r.y, v.y + gap), Math.max(v.y + gap, v.y + v.h - gap - r.h)),
+  w: r.w,
+  h: r.h,
+});
+
+/** One zone's way out: along the anchor's own edge first (sideways for a top or bottom anchor), then the other axis, the nearer side first. */
+function slideOut(r: Rect, z: Rect, v: Rect, gap: number, sidewaysFirst: boolean): Rect | null {
+  const across = [{ ...r, x: z.x - gap - r.w }, { ...r, x: z.x + z.w + gap }].sort((a, b) => Math.abs(a.x - r.x) - Math.abs(b.x - r.x));
+  const along = [{ ...r, y: z.y - gap - r.h }, { ...r, y: z.y + z.h + gap }].sort((a, b) => Math.abs(a.y - r.y) - Math.abs(b.y - r.y));
+  for (const c of sidewaysFirst ? [...across, ...along] : [...along, ...across]) {
+    const kept = keepInside(c, v, gap);
+    if (!zoneHit(kept, z, gap)) return kept;
+  }
+  return null;
+}
+
+function nudge(r: Rect, zones: readonly Rect[], v: Rect, gap: number, sidewaysFirst: boolean): Rect {
+  let out = keepInside(r, v, gap);
+  for (let pass = 0; pass < 4; pass++) {
+    const z = zones.find((zone) => zoneHit(out, zone, gap));
+    if (!z) break;
+    const moved = slideOut(out, z, v, gap, sidewaysFirst);
+    if (!moved) break;
+    out = moved;
+  }
+  return out;
+}
+
+/**
+ * 0.8.9 (session 15's A5): the photo-menu panel's rectangle kept out of photo mode's own zones (its menu, its top bar, the
+ * title row with its icon, its hint strips, measured in the game from the controller's widgets), as XFInkStyle.Avoid does:
+ * the asked place when it is clear; else the panel slides out of each zone it meets along its anchor's own edge first
+ * (sideways for a top or bottom anchor, so bottom_right goes left of the menu, not up over it), then the other way, up to
+ * four zones; if it still meets one, the first free corner, the anchor's own side first; then kept inside the visible
+ * screen, gap apart. `how` says which.
+ */
+export function avoidZones(panel: Rect, zones: readonly Rect[], visible: Rect, gap: number, anchor: string = "bottom_right"): Rect & { how: ZoneHow } {
+  const asked = keepInside(panel, visible, gap);
+  if (!zones.some((z) => zoneHit(asked, z, gap))) return { ...asked, how: "kept" };
+  const sidewaysFirst = !anchor.startsWith("center");
+  const nudged = nudge(asked, zones, visible, gap, sidewaysFirst);
+  if (!zones.some((z) => zoneHit(nudged, z, gap))) return { ...nudged, how: "nudged" };
+  const bottom = !anchor.startsWith("top"), right = !anchor.endsWith("left");
+  const corners: { name: "top_left" | "top_right" | "bottom_left" | "bottom_right"; bottom: boolean; right: boolean }[] = [
+    { name: `${bottom ? "bottom" : "top"}_${right ? "left" : "right"}`, bottom, right: !right },
+    { name: `${bottom ? "top" : "bottom"}_${right ? "right" : "left"}`, bottom: !bottom, right },
+    { name: `${bottom ? "top" : "bottom"}_${right ? "left" : "right"}`, bottom: !bottom, right: !right },
+    { name: `${bottom ? "bottom" : "top"}_${right ? "right" : "left"}`, bottom, right },
+  ];
+  for (const c of corners) {
+    const at: Rect = { x: c.right ? visible.x + visible.w - gap - panel.w : visible.x + gap, y: c.bottom ? visible.y + visible.h - gap - panel.h : visible.y + gap, w: panel.w, h: panel.h };
+    const r = nudge(at, zones, visible, gap, true);
+    if (!zones.some((z) => zoneHit(r, z, gap))) return { ...r, how: `corner:${c.name}` };
+  }
+  return { ...nudged, how: "overlapping" };
+}
+
+/**
+ * 0.8.10 (session 16's D1r): the game's own HUD blocks as rectangles in the root's units for the visible screen, as
+ * XFInkStyle.HudBlocks has them (Floor's measurements, in design units of 2160 per screen height): the minimap and the quest
+ * tracker at the top right (the tracker grows to about 1250), the weapon block and prompts at the bottom right, the status
+ * bars at the top left and the status and cyberware icons at the bottom left.
+ */
+export function hudBlocks(visible: Rect): Rect[] {
+  const h = visible.h / 2160;
+  return [
+    { x: visible.x + visible.w - 860 * h, y: visible.y, w: 860 * h, h: 1250 * h },
+    { x: visible.x + visible.w - 860 * h, y: visible.y + visible.h - 480 * h, w: 860 * h, h: 480 * h },
+    { x: visible.x, y: visible.y, w: 700 * h, h: 300 * h },
+    { x: visible.x, y: visible.y + visible.h - 520 * h, w: 570 * h, h: 520 * h },
+  ];
+}
+
+/**
+ * 0.8.10: a pin mark at the screen's side edge (its asked rectangle) kept clear of the HUD's blocks and of the ink panel when
+ * it is on screen, sliding along the edge to the nearest free place, as XFInkOverlay.PlacePinMark does with XFInkStyle.Avoid.
+ */
+export function placeEdgeMark(asked: Rect, visible: Rect, panel: Rect | null, units = 1): Rect {
+  const zones = hudBlocks(visible);
+  if (panel && panel.w > 1 && panel.h > 1) zones.push(panel);
+  return slideAlong(asked, zones, visible, 12 * units);
+}
+
+/**
+ * The Sol review of 0.8.10, finding 2: a mark on a side edge keeps its x and moves along the edge only, to the nearest free
+ * interval (XFInkStyle.SlideAlong): the asked top when clear, else the nearest top just above or below a zone, inside the
+ * visible screen and clear of every zone; with none free it stays where asked (clamped).
+ */
+export function slideAlong(r: Rect, zones: readonly Rect[], v: Rect, gap: number): Rect {
+  const low = v.y + gap, high = Math.max(low, v.y + v.h - gap - r.h);
+  const asked = Math.min(Math.max(r.y, low), high);
+  const clear = (y: number) => !zones.some((z) => zoneHit({ ...r, y }, z, gap));
+  if (clear(asked)) return { ...r, y: asked };
+  let best: number | null = null;
+  for (const z of zones) {
+    for (const top of [z.y - gap - r.h, z.y + z.h + gap]) {
+      if (top >= low && top <= high && clear(top) && (best === null || Math.abs(top - asked) < Math.abs(best - asked))) best = top;
+    }
+  }
+  return { ...r, y: best ?? asked };
+}

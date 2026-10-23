@@ -1,7 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { depotHash } from "../src/game/depot-path";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { accessorFloats, GlbWriter, parseGlb, readAccessor } from "../src/formats/glb";
 import { decodePng, encodePng } from "../src/formats/png";
@@ -15,6 +14,7 @@ import { PREVIEW_CORE_FILES } from "../src/preview/preview-core-recipe";
 import {
   EYE_MORPH_LIFT, eyeGlb, eyeMorphGlb, fakeUncook, fixturePlateRecipe, fixturePreviewRecipe, headGlb, HEAD_TRIANGLES, HEAD_VERTICES, materialExports, plateVertexIds,
 } from "./preview-core-fixture";
+import { tempDir } from "./temp-dir";
 
 /**
  * Tests that run whole derivations (real files written, hashed, encoded and verified in temporary folders). The head test runs eleven:
@@ -22,7 +22,7 @@ import {
  */
 const DERIVATION_TIMEOUT_MS = 30_000;
 const roots: string[] = [];
-const temporary = (label: string) => { const root = mkdtempSync(join(tmpdir(), `xfs-preview-${label}-`)); roots.push(root); return root; };
+const temporary = (label: string) => { const root = tempDir(`xfs-preview-${label}-`); roots.push(root); return root; };
 /** Each scenario gets its own export cache, so one fake's exports never leak into another. */
 const fresh = (fake: { exporter: (root: string) => any }) => fake.exporter(temporary("exports"));
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });

@@ -1,6 +1,7 @@
 #include "core/Config.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <fstream>
 #include <sstream>
@@ -156,6 +157,10 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseBool(value, config.allowLivePose);
         }
+        else if (key == "bridge.allow_test_hooks")
+        {
+            ok = ParseBool(value, config.allowTestHooks);
+        }
         else if (key == "bridge.allow_write_classes")
         {
             // A comma-separated list; an unknown name is ignored with a warning, so a typo can
@@ -199,10 +204,14 @@ Config ParseConfig(const std::string& aText)
                 {
                     config.writeClasses |= kActPlayer;
                 }
+                else if (name == "npc")
+                {
+                    config.writeClasses |= kWriteNpc;
+                }
                 else if (!name.empty())
                 {
                     config.warnings.push_back("line " + std::to_string(lineNumber) + ": unknown write class '" +
-                                              name.substr(0, 32) + "' ignored (photo, world, character, inventory, save, showroom, player, act)");
+                                              name.substr(0, 32) + "' ignored (photo, world, character, inventory, save, showroom, player, act, npc)");
                 }
             }
         }
@@ -221,6 +230,14 @@ Config ParseConfig(const std::string& aText)
         else if (key == "ui.hud_panel")
         {
             ok = ParseBool(value, config.hudPanel);
+        }
+        else if (key == "ui.layer")
+        {
+            ok = value == "photo_menu" || value == "hud" || value == "notifications" || value == "top";
+            if (ok)
+            {
+                config.hudLayer = value;
+            }
         }
         else if (key == "ui.cet_label")
         {
@@ -244,14 +261,32 @@ Config ParseConfig(const std::string& aText)
                 config.killKey = chord;
                 if (chord.enabled && killkey::GameBinds(chord.vk))
                 {
-                    config.warnings.push_back("line " + std::to_string(lineNumber) + ": the kill key " + chord.label +
-                                              " is also one of the game's own keys, so pressing it does that too; End is free");
+                    config.warnings.push_back("line " + std::to_string(lineNumber) + ": the stop key " + chord.label +
+                                              " is also one of the game's own keys, so pressing it does that too; the default, Ctrl + Shift + End, is free");
                 }
             }
             else
             {
                 config.warnings.push_back("line " + std::to_string(lineNumber) + ": kill_key: " + why + "; the default (" + killkey::kDefault + ") stays");
                 ok = true; // the warning says it; no second "bad value" line
+            }
+        }
+        else if (key == "ui.question_sound")
+        {
+            // 0.8.5: true (the default sound), false, or a sound event's name (lower case letters, digits and _).
+            bool on = false;
+            if (ParseBool(value, on))
+            {
+                config.questionSound = on ? kQuestionSoundDefault : "";
+            }
+            else
+            {
+                ok = !value.empty() && value.size() <= 64 && std::isalpha(static_cast<unsigned char>(value[0])) &&
+                     std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::islower(c) || std::isdigit(c) || c == '_'; });
+                if (ok)
+                {
+                    config.questionSound = value;
+                }
             }
         }
         else if (key == "overlay.enabled")
@@ -333,10 +368,12 @@ std::string DescribeConfig(const Config& aConfig)
     text += " bridge.allow_write_classes=" + (classes.empty() ? std::string("<none>") : classes);
     text += " bridge.allow_creator_leave=" + std::string(aConfig.allowCreatorLeave ? "true" : "false");
     text += " bridge.allow_live_pose=" + std::string(aConfig.allowLivePose ? "true" : "false");
+    text += " bridge.allow_test_hooks=" + std::string(aConfig.allowTestHooks ? "true" : "false");
     text += " bridge.request_timeout_ms=" + std::to_string(aConfig.requestTimeoutMs);
     text += " bridge.max_requests_per_second=" + std::to_string(aConfig.maxRequestsPerSecond);
     text += " bridge.idle_disconnect_seconds=" + std::to_string(aConfig.idleDisconnectSeconds);
     text += " ui.hud_panel=" + std::string(aConfig.hudPanel ? "true" : "false");
+    text += " ui.layer=" + aConfig.hudLayer;
     text += " ui.cet_label=" + std::string(aConfig.cetLabel ? "true" : "false");
     text += " ui.nameplates=" + std::string(aConfig.nameplates ? "true" : "false");
     std::string keys;
@@ -349,6 +386,7 @@ std::string DescribeConfig(const Config& aConfig)
     std::string killKey = aConfig.killKey.enabled ? aConfig.killKey.label : std::string("off");
     killKey.erase(std::remove(killKey.begin(), killKey.end(), ' '), killKey.end());
     text += " ui.kill_key=" + killKey;
+    text += " ui.question_sound=" + (aConfig.questionSound.empty() ? std::string("off") : aConfig.questionSound);
     text += " overlay.enabled=" + std::string(aConfig.overlayEnabled ? "true" : "false") + " overlay.theme=" + aConfig.overlayTheme +
             " overlay.scale_percent=" + std::to_string(aConfig.overlayScalePercent) + " overlay.diagnostics=" + (aConfig.overlayDiagnostics ? "true" : "false");
     text += " log.level=" + std::string(LevelName(aConfig.logLevel));
@@ -389,6 +427,10 @@ std::vector<std::string> WriteClassList(const Config& aConfig)
     if (aConfig.writeClasses & kActPlayer)
     {
         out.emplace_back("act");
+    }
+    if (aConfig.writeClasses & kWriteNpc)
+    {
+        out.emplace_back("npc");
     }
     return out;
 }

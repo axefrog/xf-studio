@@ -26,6 +26,12 @@ export type JsonSchema = {
   default?: unknown;
 };
 
+/**
+ * 0.8.10 (session 16's N7: `holocall` was refused with only the valid styles listed): a value an input used to take and
+ * has been renamed to. An enum refusal for one of these names its replacement first (the replacement must be a listed value).
+ */
+const RENAMED_VALUES: Readonly<Record<string, string>> = { holocall: "call_subtitle" };
+
 /** Returns plain-language problems with `value`, or an empty list when it matches. */
 export function validate(schema: JsonSchema, value: unknown, path = "input"): string[] {
   const problems: string[] = [];
@@ -82,7 +88,11 @@ export function validate(schema: JsonSchema, value: unknown, path = "input"): st
       if (schema.maxLength !== undefined && value.length > schema.maxLength)
         problems.push(`${where} is too long: ${value.length} characters, at most ${schema.maxLength}${schema.description ? ` (${schema.description.replace(/\.$/, "")})` : ""}.`);
       if (schema.pattern && !new RegExp(schema.pattern).test(value)) problems.push(`${where} has characters that aren't allowed.`);
-      if (schema.enum && !schema.enum.includes(value)) problems.push(`${where} must be one of: ${schema.enum.join(", ")}.`);
+      if (schema.enum && !schema.enum.includes(value)) {
+        const renamed = RENAMED_VALUES[value];
+        const pointer = renamed && schema.enum.includes(renamed) ? `'${value}' is now called ${renamed}: use that. ` : "";
+        problems.push(`${where} must be one of: ${schema.enum.join(", ")}. ${pointer}`.trim());
+      }
       break;
     }
     case "boolean":

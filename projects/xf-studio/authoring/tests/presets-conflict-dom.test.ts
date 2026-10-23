@@ -35,11 +35,12 @@ test("conflict notices show what differs; Keep mine and Use theirs ask first, na
   const notices = root.querySelectorAll(".doc-conflict").filter(notice => !notice.hidden);
   expect(notices.map(notice => notice.querySelector(".doc-conflict-text")!.textContent)).toEqual(conflicts.map(item => `Changed in another window. ${item.message}`));
   const buttons = (notice: LightElement) => notice.querySelectorAll("button").filter(control => !control.hidden).map(control => control.textContent);
-  expect(buttons(notices[0]!)).toEqual(["Keep mine", "Use theirs", "Keep both"]);
+  // "Use other window's", never "Use theirs" (UI review item 12): the other version is another window's, not another person's.
+  expect(buttons(notices[0]!)).toEqual(["Keep mine", "Use other window's", "Keep both"]);
   // A collection's name or list can't be kept as a copy: only the first two show.
-  expect(buttons(notices[1]!)).toEqual(["Keep mine", "Use theirs"]);
+  expect(buttons(notices[1]!)).toEqual(["Keep mine", "Use other window's"]);
   const popover = () => lightDocument.body.querySelector(".confirm-popover");
-  // Use theirs discards this window's changes: it asks first, in place, naming the preset and what goes, with focus on Cancel.
+  // Use other window's discards this window's changes: it asks first, in place, naming the preset and what goes, with focus on Cancel.
   notices[0]!.querySelectorAll("button")[1]!.click();
   await settle();
   expect(requests).toEqual([]);

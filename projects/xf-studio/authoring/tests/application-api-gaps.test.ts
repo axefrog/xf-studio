@@ -62,7 +62,7 @@ test("content edits are refused while a loaded collection has no selected preset
 test("file workflow IDs are part of the one application registry with unique IDs", () => {
   const { app } = coreFixture();
   expect(app.fileKinds()).toEqual(["recipe.import", "recipe.export", "mask.export", "savedV.import", "savedV.export", "characterPreset.import", "characterPreset.export",
-    "collection.import", "collection.export", "collection.plan", "package.check", "package.build", "collection.recover"]);
+    "collection.import", "collection.export", "collection.plan", "collection.exportWindowCopy", "package.check", "package.build", "collection.recover"]);
   const registry = app.registry(), ids = registry.map(entry => entry.id);
   expect(new Set(ids).size).toBe(ids.length);
   expect(registry.filter(entry => entry.family === "file").map(entry => entry.id)).toEqual(app.fileKinds());

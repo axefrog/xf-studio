@@ -2,13 +2,13 @@
 // runs only when XFS_TEST_GAME_ROOT (Cyberpunk 2077 folder) and XFS_TEST_WOLVENKIT (WolvenKit.CLI.exe)
 // are set. Without them it is reported as skipped, never as a pass.
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createGameAssetExporter } from "../src/game/host/game-asset-export";
 import { createWolvenKitUncook } from "../src/game/host/game-asset-export-wolvenkit";
 import { ensurePreviewCore, previewCoreReadiness } from "../src/preview/host/preview-core-service";
 import { accessorFloats, parseGlb, readAccessor } from "../src/formats/glb";
+import { tempDir } from "./temp-dir";
 
 /** Show-through counts at neutral, and per eye shape with the eyes left static (the old preview) or morphed. */
 function eyeSeating(bytes: Uint8Array) {
@@ -48,7 +48,7 @@ const available = !!game && !!wolvenkit && existsSync(join(game, "archive", "pc"
 if (!available) console.warn("preview-core-game.test.ts skipped: set XFS_TEST_GAME_ROOT and XFS_TEST_WOLVENKIT to derive the 3D preview from an installed game.");
 
 test.skipIf(!available)("the 3D preview core derives from the installed 2.31 game, verifies and is reused", async () => {
-  const cacheRoot = mkdtempSync(join(tmpdir(), "xfs-preview-game-"));
+  const cacheRoot = tempDir("xfs-preview-game-");
   try {
     const exporter = createGameAssetExporter(join(cacheRoot, "exports"), createWolvenKitUncook(wolvenkit!));
     const derived = await ensurePreviewCore({ gameRoot: game!, cacheRoot, exporter });
@@ -79,7 +79,7 @@ test.skipIf(!available)("the 3D preview core derives from the installed 2.31 gam
 }, 600_000);
 
 test.skipIf(!available)("cancelling a real derivation stops WolvenKit and publishes nothing", async () => {
-  const cacheRoot = mkdtempSync(join(tmpdir(), "xfs-preview-game-cancel-"));
+  const cacheRoot = tempDir("xfs-preview-game-cancel-");
   try {
     const controller = new AbortController();
     const exporter = createGameAssetExporter(join(cacheRoot, "exports"), createWolvenKitUncook(wolvenkit!));

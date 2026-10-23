@@ -235,6 +235,16 @@ async function runHandover(input: Json, context: CommandContext): Promise<Comman
       ...(released && released.released === false ? { why: released.why } : { removed: released?.removed ?? [] }),
     });
   }
+  // 0.8 (NPC direction): every NPC the bridge directs is released in the same step (actors removed, picks left alone again,
+  // dialogue choices and lines taken down); an older bridge without NPC direction answers nothing here.
+  const npcs = handed.npcs_released as Json | null | undefined;
+  if (npcs) {
+    steps.push({
+      step: "release the NPCs the bridge directs",
+      ok: npcs.released !== false,
+      ...(npcs.released === false ? { why: npcs.why } : { released: npcs.released ?? [] }),
+    });
+  }
   await attempt(context, "ui.message", { text: "Handed over: the game is yours. XF automation is paused until the session resumes.", level: "ask", seconds: 15 });
   return { value: { handed_over: true, was: handed.was, steps, note: input.note ?? null, undo: { method: "session.resume", params: {} } } };
 }
@@ -318,6 +328,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
       occlusion: bool("Check the sight line from the camera to each face (default true)."),
       points: { type: "array", description: "World points to project with the game's own projection.", items: point3("A world point [x, y, z]."), maxItems: 32 },
       piece_eyes: point3("A showroom head's eyes in its own frame (default [0, 0.0497, 1.691], the showroom build's)."),
+      npc_detail: bool("Also give each NPC its character record's details (affiliation, type, rarity, archetype, attitude group, crowd flags) under \"character\". Off by default; one extra lookup per distinct record."),
     }),
     bridge: { method: "scene.read" },
   },
@@ -348,7 +359,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     input: obj({
       since: int("Only events after this sequence number (default 0: the oldest kept).", 0),
       limit: int("At most this many events, 1 to 500. Default 100.", 1, 500),
-      kinds: { type: "array", description: "Only these kinds (write, refused, kill, handover, resume, behaviour, note).", items: str("An event kind.", { maxLength: 32 }), maxItems: 16 },
+      kinds: { type: "array", description: "Only these kinds (write, refused, kill, handover, resume, behaviour, note; 0.8.6: ink_tree, ink_pointer, ink_input from the panel inside photo mode's menu).", items: str("An event kind.", { maxLength: 32 }), maxItems: 16 },
     }),
     bridge: { method: "session.events" },
   },
@@ -387,7 +398,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     name: "session.handover",
     title: "Hand the game to the player",
     description:
-      "Gives the game to the player in one step: stops every behaviour, shows photo mode's menu and cursor again if the bridge hid them, clears the showroom's light rigs if lights is clear (so the player lights the heads with photo mode's own lights), then pauses the bridge and gives V back as player_stop does (every effect the bridge put on her, such as a crouch or a glide's movement hold, lifted; any look it started ended): every change it is asked for is refused until session_resume. A line in the game says so, and the session log records it. Reads, notes and the kill switch still work.",
+      "Gives the game to the player in one step: stops every behaviour, shows photo mode's menu and cursor again if the bridge hid them, clears the showroom's light rigs if lights is clear (so the player lights the heads with photo mode's own lights), then pauses the bridge and gives V back as player_stop does (every effect the bridge put on her, such as a crouch or a glide's movement hold, lifted; any look it started ended) and releases every NPC it directs (actors removed, dialogue choices and lines taken down): every change it is asked for is refused until session_resume. A line in the game says so, and the session log records it. Reads, notes and the kill switch still work.",
     permission: "control",
     input: obj({
       lights: oneOf("keep (default) or clear the showroom's rigs.", ["keep", "clear"]),
@@ -570,7 +581,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.state",
     title: "Read V's state",
     description:
-      "V in the world: position, facing (yaw), the camera's place, direction, yaw and pitch, the player state machine (locomotion, high level, scene tier, vehicle, combat), whether she is in combat, a vehicle, a scene or a dialogue, why the bridge wouldn't move her now (busy), what she is looking at (with whether it is an interaction target), the effects the bridge put on her and the behaviours running.",
+      "V in the world: position (her feet: the entity's origin on the ground; 0.8.4, session 11's L5), facing (yaw), the camera's place (camera.position: in first person her eyes, about 1.6 m above position), direction, yaw and pitch, the player state machine (locomotion, high level, scene tier, vehicle, combat), whether she is in combat, a vehicle, a scene or a dialogue, why the bridge wouldn't move her now (busy), what she is looking at (with whether it is an interaction target), the effects the bridge put on her and the behaviours running.",
     permission: "read",
     input: obj({}),
     bridge: { method: "player.state" },
@@ -579,7 +590,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.teleport",
     title: "Teleport V",
     description:
-      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). ${playerBusyNote}`,
+      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. ${playerBusyNote}`,
     permission: "write-player",
     input: obj({
       position: point3("The world point [x, y, z]."),

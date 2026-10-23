@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { collectionRequest } from "../src/library/host/collection-store";
 import { LookLibrary } from "../src/library/host/library-store";
@@ -15,6 +14,7 @@ import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe } from "./fixtures/eye-region";
 import { profileStudio } from "./fixtures/profile-studio";
 import { COLLECTION_2 } from "../src/platform/api";
+import { tempDir } from "./temp-dir";
 
 test("preset switching keeps each look's edits, selection and Undo; structural operations preserve export identity; a restart restores removals", async () => {
   const studio = await profileStudio({ name: "Looks", looks: [{ name: "Original", recipe: initialRecipe() }] });
@@ -71,7 +71,7 @@ test("opening a collection replaces nothing and Undo open shows the one before; 
 });
 
 test("SQLite migration preserves look revisions; collection saves are atomic, ordered and conflict-protected", () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-collections-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfs-collections-"), path = join(dir, "library.sqlite");
   // A version-1 library (looks only), as builds before the collection library left it.
   const v1 = LibraryDatabase.open(path, { clock: hostClock(), migrations: LIBRARY_MIGRATIONS.slice(0, 1), backups: null });
   let file: TestLibrary | undefined;
@@ -110,7 +110,7 @@ test("SQLite migration preserves look revisions; collection saves are atomic, or
 });
 
 test("collection API preserves legacy looks and rejects foreign, stale and destructive requests", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-collection-api-")), path = join(dir, "test.sqlite");
+  const dir = tempDir("xfs-collection-api-"), path = join(dir, "test.sqlite");
   const file = openTestLibrary(path), looks = file.looks, db = file.collections;
   const prefix = "/api/verification/collections", origin = "http://127.0.0.1:4317";
   const request = (suffix: string, method = "GET", value?: unknown, source = origin) => new Request(origin + prefix + suffix,

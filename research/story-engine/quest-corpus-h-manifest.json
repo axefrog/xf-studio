@@ -1,0 +1,225 @@
+{
+ "purpose": "Research request \"The quest corpus\" (area H of the P2 game-substrate plan), steps 1 and 2. Every quest, questphase, scene and journal resource of the base game and Phantom Liberty, serialised to JSON and held in one SQLite database with structure tables for statistics. Derived from game files: the database is private, ignored by git, never packaged.",
+ "extractedOn": "2026-10-22",
+ "tool": {
+  "name": "WolvenKit CLI",
+  "version": "9.0.1",
+  "exeSha256": "7AE9C308DA2FE003220B55CE4CA9C122B51F0701A67DB1618CCA3FF4F7FF6738",
+  "whyThisVersion": "The same tool, version and settings as areas A, B and C (quest-corpus-a-manifest.json).",
+  "jsonHeader": {
+   "WolvenKitVersion": "9.0.1",
+   "WKitJsonVersion": "0.0.9",
+   "GameVersion": 2310
+  }
+ },
+ "game": {
+  "productVersion": "2.31",
+  "jsonHeaderGameVersion": 2310
+ },
+ "commands": [
+  "WolvenKit.CLI archive PATH_TO_GAME/<archive> -l -r \"[.](quest|questphase|scene|journal)$\"   (path listing, for every archive under archive/pc/content and archive/pc/ep1 except localisation)",
+  "WolvenKit.CLI extract PATH_TO_GAME/<archive> -o SCRATCH/chunk -r \"^(<quest folders of the chunk>)..*[.](quest|questphase|scene|journal)$\"   (chunks of about 250 resources, one archive at a time)",
+  "WolvenKit.CLI convert serialize SCRATCH/chunk   (default settings; one .json written beside each resource, ingested and deleted before the next chunk)"
+ ],
+ "run": "Every WolvenKit call ran under tools/memory_guard.py with a limit of 4 GB. The game was not running. Chunks were built on drive C and deleted after ingestion; the database was built on C and copied to the corpus folder in one go.",
+ "database": {
+  "location": "research/consumers/quest-corpus/quest-corpus.sqlite (ignored)",
+  "bytes": 3863961600,
+  "sha256": "28b3ebcd8f3b98c259f26d145052c8c20adc26574c10af2511c8a1d8b72cabf4",
+  "schemaVersion": 1,
+  "largestChunkScratchBytes": 913423279,
+  "storage": "JSON text in resources.json; scenes zlib-compressed in resources.json_z"
+ },
+ "counts": {
+  "resources": 15913,
+  "jsonBytes": 12352031925,
+  "byAreaAndType": {
+   "C": {
+    "app": {
+     "resources": 6,
+     "jsonBytes": 217019727
+    },
+    "community": {
+     "resources": 2727,
+     "jsonBytes": 65487155
+    },
+    "csv": {
+     "resources": 3,
+     "jsonBytes": 105416
+    },
+    "ent": {
+     "resources": 47,
+     "jsonBytes": 56948368
+    },
+    "gamedef": {
+     "resources": 1,
+     "jsonBytes": 1948
+    },
+    "quest": {
+     "resources": 22,
+     "jsonBytes": 4092235
+    },
+    "questphase": {
+     "resources": 93,
+     "jsonBytes": 97693718
+    },
+    "streamingsector": {
+     "resources": 1,
+     "jsonBytes": 343803596
+    }
+   },
+   "H": {
+    "journal": {
+     "resources": 3,
+     "jsonBytes": 165109995
+    },
+    "quest": {
+     "resources": 590,
+     "jsonBytes": 34828765
+    },
+    "questphase": {
+     "resources": 1874,
+     "jsonBytes": 1204962004
+    },
+    "scene": {
+     "resources": 8553,
+     "jsonBytes": 9057215384
+    }
+   },
+   "A": {
+    "quest": {
+     "resources": 12,
+     "jsonBytes": 17326936
+    },
+    "questphase": {
+     "resources": 725,
+     "jsonBytes": 557001324
+    }
+   },
+   "B": {
+    "quest": {
+     "resources": 110,
+     "jsonBytes": 4926592
+    },
+    "questphase": {
+     "resources": 1146,
+     "jsonBytes": 525508762
+    }
+   }
+  },
+  "byArchiveTypeVariant": {
+   "archive/pc/content/audio_1_general.archive": {
+    "scene": {
+     "live": 1
+    }
+   },
+   "archive/pc/content/basegame_1_engine.archive": {
+    "scene": {
+     "live": 1
+    }
+   },
+   "archive/pc/content/basegame_3_nightcity.archive": {
+    "scene": {
+     "live": 756
+    }
+   },
+   "archive/pc/content/basegame_4_gamedata.archive": {
+    "journal": {
+     "live": 1
+    },
+    "quest": {
+     "live": 538,
+     "test": 98
+    },
+    "questphase": {
+     "live": 2836,
+     "test": 24
+    },
+    "scene": {
+     "live": 2575,
+     "test": 129,
+     "version": 4363
+    }
+   },
+   "archive/pc/ep1/ep1_1_nightcity.archive": {
+    "scene": {
+     "live": 215
+    }
+   },
+   "archive/pc/ep1/ep1_2_gamedata.archive": {
+    "journal": {
+     "live": 2
+    },
+    "quest": {
+     "live": 83,
+     "test": 15
+    },
+    "questphase": {
+     "live": 972,
+     "test": 6
+    },
+    "scene": {
+     "live": 478,
+     "test": 14,
+     "version": 21
+    }
+   }
+  },
+  "liveByCategory": {
+   "main": {
+    "quest": 27,
+    "questphase": 436,
+    "scene": 344
+   },
+   "phantom_liberty": {
+    "journal": 1,
+    "quest": 83,
+    "questphase": 971,
+    "scene": 693
+   },
+   "other": {
+    "journal": 2,
+    "quest": 354,
+    "questphase": 1535,
+    "scene": 2280
+   },
+   "gig": {
+    "quest": 90,
+    "questphase": 356,
+    "scene": 358
+   },
+   "side": {
+    "quest": 67,
+    "questphase": 510,
+    "scene": 351
+   }
+  },
+  "structureRows": {
+   "graphs": 20553,
+   "nodes": 410246,
+   "edges": 453840,
+   "fact_refs": 100797,
+   "phases": 4572,
+   "scenes": 8553,
+   "scene_node_types": 43618,
+   "scene_event_types": 33864,
+   "journal_entries": 67099
+  }
+ },
+ "earlierLooseIngest": {
+  "ingested": 4893,
+  "hash_mismatches": 0,
+  "duplicates": 0,
+  "missing": 0,
+  "unlisted": 0
+ },
+ "ingestLog": {
+  "unresolved_edges": 2
+ },
+ "notes": [
+  "Areas A, B and C are the earlier loose-file extractions, ingested after their SHA-256 values were checked against MANIFEST.json. Area E (decompiled scripts) and the analysis outputs were not ingested.",
+  "Resources are keyed by archive and path: the journal and one gig phase exist in both gamedata archives.",
+  "variant 'version' marks copies under versions/ folders and 'test' marks test/ folders; the statistics use 'live'.",
+  "Step 3 (decompositions into the composite) is not part of this run."
+ ]
+}

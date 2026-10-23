@@ -36,8 +36,10 @@ public class XFPinEntry {
   public let piece: Int32;
   public let position: Vector4;
   public let bound: Bool;
-  // 0.8: the views that have drawn this pin so far (controller class names), for world.pin's answer and the log.
-  public let drawnBy: array<String>;
+  // 0.8: the views that have drawn this pin so far, for world.pin's answer and the log. 0.8.9 (session 15's D1: ui.state's
+  // pins came back "failed" because one name read "????????ay"): the mappin controllers' UpdateIcon runs on the UI's worker
+  // threads, several at once, and they all pushed into one script array. The views are now bits the plugin ORs under one
+  // lock (XFBridge_PinDrawn; the Sol review's finding 3: a script-side OR was still a read-modify-write); nothing here.
   // 0.8.3: the bridge's own mark in the world (XFRuntimeBridgeInk.reds PlacePinMark) as the overlay last placed it: shown
   // this tick, its top-left corner in the overlay's units and in window pixels (the game's own layout), on screen or not.
   public let markShown: Bool;
@@ -45,6 +47,11 @@ public class XFPinEntry {
   public let markAt: Vector2;
   public let markPx: Vector2;
   public let markOnScreen: Bool;
+  // 0.8.7: the mark is held at the screen's edge, pointing the way to a pin off the screen (as the game's own edge marker does).
+  public let markAtEdge: Bool;
+  // 0.8.4: the pin's own point projected into window pixels this tick (where the game's marker is anchored), so a screenshot
+  // shows how far above it the game draws its marker and the XF mark.
+  public let pointPx: Vector2;
 }
 
 public class XFPinRegistry extends ScriptableSystem {
@@ -69,6 +76,7 @@ public class XFPinRegistry extends ScriptableSystem {
   }
 
   public func Add(entry: ref<XFPinEntry>) -> Void {
+    XFBridge_PinDrawn(entry.id, -1); // a new session restarts the ids: no views from an older pin
     ArrayPush(this.m_pins, entry);
   }
 
@@ -140,11 +148,40 @@ public abstract class XFInkPins {
 
   // 0.8: records the first time a view draws an XF pin (the plugin log and world.pin's drawn_by).
   public static func NoteDrawn(entry: ref<XFPinEntry>, view: String) -> Void {
-    if !IsDefined(entry) || ArrayContains(entry.drawnBy, view) {
+    let bit = XFInkPins.ViewBit(view);
+    if !IsDefined(entry) || bit == 0 {
       return;
     }
-    ArrayPush(entry.drawnBy, view);
-    XFBridgeLog.Info("pins", "world.pin " + IntToString(entry.id) + " '" + entry.label + "' drawn by " + view);
+    // The plugin ORs the bit under its lock and answers the views before; only the caller that set it logs.
+    let before = XFBridge_PinDrawn(entry.id, bit);
+    if (before & bit) == 0 {
+      XFBridgeLog.Info("pins", "world.pin " + IntToString(entry.id) + " drawn by " + view);
+    }
+  }
+
+  // The views in drawn_by's order, one bit each.
+  public static func ViewName(i: Int32) -> String {
+    switch i {
+      case 0: return "world_map";
+      case 1: return "world";
+      case 2: return "world_gameplay";
+      case 3: return "minimap";
+      case 4: return "xf_overlay";
+      default: return "";
+    }
+  }
+
+  public static func ViewBit(view: String) -> Int32 {
+    let i = 0;
+    let bit = 1;
+    while i < 5 {
+      if Equals(XFInkPins.ViewName(i), view) {
+        return bit;
+      }
+      bit = bit * 2;
+      i += 1;
+    }
+    return 0;
   }
 
   public static func Entry(mappin: wref<IMappin>) -> ref<XFPinEntry> {
@@ -160,14 +197,22 @@ public abstract class XFInkPins {
 
   public static func Json(entry: ref<XFPinEntry>) -> String {
     let drawn = "";
-    for view in entry.drawnBy {
-      drawn += (StrLen(drawn) > 0 ? "," : "") + XFJson.Str(view);
+    let views = XFBridge_PinDrawn(entry.id, 0);
+    let i = 0;
+    let bit = 1;
+    while i < 5 {
+      if (views & bit) != 0 {
+        drawn += (StrLen(drawn) > 0 ? "," : "") + XFJson.Str(XFInkPins.ViewName(i));
+      }
+      bit = bit * 2;
+      i += 1;
     }
     return "{\"id\":" + IntToString(entry.id) + ",\"label\":" + XFJson.Str(entry.label) + ",\"variant\":" + XFJson.Str(entry.variant)
       + ",\"target\":" + XFJson.Str(entry.target) + ",\"piece\":" + IntToString(entry.piece) + ",\"bound\":" + XFJson.Str(entry.bound ? "object" : "position")
       + ",\"position\":[" + XFJson.Num(entry.position.X) + "," + XFJson.Num(entry.position.Y) + "," + XFJson.Num(entry.position.Z) + "],\"drawn_by\":[" + drawn + "]"
       + ",\"xf_mark\":{\"shown\":" + XFJson.Flag(entry.markShown) + ",\"at\":[" + XFJson.Num(entry.markAt.X) + "," + XFJson.Num(entry.markAt.Y)
-      + "],\"px\":[" + XFJson.Num(entry.markPx.X) + "," + XFJson.Num(entry.markPx.Y) + "],\"on_screen\":" + XFJson.Flag(entry.markShown && entry.markOnScreen) + "}}";
+      + "],\"px\":[" + XFJson.Num(entry.markPx.X) + "," + XFJson.Num(entry.markPx.Y) + "],\"point_px\":[" + XFJson.Num(entry.pointPx.X) + "," + XFJson.Num(entry.pointPx.Y)
+      + "],\"on_screen\":" + XFJson.Flag(entry.markShown && entry.markOnScreen) + ",\"at_edge\":" + XFJson.Flag(entry.markShown && entry.markAtEdge) + "}}";
   }
 
   // 0.8.2: ui.state's pins, with the views that have drawn each by now.
@@ -227,7 +272,8 @@ public abstract class XFInkPins {
       if !IsDefined(entity) {
         return XFJson.Fail("not_spawned_yet", "piece " + IntToString(piece) + " isn't in the world yet; try again in a moment");
       }
-      // The head's eyes stand 1.69 m above its entity's origin (the showroom build's head joint plus 5 cm). 0.7 (session 7:
+      // The head's eyes stand 1.69 m above its entity's origin (the showroom build's head joint plus 5 cm); lift defaults to
+      // 0.12 m, the crown (0.8.4, session 11's G4: 0.25 drew the game's marker about a head's height above it). 0.7 (session 7:
       // the object-bound pin drew well above the head, as the game's default circle): the pin is placed at that point, not
       // bound to the entity, so its height is exactly the eyes plus lift; turning a head doesn't move it, and clearing the
       // heads removes it (RB-87).
@@ -363,6 +409,26 @@ public abstract class XFInkPins {
   // The diamond with "XF" at the top centre, the label under it; every part placed by a margin from the canvas's top-left.
   public static func BuildMark(mark: ref<inkCanvas>) -> Void {
     let w = XFInkPins.MarkWidth();
+    // 0.8.7 (session 14's U2: readable over a bright sky, but only just): a dark halo under the diamond and a dark plate under
+    // the label, half see-through, so both keep their contrast over sky and neon alike.
+    let halo = new inkRectangle();
+    halo.SetName(n"halo");
+    halo.SetAnchor(inkEAnchor.TopLeft);
+    halo.SetSize(new Vector2(44.0, 44.0));
+    halo.SetRenderTransformPivot(new Vector2(0.5, 0.5));
+    halo.SetRotation(45.0);
+    halo.SetMargin(new inkMargin(w * 0.5 - 22.0, 2.0, 0.0, 0.0));
+    halo.SetTintColor(new HDRColor(0.0, 0.0, 0.0, 1.0));
+    halo.SetOpacity(0.55);
+    halo.Reparent(mark);
+    let plate = new inkRectangle();
+    plate.SetName(n"plate");
+    plate.SetAnchor(inkEAnchor.TopLeft);
+    plate.SetSize(new Vector2(w, 34.0));
+    plate.SetMargin(new inkMargin(0.0, 54.0, 0.0, 0.0));
+    plate.SetTintColor(new HDRColor(0.0, 0.0, 0.0, 1.0));
+    plate.SetOpacity(0.5);
+    plate.Reparent(mark);
     let frame = new inkRectangle();
     frame.SetName(n"frame");
     frame.SetAnchor(inkEAnchor.TopLeft);
@@ -472,6 +538,6 @@ public func SetData(const data: script_ref<WorldMapTooltipData>, menu: ref<World
   let entry = XFInkPins.Entry(Deref(data).mappin);
   if IsDefined(entry) {
     inkTextRef.SetText(this.m_titleText, entry.label);
-    inkTextRef.SetText(this.m_descText, "XF Runtime Bridge test pin (temporary). XF Studio placed it; the kill switch or loading a save removes it.");
+    inkTextRef.SetText(this.m_descText, "Test pin from XF Studio. Stopping the bridge or loading a save removes it."); // 0.8.4: the UI review's fix 7
   }
 }

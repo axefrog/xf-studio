@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { depotPath, expectedPaths, inventoryFromFiles, pathHash } from "../src/legacy/eye-makeup/export/archive-inventory";
 import { archiveInventory } from "../src/legacy/eye-makeup/export/host/archive-inventory-fs";
 import { oracleTest } from "./optional-oracles";
+import { tempDir } from "./temp-dir";
 
 const study = resolve(import.meta.dir, "../../../../experiments/005-preset-collection");
 const plan = {
@@ -59,7 +59,7 @@ test("the inventory equals the plan exactly and is sorted by code point", () => 
 });
 
 function tree() {
-  const root = mkdtempSync(resolve(tmpdir(), "xfs-inventory-"));
+  const root = tempDir("xfs-inventory-");
   for (const [i, path] of allPaths.entries()) {
     mkdirSync(dirname(resolve(root, path)), { recursive: true });
     writeFileSync(resolve(root, path), `payload ${i}`);
@@ -78,7 +78,7 @@ test("the filesystem adapter hashes real files and refuses links", () => {
     writeFileSync(resolve(root, "xfs/eye/notes.txt"), "x");
     expect(() => archiveInventory(root, plan)).toThrow("Unsupported");
     rmSync(resolve(root, "xfs/eye/notes.txt"));
-    const target = mkdtempSync(resolve(tmpdir(), "xfs-inventory-target-"));
+    const target = tempDir("xfs-inventory-target-");
     try {
       symlinkSync(target, resolve(root, "xfs/linked"), "junction");
       expect(() => archiveInventory(root, plan)).toThrow("symlink");

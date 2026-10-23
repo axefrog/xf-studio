@@ -459,6 +459,11 @@ public abstract class XFGame {
     if cyberware {
       out += (StrLen(out) > 0 ? "," : "") + "\"cyberware changed by the bridge\"";
     }
+    // 0.8: XF actors (npc.spawn): never saved (non-persistent), but a save is refused while any exists.
+    let npcs = XFNpcRegistry.HoldsText();
+    if StrLen(npcs) > 0 {
+      out += (StrLen(out) > 0 ? "," : "") + XFJson.Str(npcs);
+    }
     return "{\"ok\":true,\"holds\":[" + out + "]}";
   }
 

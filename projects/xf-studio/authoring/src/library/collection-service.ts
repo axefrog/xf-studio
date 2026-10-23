@@ -12,7 +12,7 @@
  * - **Check, Build and export** read a coherent snapshot (the collection and its live looks in one read, once its changes have reached the
  *   library); export saves a version first, as before.
  * - **Opening and importing** never replace anything: opening a saved collection shows its working copy (made from the saved version the
- *   first time), importing makes a new working copy, and each joins the profile. Undo open (and Recover) shows the collection shown before.
+ *   first time), importing makes a new working copy, and each joins the profile. Reopen previous (and Reopen on a recent draft) shows the collection shown before.
  * - **Recent drafts** are the library's other working copies never saved as a version (an earlier draft brought into the library, an
  *   import not saved yet).
  */
@@ -31,7 +31,7 @@ import { collectionProducts, copyPackagePlan, editPackagePlan, packagePlanEditIs
 import { emptyMemory, NEWER_LOOKS_LIBRARY_MESSAGE, newPresetName, starterLook, withLiveMemory, withLivePart, type DocumentModel } from "../app/workspace/collection-workspace";
 import { type CollectionAction, type CodedCapability, type CollectionConflict, CONFLICT_FIRST, type CollectionDraftSummary, packagePlanEdit, type PackageProductSummary, type ReadonlyDeep,
   type CollectionSummary, type StoredCollection, PACKAGE_PLAN_KINDS, type PackagePlanAction } from "./collection-actions";
-import { type CollectionView, type CollectionOwner, type LookInput, MAX_LOOKS_AT_CREATE } from "./collection-owner";
+import { type CollectionSnapshot, type CollectionView, type CollectionOwner, type LookInput, MAX_LOOKS_AT_CREATE } from "./collection-owner";
 import { COLLECTION_WORKING, collectionRef, collectionWorkingOf, LOOK_WORKING, lookRef, lookWorkingOf, type LookRef, sameLook } from "./collection-documents";
 import { documentKey } from "../platform/api/document-commands";
 import type { OutboxEntry } from "../platform/core/document-outbox";
@@ -42,7 +42,7 @@ export const EVERY_LOOK_NEWER_MESSAGE = "Every look in this collection was made 
 export const NO_EDITABLE_EYE_MAKEUP_MESSAGE = "The looks with eye makeup here were made with a newer version of XF Studio, so this " +
   "version can't put them in a mod. Update XF Studio to build them, or add eye makeup to another look.";
 const LOADING = "Collection is still loading.";
-/** How many collections Undo open steps back through. */
+/** How many collections Reopen previous steps back through. */
 export const PREVIOUS_LIMIT = 8;
 
 export type CollectionRequest =
@@ -82,12 +82,12 @@ export type CollectionServiceSummary = { busy: boolean; progress?: CollectionPro
 export type CollectionServiceState = CollectionServiceSummary;
 /**
  * The shown collection against the named version it was last saved as (audit A-1). `baseline` is `none` for a collection never saved,
- * `unknown` while that version's content hasn't been read in this session (dirty is then undefined rather than guessed), and `known`
- * otherwise. Preset renames and edits mark that preset; a collection rename, reorder, addition or removal marks the structure. The shown
+ * `unknown` while that version's content is being read back (dirty is then undefined rather than guessed), `unavailable` when it
+ * couldn't be read (it is read again on the next library refresh; dirty is undefined too), and `known` otherwise. Preset renames and edits mark that preset; a collection rename, reorder, addition or removal marks the structure. The shown
  * look is compared as the editor holds it.
  */
 export type DraftPersistence = { collectionId: string; savedRevision?: number;
-  baseline: "none" | "unknown" | "known"; dirty?: boolean; dirtyPresets: string[]; structureDirty?: boolean };
+  baseline: "none" | "unknown" | "unavailable" | "known"; dirty?: boolean; dirtyPresets: string[]; structureDirty?: boolean };
 /** A saved version's content: each look's name, its parts as last read and their canonical text. */
 type Baseline = { name: string; order: string[]; presets: Map<string, { name: string; raw: string; canonical: string }>;
   /** The saved package plan's JSON (`null`: the default). */
@@ -150,12 +150,16 @@ export class CollectionService {
   private content = 0;
   private structure = "";
   private baselines = new Map<string, Baseline>();
+  /** Saved versions being read back to compare with (`collection@revision`): the chip's Working… while one is pending. */
+  private baselineReads = new Set<string>();
+  /** Saved versions that couldn't be read back: no comparison (the chip names the version) until the next library refresh reads them. */
+  private baselineFailed = new Set<string>();
   private persistenceCache?: { key: string; value: DraftPersistence };
   private requestSeq = 0;
   private listSeq = 0;
   private running?: CollectionActivity;
   private parsed?: Parsed;
-  /** The looks shown before an open or import, newest last (Undo open). */
+  /** The looks shown before an open or import, newest last (Reopen previous). */
   private previous: LookRef[] = [];
   /** The look last shown in each collection, to come back to it. */
   private lastShown = new Map<string, string>();
@@ -299,12 +303,14 @@ export class CollectionService {
     const view = this.shown(), collection = this.collection();
     if (!view || !collection) return undefined;
     const live = this.deps.readRecipe?.(), selected = this.selectedId(), revision = view.saved?.revision;
-    const key = JSON.stringify([this.content, this.versions(view), revision, live?.revision, live?.others?.revision]);
+    const key = JSON.stringify([this.content, this.versions(view), revision, live?.revision, live?.others?.revision, [...this.baselineReads], [...this.baselineFailed]]);
     if (this.persistenceCache?.key === key) return structuredClone(this.persistenceCache.value);
     const ids = collection.presets.map(preset => preset.id), base = revision === undefined ? undefined : this.baselines.get(`${view.id}@${revision}`);
     let value: DraftPersistence;
     if (revision === undefined) value = { collectionId: view.id, baseline: "none", dirty: true, dirtyPresets: ids, structureDirty: true };
-    else if (!base) value = { collectionId: view.id, savedRevision: revision, baseline: "unknown", dirtyPresets: [] };
+    // Not read yet: unavailable once a read failed (until a refresh reads it again), else in progress (the read is pending or about to start).
+    else if (!base) value = { collectionId: view.id, savedRevision: revision, dirtyPresets: [],
+      baseline: this.baselineFailed.has(`${view.id}@${revision}`) && !this.baselineReads.has(`${view.id}@${revision}`) ? "unavailable" : "unknown" };
     else {
       const dirtyPresets = collection.presets.filter(preset => {
         const saved = base.presets.get(preset.id);
@@ -383,8 +389,8 @@ export class CollectionService {
     if (request.kind === "resolveConflict") {
       const conflict = this.conflictsOf(collection.id).find(item => item.id === request.conflict);
       if (!conflict) return refusal("missing_target", "That was already resolved.");
-      if (!["mine", "theirs", "both"].includes(request.keep)) return refusal("invalid_value", "Choose Keep mine, Use theirs or Keep both.");
-      return request.keep === "both" && !conflict.keepBoth ? refusal("unavailable", "Only a preset can be kept as a copy; choose Keep mine or Use theirs.") : { available: true };
+      if (!["mine", "theirs", "both"].includes(request.keep)) return refusal("invalid_value", "Choose Keep mine, Use other window's or Keep both.");
+      return request.keep === "both" && !conflict.keepBoth ? refusal("unavailable", "Only a preset can be kept as a copy; choose Keep mine or Use other window's.") : { available: true };
     }
     // A conflict waits on this collection or a preset: the person chooses first (the Presets panel shows how).
     if (["save", "saveCopy", "exportCollection", "exportPlan", "package"].includes(request.kind) && this.conflictEntries(collection.id).length)
@@ -566,16 +572,29 @@ export class CollectionService {
   // -------------------------------------------------------------------------------------------------------------
   // Requests
 
-  /** A saved version's content is read once so the dirty state is exact after a restart. */
+  /**
+   * A saved version's content is read once so the dirty state is exact after a restart. One that couldn't be read is read again on the
+   * next library refresh (`refresh`, which the Library panel asks for whenever it or the window is shown again).
+   */
   private async loadBaseline(summaries: CollectionSummary[]) {
-    const view = this.shown(), revision = view?.saved?.revision;
-    if (!view || revision === undefined || this.baselines.has(`${view.id}@${revision}`)) return;
-    if (!summaries.some(item => item.id === view.id && item.revision === revision)) return;
+    const view = this.shown(), revision = view?.saved?.revision, key = view && `${view.id}@${revision}`;
+    if (!view || revision === undefined || this.baselines.has(key!) || this.baselineReads.has(key!)) return;
+    // The library doesn't list that version: nothing to read back, so no comparison until a refresh lists it.
+    if (!summaries.some(item => item.id === view.id && item.revision === revision)) { this.unread(key!); return; }
+    this.baselineReads.add(key!); this.notify();
+    let read = false;
     try {
       const stored = await this.deps.transport.get(view.id);
-      if (stored.revision === revision && stored.collection.id === view.id) this.remember(stored.collection, stored.revision);
-    } catch { /* The baseline stays unknown; the collection itself is unaffected. */ }
+      if (stored.revision === revision && stored.collection.id === view.id) { this.remember(stored.collection, stored.revision); read = true; }
+    } catch { /* The comparison is unavailable until the next refresh reads it; the collection itself is unaffected. */ }
+    finally {
+      this.baselineReads.delete(key!);
+      if (read) this.baselineFailed.delete(key!); else this.unread(key!);
+      this.persistenceCache = undefined; this.notify();
+    }
   }
+  /** A saved version couldn't be read back to compare with (`collection@revision`): unavailable until a refresh reads it. */
+  private unread(key: string) { if (!this.baselineFailed.has(key)) { this.baselineFailed.add(key); this.persistenceCache = undefined; this.notify(); } }
   private setProgress(progress: CollectionProgress) { this.progress = progress; this.notify(); }
   /** While Build `requestId` runs, ask the host which stage it has reached and show it in place of the starting line (PIPE-131). */
   private followBuild(requestId: number): () => void {
@@ -605,12 +624,38 @@ export class CollectionService {
   /** The collection and its live looks as the library holds them (one read, after this window's changes reached it). */
   private async snapshot(id: string): Promise<LookCollection> {
     this.deps.flushLook?.();
-    const snapshot = await this.deps.owner.snapshot(id);
+    return this.portable(id, await this.deps.owner.snapshot(id));
+  }
+  /** A snapshot (the library's, or this window's copy) as the portable collection, or the owner's refusal as an error. */
+  private portable(id: string, snapshot: CollectionSnapshot | Capability): LookCollection {
     if ("available" in snapshot) throw new CollectionServiceError(snapshot.code ?? "unavailable", snapshot.reason ?? "The collection couldn't be read.");
     const stored = { schema: COLLECTION_2, id, name: snapshot.collection.name,
       presets: snapshot.looks.map(look => ({ id: look.id, name: look.name, revision: 1, parts: look.parts })),
       ...(snapshot.collection.packagePlan !== undefined ? { packagePlan: snapshot.collection.packagePlan } : {}) };
     return this.deps.model.parts.readCollection(stored, true, "keep");
+  }
+  /**
+   * Whether this window's own copy can be exported (the recovery export, `exportWindowCopy`). It needs nothing from the library: not a
+   * write, a read or the workspace lease, and it doesn't wait for another collection request.
+   */
+  windowCopyCapability(): Capability {
+    const view = this.shown(), collection = this.collection();
+    if (!view || !collection) return refusal("not_ready", LOADING);
+    if (!collection.presets.length) return refusal("invalid_value", COLLECTION_MESSAGE);
+    return { available: true };
+  }
+  /**
+   * The recovery export: the collection open here as this window shows it, its changes that haven't reached the library included, as
+   * the portable collection file. Nothing is saved, read or sent; this is the way to keep a copy when the library can't take those
+   * changes (a handover that couldn't save, a restore that is stuck).
+   */
+  exportWindowCopy(): { name: string; json: string; message: string } {
+    const allowed = this.windowCopyCapability();
+    if (!allowed.available) throw new CollectionServiceError(allowed.code ?? "unavailable", allowed.reason!);
+    this.deps.flushLook?.();
+    const id = this.shown()!.id, collection = this.portable(id, this.deps.owner.windowCopy(id));
+    return { name: "xfs.collection.json", json: JSON.stringify(this.deps.model.parts.writeMinimal(collection), null, 2),
+      message: `Exported this window's copy of “${collection.name}”, with the changes your library doesn't have yet. It wasn't saved to your library.` };
   }
   /** Save version: the host writes a named version from its own snapshot; its content becomes the baseline. */
   private async saveVersion(id: string): Promise<StoredCollection> {
@@ -620,6 +665,8 @@ export class CollectionService {
     let stored: StoredCollection | undefined;
     try { stored = await this.deps.transport.get(id); } catch { stored = undefined; }
     if (stored && stored.revision === saved.version.revision) this.remember(stored.collection, stored.revision);
+    // The version just saved couldn't be read back: no comparison until a refresh reads it (never a lasting Working…).
+    else this.unread(`${id}@${saved.version.revision}`);
     await this.list().catch(() => undefined);
     return stored && stored.revision === saved.version.revision ? stored
       : { collection: this.collection() ?? { schema: COLLECTION_2, id, name: "", presets: [] }, revision: saved.version.revision, updatedAt: saved.version.updatedAt };
@@ -664,6 +711,8 @@ export class CollectionService {
       try {
         const summaries = await this.deps.transport.list();
         if (seq === this.listSeq && JSON.stringify(summaries) !== JSON.stringify(this.summaries)) { this.summaries = summaries; this.notify(); }
+        // A saved version that couldn't be read back to compare with is read again now.
+        void this.loadBaseline(this.summaries);
         return { ok: true, result: { kind: "list", summaries: this.summaries }, requestId };
       } catch (error) {
         return { ok: false, code: "request_failed", message: (error as Error).message, requestId };
@@ -704,7 +753,7 @@ export class CollectionService {
             void this.loadBaseline(this.summaries);
           }
           result = { kind: "opened", collection: stored };
-          message = `Opened “${stored.collection.name}”. Undo open shows the collection you had open.`; break;
+          message = `Opened “${stored.collection.name}”. The collection you had open stays in your library.`; break;
         }
         case "resolveConflict": {
           // What waits in the editor joins this window's version first: Keep mine keeps it, Use theirs lets it go with the rest.
@@ -736,7 +785,7 @@ export class CollectionService {
             stored = await this.saveVersion(id);
           }
           result = { kind: "saved", collection: stored };
-          message = `Saved “${stored.collection.name}” · version ${stored.revision}. Changes made while saving stay in your collection.`; break;
+          message = `Saved “${stored.collection.name}” · version ${stored.revision}.`; break;
         }
         case "exportCollection": case "exportPlan": {
           const view = this.shown()!;
@@ -797,7 +846,7 @@ export class CollectionService {
           }
           if (refs[0]) this.deps.scene.setLook(refs[0]);
           result = { kind: "imported" };
-          message = "Imported the collection as a new collection. Undo import shows the collection you had open."; break;
+          message = "Imported the collection as a new collection. The collection you had open stays in your library."; break;
         }
       }
       this.setProgress({ phase: "success", code: result.kind, message, requestId });
@@ -909,7 +958,7 @@ export function conflictMessage(entry: OutboxEntry): string {
   } else {
     const mine = lookWorkingOf(look?.value), theirs = look ? lookWorkingOf(theirsOf(look)) : null;
     if (mine && theirs) {
-      if (mine.name !== theirs.name) differs.push(`its name (“${theirs.name}” there)`);
+      if (mine.name !== theirs.name) differs.push(`its name: “${theirs.name}” there`);
       if (JSON.stringify(mine.parts) !== JSON.stringify(theirs.parts)) differs.push("its makeup");
       if (mine.state !== theirs.state) differs.push(theirs.state === "removed" ? "the other window removed it" : "the other window restored it");
     } else if (!theirs) differs.push("the other window deleted it");

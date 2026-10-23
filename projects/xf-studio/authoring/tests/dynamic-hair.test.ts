@@ -2,8 +2,7 @@
 // by a hair-colour pack's patched appearance, and which WolvenKit can't export as it is (its render data lists fewer bone positions
 // than it has bones). Asset-free: the shapes mirror the High Ponytail CCXL hair (knowledge/mod-loading.md §5–6).
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { planCharacterDetails } from "../src/character/character-detail-plan";
 import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character/host/character-detail-service";
@@ -16,8 +15,9 @@ import { encodePng } from "../src/formats/png";
 import type { JsonObject } from "../src/game/red-json";
 import { detailFixture, P, REQUEST_A } from "./character-detail-fixtures";
 import { app, cco, fixtureInstallation, instance, mesh, meshComponent, mi, nameParam, tex, appearanceOption, type FixtureArchive } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-dynamic-hair-"));
+const root = tempDir("xfs-dynamic-hair-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const HAIR_APP = "anru\\highpony\\fhair_highpony.app", PONY = "anru\\highpony\\fhair_highpony_pony.mesh";

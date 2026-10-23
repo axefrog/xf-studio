@@ -1,0 +1,52 @@
+# Story Engine reference model: its tests and typecheck on every push to main and every pull request
+# that touches projects/xf-story-engine/. Nothing is built for release or uploaded.
+#
+# The reference model is the TypeScript oracle for the kernel specification
+# (research/story-engine/spec/kernel.md). Its suite includes the frozen determinism digest, so a
+# change that alters any resolved value fails here.
+name: Story Engine
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "projects/xf-story-engine/**"
+      - ".github/workflows/story-engine.yml"
+  pull_request:
+    paths:
+      - "projects/xf-story-engine/**"
+      - ".github/workflows/story-engine.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: story-engine-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    defaults:
+      run:
+        working-directory: projects/xf-story-engine/reference
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Test
+        run: bun test
+
+      - name: Typecheck
+        run: bun run check

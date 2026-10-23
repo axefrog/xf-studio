@@ -1,8 +1,7 @@
 // PIPE-130 and PIPE-131: the plate's kept WolvenKit JSON (and when it is not read), the Build's bounded WolvenKit
 // concurrency, the batched conversions, stdout progress lines and the host's stage snapshot.
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { keptJsonDirectory, publishKeptJson, readKeptJson } from "../src/host/derived-cache";
 import { concurrencyGate } from "../src/legacy/eye-makeup/export/host/package-build-wolvenkit";
@@ -13,8 +12,9 @@ import { PACKAGE_PROGRESS_PREFIX, type PackageBuildProgress, type PackageBuildRe
 import { packageBuildStageLine } from "../src/legacy/eye-makeup/export/package-action";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, PLATE, writePlate } from "./fixtures/product-fixture";
+import { tempDir } from "./temp-dir";
 
-const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-build-speed-")));
+const root = realpathSync.native(tempDir("xfs-build-speed-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const app = resolve(import.meta.dir, "..");
 const fixture = JSON.parse(readFileSync(resolve(app, "../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));

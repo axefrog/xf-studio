@@ -3,8 +3,7 @@
 // here reproduced a hang, a memory blow-up or a silent misread before the fixes; each must now be refused quickly with a typed
 // error, or decoded with the right note. Synthetic fixtures only (no game data).
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { hairProfileStops } from "../src/character/host/character-detail-service";
 import { depotHash } from "../src/game/depot-path";
@@ -21,10 +20,11 @@ import { Cursor, decoderCacheSize, readVarString } from "../src/native/red-value
 import { readResource, readResourceJson } from "../src/native/resource-document";
 import { fakeDecompress, kark, syntheticArchive } from "./fixtures/native-archive";
 import { buildPackage, Bytes, Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temp = () => { const root = mkdtempSync(join(tmpdir(), "xfs-native-hardening-")); roots.push(root); return root; };
+const temp = () => { const root = tempDir("xfs-native-hardening-"); roots.push(root); return root; };
 const json = (bytes: Uint8Array) => readResourceJson(bytes, fakeDecompress) as unknown as { Data: { RootChunk: Record<string, any> } };
 const text = (value: string) => new TextEncoder().encode(value);
 

@@ -44,10 +44,14 @@ using namespace xfb::plugin;
 constexpr uint64_t kHeartbeatTicks = 60ull * 60ull * 10ull; // about every 10 minutes at 60 fps
 constexpr uint64_t kRearmPatienceTicks = 600;                 // about 10 s at 60 fps for the old listener and restore
 
-void RecordRearm(State& aState, bool aOk, const std::string& aMessage)
+// 0.8.6 (the UI review's P4: the window put this message inside its own sentence, internal words and all): code says what
+// happened, for the window's plain copy (init.lua rearmCopy): reconnected, still_closing and restore_pending (try again in a
+// moment), not_stopped, or failed (restart the game). message stays the log's and the agents' detail.
+void RecordRearm(State& aState, bool aOk, const std::string& aCode, const std::string& aMessage)
 {
     std::scoped_lock _(aState.rearmMutex);
-    aState.lastRearm = nlohmann::json{{"ok", aOk}, {"message", aMessage}, {"at_tick", aState.runningTicks.load()}};
+    aState.lastRearm =
+        nlohmann::json{{"ok", aOk}, {"code", aCode}, {"message", aMessage}, {"at_tick", aState.runningTicks.load()}};
 }
 
 // 0.8.3: whether the game's own window is the one in front (the kill key reads the keyboard only then).
@@ -62,7 +66,12 @@ bool GameWindowInFront()
 // listens, the game's window is in front and CET's overlay is closed. Only reads the keyboard; sends nothing.
 void PollKillKey(State& aState)
 {
-    const auto& chord = aState.config.killKey;
+    // 0.8.4: the key can change while the game runs (XFBridge_KillKey); a new key needs a release first, like a re-arm.
+    if (aState.killKeyChanged.exchange(false))
+    {
+        aState.killKeyWatch = killkey::Watch{};
+    }
+    const auto chord = aState.KillKey();
     // 0.8.3 (the review): armed only while the bridge runs, the game's window is in front and CET's overlay is closed; the watch
     // needs the key released after it is armed again, and the window and the overlay are checked again right before the kill.
     const auto armedNow = [&aState] {
@@ -73,6 +82,36 @@ void PollKillKey(State& aState)
     {
         log::Warn("bridge.kill_key", "key=" + chord.label + " (the bridge's own kill key)");
         aState.bridge->Kill("kill_key");
+    }
+}
+
+// 0.8.5: a soft sound when a new question appears ([ui] question_sound), so a missed prompt is rarer: once per question, never for
+// info lines, through the game's own audio system (XFBridgeSound.Question, redscript). A question posted while no game session
+// is live (a loading screen) sounds once the scripts can be called; questions posted while the switch is off or the bridge is
+// stopped never do.
+void SoundNewQuestion(State& aState, bool aScriptsReady)
+{
+    PendingAsk ask;
+    const uint64_t id = aState.messages.Pending(ask) ? ask.id : 0;
+    const bool stopped = !aState.bridge || aState.bridge->GetDispatcher().IsKilled();
+    if (aState.config.questionSound.empty() || stopped)
+    {
+        aState.questionChime.Skip(id);
+        return;
+    }
+    if (!aScriptsReady || !aState.questionChime.Take(id))
+    {
+        return;
+    }
+    try
+    {
+        RED4ext::CString event(aState.config.questionSound.c_str());
+        ScriptCall("XFBridgeSound", "Question", {"String"}, {&event}, "question-sound");
+        log::Info("ui.question_sound", "id=" + std::to_string(id) + " event=" + aState.config.questionSound);
+    }
+    catch (const std::exception& e)
+    {
+        log::Warn("ui.question_sound_failed", "id=" + std::to_string(id) + " what=" + e.what());
     }
 }
 
@@ -95,14 +134,14 @@ void HandleRearm(State& aState)
     aState.rearmRequested.store(false);
     if (!refusal.empty())
     {
-        RecordRearm(aState, false, refusal);
+        RecordRearm(aState, false, aState.bridge->GetDispatcher().IsKilled() ? "still_closing" : "not_stopped", refusal);
         log::Warn("bridge.rearm_refused", "why=" + refusal);
         return;
     }
     if (!aState.restore.Reset())
     {
         const std::string why = "the kill switch's restore hasn't finished; try again in a moment";
-        RecordRearm(aState, false, why);
+        RecordRearm(aState, false, "restore_pending", why);
         log::Warn("bridge.rearm_refused", "why=restore_pending");
         return;
     }
@@ -119,7 +158,7 @@ void HandleRearm(State& aState)
             return true;
         },
         aState.queue.IsPumping() || aState.gameState.load() == 2, error);
-    RecordRearm(aState, ok, ok ? "reconnected: a new session is listening; clients read the new session.json" : error);
+    RecordRearm(aState, ok, ok ? "reconnected" : "failed", ok ? "reconnected: a new session is listening; clients read the new session.json" : error);
     if (!ok)
     {
         log::Error("bridge.rearm_failed", error);
@@ -237,6 +276,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             const double dt = std::chrono::duration<double>(now - last).count();
             last = now;
             TickBehaviours(dt, scriptsReady);
+            TickNpc(dt, scriptsReady); // 0.8: NPC direction's timers, poll and automatic release (plugin/HandlersNpc.cpp)
         }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
         // write can run after this undo; RestoreOnce runs it here directly, once, after a write,
@@ -266,6 +306,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         }
         HandleRearm(state);
         PollKillKey(state);
+        SoundNewQuestion(state, scriptsReady);
         // 0.8.2: the status surface for this tick (one at a time: core/InkUi.hpp ChooseStatusSurface). 0.8.3: none while no
         // game session is live (a loading screen, the press-any-key screen after a load).
         const auto surface = inkui::ChooseStatusSurface({state.InkVisible(), state.overlayHost.CanShowPanel(), scriptsReady});
@@ -289,6 +330,13 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             panel.bridgeStatus = status.text;
             panel.diagnostics = state.config.overlayDiagnostics;
             panel.show = surface == inkui::StatusSurface::XfBox;
+            {
+                // 0.8.4 (the UI review's fix 4): the XF box stands where the ink panel does.
+                const auto hud = state.hud.Current();
+                panel.anchor = hud.anchor;
+                panel.x = hud.x;
+                panel.y = hud.y;
+            }
             if (panel.show && !killed)
             {
                 // 0.8.2: as the status surface, the coordinator's lines and the question with its keys (the ink panel's).
@@ -455,6 +503,7 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
         // The ink HUD panel's starting settings (bridge 0.5.3, temporary test feature; ui.hud changes them).
         inkui::HudSettings hud;
         hud.show = state.config.hudPanel;
+        hud.layer = state.config.hudLayer;
         hud.cetLabel = state.config.cetLabel;
         hud.nameplates = state.config.nameplates;
         state.hud.SetDefaults(hud);
@@ -476,6 +525,12 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     for (const auto& warning : state.config.warnings)
     {
         log::Warn("plugin.config_warning", warning);
+    }
+    // 0.8.4: what else may react to the kill key (the game's input files, CET's hotkeys), read once here and on each change.
+    state.killKeyConflicts = ReadKillKeyConflicts(state.config.killKey);
+    for (const auto& warning : state.killKeyConflicts.warnings)
+    {
+        log::Warn("plugin.kill_key_warning", warning);
     }
 
     // Every engine address a game call needs, resolved now rather than lazily at the first call, where a
@@ -527,6 +582,11 @@ void Unload()
     log::Info("plugin.unload", "requests_served=" +
                                    std::to_string(state.bridge ? state.bridge->GetDispatcher().RequestCount() : 0));
     state.queue.Close();
+    // 0.8.7: a Save anyway still running finds the queue closed and ends.
+    if (state.saveAnywayThread.joinable())
+    {
+        state.saveAnywayThread.join();
+    }
     if (state.bridge)
     {
         state.bridge->Stop("plugin_unload");

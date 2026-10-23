@@ -40,6 +40,8 @@ struct SimHooks
     std::function<void()> takeSaveLock;
     // 0.8.2: bridge.handover's clearing of the showroom's rigs ("lights"), as the plugin's ClearShowroomForHandover.
     std::function<json(const std::string& aWhat)> clearShowroom;
+    // 0.8: bridge.handover's release of every NPC the bridge directs (selftest/SimNpc.cpp), on the game thread.
+    std::function<json()> releaseNpcs;
 };
 
 class Sim060
@@ -57,6 +59,8 @@ public:
     // What the bridge holds on V (game.save's refusal, RB-83): its status effects and "behaviours running".
     json Holds();
     EventLog& Events();
+    // 0.8: V now, {position, yaw, busy}, for the simulated NPC street (selftest/SimNpc.cpp).
+    json PlayerNow();
     // 0.8: whether V has a weapon out (player.action weapon.* in the simulation), for 0.7's arms_drawn.
     bool WeaponDrawn();
 

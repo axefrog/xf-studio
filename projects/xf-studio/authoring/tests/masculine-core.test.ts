@@ -3,8 +3,7 @@
  * feminine core under `pma/`, prepared on first use through the same host, and loaded when the shown V is masculine.
  */
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, EYE_PLATE_RECIPES, eyePlateBody, idListSha256, selectedFaceIds } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { createGameAssetExporter } from "../src/game/host/game-asset-export";
@@ -19,11 +18,12 @@ import { PreviewCoreCache, previewCoreReadiness } from "../src/preview/host/prev
 import { PreviewPreparationActions, type PreviewState } from "../src/preview/preview-preparation";
 import { coreDetailUrl, CORE_DETAIL_URL } from "../src/character/render-detail";
 import { USER_FACING_JARGON } from "../src/app/alpha-availability";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
 function setup() {
-  const root = mkdtempSync(join(tmpdir(), "xfs-masculine-core-"));
+  const root = tempDir("xfs-masculine-core-");
   roots.push(root);
   const game = join(root, "game"), cli = join(root, "WolvenKit.CLI.exe");
   mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });

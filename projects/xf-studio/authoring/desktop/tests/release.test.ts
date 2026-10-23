@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import config from "../electrobun.config";
 import desktopPackage from "../package.json";
@@ -10,8 +9,9 @@ import directxtexPin from "../../native/bcn/directxtex.json";
 import { INNO_SETUP } from "../inno-setup";
 import { appVersion, changelogPath, changelogSection, checkTag, isPrerelease, parseChecksums, parseReleaseVersion,
   noticesAssetName, releaseNotes, releaseTag, releaseTitle, setupAssetName, stageRelease, verifyStaged } from "../release";
+import { tempDir } from "../../tests/temp-dir";
 
-const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-release-test-"));
+const root = tempDir("xfs-desktop-release-test-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const section = (body: string) => `# Log\n\n## Unreleased\n\n### New and improved\n\n## 0.2.0-alpha.1\n\n${body}\n## 0.1.0-alpha.1\n\n### New and improved\n\n- old\n`;
 

@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CharacterDetailHost, installationFingerprint, characterRequestKey, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
 import { codeIdentityOf, hostCodeIdentity, includeHostCode, memoisedRead } from "../src/host/host-code-identity";
@@ -13,6 +12,7 @@ import { pathStamp, type WatchedPath } from "../src/game/host/source-discovery";
 import { CHARACTER_DETAIL_SCHEMA } from "../src/character/render-detail";
 import { CharacterWarmStart } from "../src/character/browser/character-warm-start";
 import { REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
+import { tempDir } from "./temp-dir";
 
 /**
  * What a warm restart reuses and when it stops (research/backlog/performance.md, warm restart): a route's kept discovery
@@ -21,7 +21,7 @@ import { REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
  */
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-warm-restart-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-warm-restart-"); roots.push(root); return root; };
 const put = (path: string, content: string | Uint8Array) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 let tick = Date.now() / 1000 + 10;
 const touchLater = (path: string) => { tick += 10; utimesSync(path, tick, tick); };
