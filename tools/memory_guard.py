@@ -110,13 +110,41 @@ kernel32.CreateJobObjectW.restype = wintypes.HANDLE
 kernel32.OpenProcess.restype = wintypes.HANDLE
 
 
-def free_physical() -> int:
-    status = MEMORYSTATUSEX()
-    status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-    kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
-    # The lower of available RAM and available commit: commit (RAM plus page file) is the
-    # limit that makes allocations fail, and it can run out while RAM still looks free.
-    return min(status.ullAvailPhys, status.ullAvailPageFile)
+class PERFORMANCE_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("cb", wintypes.DWORD),
+        ("CommitTotal", ctypes.c_size_t),
+        ("CommitLimit", ctypes.c_size_t),
+        ("CommitPeak", ctypes.c_size_t),
+        ("PhysicalTotal", ctypes.c_size_t),
+        ("PhysicalAvailable", ctypes.c_size_t),
+        ("SystemCache", ctypes.c_size_t),
+        ("KernelTotal", ctypes.c_size_t),
+        ("KernelPaged", ctypes.c_size_t),
+        ("KernelNonpaged", ctypes.c_size_t),
+        ("PageSize", ctypes.c_size_t),
+        ("HandleCount", wintypes.DWORD),
+        ("ProcessCount", wintypes.DWORD),
+        ("ThreadCount", wintypes.DWORD),
+    ]
+
+
+def available_headroom() -> int:
+    """The machine's memory headroom: the lower of available RAM and available commit.
+
+    Commit (RAM plus page file) is the limit that makes allocations fail, and it can run out
+    while RAM still looks free. Both come from GetPerformanceInfo, which reports the whole
+    system, unlike GlobalMemoryStatusEx's commit figure, which is per calling process."""
+    info = PERFORMANCE_INFORMATION()
+    info.cb = ctypes.sizeof(info)
+    if not psapi.GetPerformanceInfo(ctypes.byref(info), info.cb):
+        status = MEMORYSTATUSEX()
+        status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+        kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+        return status.ullAvailPhys
+    page = info.PageSize
+    commit_free = (info.CommitLimit - info.CommitTotal) * page
+    return min(info.PhysicalAvailable * page, commit_free)
 
 
 def create_job(hard_limit: int) -> wintypes.HANDLE:
@@ -189,8 +217,8 @@ def main() -> int:
         parser.error("give the command after --")
     limit, floor = int(args.limit * GB), int(args.floor * GB)
 
-    if free_physical() < floor:
-        print(f"MEMORY GUARD: not starting; only {free_physical() / GB:.1f} GB free, below the {args.floor:g} GB "
+    if available_headroom() < floor:
+        print(f"MEMORY GUARD: not starting; only {available_headroom() / GB:.1f} GB free, below the {args.floor:g} GB "
               "floor. Wait for other work to finish.", file=sys.stderr)
         return KILLED_EXIT
 
@@ -208,7 +236,7 @@ def main() -> int:
         while proc.poll() is None:
             used = sum(private_bytes(pid) for pid in job_pids(job))
             peak = max(peak, used)
-            free = free_physical()
+            free = available_headroom()
             if used > limit:
                 reason = f"its processes used {used / GB:.1f} GB (limit {args.limit:g} GB)"
             elif free < floor:
