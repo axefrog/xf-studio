@@ -23,7 +23,7 @@ export interface ActsState {
   /** The focus recorded in the previous run: demand at the occurrence time. */
   prev: { w: number; cells: Id[] } | null;
   /** Items already published as events: the last 512, and no older than the ring. */
-  published: Array<{ item: Id; w: number; cell: Id }>;
+  published: Array<{ item: Id; w: number; cell: Id; summary: Id; index: number }>;
   /** By scene cell, the windows of opened items in the last hour. */
   recent: Record<Id, number[]>;
 }
@@ -139,9 +139,10 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
             if (!c.produce(sim.occurrenceOf(d, cast, c.proc, 'sim')).ok) continue;
             const persons = cast.filter((e) => e.who !== undefined).map((e) => e.who!);
             const witnesses = witnessesOf(d, persons);
+            sim.k.summaries.materialise(it.summary, it.index);
             ops.push(...itemFieldOps(sim, d, cast, witnesses, false));
             ops.push({ op: 'publish-item', item: it.id });
-            st.published.push({ item: it.id, w: k - 1, cell });
+            st.published.push({ item: it.id, w: k - 1, cell, summary: it.summary, index: it.index });
             recent.push(k);
             opened++;
           }
@@ -152,13 +153,13 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
         for (const p of st.published) {
           if (p.cell !== cell || k - p.w >= sim.data.events.heatHorizon) continue;
           if (sim.k.store.localState(p.item) > 0) continue;
-          const S = sim.summaryOfItem(p.item);
-          const entry = S ? sim.ringEntry(S.summary) : undefined;
-          if (!S || !entry?.meta?.[S.index]) continue;
-          const d = itemDescriptor(sim, S.summary, S.index, p.w, cell, entry.kind, entry.meta[S.index]!);
+          const entry = sim.ringEntry(p.summary);
+          if (!entry?.meta?.[p.index]) continue;
+          const d = itemDescriptor(sim, p.summary, p.index, p.w, cell, entry.kind, entry.meta[p.index]!);
           const cast = sim.casting.cast(d);
           if (cast === 'no-cast') continue;
           const persons = cast.filter((e) => e.who !== undefined).map((e) => e.who!);
+          sim.k.summaries.materialise(p.summary, p.index);
           ops.push(...itemFieldOps(sim, d, cast, witnessesOf(d, persons), true));
         }
       }

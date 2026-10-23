@@ -375,6 +375,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
       st.admit.m4Times = m4Times;
 
       const occurrences: Descriptor[] = [];
+      const minted = new Map<Id, { name: string; cause: Id }>();
       for (const cd of admitted) {
         if (cd.isRegime) {
           const r = cd.regime!;
@@ -388,6 +389,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         const d = cd.d!;
         sim.completeDescriptor(d);
         occurrences.push(d);
+        minted.set(d.id, { name: cd.name!, cause: cd.cause! });
         ops.push({ op: 'mint-event', spec: sim.eventSpecOf(d, cd.cast!, proc, cd.cause!, cd.name!) });
         bump(countAgg, sim.w.cell(d.cell).district, d.kind, d.size);
       }
@@ -497,7 +499,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         facts.push(f);
         const { witnesses: _ignored, ...rest } = d;
         void _ignored;
-        ringNew.push({ id: d.id, w, kind: d.kind, cell: d.cell, event: rest });
+        ringNew.push({ id: d.id, w, kind: d.kind, cell: d.cell, event: rest, mint: minted.get(d.id)! });
       }
       facts.sort((x, y) => x.time - y.time || cmp(x.id, y.id));
       st.ring.push(...ringNew);

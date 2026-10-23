@@ -195,6 +195,52 @@ export class Sim {
     return st?.ring.find((e) => e.id === summary);
   }
 
+  /**
+   * The cause chain of a minted occurrence (S1 9.4 `why`): the occurrence, then its ancestors nearest first, to an immigrant (generation 0).
+   * It has at most `genMax` links after the occurrence. An ancestor that the ring no longer holds is an Id only, marked `beyondRing`.
+   */
+  why(occurrence: Id): Array<{ id: Id; kind?: string; gen?: number; beyondRing?: true }> | undefined {
+    const st = this.k.evolution.states.get('city.events')?.state as EventsState | null | undefined;
+    if (!st) return undefined;
+    const lookup = (id: Id): { kind: string; gen: number; chain: Id[] } | undefined => {
+      const ev = st.ring.find((e) => e.id === id);
+      if (ev?.event) return { kind: ev.event.kind, gen: ev.event.gen, chain: ev.event.chain };
+      const it = this.summaryOfItem(id);
+      const sum = it ? st.ring.find((e) => e.id === it.summary) : undefined;
+      const meta = sum?.meta?.[it!.index];
+      return sum && meta ? { kind: sum.kind, gen: meta.gen, chain: meta.chain } : undefined;
+    };
+    const first = lookup(occurrence);
+    if (!first) return undefined;
+    const out: Array<{ id: Id; kind?: string; gen?: number; beyondRing?: true }> = [{ id: occurrence, kind: first.kind, gen: first.gen }];
+    for (const a of first.chain) {
+      const known = lookup(a);
+      out.push(known ? { id: a, kind: known.kind, gen: known.gen } : { id: a, beyondRing: true });
+    }
+    return out;
+  }
+
+  /**
+   * Mint an occurrence of the ring again under its own Id (S1 11): an event or a summary within seven days regenerates identically,
+   * its cast being a pure function of its descriptor and recorded history. Returns the Id, or undefined when the ring no longer holds it.
+   * It publishes nothing new beyond what minting an event does for a node that has no fields.
+   */
+  remint(id: Id): Id | undefined {
+    const e = this.ringEntry(id);
+    if (!e) return undefined;
+    const proc = processCause('city.events');
+    const W = this.data.time.W;
+    if (e.count !== undefined) {
+      return this.k.summaries.mintSummary({ creator: proc, cause: proc, name: `sum/${e.w}/${e.cell}/${e.kind}`, kind: e.kind, from: e.w * W, length: W, scope: e.cell, count: e.count });
+    }
+    if (!e.event || !e.mint) return undefined;
+    const d: Descriptor = { ...e.event, witnesses: 0 };
+    this.completeDescriptor(d);
+    const cast = this.casting.cast(d);
+    if (cast === 'no-cast') return undefined;
+    return this.k.events.mintEvent(this.eventSpecOf(d, cast, proc, e.mint.cause, e.mint.name));
+  }
+
   /** The summary an item belongs to and its index, from the item's header. */
   summaryOfItem(item: Id): { summary: Id; index: number } | undefined {
     const h = this.k.store.header(item);

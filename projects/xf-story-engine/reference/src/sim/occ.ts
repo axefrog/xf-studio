@@ -48,6 +48,8 @@ export interface RingEntry {
   cell: Id;
   /** An event: its descriptor. */
   event?: Omit<Descriptor, 'witnesses'>;
+  /** An event: the name and cause its node is minted under, so it can be minted again under the same Id (S1 11). */
+  mint?: { name: string; cause: Id };
   /** A summary: its count. */
   count?: number;
   /** A summary: by item index. */
