@@ -91,6 +91,7 @@ export function onLoad(l2: Layer2): void {
   // The arbiter starts a new session: the play clock restarts, and the load settles (S2 section 8.2).
   const info = l2.port.loadInfo();
   l2.arbiter = new Arbiter();
+  l2.playBase = info?.playClock ?? l2.playBase;
   l2.baseTotal = l2.global.playTotal;
   l2.arbiter.session = 'settling';
   l2.arbiter.saveAge = info?.ageSeconds ?? 0;

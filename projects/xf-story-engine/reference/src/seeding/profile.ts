@@ -171,7 +171,10 @@ function expandLadder(seed: SeedInput, p: LadderParams): Expansion {
   const top: Pred = p.intimate
     ? { all: [{ seedFact: rungKey, op: 'eq', value: n - 1 }, { beat: 'intimate', state: ['done', 'skipped'] }] }
     : { all: [{ seedFact: rungKey, op: 'eq', value: n - 1 }, { beat: `offer-${n - 1}`, state: ['done'] }] };
-  const end: Pred = { any: [top, { seedFact: exitKey, op: 'gt', value: 0 }] };
+  // An exit ends the ladder once its content is done (A.2 step 7: "any exit beat is `done`"), not when the answer is written:
+  // otherwise a decline would end the seed before its exit could play (SPEC-NOTES 58).
+  const exitDone: Pred = { any: ['exit-decline', 'exit-stay', 'exit-lapse'].map((b) => ({ beat: b, state: ['done'] })) as Pred[] };
+  const end: Pred = { any: [top, { all: [{ seedFact: exitKey, op: 'gt', value: 0 }, exitDone] }] };
   const unattended = { after: p.lapseAfter, outcome: [{ fact: exitKey, set: 3 }] };
   const turns = [{ level: 'concern' as const, who: withRole, kind: 'tie' as const, what: { seedFact: rungKey, op: 'gt', value: 0 } as PredInput }];
   const start = ['offer-1'];

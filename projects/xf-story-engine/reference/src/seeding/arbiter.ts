@@ -372,7 +372,7 @@ function missed(l2: Layer2, inst: Instance, d: Delivery, why: string): void {
   d.state = 'expired';
   l2.record(inst, 'missed', { delivery: d.id, why, attempts: d.attempts });
   const rt = d.beat ? inst.st.beats[d.beat] : undefined;
-  if (!rt || !d.beat) return;
+  if (!rt || !d.beat || (d.what !== 'offer' && d.what !== 'beat')) return;
   if (rt.state === 'running') {
     rt.state = 'available';
     rt.since = l2.k.now;
@@ -451,7 +451,7 @@ function prepareAndRelease(l2: Layer2, inst: Instance, d: Delivery, channel: Cha
   if (d.timing.kind === 'message' && cls !== 2) d.timing.kind = PLAIN_KIND[cls]!;
   d.words = l2.renderWords(inst, d);
   const rt = d.beat ? st.beats[d.beat] : undefined;
-  if (rt && d.what !== 'warning' && d.what !== 'signpost') {
+  if (rt && (d.what === 'offer' || d.what === 'beat')) {
     if (rt.state === 'available') { rt.state = 'running'; rt.since = k.now; }
     rt.releases++;
   }

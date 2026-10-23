@@ -8,6 +8,8 @@ export type LoadClass = 'known' | 'behind' | 'foreign' | 'unkeyed' | 'damaged';
 
 export interface LoadInfo {
   class: LoadClass;
+  /** The port's play clock at the load: a session's stamps are relative to it. */
+  playClock?: number;
   /** The wall-clock gap between the save's own timestamp and the load, read once from the save's metadata (S2 section 8.7). */
   ageSeconds: number;
 }
@@ -37,9 +39,6 @@ export interface Layer2Port {
   writeGameFact(fact: string, request: { set?: number; add?: number }): void;
   reward(table: string, tier: string, route: number | undefined): void;
   loadInfo(): LoadInfo | undefined;
-  /** The one input that retracts a push (S5): reported through `Layer2.respond`. */
-  /** The game time of the lineage is the kernel's; the play clock is the port's. */
-  playClock(): number;
 }
 
 /** A stub port driven by a script. Everything is a plain field a test sets. */
@@ -51,7 +50,6 @@ export class ScriptPort implements Layer2Port {
   caps = new Map<string, Verdict>();
   capabilitySet = new Set<string>(['story.write-vanilla']);
   load: LoadInfo | undefined;
-  play = 0;
   readonly gameWrites: Array<{ fact: string; set?: number; add?: number }> = [];
   readonly rewards: Array<{ table: string; tier: string; route: number | undefined }> = [];
 
@@ -81,8 +79,5 @@ export class ScriptPort implements Layer2Port {
   }
   loadInfo(): LoadInfo | undefined {
     return this.load;
-  }
-  playClock(): number {
-    return this.play;
   }
 }

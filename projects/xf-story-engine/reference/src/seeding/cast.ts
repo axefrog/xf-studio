@@ -143,6 +143,8 @@ function holdersOf(l2: Layer2, node: Id, me: Instance): Holder[] {
   const out: Holder[] = [];
   for (const other of l2.all()) {
     if (other === me || isTerminal(other.st.state)) continue;
+    // A fit report's stand-in instance is not registered; the live instances of its own template do not claim against it.
+    if (!l2.insts.has(me.id) && other.st.template.id === me.st.template.id) continue;
     for (const [role, rs] of Object.entries(other.st.roles)) {
       if (rs.cast === node && !rs.shrunk) out.push({ inst: other, role, committed: rs.committed });
     }
@@ -320,7 +322,8 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
     }
     return true;
   });
-  for (const x of lost) recordClaim(l2, inst, key, x.by.inst, x.by.role, x.node, x.by.inst.id);
+  // A report's stand-in instance is not registered: it records nothing on the seeds it would meet.
+  if (l2.insts.has(inst.id)) for (const x of lost) recordClaim(l2, inst, key, x.by.inst, x.by.role, x.node, x.by.inst.id);
   if (candidates.length === 0) return fail(maybeSeen ? 'a requirement cannot be read yet' : 'no candidate meets the role\'s requirements');
 
   // Choose: the layer-2 draw, with the preference terms added in a fixed order (S2 section 5.2 step 6).

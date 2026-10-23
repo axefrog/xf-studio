@@ -32,6 +32,7 @@ import { flush, onLoad, syncGlobal, syncRecord } from './persist.ts';
 import { transition } from './run.ts';
 import { claimConflictRead } from './cast.ts';
 import { emptyGlobal } from './state.ts';
+import { fitReport, recap, type FitReport, type RecapItem } from './fit.ts';
 import { placeholders } from './lint.ts';
 import type {
   FactsTable, Finding, GlobalState, InstanceState, Pack, Pred, RecordEntry, Seed, SeedInput, Delivery, TimingRequest,
@@ -148,6 +149,14 @@ export interface SowOutcome {
   gated?: string;
 }
 
+export interface SowRequest {
+  template: string;
+  pack?: string;
+  overlay?: SowOpts['overlay'];
+  localName: string;
+  decision: Id;
+}
+
 export const isTerminal = (s: string): boolean => s === 'resolved' || s === 'withered' || s === 'withdrawn';
 
 export class Layer2 implements Layer2Hook {
@@ -161,6 +170,8 @@ export class Layer2 implements Layer2Hook {
   arbiter = new Arbiter();
   /** Cumulative play seconds in this branch as of the last load or the start (the base `playTotal()` adds this session's play to). */
   baseTotal = 0;
+  /** The port's play clock at the start of the session: every stamp layer 2 keeps is relative to it (S2-I-11, SF-27). */
+  playBase = 0;
   /** Queued re-evaluations: instance Id to the triggers since it last ran. */
   readonly queue = new Map<Id, Trigger[]>();
   /** Packs whose sowing watcher heard something. */
@@ -330,6 +341,28 @@ export class Layer2 implements Layer2Hook {
     return sowTemplate(this, packId, templateId, opts);
   }
 
+  /** A sowing request from layer 3 (`story.seed@1`, S2 section 1.3). */
+  sowRequest(req: SowRequest): { ok: true; instance: Id; existing: boolean } | { ok: false; findings: Finding[] } {
+    let packId = req.pack;
+    if (!packId) packId = [...this.packs.keys()].sort().find((p) => this.packs.get(p)!.pack.seeds.some((s) => s.id === req.template));
+    if (!packId) return { ok: false, findings: [{ code: 'sow', level: 'error', message: `No pack holds the template "${req.template}".` }] };
+    const o: SowOpts = { by: 'director', decision: req.decision, localName: req.localName };
+    if (req.overlay) o.overlay = req.overlay;
+    const r = this.sow(packId, req.template, o);
+    if (r.ok) return { ok: true, instance: r.instance!, existing: r.existing ?? false };
+    return { ok: false, findings: r.findings };
+  }
+
+  /** The fit report: a template run against the current state without changing it (S2 section 11.2). */
+  fit(packId: string, templateId: string): FitReport {
+    return fitReport(this, packId, templateId);
+  }
+
+  /** "Story so far": the pull recap, grounded in what V was shown (S2 section 8.7). */
+  recap(): RecapItem[] {
+    return recap(this);
+  }
+
   // ---- instances ----
 
   all(): Instance[] {
@@ -450,19 +483,27 @@ export class Layer2 implements Layer2Hook {
 
   // ---- the play clock and the game port's reports ----
 
-  /** Advance the play clock to `to`, one second at a time: the arbiter runs once a second of play (S2 section 8.3). */
+  /** A session starts with the port's play clock at `base`; nothing layer 2 keeps depends on the offset. */
+  beginSession(base: number): void {
+    this.playBase = base;
+    this.arbiter.play = 0;
+    this.arbiter.lastStep = -1;
+  }
+
+  /** Advance the play clock to `to` (the port's seconds), one second at a time: the arbiter runs once a second of play (S2 section 8.3). */
   advancePlay(to: number, onSecond?: (s: number) => void): void {
-    for (let s = this.arbiter.lastStep + 1; s <= to; s++) {
+    const rel = to - this.playBase;
+    for (let s = this.arbiter.lastStep + 1; s <= rel; s++) {
       this.arbiter.play = s;
-      onSecond?.(s);
+      onSecond?.(s + this.playBase);
       arbiterStep(this, s);
     }
-    this.arbiter.play = Math.max(this.arbiter.play, to);
+    this.arbiter.play = Math.max(this.arbiter.play, rel);
   }
 
   /** The game port reports how a released delivery was shown (S2 section 8.5). */
   display(report: DisplayReport): void {
-    displayReport(this, report);
+    displayReport(this, { ...report, atPlay: report.atPlay - this.playBase });
   }
 
   /** V answers an offer (S2 section 7.4). Returns whether the answer was accepted. */
