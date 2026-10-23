@@ -1,6 +1,6 @@
 # S3. Procedural engine specification
 
-**Status:** v0.2, 23 October 2026. v0.2 answers GPT-6 Astra's review of v0.1. It narrows the core (no online player-model estimator, completed event patterns only, no loose-end growth, no automatic overflow withdrawal) and tightens identity, deadlines, reloads and saving.
+**Status:** v0.3, 23 October 2026. v0.3 adds a chronological buffer before the sifter, after GPT-6 Astra's review of S1 (E-07). v0.2: v0.2 answers GPT-6 Astra's review of v0.1. It narrows the core (no online player-model estimator, completed event patterns only, no loose-end growth, no automatic overflow withdrawal) and tightens identity, deadlines, reloads and saving.
 - **Reviews.** Round 1, GPT-6 Astra, on v0.1: 18 findings and four cuts, all adopted (§15).
 - **The core.** This version specifies the **core**: the layer-3 parts that the first implementation builds, narrowed to [S2's core](seeding.md#03-the-core-what-the-first-implementation-builds) (§0.2). Everything else in [P5](../p5-procedural-engine.md) is a **later capability** (§0.3). The first implementation rejects it plainly rather than half-doing it.
 - **The additions to S2 and S0.** Layer 3 needed a few additions. S2 v1.1 and v1.2 and S0 v4.7 and v4.8 have taken them. §13 lists them.
@@ -765,6 +765,8 @@ The frame's weight 1 and no parents give pull 1. A kind-level `reactsTo` match h
 
 **What the sifter ignores.** A `contribution` Change. An event whose `creator` is `director` or whose kind starts `meta:` (S1's policies ignore them too; a pattern may not name them in the core, S3-L-7).
 
+**The chronological buffer** (v0.3). Producers publish late: S1's simulated events appear only when their window's batch is applied, while mirrored events appear at once. So the sifter doesn't take emissions as they arrive. It holds them in a buffer and releases them **in order of occurrence time** (then occurrence id) once the **horizon** has passed: every producer has published up to that time. The horizon is the current boundary, less the longest publication lag among the loaded producers. S1 declares the lag per process (§9.4); in M3 it is one window, because S1 runs one window at a time. The buffer is bounded by the lag, and is persisted with the pool (§9.2), so a reload neither loses nor reorders it. A mixed mirror-and-simulation two-stage fixture (SF3-38) checks that a pattern whose stages arrive out of order still matches in chronological order.
+
 ### 6.2 The pool
 
 The pool holds open and completed matches as **copied descriptors**: ids, times, bindings and event ids. It holds no live node references. It also **keeps the events alive**: the constituent events of every entry are retention roots of the layer-3 record (§9.2), so a non-canon event cannot be forgotten while a saved entry needs it.
@@ -1241,6 +1243,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, the fixture pack `xf.fixtur
 | SF3-33 | **Hook perturbation.** Run SF3-37 and SF3-3 twice; perturb session length, idle time, quit and save counts, time of day, the wall clock | Byte-identical hook outputs and records |
 | SF3-34 | **The evidence is inert.** Run SF3-37 with the evidence log off and on | Byte-identical decisions, holds, joint reports, pool and records; only `evidence` log entries differ. They hold offers and responses with `playTotal`, none for a lapse or retraction, and none with `noticing: off` |
 | SF3-35 | **No layer-3 record.** Load a save made without the layer-3 record | Loads without error. Empty pool; schedule resumes from `floor(playTotal / I)`; a new match can start. No finding is shown to the player |
+| SF3-38 | **Chronological buffer.** A two-stage pattern: stage 0 a simulated event at window 0, published at its batch; stage 1 a mirrored event at window 1, published at once | The emissions are released in occurrence order, and the match completes. With the buffer off, it would miss |
 
 ### 12.2 End-to-end fixtures
 
