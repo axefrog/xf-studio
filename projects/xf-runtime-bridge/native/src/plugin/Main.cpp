@@ -581,6 +581,11 @@ void Unload()
     log::Info("plugin.unload", "requests_served=" +
                                    std::to_string(state.bridge ? state.bridge->GetDispatcher().RequestCount() : 0));
     state.queue.Close();
+    // 0.8.7: a Save anyway still running finds the queue closed and ends.
+    if (state.saveAnywayThread.joinable())
+    {
+        state.saveAnywayThread.join();
+    }
     if (state.bridge)
     {
         state.bridge->Stop("plugin_unload");

@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <limits>
@@ -38,6 +39,7 @@
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
+#include "core/Probes.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/ScriptFrame.hpp"
@@ -5102,6 +5104,92 @@ int RunLayoutRepro()
     return 2;
 }
 
+// 0.8.7: the test probes' ring (test.events) and the companion probe (test.companion.probe), run for real against the companion
+// built beside this self-test: its containment (in its job before it resumes, kill-on-close, one process, the memory cap) and
+// what it reports.
+void Bridge087Tests()
+{
+    namespace pr = xfb::probes;
+    Check("0.8.7 probe kinds: a-z, 0-9, _ . : / only, 1 to 40 long",
+          pr::KindOk("death") && pr::KindOk("dialogue.hub") && pr::KindOk("session") && !pr::KindOk("") && !pr::KindOk("Death") &&
+              !pr::KindOk("a b") && !pr::KindOk(std::string(41, 'a')));
+
+    pr::ProbeRing ring(32, 3);
+    for (int i = 0; i < 5; ++i)
+    {
+        ring.Push("death", json{{"i", i}}, 10'000);
+    }
+    ring.Push("heat", json{{"value", 1}}, 10'000);
+    ring.Push("death", json{{"i", 9}}, 11'000); // the next second: kept, carrying the two dropped before it
+    const auto read = ring.Read(0, 100);
+    Check("0.8.7 the probe ring keeps 3 a second per kind, counts the rest, and the kind's next record says how many it missed",
+          read["events"].size() == 5 && read["dropped"]["death"] == 2 && read["events"][4]["data"].value("dropped_before", 0) == 2 &&
+              read["events"][3]["kind"] == "heat" && read["latest"] == 5,
+          read.dump());
+    const auto later = ring.Read(read["next"].get<uint64_t>(), 100);
+    Check("0.8.7 the probe ring reads on from a cursor", later["events"].empty() && later["next"] == read["next"], later.dump());
+
+    pr::ProbeRing small(16, 100);
+    for (int i = 0; i < 20; ++i)
+    {
+        small.Push("journal", json{{"i", i}}, 5'000);
+    }
+    const auto evicted = small.Read(1, 100);
+    Check("0.8.7 the probe ring holds its capacity, says how many it evicted and how many a reader behind it missed",
+          small.Size() == 16 && evicted["evicted"] == 4 && evicted["missed"] == 4 && evicted["events"][0]["seq"] == 5, evicted.dump());
+
+    Check("0.8.7 test.companion.probe takes mode probe, sleep or stop, seconds 1-3600 and memory_mb 16-1024, nothing else",
+          pr::ParseCompanion(json::object()).mode == "probe" && pr::ParseCompanion(json{{"mode", "sleep"}, {"seconds", 5}}).seconds == 5 &&
+              ParamsCode([] { pr::ParseCompanion(json{{"mode", "run"}}); }) == "bad_params" &&
+              ParamsCode([] { pr::ParseCompanion(json{{"memory_mb", 4096}}); }) == "bad_params" &&
+              ParamsCode([] { pr::ParseCompanion(json{{"shell", true}}); }) == "bad_params");
+
+    // The real companion, beside this self-test, looking at a folder of two archives made here.
+    const auto here = xfb::win32::ModuleDirectory(reinterpret_cast<const void*>(&Bridge087Tests));
+    const auto exe = here / "xfb_companion_probe.exe";
+    const auto folder = here / "companion-probe-test";
+    std::error_code ec;
+    std::filesystem::create_directories(folder, ec);
+    for (const char* name : {"a.archive", "b.archive"})
+    {
+        std::ofstream(folder / name) << "x";
+    }
+    try
+    {
+        const auto probe = pr::RunCompanion(pr::CompanionRequest{}, exe, folder / "a.archive", folder, 10'000);
+        const auto& report = probe.value("report", json::object());
+        Check("0.8.7 the companion runs in its job before it resumes (the job named at creation), with kill-on-close, one process and the 64 MB cap",
+              probe.value("in_job", false) && probe.value("route", std::string()) == "atomic" && report.value("in_job", false) &&
+                  report.value("kill_on_close", false) && report.value("active_process_limit", 0) == 1 && report.value("memory_limit_mb", 0) == 64 &&
+                  probe.value("exit_code", -1) == 0 && probe.value("sha256", std::string()).size() == 64,
+              probe.dump());
+        Check("0.8.7 the companion reports what it sees: the file it was asked about and the folder's two archives",
+              report.value("file_seen", false) && report.value("folder_archives", -1) == 2, probe.dump());
+        const auto missing = pr::RunCompanion(pr::CompanionRequest{}, exe, folder / "none.archive", folder, 10'000);
+        Check("0.8.7 a file the companion can't see says so (file_seen false, the system's error)",
+              !missing["report"].value("file_seen", true) && missing["report"].value("file_error", 0) == 2, missing.dump());
+
+        pr::CompanionRequest sleep;
+        sleep.mode = "sleep";
+        sleep.seconds = 60;
+        const auto asleep = pr::RunCompanion(sleep, exe, {}, {}, 0);
+        const auto twice = ParamsCode([&] { pr::RunCompanion(sleep, exe, {}, {}, 0); });
+        const auto stopped = pr::RunCompanion(pr::CompanionRequest{"stop"}, exe, {}, {}, 0);
+        Check("0.8.7 a sleeping companion keeps its job; a second is refused; stop closes the job and kill-on-close ends it",
+              asleep.value("in_job", false) && twice == "busy" && stopped.value("stopped", false) && stopped.value("ended_by_job_close", false),
+              asleep.dump() + " / " + twice + " / " + stopped.dump());
+        const auto none = pr::RunCompanion(pr::CompanionRequest{"stop"}, exe, {}, {}, 0);
+        Check("0.8.7 stop with no sleeping companion says so", !none.value("stopped", true), none.dump());
+    }
+    catch (const std::exception& e)
+    {
+        Check("0.8.7 the companion probe runs", false, e.what());
+    }
+    Check("0.8.7 a companion that isn't in the plugin's folder is refused in plain words",
+          ParamsCode([&] { pr::RunCompanion(pr::CompanionRequest{}, here / "no-such-companion.exe", {}, {}, 1000); }) == "not_in_this_package");
+    std::filesystem::remove_all(folder, ec);
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -5138,6 +5226,7 @@ int RunUnitTests()
     Session9Tests();
     Bridge083Tests();
     Bridge086Tests();
+    Bridge087Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

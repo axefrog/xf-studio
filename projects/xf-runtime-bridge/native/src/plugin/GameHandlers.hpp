@@ -48,4 +48,8 @@ void ReleaseCursorAfterIdle();
 // Game thread, each Running tick: takes the bridge's save lock back when a game.save with override_lock
 // couldn't retake it through the queue (State::relockOwed; RB-52). Throws on a failed script call.
 void RetakeOwedSaveLock();
+
+// 0.8.7: the XF Runtime Bridge window's Save anyway (XFBridge_SaveAnyway): one manual save past the bridge's save lock, refused
+// only once the bridge is stopped. Blocks for the save's steps; never call it on the game thread.
+nlohmann::json PlayerSaveAnyway(const std::string& aCid);
 } // namespace xfb::plugin

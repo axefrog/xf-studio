@@ -381,6 +381,19 @@ local function runAction(action)
       state.messageOk = false
     end
     log("warn", cid, "panel: stop key " .. tostring(arg.action) .. " " .. tostring(arg.key) .. " ok=" .. tostring(answer and answer.ok))
+  elseif action.name == "saveanyway" then
+    -- 0.8.7: the window's Save anyway, the player's own say-so to save past the bridge's save lock. The plugin makes one manual
+    -- save as game.save {override_lock: true} would, on its own thread, and the outcome comes back on the status surface.
+    local answer = decodeAnswer(callNative("XFBridge_SaveAnyway", "cet-panel"))
+    if answer and answer.started then
+      state.message = "Saving... The XF Runtime Bridge window says when it's done."
+      state.messageOk = true
+    else
+      state.message = answer and answer.why and ("The save didn't start: " .. tostring(answer.why) .. ".")
+        or "The bridge didn't answer. Restart the game to start it again."
+      state.messageOk = false
+    end
+    log("warn", cid, "panel: save anyway started=" .. tostring(answer and answer.started) .. " " .. tostring(answer and answer.why))
   elseif action.name == "kill" then
     local ok, killed = callNative("XFBridge_Kill", "cet-panel")
     state.message = (ok and killed) and "The bridge is stopped. Reconnect starts it again." or "The bridge wasn't running."
@@ -511,14 +524,28 @@ local function colouredWrapped(colour, text)
 end
 
 -- 0.8.6 (the UI review's P5: the status words sat 66 px in against 26 px on the right): the status dot hangs in the window's
--- left padding. A bullet one font size wide with no frame padding (its dot centred half a font size in, a fifth of one in
--- radius) is placed a font size left of where the text starts, with the clip widened to the window so the padding doesn't
--- cut it, and the words then start at the padding, as the right side ends there. Answers false, drawing nothing, where the
--- padding is narrower than a font size or this CET lacks the calls.
+-- left padding, so the words start at the padding, as the right side ends there. 0.8.7 (session 14's T3: it didn't take in
+-- game; the hanging indent applied): 0.8.6 needed the padding to be a whole font size wide, and CET's padding is narrower
+-- than its font. Now only the dot itself has to fit: Dear ImGui's bullet is a circle a fifth of a font size in radius,
+-- centred half a font size into the bullet's cell (no frame padding), so the cell starts half a font size left of where the
+-- dot's centre should be, the middle of the padding, even left of the window's edge, with the clip widened to the window so
+-- the padding doesn't cut it. Answers false, drawing nothing, where the padding can't hold the dot or this CET lacks the
+-- calls; the first such frame says why in the mod's log.
 local function statusDot(tone, startX)
   local font = ImGui.GetFontSize()
-  if not (startX >= font) or type(ImGui.PushClipRect) ~= "function" or type(ImGui.GetWindowPos) ~= "function"
+  local radius = font * 0.2
+  local why = nil
+  if not (startX >= 2 * radius + 2) then
+    why = "the window's padding (" .. tostring(startX) .. " px) is narrower than the dot (" .. tostring(2 * radius + 2) .. " px)"
+  elseif type(ImGui.PushClipRect) ~= "function" or type(ImGui.GetWindowPos) ~= "function"
     or type(ImGui.GetWindowSize) ~= "function" or type(ImGui.SetCursorPosX) ~= "function" then
+    why = "this CET's ImGui lacks PushClipRect, GetWindowPos, GetWindowSize or SetCursorPosX"
+  end
+  if why then
+    if not state.dotFallbackLogged then
+      state.dotFallbackLogged = true
+      log("info", "-", "CET line: the status dot hangs before the words instead of in the padding: " .. why)
+    end
     return false
   end
   local wx, wy = ImGui.GetWindowPos()
@@ -526,12 +553,13 @@ local function statusDot(tone, startX)
   ImGui.PushClipRect(wx, wy, wx + (ww or 0), wy + (wh or 0), false)
   ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 0, 0)
   ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
-  ImGui.SetCursorPosX(startX - font)
+  ImGui.SetCursorPosX(startX / 2 - font / 2)
   ImGui.Bullet()
   ImGui.PopStyleColor(1)
   ImGui.PopStyleVar(1)
   ImGui.PopClipRect()
   ImGui.SameLine(0, 0)
+  ImGui.SetCursorPosX(startX)
   return true
 end
 
@@ -641,7 +669,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.6",
+  version = "0.8.7",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

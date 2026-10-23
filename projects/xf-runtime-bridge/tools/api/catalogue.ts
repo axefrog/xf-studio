@@ -1485,6 +1485,54 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     bridge: { method: "test.save.delay" },
   },
   {
+    // 0.8.7, session 15: the game-events probe (knowledge/game-events.md §12 and its session rows 4 to 16).
+    name: "test.events",
+    title: "Read the event probes' records (test probe)",
+    description:
+      "Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off). Reads the records of the game-events and save-identity probes from their own ring (512 records, at most 20 a second per kind; what goes over is counted in dropped and in the kind's next record), apart from the session's events: kinds session (each lifecycle point of a load or save, with restored, pre_game and the probe's test facts), death, defeated, knockdown, combat, heat (wanted_level, wanted_chase_active), zone (CityAreaType), district (the innermost district's enum name, previous, new_location_discovered), interior (a 2 Hz poll's flips), vehicle (mount and unmount with the seat), vehicle.stolen, vehicle.acquired, journal (hash, class, change type, state; no text), dialogue.hub (hub ids, states and choice counts; no text), dialogue.index, call (contact, phase), time (a jump of the clock, or the menu's skip), status.count and stim.count (the noisy hooks, counted every 5 s). Every record carries game_s and sim_s. since reads on from a cursor (next). stims: true switches on the stim tap (row 16), false off. Changes nothing in the game.",
+    permission: "read",
+    input: obj({
+      since: int("Read records from this sequence number on (the last answer's next); 0 or none from the oldest.", 0),
+      limit: int("At most this many records (1 to 500, default 200).", 1, 500),
+      stims: bool("true switches the stim tap on (allow-listed stims counted every 5 s), false off."),
+    }),
+    undo: "stims: false switches the stim tap off again; reading changes nothing.",
+    bridge: { method: "test.events" },
+  },
+  {
+    // 0.8.7, session 15: the save-identity probe (knowledge/save-identity.md's session card).
+    name: "test.save.identity",
+    title: "Write or read the save-identity test facts (test probe)",
+    description:
+      "Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off). mode write sets the probe's test facts, all named xfs_probe_* so they can never be taken for the real save key: a and b (xfs_probe_a, xfs_probe_b), and pin {c0, c1, b, n} (xfs_probe_sk_c0, _c1, _b, _n, with the check xfs_probe_sk_k worked out by the plugin and written last), or pin \"clear\" to set them all to 0; arm_before_save: true makes Codeware's Session/BeforeSave write a fresh xfs_probe_b before every save (save-identity row 4), false stops it; persist {value, kib} fills the probe's persistent system (rows 11 and 12; kib 0 to 4096). mode read answers the facts, whether the pin's check holds, and the persistent system (present false once its file is removed from the staged mod). The facts go into any save made after; they are test facts and harmless. Takes no save lock. Needs the save permission.",
+    permission: "write-save",
+    input: obj({
+      mode: oneOf("write or read (default read).", ["write", "read"]),
+      a: int("xfs_probe_a's value (0 to 2147483647).", 0, 2147483647),
+      b: int("xfs_probe_b's value (0 to 2147483647).", 0, 2147483647),
+      pin: { description: "The pin {c0, c1, b, n} (each 0 to 2147483647), or \"clear\".", anyOf: [{ ...obj({ c0: int("Campaign id, high part.", 0, 2147483647), c1: int("Campaign id, low part.", 0, 2147483647), b: int("Branch id.", 0, 2147483647), n: int("Sequence number.", 0, 2147483647) }), description: "The pin." }, { type: "string", enum: ["clear"], description: "Every test fact back to 0." }] },
+      arm_before_save: bool("true: Session/BeforeSave writes a fresh xfs_probe_b before each save; false stops it."),
+      persist: { ...obj({ value: int("The persistent field's value.", 0, 2147483647), kib: int("The persistent array's size in KiB (0 to 4096).", 0, 4096) }), description: "Fills the probe's persistent system: {value, kib}." },
+    }),
+    undo: "pin \"clear\" sets every test fact back to 0; arm_before_save: false stops the BeforeSave write.",
+    bridge: { method: "test.save.identity" },
+  },
+  {
+    // 0.8.7, session 15: the companion probe (XF Core's O4 and companion@1's containment, xf-core-architecture §7.6).
+    name: "test.companion.probe",
+    title: "Run the companion probe (test probe)",
+    description:
+      "Test probe, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks, and the package's xfb_companion_probe.exe; elsewhere refused). Launches the bundled companion from the plugin's own folder the way companion@1 will: opened against writers and hashed (sha256), created suspended with no window in a job named at creation (route atomic; assigned if the system refused that, with the reason), the job kill-on-close with one process, a memory cap (memory_mb, default 64) and UI limits, its only inherited handle the pipe for its output, checked in the job before it resumes (else ended), a fixed command line, no shell. mode probe (default): the plugin lists the game's archive/pc/mod folder as the game sees it and asks the companion about its first archive and that folder; the answer has the companion's report (in_job, kill_on_close, active_process_limit, memory_limit_mb, file_seen, folder_archives), plugin_view, and vfs_reaches_child (true when the companion sees what the game sees: MO2's virtual files reach a child of the game). mode sleep starts one that waits seconds (default 600) and keeps its job, so quitting the game should end it (kill-on-close); mode stop ends it now. Changes nothing in the game.",
+    permission: "write-world",
+    input: obj({
+      mode: oneOf("probe (default), sleep or stop.", ["probe", "sleep", "stop"]),
+      seconds: int("sleep only: how long it waits, 1 to 3600 (default 600).", 1, 3600),
+      memory_mb: int("The job's memory cap in MB, 16 to 1024 (default 64).", 16, 1024),
+    }),
+    undo: "mode stop ends a sleeping companion; quitting the game ends it too.",
+    bridge: { method: "test.companion.probe" },
+  },
+  {
     name: "game.load",
     title: "Load a save",
     description:
@@ -1536,7 +1584,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "ui.hud",
     title: "Show, hide or move the ink panel in the game",
     description:
-      "Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: photo_menu (default, 0.8.6: the HUD in play and, while photo mode is open, inside photo mode's own menu, where it fades with the menu for the hide-UI key, photo_hud_hide and screenshots, and its answers can also be clicked; there the anchors have no HUD floors), hud (the HUD only, hidden wherever the game hides it: menus, photo mode, the appearance screen, so the XF box shows in photo mode), notifications or top (research). modal (0.8.6, research for knowledge/photo-mode.md §15) makes the panel inside photo mode's menu hold one ModalPopup game context while photo mode is open, which is said to hold off photo mode's own keys (camera movement, the screenshot key, hide UI, exit); it takes effect only there, and the kill switch drops it. The panel in photo mode reports to session_log as ink_tree (photo mode's menu root and the XF layer: on each open, and once laid out with the root's width and rectangles), ink_pointer (hover taken, refused while a mouse button is held, replayed, left; answer clicks with the pointer's position) and ink_input (the camera's mouse and ModalPopup taken and released, with push and pop counts). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
+      "Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: photo_menu (default, 0.8.6: the HUD in play and, while photo mode is open, inside photo mode's own menu, where it fades with the menu for the hide-UI key, photo_hud_hide and screenshots, and its answers can also be clicked; there the anchors have no HUD floors, and 0.8.7 keeps the panel out of photo mode's own menu, top bar and hint strips, measured from photo mode's widgets), hud (the HUD only, hidden wherever the game hides it: menus, photo mode, the appearance screen, so the XF box shows in photo mode), notifications or top (research). modal (0.8.7) makes the panel inside photo mode's menu hold photo mode's exit while photo mode is open (Esc and the exit hint do nothing); photo mode's camera keys are read natively and can't be held from a contained route, so they keep moving the camera (0.8.6's ModalPopup context held neither, session 14); it takes effect only there, and the kill switch drops it. The panel in photo mode reports to session_log as ink_tree (photo mode's menu root and the XF layer: on each open, and once laid out with the root's width and rectangles), ink_pointer (hover taken, refused while a mouse button is held, replayed, left; presses with their route and actions, answer clicks and ignored releases with the pointer's position) and ink_input (the camera's mouse taken and released; photo mode's exit held by modal). Its laid-out ink_tree event also gives photo mode's zones and the panel's rectangle. nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
     permission: "notify",
     input: obj({
       show: bool("true shows the panel, false hides it."),
@@ -1547,7 +1595,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
       layer: oneOf("Where the panel draws: photo_menu (default: the HUD in play, inside photo mode's menu while it is open), hud (the HUD only; the XF box in photo mode), notifications or top (research).", ["photo_menu", "hud", "notifications", "top"]),
       nameplates: bool("Show each XF Finish Showroom head's preset name on its pedestal."),
       cet_label: bool("Show the CET line (Cyber Engine Tweaks' status line with a coloured dot, far top left) and its message lines."),
-      modal: bool("Research (0.8.6): while the panel is inside photo mode's menu, hold one ModalPopup game context (photo mode's own keys held off); false lets it go. The kill switch drops it."),
+      modal: bool("While the panel is inside photo mode's menu, hold photo mode's exit (Esc does nothing); photo mode's camera keys can't be held and keep working (0.8.7, session 14). false lets it go; the kill switch drops it."),
       reset: bool("Go back to the configured settings (alone)."),
     }),
     undo: "the result's undo: ui.hud with the earlier settings.",

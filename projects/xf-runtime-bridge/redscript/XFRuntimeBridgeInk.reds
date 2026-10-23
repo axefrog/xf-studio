@@ -119,7 +119,7 @@ public class XFHudFrame {
   // 0.8 (the UI review): the answered ask (its answer shows where its keys were, until the next message).
   public let answeredId: Int32;
   public let answeredLabel: String;
-  // 0.8.6: ui.hud's modal: the panel inside photo mode's menu holds one ModalPopup game context while this is set.
+  // 0.8.6: ui.hud's modal (0.8.7: the panel inside photo mode's menu holds photo mode's exit while this is set).
   public let modal: Bool;
 
   public static func Parse(text: String) -> ref<XFHudFrame> {
@@ -367,6 +367,41 @@ public abstract class XFInkStyle {
       return new Vector2(860.0, 480.0);
     }
     return new Vector2(0.0, 0.0);
+  }
+
+  // 0.8.7 (session 14's P11): the panel's rectangle p (left, top, width, height) moved out of each zone it overlaps (photo
+  // mode's menu, top bar and hint strips), then kept inside the visible screen v, gap apart. A zone along the bottom fifth
+  // pushes the panel up, one in the right half pushes it left, one along the top fifth pushes it down; two passes settle a
+  // panel that a first move pushed into a second zone. tools/overlay/ink-place.ts has the same rule (avoidZones) and tests it.
+  public static func Avoid(p: Vector4, zones: array<Vector4>, v: Vector4, gap: Float) -> Vector4 {
+    let left = p.X;
+    let top = p.Y;
+    let pass = 0;
+    while pass < 2 {
+      let i = 0;
+      while i < ArraySize(zones) {
+        let z = zones[i];
+        let overlaps = left < z.X + z.Z + gap && left + p.Z + gap > z.X && top < z.Y + z.W + gap && top + p.W + gap > z.Y;
+        if overlaps {
+          if z.Y + z.W >= v.Y + v.W * 0.8 {
+            top = z.Y - gap - p.W;
+          } else {
+            if z.X >= v.X + v.Z * 0.5 {
+              left = z.X - gap - p.Z;
+            } else {
+              if z.Y <= v.Y + v.W * 0.2 {
+                top = z.Y + z.W + gap;
+              }
+            }
+          }
+        }
+        i += 1;
+      }
+      pass += 1;
+    }
+    left = ClampF(left, v.X + gap, MaxF(v.X + gap, v.X + v.Z - gap - p.Z));
+    top = ClampF(top, v.Y + gap, MaxF(v.Y + gap, v.Y + v.W - gap - p.W));
+    return new Vector4(left, top, p.Z, p.W);
   }
 
   public static func AnchorPoint(name: String) -> Vector2 {
@@ -716,8 +751,8 @@ public class XFInkPanel {
   // where floors is set (0.8.3, XFInkStyle.Floor: clear of the game's own HUD blocks; 0.8.6: not in photo mode's menu, which
   // has no HUD), the panel's own point there is the same fractions of its measured size (scaled), and the whole panel is kept
   // inside the visible screen. An anchor other than top_left waits unseen until the panel has been measured, so it never
-  // shows in the wrong place.
-  public func Place(frame: ref<XFHudFrame>, scale: Float, v: Vector4, units: Float, floors: Bool) -> Void {
+  // shows in the wrong place. 0.8.7: answers where it went (left, top, width, height), for the photo-menu panel's safe zones.
+  public func Place(frame: ref<XFHudFrame>, scale: Float, v: Vector4, units: Float, floors: Bool) -> Vector4 {
     let point = XFInkStyle.AnchorPoint(frame.anchor);
     let size = this.m_plate.GetSize();
     let w = size.X * scale;
@@ -742,6 +777,17 @@ public class XFInkPanel {
     this.canvas.SetTranslation(new Vector2(0.0, 0.0));
     this.canvas.SetMargin(new inkMargin(left, top, 0.0, 0.0));
     this.canvas.SetOpacity(measured || (point.X < 0.1 && point.Y < 0.1) ? 1.0 : 0.0);
+    return new Vector4(left, top, w, h);
+  }
+
+  // 0.8.7: the panel's top-left corner moved (the photo-menu panel's safe zones), in the same units as Place.
+  public func MoveTo(left: Float, top: Float) -> Void {
+    this.canvas.SetMargin(new inkMargin(left, top, 0.0, 0.0));
+  }
+
+  // 0.8.7: the answer under the pointer now (SetHovered), or -1.
+  public func Hovered() -> Int32 {
+    return this.m_hovered;
   }
 }
 
@@ -1233,8 +1279,22 @@ public class XFInkOverlay extends ScriptableSystem {
       }
     }
     let s = projector.Project(new Vector4(point.X, point.Y, point.Z, 1.0));
-    if s.W <= 0.0 || s.W > 200.0 || AbsF(s.X) > 1.1 || AbsF(s.Y) > 1.1 {
+    if s.W > 200.0 || s.W < -200.0 {
       return false;
+    }
+    // 0.8.7 (session 14's U2: off the screen only the game's own edge marker stayed): a pin off the screen, or behind the
+    // camera (its projection mirrored), keeps its mark at the screen's edge in the pin's direction from the centre.
+    let edge = s.W <= 0.0 || AbsF(s.X) > 1.0 || AbsF(s.Y) > 1.0;
+    if edge {
+      let dx = s.W <= 0.0 ? -s.X : s.X;
+      let dy = s.W <= 0.0 ? -s.Y : s.Y;
+      let reach = MaxF(AbsF(dx), AbsF(dy));
+      if reach < 0.0001 {
+        dx = 0.0;
+        dy = 1.0;
+        reach = 1.0;
+      }
+      s = new Vector4(dx / reach * 0.9, dy / reach * 0.86, s.Z, AbsF(s.W));
     }
     let mark = this.PinMark(slot);
     XFInkPins.MarkLabel(mark, entry.label);
@@ -1244,6 +1304,12 @@ public class XFInkOverlay extends ScriptableSystem {
     // The mark's bottom centre 64 design units above the point (above the game's own marker, about 60 units tall there).
     let left = at.X - XFInkPins.MarkWidth() * 0.5 * size;
     let top = at.Y - 64.0 * units - XFInkPins.MarkHeight() * size;
+    if edge {
+      // At the edge the mark itself stays whole on the visible screen.
+      let v = this.m_visible.Z > 100.0 ? this.m_visible : new Vector4(0.0, 0.0, this.m_width, this.m_height);
+      left = ClampF(left, v.X + 8.0 * units, v.X + v.Z - 8.0 * units - XFInkPins.MarkWidth() * size);
+      top = ClampF(top, v.Y + 8.0 * units, v.Y + v.W - 8.0 * units - XFInkPins.MarkHeight() * size);
+    }
     mark.SetScale(new Vector2(size, size));
     mark.SetMargin(new inkMargin(left, top, 0.0, 0.0));
     mark.SetVisible(true);
@@ -1254,6 +1320,7 @@ public class XFInkOverlay extends ScriptableSystem {
     entry.markAt = new Vector2(left, top);
     entry.markPx = px;
     entry.markOnScreen = px.X > -10.0 && px.Y > -10.0 && px.X < this.m_screen.X && px.Y < this.m_screen.Y;
+    entry.markAtEdge = edge;
     // 0.8.4: the pin's point itself in window pixels (the projector's -1..1 across and down the window).
     entry.pointPx = new Vector2((s.X + 1.0) * 0.5 * this.m_screen.X, (s.Y + 1.0) * 0.5 * this.m_screen.Y);
     entry.markPlacedNow = true;

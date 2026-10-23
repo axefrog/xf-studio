@@ -69,3 +69,25 @@ export function place(anchor: Anchor, offset: Vec2, panel: Vec2, visible: Rect, 
   top = Math.min(Math.max(top, visible.y + margin), Math.max(visible.y + margin, visible.y + visible.h - margin - panel.y));
   return { x: left, y: top };
 }
+
+/**
+ * 0.8.7 (session 14's P11): the photo-menu panel's rectangle moved out of photo mode's own zones (its menu, top bar and hint
+ * strips, measured in the game from the controller's widgets), as XFInkStyle.Avoid does: a zone along the bottom fifth pushes the
+ * panel up, one in the right half pushes it left, one along the top fifth pushes it down; two passes; then kept inside the
+ * visible screen, gap apart.
+ */
+export function avoidZones(panel: Rect, zones: readonly Rect[], visible: Rect, gap: number): Rect {
+  let { x: left, y: top } = panel;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const z of zones) {
+      const overlaps = left < z.x + z.w + gap && left + panel.w + gap > z.x && top < z.y + z.h + gap && top + panel.h + gap > z.y;
+      if (!overlaps) continue;
+      if (z.y + z.h >= visible.y + visible.h * 0.8) top = z.y - gap - panel.h;
+      else if (z.x >= visible.x + visible.w * 0.5) left = z.x - gap - panel.w;
+      else if (z.y <= visible.y + visible.h * 0.2) top = z.y + z.h + gap;
+    }
+  }
+  left = Math.min(Math.max(left, visible.x + gap), Math.max(visible.x + gap, visible.x + visible.w - gap - panel.w));
+  top = Math.min(Math.max(top, visible.y + gap), Math.max(visible.y + gap, visible.y + visible.h - gap - panel.h));
+  return { x: left, y: top, w: panel.w, h: panel.h };
+}

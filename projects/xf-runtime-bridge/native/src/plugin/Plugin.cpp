@@ -151,11 +151,39 @@ nlohmann::json InfoJson()
         {"kill_key", KillKeyJson()},
         // 0.8.5: the sound a new question plays ([ui] question_sound), or off.
         {"question_sound", state.config.questionSound.empty() ? std::string("off") : state.config.questionSound},
+        // 0.8.7: the bridge's save lock as the player meets it: whether the window offers Save anyway, refusals, the outcome.
+        {"save_lock", SaveLockJson()},
         {"last_rearm", [&state] {
              std::scoped_lock _(state.rearmMutex);
              return state.lastRearm;
          }()}};
 }
+bool SaveAnywayOffered()
+{
+    auto& state = Get();
+    if (!state.config.allowWrites || (state.config.writeClasses & kWriteSave) == 0 || !state.bridge)
+    {
+        return false;
+    }
+    const auto& dispatcher = state.bridge->GetDispatcher();
+    // Only while the bridge runs and its lock is (as far as the plugin knows) held: it is taken before the first change, and a
+    // refused save of the player's says so.
+    return !dispatcher.IsKilled() && (state.restore.WritesUsed() || state.saveRefusals.load() > 0);
+}
+
+nlohmann::json SaveLockJson()
+{
+    auto& state = Get();
+    std::scoped_lock _(state.saveAnywayMutex);
+    nlohmann::json out{{"save_anyway", SaveAnywayOffered()}, {"running", state.saveAnywayRunning.load()}, {"refusals", state.saveRefusals.load()},
+                       {"last_seq", state.saveAnywaySeq}};
+    if (!state.saveAnywayLast.empty())
+    {
+        out["last"] = state.saveAnywayLast;
+    }
+    return out;
+}
+
 killkey::Chord State::KillKey()
 {
     std::scoped_lock _(killKeyMutex);

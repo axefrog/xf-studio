@@ -15,6 +15,8 @@
 // The live-pose carrier is a separate test package (tools/live-pose/build-carrier.ts), never in these.
 //   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json, RED4ext.SDK and Dear ImGui, MIT)
 //   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
+//   red4ext/plugins/XFRuntimeBridge/Scripts/XFRuntimeBridgeProbe*.reds  (0.8.7, test probes from redscript-probes/; writes only)
+//   red4ext/plugins/XFRuntimeBridge/xfb_companion_probe.exe              (0.8.7, the companion probe; writes only)
 
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -55,6 +57,15 @@ export const CET_MOD_NAME = "XF_Runtime_Bridge";
 export const CET_DIR = `bin/x64/plugins/cyber_engine_tweaks/mods/${CET_MOD_NAME}`;
 export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 export const THEME_FILE = `${CET_DIR}/theme.lua`;
+
+/** 0.8.7: the companion probe's executable, beside the plugin in the -writes package only. */
+export const COMPANION_FILE = "xfb_companion_probe.exe";
+/** 0.8.7: the test probes (methods and what they carry), the -writes package only. */
+export const TEST_PROBES: readonly string[] = [
+  "test.events (the game-events probe: knowledge/game-events.md §12's hooks, log-only, in a ring of their own)",
+  "test.save.identity (the save-identity probe: the xfs_probe_* test facts and the lifecycle points)",
+  "test.companion.probe (xfb_companion_probe.exe under companion@1's containment)",
+];
 
 export const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -160,6 +171,8 @@ export type StageOptions = {
   commit: string;
   /** -writes only: also allow the inventory write class (only with the maintainer's approval). */
   allowInventory?: boolean;
+  /** 0.8.7, -writes only: the companion probe (build/Release/xfb_companion_probe.exe beside the DLL unless given). */
+  companion?: string;
 };
 
 export type StagedFile = { path: string; bytes: number; sha256: string };
@@ -175,6 +188,8 @@ export type Manifest = {
   allow_creator_leave: boolean;
   allow_live_pose: boolean;
   allow_test_hooks: boolean;
+  /** 0.8.7: the test probes this package carries (the -writes package only). */
+  test_probes: string[];
   photo_mode_presets: string | null;
   /** Steps and consequences for staging by hand (RB-65); empty for the default package, which carries no presets. */
   staging_notes: string[];
@@ -218,6 +233,14 @@ export function stageVariant(options: StageOptions): Manifest {
   if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "panel.lua"), PANEL_FILE);
   // 0.7: the panel's XF Studio theme (generated from the Studio's tokens, tools/overlay/theme.ts) goes with the panel.
   if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "theme.lua"), THEME_FILE);
+  // 0.8.7: the test probes (the game-events, save-identity and companion probes, behind [bridge] allow_test_hooks): only the
+  // -writes package carries their scripts and the companion. They come out, or move into XF Lab, when XF Core's C1 to C3 land.
+  if (variant === "writes") {
+    for (const name of readdirSync(join(projectDir, "redscript-probes"))) {
+      if (name.endsWith(".reds")) put(join(projectDir, "redscript-probes", name), `${PLUGIN_DIR}/Scripts/${name}`);
+    }
+    put(options.companion ?? join(dirname(dll), COMPANION_FILE), `${PLUGIN_DIR}/${COMPANION_FILE}`);
+  }
 
   const files = listFiles(stageDir).map((path) => ({
     path: relative(stageDir, path).replaceAll("\\", "/"),
@@ -235,6 +258,7 @@ export function stageVariant(options: StageOptions): Manifest {
     allow_creator_leave: variant === "writes",
     allow_live_pose: variant === "writes",
     allow_test_hooks: variant === "writes",
+    test_probes: variant === "writes" ? [...TEST_PROBES] : [],
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",

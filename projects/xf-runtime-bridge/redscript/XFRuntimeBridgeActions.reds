@@ -841,7 +841,7 @@ protected cb func OnShow(reversedUI: Bool) -> Bool {
 
 @wrapMethod(gameuiPhotoModeMenuController)
 protected cb func OnHide() -> Bool {
-  // 0.8.6: the photo-menu panel gives back the camera's mouse and any ModalPopup it pushed before photo mode closes.
+  // 0.8.6: the photo-menu panel gives back the camera's mouse and its input callbacks before photo mode closes.
   this.XFBridgePhotoPanelHide();
   let registry = XFBridgeRegistry.Get();
   if IsDefined(registry) {
@@ -3411,4 +3411,16 @@ public abstract class XFBridgeSound {
     XFBridgeLog.Info(cid, "question sound: " + eventName);
     return "{\"ok\":true}";
   }
+}
+
+// 0.8.7 (session 14's friction: after a bridge change the player's own save got only the game's "You can't save right now"):
+// every refused save the player tries (the pause menu's Save, a quick-save, the main menu's) builds its notice here
+// (ingameUINotification.script:119; pauseMenu.script:132-150, inGameMenuGameController.script:531-544). The game's notice is
+// unchanged; the plugin is told whether the bridge's own lock was among the reasons, and then says why on the status surface
+// and offers Save anyway in the XF Runtime Bridge window.
+@wrapMethod(UIInGameNotificationEvent)
+public final static func CreateSavingLockedEvent(const locks: script_ref<array<gameSaveLock>>) -> ref<UIInGameNotificationEvent> {
+  let result = wrappedMethod(locks);
+  XFBridge_SaveRefused(XFBridgeActions.OwnSaveLockHeld());
+  return result;
 }

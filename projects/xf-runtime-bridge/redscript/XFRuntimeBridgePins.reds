@@ -45,6 +45,8 @@ public class XFPinEntry {
   public let markAt: Vector2;
   public let markPx: Vector2;
   public let markOnScreen: Bool;
+  // 0.8.7: the mark is held at the screen's edge, pointing the way to a pin off the screen (as the game's own edge marker does).
+  public let markAtEdge: Bool;
   // 0.8.4: the pin's own point projected into window pixels this tick (where the game's marker is anchored), so a screenshot
   // shows how far above it the game draws its marker and the XF mark.
   public let pointPx: Vector2;
@@ -171,7 +173,7 @@ public abstract class XFInkPins {
       + ",\"position\":[" + XFJson.Num(entry.position.X) + "," + XFJson.Num(entry.position.Y) + "," + XFJson.Num(entry.position.Z) + "],\"drawn_by\":[" + drawn + "]"
       + ",\"xf_mark\":{\"shown\":" + XFJson.Flag(entry.markShown) + ",\"at\":[" + XFJson.Num(entry.markAt.X) + "," + XFJson.Num(entry.markAt.Y)
       + "],\"px\":[" + XFJson.Num(entry.markPx.X) + "," + XFJson.Num(entry.markPx.Y) + "],\"point_px\":[" + XFJson.Num(entry.pointPx.X) + "," + XFJson.Num(entry.pointPx.Y)
-      + "],\"on_screen\":" + XFJson.Flag(entry.markShown && entry.markOnScreen) + "}}";
+      + "],\"on_screen\":" + XFJson.Flag(entry.markShown && entry.markOnScreen) + ",\"at_edge\":" + XFJson.Flag(entry.markShown && entry.markAtEdge) + "}}";
   }
 
   // 0.8.2: ui.state's pins, with the views that have drawn each by now.
@@ -368,6 +370,26 @@ public abstract class XFInkPins {
   // The diamond with "XF" at the top centre, the label under it; every part placed by a margin from the canvas's top-left.
   public static func BuildMark(mark: ref<inkCanvas>) -> Void {
     let w = XFInkPins.MarkWidth();
+    // 0.8.7 (session 14's U2: readable over a bright sky, but only just): a dark halo under the diamond and a dark plate under
+    // the label, half see-through, so both keep their contrast over sky and neon alike.
+    let halo = new inkRectangle();
+    halo.SetName(n"halo");
+    halo.SetAnchor(inkEAnchor.TopLeft);
+    halo.SetSize(new Vector2(44.0, 44.0));
+    halo.SetRenderTransformPivot(new Vector2(0.5, 0.5));
+    halo.SetRotation(45.0);
+    halo.SetMargin(new inkMargin(w * 0.5 - 22.0, 2.0, 0.0, 0.0));
+    halo.SetTintColor(new HDRColor(0.0, 0.0, 0.0, 1.0));
+    halo.SetOpacity(0.55);
+    halo.Reparent(mark);
+    let plate = new inkRectangle();
+    plate.SetName(n"plate");
+    plate.SetAnchor(inkEAnchor.TopLeft);
+    plate.SetSize(new Vector2(w, 34.0));
+    plate.SetMargin(new inkMargin(0.0, 54.0, 0.0, 0.0));
+    plate.SetTintColor(new HDRColor(0.0, 0.0, 0.0, 1.0));
+    plate.SetOpacity(0.5);
+    plate.Reparent(mark);
     let frame = new inkRectangle();
     frame.SetName(n"frame");
     frame.SetAnchor(inkEAnchor.TopLeft);

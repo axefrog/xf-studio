@@ -58,9 +58,10 @@ struct HudSettings
     std::string layer = "photo_menu";
     bool nameplates = true;    // Demo B
     bool cetLabel = true;      // the CET layer's CET line and message lines ([ui] cet_label)
-    // 0.8.6 (§15's row 9 and 10, a research switch): while the panel is inside photo mode's menu, it pushes one ModalPopup
-    // game context, which holds off photo mode's own keys (camera movement, the screenshot key, hide UI, exit) [community].
-    // Never from config.ini; the kill switch drops it.
+    // 0.8.6 (§15's row 9 and 10, a research switch): while the panel is inside photo mode's menu, it pushed one ModalPopup
+    // game context, said to hold off photo mode's own keys [community]; session 14 showed it held neither the camera keys nor
+    // the exit. 0.8.7: the panel holds photo mode's exit (its OnTryExitPhotomode); the camera keys can't be held. Never from
+    // config.ini; the kill switch drops it.
     bool modal = false;
 };
 json ToJson(const HudSettings& aSettings);
@@ -219,7 +220,7 @@ std::string KeyPrompt(const std::string& aKey, const std::string& aLabel);
 
 // 0.8.6: the ink layer's own events into the session's event stream (XFBridge_InkEvent): ink_tree (photo mode's menu root
 // and the XF layer under it, on each open and once laid out), ink_pointer (the photo-menu panel's hover and clicks) and
-// ink_input (its hold on the camera's mouse and the ModalPopup context, taken and released). Anything else is refused.
+// ink_input (its hold on the camera's mouse, taken and released; 0.8.7: photo mode's exit held by modal). Anything else is refused.
 bool InkEventKindOk(const std::string& aKind);
 // The event's data: the script's JSON object, or {raw: the first 200 characters} when it isn't one.
 json InkEventData(const std::string& aText);

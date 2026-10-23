@@ -21,6 +21,7 @@ describe("packages", () => {
   const work = mkdtempSync(join(tmpdir(), "xfb-package-"));
   const dll = join(work, "XFRuntimeBridge.dll");
   writeFileSync(dll, "stand-in DLL XFB_BUILD=0000000000000000000000000000000000000000;dirty=0");
+  writeFileSync(join(work, "xfb_companion_probe.exe"), "stand-in companion probe");
   const staged = Object.fromEntries(
     VARIANTS.map((variant) => {
       const stageDir = join(work, variant);
@@ -28,6 +29,25 @@ describe("packages", () => {
       return [variant, { stageDir, manifest, config: readFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), "utf8") }];
     }),
   ) as Record<Variant, { stageDir: string; manifest: ReturnType<typeof stageVariant>; config: string }>;
+
+  test("0.8.7: only the -writes package carries the test probes (their scripts and the companion), the others none of them", () => {
+    const probeFiles = (variant: Variant) => staged[variant].manifest.files.map((f) => f.path).filter((p) => /XFRuntimeBridgeProbe|xfb_companion_probe/.test(p));
+    expect(probeFiles("default")).toEqual([]);
+    expect(probeFiles("diagnostic")).toEqual([]);
+    expect(probeFiles("writes").sort()).toEqual(
+      [
+        `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbeEvents.reds`,
+        `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbePersist.reds`,
+        `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbeSave.reds`,
+        `${PLUGIN_DIR}/xfb_companion_probe.exe`,
+      ].sort(),
+    );
+    expect(staged.writes.manifest.test_probes.length).toBe(3);
+    expect(staged.default.manifest.test_probes).toEqual([]);
+    expect(staged.diagnostic.manifest.test_probes).toEqual([]);
+    expect(staged.writes.config).toMatch(/^allow_test_hooks = true$/m);
+    expect(staged.diagnostic.config).toMatch(/^allow_test_hooks = false$/m);
+  });
 
   test("the default package has the bridge off, no camera presets, no panel, no carrier and every switch off", () => {
     const { stageDir, manifest, config } = staged.default;

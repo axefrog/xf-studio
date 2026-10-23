@@ -50,3 +50,13 @@ public static native func XFBridge_KillKey(action: String, key: String) -> Strin
 // guard: no hover is taken from photo mode's camera mid-drag).
 public static native func XFBridge_InkEvent(kind: String, text: String, data: String) -> Bool
 public static native func XFBridge_MouseHeld() -> Bool
+// Bridge 0.8.7: the player's own save refused while the bridge's save lock held (ours: whether that lock is among the
+// reasons), so the status surface says why; and the XF Runtime Bridge window's Save anyway, the player's say-so to save past
+// the lock (the plugin offers it only where writes and the save class are allowed; it answers JSON, {started} or {why}).
+public static native func XFBridge_SaveRefused(ours: Bool) -> Bool
+public static native func XFBridge_SaveAnyway(source: String) -> String
+// Bridge 0.8.7, test probes (the -writes package's redscript-probes; refused unless [bridge] allow_test_hooks): one record
+// into the probe's own ring (test.events; kind a-z, 0-9, _ . : /; data a JSON object as text), and the probe's switches (bit
+// 1 the hooks on, 2 the stim tap, 4 the save-identity probe's BeforeSave write armed).
+public static native func XFBridge_Event(kind: String, data: String) -> Bool
+public static native func XFBridge_ProbeFlags() -> Int32

@@ -154,11 +154,11 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
     expect(out).not.toContain("Answer: F6");
   });
 
-  test("P5: the status dot hangs in the window's left padding (clip widened), so the words start at the padding like every later line", () => {
+  test("P5 (0.8.7, session 14's T3): the status dot sits in the middle of the window's left padding (clip widened), so the words start at the padding like every later line", () => {
     const out = run(`return draw()`);
-    // A bullet one font size (14) left of the text's start (26), no frame padding, the clip the window's rectangle; then the
-    // words at 26 with no hanging indent.
-    expect(out).toMatch(/clip:12,12,612,132,false\|var:FramePadding=0,0\|colour:Text=[^|]+\|setX:12\|bullet@12\|.*unclip\|sameline:0,0\|colour:Text=[^|]+\|wrapped@26:XF Runtime Bridge/);
+    // The dot's cell (one font size, 14, wide; the dot at its middle) starts half a font size left of the padding's middle (26 /
+    // 2 = 13), so at 6; then the words at the padding, 26, with no hanging indent.
+    expect(out).toMatch(/clip:12,12,612,132,false\|var:FramePadding=0,0\|colour:Text=[^|]+\|setX:6(\.0)?\|bullet@6(\.0)?\|.*unclip\|sameline:0,0\|setX:26\|colour:Text=[^|]+\|wrapped@26:XF Runtime Bridge/);
     expect(out).not.toContain("indent:");
   });
 
@@ -212,27 +212,24 @@ describe("0.8.6 the panel inside photo mode's menu (knowledge/photo-mode.md §15
     expect(reds).toMatch(/Equals\(root\.GetChildOrder\(\), inkEChildOrder\.Backward\)/);
   });
 
-  test("teardown: OnHide, the stop (a stopped frame) and a closed photo mode each release the camera's mouse and pop exactly the ModalPopup pushes made", () => {
-    expect(reds).toMatch(/PushGameContext\(UIGameContext\.ModalPopup\)/);
-    expect(reds).toMatch(/PopGameContext\(UIGameContext\.ModalPopup\)/);
+  test("teardown (0.8.7): OnHide, the stop (a stopped frame) and a closed photo mode each release the camera's mouse and the global input callbacks; modal pushes no game context", () => {
+    const panel = read("redscript", "XFRuntimeBridgePhotoPanel.reds");
+    expect(reds).not.toMatch(/PushGameContext\(UIGameContext\.ModalPopup\)/);
     expect(reds).toMatch(/public func Release\(why: String\) -> Void \{/);
     expect(reds).toMatch(/this\.Hide\("photo_mode_closed"\)/);
     expect(reds).toMatch(/protected cb func OnHide\(\) -> Bool \{\s+\/\/.*\s+this\.XFBridgePhotoPanelHide\(\);/);
     expect(reds).toContain('"killed"');
+    const release = panel.slice(panel.indexOf("public func Release(why: String) -> Void {"), panel.indexOf("private func Settle()"));
+    expect(release).toContain("this.Listen(false);");
+    expect(release).toContain("this.ClearPress();");
   });
 
-  // The Sol review of 0.8.6: teardown asks nothing of the game while the scripts' gate is shut, and a pop belongs to its session.
-  test("Sol review 1: game input goes back only while the scripts are live, a push is popped only in its own session, and owed input is settled later", () => {
+  // The Sol review of 0.8.6: teardown asks nothing of the game while the scripts' gate is shut.
+  test("Sol review 1 (0.8.7): the camera's mouse goes back only while the scripts are live, and owed input is settled later", () => {
     const panel = read("redscript", "XFRuntimeBridgePhotoPanel.reds");
-    const settle = panel.slice(panel.indexOf("private func Settle() -> Void {"), panel.indexOf("private func ClearPress()"));
-    // The gate first, before anything that reaches the game.
-    expect(settle.indexOf("if !XFBridge_Live() {")).toBeGreaterThan(0);
-    expect(settle.indexOf("if !XFBridge_Live() {")).toBeLessThan(settle.indexOf("XFBridgeRegistry.Get()"));
-    expect(settle).toMatch(/owner == now \{\s+this\.SetModal\(false\);\s+\} else \{\s+this\.m_modalPushed = false;/);
-    const setModal = panel.slice(panel.indexOf("private func SetModal(on: Bool) -> Void {"), panel.indexOf("private func Pointer("));
-    expect(setModal.indexOf("!XFBridge_Live()")).toBeLessThan(setModal.indexOf("GameInstance.GetUISystem"));
+    const settle = panel.slice(panel.indexOf("private func Settle() -> Void {"), panel.indexOf("private func Listen("));
+    expect(settle).toMatch(/if !this\.m_hoverTaken \|\| !XFBridge_Live\(\) \{\s+return;\s+\}\s+this\.Block\(false\);/);
     const release = panel.slice(panel.indexOf("public func Release(why: String) -> Void {"), panel.indexOf("private func Settle()"));
-    expect(release).not.toContain("SetModal(");
     expect(release).not.toContain("Block(");
     const update = panel.slice(panel.indexOf("public func Update(timeDelta: Float) -> Void {"), panel.indexOf("private func Apply("));
     expect(update).toMatch(/if !this\.m_open \{\s+\/\/[^\n]*\n\s+this\.Settle\(\);/);
@@ -241,18 +238,16 @@ describe("0.8.6 the panel inside photo mode's menu (knowledge/photo-mode.md §15
     expect(show.indexOf("this.Settle();")).toBeLessThan(show.indexOf("this.Ensure(root)"));
   });
 
-  test("Sol review 2: an answer takes a click only as a press and a release on it, the press made while the panel holds the mouse", () => {
+  test("Sol review 2 (0.8.7): an answer takes a click only as a press and a release of the left button on it, the press made while the panel holds the mouse", () => {
     const panel = read("redscript", "XFRuntimeBridgePhotoPanel.reds");
     expect(panel).toContain('chip.RegisterToCallback(n"OnPress", this, n"OnXFChipPress");');
-    const press = panel.slice(panel.indexOf("protected cb func OnXFChipPress"), panel.indexOf("protected cb func OnXFChipRelease"));
-    expect(press).toContain("!this.m_hoverTaken");
-    expect(press).toContain("this.m_pressAsk = frame.askId;");
-    const release = panel.slice(panel.indexOf("protected cb func OnXFChipRelease"), panel.indexOf("// ---- What the agent sees"));
-    expect(release.indexOf("if pressAsk != frame.askId || pressChoice != choice {")).toBeLessThan(release.indexOf("XFBridge_Answer("));
-    // Cleared on leaving the answer, the panel, a release, a hide or stop (Release) and a new question.
-    const chipOut = panel.slice(panel.indexOf("protected cb func OnXFChipHoverOut"), panel.indexOf("protected cb func OnXFChipPress"));
-    expect(chipOut).toContain("this.ClearPress();");
-    expect(panel.slice(panel.indexOf("public func Release("), panel.indexOf("private func Settle()"))).toContain("this.ClearPress();");
+    const arm = panel.slice(panel.indexOf("private func Arm("), panel.indexOf("private func Complete("));
+    expect(arm.indexOf("!this.m_hoverTaken")).toBeLessThan(arm.indexOf("this.m_pressAsk = frame.askId;"));
+    const complete = panel.slice(panel.indexOf("private func Complete("), panel.indexOf("protected cb func OnXFChipPress"));
+    expect(complete.indexOf("if pressAsk != frame.askId || pressChoice != choice {")).toBeLessThan(complete.indexOf("XFBridge_Answer("));
+    // Cleared by a release elsewhere (the global release), a hide or stop (Release) and a new question.
+    const globalRelease = panel.slice(panel.indexOf("protected cb func OnXFGlobalRelease"), panel.indexOf("// ---- What the agent sees"));
+    expect(globalRelease).toContain('this.PointerAt("press_abandoned"');
     expect(panel).toMatch(/if this\.m_pressAsk > 0 && frame\.askId != this\.m_pressAsk \{\s+this\.ClearPress\(\);/);
   });
 
@@ -265,6 +260,7 @@ describe("0.8.6 the panel inside photo mode's menu (knowledge/photo-mode.md §15
   test("natives: XFBridge_InkEvent and XFBridge_MouseHeld are declared as the plugin registers them", () => {
     expect(natives).toContain("public static native func XFBridge_InkEvent(kind: String, text: String, data: String) -> Bool");
     expect(natives).toContain("public static native func XFBridge_MouseHeld() -> Bool");
-    expect(read("native", "src", "plugin", "Natives.cpp")).toContain('log::Info("rtti.register_types", "phase=post_register natives=22");');
+    // 0.8.7: four more (XFBridge_SaveRefused, XFBridge_SaveAnyway, XFBridge_Event, XFBridge_ProbeFlags; batch21).
+    expect(read("native", "src", "plugin", "Natives.cpp")).toContain('log::Info("rtti.register_types", "phase=post_register natives=26");');
   });
 });

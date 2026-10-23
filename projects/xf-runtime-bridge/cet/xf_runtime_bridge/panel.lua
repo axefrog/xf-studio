@@ -131,11 +131,6 @@ function panel.pushTheme(theme, which)
   return colours, vars
 end
 
--- A key's name as the panels show it ("IK_F6" to "F6").
-local function keyLabel(key)
-  return (string.gsub(tostring(key), "^IK_", ""))
-end
-
 -- 0.8.4 (the UI review's fix 2: a question arriving or clearing moved the buttons under the pointer, so a click aimed at
 -- Pause or Mark could land on Stop the bridge or on an answer): every button ignores clicks for SETTLE_S after the content
 -- above it changed height. panel.body notes the question slot's height each frame (panel.noteLayout).
@@ -177,7 +172,9 @@ local function place(row, width, gap)
   end
 end
 
--- The question's slot (0.8, the UI review): the pending question with its answers as primary buttons, each naming its key;
+-- The question's slot (0.8, the UI review): the pending question with its answers as primary buttons (0.8.7, session 14:
+-- without their keys, since this window shows only while CET's overlay is open, and CET then takes the keyboard, so a key
+-- named on a button would do nothing);
 -- once answered, the same slot says what was sent, at the buttons' height, so nothing below it moves. 0.8.4 (the UI
 -- review's fixes 1-3): the hover is the Studio's primary hover (XfAccentHover; XfAccentEdge only as the border), the
 -- buttons wrap onto a new row at the window's text width instead of widening it, and "Sent: ..." stays until the next
@@ -190,8 +187,6 @@ local function drawQuestion(state, queue, theme, which)
   coloured(panel.colour(theme, which, "XfAccentText", AMBER), "Question from XF Studio")
   wrapped(tostring(ask and ask.text or answered.text))
   if ask then
-    local keys = state.info and state.info.answer_keys or {}
-    if state.keysArmed == false then keys = {} end -- 0.8.2: no key answers it now; the buttons do
     local fill = panel.colour(theme, which, "XfAccent", AMBER)
     local hover = panel.colour(theme, which, "XfAccentHover", fill)
     local edge = panel.colour(theme, which, "XfAccentEdge", fill)
@@ -206,8 +201,7 @@ local function drawQuestion(state, queue, theme, which)
     local pad, gap = spacing(theme)
     local row = { used = 0 }
     for i, label in ipairs(ask.choices) do
-      local key = keys[i] and (" (" .. keyLabel(keys[i]) .. ")") or ""
-      local text = tostring(label) .. key
+      local text = tostring(label)
       place(row, (ImGui.CalcTextSize(text)) + pad * 2, gap)
       if button(text .. "##xf_answer_" .. tostring(i)) then
         queue("answer", { id = ask.id, choice = i - 1 })
@@ -569,6 +563,38 @@ local function drawComment(state, queue, theme, which)
   end
 end
 
+-- 0.8.7 (session 14's T2: the window's top edge moved when its height changed): the window's top-left corner stays put. A
+-- frame whose size changed and whose corner moved with it is put back where the corner was; a move with no change of size is
+-- the player dragging the window, and that becomes the corner to keep.
+local function differs(a, b) return math.abs((a or 0) - (b or 0)) > 0.5 end
+
+function panel.anchorBefore(state)
+  local a = state.windowAnchor
+  if a and a.restore and type(ImGui.SetNextWindowPos) == "function" then
+    ImGui.SetNextWindowPos(a.x, a.y, ImGuiCond.Always)
+    a.restore = false
+  end
+end
+
+function panel.anchorAfter(state)
+  if type(ImGui.GetWindowPos) ~= "function" or type(ImGui.GetWindowSize) ~= "function" then return end
+  local x, y = ImGui.GetWindowPos()
+  local w, h = ImGui.GetWindowSize()
+  local a = state.windowAnchor
+  if not a then
+    state.windowAnchor = { x = x, y = y, w = w, h = h, restore = false }
+    return
+  end
+  local resized = differs(w, a.w) or differs(h, a.h)
+  local moved = differs(x, a.x) or differs(y, a.y)
+  a.w, a.h = w, h
+  if resized and moved then
+    a.restore = true
+  elseif moved then
+    a.x, a.y = x, y
+  end
+end
+
 -- state: init.lua's state (info from XFBridge_Info, pluginPresent, pending, message, pendingAsk, answeredAsk, comment).
 -- queue(name, argument): asks init.lua to run an action on the next update.
 -- theme: theme.lua's table, or nil.
@@ -598,10 +624,12 @@ function panel.body(state, queue, theme, which)
   -- 0.8.5 (the UI review's N4: the ink panel showed through in both themes): the window's background fully opaque, whatever the
   -- theme's overlay token (alpha 0.97) or CET's global alpha.
   ImGui.SetNextWindowBgAlpha(1.0)
+  panel.anchorBefore(state)
   if not ImGui.Begin("XF Runtime Bridge", ImGuiWindowFlags.AlwaysAutoResize) then
     ImGui.End()
     return
   end
+  panel.anchorAfter(state)
   local drew, err = pcall(function()
     local info = state.info
     local bridge = info and info.bridge
@@ -651,6 +679,19 @@ function panel.body(state, queue, theme, which)
         if button("Mark this moment") then
           queue("mark")
         end
+        -- 0.8.7 (session 14's friction: the bridge's save lock refused the player's own save with only the game's "You can't
+        -- save right now"): while the lock holds, the player can save anyway, on their own say-so (the -writes package only:
+        -- the plugin offers it only where writes and the save class are allowed).
+        local lock = info and type(info.save_lock) == "table" and info.save_lock or nil
+        if lock and lock.save_anyway then
+          ImGui.SameLine()
+          if button("Save anyway") then
+            queue("saveanyway")
+          end
+          if ImGui.IsItemHovered() then
+            ImGui.SetTooltip("Makes a manual save now, past the XF Runtime Bridge's save lock. The test change goes into that save.")
+          end
+        end
         -- 0.8 (the UI review): the kill switch on its own row, in the danger colour, away from the everyday buttons. 0.8.5 (the
         -- UI review's fix 8): the Studio's danger button (.btn.danger): danger text and border on a clear fill; hover and press
         -- keep the theme's.
@@ -686,6 +727,13 @@ function panel.body(state, queue, theme, which)
     -- 0.8.4 (the UI review): the Keys line, lower in the window, away from the Stop row.
     if bridge and bridge.enabled and bridge.listening and not bridge.killed then
       drawKillKey(state, queue, theme, which, info and type(info.kill_key) == "table" and info.kill_key or nil)
+    end
+
+    -- 0.8.7: Save anyway's outcome, once, in the message line.
+    local saveLock = info and type(info.save_lock) == "table" and info.save_lock or nil
+    if saveLock and saveLock.last and saveLock.last_seq ~= state.saveSeenSeq then
+      state.saveSeenSeq = saveLock.last_seq
+      state.message = tostring(saveLock.last)
     end
 
     if state.message then

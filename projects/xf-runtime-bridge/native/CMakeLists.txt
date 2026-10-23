@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.8.6
+  VERSION 0.8.7
   LANGUAGES CXX RC
 )
 
@@ -139,6 +139,7 @@ add_library(xfb_core STATIC
   src/core/OptionsExchange.cpp
   src/core/Params.cpp
   src/core/PipeServer.cpp
+  src/core/Probes.cpp
   src/core/Player.cpp
   src/core/ScriptFrame.cpp
   src/core/Scene.cpp
@@ -179,9 +180,17 @@ set_target_properties(XFRuntimeBridge PROPERTIES OUTPUT_NAME "XFRuntimeBridge")
 add_dependencies(XFRuntimeBridge xfb_header_stamp)
 
 # -----------------------------------------------------------------------------
+# 0.8.7, a test probe: the companion that test.companion_probe launches under companion@1's containment (core/Probes.cpp).
+# Staged only in the -writes package (tools/packaging.ts), beside the plugin.
+# -----------------------------------------------------------------------------
+add_executable(xfb_companion_probe src/companion/ProbeMain.cpp)
+target_compile_definitions(xfb_companion_probe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
+target_compile_options(xfb_companion_probe PRIVATE ${XFB_OPTIONS} /WX)
+
+# -----------------------------------------------------------------------------
 # Offline self-test host: runs the same bridge core with a simulated game thread.
 # -----------------------------------------------------------------------------
 add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/UnitTests.cpp)
 target_compile_options(xfb_selftest PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_selftest PRIVATE xfb_core)
-add_dependencies(xfb_selftest xfb_header_stamp)
+add_dependencies(xfb_selftest xfb_header_stamp xfb_companion_probe)

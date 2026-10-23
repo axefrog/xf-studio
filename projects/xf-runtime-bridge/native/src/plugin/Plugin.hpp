@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/Api/v1/Sdk.hpp>
@@ -23,6 +24,7 @@
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
 #include "core/OptionsExchange.hpp"
+#include "core/Probes.hpp"
 #include "core/ScriptLayer.hpp"
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
@@ -143,6 +145,22 @@ struct State
     std::atomic<uint64_t> rearmRequestedAt{0}; // running tick of the request
     std::mutex rearmMutex;
     nlohmann::json lastRearm; // {ok, code (0.8.6), message, at_tick} or null; guarded by rearmMutex
+
+    // 0.8.7: the player's own saves refused while the bridge's save lock held (XFBridge_SaveRefused: how many, when, in steady
+    // milliseconds), and the XF Runtime Bridge window's Save anyway (XFBridge_SaveAnyway): one at a time, on its own thread
+    // (joined at unload), with its outcome for the window (a sequence number and plain text, under saveAnywayMutex).
+    std::atomic<uint64_t> saveRefusals{0};
+    std::atomic<int64_t> saveRefusedAtMs{0};
+    std::atomic<bool> saveAnywayRunning{false};
+    std::mutex saveAnywayMutex;
+    std::thread saveAnywayThread;
+    uint64_t saveAnywaySeq = 0;
+    std::string saveAnywayLast;
+
+    // 0.8.7, test probes ([bridge] allow_test_hooks; core/Probes.hpp): the game-events and save-identity probes' ring
+    // (XFBridge_Event, test.events), and their switches (XFBridge_ProbeFlags: 2 the stim tap, 4 the BeforeSave write armed).
+    probes::ProbeRing probeEvents;
+    std::atomic<int32_t> probeSwitches{0};
 };
 
 State& Get();
@@ -159,4 +177,8 @@ nlohmann::json KillKeyJson();
 // 0.8.4 (XFBridge_KillKey): sets the kill key from a chord's text (the window's Change..., or the default for Reset), saves it
 // to config.ini's [ui] kill_key, and answers {ok, kill_key, saved, save_error?, why?}. A refused text changes nothing.
 nlohmann::json SetKillKey(const std::string& aText, const std::string& aSource);
+// 0.8.7: whether the XF Runtime Bridge window offers Save anyway now, and bridge_info's save_lock (the offer, the refusals of
+// the player's saves, the last outcome of Save anyway).
+bool SaveAnywayOffered();
+nlohmann::json SaveLockJson();
 } // namespace xfb::plugin

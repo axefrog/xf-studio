@@ -17,7 +17,9 @@
 
 #include <chrono>
 
+#include "core/Win32.hpp"
 #include "core/Writes.hpp"
+#include "plugin/GameHandlers.hpp"
 #include "plugin/Natives.hpp"
 #include "plugin/Plugin.hpp"
 
@@ -632,6 +634,177 @@ void MouseHeld(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, 
     });
 }
 
+// 0.8.7, what the player reads when their own save is refused by the bridge's lock (the status surface; the game's own
+// notice stays as it is).
+constexpr const char* kSaveHeldText =
+    "XF Runtime Bridge is holding saves because of a test change. Load a save, or use Save anyway in the XF Runtime Bridge window.";
+
+// XFBridge_SaveRefused(ours: Bool) -> Bool   (0.8.7: the redscript layer's wrap of the game's refused-save notice; ours: the
+// bridge's own lock was among the reasons). Then the status surface says why for 12 s (at most once every 4 s) and the event
+// stream records it; the XF Runtime Bridge window offers Save anyway.
+void SaveRefused(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    bool ours = false;
+    RED4ext::GetParameter(aFrame, &ours);
+    aFrame->code++; // skip ParamEnd
+    if (aOut)
+    {
+        *aOut = false;
+    }
+    Guarded("XFBridge_SaveRefused", [&] {
+        auto& state = Get();
+        if (!ours || !state.bridge || state.bridge->GetDispatcher().IsKilled())
+        {
+            return;
+        }
+        state.saveRefusals.fetch_add(1);
+        const auto now = static_cast<int64_t>(win32::MonotonicMs());
+        const auto last = state.saveRefusedAtMs.exchange(now);
+        if (last > 0 && now - last < 4000)
+        {
+            return;
+        }
+        MessageRequest message;
+        message.text = kSaveHeldText;
+        message.seconds = 12;
+        message.level = "warn";
+        state.messages.Post(message);
+        state.events.Push("save_refused", "warn", "game", "The player's save was refused while the bridge's save lock held",
+                          json{{"by_bridge_lock", true}, {"refusals", state.saveRefusals.load()}});
+        log::Info("save.refused_by_lock", "refusals=" + std::to_string(state.saveRefusals.load()));
+        if (aOut)
+        {
+            *aOut = true;
+        }
+    });
+}
+
+// XFBridge_SaveAnyway(source: String) -> String   (0.8.7: the XF Runtime Bridge window's Save anyway, the player's own say-so
+// to make one manual save past the bridge's lock, as game.save {override_lock: true} does; no pipe method asks for it). Only
+// where the window offers it (allow_writes and the save class: the -writes package), while the bridge runs, one at a time, on
+// a thread of its own so the game thread isn't held; the outcome goes to the status surface and the window. Answers
+// {"started":true} or {"started":false,"why":"..."}.
+void SaveAnyway(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    RED4ext::CString source;
+    RED4ext::GetParameter(aFrame, &source);
+    aFrame->code++; // skip ParamEnd
+    json answer{{"started", false}, {"why", "the bridge couldn't start the save"}};
+    Guarded("XFBridge_SaveAnyway", [&] {
+        auto& state = Get();
+        if (!SaveAnywayOffered())
+        {
+            answer["why"] = state.config.allowWrites && (state.config.writeClasses & kWriteSave) != 0 ? "the bridge isn't holding saves now"
+                                                                                                       : "this build of the bridge can't save";
+            return;
+        }
+        if (state.saveAnywayRunning.exchange(true))
+        {
+            answer["why"] = "a save is already being made";
+            return;
+        }
+        if (state.saveAnywayThread.joinable())
+        {
+            state.saveAnywayThread.join(); // the last one, finished
+        }
+        const auto from = Sanitize(ToStd(source), 32);
+        log::Warn("save.anyway_requested", "by=" + from);
+        state.saveAnywayThread = std::thread([] {
+            auto& s = Get();
+            std::string text;
+            json data{{"via", "save_anyway"}};
+            try
+            {
+                const auto result = PlayerSaveAnyway("save-anyway");
+                text = "Saved. XF Runtime Bridge holds saves again until you load a save.";
+                data["ok"] = true;
+                data["lock_overridden"] = result.value("lock_overridden", false);
+            }
+            catch (const std::exception& e)
+            {
+                text = std::string("The save didn't go through: ") + e.what();
+                data["ok"] = false;
+                data["why"] = e.what();
+            }
+            catch (...)
+            {
+                text = "The save didn't go through.";
+                data["ok"] = false;
+            }
+            MessageRequest message;
+            message.text = text.substr(0, 400);
+            message.seconds = 10;
+            message.level = data.value("ok", false) ? "done" : "warn";
+            s.messages.Post(message);
+            s.events.Push("save", data.value("ok", false) ? "done" : "warn", "game", "Save anyway: " + text.substr(0, 200), data);
+            {
+                std::scoped_lock _(s.saveAnywayMutex);
+                s.saveAnywaySeq += 1;
+                s.saveAnywayLast = text.substr(0, 400);
+            }
+            s.saveAnywayRunning.store(false);
+        });
+        answer = json{{"started", true}};
+    });
+    if (aOut)
+    {
+        *aOut = RED4ext::CString(SerializeJson(answer).c_str());
+    }
+}
+
+// XFBridge_Event(kind: String, data: String) -> Bool   (0.8.7, test probes: one record into the probe ring, test.events).
+// Refused (false) unless [bridge] allow_test_hooks; data must be a JSON object of at most 4 KiB.
+void ProbeEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    RED4ext::CString kind;
+    RED4ext::CString data;
+    RED4ext::GetParameter(aFrame, &kind);
+    RED4ext::GetParameter(aFrame, &data);
+    aFrame->code++; // skip ParamEnd
+    if (aOut)
+    {
+        *aOut = false;
+    }
+    Guarded("XFBridge_Event", [&] {
+        auto& state = Get();
+        const auto what = ToStd(kind);
+        const auto raw = ToStd(data);
+        if (!state.config.allowTestHooks || !probes::KindOk(what) || raw.size() > 4096)
+        {
+            return;
+        }
+        auto parsed = json::parse(raw, nullptr, false);
+        if (parsed.is_discarded() || !parsed.is_object())
+        {
+            parsed = json{{"bad_json", Sanitize(raw, 200)}};
+        }
+        const bool kept = state.probeEvents.Push(what, std::move(parsed), static_cast<int64_t>(win32::MonotonicMs()));
+        if (aOut)
+        {
+            *aOut = kept;
+        }
+    });
+}
+
+// XFBridge_ProbeFlags() -> Int32   (0.8.7, test probes: 1 the hooks are on ([bridge] allow_test_hooks), 2 the stim tap, 4 the
+// save-identity probe's BeforeSave write armed; 0 without the test hooks).
+void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aOut, int64_t)
+{
+    aFrame->code++; // skip ParamEnd
+    int32_t flags = 0;
+    Guarded("XFBridge_ProbeFlags", [&] {
+        auto& state = Get();
+        if (state.config.allowTestHooks)
+        {
+            flags = 1 | (state.probeSwitches.load() & 6);
+        }
+    });
+    if (aOut)
+    {
+        *aOut = flags;
+    }
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -703,7 +876,12 @@ void PostRegisterTypes()
         // 0.8.6: the photo-menu panel's events, and whether a mouse button is held (its hover guard).
         RegisterGlobal(rtti, "XFBridge_InkEvent", &InkEvent, "Bool", {"kind", "text", "data"});
         RegisterGlobal(rtti, "XFBridge_MouseHeld", &MouseHeld, "Bool", {});
-        log::Info("rtti.register_types", "phase=post_register natives=22");
+        // 0.8.7: the player's refused saves and the window's Save anyway; the test probes' ring and switches.
+        RegisterGlobal(rtti, "XFBridge_SaveRefused", &SaveRefused, "Bool", {"ours"}, "Bool");
+        RegisterGlobal(rtti, "XFBridge_SaveAnyway", &SaveAnyway, "String", {"source"});
+        RegisterGlobal(rtti, "XFBridge_Event", &ProbeEvent, "Bool", {"kind", "data"});
+        RegisterGlobal(rtti, "XFBridge_ProbeFlags", &ProbeFlags, "Int32", {});
+        log::Info("rtti.register_types", "phase=post_register natives=26");
     }
     catch (const std::exception& e)
     {

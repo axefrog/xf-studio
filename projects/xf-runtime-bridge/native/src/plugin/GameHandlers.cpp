@@ -829,8 +829,13 @@ json UiHud(const MethodContext& aContext)
     }
     if (out["settings"].value("modal", false))
     {
-        out["modal_note"] = "modal takes effect only while the panel is inside photo mode's menu (layer photo_menu, photo mode open); "
-                            "session_log kinds ink_input says when it is pushed and popped";
+        // 0.8.7 (session 14's P8 and P9: the ModalPopup context held neither): modal holds photo mode's exit, the one key photo
+        // mode answers through a script callback; its camera keys are read natively and keep working.
+        out["modal_note"] = "modal holds photo mode's exit (Esc) while the panel is inside photo mode's menu (layer photo_menu, photo mode open); "
+                            "photo mode's camera keys can't be held from a contained route and keep moving the camera; "
+                            "session_log kinds ink_input says when the exit was held";
+        out["modal_holds"] = json::array({"photo_mode_exit"});
+        out["modal_cannot_hold"] = json::array({"photo_mode_camera_keys"});
     }
     return out;
 }
@@ -1045,14 +1050,30 @@ std::function<void()> WritesGuard()
     };
 }
 
-json GameSaveMethod(const MethodContext& aContext)
+// 0.8.7: game.save's steps, shared with the XF Runtime Bridge window's Save anyway (aPlayer). A client's save changes the game
+// through the write gate (WriteStep: refused once killed, paused or handed over); the player's own save, on their say-so, is
+// refused only once the bridge is stopped, since the pause and a handover keep XF tools from changing the game, not the
+// player from saving it.
+json SaveWith(const params::GameSaveRequest& aRequest, const std::string& aCid, bool aPlayer)
 {
-    const auto request = params::ParseGameSave(aContext.params);
-    const auto cid = aContext.cid;
+    const auto request = aRequest;
+    const auto cid = aCid;
     auto& queue = Get().queue;
+    const auto step = [aPlayer, &queue](const std::function<json()>& aTask, const std::string& aLabel) {
+        if (!aPlayer)
+        {
+            return WriteStep(aTask, aLabel);
+        }
+        auto& state = Get();
+        if (!state.bridge || state.bridge->GetDispatcher().IsKilled())
+        {
+            throw MethodError("killed", "the bridge is stopped");
+        }
+        return RunGameTask(queue, Timeout(), aTask, aLabel);
+    };
     writes::SaveOps ops;
-    ops.prepare = [&queue, cid, request] {
-        return WriteStep(
+    ops.prepare = [step, cid, request] {
+        return step(
             [cid, request] {
                 bool override = request.overrideLock;
                 return CallScript("XFGame", "SavePrepare", {"Bool"}, {&override}, cid);
@@ -1062,8 +1083,8 @@ json GameSaveMethod(const MethodContext& aContext)
     ops.status = [&queue, cid] {
         return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "SavingLocked", {}, {}, cid); }, "game.save.status");
     };
-    ops.save = [&queue, cid, request] {
-        return WriteStep(
+    ops.save = [step, cid, request] {
+        return step(
             [cid, request] {
                 // RB-94 (0.7): the holds are read again in the same game-thread step as the save, so a behaviour started or an
                 // effect put on V by another client after the first check (which runs before prepare) can't reach the save.
@@ -1099,7 +1120,20 @@ json GameSaveMethod(const MethodContext& aContext)
             log::Warn("game.save_relock_deferred", std::string("what=") + e.what() + " (retaken on the next game tick)", cid);
         }
     };
-    ops.guard = WritesGuard();
+    if (aPlayer)
+    {
+        ops.guard = [] {
+            auto& state = Get();
+            if (!state.bridge || state.bridge->GetDispatcher().IsKilled())
+            {
+                throw MethodError("killed", "the bridge is stopped");
+            }
+        };
+    }
+    else
+    {
+        ops.guard = WritesGuard();
+    }
     // 0.8.4, test hook: a one-shot hold after prepare (test.save.delay), taken by this save.
     ops.hold = [] { return Get().saveHoldMs.exchange(0); };
     // RB-83: what the bridge holds on V (its status effects, a suspended outfit) and whether a behaviour runs, read in one
@@ -1123,6 +1157,11 @@ json GameSaveMethod(const MethodContext& aContext)
     };
     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
     return writes::GameSave(request, ops);
+}
+
+json GameSaveMethod(const MethodContext& aContext)
+{
+    return SaveWith(params::ParseGameSave(aContext.params), aContext.cid, false);
 }
 
 json GameLoadMethod(const MethodContext& aContext)
@@ -1778,7 +1817,203 @@ MethodSpec WriteMethod(std::string aName, Access aAccess, RunOn aRunOn, std::str
                 return result;
             }};
 }
+
+// ---- 0.8.7, test probes ([bridge] allow_test_hooks, the -writes package only; core/Probes.hpp) -------------------------------
+// They come out, or move into XF Lab, when XF Core's tracks C1 to C3 land (runtime-bridge-design.md §3.15).
+
+void RequireTestHooks(const char* aMethod)
+{
+    if (!Get().config.allowTestHooks)
+    {
+        throw MethodError("test_hooks_off", std::string(aMethod) + " is a test probe; this build's config.ini has [bridge] allow_test_hooks off (only the -writes package sets it)");
+    }
+}
+
+// test.events {since?, limit?, stims?}: the game-events and save-identity probes' records from their own ring; stims switches
+// the stim tap (game-events row 16).
+json TestEvents(const MethodContext& aContext)
+{
+    RequireTestHooks("test.events");
+    params::RequireOnly(aContext.params, {"since", "limit", "stims"});
+    const auto since = static_cast<uint64_t>(params::CheckInteger(aContext.params, "since", 0, INT64_MAX).value_or(0));
+    const auto limit = static_cast<size_t>(params::CheckInteger(aContext.params, "limit", 1, 500).value_or(200));
+    auto& state = Get();
+    if (const auto stims = params::CheckBoolean(aContext.params, "stims"))
+    {
+        if (*stims)
+        {
+            state.probeSwitches.fetch_or(2);
+        }
+        else
+        {
+            state.probeSwitches.fetch_and(~2);
+        }
+    }
+    auto out = state.probeEvents.Read(since, limit);
+    out["stims"] = (state.probeSwitches.load() & 2) != 0;
+    out["arm_before_save"] = (state.probeSwitches.load() & 4) != 0;
+    return out;
+}
+
+// The pin's check: a 31-bit FNV-1a hash of the other four (knowledge/save-identity.md, the save key).
+int32_t PinCheck(int32_t aC0, int32_t aC1, int32_t aB, int32_t aN)
+{
+    uint32_t hash = 2166136261u;
+    for (const int32_t value : {aC0, aC1, aB, aN})
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            hash ^= static_cast<uint32_t>(value >> (8 * i)) & 0xFFu;
+            hash *= 16777619u;
+        }
+    }
+    return static_cast<int32_t>(hash & 0x7FFFFFFFu);
+}
+
+// test.save.identity {mode: write | read, a?, b?, pin?: {c0, c1, b, n} or "clear", arm_before_save?, persist?: {value, kib}}:
+// the save-identity probe's test facts (all xfs_probe_*), the BeforeSave write's switch, and the persistent probe system (rows
+// 11 and 12); read answers them all with the pin's check validated. Game thread.
+json TestSaveIdentity(const MethodContext& aContext)
+{
+    RequireTestHooks("test.save.identity");
+    const auto& p = aContext.params;
+    params::RequireOnly(p, {"mode", "a", "b", "pin", "arm_before_save", "persist"});
+    const auto mode = params::CheckText(p, "mode", 8).value_or("read");
+    if (mode != "write" && mode != "read")
+    {
+        throw MethodError("bad_params", "'mode' is write or read");
+    }
+    int32_t what = 0, a = 0, b = 0, c0 = 0, c1 = 0, br = 0, n = 0, k = 0;
+    bool persistSet = false;
+    int32_t persistValue = 0, persistKib = 0;
+    if (mode == "write")
+    {
+        if (const auto value = params::CheckInteger(p, "a", 0, INT32_MAX))
+        {
+            what |= 1;
+            a = static_cast<int32_t>(*value);
+        }
+        if (const auto value = params::CheckInteger(p, "b", 0, INT32_MAX))
+        {
+            what |= 2;
+            b = static_cast<int32_t>(*value);
+        }
+        if (p.contains("pin"))
+        {
+            const auto& pin = p["pin"];
+            if (pin.is_string() && pin.get<std::string>() == "clear")
+            {
+                what |= 8;
+            }
+            else if (pin.is_object())
+            {
+                params::RequireOnly(pin, {"c0", "c1", "b", "n"});
+                c0 = static_cast<int32_t>(params::CheckInteger(pin, "c0", 0, INT32_MAX).value_or(0));
+                c1 = static_cast<int32_t>(params::CheckInteger(pin, "c1", 0, INT32_MAX).value_or(0));
+                br = static_cast<int32_t>(params::CheckInteger(pin, "b", 0, INT32_MAX).value_or(0));
+                n = static_cast<int32_t>(params::CheckInteger(pin, "n", 0, INT32_MAX).value_or(0));
+                k = PinCheck(c0, c1, br, n);
+                what |= 4;
+            }
+            else
+            {
+                throw MethodError("bad_params", "'pin' is {c0, c1, b, n} (each 0 to 2147483647) or \"clear\"");
+            }
+        }
+        if (p.contains("persist"))
+        {
+            const auto& persist = p["persist"];
+            if (!persist.is_object())
+            {
+                throw MethodError("bad_params", "'persist' is {value, kib}");
+            }
+            params::RequireOnly(persist, {"value", "kib"});
+            persistSet = true;
+            persistValue = static_cast<int32_t>(params::CheckInteger(persist, "value", 0, INT32_MAX).value_or(0));
+            persistKib = static_cast<int32_t>(params::CheckInteger(persist, "kib", 0, 4096).value_or(0));
+        }
+        if (const auto arm = params::CheckBoolean(p, "arm_before_save"))
+        {
+            if (*arm)
+            {
+                Get().probeSwitches.fetch_or(4);
+            }
+            else
+            {
+                Get().probeSwitches.fetch_and(~4);
+            }
+        }
+        // Test facts only: no save lock is taken (the rows save around them), and nothing for the kill switch to put back.
+    }
+    auto out = CallScript("XFProbeSave", "SaveIdentity", {"Int32", "Int32", "Int32", "Int32", "Int32", "Int32", "Int32", "Int32"},
+                          {&what, &a, &b, &c0, &c1, &br, &n, &k}, aContext.cid);
+    if (out.contains("facts") && out["facts"].is_object())
+    {
+        const auto& f = out["facts"];
+        const auto get = [&f](const char* aKey) { return f.value(aKey, 0); };
+        const bool keyed = get("sk_c0") != 0 || get("sk_c1") != 0;
+        out["pin"] = json{{"keyed", keyed}, {"check_ok", keyed && PinCheck(get("sk_c0"), get("sk_c1"), get("sk_b"), get("sk_n")) == get("sk_k")}};
+    }
+    try
+    {
+        out["persist"] = CallScript("XFProbePersistAccess", "Run", {"Bool", "Int32", "Int32"}, {&persistSet, &persistValue, &persistKib}, aContext.cid);
+    }
+    catch (const MethodError& e)
+    {
+        out["persist"] = json{{"present", false}, {"why", std::string("the probe's persistent file isn't staged (") + e.what() + ")"}};
+    }
+    out["arm_before_save"] = (Get().probeSwitches.load() & 4) != 0;
+    out["names"] = json::array({"xfs_probe_a", "xfs_probe_b", "xfs_probe_sk_c0", "xfs_probe_sk_c1", "xfs_probe_sk_b", "xfs_probe_sk_n", "xfs_probe_sk_k"});
+    out["undo"] = nullptr;
+    out["undo_note"] = "test facts; write them back to 0 with pin \"clear\"";
+    return out;
+}
+
+// test.companion.probe {mode?: probe | sleep | stop, seconds?, memory_mb?}: the companion probe (XF Core's O4 and companion@1's
+// containment). The plugin picks a file from the game's archive/pc/mod folder the way the game sees it, and asks the child
+// whether it sees the same.
+json TestCompanionProbe(const MethodContext& aContext)
+{
+    RequireTestHooks("test.companion.probe");
+    const auto request = probes::ParseCompanion(aContext.params);
+    auto& state = Get();
+    const auto exe = state.pluginDir / "xfb_companion_probe.exe";
+    // red4ext/plugins/XFRuntimeBridge -> the game's folder.
+    const auto gameDir = state.pluginDir.parent_path().parent_path().parent_path();
+    const auto modDir = gameDir / "archive" / "pc" / "mod";
+    std::filesystem::path seeFile;
+    int archives = 0;
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(modDir, ec), end; !ec && it != end; it.increment(ec))
+    {
+        if (it->path().extension() == ".archive")
+        {
+            ++archives;
+            if (seeFile.empty() || it->path().filename() < seeFile.filename())
+            {
+                seeFile = it->path();
+            }
+        }
+    }
+    auto out = probes::RunCompanion(request, exe, seeFile.empty() ? modDir / "none.archive" : seeFile, modDir, 5000);
+    out["plugin_view"] = json{{"mod_folder_archives", archives}, {"file", seeFile.filename().string()}, {"mod_folder_listed", !ec}};
+    if (out.contains("report") && out["report"].is_object())
+    {
+        const auto& report = out["report"];
+        out["vfs_reaches_child"] = !seeFile.empty() && report.value("file_seen", false) && report.value("folder_archives", -1) == archives;
+    }
+    return out;
+}
 } // namespace
+
+// 0.8.7: the XF Runtime Bridge window's Save anyway (XFBridge_SaveAnyway, on its own thread): one manual save past the bridge's
+// lock, as game.save {override_lock: true} makes it, through the player's path (SaveWith).
+nlohmann::json PlayerSaveAnyway(const std::string& aCid)
+{
+    params::GameSaveRequest request;
+    request.overrideLock = true;
+    return SaveWith(request, aCid, true);
+}
 
 // For the 0.6 methods in Handlers060.cpp (declared in GameHandlers.hpp).
 nlohmann::json ScriptCall(const std::string& aClass, const char* aFunction, std::initializer_list<const char*> aTypes,
@@ -2009,6 +2244,13 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      "Makes one new manual save; refused while the bridge's save lock is held unless overridden.", &GameSaveMethod));
     aDispatcher.Register(WriteMethod("game.load", Access::WriteSave, RunOn::BridgeThread, "Loads the latest save or one save by name.",
                                      &GameLoadMethod));
+    // 0.8.7, test probes for session 15 ([bridge] allow_test_hooks, the -writes package only; core/Probes.hpp).
+    aDispatcher.Register({"test.events", Access::Read, RunOn::BridgeThread,
+                          "Test probe: the game-events and save-identity probes' records from their own ring; stims switches the stim tap.", &TestEvents});
+    aDispatcher.Register({"test.save.identity", Access::WriteSave, RunOn::GameThread,
+                          "Test probe: writes or reads the save-identity probe's test facts (xfs_probe_*) and its persistent system.", &TestSaveIdentity});
+    aDispatcher.Register({"test.companion.probe", Access::WriteWorld, RunOn::BridgeThread,
+                          "Test probe: launches the bundled companion under companion@1's containment and reports what it sees.", &TestCompanionProbe});
     // 0.8.4, a test hook for card row L1 ([bridge] allow_test_hooks, the -writes package only): changes only the bridge.
     aDispatcher.Register({"test.save.delay", Access::WriteSave, RunOn::BridgeThread,
                           "Test hook: holds the next manual save after its prepare step for ms milliseconds (once).",

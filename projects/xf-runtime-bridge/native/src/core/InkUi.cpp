@@ -600,7 +600,7 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
     out += "tone\t" + status.tone + "\n";
     out += "status\t" + CleanField(ForInk(status.text)) + "\n";
     out += std::string("surface\t") + SurfaceName(aSurface) + "\n";
-    // 0.8.6: the photo-menu panel's ModalPopup hold (ui.hud's modal), never while stopped.
+    // 0.8.6: ui.hud's modal for the photo-menu panel (0.8.7: it holds photo mode's exit), never while stopped.
     out += std::string("modal\t") + (aSettings.modal && !aView.killed && aView.pluginEnabled ? "1" : "0") + "\n";
     if (!aView.killed)
     {
