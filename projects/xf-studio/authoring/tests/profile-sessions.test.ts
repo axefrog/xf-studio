@@ -80,8 +80,11 @@ function contentFrom(s: ProfileSessions, from: string, share: boolean, name = "M
 function fromDefault(s: ProfileSessions, random: () => number, name: string): TabContent {
   const tabs = s.tabList(), saved = tabs.length && random() < .4 ? fragmentOfTab(s.session(), pick(random, tabs).id) : undefined;
   const contributed = pick(random, STUDIO_LAYOUT_DEFAULTS), fragment = saved ?? contributed.fragment;
-  const scenes: SceneCandidate[] = [...new Set(s.graph.viewIds().map(view => s.graph.node(view, "scene").id))].map(scene => ({ scene, kind: "character",
-    tab: s.viewTab(s.graph.viewIds().find(view => s.graph.node(view, "scene").id === scene)!), ...s.knownScene(scene) }));
+  // A shared scene shares the lights of a view showing it (decision M2).
+  const scenes: SceneCandidate[] = [...new Set(s.graph.viewIds().map(view => s.graph.node(view, "scene").id))].map(scene => {
+    const view = s.graph.viewIds().find(item => s.graph.node(item, "scene").id === scene)!;
+    return { scene, kind: "character", tab: s.viewTab(view), lights: s.graph.node(view, "lights").id, ...s.knownScene(scene) };
+  });
   const subjects = [{ kind: "character", id: "c-1" }];
   const choice = { looks: Object.fromEntries(fragment.looks.map(slot => [slot.key, random() < .5 ? LOOK : OTHER_LOOK])),
     scenes: Object.fromEntries(fragment.nodes.filter(node => node.slot === "scene").map((node): [string, string | null] => {

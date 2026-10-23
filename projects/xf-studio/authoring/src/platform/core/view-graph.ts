@@ -117,7 +117,7 @@ function parseGraph(value: unknown, rules: ViewGraphRules): Parsed | undefined {
   for (const [at, item] of input.views.entries()) {
     const view = record(item);
     if (!view || !validViewId(view.id) || ids.has(view.id) || typeof view.kind !== "string") return;
-    if (view.title !== undefined && (typeof view.title !== "string" || view.title.length > 60)) return;
+    if (!validTitle(view.title)) return;
     if (view.tab !== undefined && !validTab(view.tab)) return;
     ids.add(view.id);
     // A newer build's view kind: every node it names must exist in that slot; it is kept as stored.
@@ -182,6 +182,9 @@ function writeData(views: readonly ViewRecord[], nodes: ReadonlyMap<string, Node
     display: list("display"), tools: list("tools"), ...(focused !== undefined ? { focused } : {}) };
 }
 const validTab = (tab: unknown) => typeof tab === "string" && tab.length > 0 && tab.length <= 64;
+/** A view's own name as the graph stores it (reading refuses a longer one, so nothing may write one). */
+export const VIEW_TITLE_LIMIT = 60;
+const validTitle = (title: unknown) => title === undefined || (typeof title === "string" && title.length <= VIEW_TITLE_LIMIT);
 
 /** The graph service. One per workspace; devices and services act on the views it lists. */
 export class ViewGraph {
@@ -408,6 +411,7 @@ export class ViewGraph {
    */
   addView(from: ViewId, share: Readonly<Partial<Record<ViewSlot, boolean>>>,
     options: ViewEditOptions & { title?: string; tab?: string; freshTools?: Record<string, unknown> } = {}): ViewId {
+    if (!validTitle(options.title)) throw new ViewGraphError("invalid_value", `Keep the view's name to ${VIEW_TITLE_LIMIT} characters.`);
     const source = this.record(from), id = this.freshViewId();
     const created: NodeEntry[] = [], refs = {} as Record<ViewSlot, string>;
     for (const slot of VIEW_SLOTS) {
@@ -468,7 +472,8 @@ export class ViewGraph {
     }
     const views = this.views.filter(view => !removing.has(view.id));
     for (const { view, at } of [...change.add ?? []].sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity))) {
-      if (!validViewId(view.id) || this.takenView(view.id) || views.some(item => item.id === view.id) || (view.tab !== undefined && !validTab(view.tab)))
+      if (!validViewId(view.id) || this.takenView(view.id) || views.some(item => item.id === view.id) || (view.tab !== undefined && !validTab(view.tab))
+        || !validTitle(view.title))
         throw new ViewGraphError("invalid_value", "That view can't be added.");
       const record: ViewRecord = { id: view.id, kind: "3d", ...(view.title !== undefined ? { title: view.title } : {}), ...(view.tab !== undefined ? { tab: view.tab } : {}),
         ...Object.fromEntries(VIEW_SLOTS.map(slot => [slot, view[slot]])) as Record<ViewSlot, string> };

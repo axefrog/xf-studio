@@ -21,6 +21,8 @@ import { buildIssues, fillOf, fragmentIssues, fragmentOfTab, instantiateFragment
 import { contributedDefaultIssues, contributedDefaults, LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, LayoutDefaults } from "../src/app/profiles/layout-defaults";
 import { TabDefaults } from "../src/app/profiles/tab-defaults";
 import { substitutionContext } from "../src/app/profiles/profile-window";
+import { profileSessionOf } from "../src/app/profiles/profile-session";
+import type { ProfileSessions } from "../src/app/profiles/profile-sessions";
 import { layoutFragment, sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS } from "../src/compose/layout-defaults";
 import { STUDIO_MODULES } from "../src/compose/modules";
@@ -45,19 +47,24 @@ async function quiet(outbox: DocumentOutbox) { for (let i = 0; i < 200 && (outbo
 
 /** A profile: its subjects and its collection's looks (all live), changed by the tests. */
 type Profile = { subjects: { kind: string; id: string }[]; looks: string[] };
+let windows = 0;
 /** A window: its outbox over the library, its defaults, its session (tab 1 shows V1 wearing LOOK) and the tabs' actions. */
 function windowOn(documents = storeDocuments(), storage = memoryOutboxStorage(), options: { drawn?: () => string | undefined; profile?: Profile } = {}) {
   const outbox = new DocumentOutbox(documents, storage, { retryMs: 5 });
   outbox.open();
-  const defaults = new LayoutDefaults({ documents, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(11) });
+  // Each window its own source of randomness, as each page has: two windows saving in the same millisecond never make the same ID.
+  const defaults = new LayoutDefaults({ documents, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(11 + ++windows) });
   const s = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "Layout 1", character: V1.id, look: LOOK }, seededRandom(1)),
     { random: seededRandom(7), ...(options.drawn ? { drawn: options.drawn } : {}) });
   const profile: Profile = options.profile ?? { subjects: [V1], looks: [LOOK.look, OTHER_LOOK.look] };
+  /** Vs deleted since (still members of the profile, design §1.4). */
+  const deleted = new Set<string>();
   const services = { profiles: { profile: () => ({ subjects: profile.subjects, collections: [COLLECTION] }) },
-    collections: { collection: () => ({ looks: profile.looks }), look: () => ({ state: "live" }) } };
+    collections: { collection: () => ({ looks: profile.looks }), look: () => ({ state: "live" }) },
+    characters: { document: (id: string) => deleted.has(id) ? null : { id } } };
   const tabs = new TabDefaults({ sessions: s, defaults, candidates: () => substitutionContext(s, services as never), keepsState: keepsStateInDefaults,
     known: STUDIO_FRAGMENT_KNOWLEDGE });
-  return { documents, storage, outbox, defaults, s, tabs, profile };
+  return { documents, storage, outbox, defaults, s, tabs, profile, deleted };
 }
 type Window = ReturnType<typeof windowOn>;
 /** Dispatch after checking the capability, as the application does; returns the refusal's reason when refused. */
@@ -205,7 +212,7 @@ describe("substitution as data (0, 1 and 2 candidates; M2's share or new)", () =
     expect(shared.scenes[0]).toMatchObject({ shares: [shown], chosen: "s-a" });
     expect(shared.looks[0]!.needed).toBe(false);
     expect(shared.oneClick).toBe(true);
-    expect(fillOf(shared).share).toEqual({ scene1: "s-a" });
+    expect(fillOf(shared).share).toEqual({ scene1: { scene: "s-a" } });
     // New scene: the look slot matters again, and with two looks the step is needed.
     const fresh = ok(substitutionOf(eye, two, { scenes: { scene1: null } }));
     expect([fresh.scenes[0]!.chosen, fresh.looks[0]!.needed, fresh.oneClick]).toEqual([undefined, true, false]);
@@ -318,7 +325,13 @@ describe("own defaults: Save as default, update, rename, delete and restore, thr
     expect(w.s.graph.undo()).toBe(true);
     expect(w.s.tab(tab)!.origin).toBeUndefined();
     expect(w.s.graph.redo()).toBe(true);
-    expect(act(w, { kind: "tabs.saveAsDefault", tab, name: "eye MAKEUP" })).toBe('You already have a default called "Eye makeup". Choose another name.');
+    // Names need not be unique (the coordinator's decision): the list tells same-named defaults apart by when each was saved.
+    expect(act(w, { kind: "tabs.saveAsDefault", tab, name: "eye MAKEUP" })).toBeUndefined();
+    const twin = w.s.tab(tab)!.origin!;
+    expect(twin).not.toBe(id);
+    expect(w.defaults.get(twin)!.owner).toMatchObject({ kind: "user", savedAt: expect.any(Number), createdAt: expect.any(Number) });
+    expect(act(w, { kind: "defaults.delete", default: twin })).toBeUndefined();
+    w.s.setOrigin(tab, id);
     await quiet(w.outbox);
     expect(w.documents.store.get<{ name: string }>(LAYOUT_DEFAULT_DOCUMENT, id)!.value.name).toBe("Eye makeup");
     // Update: the tab as it is now replaces the default's fragment; its name stays.
@@ -443,5 +456,112 @@ describe("reset to default", () => {
     expect(w.s.graph.redo()).toBe(true);
     expect(json(w.s.session())).toBe(again);
     expect(json(w.s.session())).not.toBe(before);
+  });
+});
+
+describe("review P2-2's findings", () => {
+  const eye = STUDIO_LAYOUT_DEFAULTS.find(item => item.id === EYE)!.fragment;
+  const titled = (title: string): LayoutFragment => ({ ...eye, views: [{ ...eye.views[0]!, title }] });
+  const putDefault = (w: Window, id: string, fragment: unknown) => w.documents.store.transact({ id: `put-${id}`, command: "x", writes: [{ kind: LAYOUT_DEFAULT_DOCUMENT,
+    id, base: 0, value: { schema: LAYOUT_DEFAULT_SCHEMA, id, name: id, owner: "user", fragment, createdAt: 5 } }] });
+  /** The session as a restart reads it: stored, read back, and opened over the Studio's graph. */
+  const restarted = (s: ProfileSessions) => openSession(profileSessionOf(JSON.parse(JSON.stringify(s.session())))!, { random: seededRandom(3) });
+
+  test("finding 1: a fragment is checked against what a restart reads back; a 60-character view title survives one, a 61-character one is refused", async () => {
+    expect(buildIssues(titled("x".repeat(60)), STUDIO_FRAGMENT_KNOWLEDGE)).toEqual([]);
+    expect(fragmentIssues(titled("x".repeat(61)))).toEqual(["view view1 has an unusable title"]);
+    const w = windowOn();
+    putDefault(w, "d-title60", titled("x".repeat(60)));
+    putDefault(w, "d-title61", titled("x".repeat(61)));
+    await w.defaults.load();
+    expect(w.defaults.get("d-title61")!.unavailable).toBe("This default can't be read, so a tab can't be made from it.");
+    expect(act(w, { kind: "tabs.new", default: "d-title61" })).toBe("This default can't be read, so a tab can't be made from it.");
+    expect(act(w, { kind: "tabs.new", default: "d-title60", choice: { scenes: { scene1: null } } })).toBeUndefined();
+    const views = w.s.graph.data().views, after = restarted(w.s);
+    expect(after.graph.data().views).toEqual(views);
+    expect(after.graph.data().views.some(view => (view as { title?: string }).title === "x".repeat(60))).toBe(true);
+    // The graph refuses to hold what it couldn't read back: a 61-character title made into content anyway changes nothing.
+    const stored = json(w.s.session());
+    expect(() => w.s.newTab(instantiateFragment(titled("x".repeat(61)), {}, w.s, { name: "Long" }))).toThrow("That view can't be added.");
+    expect(json(w.s.session())).toBe(stored);
+    // What only the session's own reader refuses is caught by reading back too: a panel type no stored instance ID can name.
+    const lenient = { ...STUDIO_FRAGMENT_KNOWLEDGE, panel: () => true };
+    expect(buildIssues({ ...eye, panels: [...eye.panels, { key: "odd", type: "Odd_Type" }],
+      tab: { ...eye.tab, dock: dockOf(["view:view1", "odd"]) } }, lenient)).toEqual(["a panel of a tab made from it wouldn't read back after a restart"]);
+  });
+
+  test("finding 2: a shared scene shares its lighting (M2): a lighting change in one tab is seen in the other, and stays shared after a restart", () => {
+    const w = windowOn(), main = w.s.graph.viewIds()[0]!;
+    expect(act(w, { kind: "tabs.new", default: EYE })).toBeUndefined();
+    const other = w.s.graph.viewIds().find(view => w.s.graph.tabOf(view) === w.s.tabId())!;
+    expect(w.s.graph.node(other, "scene").id).toBe(w.s.graph.node(main, "scene").id);
+    expect(w.s.graph.node(other, "lights").id).toBe(w.s.graph.node(main, "lights").id);
+    const lights = w.s.graph.state<{ creatorLighting: Record<string, unknown> }>(main, "lights");
+    w.s.graph.edit(other, "lights", { state: { creatorLighting: { ...lights.creatorLighting, exposure: 2 } } });
+    expect(w.s.graph.state<{ creatorLighting: { exposure: number } }>(main, "lights").creatorLighting.exposure).toBe(2);
+    // After a restart the two views still share one lights node (the main view's state then comes from the workspace's preview fields).
+    const after = restarted(w.s);
+    expect(after.graph.node(other, "lights").id).toBe(after.graph.node(main, "lights").id);
+    // New scene: its own lights, as before.
+    expect(act(w, { kind: "tabs.new", default: EYE, choice: { scenes: { scene1: null }, looks: { look1: LOOK } } })).toBeUndefined();
+    const own = w.s.graph.viewIds().find(view => w.s.graph.tabOf(view) === w.s.tabId())!;
+    expect(w.s.graph.node(own, "lights").id).not.toBe(w.s.graph.node(main, "lights").id);
+  });
+
+  test("finding 3: node state can't hold an identity or what a scene shows; a tab's are made only from fresh IDs and the substitution", () => {
+    const sneaky = { ...eye, nodes: eye.nodes.map(node => node.slot === "scene" ? { ...node, state: { ...node.state, id: "s-forced", subject: V2, gen: 7 } } : node) };
+    expect(fragmentIssues(sneaky)).toEqual(["scene node scene1's state holds id, which only the tab it makes may give",
+      "scene node scene1's state holds subject, which only the tab it makes may give", "scene node scene1's state holds gen, which only the tab it makes may give"]);
+    const w = windowOn(), content = instantiateFragment(sneaky, { subjects: { v1: null }, looks: { look1: null } }, w.s, { name: "Sneaky" });
+    const scene = content.nodes.find(item => item.slot === "scene")!.node as Record<string, unknown>;
+    expect(scene.id).not.toBe("s-forced");
+    expect([scene.subject, scene.look, scene.gen]).toEqual([undefined, undefined, 0]);
+  });
+
+  test("finding 4: a deleted V is never a candidate, and a choice of one made before it was deleted is refused when dispatched", () => {
+    const w = windowOn(undefined, undefined, { profile: { subjects: [V1, V2], looks: [LOOK.look] } });
+    w.deleted.add(V1.id);
+    // V1 is deleted though its scene is still shown: V2 alone is offered, named, and the tab is one click with a new scene.
+    expect(w.tabs.substitution(EYE)).toMatchObject({ subjects: [{ candidates: [V2], chosen: V2 }], scenes: [{ shares: [] }], oneClick: true });
+    w.deleted.add(V2.id);
+    expect(w.tabs.substitution(EYE)).toMatchObject({ subjects: [{ candidates: [] }], oneClick: true });
+    w.deleted.delete(V2.id);
+    const action = { kind: "tabs.new" as const, default: EYE, choice: { subjects: { v1: V2 } } };
+    expect(w.tabs.capability(action)).toEqual({ available: true });
+    w.deleted.add(V2.id);
+    const stored = json(w.s.session());
+    expect(() => w.tabs.dispatch(action)).toThrow("That V isn't in this profile any more.");
+    expect(json(w.s.session())).toBe(stored);
+  });
+
+  test("finding 5: names need not be unique, in one window or two; both defaults are kept and told apart by when they were saved", async () => {
+    const documents = storeDocuments(), a = windowOn(documents), b = windowOn(documents);
+    expect(act(a, { kind: "tabs.saveAsDefault", tab: a.s.tabId(), name: "Same" })).toBeUndefined();
+    expect(act(b, { kind: "tabs.saveAsDefault", tab: b.s.tabId(), name: "Same" })).toBeUndefined();
+    expect(act(a, { kind: "tabs.saveAsDefault", tab: a.s.tabId(), name: "Same" })).toBeUndefined();
+    await quiet(a.outbox); await quiet(b.outbox);
+    await a.outbox.check();
+    const same = a.defaults.list().filter(item => item.name === "Same");
+    expect(same.length).toBe(3);
+    expect(same.every(item => item.owner.kind === "user" && item.owner.savedAt > 0)).toBe(true);
+    expect(a.defaults.conflicts()).toEqual([]);
+  });
+
+  test("finding 6: an open window finds a default another window saved at its next revision check, keeping its own pending writes", async () => {
+    const documents = storeDocuments(), a = windowOn(documents);
+    expect(act(a, { kind: "tabs.saveAsDefault", tab: a.s.tabId(), name: "First" })).toBeUndefined();
+    const first = a.s.tab(a.s.tabId())!.origin!;
+    await quiet(a.outbox);
+    // B is open and loaded; its library writes don't get through, so its rename of First stays pending.
+    const b = windowOn({ ...documents, transact: () => new Promise<never>(() => {}) });
+    await b.defaults.load();
+    expect(act(b, { kind: "defaults.rename", default: first, name: "B's pending name" })).toBeUndefined();
+    expect(act(a, { kind: "tabs.saveAsDefault", tab: a.s.tabId(), name: "Second" })).toBeUndefined();
+    const second = a.s.tab(a.s.tabId())!.origin!;
+    await quiet(a.outbox);
+    expect(b.defaults.get(second)).toBeUndefined();
+    await b.outbox.check();
+    expect(b.defaults.get(second)!.name).toBe("Second");
+    expect(b.defaults.get(first)!.name).toBe("B's pending name");
   });
 });

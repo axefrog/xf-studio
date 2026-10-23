@@ -242,6 +242,8 @@ export class DocumentOutbox {
    */
   private readonly graves = new Map<string, Set<string>>();
   private readonly listeners = new Set<(event: OutboxEvent) => void>();
+  /** Owners' membership refreshes, run at the start of every revision check (`onCheck`). */
+  private readonly membership = new Set<(signal?: AbortSignal) => Promise<void>>();
   /**
    * Keys whose latest entries are recorded here but not stored yet (`commit` with `store: "soon"`): stored together within
    * `STORE_SOON_MS`, or at once by `store()`, `settle`, `flush` or any write of the key. Until then they count as unprotected, and their
@@ -504,6 +506,11 @@ export class DocumentOutbox {
       missing: [...waiting].map(key => this.held.get(key)?.ref ?? refOfKey(key)) };
   }
   subscribe(listener: (event: OutboxEvent) => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  /**
+   * Run `refresh` at the start of every revision check (A7): an owner whose documents another page can create (a default saved there)
+   * lists its kind and holds the documents it didn't know, so this page finds them as it finds newer revisions. Returns the removal.
+   */
+  onCheck(refresh: (signal?: AbortSignal) => Promise<void>): () => void { this.membership.add(refresh); return () => { this.membership.delete(refresh); }; }
   /**
    * Stores every key recorded with `store: "soon"` now (pagehide, closing, Save version, Check, Build, a takeover's drain), and sends what
    * waited for it.
@@ -1032,6 +1039,8 @@ export class DocumentOutbox {
    */
   async check(signal?: AbortSignal): Promise<readonly DocumentRef[]> {
     if (!this.opened || !this.sendable()) return [];
+    // Owners whose documents another page can add to (a default saved there) look for new ones first, and hold what they find.
+    await Promise.all([...this.membership].map(refresh => refresh(signal).catch(error => this.options.report?.(error))));
     const clean = [...this.held.values()].filter(held => held.known && !this.entriesFor(documentKey(held.ref)).length);
     if (!clean.length) return [];
     const revisions = await this.transport.revisions(clean.map(held => held.ref), signal);

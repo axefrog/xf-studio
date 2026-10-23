@@ -7,7 +7,10 @@
  *   changes only new tabs and resets.
  * - **Own defaults** are library documents written only through this owner's commands and the outbox (§2.2): create (Save as default),
  *   update (Update "<name>"), rename, and delete as a tombstone, which restore takes back (the Undo notice's action). Names are 1 to 60
- *   characters and unique among own defaults; a contributed default's name may be reused (saving over it makes an own default).
+ *   characters and need not be unique (the coordinator's decision): two windows could otherwise both take a name, so one window enforcing
+ *   it would only make the two disagree. The list tells same-named defaults apart by when each was saved (`savedAt`).
+ * - **Another window's new defaults** are found at every revision check (`DocumentOutbox.onCheck`): the kind is listed again and the
+ *   documents this window didn't know are held, beside its own pending writes.
  * - **Read as this build can.** An own default whose fragment doesn't read, or needs panel types or view tools this build lacks (a newer
  *   build's), is listed with the reason it can't be used, so it can still be renamed or deleted, never made into a tab.
  * - **Forward reading:** unknown fields of a document are kept when it is written again.
@@ -43,14 +46,16 @@ export type ContributedLayoutDefault = {
 };
 /** An own default as stored (`xfs/layout-default-1`). */
 export type OwnDefaultDocument = { readonly schema: typeof LAYOUT_DEFAULT_SCHEMA; readonly id: string; readonly name: string; readonly owner: "user";
-  readonly fragment: LayoutFragment; readonly createdAt: number };
+  readonly fragment: LayoutFragment; readonly createdAt: number;
+  /** When the fragment was last saved (create or Update); a document written before it has only `createdAt`. */
+  readonly savedAt?: number };
 /** A default as listed: a module's or the person's, with the reason it can't be used here, if any. Detached. */
 export type LayoutDefaultView = {
   readonly id: string;
   readonly name: string;
   readonly description?: string;
   readonly owner: { readonly kind: "module"; readonly module: string; readonly label: string; readonly earlyAccess: boolean }
-    | { readonly kind: "user"; readonly revision: number };
+    | { readonly kind: "user"; readonly revision: number; readonly createdAt: number; readonly savedAt: number };
   readonly fragment: LayoutFragment;
   /** Why no tab can be made from it in this build (plain words); absent when one can. */
   readonly unavailable?: string;
@@ -68,7 +73,6 @@ const UNREADABLE = "This default can't be read, so a tab can't be made from it."
 const CONTRIBUTED = "A feature's default can't be changed. Make a tab from it and save your own.";
 const ref = (id: string): DocumentRef => ({ kind: LAYOUT_DEFAULT_DOCUMENT, id });
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
-const folded = (name: string) => name.trim().toLocaleLowerCase();
 
 /** A stored own default, validated (null: not one). Its fragment is checked when it is listed, so one from another build is still listed. */
 export function ownDefaultOf(value: unknown): OwnDefaultDocument | null {
@@ -106,16 +110,27 @@ export class LayoutDefaults {
       for (const item of refs) if (item.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(item.id);
       this.changed();
     });
+    deps.outbox.onCheck(signal => this.refresh(signal));
   }
 
   /** Read every own default from the library (deleted ones too), and those this window's outbox still holds from its last session. */
   async load(signal?: AbortSignal): Promise<void> {
+    for (const entry of this.deps.outbox.pendingEntries()) for (const write of entry.writes) if (write.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(write.id);
+    await this.refresh(signal, true);
+  }
+  /**
+   * List the library's own defaults and hold those this window doesn't know yet (another window saved them since). A document this window
+   * knows is left to the outbox: its revision check takes a newer value, and never one under a pending write here.
+   */
+  private async refresh(signal?: AbortSignal, always = false): Promise<void> {
+    let found = false;
     for (const document of await this.deps.documents.list(LAYOUT_DEFAULT_DOCUMENT, signal)) {
+      if (this.ids.has(document.id) && !always) continue;
       this.deps.outbox.hold(ref(document.id), { revision: document.revision, value: document.value });
       this.ids.add(document.id);
+      found = true;
     }
-    for (const entry of this.deps.outbox.pendingEntries()) for (const write of entry.writes) if (write.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(write.id);
-    this.changed();
+    if (found || always) this.changed();
   }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private changed() { this.views = null; notifyAll(this.listeners); }
@@ -160,7 +175,8 @@ export class LayoutDefaults {
   }
   private ownView({ value, revision }: { value: OwnDefaultDocument; revision: number }): LayoutDefaultView {
     const unavailable = this.unusable(value.fragment);
-    return { id: value.id, name: value.name.trim(), owner: { kind: "user", revision }, fragment: value.fragment, ...(unavailable ? { unavailable } : {}) };
+    return { id: value.id, name: value.name.trim(), owner: { kind: "user", revision, createdAt: value.createdAt,
+      savedAt: Number.isFinite(value.savedAt) ? value.savedAt! : value.createdAt }, fragment: value.fragment, ...(unavailable ? { unavailable } : {}) };
   }
   /** Why a fragment can't be made into a tab here (undefined: it can). */
   private unusable(fragment: unknown): string | undefined {
@@ -175,9 +191,9 @@ export class LayoutDefaults {
     const held = this.held(command.id), value = held && ownDefaultOf(isTombstone(held.value) ? held.value.value : held.value);
     if (!held || !value) return refusal("missing_target", "That default doesn't exist any more.");
     const deleted = isTombstone(held.value);
-    if (command.kind === "restore") return deleted ? this.nameCheck(value.name, value.id) ?? { available: true } : refusal("invalid_value", "That default isn't deleted.");
+    if (command.kind === "restore") return deleted ? { available: true } : refusal("invalid_value", "That default isn't deleted.");
     if (deleted) return refusal("missing_target", "That default was deleted.");
-    if (command.kind === "rename") return this.nameCheck(command.name, command.id) ?? { available: true };
+    if (command.kind === "rename") return this.nameCheck(command.name) ?? { available: true };
     if (command.kind === "update") return this.fragmentCheck(command.fragment) ?? { available: true };
     return { available: true };
   }
@@ -188,13 +204,14 @@ export class LayoutDefaults {
     const now = (this.deps.now ?? Date.now)();
     const id = command.kind === "create" ? this.newId(now) : command.id;
     let value: unknown;
-    if (command.kind === "create") value = { schema: LAYOUT_DEFAULT_SCHEMA, id, name: command.name.trim(), owner: "user", fragment: structuredClone(command.fragment), createdAt: now };
+    if (command.kind === "create") value = { schema: LAYOUT_DEFAULT_SCHEMA, id, name: command.name.trim(), owner: "user", fragment: structuredClone(command.fragment), createdAt: now,
+      savedAt: now };
     else {
       const held = this.held(id)!.value;
       if (command.kind === "restore") value = (held as { value: unknown }).value;
       else if (command.kind === "delete") value = tombstoneOf(held, now);
       else if (command.kind === "rename") value = { ...(held as object), name: command.name.trim() };
-      else value = { ...(held as object), fragment: structuredClone(command.fragment) };
+      else value = { ...(held as object), fragment: structuredClone(command.fragment), savedAt: now };
     }
     try { this.deps.outbox.commit(`layout-default.${command.kind}`, [{ ...ref(id), value }]); }
     catch (error) { return { ok: false, code: "unavailable", reason: (error as Error).message }; }
@@ -202,11 +219,9 @@ export class LayoutDefaults {
     this.changed();
     return { ok: true, id };
   }
-  private nameCheck(name: unknown, self?: string): Capability | undefined {
+  private nameCheck(name: unknown): Capability | undefined {
     const issue = typeof name === "string" ? nameIssue(name.trim()) : "Name the default.";
-    if (issue) return refusal("invalid_value", issue.replace("the tab", "the default"));
-    const taken = this.own().find(item => item.value.id !== self && folded(item.value.name) === folded(name as string));
-    return taken ? refusal("invalid_value", `You already have a default called "${taken.value.name.trim()}". Choose another name.`) : undefined;
+    return issue ? refusal("invalid_value", issue.replace("the tab", "the default")) : undefined;
   }
   private fragmentCheck(fragment: unknown): Capability | undefined {
     const unusable = this.unusable(fragment);

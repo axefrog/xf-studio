@@ -4,27 +4,33 @@
  *
  * - **Validation on read.** `fragmentIssues` checks a fragment's structure (a fragment from another build, or a damaged document): every
  *   key well formed and unique, every reference resolving inside the fragment (views to nodes, scenes to slots, pins to views, scenes and
- *   slots, the dock's panels to panels and views). `buildIssues` checks it against what this build has: its panel types, its view tools,
- *   and every node's state and kind as the graph's codecs read them, with each view's scene, camera and lights kinds fitting together.
+ *   slots, the dock's panels to panels and views), view titles within the graph's limit, and no node state holding an identity or what
+ *   a scene shows. `buildIssues` checks it against what this build has: its panel types, its view tools, and every node's state and kind
+ *   as the graph's codecs read them, with each view's scene, camera and lights kinds fitting together. Last, a tab made from it is read
+ *   back through the session's own readers (`profileSessionOf`, `parseViewGraph`), so nothing accepted here can be refused on a restart.
  * - **From a tab** (`fragmentOfTab`, Save as default): the tab's views and every node they name, copied as values (links to other tabs'
  *   views included); actual subjects and looks become slots; pins name the fragment's keys (a pin to something outside the tab is
  *   dropped); panel state is kept for types that keep it. Keys are canonical (views `view1`, nodes `<slot>1`, subject slots `v1`, look
  *   slots `look1`, panels by type), so a fragment made from a tab made from a fragment is the same bytes.
  * - **Into a tab** (`instantiateFragment`): fresh IDs for every view, node and panel instance, scenes included; each scene's subject and
- *   look come from the fill, and a scene the fill shares is an existing scene instead of a new one.
+ *   look come from the fill (never from its state), and a scene the fill shares is an existing scene instead of a new one, lit by that
+ *   scene's lights (M2: one runtime keeps one setup, and a lighting change in either tab shows in both).
  * - **Substitution as data** (`substitutionOf`): per subject slot the profile's subjects of its kinds, per look slot the profile's looks,
- *   per scene the existing scenes showing the chosen V (decision M2 of experiment 044: sharing is the default, New scene beside it).
+ *   per scene the existing scenes showing the chosen V, with their lights (decision M2 of experiment 044: sharing is the default, New
+ *   scene beside it).
  *   Each defaults to its only candidate, else Leave empty; a scene to the first scene to share, else New scene. P2-iv's substitution
  *   step presents exactly this.
  */
 import { LAYOUT_FRAGMENT_SCHEMA, type DefaultLayoutContribution, type FragmentBinding, type FragmentDock, type FragmentNode, type FragmentPanel, type FragmentView,
   type LayoutFragment } from "../../platform/api/layout-fragment";
 import { sameSubject, type SubjectRef } from "../../platform/api/subjects";
-import { SLOT_COLLECTIONS, VIEW_SLOTS, type StoredNode, type ViewGraphRules, type ViewRecord, type ViewSlot } from "../../platform/api/view-graph";
+import { SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, type StoredNode, type ViewGraphRules, type ViewRecord, type ViewSlot } from "../../platform/api/view-graph";
+import { parseViewGraph, VIEW_TITLE_LIMIT } from "../../platform/core/view-graph";
 import type { LookRef } from "../../library/collection-documents";
 import type { DockLayout } from "../ui-preferences";
 import { dockPanels, rewriteDock, withoutDockPanels } from "./profiles-migration-data";
-import type { PanelBinding, PanelInstance, ProfileSessionData, SessionScene, TabId } from "./profile-session";
+import { PROFILE_SESSION_SCHEMA, profileSessionOf, type PanelBinding, type PanelInstance, type ProfileSessionData, type SessionScene,
+  type TabId } from "./profile-session";
 import { nameIssue, type TabContent } from "./profile-sessions";
 
 export { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment };
@@ -36,6 +42,11 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 const EMPTY_DOCK: FragmentDock = { format: "xfs/dock", version: 1, state: {} };
 /** Panel types a fragment never lists: a view's panel is `view:<key>` in its dock. */
 const VIEW_TYPES = (type: string) => type === "view" || type === "head" || type.startsWith("view.");
+/**
+ * Fields a node's state never holds: its identity and what a scene shows are made with the tab (fresh IDs, the substitution), so state can
+ * never override them or keep a subject a slot left empty.
+ */
+const RESERVED_STATE = ["id", "kind", "subject", "look", "gen", "tab"] as const;
 
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const clone = <T>(value: T): T => structuredClone(value);
@@ -76,12 +87,13 @@ export function fragmentIssues(value: unknown): string[] {
     nodes.get(slot)!.add(key);
     if (item.kind !== undefined && (typeof item.kind !== "string" || !item.kind)) issues.push(`${slot} node ${key} has an unusable kind`);
     if (!object(item.state)) issues.push(`${slot} node ${key} has no state`);
+    else for (const field of RESERVED_STATE) if (field in item.state) issues.push(`${slot} node ${key}'s state holds ${field}, which only the tab it makes may give`);
     if (item.subject !== undefined && (slot !== "scene" || typeof item.subject !== "string" || !subjects.has(item.subject))) issues.push(`${slot} node ${key} names a subject slot it can't`);
     if (item.look !== undefined && (slot !== "scene" || typeof item.look !== "string" || !looks.has(item.look))) issues.push(`${slot} node ${key} names a look slot it can't`);
   }
   for (const item of viewItems) {
     if (!object(item)) continue;
-    if (item.title !== undefined && typeof item.title !== "string") issues.push(`view ${String(item.key)} has an unusable title`);
+    if (item.title !== undefined && (typeof item.title !== "string" || item.title.length > VIEW_TITLE_LIMIT)) issues.push(`view ${String(item.key)} has an unusable title`);
     for (const slot of VIEW_SLOTS) if (typeof item[slot] !== "string" || !nodes.get(slot)!.has(item[slot] as string)) issues.push(`view ${String(item.key)} names no ${slot} node of the fragment`);
   }
   for (const item of panelItems) {
@@ -129,7 +141,27 @@ export function buildIssues(fragment: LayoutFragment, known: FragmentKnowledge):
     else if (!rule.cameras.includes(kinds.get(`camera:${view.camera}`) ?? "") || !rule.rigs.includes(kinds.get(`lights:${view.lights}`) ?? ""))
       issues.push(`view ${view.key}'s camera or lights don't fit its scene`);
   }
-  return issues;
+  return issues.length ? issues : readBackIssues(fragment, known.rules);
+}
+/**
+ * Whether a tab made from the fragment reads back as a restart reads it: through the readers the session itself uses on a stored session
+ * (`profileSessionOf`) and on its graph (`parseViewGraph`), so the two can't drift. Without it, a fragment the checks above accept (a view
+ * title over the graph's limit, a panel type no stored instance ID can name) could make a tab whose graph a restart refuses and replaces.
+ */
+function readBackIssues(fragment: LayoutFragment, rules: ViewGraphRules): string[] {
+  let made = 0;
+  const probe = (prefix: string) => `${prefix}${(++made).toString(36).padStart(4, "0")}`;
+  const content = instantiateFragment(fragment, {}, { freshId: kind => probe(`${kind === "view" ? "v" : kind[0]}-probe`),
+    freshInstance: type => probe(`${type}--p`) }, { name: fragment.tab.name });
+  const tab = "t-probe", lists: Record<string, StoredNode[]> = Object.fromEntries(VIEW_SLOTS.map(slot => [SLOT_COLLECTIONS[slot], []]));
+  for (const { slot, node } of content.nodes) lists[SLOT_COLLECTIONS[slot]]!.push(node as StoredNode);
+  const session = profileSessionOf(clone({ schema: PROFILE_SESSION_SCHEMA, tabs: [{ id: tab, name: content.name, dock: content.dock, panels: content.panels }],
+    views: { schema: VIEW_GRAPH_1, views: content.views.map(view => ({ ...view, tab })), ...lists }, focus: { views: {} }, closed: [], seq: 0 }));
+  if (!session) return ["a tab made from it wouldn't read back after a restart"];
+  if (session.tabs[0]!.panels.length !== content.panels.length) return ["a panel of a tab made from it wouldn't read back after a restart"];
+  // The graph as the session hands it to the view graph: its scenes without what they show.
+  const graph = parseViewGraph({ ...session.views, scenes: session.views.scenes.map(({ subject: _s, look: _l, gen: _g, ...scene }) => scene) }, rules);
+  return graph && graph.views.length === content.views.length ? [] : ["the views of a tab made from it wouldn't read back after a restart"];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -219,8 +251,11 @@ function fragmentBinding(binding: PanelBinding | undefined, keys: { view(id: str
 export type FragmentFill = {
   readonly subjects?: Readonly<Record<string, SubjectRef | null>>;
   readonly looks?: Readonly<Record<string, LookRef | null>>;
-  /** Scene key → the existing scene it shares (Share the scene of). */
-  readonly share?: Readonly<Record<string, string>>;
+  /**
+   * Scene key → the existing scene it shares (Share the scene of), and the lights node it is lit by there: decision M2 of experiment 044,
+   * a shared scene shares its lighting too, so one runtime keeps one setup and a lighting change in either tab shows in both.
+   */
+  readonly share?: Readonly<Record<string, { readonly scene: string; readonly lights?: string }>>;
 };
 /** Where a new tab's IDs come from (`ProfileSessions.freshId`, `freshInstance`). */
 export type FreshIds = { freshId(kind: "view" | ViewSlot): string; freshInstance(type: string): string };
@@ -232,22 +267,29 @@ export type FreshIds = { freshId(kind: "view" | ViewSlot): string; freshInstance
  */
 export function instantiateFragment(fragment: LayoutFragment, fill: FragmentFill, ids: FreshIds, header: { name: string; origin?: string }): TabContent {
   const nodeIds = new Map<string, string>(), nodes: TabContent["nodes"][number][] = [];
+  const shared = (scene: string) => fill.share?.[scene];
+  // A lights node only views of shared scenes use isn't made: those views are lit by the shared scene's lights.
+  const lit = new Set(fragment.views.filter(view => !shared(view.scene)?.lights).map(view => view.lights));
   for (const node of fragment.nodes) {
-    const shared = node.slot === "scene" ? fill.share?.[node.key] : undefined;
-    if (shared) { nodeIds.set(`scene:${node.key}`, shared); continue; }
+    const share = node.slot === "scene" ? shared(node.key) : undefined;
+    if (share) { nodeIds.set(`scene:${node.key}`, share.scene); continue; }
+    if (node.slot === "lights" && !lit.has(node.key)) continue;
     const id = ids.freshId(node.slot);
     nodeIds.set(`${node.slot}:${node.key}`, id);
     const subject = node.subject ? fill.subjects?.[node.subject] : undefined, look = node.look ? fill.looks?.[node.look] : undefined;
-    nodes.push({ slot: node.slot, node: { id, ...(node.kind !== undefined ? { kind: node.kind } : {}), ...clone(node.state),
+    // Identity and what a scene shows come only from the fresh ID and the fill, never from the state.
+    const state: Record<string, unknown> = clone(node.state);
+    for (const field of RESERVED_STATE) delete state[field];
+    nodes.push({ slot: node.slot, node: { ...state, id, ...(node.kind !== undefined ? { kind: node.kind } : {}),
       ...(node.slot === "scene" ? { ...(subject ? { subject: { kind: subject.kind, id: subject.id } } : {}),
         ...(look ? { look: { collection: look.collection, look: look.look } } : {}), gen: 0 } : {}) } as StoredNode });
   }
   const viewIds = new Map<string, string>(), views: ViewRecord[] = [];
   for (const view of fragment.views) {
-    const id = ids.freshId("view");
+    const id = ids.freshId("view"), lights = shared(view.scene)?.lights;
     viewIds.set(view.key, id);
     views.push({ id, kind: "3d", ...(view.title !== undefined ? { title: view.title } : {}),
-      ...Object.fromEntries(VIEW_SLOTS.map(slot => [slot, nodeIds.get(`${slot}:${view[slot]}`)!])) } as ViewRecord);
+      ...Object.fromEntries(VIEW_SLOTS.map(slot => [slot, slot === "lights" && lights ? lights : nodeIds.get(`${slot}:${view[slot]}`)!])) } as ViewRecord);
   }
   const instances = new Map<string, string>(), panels: PanelInstance[] = [];
   for (const panel of fragment.panels) {
@@ -282,8 +324,12 @@ function panelBinding(binding: FragmentBinding | undefined, targets: { view(key:
 // ---------------------------------------------------------------------------------------------------------------------
 // Substitution (as data)
 
-/** An existing scene a new tab may share: its kind, the tab of its most recently focused view, and what it shows. */
-export type SceneCandidate = { readonly scene: string; readonly kind: string; readonly tab: TabId; readonly subject?: SubjectRef; readonly look?: LookRef };
+/**
+ * An existing scene a new tab may share: its kind, the tab and the lights of its most recently focused view (a shared scene shares that
+ * lighting, M2), and what it shows.
+ */
+export type SceneCandidate = { readonly scene: string; readonly kind: string; readonly tab: TabId; readonly lights?: string; readonly subject?: SubjectRef;
+  readonly look?: LookRef };
 /** What a profile offers a new tab: its subjects, its live looks (collection order), and the session's scenes (most recently focused first). */
 export type SubstitutionContext = { readonly subjects: readonly SubjectRef[]; readonly looks: readonly LookRef[]; readonly scenes: readonly SceneCandidate[] };
 /**
@@ -351,7 +397,10 @@ export function fillOf(substitution: Substitution): FragmentFill {
   return {
     subjects: Object.fromEntries(substitution.subjects.map(slot => [slot.key, slot.chosen ?? null])),
     looks: Object.fromEntries(substitution.looks.map(slot => [slot.key, slot.chosen ?? null])),
-    share: Object.fromEntries(substitution.scenes.flatMap(scene => scene.chosen ? [[scene.key, scene.chosen]] : [])),
+    share: Object.fromEntries(substitution.scenes.flatMap(scene => {
+      const lights = scene.shares.find(item => item.scene === scene.chosen)?.lights;
+      return scene.chosen ? [[scene.key, { scene: scene.chosen, ...(lights ? { lights } : {}) }]] : [];
+    })),
   };
 }
 

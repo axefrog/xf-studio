@@ -10,7 +10,7 @@
  * - **What a scene shows** must exist: a scene whose V was deleted gets a new default V (listed in the profile), so the 3D view always has
  *   one to show.
  */
-import type { SubjectRegistryPort } from "../../platform/api/subjects";
+import type { SubjectRef, SubjectRegistryPort } from "../../platform/api/subjects";
 import { characterRef } from "../../platform/api/characters";
 import type { DocumentStorePort } from "../../platform/api/document-store";
 import type { DocumentOutbox } from "../../platform/core/document-outbox";
@@ -122,12 +122,16 @@ export function relayDockSaves(preferences: Pick<UIPreferenceActions, "snapshot"
  * session's profile (its subjects, and the live looks of its collections in profile order) and its scenes (decision M2 of experiment
  * 044: a V another tab shows shares that tab's scene by default, the scene of the most recently focused view first).
  */
-export function tabDefaults(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "collections" | "defaults">,
+export function tabDefaults(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "collections" | "characters" | "defaults">,
   build: { keepsState?(type: string): boolean; known?: FragmentKnowledge } = {}): TabDefaults {
   return new TabDefaults({ sessions: state, defaults: services.defaults, ...build, candidates: () => substitutionContext(state, services) });
 }
-/** What a new tab can be filled from: the profile's subjects and live looks, and every scene the session shows, most recently focused first. */
-export function substitutionContext(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "collections">): SubstitutionContext {
+/**
+ * What a new tab can be filled from: the profile's subjects that still exist (a deleted V stays a member, design §1.4, but is never
+ * offered), its live looks, and every scene the session shows, most recently focused first, each with the lights its view uses there.
+ * It is read again when the action is dispatched, so a choice made before a V or look was deleted is refused then.
+ */
+export function substitutionContext(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "collections" | "characters">): SubstitutionContext {
   const profile = services.profiles.profile(state.profile), graph = state.graph, order = state.focus.viewOrder();
   const looks = (profile?.collections ?? []).flatMap(id => (services.collections.collection(id)?.looks ?? []).map(look => ({ collection: id, look })))
     .filter(ref => services.collections.look(ref)?.state === "live");
@@ -138,17 +142,20 @@ export function substitutionContext(state: ProfileSessions, services: Pick<Profi
     if (seen.has(node.id)) continue;
     seen.add(node.id);
     const shown = state.scene(node.id);
-    scenes.push({ scene: node.id, kind: node.kind ?? "", tab: state.viewTab(view), ...(shown.subject ? { subject: shown.subject } : {}),
+    scenes.push({ scene: node.id, kind: node.kind ?? "", tab: state.viewTab(view), lights: graph.node(view, "lights").id, ...(shown.subject ? { subject: shown.subject } : {}),
       ...(shown.look ? { look: shown.look } : {}) });
   }
-  return { subjects: [...(profile?.subjects ?? [])], looks, scenes };
+  return { subjects: (profile?.subjects ?? []).filter(subjectAvailable(services)), looks, scenes };
 }
 
 /** `scene.setLook` and `scene.setSubject` over the session's scenes, checking that a look or V still exists (profiles design §3.6). */
 export function sceneCommands(state: ProfileSessions, services: Pick<ProfileServices, "characters" | "collections">): SceneCommands {
   return new SceneCommands({ scene: id => state.knownScene(id), setLook: (scene, look) => state.setLook(scene, look), setSubject: (scene, subject) => state.setSubject(scene, subject) },
-    { look: ref => services.collections.look(ref)?.state === "live", subject: ref => ref.kind === CHARACTER_KIND && !!services.characters.document(ref.id) });
+    { look: ref => services.collections.look(ref)?.state === "live", subject: subjectAvailable(services) });
 }
+/** Whether a subject can be shown: one of a kind this build has, whose document exists (not deleted). */
+const subjectAvailable = (services: Pick<ProfileServices, "characters">) => (ref: SubjectRef) =>
+  ref.kind === CHARACTER_KIND && !!services.characters.document(ref.id);
 
 /**
  * The window's input-layer resolution (app/profiles/targets.ts) over its session, view graph, focus and owners: what each panel, key

@@ -448,9 +448,10 @@ type LayoutFragment = {                                         // xfs/layout-fr
 
 - **The fragment** is the type above, with panel state only for types marked `stateInDefaults`. It is checked on read twice: its structure, then what the build has (panel types, view tools, node states through the graph's codecs).
 - **Save as default** writes canonical keys. A fragment made into a tab and saved again is the same bytes, and the panels of views the tab no longer holds are left out.
-- **Substitution is data** (candidates, what is chosen, `oneClick`), with decision M2 of experiment 044: a V another tab shows shares that scene by default, and New scene sits beside it.
+- **Substitution is data** (candidates, what is chosen, `oneClick`), with decision M2 of experiment 044: a V another tab shows shares that scene, and its lighting, by default, and New scene sits beside it. A deleted V is never offered.
 - **The modules' defaults** live in each module's `defaults.ts` and are checked at composition. They are Eye makeup (today's factory arrangement) and minimal Poses, Expressions and Save Explorer defaults, marked early access.
-- **Own defaults** are owned by `LayoutDefaults`, through the outbox. A newer build's own default is listed as unavailable, with the reason.
+- **Own defaults** are owned by `LayoutDefaults`, through the outbox. A newer build's own default is listed as unavailable, with the reason. Names need not be unique; the list tells defaults apart by when each was saved. An open window finds another window's new defaults at its revision checks.
+- **Nothing accepted can be lost on a restart:** a fragment is read back through the session's own readers before a tab is made from it.
 
 ### 4.3 Feature focus from the tab
 
