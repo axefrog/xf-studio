@@ -299,6 +299,14 @@ export class Layer2 implements Layer2Hook {
     const findings = lintPack(pack, index);
     if (findings.some((f) => f.level === 'error')) return findings;
     this.packs.set(pack.id, index);
+    // A live instance runs on its stored closure, so a newer version changes nothing for it, unless the template's `migrate`
+    // entry for the instance's version says `withdraw` (S2 section 12.3).
+    for (const inst of this.live()) {
+      if (inst.st.template.pack !== pack.id) continue;
+      const t = pack.seeds.find((x) => x.id === inst.st.template.id);
+      const m = t?.migrate?.find((e) => e.from.includes(inst.st.template.version));
+      if (m?.policy === 'withdraw') this.withdraw(inst, `the pack was updated and the template's migration withdraws version ${inst.st.template.version}`);
+    }
     this.k.root(`pack:${pack.id}`, 'core:seed');
     this.registerPackRoot(pack.id);
     this.sowQueue.add(pack.id);
