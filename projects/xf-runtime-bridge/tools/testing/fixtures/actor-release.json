@@ -1,0 +1,62 @@
+{
+  "schema": "xfb/session-script-2",
+  "name": "actor-release",
+  "title": "Session 18: default and face_v actor release",
+  "card": "research/runtime/runtime-bridge-test-card.md#session-18-checks-bridge-0811",
+  "requires": [
+    "Maintainer has launched the approved dedicated test profile and loaded the exact safety save; this script never launches or loads the game.",
+    "Quiet, clear street with at least 15 m walkable space; V stays still. Ready questions are answered in game.",
+    "Pass --fixtures PRIVATE_JSON containing logs.plugin and logs.redscript for this launch. Candidate is the session-18 build below; override only from the approved candidate manifest.",
+    "Root-transform evidence only. No gait, feet, head-facing or rendered-pixel verdict; provisional thresholds need a known-forward runtime calibration."
+  ],
+  "fixtures": {
+    "candidate": {
+      "plugin_version": "0.8.11",
+      "build_commit": "806c271cb07aee82672b63f7044dc3c119340747",
+      "natives": 27,
+      "write_classes": ["photo", "world", "character", "save", "showroom", "player", "npc", "inventory"]
+    },
+    "logs": { "plugin": "SET_CURRENT_PLUGIN_LOG_IN_PRIVATE_FIXTURE", "redscript": "SET_CURRENT_REDSCRIPT_LOG_IN_PRIVATE_FIXTURE" }
+  },
+  "diagnostic_logs": { "plugin": "$fixture.logs.plugin", "redscript": "$fixture.logs.redscript" },
+  "steps": [
+    { "do": "run", "label": "Z18-info", "command": "bridge.info", "bind": "bridge" },
+    { "do": "assert", "label": "Z18-preflight", "row": "Z18", "check": "bridge_ready", "actual": "$bridge", "candidate": "$fixture.candidate", "logs": "$fixture.logs" },
+    { "do": "run", "label": "Z18-saves", "command": "game.saves", "input": { "wait_ms": 500 }, "bind": "savesBefore" },
+    { "do": "assert", "label": "Z18-save-list-ready", "row": "Z18", "check": "equals", "actual": "$savesBefore.ready", "expected": true },
+    { "do": "cursor", "label": "N1-ready-cursor", "bind": "ready1Cursor" },
+    { "do": "run", "label": "N1-ready", "command": "ui.message", "input": { "level": "ask", "text": "Stand still on the clear street. Ready for the default walk to V and away?", "choices": ["Ready"], "seconds": 120 }, "bind": "ready1" },
+    { "do": "await", "label": "N1-ready-answer", "cursor": "$ready1Cursor", "kind": "answer", "message_id": "$ready1.id", "timeout_s": 120, "bind": "ready1Answer" },
+    { "do": "cursor", "label": "N1-spawn-cursor", "bind": "spawn1Cursor" },
+    { "do": "run", "label": "N1-spawn", "command": "npc.spawn", "input": { "cast": "woman_corpo", "ahead_m": 8 }, "bind": "spawn1" },
+    { "do": "await", "label": "N1-spawned", "cursor": "$spawn1Cursor", "kind": "npc.spawned", "subject": "$spawn1.who", "timeout_s": 20, "bind": "spawn1Event" },
+    { "do": "observe", "label": "N1-approach", "command": "npc.move", "subject": "$spawn1.who", "input": { "who": "$spawn1.who", "to": "v", "max_s": 30 }, "timeout_s": 32, "bind": "approach1" },
+    { "do": "assert", "label": "N1-approach-forward", "row": "N1", "check": "moves_forward", "window": "$approach1" },
+    { "do": "assert", "label": "N1-arrival", "row": "N1", "check": "actor_arrived", "window": "$approach1", "max_range_m": 2.3 },
+    { "do": "observe", "label": "N1-release", "command": "npc.release", "subject": "$spawn1.who", "input": { "who": "$spawn1.who", "how": "walk_away" }, "timeout_s": 30, "bind": "release1" },
+    { "do": "assert", "label": "N1-whole-departure-forward", "row": "N1", "check": "moves_forward", "window": "$release1", "min_distance_m": 0.25, "max_backwards_s": 0.5 },
+    { "do": "assert", "label": "N1-clean-release-and-range", "row": "N1", "check": "actor_released", "window": "$release1", "endpoint_tolerance_m": 2.5 },
+    { "do": "cursor", "label": "N2-ready-cursor", "bind": "ready2Cursor" },
+    { "do": "run", "label": "N2-ready", "command": "ui.message", "input": { "level": "ask", "text": "Ready for the same walk with face_v enabled? Stay still and watch the departure.", "choices": ["Ready"], "seconds": 120 }, "bind": "ready2" },
+    { "do": "await", "label": "N2-ready-answer", "cursor": "$ready2Cursor", "kind": "answer", "message_id": "$ready2.id", "timeout_s": 120, "bind": "ready2Answer" },
+    { "do": "cursor", "label": "N2-spawn-cursor", "bind": "spawn2Cursor" },
+    { "do": "run", "label": "N2-spawn", "command": "npc.spawn", "input": { "cast": "woman_corpo", "ahead_m": 8 }, "bind": "spawn2" },
+    { "do": "await", "label": "N2-spawned", "cursor": "$spawn2Cursor", "kind": "npc.spawned", "subject": "$spawn2.who", "timeout_s": 20, "bind": "spawn2Event" },
+    { "do": "observe", "label": "N2-approach", "command": "npc.move", "subject": "$spawn2.who", "input": { "who": "$spawn2.who", "to": "v", "face_v": true, "max_s": 30 }, "timeout_s": 32, "bind": "approach2" },
+    { "do": "assert", "label": "N2-approach-forward", "row": "N2", "check": "moves_forward", "window": "$approach2" },
+    { "do": "assert", "label": "N2-arrival", "row": "N2", "check": "actor_arrived", "window": "$approach2", "max_range_m": 2.3 },
+    { "do": "observe", "label": "N2-release", "command": "npc.release", "subject": "$spawn2.who", "input": { "who": "$spawn2.who", "how": "walk_away" }, "timeout_s": 30, "bind": "release2" },
+    { "do": "assert", "label": "N2-whole-departure-forward", "row": "N2", "check": "moves_forward", "window": "$release2", "min_distance_m": 0.25, "max_backwards_s": 0.5 },
+    { "do": "assert", "label": "N2-clean-release-and-range", "row": "N2", "check": "actor_released", "window": "$release2", "endpoint_tolerance_m": 2.5 },
+    { "do": "run", "label": "final-saves", "command": "game.saves", "input": { "wait_ms": 500 }, "bind": "savesAfter" },
+    { "do": "assert", "label": "save-list-unchanged", "check": "restored", "actual": "$savesAfter.names", "baseline": "$savesBefore.names" },
+    { "do": "run", "label": "final-bridge", "command": "bridge.info", "bind": "bridgeAfter" },
+    { "do": "assert", "label": "Z18-final-logs", "row": "Z18", "check": "bridge_ready", "actual": "$bridgeAfter", "candidate": "$fixture.candidate", "logs": "$fixture.logs" }
+  ],
+  "restore": [
+    { "do": "run", "label": "withdraw-ready1", "command": "ui.message", "input": { "withdraw": "$ready1.id" }, "if_bound": "ready1", "continue_on_error": true },
+    { "do": "run", "label": "withdraw-ready2", "command": "ui.message", "input": { "withdraw": "$ready2.id" }, "if_bound": "ready2", "continue_on_error": true },
+    { "do": "run", "label": "cleanup-default-actor", "command": "npc.release", "input": { "who": "$spawn1.who", "how": "despawn" }, "allow_error": "npc_unknown", "if_bound": "spawn1", "continue_on_error": true },
+    { "do": "run", "label": "cleanup-face-v-actor", "command": "npc.release", "input": { "who": "$spawn2.who", "how": "despawn" }, "allow_error": "npc_unknown", "if_bound": "spawn2", "continue_on_error": true }
+  ]
+}
