@@ -16,7 +16,14 @@ const REMOVAL = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 
 const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const root = resolve(import.meta.dir, "..");
 
-/** A killed verification run misses its exit hooks. Only our own throwaway folders, older than a day, are candidates; never follow links. */
+const FOLDER_OWNER = ".xfs-ui-owner";
+function browserFolder(kind: "chrome" | "data"): string {
+  const folder = mkdtempSync(join(tmpdir(), `xfs-ui-${kind}-`));
+  writeFileSync(join(folder, FOLDER_OWNER), String(process.pid));
+  return folder;
+}
+
+/** A killed run misses its exit hooks. Sweep only our old folders whose recorded owner has exited; unknown ownership stays. */
 export async function removeStaleBrowserFolders(directory = tmpdir(), now = Date.now(), keep?: string): Promise<void> {
   let folders;
   try { folders = await readdir(directory, { withFileTypes: true }); } catch { return; }
@@ -26,7 +33,14 @@ export async function removeStaleBrowserFolders(directory = tmpdir(), now = Date
     if (keep && path === resolve(keep)) continue;
     try {
       const stat = await lstat(path);
-      if (stat.isDirectory() && !stat.isSymbolicLink() && now - stat.mtimeMs > 24 * 60 * 60_000) await rm(path, REMOVAL);
+      if (!stat.isDirectory() || stat.isSymbolicLink() || now - stat.mtimeMs <= 24 * 60 * 60_000) continue;
+      const ownerFile = join(path, FOLDER_OWNER), ownerStat = await lstat(ownerFile);
+      if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) continue;
+      const owner = readFileSync(ownerFile, "utf8").trim();
+      if (!/^[1-9]\d*$/.test(owner) || !Number.isSafeInteger(Number(owner))) continue;
+      try { process.kill(Number(owner), 0); continue; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") continue; }
+      await rm(path, REMOVAL);
     } catch { /* Still held by a process, or already removed by another run. */ }
   }
 }
@@ -59,7 +73,7 @@ export type Session = {
  * it from a copy of the real settings, read once, so looks that need the game (the 3D head, hair, brows) still load.
  */
 export async function startServer(port: number, options: { settings?: "copy" | "empty" } = {}) {
-  const data = mkdtempSync(join(tmpdir(), "xfs-ui-data-"));
+  const data = browserFolder("data");
   // The server is killed by the script, not by us, so the folder goes when the script ends (whatever the way it ends).
   process.once("exit", () => { try { rmSync(data, REMOVAL); } catch { /* still held; nothing more to do at exit */ } });
   const real = join(localSettingsDirectory(), "settings.json");
@@ -122,7 +136,7 @@ async function stopChrome(chrome: Subprocess, profile: string, keep = false): Pr
 async function startChrome(options: { width?: number; height?: number; debugPort?: number; args?: readonly string[]; profile?: string }) {
   const failures: string[] = [];
   for (let attempt = 1; attempt <= PAGE_TARGET_LIMITS.attempts; attempt++) {
-    const profile = options.profile ? (mkdirSync(options.profile, { recursive: true }), options.profile) : mkdtempSync(join(tmpdir(), "xfs-ui-chrome-"));
+    const profile = options.profile ? (mkdirSync(options.profile, { recursive: true }), options.profile) : browserFolder("chrome");
     // Chrome's scoped_dir* scratch belongs to this profile too, so removing the profile also removes it after a crash or killed run.
     const temp = join(resolve(profile), "temp");
     mkdirSync(temp, { recursive: true });

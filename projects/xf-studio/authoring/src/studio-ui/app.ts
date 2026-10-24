@@ -817,7 +817,7 @@ export function withPreviewSetup(rt: Pick<StudioRuntime, "port" | "feedback" | "
 }
 
 /** The palette's commands: the platform's own, with each feature view's commands after the platform's Edit entries. */
-function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
+export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
   const port = rt.port;
   const act = (id: string, title: string, group: string, action: PresentationAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra,
@@ -852,6 +852,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
       run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),
+    file("collection.exportWindowCopy", "Export this window's copy", "Files", { kind: "collection.exportWindowCopy" },
+      { icon: "export", keywords: "backup recovery changes file without saving library" }),
     ...research([file("collection.plan", "Export compiler plan (saves first; not a mod)", "Research", { kind: "collection.plan" }, { icon: "export", keywords: "build plan" })]),
     file("recipe.import", "Import recipe as preset…", "Files", { kind: "recipe.import" }, { icon: "import" }),
     file("recipe.export", "Export preset recipe", "Files", { kind: "recipe.export" }, { icon: "export" }),

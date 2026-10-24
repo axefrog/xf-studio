@@ -1,7 +1,32 @@
 /** Palette hygiene (release-readiness-audit.md item 8): the commands that wait for the 3D view are one entry until it is ready. */
 import { expect, test } from "bun:test";
-import { withPreviewSetup } from "../src/studio-ui/app";
+import { buildCommands, withPreviewSetup } from "../src/studio-ui/app";
 import type { Command } from "../src/studio-ui/commands";
+import { DESKTOP_SAVE_FAILED, desktopWorkspaceWriter } from "../src/app/browser/desktop-workspace-writer";
+import { trustedFixture } from "./studio-presentation-fixture";
+
+test("a workspace-only desktop save failure leaves Export this window's copy reachable in the palette, with no outbox warning", async () => {
+  const { shell, downloads, outbox } = trustedFixture();
+  await shell.library.execute({ kind: "refresh" });
+  expect(await outbox.settle()).toBe(true);
+  const results: boolean[] = [];
+  const writer = desktopWorkspaceWriter(async () => { throw Error("Workspace file is locked"); }, failed => results.push(failed));
+  await writer.save("workspace draft");
+  expect(results).toEqual([true]);
+  await expect(writer.settle()).rejects.toThrow(DESKTOP_SAVE_FAILED);
+  expect(outbox.status()).toMatchObject({ unprotectedWarning: false, failing: false, pending: 0 });
+  const files: Promise<unknown>[] = [];
+  const rt = { port: shell, modules: { list: [] }, toolFilter: () => ({ modules: [], research: false }),
+    file: (action: Parameters<typeof shell.files.execute>[0]) => { const result = shell.files.execute(action); files.push(result); return result; } };
+  const commands = buildCommands(rt as never, { system: "dark" } as never, { research: () => false, hints: () => true } as never,
+    new Map(), [], { commands: () => [] } as never);
+  const recovery = commands.find(command => command.title === "Export this window's copy");
+  expect(recovery).toBeDefined();
+  expect(recovery!.capability().available).toBe(true);
+  recovery!.run();
+  await Promise.all(files);
+  expect(downloads).toEqual(["xfs.collection.json"]);
+});
 
 const HEAD = "The 3D view needs your Cyberpunk 2077 game folder.";
 function palette(head: { phase: string; message?: string; error?: string }, next: { kind: string } | null = { kind: "previewSetup.show" }) {
