@@ -51,7 +51,7 @@ const recordName = (description: string): JsonSchema => str(description, { patte
 // --- session.wait -----------------------------------------------------------------------------------
 
 // 0.8: the npc.* events too (npc.choice brings the player's pick from npc_choices).
-export const WAIT_KINDS = ["answer", "comment", "note", "behaviour", "kill", "handover", "resume", "write", "refused", "save", "input.submitted", "input.result", "input.photo.callback", "input.photo.hide", "input.photo.confirm", "input.ui.consumed", "input.ui.queued", "input.ui.dequeued", "input.ui.native", "choice.offer", "choice.selection", "choice.attempt", "choice.result", ...NPC_WAIT_KINDS, ...DM_WAIT_KINDS] as const;
+export const WAIT_KINDS = ["answer", "comment", "note", "behaviour", "kill", "handover", "resume", "write", "refused", "save", "input.submitted", "input.result", "input.photo.callback", "input.photo.hide", "input.photo.confirmation", "input.ui.consumed", "input.ui.queued", "input.ui.dequeued", "input.ui.native", "choice.offer", "choice.selection", "choice.attempt", "choice.result", ...NPC_WAIT_KINDS, ...DM_WAIT_KINDS] as const;
 
 /**
  * session.wait (0.7): blocks until the session's event stream has an event of the given kinds, then answers those events.
