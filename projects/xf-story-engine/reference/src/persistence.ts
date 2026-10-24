@@ -7,7 +7,7 @@
 // mirrored state is reconciled with the game, and a new epoch starts.
 
 import type { BeliefEntry } from './beliefs.ts';
-import { canonicalEqual } from './canon.ts';
+import { canonicalEqual, idsIn } from './canon.ts';
 import { rootId } from './id.ts';
 import type { EventCanonRecord, EventMaterialisation } from './events.ts';
 import type { ProcessState } from './evolution.ts';
@@ -272,7 +272,36 @@ export class Persistence {
     return this.base.headers.get(id);
   }
 
-  hasSavedEdge(id: Id): boolean { return this.base.edges.has(id); }
+  /** An owned edge may leave memory only if its complete interval and endpoints are recoverable. */
+  canSweepEdge(e: Edge): boolean {
+    const saved = this.base.edges.get(e.id);
+    return saved !== undefined && same(saved, e) && this.base.headers.has(e.from) && this.base.headers.has(e.to);
+  }
+
+  /** Public writes can reach a saved record directly, without first reaching its node. */
+  restoreContribution(id: Id): Contribution | undefined {
+    const store = this.k.store, live = store.contribution(id);
+    if (live) return live;
+    const saved = this.base.contributions.get(id);
+    if (!saved) return undefined;
+    for (const ref of idsIn(saved)) this.restoreReferencedHeader(ref);
+    const view = new PersistedView();
+    view.contributions.set(id, saved);
+    if (this.replay(view)) this.k.bump();
+    return store.contribution(id);
+  }
+
+  restoreEdge(id: Id): Edge | undefined {
+    const store = this.k.store, live = store.edges.get(id);
+    if (live) return live;
+    const saved = this.base.edges.get(id);
+    if (!saved) return undefined;
+    for (const ref of [saved.from, saved.to, saved.cause]) this.restoreReferencedHeader(ref);
+    const view = new PersistedView();
+    view.edges.set(id, saved);
+    if (this.replay(view)) this.k.bump();
+    return store.edges.get(id);
+  }
 
   /** Drop only exact saved facts whose absent targets recovery can restore. Never a retention root. */
   canSweepContribution(c: Contribution): boolean {

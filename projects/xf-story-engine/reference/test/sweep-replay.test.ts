@@ -3,6 +3,7 @@ import type { EventSpec } from '../src/events.ts';
 import { H, s } from '../src/id.ts';
 import type { Kernel } from '../src/kernel.ts';
 import { coreKernel } from './helpers.ts';
+import { runSweepReplayProperty } from './sweep-replay-property.ts';
 
 function replacement(k: Kernel, name: string, key: string): Kernel {
   const fresh = coreKernel(name, undefined, k.config);
@@ -146,83 +147,7 @@ test('S3H recovery paths: reconciliation cannot recover facts from the discarded
   expect(k.store.contribution(contribution.id), 'reconciliation recovers only the selected save').toBeUndefined();
 });
 
-test('S3H property: bounded generated sweeps, releases, references, ends and regeneration agree after random fresh loads', () => {
-  // Two independent executions: one stays live, the other is randomly replaced by saved replay.
-  // Compare semantic retained state after EVERY operation; physical residency intentionally differs.
-  const coverage = { operations: new Set<number>(), saves: 0, loads: 0 };
-  for (const snapshot of [false, true]) for (let seed = 1; seed <= 8; seed++) {
-    let random = seed;
-    const draw = (n: number): number => { random = (Math.imul(random, 1664525) + 1013904223) >>> 0; return Math.floor(random / 0x100000000 * n); };
-    const name = `sweep-property-${seed}`, config = { snapshotEvery: snapshot ? 1 : 10000 },
-      live = coreKernel(name, undefined, config), creator = live.root('producer', 'core:person'),
-      place = live.root('place', 'core:place'),
-      specs: EventSpec[] = Array.from({ length: 4 }, (_, i) => ({ creator, cause: creator, name: `event-${i}`,
-        time: i, kind: 'arrival', place, participants: [{ who: creator, role: 'actor' }] })),
-      events = specs.map((spec, i) => i < 3 ? live.events.mintEvent(spec) : live.mint(creator, creator, spec.name, 'core:event')),
-      consumers = events.map((_, i) => H(s(`consumer-${i}`))),
-      orphan = live.contribute({ source: { layer: 'authored', origin: H(s('external-author')) },
-        target: { slot: 'time', scope: { nodes: [events[3]] } }, form: { f: 'const', value: 42 }, mode: 'constrain' }),
-      times = [...events.slice(0, 3).map((event) => live.store.contributionsNaming(event).find((c) => c.target.slot === 'time')!.id), orphan.id],
-      locations = events.slice(0, 3).map((event) => live.store.edgesFrom(event)[0].id),
-      rule = live.contribute({ source: { layer: 'authored', origin: events[0] },
-        target: { kind: 'core:event', slot: 'outcome' }, form: { f: 'const', value: 'done' }, mode: 'constrain' });
-    for (let i = 0; i < 3; i++) live.retention.setSeed({ id: consumers[i], state: {}, nodes: [events[i]] });
-    live.persistence.save('initial');
-    let loaded = replacement(live, name, 'initial');
-    const observe = (k: Kernel) => {
-      const retained = [...k.retention.marked()].sort();
-      const facts = events.filter((id) => retained.includes(id)).map((event) => ({ event,
-        contributions: k.store.contributionsNaming(event).sort((a, b) => a.id.localeCompare(b.id)),
-        edges: k.store.edgesFrom(event).sort((a, b) => a.id.localeCompare(b.id)),
-        at: [0, k.now, k.now + 5].map((at) => ['time', 'kind', 'place', 'participants#count', 'outcome'].map((slot) => {
-          const r = k.resolve(event, slot, at);
-          return r.status === 'ok' || r.status === 'contradiction' ? [r.status, r.value] : [r.status];
-        })),
-        participant: event === events[3] ? undefined : k.value(k.address(event, 'participants[0]'), 'role'),
-      }));
-      return { retained, facts, rules: k.store.generalContributions(),
-        seeds: [...k.retention.seeds.values()].sort((a, b) => a.id.localeCompare(b.id)) };
-    };
-    for (let step = 0; step < 48; step++) {
-      const op = draw(8), i = draw(events.length), at = live.now + draw(6),
-        save = draw(4) === 0, reload = draw(2) === 0;
-      coverage.operations.add(op);
-      for (const k of [live, loaded]) {
-        switch (op) {
-          case 0: k.retention.endSeed(consumers[i]); break;
-          case 1:
-            // The unsaved header has to be supplied by its author before it can be referenced.
-            if (i === 3) k.mint(creator, creator, specs[i].name, 'core:event');
-            k.retention.setSeed({ id: consumers[i], state: {}, nodes: [events[i]] });
-            break;
-          case 2: sweep(k); break;
-          case 3:
-            k.persistence.restoreReferencedHeader(events[i]);
-            k.endContribution(times[i], at);
-            break;
-          case 4:
-          case 5:
-            if (i === 3) k.mint(creator, creator, specs[i].name, 'core:event');
-            else if (op === 4) k.events.mintEvent(specs[i]);
-            else k.events.restoreEvent(specs[i]);
-            break;
-          case 6: k.now = at + 1; k.endContribution(rule.id, at + 4); break;
-          case 7: k.endEdge(locations[i % 3], at); break;
-        }
-      }
-      if (save) {
-        coverage.saves++;
-        const key = `save-${step}`;
-        expect(live.persistence.save(key), `seed ${seed}, snapshot ${snapshot}, step ${step}: saved records`).toEqual(loaded.persistence.save(key));
-        if (reload) { loaded = replacement(loaded, name, key); coverage.loads++; }
-      }
-      expect(observe(live), `seed ${seed}, snapshot ${snapshot}, step ${step}, op ${op}: live versus replay`).toEqual(observe(loaded));
-    }
-    expect(live.persistence.save('final')).toEqual(loaded.persistence.save('final'));
-    loaded = replacement(loaded, name, 'final');
-    expect(observe(live)).toEqual(observe(loaded));
-  }
-  expect(coverage.operations.size).toBe(8);
-  expect(coverage.saves).toBeGreaterThan(100);
-  expect(coverage.loads).toBeGreaterThan(50);
-});
+test('S3I property: unswept, swept and random fresh replay agree after every operation', () => {
+  const coverage = runSweepReplayProperty();
+  if (process.env.SWEEP_SEEDS) console.log('sweep/replay coverage:', coverage);
+}, Math.max(30000, Number(process.env.SWEEP_SEEDS ?? 8) * 1500));

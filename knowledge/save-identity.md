@@ -181,6 +181,11 @@ The Story Engine's deterministic reference model tests the logical ledger indepe
    Pending updates, unsaved facts, authored general rules and facts on never-saved headers stay live without becoming
    roots. An origin's lifetime cannot delete an authored rule still applying to a retained target. Every path that
    brings a node back replays saved records before synthesising defaults, so an event re-mint preserves a saved end.
+   The same exact-record rule protects unsaved event-location edges and pending interval/attribute/data updates.
+   Non-rooting ownership metadata survives an unsaved event header's sweep, so a preserved location never revives
+   the event as a retention root. Public contribution and edge operations recover absent saved records by identity;
+   callers need no preparatory recovery. Identical contribution re-submission keeps its termination. Event regeneration
+   checks its complete owned payload and spatial link, rather than treating one surviving constant as completeness.
 
 A referenced summary item preserves explicit descriptor/materialisation ownership alongside its participant/effect
 constants. Retention and event views share that record; contribution order or an expired overlay cannot impersonate
@@ -197,13 +202,31 @@ probes reject reversals of the writer, sweep protection and descriptor-header se
 [`sweep-replay.test.ts`](../projects/xf-story-engine/reference/test/sweep-replay.test.ts), verified 24 October 2026,
 covers S3H-01's 16 re-mint/restore variants, S3H-02's four never-saved-header cleanup variants and S3H-03's two authored-rule
 variants, each with controls, plus silent header recovery and selected-branch reconciliation. Its bounded property
-test compares live and randomly reloaded execution after every one of 768 generated operations across eight seeds and
-both snapshot modes: sweeps, releases, references, contribution/edge ends, regenerations and time advances, with random
-saves and fresh loads. It compares retained semantic state and complete saved records, rather than physical residency;
-replay may hold unreferenced history already swept from live memory. This is deterministic offline evidence.
-The frozen v3/v4 digests remain `f924d2c9d1159bca85bbfa4cf18dba6c` / `42d5a84e16dde21cc0bca7fe50c01d72`;
-these scripts exercise none of the newly fixed divergence sequences, so their records do not change.
-Implementation and superseded rules: [`SPEC-NOTES.md`, findings 191–193](../projects/xf-story-engine/reference/SPEC-NOTES.md).
+test compares unswept control, swept live execution and swept execution with random fresh loads after every one of
+768 generated operations (eight seeds, both snapshot modes). The 17 operations include contribution re-submission
+without an explicit Id, post-release/sweep contribution and edge ending, edge reopening/updating and header-first
+regeneration through both event APIs, plus saved summary-item recovery with explicit materialisation ownership.
+The observer calls no retention traversal, address creation, resolution or recovery: it reads the complete consumer
+closure over owned headers/members, origins and Id-valued constants, including all contributions and validity,
+edges and intervals/data, pins, causes and provenance. Spatial queries at four times compare every result in that
+closure, and asserts ensure observation changes neither table sizes, revision nor provenance. Every random save
+compares complete records. Unreferenced physical residency is excluded; never-saved unreferenced simulation facts
+require their author to regenerate the original payload.
+
+[`sweep-operations.test.ts`](../projects/xf-story-engine/reference/test/sweep-operations.test.ts) keeps S3I-01's
+re-submission/direct-end reproductions and S3I-02's unsaved-location/header-first and ended-interval reproductions,
+with incremental/snapshot controls and fresh loads where applicable. It also checks all four edge operations on
+physically swept saved edges, and regeneration with missing member facts despite surviving own constants.
+The extended hunt passed 2,048 distinct seeds in both snapshot modes (4,096 scenarios): 196,608 generated
+steps in three executions, 49,052 random saves and 24,556 random fresh loads, plus initial/final loads.
+No additional divergence was found after S3I-01/02. It took 987.42 seconds at a guarded peak of 0.3 GB;
+the default property took 3.62 seconds. All 60 source-loader mutation probes reject their intended semantic
+mutations, including the four new S3I probes. Type-checking and the 21 new regressions pass.
+The guarded full suite passes: 1,315 tests across 80 files, zero failures, 208.55 seconds, peak 1.1 GB
+under the 4 GB limit (shared-machine run overlapping the hunt's tail). Both frozen digests are unchanged:
+v3 `f924d2c9d1159bca85bbfa4cf18dba6c`, v4 `42d5a84e16dde21cc0bca7fe50c01d72`. Their scripts contain
+none of these direct-record-write or incomplete-unsaved-regeneration sequences; no golden was edited.
+Implementation and superseded rules: [`SPEC-NOTES.md`, findings 191-194](../projects/xf-story-engine/reference/SPEC-NOTES.md).
 These are oracle results, not new game-runtime evidence.
 
 ## Session card

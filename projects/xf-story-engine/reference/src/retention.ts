@@ -31,6 +31,8 @@ export class Retention {
   readonly streamed = new Set<Id>();
   private cache: { revision: number; now: GameTime; marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id> } | null = null;
   private sweepList = new Worklist<{ id: Id }>();
+  /** Ownership of unrecoverable location edges survives their unsaved event header, without rooting it. */
+  private sweptEventLocations = new Set<Id>();
 
   constructor(private readonly k: Kernel) {}
 
@@ -72,16 +74,17 @@ export class Retention {
 
   /** A deep copy of the seeds, streaming and sweep state, for a staged batch's discard (spec 14.2a). */
   capture(): unknown {
-    return structuredClone({ seeds: this.seeds, streamed: this.streamed, sweep: this.sweepList.snapshot() });
+    return structuredClone({ seeds: this.seeds, streamed: this.streamed, sweep: this.sweepList.snapshot(), locations: this.sweptEventLocations });
   }
 
   restoreFrom(cap: unknown): void {
-    const c = structuredClone(cap) as { seeds: Map<Id, SeedRecord>; streamed: Set<Id>; sweep: Array<{ id: Id }> };
+    const c = structuredClone(cap) as { seeds: Map<Id, SeedRecord>; streamed: Set<Id>; sweep: Array<{ id: Id }>; locations: Set<Id> };
     this.seeds.clear();
     for (const [k, v] of c.seeds) this.seeds.set(k, v);
     this.streamed.clear();
     for (const i of c.streamed) this.streamed.add(i);
     this.sweepList.restore(c.sweep);
+    this.sweptEventLocations = c.locations;
     this.cache = null;
   }
 
@@ -90,13 +93,15 @@ export class Retention {
     this.streamed.clear();
     this.cache = null;
     this.sweepList.clear();
+    this.sweptEventLocations.clear();
   }
 
   // ---- roots ----
 
   /** A minted event's spatial link is part of its facts, rather than an independent retention root. */
   isOwnEventLocation(e: Edge, h: NodeHeader | undefined = this.k.store.header(e.from) ?? this.k.persistence.savedHeader(e.from)): boolean {
-    return e.cause === e.from && e.type === 'core:located-in' && h !== undefined && this.k.schema.hasFacet(h.kind, 'event');
+    return e.cause === e.from && e.type === 'core:located-in' &&
+      ((h !== undefined && this.k.schema.hasFacet(h.kind, 'event')) || this.sweptEventLocations.has(e.id));
   }
 
   /** Whether an edge is a root: not ended, or ended but referenced by a canon event. An event's own location edge is not. */
@@ -295,9 +300,10 @@ export class Retention {
     store.dropNode(id);
     if (h.origin.by === 'minted') {
       for (const e of store.edgesFrom(id)) if (e.cause === id) {
-        // Keep updates to saved history until the next save, without ending an open interval.
-        // A saved header still identifies this as an owned edge, so it cannot become a root (S3C/D).
-        if (!this.k.persistence.hasSavedEdge(e.id)) store.removeEdge(e.id);
+        if (this.k.persistence.canSweepEdge(e)) {
+          store.removeEdge(e.id);
+          this.sweptEventLocations.delete(e.id);
+        } else if (this.isOwnEventLocation(e, h)) this.sweptEventLocations.add(e.id);
       }
       this.k.events.forgetMaterialisation(id);
       this.removeTree(id);

@@ -590,7 +590,7 @@ export class Kernel {
     if (!(strength > 0) || !Number.isFinite(strength)) throw new Error('a contribution strength is positive');
     const valid = spec.valid ?? {};
     const cid = spec.id ?? contributionId({ ...spec, strength, valid });
-    const existing = this.store.contribution(cid);
+    const existing = this.persistence.restoreContribution(cid);
     if (existing) return existing;
     const c: Contribution = { id: cid, source: spec.source, target: spec.target, form: spec.form, mode: spec.mode, strength, valid };
     this.store.addContribution(c);
@@ -601,7 +601,7 @@ export class Kernel {
 
   endContribution(id: Id, at: GameTime = this.now, silent = false): void {
     this.assertWritable();
-    const c = this.store.contribution(id);
+    const c = this.persistence.restoreContribution(id);
     if (!c) throw new Error(`unknown contribution: ${id}`);
     if (c.valid.to !== undefined && c.valid.to <= at) return;
     c.valid = { ...c.valid, to: at };
@@ -614,8 +614,8 @@ export class Kernel {
   addEdge(spec: EdgeSpec): Edge {
     this.assertWritable();
     const def = this.schema.edgeType(spec.type);
-    const fh = this.store.header(spec.from);
-    const th = this.store.header(spec.to);
+    const fh = this.persistence.restoreReferencedHeader(spec.from);
+    const th = this.persistence.restoreReferencedHeader(spec.to);
     if (!fh || !th) throw new Error('an edge joins two known nodes');
     if (!def.from.some((k) => this.schema.isKind(fh.kind, k))) throw new Error(`${spec.type} cannot leave a ${fh.kind}`);
     if (!def.to.some((k) => this.schema.isKind(th.kind, k))) throw new Error(`${spec.type} cannot reach a ${th.kind}`);
@@ -631,7 +631,7 @@ export class Kernel {
     const eid = spec.id ?? H(
       hs('edge'), hs(spec.type), hid(spec.from), hid(spec.to), hi(from), hid(spec.cause), hrec(attrs),
     );
-    const existing = this.store.edges.get(eid);
+    const existing = this.persistence.restoreEdge(eid);
     if (existing) return existing;
     const e: Edge = { id: eid, type: spec.type, from: spec.from, to: spec.to, attrs, valid, cause: spec.cause };
     if (spec.data !== undefined) e.data = spec.data;
@@ -644,7 +644,7 @@ export class Kernel {
 
   endEdge(id: Id, at: GameTime = this.now): void {
     this.assertWritable();
-    const e = this.store.edges.get(id);
+    const e = this.persistence.restoreEdge(id);
     if (!e) throw new Error(`unknown edge: ${id}`);
     if (e.valid.to !== undefined && e.valid.to <= at) return;
     e.valid = { from: e.valid.from, to: at };
@@ -660,7 +660,7 @@ export class Kernel {
    */
   reopenEdge(id: Id, at: GameTime = this.now, attrs?: Record<string, Value>): Edge {
     this.assertWritable();
-    const e = this.store.edges.get(id);
+    const e = this.persistence.restoreEdge(id);
     if (!e) throw new Error(`unknown edge: ${id}`);
     if (e.valid.to === undefined || e.valid.to > at) throw new Error(`the edge is not ended: ${id}`);
     const def = this.schema.edgeType(e.type);
@@ -681,7 +681,7 @@ export class Kernel {
   /** Change an edge's attributes or data in place (a membership's strength or obligations, spec 10.8). */
   updateEdge(id: Id, patch: { attrs?: Record<string, Value>; data?: Record<string, unknown> }): Edge {
     this.assertWritable();
-    const e = this.store.edges.get(id);
+    const e = this.persistence.restoreEdge(id);
     if (!e) throw new Error(`unknown edge: ${id}`);
     const def = this.schema.edgeType(e.type);
     for (const [k, v] of Object.entries(patch.attrs ?? {})) {

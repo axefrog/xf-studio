@@ -1333,8 +1333,11 @@ and have saved headers for every target, with none of those targets still live. 
 contributions whose target headers were never saved, and general rules stay live. In particular an
 authored rule's applicability is independent of its origin header's lifetime; sweeping that origin
 cannot delete a rule needed by a retained target. These retained records do not become retention roots.
-Unsaved contributions are conservatively kept: the kernel cannot prove that a layer will regenerate
-their entire record exactly. Re-creation completes saved replay first, including ends and provenance;
+Unsaved contributions and event-owned edges are conservatively kept: the kernel cannot prove that a layer will regenerate
+their entire records exactly. Edge disposal requires an exact saved record and saved endpoint headers.
+Pending interval or attribute/data changes stay live. Ownership of an unsaved event location survives
+its swept header as non-rooting retention metadata, included in staged capture/discard and cleared on load.
+Re-creation completes saved replay first, including ends and provenance;
 an original event specification never reopens an ended saved contribution.
 
 `test/sweep-replay.test.ts` covers S3H-01's 16 variants (both event APIs, incremental/snapshot saves,
@@ -1343,22 +1346,55 @@ four variants, with twelve controls, explicit known-live-header recovery and lat
 and S3H-03's two variants, with named, unsaved and no-sweep controls and repeated fresh loads. Additional
 fixtures check silent header re-mints and selection of the loaded branch before reconciliation.
 The bounded property test runs eight deterministic seeds in both snapshot modes, 48 operations each
-(768 total), with random sweeps, releases, re-references, contribution/edge ends, both regenerations,
-time advances, saves and fresh loads. After every operation it compares retained closure, owned facts,
-intervals, authored rules and resolved values; every random save also compares whole records. It includes
-an authored fact on a never-saved header. Physical residency is intentionally excluded: replay may hold
-unreferenced saved history that live execution has already swept. Coverage assertions require all eight
-operation kinds, over 100 random saves and over 50 random fresh loads. The earlier S3C–G regressions,
-monotonicity, root order and non-rooting history remain in `test/process-evidence.test.ts`; query-first
-checks now also require saved materialisation ownership to recover during regeneration. Mutation probes
-target the partial-live-record fixture where regeneration's additional recovery makes the old
-query-first short-circuit probes redundant, and reverse all three S3H fixes independently.
+(768 total), against three independent executions: unswept control, swept live state and swept state
+with random fresh loads. Its 17 operation kinds include original contribution re-submissions without
+Ids, contribution and edge ends immediately after release/sweep, edge reopening and updates, and
+header-first regeneration through both event APIs. It also releases, sweeps and regenerates a saved
+summary item with explicit materialisation provenance. There are no preparatory recovery calls.
+Before every save can traverse retention, a read-only observer walks consumer roots, every owned
+header and member, origin links and Id-valued constants; it compares all headers, contributions and
+validity, edges and intervals/data, pins, causes, provenance and authored general rules. Spatial queries
+at four times compare every result in that consumer closure. Observation asserts that table sizes,
+revision and provenance do not change; it calls neither `marked()`, `address()` nor resolution.
+Unreferenced physical residency is excluded: a fresh load may hold saved history that a sweep removed,
+and never-saved unreferenced simulation facts require their author to regenerate the original payload.
+Whole records agree at every random save and after the final fresh load. Extended bounds use
+`SWEEP_SEEDS`, `SWEEP_FIRST_SEED` and `SWEEP_STEPS`; the default remains under about ten seconds.
+The earlier S3C-G regressions, monotonicity, root order and non-rooting history remain in
+`test/process-evidence.test.ts`. Mutation probes target the current disposal predicate and remove both
+header and direct-record recovery when reversing the earlier S3H regeneration fix.
 
-Validation: 25 sweep/replay tests (including the property), 88 earlier event-persistence tests, 15 retention
-tests, all 10 digest tests, all 56 source-loader mutation probes and `bun run check` pass. The unsaved-event
-retention fixture now expects unsaved contributions to remain live, as the third principle requires.
-Both frozen digests are unchanged. The guarded full suite was attempted twice with `--limit 4`; the
-machine-wide 4 GB floor stopped it while the job held 0.9 GB and 0.3 GB. The coordinator confirmed a kernel
-memory leak and requested no further retries before reboot; full-suite validation remains the coordinator's
-post-reboot check. No game session is needed. All changes are saved and uncommitted; no test logs were written
-in this worktree.
+**194. Recovery belongs inside record operations; event regeneration checks completeness (S3I).**
+`contribute` computes the original identity before replaying an absent saved contribution; identical
+re-submission returns its saved exclusive end. `endContribution` also recovers by identity. Edge add,
+end, reopen and update use the same selected-save recovery authority. The shared header-first replay
+installs only absent records and emits nothing; live ends, intervals, attributes and data remain
+current. Recovery by record identity restores its reached headers before the record, without requiring
+callers to recover a target or register a temporary retention seed.
+
+An event's surviving own constant proves only that constant exists. Regeneration checks the complete
+stored description, including participant/effect member fields and all list elements, and restores the
+spatial link using the original stored time/place. An ended or reopened edge is returned by identity,
+so regeneration cannot reopen or reset its interval. A complete event still ignores changed defaults.
+
+`test/sweep-operations.test.ts` keeps S3I-01's original-spec re-submission and direct-end reproductions
+in incremental/snapshot modes, with/without loading A. S3I-02 covers header-first regeneration against
+a fresh A load and ended-unsaved-interval preservation against an unswept control, through both event
+APIs and both snapshot modes. Extra regressions cover all four edge operations on physically swept
+saved edges, and regeneration with one missing member field and a missing edge. The unsaved-event
+retention fixture now checks that intervals stay live without rooting the missing header.
+
+The extended hunt passed 2,048 distinct seeds in both snapshot modes (4,096 scenarios), 196,608
+generated steps executed in all three runs, 49,052 random saves and 24,556 random fresh loads, plus
+initial/final loads. No additional divergence was found after S3I-01/02. It took 987.42 seconds and
+peaked at 0.3 GB under the 4 GB guard; the default property took 3.62 seconds. All 60 source-loader
+mutation probes reach their intended semantic assertions (four new S3I probes; guard peak 0.2 GB).
+`bun run check` and the 21 new operation regressions pass. The guarded full suite passes: 1,315 tests
+across 80 files, 191,483 assertions, zero failures, 208.55 seconds, peak 1.1 GB under `--limit 4`
+(overlapping the tail of the seed hunt on the shared machine). The earlier S3C-H regressions pass.
+Both frozen digests remain unchanged: v3 `f924d2c9d1159bca85bbfa4cf18dba6c`, v4
+`42d5a84e16dde21cc0bca7fe50c01d72`; no golden or transcript was edited. Neither script contains the
+post-sweep direct-record writes or incomplete unsaved-event regeneration fixed here. Changed-file
+link/privacy checks and `git diff --check` pass. No logs or scratch payloads were written in the worktree;
+its scoped final footprint is 0.110 GB. This is deterministic offline oracle evidence; no game session is
+needed. All changes remain uncommitted for the coordinator.

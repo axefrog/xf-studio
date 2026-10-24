@@ -81,7 +81,7 @@ export const probes: Probe[] = [
     saveEdge, '/* omit saved edge updates */'),
     file: 'test/process-evidence.test.ts' },
   { ...probe('S3C-02-sweep', 'S3C-02-sweep', 'src/retention.ts',
-    'if (!this.k.persistence.hasSavedEdge(e.id))', 'if (true)'), file: 'test/process-evidence.test.ts' },
+    'if (this.k.persistence.canSweepEdge(e))', 'if (true)'), file: 'test/process-evidence.test.ts' },
   { ...probe('S3D-01', 'S3D-01', 'src/persistence.ts',
     saveEdge,
     `merge(this.base.edges, cur.edges, (id) => {
@@ -118,7 +118,8 @@ export const probes: Probe[] = [
     'const have = k.persistence.restoreReferencedHeader(nid) !== undefined;',
     'const have = k.store.header(nid) !== undefined;'), file: 'test/sweep-replay.test.ts',
     also: [{ source: 'src/kernel.ts', from: 'if (this.persistence.restoreReferencedHeader(header.id)) return false;', to: '/* recreate without recovery */' },
-      { source: 'src/kernel.ts', from: 'this.persistence.restoreReferencedHeader(header.id);', to: '/* omit new live header recovery */' }] },
+      { source: 'src/kernel.ts', from: 'this.persistence.restoreReferencedHeader(header.id);', to: '/* omit new live header recovery */' },
+      { source: 'src/kernel.ts', from: 'const existing = this.persistence.restoreContribution(cid);', to: 'const existing = this.store.contribution(cid);' }] },
   { ...probe('S3H-02-cleanup', 'S3H-02', 'src/persistence.ts',
     'this.canSweepContribution(c)',
     "c.target.scope && 'nodes' in c.target.scope && c.target.scope.nodes.every((id) => !k.store.header(id))"), file: 'test/sweep-replay.test.ts' },
@@ -133,4 +134,16 @@ export const probes: Probe[] = [
     return saved !== undefined && !same(saved, c);
   }
   canSweepContribution(c: Contribution): boolean {` }] },
+  { ...probe('S3I-01-contribute', 'S3I-01', 'src/kernel.ts',
+    'const existing = this.persistence.restoreContribution(cid);', 'const existing = this.store.contribution(cid);'),
+    file: 'test/sweep-operations.test.ts' },
+  { ...probe('S3I-01-end', 'S3I-01-end', 'src/kernel.ts',
+    'const c = this.persistence.restoreContribution(id);', 'const c = this.store.contribution(id);'),
+    file: 'test/sweep-operations.test.ts' },
+  { ...probe('S3I-02-edge', 'S3I-02-header-first-mintEvent', 'src/retention.ts',
+    'if (this.k.persistence.canSweepEdge(e))', 'if (!this.k.persistence.savedHeader(e.from))'),
+    file: 'test/sweep-operations.test.ts' },
+  { ...probe('S3I-02-completeness', 'S3I completeness', 'src/events.ts',
+    'if (complete) {', "if (have && k.store.contributionsNaming(nid).some((c) => c.source.layer === 'simulation' && c.source.origin === nid)) return nid;\n    if (complete) {"),
+    file: 'test/sweep-operations.test.ts' },
 ];

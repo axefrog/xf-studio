@@ -167,13 +167,15 @@ describe('roots, marks and forgetting (spec 7.3, I-3)', () => {
     const snapshot = () => [k.value(e, 'time'), k.value(e, 'kind'), k.value(e, 'place'), k.value(member, 'who'), k.value(member, 'role')];
     const before = snapshot();
     const facts = structuredClone(k.store.contributionsOrigin(e));
+    const edges = structuredClone(k.store.edgesFrom(e));
     expect(k.retention.isRetained(e)).toBe(false);
     k.retention.scheduleSweep();
     k.settle();
     expect(k.store.header(e)).toBeUndefined();
     expect(k.store.header(member)).toBeUndefined();
     expect(k.store.contributionsOrigin(e), 'unsaved records cannot be recovered from the save chain').toEqual(facts);
-    expect(k.store.edgesFrom(e)).toHaveLength(0);
+    expect(k.store.edgesFrom(e), 'unsaved intervals cannot be recovered from the save chain').toEqual(edges);
+    expect(k.retention.isRetained(e), 'preserved ownership never roots the swept event').toBe(false);
     expect(k.resolve(e, 'time')).toEqual({ status: 'unavailable' });
     expect(k.events.mintEvent(spec)).toBe(e);
     expect(snapshot()).toEqual(before);

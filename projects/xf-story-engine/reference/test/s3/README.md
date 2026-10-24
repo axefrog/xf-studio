@@ -92,12 +92,22 @@ absent. All 18 S3G test bodies reproduced the prior defects. `sweep-replay.test.
 S3H-02's four variants and S3H-03's two variants, with no-sweep, reference-first, saved/unsaved-header and
 general/named-rule controls. Re-mints recover saved ends before defaults, known live headers can recover saved
 contributions without a saved header, and authored general rules survive their origin's sweep. Silent header
-recovery and selected-branch reconciliation have separate fixtures. The bounded property test checks live versus
-randomly reloaded state after 768 generated operations in both snapshot modes, including contribution/edge ends
-and an authored contribution whose target header was never saved. Every random save compares complete records.
-All 56 S3/review mutation probes pass their rejection checks; the S3H probes reverse regeneration recovery, cleanup,
-known-live-header recovery and general-rule preservation. Redundant query-first probes now target partial live
-records, because query regeneration itself performs recovery.
+recovery and selected-branch reconciliation have separate fixtures. The bounded property test checks unswept control, swept live execution and swept execution with random fresh
+loads after every one of 768 generated operations (eight seeds, both snapshot modes). Its 17 operations include
+original contribution re-submissions, post-release/sweep contribution/edge ends, edge reopening/updating,
+header-first event regeneration and summary-item recovery with explicit provenance. Observation reads the complete
+consumer/owned closure and spatial-query results without calling retention traversal, address creation or recovery;
+table-size, revision and provenance assertions reject observation that repairs state. Every random save compares
+complete records. Never-saved unreferenced simulation payloads require their author's original specification.
+`sweep-operations.test.ts` adds S3I-01 re-submission/direct-end and S3I-02 unsaved spatial-link/ended-interval
+regressions, all four edge operations on swept saved edges, and partial-owned-tree completion. The source-loader
+mutation probes reverse both record-recovery routes, edge disposal and the completeness test, alongside earlier
+S3C-H defects. All 60 probes reject their intended semantic mutations; `bun run check` passes.
+The extended hunt passed 2,048 seeds in both snapshot modes, 196,608 generated steps in three executions,
+49,052 random saves and 24,556 random fresh loads, with no further divergence (987.42 seconds, 0.3 GB peak
+under the 4 GB guard). The default 768-step property took 3.62 seconds. The guarded full suite passes:
+1,315 tests across 80 files, zero failures, 208.55 seconds, 1.1 GB peak (shared-machine run overlapping
+the hunt's tail). Frozen kernel digests and the S1 transcript are unchanged.
 The S1 generated partition/reload comparison remains unchanged and checks that saved updates do not leak into the
 retention-selected live-state view.
 

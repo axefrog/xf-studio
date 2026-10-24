@@ -181,7 +181,14 @@ export class Events {
     const have = k.persistence.restoreReferencedHeader(nid) !== undefined;
     if (!have) k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
     if (provenance) this.setMaterialisation(nid, provenance);
-    if (have && k.store.contributionsNaming(nid).some((c) => c.source.layer === 'simulation' && c.source.origin === (provenance?.materialisation ?? nid))) return nid;
+    // A surviving constant proves only that constant exists. Check the complete owned payload,
+    // including member fields, and repair the spatial link from the original stored description.
+    const complete = have ? this.mintedSpec(nid, provenance ? { descriptor: spec, provenance } : undefined) : undefined;
+    if (complete) {
+      if (!provenance && complete.place !== undefined) k.addEdge({ type: 'core:located-in', from: nid,
+        to: complete.place, cause: nid, valid: { from: complete.time }, silent: true });
+      return nid;
+    }
     // a pin that survived a load may already restate the kind or the time: then what the event was minted with is not what it resolves to, and nothing is cached
     const untouched = k.store.localState(nid) === 0;
     const put = (node: Id, slot: SlotPath, value: Value): void => {

@@ -116,14 +116,18 @@ A or sweeping before B. S3G-01 covers all 16 release/end variants, both operatio
 S3G-02 covers swept descriptor/item recovery in both root orders, incremental/snapshot records and fresh B loads.
 S3H-01 covers all 16 re-mint/restore variants with saved terminations; S3H-02 covers four never-saved-header cleanup
 variants and recovery against known live headers; S3H-03 covers both general-authored-rule variants. Each has controls.
-Sweep and post-save cleanup drop only exact recoverable contributions, independently of the origin's lifetime.
-Header re-creation replays saved facts before defaults, and load selects its recovery baseline before reconciliation.
-The bounded sweep/replay property test compares retained semantic state after every one of 768 generated operations,
-with random saves and fresh loads in both snapshot modes. All 56 source-loader mutation probes reach their intended
-semantic assertions; `bun run check` passes. The preceding guarded full-suite baseline was **1,269 tests across 78 files
-in 95.44 seconds**, peaking at **1.1 GB** under the 4 GB limit. The expanded run hit the machine-wide floor twice
-(0.9 GB and 0.3 GB in the test job); the coordinator confirmed a kernel memory leak, requested no further retries,
-and will run the full suite after reboot. Focused S3H, earlier event-persistence, retention and digest tests pass.
+Sweeps and post-save cleanup drop only exactly recoverable contributions; event-edge disposal uses the same rule.
+Unsaved intervals and pending updates survive without becoming roots. Contribution re-submission/end and edge
+add/end/reopen/update recover saved identities inside their public APIs. Event regeneration checks its complete
+owned payload and spatial link, preserving saved terminations and current live updates.
+The bounded sweep/replay property now runs three executions (unswept, swept, swept with fresh loads), with 17
+operation kinds, complete consumer/owned closure and provenance comparisons, side-effect checks on observation,
+and spatial queries. Its default eight seeds in both snapshot modes run 768 generated operations in under about
+10 seconds. The extended hunt passed 2,048 seeds in both modes (196,608 steps in three executions), with
+49,052 random saves and 24,556 random fresh loads, finding no further divergence (987.42 seconds, 0.3 GB peak).
+All 60 source-loader mutation probes reject their intended semantic mutations and `bun run check` passes.
+The guarded full suite passes: **1,315 tests across 80 files, zero failures, 208.55 seconds, 1.1 GB peak** under
+`--limit 4` (overlapping the hunt's tail on the shared machine), including earlier S3C-H regressions. The additional S3I reproductions live in `test/sweep-operations.test.ts`.
 Kernel digests stay at v3 `f924d2c9d1159bca85bbfa4cf18dba6c` and v4
 `42d5a84e16dde21cc0bca7fe50c01d72`; the S1 frozen transcript is unchanged. The S3 transcript checks independently encoded identities and draws, plus explicit
 persisted records. Hand-over facts, pending closure consumption and output-batch event facts survive replacement loads;
