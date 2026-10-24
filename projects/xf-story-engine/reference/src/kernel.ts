@@ -173,6 +173,8 @@ export class Kernel {
   readonly loadHooks: Array<(rec: SaveRecord, report: LoadReport) => void> = [];
   /** Committed edge changes, in write order. Layer-owned history waits for a staged commit and is dropped with a discard. */
   readonly edgeHooks: Array<(edge: Readonly<Edge>, ended: boolean) => void> = [];
+  /** Mirrored readings at application, before later writes or deferred relevance dispatch can hide intermediate values. */
+  readonly readingHooks: Array<(node: Id, slot: SlotPath) => void> = [];
 
   /** The effect conflict table in force (spec 10.8): a registry function owned by S1. */
   conflictTable: FnRef = CONFLICT_TABLE;
@@ -233,6 +235,11 @@ export class Kernel {
     else this.pending.push(pc);
     if (snapshot.c === 'edge' && this.edgeHooks.length) {
       const notify = () => { for (const hook of this.edgeHooks) hook(snapshot.edge, snapshot.ended); };
+      if (this.batch) this.batch.after.push(notify);
+      else notify();
+    }
+    if (snapshot.c === 'reading' && this.readingHooks.length) {
+      const notify = () => { for (const hook of this.readingHooks) hook(snapshot.node, snapshot.slot); };
       if (this.batch) this.batch.after.push(notify);
       else notify();
     }

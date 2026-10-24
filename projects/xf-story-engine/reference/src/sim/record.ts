@@ -19,11 +19,10 @@ export interface S1Record {
   dirty: Array<{ carrier: Id; subject: Id; axis: string; seq: number }>;
   /** By "believer|subject": transitions of the `divergence` read, at most 8. */
   divLog: Record<string, Array<{ t: GameTime; value: 'none' | 'small' | 'large'; ord: number }>>;
-  /** A persistent sequence shared by every divergence pair; ord is never a pair-local array index. */
-  divSeq: number;
-  /** Tie boundary changes share a persistent sequence across all pairs. */
+  /** The next ordinal across process publications, divergence and tie validity changes (S2 4.2). */
+  ord: number;
+  /** Tie validity boundaries, retained as long as their intervals (and the coverage floor) are answerable. */
   tieLog: Record<Id, Array<{ t: GameTime; value: 'yes' | 'no'; ord: number }>>;
-  tieSeq: number;
   /** By "believer|subject": the time before which the retained transitions say nothing, once the oldest has been dropped (SIM-08). */
   divFloor: Record<string, GameTime>;
   /** Tie threads a retract has switched off. */
@@ -89,7 +88,7 @@ export interface TieRecord {
 }
 
 export function emptyRecord(): S1Record {
-  return { v: 1, absorbed: {}, dirty: [], divLog: {}, divSeq: 0, tieLog: {}, tieSeq: 0, divFloor: {}, softExcluded: [], log: [], seq: 0, dirtySeq: 0, tells: [], tieHistory: {}, protect: {}, evidence: {} };
+  return { v: 1, absorbed: {}, dirty: [], divLog: {}, ord: 0, tieLog: {}, divFloor: {}, softExcluded: [], log: [], seq: 0, dirtySeq: 0, tells: [], tieHistory: {}, protect: {}, evidence: {} };
 }
 
 /** A record as a save holds it, with every field a newer version added filled in. */

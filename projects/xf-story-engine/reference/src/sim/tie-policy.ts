@@ -144,23 +144,44 @@ export class TiePolicy {
   noteEdge(edge: Readonly<Edge>, ended: boolean): void {
     if (edge.type !== 'xf:tie') return;
     const log = (this.sim.record.tieLog[edge.id] ??= []);
-    const push = (t: GameTime, value: 'yes' | 'no') => log.push({ t, value, ord: this.sim.record.tieSeq++ });
-    if (!ended) push(edge.valid.from, 'yes');
-    if (edge.valid.to !== undefined) push(edge.valid.to, 'no');
-    while (log.length > 64) log.shift();
+    const push = (t: GameTime, value: 'yes' | 'no') => log.push({ t, value, ord: this.sim.record.ord++ });
+    // Attribute writes restate the same validity: they neither allocate nor evict a boundary.
+    let start = log.length - 1;
+    while (start >= 0 && log[start]!.value !== 'yes') start--;
+    const opening = log[start];
+    if (!opening || opening.t !== edge.valid.from) push(edge.valid.from, 'yes');
+    if (!opening || opening.t !== edge.valid.from) start = log.length - 1;
+    const end = log[start + 1];
+    if (end?.t !== edge.valid.to) {
+      // A scheduled end is still the kernel's. Replace its superseded boundary, keeping the opening's ordinal.
+      log.splice(start + 1);
+      if (edge.valid.to !== undefined) push(edge.valid.to, 'no');
+    }
+    this.pruneLog(edge.from, edge.to);
+    void ended;
+  }
+
+  private pruneLog(a: Id, b: Id): void {
+    const id = tieEdgeId(a, b), spans = this.intervalsOf(a, b), floor = this.coverageFloor(a, b);
+    if (!this.sim.record.tieLog[id]) return;
+    this.sim.record.tieLog[id] = this.sim.record.tieLog[id]!.filter((e) =>
+      e.value === 'no' && e.t === floor || spans.some((s) => (e.value === 'yes' ? s.from : s.to) === e.t));
   }
 
   transitionsOf(a: Id, b: Id): Array<{ t: GameTime; value: 'yes' | 'no'; ord: number }> {
     const spans = this.intervalsOf(a, b);
     // An edge's scheduled future end can be shortened; its superseded boundary must not be replayed.
-    return (this.sim.record.tieLog[tieEdgeId(a, b)] ?? []).filter((e) => spans.some((s) => (e.value === 'yes' ? s.from : s.to) === e.t));
+    const floor = this.coverageFloor(a, b);
+    return (this.sim.record.tieLog[tieEdgeId(a, b)] ?? []).filter((e) =>
+      e.value === 'no' && e.t === floor || spans.some((s) => (e.value === 'yes' ? s.from : s.to) === e.t));
   }
 
   /** A save is about to drop the ended ties: their intervals go into the record first. */
   captureSpans(): void {
     for (const e of this.k.store.allEdges()) {
-      if (e.type !== 'xf:tie' || e.valid.to === undefined) continue;
+      if (e.type !== 'xf:tie' || e.valid.to === undefined || e.valid.to > this.k.now) continue;
       this.addSpan(this.record(e.from, e.to), e.valid.from, e.valid.to);
+      this.pruneLog(e.from, e.to);
     }
   }
 

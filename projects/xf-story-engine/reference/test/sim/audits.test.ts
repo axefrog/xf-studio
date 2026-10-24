@@ -229,14 +229,14 @@ describe('SF1-Q-2: the audits catch', () => {
       'const x = `${/[}]/.test(value) ? Math.exp(1) : 0}`;',
       'const x = `${/[{}]/.test(value) ? `${Math.random()}` : ""}`;',
       'const x = `${/\\/\\//.test(value) ? Math.random() : 0}`;',
-    ]) expect(lintSources([{ path: 'proc-stocks.ts', text }]).some((f) => ['arithmetic', 'no-load-reads'].includes(f.audit)), text).toBe(true);
+    ]) expect(lintSources([{ path: 'proc-stocks.ts', text }]).some((f) => ['arithmetic', 'no-load-reads'].includes(f.audit)), 'R3-08 semantic: executable interpolation must be audited').toBe(true);
     expect(lintSources([{ path: 'proc-stocks.ts', text: 'const x = /Math.random\\(\\)/.test(value);' }])).toEqual([]);
   });
 
   test('R3-09: unrelated calls, dead conjuncts, non-rejecting branches and displaced guards cannot replace either policy guard', () => {
     const real = files.find((f) => f.path === 'policies.ts')!;
     const disabled = real.text.replace(/ev\.kind\.startsWith\('meta:'\)/g, 'false') + "\nconst unrelated = ''.startsWith('meta:') && ''.startsWith('meta:');";
-    expect(lintSources([{ ...real, text: disabled }]).filter((f) => f.audit === 'meta-inert').map((f) => f.where)).toEqual(['policies.ts:heardEvent', 'policies.ts:absorb']);
+    expect(lintSources([{ ...real, text: disabled }]).filter((f) => f.audit === 'meta-inert').map((f) => f.where), 'R3-09 semantic: both methods need rejecting guards').toEqual(['policies.ts:heardEvent', 'policies.ts:absorb']);
     for (const text of [
       real.text.replaceAll("ev.kind.startsWith('meta:')", "false && ev.kind.startsWith('meta:')"),
       real.text.replace("if (ev.kind.startsWith('meta:')) return;", "if (ev.kind.startsWith('meta:')) { const ignored = true; }"),

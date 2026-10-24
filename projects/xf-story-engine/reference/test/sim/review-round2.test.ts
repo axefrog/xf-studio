@@ -34,9 +34,9 @@ test('R3-01: opened summary evidence retains original fields and provenance thro
   expect(sim.record.evidence[pub.item]!.provenance).toEqual({ descriptor: pub.summary, materialisation: 'scene.acts' });
   sim.k.persistence.load('A');
   sim.startAt(105);
-  expect(sim.policies.viewEvent(pub.item)).toEqual(before);
+  expect(sim.policies.viewEvent(pub.item), 'R3-01 semantic: restored materialisation matches the original').toEqual(before);
   const fields = sim.k.store.contributionsNaming(pub.item);
-  expect(fields.find((c) => c.target.slot === 'kind' && c.source.layer === 'simulation')!.source.origin).toBe(pub.summary);
+  expect(fields.some((c) => c.target.slot === 'kind' && c.source.layer === 'simulation')).toBe(false);
   expect(fields.find((c) => c.target.slot === 'participants#count')!.source.origin).toBe('scene.acts');
   sim.k.persistence.save('B');
   sim.k.persistence.load('B');
@@ -53,7 +53,7 @@ test('R3-02: future-ended protection is capped at the save, and future or empty 
   sim.k.addEdge({ type: 'core:cast', from: seed, to: future, cause: seed, valid: { from: 900, to: 6000 } });
   sim.advance(1);
   sim.k.persistence.save('A');
-  expect(sim.record.protect[person]).toEqual([{ from: 0, to: 600 }]);
+  expect(sim.record.protect[person], 'R3-02 semantic: protection stops at the save time').toEqual([{ from: 0, to: 600 }]);
   expect(sim.record.protect[future]).toBeUndefined();
   sim.k.persistence.load('A');
   sim.k.endEdge(e.id, 1200);
@@ -74,7 +74,7 @@ test('R3-04: transitive ancestor rules invalidate warm resident and block caches
   expect(sim.people.view(resident)!.age).toBeGreaterThan(25);
   sim.k.pin({ node: cell, slot: 'position', value: [1, 2, 3], reason: 'authored', cause });
   expect(sim.k.value(resident, 'age')).toBe(17);
-  expect(sim.people.view(resident)!.age).toBe(17);
+  expect(sim.people.view(resident)!.age, 'R3-04 semantic: resident cache sees the transitive change').toBe(17);
   sim.people.cacheOn = false;
   expect(sim.people.view(resident)!.age).toBe(17);
 });
@@ -97,7 +97,7 @@ test('R3-05: applied, ownOf and outstanding process states have independent nest
   sim.setState('city.events', (s) => (s as EventsState).ring.push({ id: cause, w: 0, cell, kind: 'theft', count: 1 }));
   sim.advance(1);
   sim.setState('city.events', (s) => { (s as EventsState).ring[0]!.count!++; });
-  expect(sim.stateOf<EventsState>('city.events')!.ring[0]!.count).toBe(2);
+  expect(sim.stateOf<EventsState>('city.events')!.ring[0]!.count, 'R3-05 semantic: process ring records are independent').toBe(2);
   const own = sim.k.evolution.ownOf<EventsState>(sim.defs.get('city.events')!)!;
   own.ring[0]!.count = 99;
   expect(sim.stateOf<EventsState>('city.events')!.ring[0]!.count).toBe(2);
@@ -113,7 +113,7 @@ test('R3-06: a queued contribution snapshots its nested form, selector and sourc
   c.form.value = 99;
   c.target.slot = 'name';
   c.source.origin = 'changed';
-  expect(queued.contribution.form).toEqual({ f: 'const', value: 20 });
+  expect(queued.contribution.form, 'R3-06 semantic: contribution snapshot changed').toEqual({ f: 'const', value: 20 });
   expect(queued.contribution.target).toEqual({ slot: 'age', scope: { nodes: [person] } });
   expect(queued.contribution.source.origin).toBe(cause);
 });
@@ -145,7 +145,7 @@ test('R3-03b: independent divergence pairs retain one global order through reloa
   believe(a!, 'yes');
   believe(b!, 'no');
   const read = (subject: Id) => sim.reads.port().transitions('divergence', [npc, subject], time - 1, time);
-  expect(read(a!)[1]!.ord).toBeLessThan(read(b!)[1]!.ord!);
+  expect(read(a!)[1]!.ord, 'R3-03b semantic: independent divergence pairs follow write order').toBeLessThan(read(b!)[1]!.ord!);
   reevaluate(l2, inst, [{ time, reason: 'test', change: { c: 'reading', node: a, slot: 'alive', at: time, value: 'yes' } as never }]);
   expect(inst.st.latches).toEqual([]);
   const before = [read(a!), read(b!)];
@@ -176,18 +176,19 @@ test('R3-07: tie transitions include the recovery at the history coverage floor'
   const args = [...pair!, 'xf:tie'];
   expect(sim.reads.eval('tied', args, floor - 1)).toBe('maybe');
   expect(sim.reads.eval('tied', args, floor)).toBe('no');
-  expect(sim.reads.transitions('tied', args, floor - 1, floor)).toEqual([{ t: floor - 1, value: 'maybe' }, { t: floor, value: 'no' }]);
+  expect(sim.reads.transitions('tied', args, floor - 1, floor), 'R3-07 semantic: recovery boundary is published').toEqual([{ t: floor - 1, value: 'maybe' }, { t: floor, value: 'no' }]);
 });
 
 test('R3-03c: feed order is persistent through eviction and quiet windows, and aliases share an ordinal', () => {
   const sim = quietSim('R3-03c');
-  const one = pushTransitions(undefined, 0, [{ key: 'x', t: 600, value: 'one', prev: 'zero' }], 2);
-  const two = pushTransitions(one, 1, [{ key: 'x', t: 1200, value: 'two', prev: 'one' }], 2);
+  // Published entries already carry the ordinal assigned by the application hook.
+  const one = pushTransitions(undefined, 0, [{ key: 'x', t: 600, value: 'one', prev: 'zero', ord: 9 }], 2);
+  const two = pushTransitions(one, 1, [{ key: 'x', t: 1200, value: 'two', prev: 'one', ord: 12 }], 2);
   const before = feedTransitions(sim, two, 'x', 'two', 1199, 1200)[1]!;
   const three = pushTransitions(two, 2, [], 2);
-  expect(feedTransitions(sim, three, 'x', 'two', 1199, 1200)[1]).toEqual(before);
+  expect(feedTransitions(sim, three, 'x', 'two', 1199, 1200)[1], 'R3-03c semantic: eviction cannot renumber a transition').toEqual(before);
   const quiet = pushTransitions(three, 3, [], 2);
-  const later = pushTransitions(quiet, 4, [{ key: 'x', t: 3000, value: 'three', prev: 'two' }], 2);
+  const later = pushTransitions(quiet, 4, [{ key: 'x', t: 3000, value: 'three', prev: 'two', ord: 23 }], 2);
   expect(feedTransitions(sim, later, 'x', 'three', 2999, 3000)[1]!.ord).toBeGreaterThan(before.ord!);
 });
 
@@ -208,14 +209,14 @@ test('R3-03d: independent tie boundaries retain write order, and discarded stage
   sim.k.endEdge(first.id, time);
   sim.tiePolicy.materialise(...pairs[1]!);
   const read = (p: [Id, Id]) => sim.reads.port().transitions('tied', [...p, 'xf:tie'], time - 1, time);
-  expect(read(pairs[0]!)[1]!.ord).toBeLessThan(read(pairs[1]!)[1]!.ord!);
+  expect(read(pairs[0]!)[1]!.ord, 'R3-03d semantic: independent ties follow write order').toBeLessThan(read(pairs[1]!)[1]!.ord!);
   const before = structuredClone(sim.record.tieLog);
-  const sequence = sim.record.tieSeq;
+  const sequence = sim.record.ord;
   const batch = sim.k.stage();
   batch.write((k) => k.addEdge({ type: 'xf:tie', from: residents[10]!, to: residents[11]!, cause }));
   batch.discard();
   expect(sim.record.tieLog).toEqual(before);
-  expect(sim.record.tieSeq).toBe(sequence);
+  expect(sim.record.ord).toBe(sequence);
   const orders = pairs.map(read);
   sim.k.persistence.save('ties');
   sim.k.persistence.load('ties');
@@ -235,5 +236,5 @@ test('R3-03e: one mirrored reading changes all affected divergence pairs atomica
   sim.divergence.noteReading(subject, 'alive');
   const logs = [a, b].map((who) => sim.reads.port().transitions('divergence', [who, subject], at - 1, at));
   expect(logs.map((log) => log[1]!.value)).toEqual(['none', 'large']);
-  expect(logs[0]![1]!.ord).toBe(logs[1]![1]!.ord!);
+  expect(logs[0]![1]!.ord, 'R3-03e semantic: aliases of a reading share one ordinal').toBe(logs[1]![1]!.ord!);
 });

@@ -113,8 +113,8 @@ function metaValue(input: ts.Expression, event: string): boolean | string | unde
   if (ts.isBinaryExpression(node)) {
     const a = metaValue(node.left, event), b = metaValue(node.right, event);
     switch (node.operatorToken.kind) {
-      case ts.SyntaxKind.BarBarToken: return a === true || b === true ? true : a === false ? b : b === false ? a : undefined;
-      case ts.SyntaxKind.AmpersandAmpersandToken: return a === false || b === false ? false : a === true ? b : b === true ? a : undefined;
+      case ts.SyntaxKind.BarBarToken: return a === undefined ? undefined : a ? a : b;
+      case ts.SyntaxKind.AmpersandAmpersandToken: return a === undefined ? undefined : a ? b : a;
       case ts.SyntaxKind.EqualsEqualsEqualsToken: return a !== undefined && b !== undefined ? a === b : undefined;
       case ts.SyntaxKind.ExclamationEqualsEqualsToken: return a !== undefined && b !== undefined ? a !== b : undefined;
     }
@@ -125,6 +125,18 @@ function returns(statement: ts.Statement): boolean {
   if (ts.isReturnStatement(statement)) return statement.expression === undefined;
   return ts.isBlock(statement) && statement.statements.length === 1 && returns(statement.statements[0]!);
 }
+/** Truthiness can be known when an operand's exact value is not: unknown || true always returns a truthy operand. */
+function metaTruth(input: ts.Expression, event: string): boolean | undefined {
+  const value = metaValue(input, event);
+  if (value !== undefined) return !!value;
+  const node = unwrap(input);
+  if (ts.isBinaryExpression(node)) {
+    const a = metaTruth(node.left, event), b = metaTruth(node.right, event);
+    if (node.operatorToken.kind === ts.SyntaxKind.BarBarToken) return a === true || b === true ? true : a === false ? b : undefined;
+    if (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return a === false || b === false ? false : a === true ? b : undefined;
+  }
+  return undefined;
+}
 function guardsMeta(file: ts.SourceFile, method: string): boolean {
   const methods: ts.MethodDeclaration[] = [];
   const visit = (node: ts.Node): void => {
@@ -134,7 +146,7 @@ function guardsMeta(file: ts.SourceFile, method: string): boolean {
   visit(file);
   if (methods.length !== 1) return false;
   const m = methods[0]!, param = m.parameters[0]?.name, first = m.body?.statements[0];
-  return !!param && ts.isIdentifier(param) && !!first && ts.isIfStatement(first) && metaValue(first.expression, param.text) === true && returns(first.thenStatement);
+  return !!param && ts.isIdentifier(param) && !!first && ts.isIfStatement(first) && metaTruth(first.expression, param.text) === true && returns(first.thenStatement);
 }
 
 export function lintSources(files: SourceFile[]): Finding[] {

@@ -31,16 +31,6 @@ export interface ReadTransition {
   ord?: number;
 }
 
-/**
- * The order the changes of different sources were made in at one time, as one number: the process feeds first, each in the order its process
- * wrote them (the batches of a boundary apply before its external operations, S0 9.4), then what the layer's own hooks logged (divergence),
- * then the intervals of materialised ties.
- */
-const FEED_RANK: Record<string, number> = { 'city.events': 0, 'group.decide': 1, 'order.ledger': 2, 'order.norms': 3 };
-const FEED_SPAN = 2 ** 48;
-export const ORD_DIVERGENCE = 10 * FEED_SPAN;
-export const ORD_TIES = 11 * FEED_SPAN;
-
 export interface S1Read {
   name: string;
   version: number;
@@ -56,17 +46,11 @@ const GAP_NAMES = ['aligned', 'gap', 'wide'] as const;
 const GROUP_GAP_NAMES = ['low', 'mid', 'high'] as const;
 
 /** The value of a keyed transition feed at `from`, and the changes in `(from, to]`; `maybe` when `from` is older than the feed (S1 9.1). */
-export function feedTransitions(sim: Sim, feed: Feed<Transition> | undefined, key: string, current: string, from: GameTime, to: GameTime, rank = 0): ReadTransition[] {
+export function feedTransitions(sim: Sim, feed: Feed<Transition> | undefined, key: string, current: string, from: GameTime, to: GameTime): ReadTransition[] {
   if (!feed || feed.windows.length === 0) return [{ t: from, value: MAYBE }];
   const W = sim.data.time.W;
   if (from < feed.windows[0]!.w * W) return [{ t: from, value: MAYBE }];
-  const all: Array<Transition & { ord: number }> = [];
-  // the position of an item in its feed, over every key, is the order the process wrote the changes in
-  let pos = 0;
-  for (const win of feed.windows) for (const tr of win.items) {
-    if (tr.key === key) all.push({ ...tr, ord: rank * FEED_SPAN + (tr.ord ?? pos) });
-    pos++;
-  }
+  const all = feed.windows.flatMap((win) => win.items.filter((tr) => tr.key === key));
   let initial = current;
   const firstAfter = all.find((x) => x.t > from);
   const lastBefore = [...all].reverse().find((x) => x.t <= from);
@@ -148,7 +132,7 @@ export class Reads {
       const kk = key(args);
       const cur = current(args);
       if (kk === undefined || cur === MAYBE) return [{ t: from, value: MAYBE }];
-      return feedTransitions(this.sim, feed(this.dg(digestId) as never), kk, cur, from, to, FEED_RANK[digestId] ?? 3);
+      return feedTransitions(this.sim, feed(this.dg(digestId) as never), kk, cur, from, to);
     };
     this.add({
       name, version: 1, deps,
@@ -241,20 +225,14 @@ export class Reads {
       transitions: (a, from, to) => {
         if (typeof a[0] !== 'string' || typeof a[1] !== 'string') return [{ t: from, value: MAYBE }];
         // the value changes where a materialised interval opens or closes (the implicit tie is a pure function of the pair, and never changes)
-        const at = new Set<number>();
         const floor = sim.tiePolicy.coverageFloor(a[0], a[1]);
-        if (floor !== undefined && floor > from && floor <= to) at.add(floor);
-        for (const s of sim.tiePolicy.intervalsOf(a[0], a[1])) {
-          if (s.from > from && s.from <= to) at.add(s.from);
-          if (s.to !== undefined && s.to > from && s.to <= to) at.add(s.to);
-        }
         const out: ReadTransition[] = [{ t: from, value: this.tiedAt(a[0], a[1], a[2], from) }];
         const logged = sim.tiePolicy.transitionsOf(a[0], a[1]).filter((x) => x.t > from && x.t <= to && (floor === undefined || x.t >= floor));
-        const boundaries = [...logged, ...[...at].filter((t) => !logged.some((x) => x.t === t)).map((t) => ({ t, value: this.tiedAt(a[0] as Id, a[1] as Id, a[2], t), ord: sim.record.tieSeq }))].sort((x, y) => x.t - y.t || x.ord - y.ord);
+        const boundaries = logged.sort((x, y) => x.t - y.t || x.ord - y.ord);
         const implicit = sim.ties.tie(a[0], a[1]);
         for (const e of boundaries) {
           const value = a[2] !== undefined && a[2] !== 'xf:tie' ? MAYBE : implicit?.tied ? 'yes' : e.value === 'no' && implicit === undefined ? MAYBE : e.value;
-          if (value !== out[out.length - 1]!.value) out.push({ t: e.t, value, ord: ORD_TIES + e.ord });
+          if (value !== out[out.length - 1]!.value) out.push({ t: e.t, value, ord: e.ord });
         }
         return out;
       },

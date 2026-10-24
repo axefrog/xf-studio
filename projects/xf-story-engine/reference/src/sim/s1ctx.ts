@@ -8,7 +8,7 @@ import type { SettingsEntry } from '../settings.ts';
 import type { GameTime, Id, Tier } from '../types.ts';
 import type { S1Data } from './data.ts';
 import { type ProcessKeys, processKeys } from './keys.ts';
-import type { GateResult, LogDraft, Occurrence } from './occ.ts';
+import type { Feed, GateResult, LogDraft, Occurrence, Transition } from './occ.ts';
 import type { S1Record } from './record.ts';
 import type { Sim } from './sim.ts';
 
@@ -17,7 +17,7 @@ import type { Sim } from './sim.ts';
  * a save made under another version opens read-only instead of resuming old state under new code.
  */
 export const PROCESS_VERSIONS: Record<string, number> = {
-  'city.events': 2, 'group.decide': 2, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 2, 'order.norms': 2, 'scene.acts': 1,
+  'city.events': 3, 'group.decide': 3, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 3, 'order.norms': 3, 'scene.acts': 1,
 };
 
 export type CoarseFine = { kind: 'exact' } | { kind: 'count' } | { kind: 'distribution'; tolerance: string };
@@ -86,6 +86,12 @@ export function toProcessDef<S, D>(sim: Sim, p: S1Process<S, D>): ProcessDef {
     ...(p.demandLookback ? { demandLookback: p.demandLookback } : {}),
     init: () => p.init(sim),
     ...(p.cloneState ? { cloneState: (state: unknown) => p.cloneState!(state as S) } : {}),
+    applied(digest) {
+      const changes = (digest as { changes?: Feed<Transition> } | undefined)?.changes;
+      for (const win of changes?.windows ?? []) for (const tr of win.items) {
+        if (tr.ord === undefined) tr.ord = sim.record.ord++;
+      }
+    },
     run(pctx: ProcessCtx, k: number): ProcessResult {
       const logs: LogDraft[] = [];
       const T = pctx.windowStart;

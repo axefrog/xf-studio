@@ -80,7 +80,8 @@ bun test
 bun x tsc --noEmit
 ```
 
-The default profile declares 1,072 tests after the second review-fix round; its guarded full run and timing remain pending.
+The third review-fix round adds ten focused A1 regressions, with 23 mutation probes that must reach their intended semantic assertions;
+the guarded full run and timing remain the coordinator's check.
 The preceding measured baseline was 1,058 tests in about 83 seconds. Run the full suite under the repository memory guard
 with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
 
@@ -89,8 +90,9 @@ with a 4 GB limit, using the full Python interpreter path as the repository rule
 ```
 
 `S1_FULL=1` restores the specification's long fixtures, the additional uninterrupted 1,008-window replay, and cold checks of all
-10,000 tie pairs. Run that profile under the same guard. The round-2 regression mutation check is
-`bun run test/sim/check-review-mutations.ts`: it substitutes the pre-fix modules in memory and requires each new regression to fail.
+10,000 tie pairs. Run that profile under the same guard. The regression mutation check is
+`bun run test/sim/check-review-mutations.ts` (optionally followed by one probe name, such as `R3-06`): it changes only the targeted
+behaviour in memory and requires failure at the named semantic assertion. Setup and import failures are rejected as evidence.
 
 ## Layout
 

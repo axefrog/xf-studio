@@ -120,6 +120,8 @@ export interface ProcessDef {
    * must be one the process can change without the applied state changing. Absent: a structured clone.
    */
   cloneState?(state: unknown): unknown;
+  /** Observe a digest at its actual publication point, before another batch or external operation applies. */
+  applied?(digest: unknown): void;
   run(ctx: ProcessCtx, k: number): ProcessOp[] | ProcessResult;
 }
 
@@ -307,7 +309,10 @@ export class Evolution {
       // The state and the digest the batch carries replace the process's own, atomically with its operations
       // (V4-35, V4-36); a batch without one leaves it alone.
       if ('state' in d.batch) d.state.state = d.batch.state;
-      if ('digest' in d.batch) d.state.digest = d.batch.digest;
+      if ('digest' in d.batch) {
+        d.state.digest = d.batch.digest;
+        d.def?.applied?.(d.state.digest);
+      }
       d.state.outstanding = d.state.outstanding.filter((x) => x !== d.batch);
     }
     // The Ids the outstanding batches name are retention roots (SPEC-NOTES 33), so a batch leaving them changes

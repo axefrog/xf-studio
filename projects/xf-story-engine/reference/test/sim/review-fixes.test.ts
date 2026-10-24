@@ -153,7 +153,7 @@ describe('SIM-01: a closing condition sees every value a read passed through, th
     for (const swap of [false, true]) {
       const a = { city: { regime: { scope: 'fx_d1' } }, is: ['none'] };
       const b = { city: { regimeIs: { scope: 'fx_d1', kind: 'festival' } }, is: ['yes'] };
-      expect(run(`R3-03a-${swap}`, { all: swap ? [b, a] : [a, b] } as never, true).inst.st.latches).toEqual([]);
+      expect(run(`R3-03a-${swap}`, { all: swap ? [b, a] : [a, b] } as never, true).inst.st.latches, 'R3-03a semantic: regime aliases must change atomically').toEqual([]);
       const both = { all: [a, { ...b, is: ['no'] }] } as never;
       expect(run(`R3-03a-positive-${swap}`, both, true).inst.st.latches).toEqual(['w']);
     }

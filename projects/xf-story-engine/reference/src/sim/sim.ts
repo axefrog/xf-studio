@@ -103,6 +103,7 @@ export class Sim {
       for (const e of entries as LogDraft[]) appendLog(this.record, e, this.data.log.max);
     });
     this.k.beliefs.onChange.push((believer, subject) => this.divergence.noteBelief(believer, subject));
+    this.k.readingHooks.push((node, slot) => this.divergence.noteReading(node, slot));
     this.k.edgeHooks.push((edge, ended) => this.tiePolicy.noteEdge(edge, ended));
     this.k.saveHooks.push(() => this.flush());
     this.k.loadHooks.push((rec, report) => this.onLoad(rec, report));
@@ -232,7 +233,7 @@ export class Sim {
     }
     // a save the kernel opened read-only (a function it needs is missing) is looked at and not written: nothing here may write (SIM-12)
     if (this.k.readOnly) return;
-    // Old logs have no cross-pair order to recover. Guessing one would create a different oracle; keep those saves inspectable only.
+    // Old logs have no shared chronology to recover. Guessing one would create a different oracle; keep those saves inspectable only.
     const unorderedDivergence = Object.values(this.record.divLog).some((list) => list.some((e) => !Number.isSafeInteger(e.ord)));
     const unorderedFeeds = [...this.defs.keys()].some((id) => {
       const digest = this.k.evolution.digestPeek<{ changes?: { windows: Array<{ items: Array<{ ord?: number }> }> } }>(id);

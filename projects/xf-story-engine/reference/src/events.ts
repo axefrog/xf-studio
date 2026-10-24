@@ -154,16 +154,20 @@ export class Events {
     const untouched = k.store.localState(nid) === 0;
     const put = (node: Id, slot: SlotPath, value: Value): void => {
       k.contribute({
-        source: { layer: 'simulation', origin: provenance ? (node === nid && ['time', 'kind', 'place'].includes(slot) ? provenance.descriptor : provenance.materialisation) : nid },
+        source: { layer: 'simulation', origin: provenance?.materialisation ?? nid },
         target: { slot, scope: { nodes: [node] } },
         form: { f: 'const', value },
         mode: 'constrain',
         silent: true,
       });
     };
-    put(nid, 'time', spec.time);
-    put(nid, 'kind', spec.kind);
-    if (spec.place !== undefined) put(nid, 'place', spec.place);
+    // Summary items keep their live descriptor dependency through Summaries.itemConstraint.
+    // Only their materialisation is restored here; constants would override a later summary edit.
+    if (!provenance) {
+      put(nid, 'time', spec.time);
+      put(nid, 'kind', spec.kind);
+      if (spec.place !== undefined) put(nid, 'place', spec.place);
+    }
     const participants = spec.participants ?? [];
     put(nid, 'participants#count', participants.length);
     participants.forEach((p, i) => {
@@ -186,10 +190,10 @@ export class Events {
     causes.forEach((c, i) => put(nid, `causes[${i}]`, c));
     if (spec.outcome !== undefined) put(nid, 'outcome', spec.outcome);
     if (spec.served !== undefined) put(nid, 'served', spec.served);
-    if (spec.place !== undefined && k.store.header(spec.place)) {
+    if (!provenance && spec.place !== undefined && k.store.header(spec.place)) {
       k.addEdge({ type: 'core:located-in', from: nid, to: spec.place, cause: nid, valid: { from: spec.time }, silent: true });
     }
-    if (untouched) this.minted.set(nid, { kind: spec.kind, time: spec.time, local: k.store.localState(nid) });
+    if (untouched && !provenance) this.minted.set(nid, { kind: spec.kind, time: spec.time, local: k.store.localState(nid) });
     else this.minted.delete(nid);
     k.bump();
     if (have || quiet) return nid;

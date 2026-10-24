@@ -846,8 +846,8 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
     refused at compile as "not supported yet", as is every read when no port is attached. A read's `deps` become the instance's
     interests; a dependency that names no kind is scoped to the nodes the read is made of (`tied`), and a read marked
     `boundary` (`divergence`) is looked at again at every boundary, like `believes`. The invalidation of `priceLevel` is the
-    regime events, which the table says and the first version of the read did not declare. S2 should add `transitions` to the
-    port it names (see the findings below).
+    regime events, which the table says and the first version of the read did not declare. S2 v1.10 §4.2 now specifies the
+    port's persistent shared sequence (168); the worktree's older spec copy could not be rebased in the sandbox.
 124. **The audits are pure functions over structure, so a test can hand them a fault. (amended, R1)** `audit.ts` (in the simulation layer's
     source directory) has the source lint, the kind and read audits, the writers audit over a declared table (`PROCESS_WRITES`) and
     the writes a run observes, the gate audit, the cursor audit and the schema audit (which asks the kernel's loader to validate and
@@ -963,11 +963,13 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
     16); a save writes the intervals of the ended edges it is about to drop. `tied(a, b, type)` at a time before now is `yes` if the
     implicit tie (a pure function of the pair) holds or any interval of the materialised tie covers the time, and `no` otherwise
     (`maybe` where the implicit tie is unknown, and for the times the dropped intervals covered: 160); its transitions are the openings
-    and closings of the intervals. Only `xf:tie`
+    and closings of the intervals, with their original shared ordinals (168, 170). Only actually ended intervals enter history;
+    an edge's scheduled future end remains the kernel's (S1 v0.5 §4.7). Only `xf:tie`
     is built; another type answers `maybe`.
 146. **The divergence log is written when a belief changes. (new, R1 SIM-08)** `Beliefs.onChange` tells S1 when a belief is added, replaced or
-    dropped, by anyone, and S1 logs the divergence of that believer from the game at that time. The boundary hook finds nothing new
-    to write. The value at a time before now is the last log entry at or before it; when the oldest transitions have been dropped
+    dropped, by anyone, and S1 logs the divergence of that believer from the game at that time. Mirrored readings also notify S1 at
+    application, before deferred relevance dispatch can hide intermediate values (168). The boundary hook detects any remaining
+    changes. The value at a time before now is the last log entry at or before it; when the oldest transitions have been dropped
     (the log keeps eight) the record keeps the time they reached back to, and an earlier time is `maybe`. While a staged batch is open the
     notification waits for its commit, and goes with a discard (159).
 147. **`groupGap` is the band the group maintains. (new, R1 SIM-09)** The digest carries the band `group.decide` keeps with its hysteresis, and
@@ -1008,11 +1010,9 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
 155. **A closing condition is evaluated after each change, in the order the changes were made. (new, R2-01)** Layer 2 used to walk the values of
     each read separately and pair them by their index, which could meet a condition on two reads with values that never stood
     together. A transition now carries `ord` (`SimReadPort.transitions`), and `statesAt` puts the changes of every read the condition
-    names in that order, with one state after each source transition (aliases share a source: 163). The order across sources at one second
-    is that of a boundary (S0 9.4): the process feeds first, by tier then process id (`city.events`, `group.decide`, `order.ledger`,
-    `order.norms`), then the divergence hooks, then tie intervals. Each source has a persistent sequence across all its keys/pairs.
-    A change with no `ord` follows those that
-    have one.
+    names in that order, with one state after each source transition (aliases share a source: 163). All sources now allocate from
+    the S1 record's one `ord` sequence, at actual application or observation (168, S2 v1.10 §4.2). Fixed source ranks and separate
+    source counters were incorrect: external writes can interleave arbitrarily. A change with no `ord` follows those that have one.
 156. **A cause that is live at a save is recorded up to the save. (new, R2-02)** The span of a cast edge, an observed pin or a quest link that
     has not ended is written as `[from, now)`, including a finite future end (162): the kernel keeps it and says when it ends. The first version wrote it open, and the union
     with the closed span the kernel later reported kept it open for ever.
@@ -1037,16 +1037,16 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
 
 162. **Opened summary evidence keeps both sources; protection stops at the save. (R3-01, R3-02; completes R2-02)** An opened item's
     descriptor is recovered from its summary's original committed pins and its item index; S1 summaries use the cell itself as place.
-    Its materialised fields are read only from `scene.acts` constants. The evidence record keeps these origins and restores them
-    silently, so neither a temporary authored override nor a reload changes the baseline. Ordinary events retain their own provenance.
+    Its materialised fields are read only from `scene.acts` constants. The evidence record keeps these origins and restores the
+    materialisation silently; it never installs descriptor constants. An item's live descriptor still derives from the summary (169),
+    so a summary edit survives a reload and subsequent edits propagate. Ordinary events retain their own provenance.
     Every protection span is clipped to `min(end, save time)`, even a finite future end; empty and future intervals are discarded.
 
 163. **A source transition is atomic, and independent transitions have persistent order. (R3-03, R3-07; completes R2-01, R2-09)**
     Equal `ord` entries are aliases of one source transition, applied together before testing a compound closing predicate. All reads
-    contribute their initial value, including those without a change. Process transition feeds keep a next-sequence counter through
-    eviction and quiet windows; the four producers are version 2. Divergence logs share `divSeq` across pairs; one mirrored reading
-    shares one ordinal among every affected pair. Tie boundary logs share `tieSeq` across pairs and wait for staged commits. The read
-    orders source classes by the boundary order, then the persistent sequence. Tie transitions also include their coverage floor.
+    contribute their initial value, including those without a change. Feeds, divergence and ties now share `S1Record.ord` (168);
+    the four feed producers are version 3. One mirrored reading shares one ordinal among every affected divergence pair. Tie boundary
+    logs wait for staged commits and keep the original ordinals while their intervals remain answerable (170), including the coverage floor.
     Older saves with unordered retained history open read-only: the missing chronology cannot be reconstructed honestly.
 164. **Extra rules bypass resident and block caches. (R3-04; completes R2-06)** Only the exact installed world-pack contributions
     are treated as known dependencies. An extra general contribution, a named contribution on a household/resident or its owner chain,
@@ -1058,13 +1058,47 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
 166. **Source audits use the installed TypeScript compiler. (R3-08, R3-09; completes R2-10, R2-11)** TypeScript 7 exposes AST parsing
     through `typescript/unstable/sync` and `typescript/unstable/ast`. A virtual project holds the supplied source in memory; each compiler
     instance is closed after use. Lints walk syntax nodes, including nested template expressions. `heardEvent` and `absorb` must each
-    start with an unconditional early return whose conditional is provably true for a `meta:` event. Strings, unrelated calls, dead
+    start with an unconditional early return whose conditional is provably truthy for a `meta:` event. Strings, unrelated calls, dead
     conjuncts, non-returning branches and guards placed after work do not satisfy this requirement. This is a conservative syntactic
-    proof of the shipped guards, not general TypeScript control-flow verification.
+    proof of the shipped guards, not general TypeScript control-flow verification. Operand values and truthiness are evaluated separately (171).
 167. **Full mode restores independent cold and replay coverage.** `S1_FULL=1` runs the extra uninterrupted 1,008-window replay and
     compares every line to the baseline, in addition to the reload comparison. It checks all 10,000 tie pairs with shared and resident
     caches disabled and fresh per-pair caches. Default mode keeps the sampled tie comparison. The R3 regression probes can be checked
-    against pre-fix modules loaded only in memory with `bun run test/sim/check-review-mutations.ts` (default base `d4b78f79`).
+    with compatible, surgical mutations loaded only in memory by `bun run test/sim/check-review-mutations.ts` (173).
+
+### Fix round 3 (entries 168 onward)
+
+168. **One persistent sequence records actual application order. (A1-01, A1-04; S2 v1.10 §4.2, S1 v0.5 §4.7)**
+    `S1Record.ord` allocates across every feed publication, belief/divergence update and tie validity boundary. A process computes
+    unstamped transitions; its application hook stamps them when the digest is published, between the preceding and following writes.
+    Mirrored readings notify divergence immediately, rather than waiting for reconciliation's relevance dispatch. Aliases of a feed
+    entry or a mirrored reading share their source ordinal. There are no source ranks, per-source counters or read-time reconstruction.
+    Saved ordinals and the next counter survive replacement loads. The four transition producers rise from version 2 to 3 so old
+    lineages with incompatible chronology open read-only. These rulings were read from the main checkout's specs because the sandbox
+    refused the rebase's Git metadata write; the worktree specs remain untouched.
+169. **An opened item's descriptor remains a dependency, not a restored constant. (A1-02)** `Events.restoreEvent` restores participants,
+    effects, witnesses, causes, outcome and served from the evidence record with the original materialisation source. For an item with
+    summary provenance it leaves `time`, `kind` and `place` to `Summaries.itemConstraint`, creates no fixed place edge and caches no minted
+    descriptor. The evidence record still holds the original committed descriptor for provenance, not a permanent override of the
+    summary. Repeated reloads and edits after reload preserve that distinction.
+170. **Tie history contains only ended intervals; attributes cannot erase chronology. (A1-03, A1-04)** Saving captures a finite interval
+    only when its end is at or before now. A live edge's scheduled end is not copied into history, so shortening it leaves no stale
+    future interval. The boundary log compares validity with its last interval: attributes allocate nothing, shortening replaces only
+    the superseded end, and the opening keeps its ordinal. Log pruning follows the retained 16 ended intervals, the current edge and
+    the coverage floor; there is no independent 64-entry eviction and no fallback to today's counter.
+171. **Guard evaluation preserves JavaScript operands. (A1-05)** `||` and `&&` return an operand, using its truthiness; strict equality
+    compares those operand values. An unknown operand stays unknown where it could alter the result. A separate truthiness proof can
+    still accept `unknown || true` as an early-return condition without claiming its result is the Boolean `true`.
+172. **Resident views are immutable shared values. (A1-06)** `ResidentView` is readonly and every resolved view is frozen before either
+    cache receives it. Its fields are all scalars, so freezing the object also protects the shared memo across worlds.
+173. **Mutation probes must fail at the semantic assertion. (A1-07)** The helper uses small compatible changes to the current sources,
+    including reverting only `Kernel.emit`'s snapshot expression for R3-06. A rejected probe requires a nonzero exit, the named failing
+    test and that test's explicit semantic-assertion error. Constructor/import errors and failures during setup do not count. The
+    checker itself has a regression and a surgical mutation. All 23 probes (13 R3 and 10 A1) reach their intended assertions.
+    Validation: 185 targeted tests across 15 files pass, including all ten A1 regressions, and `bun run check` is clean. The frozen
+    digests remain unchanged: v3 `d534e0dcef3f85d27cefa552217152ec`, v4 `da48cabc405ed361ce6ad5f3b895a822`, and S1 transcript
+    `158e89e481c3cd72aaf891c55c1c75f1`. Persisted S1 transition ordinals change as required by 168; no golden digest was edited.
+    The coordinator owns the guarded full-suite run.
 
 ### Spec findings for the coordinator (S1)
 
@@ -1072,8 +1106,8 @@ The ones that need a decision, worst first. The six questions of the first build
 
 - **S0 9.4 (the order of a boundary).** S1 10.2 relies on a step the kernel specification does not list: between the external operations
   and the snapshot, the frame work and the relevance dispatch they queued run to their end (109, 142). S0 should say so.
-- **S2 4.2 and the read port (resolved by S2 v1.9).** The port carries transitions in shared order (123, 155, 163); aliases of one
-  source transition are evaluated atomically. The current worktree's older spec copy is left unchanged.
+- **S2 4.2 and the read port (resolved by S2 v1.10).** The port carries transitions from one persistent sequence (123, 155, 163, 168);
+  aliases of one source transition are evaluated atomically. The current worktree's older spec copy is left unchanged.
 - **S1 8.4 (assimilate).** "The listener's default reasons for the actor's group" is not defined. The reference uses `attr@1` from the
   listener's side with no constraint visible, which makes everyone dispositional at the default data (150). Is that meant, or is the
   default a table?

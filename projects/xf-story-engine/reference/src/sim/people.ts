@@ -13,7 +13,7 @@ import type { IdentityKeys } from './keys.ts';
 import { type Archetype, type Role, ROLES, SOCIABILITY, profileA, profileF, profileR } from './profile.ts';
 import type { World } from './world.ts';
 
-export interface ResidentView {
+export type ResidentView = Readonly<{
   id: Id;
   household: Id;
   /** The resident's block: the grid cell where they live. */
@@ -32,7 +32,7 @@ export interface ResidentView {
   deathAge: number;
   /** The time a story event killed the resident, if one did. */
   died?: GameTime;
-}
+}>;
 
 export type WhereClass = 'home' | 'work' | 'out' | 'away';
 export interface Whereabouts {
@@ -332,9 +332,9 @@ export class People {
       id: res, household: ref.household, cell: ref.cell, hIndex: ref.hIndex, j: ref.j, profile: x, aband: profileA(x), role: ROLES[profileR(x)]!, affc: profileF(x),
       age, ageClass, sociability: this.w.data.people.sociability.values[SOCIABILITY.indexOf(soc as (typeof SOCIABILITY)[number])]!,
       archetype: arch as Archetype, life: Number(life), deathAge: Math.max(age + 1, lifeQ[Number(life)]!),
+      ...(typeof died === 'number' ? { died } : {}),
     };
-    if (typeof died === 'number') view.died = died;
-    return view;
+    return Object.freeze(view);
   }
 
   // ---- lifetime and spells ----
