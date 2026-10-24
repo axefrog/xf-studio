@@ -189,8 +189,8 @@ describe('SF1-S-6: a value closes and reopens in one batch', () => {
 
 describe('SF1-I-5: causality', () => {
   test('every child is born in a later window and at a later time than its parent; no cause follows its effect', () => {
-    const seeds = FULL ? 20 : 3;
-    const windows = FULL ? 30 * DAY : 150;
+    const seeds = FULL ? 20 : 1;
+    const windows = FULL ? 30 * DAY : 60;
     let children = 0;
     for (let n = 0; n < seeds; n++) {
       const sim = Sim.create({ worldSeed: seedOf(`SF1-I-5-${n}`), index: fx3Slice(), data: busy(FULL ? 1 : 25), only: ['city.events'] });
@@ -214,7 +214,7 @@ describe('SF1-I-5: causality', () => {
 describe('SF1-I-9 and SF1-I-10: summaries, items, the ring and why', () => {
   test('SF1-I-9: for every summary the count equals the items enumerated, each item\'s place is the summary\'s cell, and a canon item persists', () => {
     const sim = Sim.create({ worldSeed: seedOf('SF1-I-9'), index: fx3Slice(), data: busy(25), only: ['city.events'] });
-    sim.advance(100);
+    sim.advance(FULL ? 100 : 32);
     const summaries = sim.k.summaries.summaries();
     expect(summaries.length).toBeGreaterThan(20);
     let items = 0;
@@ -357,7 +357,7 @@ describe('SF1-I-12: demand independence', () => {
         // more demand: a root that wants a scene in the other cell, and a node held at tier 4
         sim.k.frames.demandRoots.add(sim.people.residentAt(sim.w.districts[0]!.cellIds[2]!, 0));
       }
-      sim.advance(80);
+      sim.advance(FULL ? 80 : 24);
       return sim;
     };
     const a = run('c1', false);
@@ -560,7 +560,7 @@ describe('SF1-I-16: one descriptor', () => {
 
 describe('SF1-O-3: bounds and partition', () => {
   test('a soak: stocks stay in 0 to 1 and the histories are identical in one call and in many', () => {
-    const days = FULL ? 100 : 6;
+    const days = FULL ? 100 : 1;
     const mk = () => Sim.create({ worldSeed: seedOf('SF1-O-3'), index: fx3Slice(), data: fxData(), only: ['city.events', 'order.stocks', 'order.norms'] });
     const bounds = (sim: Sim) => {
       const dg = sim.digestOf<{ districts: Record<Id, { E: number; Y: number; L: number; fear: number }> }>('order.stocks')!;

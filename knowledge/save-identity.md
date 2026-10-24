@@ -184,7 +184,7 @@ carrier **[offline]**. Its save/recovery contract is:
    membership queries walk gated roots but do not acquire the queried node as a new reference. Raw
    stores, replay/collector hooks and metadata predicates observe physical/data state; they must not
    resurrect the history they collect. The public API inventory and its explicit routes are in
-   [SPEC-NOTES 195](../projects/xf-story-engine/reference/SPEC-NOTES.md).
+   [SPEC-NOTES 195 and 196](../projects/xf-story-engine/reference/SPEC-NOTES.md).
 4. Regeneration checks the whole owned event payload. One surviving constant is insufficient evidence
    of completeness. Summary items keep immutable descriptor/materialisation ownership independently
    of contribution order or expired overlays; time/kind/place remain live descriptor dependencies.
@@ -204,36 +204,51 @@ seven regression assertions against HEAD `3b2f9cae` **[offline counterfactual]**
 saved event facts and S1's evidence records provide overlapping defences. S1's capture/materialisation
 may be removable later, after its separate consumers are audited; no defence is removed in S3J.
 
+**Discovery is a semantic reference too [offline].** Saved events remain discoverable by place,
+time and witness after their headers and edges leave memory. The candidate universe is the union of
+live indexes and the selected save's indexes; callers charge candidates to the operation budget and
+recover each reached id through the common gate. Live intervals override saved intervals, and indexes
+never root history. The [SE-229 reproduction](../projects/xf-story-engine/reference/test/discovery.test.ts)
+checks independent spatial, temporal and witness reads in incremental and snapshot modes against
+unswept/fresh-load controls. Discovery leaves events sweepable. Region discovery, operation exhaustion,
+unrelated history and indirect recovery of another candidate are also checked.
+
 The property compares unswept, swept and freshly reloaded executions after every operation and compares
-whole save records. A stratified lifecycle grammar supplies release/save/end/reopen/sweep/re-reference
-combinations and partial regeneration; random operations independently select saved/unsaved events
-and authored/own simulation constants. The raw observer starts from every retention-root category,
-walks owned fields and origin/constant references, and compares headers, factual contributions,
-intervals/data, pins, withdrawals, provenance, resolved slot values, `readEvent()` and pending semantic
-changes. Deliberately ephemeral unpersisted overlays are excluded from fact equality; expired ones
-remain present when checking event views so they cannot masquerade as provenance.
+whole save records. The raw observer starts from every retention-root category, walks owned fields and
+origin/constant references, and compares headers, factual contributions, intervals/data, pins,
+withdrawals, provenance, resolved values, event views and pending changes. Observer reads use a
+disposable projection with an empty recovery baseline, with no saved-history prefill. Source tables,
+queues/worklists and revision are serialized before/after observation to prove it cannot repair them.
+Deliberately ephemeral unpersisted overlays are excluded from fact equality; expired ones remain when
+checking event views so they cannot masquerade as provenance.
 
-All lazy reads run on a disposable projection with an empty recovery baseline. Missing retained data
-is compared first and is never filled from saved history. Spatial queries compare all logical results,
-including unreferenced saved history, without filtering to seed descendants. The source execution's
-complete tables, queues/worklists and revision are serialized before/after observation; no query may
-populate its headers or repair its facts. Physical residency outside the retained closure is not a
-semantic difference, and wholly unpersisted material still requires its producer's recipe after load.
+Public spatial queries, `eventsAtTime()` and `witnessed()` are generated operations on the executions
+themselves. Every lifecycle includes save/release/sweep and all three reads, with rotating read order
+and another sweep before each read. Complete discovery results are compared there. Random discovery
+also checks saved event identities without supplying recipes; intentionally never-saved identities
+still require their producer's recipe after load. Other operations cover saved/unsaved event payloads,
+authored/own simulation constants, first-save edits, re-reference and partial regeneration. The default
+has eight seeds in both snapshot modes, 20 random operation kinds and 550 total operations.
 
-The default property rejects all 28 historical S3C-I probes when each defect is restored independently;
-the probe runner rejects setup errors and timeouts as evidence. After the common gate was introduced,
-two probes were adapted to restore the same defects at the current boundaries: partial-header recovery
-also bypasses the new provenance read gate, and contribution re-submission bypasses identity recovery
-and the new target-validation recovery gate together. The dedicated regressions retain their
-semantic assertions.
+The default property rejects **28/28 historical S3C-I probes plus 3/3 discovery counterfactuals**.
+All **64/64 dedicated probes** reach their named semantic assertion failure; setup errors and timeouts
+do not count. The recovery inventory now audits **482 operations**, including each facade callable and
+exported arrow/function expression separately, resolves simple store/argument aliases in lexical scope,
+and rejects recovery of the wrong input. Removing only the predicate facade's `kindOf` gate fails both
+the source audit and a semantic test that creates the facade before sweeping its future argument.
+Evidence: [recovery API tests](../projects/xf-story-engine/reference/test/recovery-api.test.ts) and
+[SPEC-NOTES 196](../projects/xf-story-engine/reference/SPEC-NOTES.md).
 
-The post-bar hunt passed 2,048 distinct seeds in both snapshot modes (4,096 scenarios and 102,400
-generated operations), with no divergence; the 4 GB guard measured a 0.4 GB peak over 1,363.01 seconds.
-The final guarded suite passes 1,340 tests across 81 files in 256.96 seconds (1.1 GB peak), and the
-typecheck passes. Validation and the persistence-only digest migration are recorded in SPEC-NOTES 195.
-The preceding S3I hunt's 2,048 seeds
-covered its narrower generator but detected only 14/28 historical mutations, so that hunt is not evidence
-that the classes were closed. These are offline oracle results, not new game-runtime evidence.
+Two historical probes deliberately bypass overlapping gates to restore their original defect:
+partial-header recovery also bypasses the provenance gate; contribution re-submission bypasses both
+identity recovery and target-validation recovery. The shorter default random tail initially missed
+the latter. A stratified saved-end/release/sweep/re-submission episode now detects it independently of
+random luck. The preceding S3J hunt used a history-prefilled query projection and therefore did not
+establish discovery invariance, despite passing its 28-probe bar. The earlier S3I generator detected
+only 14/28 historical mutations. The new generator's post-bar hunt and final suite results are recorded
+in SPEC-NOTES 196. These are offline oracle results, not game-runtime evidence. Both frozen kernel
+digests remain unchanged: v3 `746601727380a3fdff647f873c91c971`, v4
+`8fce55b19462a1e02f03ca5336bd8c16`.
 
 ## Session card
 

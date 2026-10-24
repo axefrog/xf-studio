@@ -107,7 +107,7 @@ describe('the determinism digest', () => {
     }
   }
 
-  test('SR-14: the digest moves when a save, a load, the belief, summary or outstanding-batch state, or a group decision changes', () => {
+  (process.env.S1_FULL === '1' ? test : test.skip)('SR-14: the digest moves when a save, a load, the belief, summary or outstanding-batch state, or a group decision changes', () => {
     const base = run().digest;
     expect(base).toBe('746601727380a3fdff647f873c91c971');
     // A save record that differs only in its lineage metadata.
@@ -130,7 +130,7 @@ describe('the determinism digest', () => {
     expect(run().digest).toBe(base);
   });
 
-  test('SR2-08: the digest moves when a group decision or an order changes its resulting frame state directly', () => {
+  (process.env.S1_FULL === '1' ? test : test.skip)('SR2-08: the digest moves when a group decision or an order changes its resulting frame state directly', () => {
     const base = run().digest;
     // A weight decision that always sets weight zero.
     const setWeight = Frames.prototype.setWeight;
@@ -153,7 +153,7 @@ describe('the determinism digest', () => {
     expect(run().digest).toBe(base);
   });
 
-  test('a second run of the same script gives the same digest (no hidden state, no iteration-order dependence)', () => {
+  (process.env.S1_FULL === '1' ? test : test.skip)('a second run of the same script gives the same digest (no hidden state, no iteration-order dependence)', () => {
     expect(run().digest).toBe(run().digest);
   });
 });

@@ -149,5 +149,5 @@ test('S3H recovery paths: reconciliation cannot recover facts from the discarded
 
 test('S3I property: unswept, swept and random fresh replay agree after every operation', () => {
   const coverage = runSweepReplayProperty();
-  if (process.env.SWEEP_SEEDS) console.log('sweep/replay coverage:', coverage);
-}, Math.max(60000, Number(process.env.SWEEP_SEEDS ?? 8) * 1500));
+  if (process.env.SWEEP_SEEDS || process.env.S1_FULL === "1") console.log('sweep/replay coverage:', coverage);
+}, Math.max(60000, Number(process.env.SWEEP_SEEDS ?? (process.env.S1_FULL === "1" ? 2048 : 8)) * 1500));

@@ -31,6 +31,19 @@ export function runCoverageEpisode(seed: number, snapshot: boolean, observe: (k:
   if(reload){const fresh=coreKernel(name,undefined,config);for(const [id,r] of runs[2].persistence.chain)fresh.persistence.chain.set(id,structuredClone(r));fresh.persistence.load(key);runs[2]=fresh;loads++;}
   compare(key);
  };
+ // Every seed includes a released saved occurrence, with all three reads before re-reference.
+ // Rotating read order prevents one discovery API from repairing another's missing gate.
+ const discovery = {creator,cause:creator,name:'discovery',kind:'arrival',time:0,place,
+  participants:[{who:creator,role:'actor'}],witnesses:[creator]};
+ let discovered='';
+ step('discovery create',k=>{discovered=k.events.mintEvent(discovery);k.retention.setSeed({id:root,state:{},nodes:[discovered]});});
+ save();step('discovery release',k=>k.retention.endSeed(root));sweep();
+ const reads = [
+  (k:Kernel)=>k.query({find:'core:event',scope:{under:place},at:0,must:[],limit:'all'}),
+  (k:Kernel)=>k.events.eventsAtTime(0),
+  (k:Kernel)=>k.beliefs.witnessed(creator,creator,0),
+ ];
+ for(let n=0;n<3;n++){sweep();step(`discovery ${n}`,reads[(seed+n)%3]);}
  const spec:EventSpec={creator,cause:creator,name:'event',kind:'arrival',time:0,place,
   participants:[{who:creator,role:'actor'}],effects:[{on:creator,effect:'harm'}]};
  let eid='',edge='',own='',authored='';
@@ -91,7 +104,11 @@ export function runCoverageEpisode(seed: number, snapshot: boolean, observe: (k:
   else if(mode!==7)save();
   if(mode===0 || mode===6){
    step('end own and authored',k=>{k.endContribution(mode===6?own:authored,10);});
-   if(mode===6)save();
+   save();
+   if(mode===0){
+    release();sweep();
+    step('saved ended contribution re-submission',k=>structuredClone(k.contribute(original)));
+   }
   }
   if(mode===7){
    step('unsaved changes',k=>{k.endEdge(edge,10);k.updateEdge(edge,{data:{proof:seed}});k.endContribution(own,10);});

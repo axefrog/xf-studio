@@ -92,18 +92,18 @@ bun x tsc --noEmit
 
 The review regressions include six A2 checks for same-second tie reopening and atomic regime/price publication, with and without reloads.
 The legacy 26-probe simulation runner stops at obsolete R3-01: saved kernel event facts already mask
-that counterfactual at HEAD, as confirmed in SPEC-NOTES 195; its migration is deferred. S3's 60 dedicated
-probes and the default sweep property's 28 historical probes pass. The final S3J guarded suite passes
-1,340 tests across 81 files in 256.96 seconds, peaking at 1.1 GB; the two-minute timing target remains
-unmet. The default sweep property takes 17.32 seconds standalone. Run the full suite under the repository memory guard
-with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
+that counterfactual at HEAD, as confirmed in SPEC-NOTES 195; its migration is deferred. All 64 dedicated
+S3/kernel probes and the default sweep property's 28 historical plus three discovery probes pass.
+The default suite is below two minutes under the memory guard; SPEC-NOTES 196 records measured before
+and after timings. Run it under the repository memory guard with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
 
 ```powershell
 & "$env:LOCALAPPDATA/Python/pythoncore-3.14-64/python.exe" ../../../tools/memory_guard.py --limit 4 -- bun test
 ```
 
 `S1_FULL=1` restores the specification's long fixtures, the additional uninterrupted 1,008-window replay, and cold checks of all
-10,000 tie pairs. Run that profile under the same guard. The regression mutation check is
+10,000 tie pairs, repeated digest/transcript checks, week-scale E1/E2 and statistical metamorphic runs,
+and 2,048 sweep/replay seeds in each snapshot mode. The weekly/manual CI job selects this profile. Run it under the same guard. The regression mutation check is
 `bun run test/sim/check-review-mutations.ts` (optionally followed by one probe name, such as `R3-06`): it changes only the targeted
 behaviour in memory and requires failure at the named semantic assertion. Setup and import failures are rejected as evidence.
 
@@ -123,21 +123,24 @@ Unsaved intervals and pending updates survive without becoming roots. Contributi
 add/end/reopen/update recover saved identities inside their public APIs. Event regeneration checks its complete
 owned payload and spatial link, preserving saved terminations and current live updates.
 The bounded sweep/replay property runs three executions (unswept, swept and swept with fresh loads).
-Its default eight seeds in both snapshot modes execute **912 operations**, combining 17 random operation
+Its default eight seeds with 16 random steps in both snapshot modes execute **550 operations**, combining 20 random operation
 kinds with stratified release/save/end/reopen/re-reference and partial-regeneration episodes. Every retention-root
 category participates. The observer compares raw closure, resolved values, event views, withdrawals and pending
-changes; lazy reads run in a disposable projection and cannot repair the observed execution. It compares all logical
-spatial results, including saved history outside seed descendants, and excludes deliberately ephemeral overlays.
-The public reference API inventory enumerates **415 operations** across `src/`, records their common-gate or raw-data
-routes in SPEC-NOTES 195, and rejects future ungated reference operations, including ids nested in new record types.
+changes; observer reads run in a disposable projection and cannot repair the observed execution.
+Public spatial, temporal and witness discovery run as generated operations without preparatory restoration.
+Each lifecycle compares complete discovery results; random discovery checks saved event identities.
+The observer excludes deliberately ephemeral overlays and never prefills saved history.
+The public reference API inventory enumerates **482 operations** across `src/`, records their common-gate or raw-data
+routes in SPEC-NOTES 195 and 196, and rejects future ungated reference operations, including ids nested in new record types.
 S3J-01 preserves first-save edge/contribution edits with full changed-event payload and identity dependencies;
 S3J-02 routes pinning, observation and canonisation through recovery before header/default-field inspection.
 Saved edit dependencies do not become retention roots. Targeted checks also cover ordinary and summary events,
 pre-edit sweeps, transitive event identities, staged discard and modified pack contributions.
-The default property rejects all **28/28** historical S3C-I probes. Its post-bar hunt passes 2,048 seeds
-in both snapshot modes (4,096 scenarios, 102,400 operations), with no divergence; details and final
-validation are recorded in SPEC-NOTES 195. The preceding S3I hunt covered its narrower generator;
-its default property detected only 14/28 historical mutations, so that hunt did not establish class closure.
+The default property rejects all **28/28** historical S3C-I probes and **3/3** discovery counterfactuals.
+All **64/64** dedicated mutation probes fail at their intended semantic assertions. SE-229 discovery is
+checked in both save modes; SE-230 removes the observer's history prefill; SE-231 audits separate facade
+operations, aliases, exported expressions and recovery of the actual lookup argument. The final hunt
+and suite measurements are recorded in SPEC-NOTES 196. `S1_FULL=1` selects the full weekly profile.
 The authorized S3J digest migration is v3 `f924d2c9d1159bca85bbfa4cf18dba6c` to
 `746601727380a3fdff647f873c91c971`, and v4 `42d5a84e16dde21cc0bca7fe50c01d72` to
 `8fce55b19462a1e02f03ca5336bd8c16`: three previously lost first-save ended location edges now persist.

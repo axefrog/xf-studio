@@ -274,6 +274,25 @@ export class Persistence {
     return this.base.headers.get(id);
   }
 
+  /** Candidate indexes only: callers charge and recover each reached candidate before reading it.
+   * Saved history never becomes a retention root. Live records override saved intervals.
+   */
+  *discoveryIdsOfKind(kind: string): Iterable<Id> {
+    const candidates = new Set([...this.k.store.idsOfKind(kind), ...this.savedStore().idsOfKind(kind)]);
+    yield* [...candidates].sort();
+  }
+
+  *discoveryChildren(node: Id, t: GameTime): Iterable<Id> {
+    const live = this.k.store, saved = this.savedStore(), seen = new Set<Id>();
+    for (const edge of [...live.edgesTo(node), ...saved.edgesTo(node)]) {
+      const e = live.edges.get(edge.id) ?? edge;
+      if (e.type === 'core:located-in' && e.valid.from <= t && (e.valid.to === undefined || t < e.valid.to) && !seen.has(e.from)) {
+        seen.add(e.from); yield e.from;
+      }
+    }
+    for (const id of [...live.ownedOf(node), ...saved.ownedOf(node)]) if (!seen.has(id)) { seen.add(id); yield id; }
+  }
+
   /** The one semantic reference boundary. Raw stores/replay/sweep never call this implicitly.
    * Only the selected save is searched; missing live facts are replayed, never replaced.
    */
@@ -384,15 +403,7 @@ export class Persistence {
     // A summary query can recreate the header alone. Complete every reached saved reference,
     // while leaving live headers, contributions, intervals and provenance authoritative.
     if (!h) return h;
-    if (this.recovery?.base !== this.base) {
-      const saved = new Store();
-      for (const header of this.base.headers.values()) saved.addHeader(header);
-      for (const c of this.base.contributions.values()) saved.addContribution(c);
-      for (const e of this.base.edges.values()) saved.addEdge(e);
-      for (const { pin } of this.base.pins.values()) saved.addPin(pin);
-      this.recovery = { base: this.base, store: saved };
-    }
-    const saved = this.recovery.store, fields = [id], view = new PersistedView(), seen = new Set<Id>();
+    const saved = this.savedStore(), fields = [id], view = new PersistedView(), seen = new Set<Id>();
     for (let n = 0; n < fields.length; n++) {
       const field = fields[n];
       if (seen.has(field)) continue;
@@ -411,6 +422,18 @@ export class Persistence {
     }
     if (this.replay(view)) this.k.bump();
     return store.header(id);
+  }
+
+  private savedStore(): Store {
+    if (this.recovery?.base !== this.base) {
+      const saved = new Store();
+      for (const header of this.base.headers.values()) saved.addHeader(header);
+      for (const c of this.base.contributions.values()) saved.addContribution(c);
+      for (const e of this.base.edges.values()) saved.addEdge(e);
+      for (const { pin } of this.base.pins.values()) saved.addPin(pin);
+      this.recovery = { base: this.base, store: saved };
+    }
+    return this.recovery.store;
   }
 
   // ---- packs (spec 14.1: reloaded, not stored) ----

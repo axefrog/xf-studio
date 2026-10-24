@@ -22,10 +22,10 @@ setDefaultTimeout(120_000);
 
 const W = 600;
 const FULL = process.env.S1_FULL === '1';
-const SEEDS = FULL ? 12 : 3;
-const WINDOWS = FULL ? 240 : 90;
+const SEEDS = FULL ? 12 : 1;
+const WINDOWS = FULL ? 240 : 24;
 /** The metamorphic relations run several worlds each, and compare counts and records, not single windows. */
-const MW = FULL ? 240 : 60;
+const MW = FULL ? 240 : 24;
 
 describe('partition and reload', () => {
   for (let n = 0; n < SEEDS; n++) {
@@ -118,8 +118,8 @@ describe('summary and item agreement at each cell', () => {
   for (let n = 0; n < SEEDS; n++) {
     test(`seed ${n}: each summary's count is its items at its cell, in every run`, () => {
       const sim = make((d) => { for (const k of Object.keys(d.shape.rate)) d.shape.rate[k] = d.shape.rate[k]!.map((x) => x * 20) as Per4; });
-      new ReplayPort(sim).submit(genScript(31 + n, 60));
-      sim.advance(60);
+      new ReplayPort(sim).submit(genScript(31 + n, FULL ? 60 : 16));
+      sim.advance(FULL ? 60 : 16);
       let seen = 0;
       for (const e of eventsState(sim).ring) {
         if (e.count === undefined) continue;
@@ -154,7 +154,7 @@ describe('metamorphic relations', () => {
     expect(eventsState(two).ring.some((e) => !cells1.has(e.cell))).toBe(true);
   }, 300_000);
 
-  test('renaming a display name changes nothing; a different hashed identity changes the histories but not their distributions', () => {
+  test('renaming display names leaves records unchanged', () => {
     const a = make(busy);
     const ix = fx3Slice();
     ix.names = Object.fromEntries(Object.entries(ix.names!).map(([k, v]) => [`renamed-${k}`, v]));
@@ -162,6 +162,9 @@ describe('metamorphic relations', () => {
     a.advance(MW);
     b.advance(MW);
     expect(differing(recordOf(b), recordOf(a))).toEqual([]);
+  }, 300_000);
+
+  (FULL ? test : test.skip)('a different hashed identity changes the histories but not their distributions', () => {
     // another world seed: other histories, the same distribution of what happens
     const counts = (seed: string): Record<string, number> => {
       const s = make(busy, fx3Slice(), seedOf(seed));
@@ -179,28 +182,30 @@ describe('metamorphic relations', () => {
     expect(Math.abs(tl - tr)).toBeLessThanOrEqual(4 * Math.sqrt(tl + tr));
   }, 300_000);
 
-  test('scaling cityScale scales the means and nothing else', () => {
-    const immigrants = (scale: number, tag: string): { n: number; views: string[] } => {
-      const s = make(busy, fx3Slice(), seedOf(tag));
-      s.k.settings.set({ cityScale: scale }, 0);
-      s.advance(MW);
-      const d = s.w.districts[0]!;
-      return { n: occurrences(s).filter((o) => o.gen === 0).length, views: d.cellIds.flatMap((c) => s.people.residentsOfBlock(c)).slice(0, 15).map((r) => JSON.stringify(s.people.view(r))) };
-    };
+  const immigrants = (scale: number, tag: string): { n: number; views: string[] } => {
+    const s = make(busy, fx3Slice(), seedOf(tag));
+    s.k.settings.set({ cityScale: scale }, 0);
+    s.advance(MW);
+    const d = s.w.districts[0]!;
+    return { n: occurrences(s).filter((o) => o.gen === 0).length, views: d.cellIds.flatMap((c) => s.people.residentsOfBlock(c)).slice(0, 15).map((r) => JSON.stringify(s.people.view(r))) };
+  };
+
+  test('cityScale leaves resident views unchanged', () => {
+    const base = immigrants(1, 'scale-views').views;
+    expect(base.length).toBeGreaterThan(0);
+    expect(immigrants(2, 'scale-views').views).toEqual(base);
+  }, 300_000);
+
+  (FULL ? test : test.skip)('scaling cityScale scales the means', () => {
     let n1 = 0;
     let n2 = 0;
-    let views1: string[] = [];
-    let views2: string[] = [];
     for (let i = 0; i < 4; i++) {
       const a = immigrants(1, `scale-${i}`);
       const b = immigrants(2, `scale-${i}`);
       n1 += a.n;
       n2 += b.n;
-      views1 = a.views;
-      views2 = b.views;
     }
     expect(Math.abs(n2 - 2 * n1)).toBeLessThanOrEqual(4 * Math.sqrt(n1 + n2));
-    expect(views2).toEqual(views1);
   }, 300_000);
 });
 

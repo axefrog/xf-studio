@@ -9,8 +9,9 @@ import { canonicalEqual, hrec } from './canon.ts';
 import { H, id as hid, i as hi, s as hs } from './id.ts';
 import type { TellOperator } from './evolution.ts';
 import type { Kernel } from './kernel.ts';
+import { newOpCtx } from './resolve.ts';
 import type { DimId, Edge, GameTime, Id, Region, SlotPath, Value } from './types.ts';
-import { type Budget, Worklist } from './work.ts';
+import { type Budget, Worklist, failIfFailed } from './work.ts';
 import { valueKey } from './value.ts';
 
 export type BeliefSource =
@@ -356,22 +357,27 @@ export class Beliefs {
   /** Whether the observer witnessed the subject at `t`: some event at `t` lists it as a witness and involves the subject (SPEC-NOTES 21). */
   witnessed(observer: Id, subject: Id, t: GameTime): boolean {
     this.k.persistence.recoverIfSaved(observer, subject);
-    const k = this.k;
-    for (const ev of k.events.eventsAtTime(t)) {
-      const wc = k.value(ev, 'witnesses#count', t);
+    const k = this.k, ctx = newOpCtx(k.config.allowance);
+    const read = (id: Id, path: SlotPath) => {
+      const r = k.resolver.resolveWithin(ctx, id, path, t);
+      failIfFailed(r.status, `${path} of ${id}`);
+      return r.value;
+    };
+    for (const ev of k.events.eventsAtTime(t, ctx)) {
+      const wc = read(ev, 'witnesses#count');
       let sees = false;
-      for (let n = 0; typeof wc === 'number' && n < wc; n++) if (k.value(ev, `witnesses[${n}]`, t) === observer) sees = true;
+      for (let n = 0; typeof wc === 'number' && n < wc; n++) if (read(ev, `witnesses[${n}]`) === observer) sees = true;
       if (!sees) continue;
-      if (ev === subject || k.value(ev, 'place', t) === subject) return true;
-      const pc = k.value(ev, 'participants#count', t);
+      if (ev === subject || read(ev, 'place') === subject) return true;
+      const pc = read(ev, 'participants#count');
       for (let n = 0; typeof pc === 'number' && n < pc; n++) {
         const m = k.address(ev, `participants[${n}]`);
-        if (k.value(m, 'who', t) === subject) return true;
+        if (read(m, 'who') === subject) return true;
       }
-      const ec = k.value(ev, 'effects#count', t);
+      const ec = read(ev, 'effects#count');
       for (let n = 0; typeof ec === 'number' && n < ec; n++) {
         const m = k.address(ev, `effects[${n}]`);
-        if (k.value(m, 'on', t) === subject) return true;
+        if (read(m, 'on') === subject) return true;
       }
     }
     return false;

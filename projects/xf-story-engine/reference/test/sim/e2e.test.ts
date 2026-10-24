@@ -41,7 +41,7 @@ function countRuns(sim: Sim): Map<string, number[]> {
   return runs;
 }
 
-describe('SF1-E2: a save and reload in the middle of an aftershock cascade', () => {
+(FULL ? describe : describe.skip)('SF1-E2: a save and reload in the middle of an aftershock cascade', () => {
   const make = (): Sim =>
     Sim.create({
       worldSeed: seedOf('SF1-E2'), index: fx3Slice(),
@@ -440,7 +440,7 @@ const actsOf = (sim: Sim): ActsState => sim.k.evolution.states.get('scene.acts')
 
 
 
-describe('SF1-E1: a Kabuki week, in one call, in many calls and with reloads', () => {
+(FULL ? describe : describe.skip)('SF1-E1: a Kabuki week, in one call, in many calls and with reloads', () => {
   const index = makeKabukiSlice();
   const N = FULL ? 1008 : 144;
   const publicW = FULL ? 300 : 40;

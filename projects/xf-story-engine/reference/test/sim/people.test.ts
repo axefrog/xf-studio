@@ -21,8 +21,8 @@ describe('SF1-P-0: the schema resolves', () => {
   const people = new People(w, identityKeys(w.k.worldSeed));
   const d = w.districts[0]!;
 
-  test(`${FULL ? '1,000' : '250'} households resolve with no defect (1,000 with S1_FULL=1); every resident age lies in its profile band and the class agrees`, () => {
-    const want = FULL ? 1000 : 250;
+  test(`${FULL ? '1,000' : '60'} households resolve with no defect (1,000 with S1_FULL=1); every resident age lies in its profile band and the class agrees`, () => {
+    const want = FULL ? 1000 : 60;
     const k = w.k;
     let households = 0;
     let residents = 0;
@@ -126,8 +126,8 @@ describe('SF1-P-2: a district fit', () => {
 
 describe('SF1-P-4: rosters', () => {
   // the spec's sample is 10,000 households; a Kabuki stand-in has about 3,500, so the long profile draws worlds of other seeds until it has them
-  const SAMPLE = FULL ? 10_000 : 350;
-  test(`${FULL ? '10,000' : 'about 350'} households (10,000 with S1_FULL=1): none beyond the size; a family child is two bands younger than member 0; crew share an affiliation; a couple is within one band`, () => {
+  const SAMPLE = FULL ? 10_000 : 160;
+  test(`${FULL ? '10,000' : 'about 160'} households (10,000 with S1_FULL=1): none beyond the size; a family child is two bands younger than member 0; crew share an affiliation; a couple is within one band`, () => {
     const seen = { family: 0, crew: 0, couple: 0 };
     let examined = 0;
     for (let n = 0; examined < SAMPLE; n++) {

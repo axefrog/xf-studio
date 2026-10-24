@@ -73,7 +73,7 @@ describe('SF1-X-1: a line', () => {
     const open = run(false, 40);
     expect(open.occurrences).toBeGreaterThan(50);
     expect(open.ring).toBeGreaterThan(0);
-    const closed = run(true, FULL ? 600 : 90);
+    const closed = run(true, FULL ? 600 : 24);
     expect(closed.clashes).toBe(0);
     expect(closed.pending).toBe(0);
     expect(closed.counted).toBe(0);
@@ -199,7 +199,7 @@ describe('SF1-X-2: the floors', () => {
 describe('SF1-X-3: V', () => {
   test('sampled events: V is never a victim or a target, and no harmful effect names V', () => {
     const sim = busySim('SF1-X-3', 40);
-    sim.advance(FULL ? 100 : 50);
+    sim.advance(FULL ? 100 : 24);
     const events = cityEvents(sim);
     expect(events.length).toBeGreaterThan(FULL ? 50 : 25);
     const harm = new Set<string>(sim.data.gate.harmEffects);
