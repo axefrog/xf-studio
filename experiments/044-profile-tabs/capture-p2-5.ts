@@ -15,7 +15,9 @@
  *   panels   U8: the Panels menu in an Eye makeup tab (open, collapsed, collapsed and closed, closed), then Coming soon with research on
  *   header   U9: the header and the strip beneath it at both widths, the `tabs.strip` anchor
  *   focus    feature focus: an Eye makeup tab, a Poses tab on the same scene, and back
- *   guide    the style guide's matching entries
+ *   status   the status bar with a ready head, after a tab switch and after a pane change (no setup refusal)
+ *   names    view names in pane tabs, the Panels menu and the not-drawn state (one view, two numbered, a renamed one)
+ *   guide    the style guide's matching entries (d-summon with feature groups and Early access tags, s-header, s-status, d-sizes)
  * `--no-game` starts from empty settings (no 3D head); the captures are meant to be made with the game's files.
  */
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -77,7 +79,10 @@ async function capture(page: Session, state: string, selectors: string[], shows:
 
 const menuText = (page: Session) => page.evaluate(`[...document.querySelectorAll(".menu-layer .menu")].map(menu => [...menu.querySelectorAll(".menu-heading, .menu-sep, .menu-item")].map(e =>
   e.classList.contains("menu-sep") ? "---" : e.classList.contains("menu-heading") ? "# " + e.textContent.trim().replace(/\\s+/g, " ") : (e.getAttribute("aria-disabled") === "true" ? "(unavailable) " : "") + (e.getAttribute("aria-checked") === "true" || e.getAttribute("aria-pressed") === "true" ? "[x] " : "") + e.textContent.trim().replace(/\\s+/g, " ") + (e.title ? " {title: " + e.title + "}" : "")))`);
-const menuFit = (page: Session) => page.evaluate(`[...document.querySelectorAll(".menu-layer .menu")].map(m => { const r = m.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), windowHeight: innerHeight, windowWidth: innerWidth, scrolls: m.scrollHeight > m.clientHeight + 1 }; })`);
+/** Each open menu's box, and (for the top-level Panels menu) where its top edge sits against the Panels button's bottom edge. */
+const menuFit = (page: Session) => page.evaluate(`(() => { const b = document.querySelector('.shell-header button[aria-label="Panels"]')?.getBoundingClientRect();
+  return [...document.querySelectorAll(".menu-layer .menu")].map((m, i) => { const r = m.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), windowHeight: innerHeight, windowWidth: innerWidth, scrolls: m.scrollHeight > m.clientHeight + 1,
+    ...(i === 0 && b ? { buttonBottom: Math.round(b.bottom), gapUnderButton: Math.round(r.top - b.bottom), topIsUnderButton: r.top >= b.bottom - 0.5 } : {}) }; }); })()`);
 async function closeAll(page: Session) {
   for (let i = 0; i < 3 && await page.evaluate(`!!document.querySelector(".menu-layer .menu, .popover")`); i++) { await page.key("Escape"); await page.wait(150); }
   await page.mouse("mouseMoved", 1, 1, { button: "none", buttons: 0 });
@@ -271,6 +276,110 @@ async function focus(page: Session) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Design-review fixes (p2-5b): the status bar, and view names
+
+/** What the status bar says now, every tone on it, whether a setup refusal shows anywhere, and the activity log. */
+const statusFacts = (page: Session) => page.evaluate(`(() => { const bar = document.querySelector(".status-bar"), message = bar?.querySelector(".status-message");
+  return { text: bar?.innerText.replace(/\\s+/g, " ").trim(), messageTone: message?.dataset.tone ?? null, messageColour: message ? getComputedStyle(message).color : null,
+    items: [...(bar?.querySelectorAll(".status-item") ?? [])].filter(e => !e.hidden).map(e => ({ tone: e.dataset.tone ?? e.dataset.phase ?? null, text: e.textContent.trim() })),
+    refusalInStatusBar: /isn't showing/.test(bar?.innerText ?? ""), refusalAnywhere: /isn't showing/.test(document.body.innerText),
+    log: ${S}.runtime.feedback.log.map(e => e.tone + ": " + e.message), head: ${P}.viewport.snapshot().head.phase }; })()`);
+/** The 3D view panes that rest (not drawn now): their visible titles and buttons. */
+const idlePanes = (page: Session) => page.evaluate(`[...document.querySelectorAll('.viewport-state[data-tone="idle"]')].filter(e => e.getClientRects().length).map(e => ({ title: e.querySelector(".viewport-idle-title")?.textContent, shows: e.querySelector(".viewport-idle-shows")?.textContent, button: e.querySelector("button")?.textContent.trim() }))`) as Promise<{ title: string; shows: string; button: string }[]>;
+/** Every 3D view pane's dock tab and the names the Panels menu, the pane titles and the presentation port give them. */
+const viewNames = (page: Session) => page.evaluate(`({ dockTabs: [...document.querySelectorAll(".dock-tab")].filter(t => !t.closest(".layout-tabs")).map(t => t.textContent.trim().replace(/\\s+/g, " ")),
+  titles: ${P}.views.titles().map(t => t.panel + " = " + t.title),
+  panelsMenu: ${S}.panelsMenu().filter(i => /3D view|Close-up|Side/.test(i.label ?? "")).map(i => i.label + (i.checked ? " [x]" : "")),
+  idle: [...document.querySelectorAll('.viewport-state[data-tone="idle"]')].map(e => e.querySelector(".viewport-idle-title")?.textContent + " (aria: " + (e.closest("[aria-label]")?.getAttribute("aria-label") ?? e.getAttribute("aria-label") ?? "") + ")") })`);
+/** Choose a dock tab by its visible name (as pressing it would). */
+const pressPaneTab = (page: Session, name: string) => press(page, `[...document.querySelectorAll(".dock-tab")].filter(t => !t.closest(".layout-tabs")).find(t => t.textContent.trim().replace(/\\s+/g, " ") === ${JSON.stringify(name)})`);
+/** Press the resting pane's "Show here" button: the window draws that view now. */
+async function showHere(page: Session) {
+  const pressed = await press(page, `[...document.querySelectorAll('.viewport-state[data-tone="idle"]')].filter(e => e.getClientRects().length).map(e => e.querySelector("button")).find(Boolean)`);
+  await page.wait(600);
+  if (!noGame) await page.waitFor(headReady, 90_000).catch(() => { unreached.push({ state: "3D view after Show here", why: "the head was not ready 90 s after Show here" }); });
+  await page.wait(700);
+  return pressed;
+}
+const addView = (page: Session, title?: string) => page.evaluate(`JSON.stringify(window.xfStudioAddView(${title ? JSON.stringify(title) : ""}) ?? null)`) as Promise<string>;
+
+async function status(page: Session) {
+  await head(page);
+  const first = (await tabsOf(page)).shown;
+  texts["status-tabs-start"] = (await tabsOf(page)).tabs.map(t => t.name);
+  await newTab(page, "eye-makeup/default"); await head(page);
+  const second = (await tabsOf(page)).shown;
+  texts["status-added-view"] = await addView(page, "Side view"); await page.wait(900); await head(page);
+  const snap = async (state: string, shows: string, size: number) => {
+    texts[`status-${state}-${size}`] = await statusFacts(page);
+    await capture(page, `status-${state}`, [".status-bar"], shows, { pad: 6, section: "status", paired: "s-status" });
+    await capture(page, `status-${state}-window`, [], shows + " (the whole window)", { whole: true, section: "status", paired: "s-status" });
+  };
+  for (const size of SIZES) {
+    await view(page, size, 700);
+    await act(page, { kind: "tabs.show", tab: second }); await page.wait(900); await head(page);
+    await snap("ready-head", `Status bar with a ready head at ${size}px (Ready, no setup refusal, no orange line)`, size);
+    await act(page, { kind: "tabs.show", tab: first }); await page.wait(900); await head(page);
+    await snap("after-tab-switch", `Status bar after switching to another tab and its head is ready, at ${size}px`, size);
+    await act(page, { kind: "tabs.show", tab: second }); await page.wait(900); await head(page);
+    await snap("after-switch-back", `Status bar after switching back, at ${size}px`, size);
+    const resting = await idlePanes(page);
+    texts[`status-idle-before-pane-change-${size}`] = resting;
+    if (!resting.length) { await pressPaneTab(page, "Side view"); await page.wait(600); }
+    texts[`status-idle-after-opening-${size}`] = await idlePanes(page);
+    texts[`status-show-here-${size}`] = await showHere(page);
+    await snap("after-pane-change", `Status bar after a pane change (Show here on the resting 3D view pane, which the window now draws), at ${size}px`, size);
+    // Another pane change: the first view's pane again.
+    const names = (await viewNames(page)).dockTabs.filter(n => /3D view|Side view/.test(n));
+    texts[`status-view-tabs-${size}`] = names;
+    const other = (await idlePanes(page)).length ? null : names.find(n => n !== names[0]);
+    if (other) { await pressPaneTab(page, other); await page.wait(500); await showHere(page); await snap("after-second-pane-change", `Status bar after a second pane change, at ${size}px`, size); }
+  }
+}
+
+async function names(page: Session) {
+  await head(page);
+  texts["names-tabs-start"] = (await tabsOf(page)).tabs.map(t => t.name);
+  await newTab(page, "eye-makeup/default"); await head(page);
+  const one = (await tabsOf(page)).shown;
+  await newTab(page, "eye-makeup/default"); await head(page);
+  const two = (await tabsOf(page)).shown;
+  texts["names-added-two"] = await addView(page); await page.wait(900); await head(page);
+  await newTab(page, "eye-makeup/default"); await head(page);
+  const renamed = (await tabsOf(page)).shown;
+  texts["names-added-renamed"] = await addView(page, "Close-up"); await page.wait(900); await head(page);
+  const states: [string, string, string][] = [
+    [one, "one-view", "a tab with one 3D view: its pane tab reads \"3D view\""],
+    [two, "two-views", "a tab with two 3D views: numbered within the tab (3D view 1, 3D view 2)"],
+    [renamed, "renamed-view", "a tab with two 3D views, one renamed Close-up: the renamed view keeps its name, the other is numbered within the tab (3D view 1)"],
+  ];
+  for (const size of SIZES) {
+    await view(page, size, 700);
+    for (const [id, key, what] of states) {
+      await act(page, { kind: "tabs.show", tab: id }); await page.wait(900); await head(page);
+      texts[`names-${key}-${size}`] = await viewNames(page);
+      await closeAll(page);
+      await capture(page, `names-${key}-pane-tabs`, [], `View names: ${what}, in the pane tabs (the whole window at ${size}px)`, { whole: true, section: "names" });
+      await press(page, `document.querySelector('.shell-header button[aria-label="Panels"]')`); await page.wait(450);
+      texts[`names-${key}-menu-${size}`] = { menu: await menuText(page), fit: await menuFit(page) };
+      await capture(page, `names-${key}-panels-menu`, [], `View names: ${what}, in the Panels menu at ${size}px (its top edge under the Panels button)`, { whole: true, section: "names", paired: "d-summon" });
+      await closeAll(page);
+      // A resting pane: choose the other view's pane tab in this tab, so its not-drawn state shows its name.
+      const titles = (await viewNames(page)).dockTabs.filter(n => /^3D view|^Close-up/.test(n));
+      let resting = await idlePanes(page);
+      if (!resting.length && titles.length > 1) {
+        for (const name of titles) { await pressPaneTab(page, name); await page.wait(500); resting = await idlePanes(page); if (resting.length) break; }
+      }
+      texts[`names-${key}-resting-${size}`] = resting;
+      if (resting.length) await capture(page, `names-${key}-not-drawn`, ['.viewport-state[data-tone="idle"]'], `View names: ${what}: the resting pane's not-drawn state names its view (${resting.map(r => r.title).join(", ")}) at ${size}px`, { section: "names", pad: 16 });
+      else if (key !== "one-view") unreached.push({ state: `names ${key} not-drawn at ${size}`, why: "no resting 3D view pane was visible" });
+      if (resting.length) await capture(page, `names-${key}-not-drawn-window`, [], `View names: ${what}: the not-drawn state in the whole window at ${size}px`, { whole: true, section: "names" });
+    }
+  }
+  // The tab with one view, drawn from another tab's view: its title when shown as a resting pane in a second window size is covered above.
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // The style guide's matching entries
 
 async function guide(page: Session) {
@@ -278,7 +387,7 @@ async function guide(page: Session) {
   await page.waitFor(`!!document.getElementById("d-summon") && !!document.getElementById("s-header") && !!document.getElementById("d-sizes")`, 60_000);
   await page.waitFor(`!document.querySelector(".live-specimen[data-live] > p.note")`, 60_000).catch(() => { unreached.push({ state: "guide specimens", why: "some live specimens never replaced their placeholder" }); });
   await page.wait(800);
-  const ids = [["d-summon", "Summoning panels (U8: the Panels menu)"], ["s-header", "Application header (U9)"], ["d-sizes", "Size classes and default layouts (U9)"]] as const;
+  const ids = [["d-summon", "Summoning panels (U8: the Panels menu), with feature groups and Early access tags"], ["s-status", "Status bar"], ["s-header", "Application header (U9)"], ["d-sizes", "Size classes and default layouts (U9)"]] as const;
   texts["guide-state"] = await page.evaluate(`({ title: document.title, liveSpecimens: document.querySelectorAll(".live-specimen[data-live]").length, placeholdersLeft: document.querySelectorAll(".live-specimen[data-live] > p.note").length,
     entries: ${JSON.stringify(ids.map(([id]) => id))}.map(id => { const e = document.getElementById(id); return { id, present: !!e, heading: e?.querySelector("h2, h3")?.textContent.trim() ?? null, mentionsModules: /\\bModules\\b/.test(e?.innerText ?? ""), mentionsLayoutsButton: /Layouts button|Saved layouts/.test(e?.innerText ?? "") }; }) })`);
   for (const size of SIZES) {
@@ -301,6 +410,8 @@ async function guide(page: Session) {
 if (want("panels")) await session("panels", panels);
 if (want("header")) await session("header", header);
 if (want("focus")) await session("focus", focus);
+if (want("status")) await session("status", status);
+if (want("names")) await session("names", names);
 if (want("guide")) await session("guide", guide);
 
 /** Each run writes its own pair of files (named by its sections), so sections can be captured in separate runs and merged afterwards. */
