@@ -20,6 +20,7 @@ class Page extends EventTarget {
 class BackLink extends EventTarget {
   label = { textContent: "XF Studio site" };
   title = "";
+  href = "./";
   querySelector() { return this.label; }
   click() { const event = new Event("click", { cancelable: true }); this.dispatchEvent(event); return event.defaultPrevented; }
   anchor() { return this as unknown as HTMLAnchorElement; }
@@ -68,4 +69,14 @@ test("other project links clear their opener as before", () => {
   const studio = new Page("http://127.0.0.1:4349/?verify=1");
   openProjectLinkInNewTab("project-knowledge", studio.window());
   expect(studio.opened!.opener).toBeNull();
+});
+
+test("a direct or bookmarked visit to a localhost copy links to the public site, not the Studio app; the published guide keeps its own front page", () => {
+  const local = new Page("http://127.0.0.1:4317/style-guide.html?from=studio"), back = new BackLink();
+  bindGuideBackLink(back.anchor(), local.window());
+  expect(back.href).toBe("https://axefrog.github.io/xf-studio/");
+  expect(back.label.textContent).toBe("XF Studio site");
+  const site = new Page("https://axefrog.github.io/xf-studio/style-guide.html"), published = new BackLink();
+  bindGuideBackLink(published.anchor(), site.window());
+  expect(published.href).toBe("./");
 });

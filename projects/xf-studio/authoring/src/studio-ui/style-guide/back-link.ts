@@ -1,7 +1,12 @@
 /** The guide's default link goes to the site; Studio-opened tabs can instead return to their opener. */
+export const XF_STUDIO_SITE = "https://axefrog.github.io/xf-studio/";
+
 export function bindGuideBackLink(back: HTMLAnchorElement, page: Window = window): void {
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(page.location.hostname);
+  // On the published site "./" is the site's front page; a localhost copy's "./" would be the Studio app itself.
+  if (local) back.href = XF_STUDIO_SITE;
   const opener = page.opener;
-  if (!opener || !["localhost", "127.0.0.1", "[::1]"].includes(page.location.hostname) || new URLSearchParams(page.location.search).get("from") !== "studio") return;
+  if (!opener || !local || new URLSearchParams(page.location.search).get("from") !== "studio") return;
   const controller = new AbortController();
   page.addEventListener("pagehide", () => controller.abort(), { once: true, signal: controller.signal });
   page.addEventListener("message", event => {
