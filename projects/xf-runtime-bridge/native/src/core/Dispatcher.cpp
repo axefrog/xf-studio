@@ -212,6 +212,12 @@ GameGate gGate;
 // withdrawal, the selection after a failure), so Dispatcher::RunWrite doesn't refuse them on a closed write gate.
 thread_local int tRestoreDepth = 0;
 thread_local json tWhen;
+thread_local Dispatcher::ExecutionGuard tExecutionGuard;
+struct ExecutionScope {
+    Dispatcher::ExecutionGuard previous;
+    explicit ExecutionScope(Dispatcher::ExecutionGuard guard) : previous(std::move(tExecutionGuard)) { tExecutionGuard = std::move(guard); }
+    ~ExecutionScope() { tExecutionGuard = std::move(previous); }
+};
 // Own a copy on each dispatch thread; concurrent control/micro-action requests cannot borrow it.
 struct WhenScope {
     json previous;
@@ -243,7 +249,7 @@ void ValidateWhen(const json& when)
 // The control pipe's methods (0.8.1, RB-121): the emergency controls and the steps a handover takes.
 const std::set<std::string>& ControlMethods()
 {
-    static const std::set<std::string> methods{"bridge.kill", "behave.stop", "player.stop", "test.record.stop", "bridge.handover",
+    static const std::set<std::string> methods{"bridge.kill", "behave.stop", "player.stop", "test.record.stop", "supervisor.clear", "bridge.handover",
                                                "game.status", "photo.hud.hide", "showroom.clear", "ui.message"};
     return methods;
 }
@@ -319,6 +325,7 @@ namespace
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
              const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed)
 {
+    const auto executionGuard = RestoreScope::Active() ? Dispatcher::ExecutionGuard{} : tExecutionGuard;
     // 0.8.2 (the re-check's sixth finding, and the review's): the kill switch closes the queue, which used to refuse a write's
     // own put-back step too (photo.pose.set killed during its settle left the category changed). A put-back step (RestoreScope)
     // passes its cleanup to Run, which posts it to the cleanup lane whenever the closed queue keeps it from starting, decided
@@ -340,7 +347,7 @@ json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const 
     // RB-122: a changing step checks the kill switch, the pause and a handover on the game thread, right before it runs.
     // Safe to keep the pointer: Run returns only once the task has run, has started (past this check) or will never run.
     const auto result = aQueue.Run(
-        [aTask, aGated, aLabel, aWriteGate]() -> json {
+        [aTask, aGated, aLabel, aWriteGate, executionGuard]() -> json {
             try
             {
                 if (aGated)
@@ -351,6 +358,7 @@ json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const 
                 {
                     aWriteGate->RequireWritesOpen();
                 }
+                if (executionGuard) executionGuard();
                 return json{{"ok", true}, {"result", aTask()}};
             }
             catch (const MethodError& e)
@@ -472,6 +480,7 @@ void Dispatcher::Kill(const std::string& aReason)
         m_killReason = aReason;
     }
     m_killed.store(true);
+    if (m_safetyCancellation) m_safetyCancellation("kill");
     log::Warn("bridge.killed", "reason=" + aReason);
     if (m_eventSink)
     {
@@ -502,7 +511,9 @@ void Dispatcher::Revive()
 
 void Dispatcher::SetWritesPaused(bool aPaused)
 {
-    if (m_writesPaused.exchange(aPaused) != aPaused)
+    const bool changed = m_writesPaused.exchange(aPaused) != aPaused;
+    if (aPaused && m_safetyCancellation) m_safetyCancellation("writes_paused");
+    if (changed)
     {
         log::Warn("bridge.writes_paused", std::string("paused=") + (aPaused ? "true" : "false"));
     }
@@ -548,7 +559,9 @@ void Dispatcher::RequireWriteClass(Access aAccess) const
 
 void Dispatcher::SetHandover(bool aOn, const std::string& aNote)
 {
-    if (m_handover.exchange(aOn) != aOn)
+    const bool changed = m_handover.exchange(aOn) != aOn;
+    if (aOn && m_safetyCancellation) m_safetyCancellation("handover");
+    if (changed)
     {
         log::Warn("bridge.handover", std::string("on=") + (aOn ? "true" : "false") + (aNote.empty() ? "" : " note=" + aNote));
         if (m_eventSink)
@@ -638,6 +651,12 @@ bool Dispatcher::TakeRateToken()
 std::string Dispatcher::NextCid()
 {
     return "n" + std::to_string(m_cidCounter.fetch_add(1) + 1);
+}
+
+DispatchResult Dispatcher::HandleGuarded(const std::string& line, uint32_t pid, ExecutionGuard guard) noexcept
+{
+    ExecutionScope scope(std::move(guard));
+    return Handle(line, pid);
 }
 
 DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute) noexcept
@@ -838,6 +857,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
         WhenScope whenScope(when);
         if (spec.runOn == RunOn::BridgeThread)
         {
+            if (tExecutionGuard) RunRead([] { return json::object(); }, "supervisor.admission");
             response = {{"v", kProtocolVersion}, {"id", id}, {"cid", cid}, {"ok", true}, {"result", spec.fn(context)}};
         }
         else
@@ -850,8 +870,9 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
             // right before it runs: one accepted just before the player paused must not change the game on the next tick.
             // `this` outlives the task: Run returns only once it has run, has started (past this check) or will never run.
             const Dispatcher* writeGate = IsWrite(spec.access) ? this : nullptr;
+            const auto executionGuard = tExecutionGuard;
             const auto result = m_queue.Run(
-                [this, fn, context, methodName, writeGate, when]() -> json {
+                [this, fn, context, methodName, writeGate, when, executionGuard]() -> json {
                     try
                     {
                         // Checked here, on the game thread just before the call, not when the request was queued (RB-76).
@@ -861,6 +882,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
                             writeGate->RequireWritesOpen();
                         }
                         RequirePrecondition(when);
+                        if (executionGuard) executionGuard();
                         return json{{"ok", true}, {"result", fn(context)}};
                     }
                     catch (const MethodError& e)

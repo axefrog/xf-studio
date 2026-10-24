@@ -18,6 +18,7 @@
 #include "core/Log.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/Supervisor.hpp"
 
 namespace xfb::plugin
 {
@@ -342,6 +343,24 @@ json DmHolds()
 json DmGuardPresent()
 {
     return Service().Present(OpsFor("action-guard"));
+}
+
+nlohmann::json SupervisorProps()
+{
+    json result = json::array();
+    auto ops = OpsFor("supervisor-owned");
+    // The general DM sampler owns watcher subscriptions and drains their events. The
+    // supervisor must only resolve positions; never borrow that sampler for a guard.
+    ops.sample = [](const dm::SampleWants&, const std::map<std::string, std::string>& entities) {
+        std::string joined;
+        for (const auto& [key, id] : entities) joined += (joined.empty() ? "" : ",") + key + "=" + id;
+        RED4ext::CString pairs(joined.c_str());
+        return ScriptCall("XFSupervisor", "SpawnPositions", {"String"}, {&pairs}, "supervisor-owned");
+    };
+    const auto status = Service().Spawned(json::object(), ops);
+    for (const auto& item : status.at("spawned"))
+        if (item.value("kind", std::string()) != "light" && item.value("present", false)) result.push_back(item);
+    return result;
 }
 
 void StopDm()

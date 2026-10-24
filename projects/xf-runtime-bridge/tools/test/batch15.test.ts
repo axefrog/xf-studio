@@ -110,7 +110,7 @@ describe("RB-121: emergency controls never wait behind the queue", () => {
   });
 
   test("the sets and the plain words", () => {
-    expect([...EMERGENCY_COMMANDS].sort()).toEqual(["behave.stop", "bridge.kill", "player.stop", "session.handover", "session.resume", "test.record.stop"]);
+    expect([...EMERGENCY_COMMANDS].sort()).toEqual(["behave.stop", "bridge.kill", "player.stop", "session.handover", "session.resume", "supervisor.clear", "test.record.stop"]);
     expect([...SUPERSEDING_COMMANDS].sort()).toEqual(["bridge.kill", "session.handover"]);
     expect(BRIDGE_MESSAGES.superseded).toContain("emergency control");
   });

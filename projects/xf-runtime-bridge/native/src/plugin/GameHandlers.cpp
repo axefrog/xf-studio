@@ -1191,6 +1191,7 @@ json GameLoadMethod(const MethodContext& aContext)
             [cid] {
                 auto result = CallScript("XFGame", "LoadLatest", {}, {}, cid);
                 // In the same game-thread step (RB-76): no script call until the loaded session is ready.
+                CancelSupervisor("load_requested");
                 StopRecording("load_requested");
                 Get().scriptLayer.OnLoadRequested();
                 return result;
@@ -1208,6 +1209,7 @@ json GameLoadMethod(const MethodContext& aContext)
             [cid, aName] {
                 RED4ext::CString name(aName.c_str());
                 auto result = CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
+                CancelSupervisor("load_requested");
                 StopRecording("load_requested");
                 Get().scriptLayer.OnLoadRequested(); // as for the latest save (RB-76)
                 return result;
@@ -1639,7 +1641,9 @@ json WorldTimeSet(const MethodContext& aContext)
 json WorldPause(const MethodContext& aContext)
 {
     bool paused = params::ParsePause(aContext.params);
-    return writes::PauseResult(CallScript("XFWorld", "SetFrozen", {"Bool"}, {&paused}, aContext.cid));
+    auto result = writes::PauseResult(CallScript("XFWorld", "SetFrozen", {"Bool"}, {&paused}, aContext.cid));
+    if (paused) CancelSupervisor("world_paused");
+    return result;
 }
 
 // photo.pose.set: selects a photo-mode pose through the menu (attribute 5, the category, then 6, the pose),
@@ -2176,6 +2180,7 @@ void RegisterMethods(Dispatcher& aDispatcher)
     RegisterMethodsNpc(aDispatcher);
     RegisterInputChoices(aDispatcher);
     RegisterRecording(aDispatcher);
+    RegisterSupervisor(aDispatcher);
     RegisterMethodsDm(aDispatcher);
     RegisterMethodsSenses(aDispatcher);
     auto& state = Get();

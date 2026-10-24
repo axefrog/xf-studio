@@ -556,11 +556,19 @@ public abstract class XFPlayer {
 // same camera actions while it drives a camera, takeOverControlSystem.script:540-570]; session 7 checks it.
 public class XFGlideInput extends IScriptable {
   public let touched: String;
+  // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+  public let xfSupervisorWatch: Bool;
+  // END XFB_AUTONOMOUS_TEST_HOOKS
 
   // 0.8: the raw watch reports here (the first input seen wins, as for the actions).
   public func Touch(name: String) -> Void {
     if StrLen(this.touched) == 0 {
       this.touched = name;
+      // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+      if this.xfSupervisorWatch && XFBridge_RecordEnabled("supervisor") {
+        XFBridge_Record("supervisor", "{\"event\":\"supervisor.input\",\"action\":" + XFJson.Str(name) + "}");
+      }
+      // END XFB_AUTONOMOUS_TEST_HOOKS
     }
   }
 
@@ -598,7 +606,7 @@ public class XFGlideInput extends IScriptable {
       }
     }
     if moved {
-      this.touched = NameToString(name);
+      this.Touch(NameToString(name));
     }
     return false;
   }

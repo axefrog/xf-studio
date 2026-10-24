@@ -125,6 +125,11 @@ public:
     // Never throws: an unexpected failure is logged and answered with code "failed". aControlRoute (0.8.1, RB-121): the
     // request came on the control pipe, which answers only IsControlRouteMethod's methods (refused not_on_control_route).
     DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false) noexcept;
+    // Trusted in-process caller only. Propagates an execution-frame guard to every queued step;
+    // never accepted from request data. Cleanup inside RestoreScope remains unconditional.
+    using ExecutionGuard = std::function<void()>;
+    DispatchResult HandleGuarded(const std::string&, uint32_t, ExecutionGuard) noexcept;
+    void SetSafetyCancellation(std::function<void(const std::string&)> fn) { m_safetyCancellation = std::move(fn); }
 
     // RB-122 (0.8.1): one game-thread step that changes the game, on this dispatcher's queue: like RunGameTask, and the step
     // also passes RequireWritesOpen on the game thread right before it runs, so a kill, a pause or a handover that came
@@ -198,6 +203,7 @@ private:
     std::atomic<bool> m_handover{false};
     EventSink m_eventSink;
     PreconditionReader m_preconditionReader;
+    std::function<void(const std::string&)> m_safetyCancellation;
     std::atomic<uint64_t> m_requests{0};
     std::atomic<int64_t> m_lastRequestMs{-1}; // steady clock, milliseconds since its epoch
     std::atomic<uint64_t> m_cidCounter{0};

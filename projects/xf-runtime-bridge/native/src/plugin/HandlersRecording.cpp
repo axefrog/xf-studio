@@ -3,6 +3,7 @@
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Plugin.hpp"
 #include "plugin/Natives.hpp"
+#include "plugin/Supervisor.hpp"
 
 namespace xfb::plugin
 {
@@ -25,7 +26,7 @@ bool RecordingWanted(const std::string& channel)
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
     auto& s = Get();
     return s.config.allowTestHooks && s.scriptLayer.Ready() && s.bridge && s.bridge->HasClient() &&
-           !s.bridge->GetDispatcher().IsKilled() && Recorder().Wants(channel);
+           !s.bridge->GetDispatcher().IsKilled() && (Recorder().Wants(channel) || SupervisorWanted(channel));
 #else
     (void)channel;
     return false;
@@ -34,8 +35,13 @@ bool RecordingWanted(const std::string& channel)
 bool RecordingIngress(const std::string& channel, const std::string& payload)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-    if (!RecordingWanted(channel)) return false;
-    return Recorder().Ingress(channel, payload, recording::Now(), World(), Connection(), Get().runningTicks.load());
+    auto& s = Get();
+    if (!s.config.allowTestHooks || !s.scriptLayer.Ready() || !s.bridge || !s.bridge->HasClient() || s.bridge->GetDispatcher().IsKilled()) return false;
+    if (payload.size() > recording::kPayload || JsonNestingDepth(payload, kMaxJsonDepth) > kMaxJsonDepth) return false;
+    const auto event = nlohmann::json::parse(payload, nullptr, false);
+    if (!event.is_object()) return false;
+    SupervisorIngress(channel, event);
+    return Recorder().Wants(channel) && Recorder().Ingress(channel, payload, recording::Now(), World(), Connection(), s.runningTicks.load());
 #else
     (void)channel; (void)payload;
     return false;
@@ -51,7 +57,7 @@ void RegisterRecording(Dispatcher& d)
         return state;
     });
     Recorder().SetDirectory(Get().session.runtimeDir / "recordings");
-    Get().bridge->SetStopObserver([] { Recorder().RequestStop("bridge_stopped"); });
+    Get().bridge->SetStopObserver([] { CancelSupervisor("bridge_stopped"); Recorder().RequestStop("bridge_stopped"); });
     recording::RegisterMethods(d, Recorder(), Get().config.allowTestHooks, World, Connection,
                               [] { return Get().session.sessionId; }, Guard);
 #else
@@ -67,6 +73,7 @@ void TickRecording(bool ready)
     recording::Ops ops;
     ops.guard = Guard;
     ops.sample = [](const std::string& channel, const std::vector<std::string>& actors) {
+        if (channel == "supervisor") return nlohmann::json{{"valid", true}, {"event", "supervisor.coverage"}, {"continuous_contact", false}, {"no_contact_proof", false}};
         RED4ext::CString name(channel.c_str());
         std::string joined;
         for (const auto& a : actors) joined += (joined.empty() ? "" : ",") + a;

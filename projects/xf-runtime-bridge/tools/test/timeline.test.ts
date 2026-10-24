@@ -14,17 +14,42 @@ function fixture() {
     data: { position: [i * 12, 0, 0], vitals: { health, in_combat: i > 0 }, heat: { stage: i }, vehicle: { mounted: false }, busy: i ? "in_combat" : "" } }));
   rows.push({ seq: 4, run: 1, session: "s", world_generation: 2, valid: true, source_s: 4, channel: "face", data: { event: "face.bridge_submit", actor: "a1" } });
   let lost = 0;
+  const events: Json[] = [{ seq: 1, kind: "npc.arrived", source_s: 9, data: { who: "a1" } }];
   const api: TestApi = { run: async (name, raw = {}) => {
     const input = raw as Json;
     const records = rows.filter(r => r.seq > (input.since ?? 0)).slice(0, 5);
     const result = name === "bridge.info" ? { sid: "s" } : name === "test.record.read" ? {
       run: 1, session: "s", world_generation: 2, active: true, latest: rows.length, next: records.at(-1)?.seq ?? input.since,
       lost, source_now_s: 10, records,
-    } : name === "session.events" ? { events: input.since ? [] : [{ seq: 1, kind: "npc.arrived", source_s: 9, data: { who: "a1" } }], next: 1, latest: 1, dropped: 0 } : { v: { busy: "" } };
+    } : name === "session.events" ? { events: events.filter(e => e.seq > (input.since ?? 0)), next: events.length, latest: events.length, dropped: 0 } : { v: { busy: "" } };
     return { ok: true, command: name, cid: "test", result };
   } };
-  return { api, rows, lose: () => { lost = 1; } };
+  return { api, rows, events, lose: () => { lost = 1; } };
 }
+
+test("catch-up reconciles supervisor recorder/session receipts and preserves refused interventions", async () => {
+  const f = fixture();
+  const violation = { event: "supervisor.violation", generation: 3, incident: 1, violation: "no_contact", at_s: 5 };
+  const action = { event: "supervisor.action", receipt_seq: 10, generation: 3, entry_generation: 3, incident: 1, method: "player.teleport", response: { ok: false, error: { code: "in_combat" } } };
+  // Several same-method actions in one withdrawal incident must all survive, even if their
+  // results are identical; recorder/session copies of each are still reconciled once.
+  for (const data of [violation, action, { ...action, receipt_seq: 11 }]) {
+    f.rows.push({ ...f.rows[3], seq: f.rows.length + 1, channel: "supervisor", data });
+    f.events.push({ seq: f.events.length + 1, kind: data.event, data });
+  }
+  // Recording can stop while the independent supervisor still records session receipts.
+  f.events.push({ seq: f.events.length + 1, kind: "supervisor.contact", data: { generation: 3, contact_seq: 1, receipt: { vehicle_hit_observed: true, other_entity: "car1" } } });
+  f.events.push({ seq: f.events.length + 1, kind: "supervisor.cleared", data: { generation: 4, reason: "player_input:MoveX" } });
+  const page = await catchUp(f.api, { run: 1, detail: true });
+  expect(page.supervisor_summary.counts).toEqual({ violations: 1, actions: 2, refused: 2, cancellations: 1 });
+  expect(page.supervisor_summary.message).toContain("while you were away:");
+  expect(page.supervisor_summary.receipts).toHaveLength(5);
+  expect(page.contact_summary.observed_since_cursor).toBe(true);
+  expect(page.contact_summary.vehicle_hit_observed_in_run).toBe(true);
+  expect(page.contact_summary.no_contact_proof).toBe(false);
+  const again = await catchUp(f.api, { cursor: page.cursor });
+  expect(again.supervisor_summary.counts.actions).toBe(0);
+});
 test("catch-up summarizes path and transitions, keeps tap callbacks and session events", async () => {
   const f = fixture(), page = await catchUp(f.api, { run: 1 });
   expect(page.complete).toBe(true); expect(page.v.path).toEqual([[0, 0, 0], [12, 0, 0], [24, 0, 0]]); expect(page.v.distance_m).toBe(24);

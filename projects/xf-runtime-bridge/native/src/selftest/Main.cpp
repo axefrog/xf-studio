@@ -50,6 +50,7 @@
 
 int RunUnitTests();
 int RecordingUnitTests();
+int SupervisorUnitTests();
 int RunPipeStress(int aRounds);
 int RunLayoutRepro();
 
@@ -159,6 +160,7 @@ int wmain(int argc, wchar_t** argv)
     {
         const std::wstring arg = argv[i];
         if (arg == L"--unit-recording") return RecordingUnitTests();
+        if (arg == L"--unit-supervisor") return SupervisorUnitTests();
         if (arg == L"--unit")
         {
             return RunUnitTests();

@@ -25,7 +25,7 @@ const armInput = { run: 1, event: "toast.created", capture: "screenshot" as cons
 
 test("spawn guards use an entity-only reader with no watcher subscription or event drain", () => {
   const cpp = readFileSync(join(projectDir, "native/src/plugin/HandlersDm080.cpp"), "utf8");
-  const guard = cpp.split("json DmGuardPresent()")[1]!.split("void StopDm")[0]!;
+  const guard = cpp.split("json DmGuardPresent()")[1]!.split(/\r?\n}/)[0]!;
   expect(guard).not.toContain(".Spawned(");
   const script = readFileSync(join(projectDir, "redscript-dm/XFRuntimeBridgeDm.reds"), "utf8");
   const presence = script.split("public static func Presence(")[1]?.split("public static func")[0];

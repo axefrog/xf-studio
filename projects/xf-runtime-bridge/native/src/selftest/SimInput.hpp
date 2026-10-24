@@ -1,6 +1,7 @@
 #pragma once
 #include "core/InputChoices.hpp"
 #include "core/Recording.hpp"
+#include "core/Supervisor.hpp"
 #include "selftest/SimNpc.hpp"
 namespace xfb::selftest
 {
@@ -15,6 +16,7 @@ private:
     input::Ops Ops();
     input::Service m_service;
     recording::Service m_recording;
+    supervisor::Service m_supervisor;
     Dispatcher& m_dispatcher;
     SimNpc& m_npc;
     std::function<std::string()> m_context;

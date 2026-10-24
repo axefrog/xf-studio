@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Dispatcher.hpp"
+#include "plugin/Supervisor.hpp"
 
 #include <chrono>
 #include <functional>

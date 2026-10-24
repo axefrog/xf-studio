@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 149 tools, 87 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 152 tools, 88 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -25,7 +25,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
-- [Other tools](#other-tools) (7)
+- [Other tools](#other-tools) (10)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -34,7 +34,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 53 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 54 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -42,11 +42,11 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | `write-inventory` | Change V's clothing | 5 | Yes | Equips and unequips V's clothing, and can add a test item to V's inventory (and remove it again). Off in the bridge's settings until the maintainer allows it; undo by equipping the earlier item. | `allow_writes = true` and `inventory` listed by name. Off in every package unless the test build is made with `--allow-inventory`. |
 | `write-save` | Save and load the game | 6 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
 | `write-showroom` | Set up the finish showroom | 5 | Yes | Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `showroom` listed by name (the test profile's build lists it). |
-| `write-player` | Move V | 7 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
+| `write-player` | Move V | 8 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
 | `write-npc` | Direct NPCs | 14 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
 | `write-dm` | Direct the scene | 21 | Yes | Brings props, vehicles and lights into the world near V and changes doors and vehicles; plays sounds and a vehicle's radio; shows message toasts and a real incoming call from a contact the player has, with subtitle lines; puts an XF quest in the HUD's tracker; shows the game's own banners and quest toasts; and arms watchers that run micro-actions inside the game without the agent. Nothing is saved: the answers' undos, the kill switch, the pause, a handover or loading a save take it all back, and saving waits until the spawned things and changed doors are gone. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only. |
 | `act-player` | Act for V | 2 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
-| `control` | Stop the bridge | 6 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
+| `control` | Stop the bridge | 7 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
 
 ## Refusals any tool can give
 
@@ -811,7 +811,7 @@ Explicit autonomous -writes candidate only. Bounded source sampling and private 
 
 ### `test_record_start`
 
-**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
+**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include supervisor interventions and contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
 
 - **Command:** `test.record.start`, the bridge method `test.record.start`
 - **Permission:** Look (`read`)
@@ -821,7 +821,7 @@ Explicit autonomous -writes candidate only. Bounded source sampling and private 
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `channels` | array of string | 1 to 8 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts` | Source channels to sample |
+| `channels` | array of string | 1 to 9 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `supervisor` | Source channels to sample |
 | `actors` | array of string | at most 16 items; each matches `^[ap][0-9]{1,15}$` | Selected returned actor or pick handles |
 | `rate_hz` | integer | exactly 10 | Source target (10 only) |
 | `duration_s` | integer | 1 to 1800 | Maximum recording lifetime |
@@ -2942,6 +2942,67 @@ Tools not yet sorted into an area above.
 | `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
 | `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
+### `supervisor_set`
+
+**Supervise an actor.** Autonomous test build and allow_test_hooks only. Replaces V's supervisor at 3 Hz by default. Observes a hold-position goal (including optional facing within 15 degrees) or idle safety, then applies the selected fixed policy on a violation edge. No walking or movement hold is implied. Last safe means a stationary quiet interval under partial contact coverage; traffic risk stays unknown. Unknown road classification causes a note only. Player input, kill, handover, pause, load or owner disconnect cancels it. NPC and spawned-object actor references reserve future adapters and are currently refused. Each action still needs its own permission; nearby withdrawal removes only our spawned NPCs, props and vehicles still within 30 m, never adopted passers-by. Return first releases our holds then uses the last observed quiet point through the normal teleport checks; missing evidence or combat refuses it. Start recording with the supervisor channel to retain interventions, or read the session events. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+
+- **Command:** `supervisor.set`, the bridge method `supervisor.set`
+- **Permission:** Move V (`write-player`)
+- **Changes the game:** Yes
+- **Undo:** supervisor.clear cancels the entry and queued actions. Actions already performed keep their ordinary command undo.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`actor_unavailable`](#refusal-actor-unavailable), [`supervisor_unavailable`](#refusal-supervisor-unavailable), `interrupted`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `schema` (required) | string | `xfb/supervisor-entry-1` | Versioned entry schema. |
+| `actor` (required) | object | the fields below | Actor identity, resolved afresh by its adapter. |
+| `actor.kind` (required) | string | `player`, `npc`, `spawn` | Actor adapter. |
+| `actor.ref` (required) | string | 1 to 16 characters | V, a returned NPC handle, or a spawned-object numeric handle. |
+| `goal` (required) | object | the fields below | hold_position requires at and a goal policy; idle_safe takes only kind. |
+| `goal.kind` (required) | string | `hold_position`, `idle_safe` | Goal to observe. |
+| `goal.at` | array of number | exactly 3 items; each -100000 to 100000 | World point [x, y, z]. |
+| `goal.radius_m` | number | 0.2 to 10 | Hold-position radius, default 1 m. |
+| `goal.facing` | number | -360 to 360 | Optional hold-position yaw, with 15 degree tolerance. |
+| `invariants` (required) | array of string | at most 4 items; each `not_in_combat`, `no_contact`, `not_on_road`, `alive` | Safety invariants; every selected invariant requires a policy. |
+| `policy` (required) | object | the fields below | One fixed action per enabled invariant and hold-position goal deviation. |
+| `policy.goal` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
+| `policy.not_in_combat` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
+| `policy.no_contact` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
+| `policy.not_on_road` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
+| `policy.alive` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
+| `tick_hz` | number | 1 to 5 | Bounded evaluation rate, default 3 Hz; no catch-up bursts. |
+| `safe_after_s` | number | 1 to 30 | Stationary time with no observed contact or combat before recording a last safe point, default 3 seconds. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
+
+### `supervisor_state`
+
+**Read actor supervision.** Autonomous test build and allow_test_hooks only. Reads the entry, cancellation generation, observed quiet-position evidence, current violation edges and explicit contact/input coverage limits. Changes nothing.
+
+- **Command:** `supervisor.state`, the bridge method `supervisor.state`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
+
+No parameters.
+
+### `supervisor_clear`
+
+**Clear actor supervision.** Autonomous test build and allow_test_hooks only. Immediately cancels the supervisor entry and invalidates actions awaiting an executing frame, including a set still waiting for admission. Available on the control route. Its independent input listener is removed on the next live game tick.
+
+- **Command:** `supervisor.clear`, the bridge method `supervisor.clear`
+- **Permission:** Stop the bridge (`control`)
+- **Changes the game:** Only the bridge's own work: it stops or pauses it
+- **Undo:** Set a new entry explicitly to resume supervision.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
+
+No parameters.
+
 ### `game_lifecycle_probe`
 
 **Inspect lifecycle continue plan.** Autonomous -writes test build and allow_test_hooks only. Read-only plan against the fresh native UI snapshot; optionally compare its generation. Records the observed prompt and hypothetical Start/UI_Skip consumer in session.events. Never invokes a consumer, readiness callback or gameplay script. It is not an execution-frame guarantee: Start acceptance, action event ABI and targeted invocation remain uncommissioned. No game.quit is implemented; shutdown/save-flush ordering remains unresolved.
@@ -3002,6 +3063,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 |---|---|
 | <a id="refusal-access-denied"></a>`access_denied` | Windows refused access to the game bridge. Run the XF tools as the same Windows user as the game. |
 | <a id="refusal-activation-expired"></a>`activation_expired` | The test activation expired. Check the current screen before arming a fresh fixture. |
+| <a id="refusal-actor-unavailable"></a>`actor_unavailable` | This supervisor candidate supports V only. NPC and vehicle supervision need their own validated actor adapter. |
 | <a id="refusal-arms-drawn"></a>`arms_drawn` | V has her arm cyberware out, and the game doesn't swap arm cyberware while it is drawn. Nothing was changed. Holster it first (player_action with weapon.holster), or leave holster_first on so the tools do it. |
 | <a id="refusal-bad-input"></a>`bad_input` | A value doesn't fit the tool's input schema (the message lists each problem), or two options that exclude each other were both given. Nothing was sent to the game. |
 | <a id="refusal-bad-params"></a>`bad_params` | Some of the values given aren't valid for this action. |
@@ -3051,6 +3113,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-no-free-slot"></a>`no_free_slot` | The game has no free manual save slot. Nothing was saved. Delete an old manual save in the game's Load menu, then try again. |
 | <a id="refusal-no-ground"></a>`no_ground` | There is no walkable ground near that point, so V wasn't moved there. Pick a point on the floor (or pass ground: exact at your own risk). |
 | <a id="refusal-no-path"></a>`no_path` | The game found no walkable path to that point, so V didn't move. Pick a point on the same floor and within reach. |
+| <a id="refusal-no-safe-position"></a>`no_safe_position` | The supervisor has no recorded quiet position yet. Let V stand quietly for the configured interval before testing a return. |
 | <a id="refusal-no-such-behaviour"></a>`no_such_behaviour` | No behaviour with that id is running. behave_list shows the ones that are. |
 | <a id="refusal-no-such-piece"></a>`no_such_piece` | The showroom has no head with that index. showroom_state lists the heads it has. |
 | <a id="refusal-not-added-by-bridge"></a>`not_added_by_bridge` | That item wasn't added by the bridge this session, so it stays in V's inventory. Nothing was removed. |
@@ -3068,6 +3131,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-not-v"></a>`not_v` | The player isn't V right now (a Johnny section, or someone else the story puts in V's place), so the appearance screen wasn't opened. Try again once V is back. |
 | <a id="refusal-outfit-managed-elsewhere"></a>`outfit_managed_elsewhere` | V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back. |
 | <a id="refusal-photo-key-needed"></a>`photo_key_needed` | The game offers no way to open the full photo mode from inside. Use photo_open, which presses the photo mode key in the game window, or ask the player to press it; game_wait with phase photo_mode notices when it opens. |
+| <a id="refusal-plan-unavailable"></a>`plan_unavailable` | The supervisor could not safely resolve its action targets. Read the action result and current actor state before replacing the entry. |
 | <a id="refusal-player-busy"></a>`player_busy` | V is busy (jumping, sliding, falling or landing, swimming, in a workspot, a takedown or grapple, carrying a body, in a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play; player_state's busy_state says which. |
 | <a id="refusal-precondition-failed"></a>`precondition_failed` | The game state changed before this step could act. The detail contains the required and observed state; read catch-up and prepare the next action. |
 | <a id="refusal-precondition-unavailable"></a>`precondition_unavailable` | This route cannot compare conditions on the executing game frame. Use the autonomous test candidate's native action route. |
@@ -3092,6 +3156,8 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-stale-context"></a>`stale_context` | The expected game screen or choices changed. Read the current state and prepare a fresh fixture. |
 | <a id="refusal-stale-match"></a>`stale_match` | The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh. |
 | <a id="refusal-superseded"></a>`superseded` | An emergency control (bridge_kill or session_handover) came after this command and cancelled it: a command still waiting never ran, and a running one stopped at its next step. Check the game's state, then send it again if it is still wanted. |
+| <a id="refusal-supervisor-busy"></a>`supervisor_busy` | The bounded supervisor action queue is full. Read its receipts and clear or replace the entry before trying again. |
+| <a id="refusal-supervisor-unavailable"></a>`supervisor_unavailable` | Supervision needs an observed, living V in unpaused gameplay with an available input listener. Read the game state before arming again. |
 | <a id="refusal-test-build-required"></a>`test_build_required` | This action needs the separate autonomous test candidate. Stage that candidate in the dedicated test profile. |
 | <a id="refusal-test-hooks-off"></a>`test_hooks_off` | Test hooks are off in this build. Only the -writes package for the dedicated XF test profile has them ([bridge] allow_test_hooks in its config.ini). |
 | <a id="refusal-test-run-required"></a>`test_run_required` | Arm a bounded test fixture before submitting this input. |

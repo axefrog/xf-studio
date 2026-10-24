@@ -17,6 +17,8 @@ This page answers requirement S1 of the [runtime requirements](../research/story
 
 **Bridge 0.8.15 lifecycle observations [source/offline]:** Round 2 adds bounded native ink-callback snapshots plus engagement-menu observation seams in autonomous builds. Changes emit `lifecycle.prompt`; the read-only `game.lifecycle.probe` emits `lifecycle.probe` with candidate Start/UI_Skip metadata and `called:false`. These use the existing session event ring, including while gameplay scripts are detached; normal recorder runs still stop on load. Start GSM acceptance and all actual native continue invocation remain uncommissioned (RB-234). See [R8](game-lifecycle-control.md#bridge-0815-round-2-offline-observer-and-read-only-plan).
 
+**Bridge 0.8.15 supervisor [source/offline, 25 October 2026]:** contact taps now have an independent supervisor subscriber as well as the recorder, so stopping/omitting contacts recording cannot disable a configured policy. The same three partial paths are used; supporting ground remains included and passive parked-car touches can still be missed (RB-233). Input callbacks cancel ownership immediately on covered deliberate input. The bounded owner emits `supervisor.violation`, `supervisor.action` with the command result, quiet-anchor, contact and cancellation receipts into session.events and the optional/default supervisor recorder channel. Native ingress copies/cancels only; sink flushes occur outside VM sampling/owner locks. Pending-receipt overflow emits supervisor.gap and makes catch-up incomplete. Catch-up reconciles duplicate recorder/session copies and reports “while you were away”; recording is not a safety-owner prerequisite. See [design and limits](../research/runtime/runtime-bridge-supervisor-design.md), [session rows](../research/runtime/runtime-bridge-test-card.md#supervisor-0815-round-3).
+
 ## 1. The short answers
 
 | Family | Best hook for a feed | Carries | Rate | Grade | Bridge today |
@@ -35,7 +37,7 @@ This page answers requirement S1 of the [runtime requirements](../research/story
 | Time skips | Poll `TimeSystem.GetGameTime()`; wrap `GameTimeUtils.FastForwardPlayerState` for the menu's skip | Clock; hours skipped | Poll | [source] | `world.state` reads the clock |
 | Save and load | Codeware `Session/BeforeSave`, `Session/AfterSave`, `Session/Start`, `Session/Ready`; `PlayerPuppet.OnGameAttached` and `OnTakeControl` | Restored and pre-game flags | Rare | [source] for Codeware's dispatch (§9); [runtime] for `OnGameAttached` | Yes, session lifecycle |
 
-The one thing to read before building anything is [section 2](#2-how-a-mod-attaches): the bridge has no hook yet that carries a game event into its event ring, and the ring has to survive a firefight.
+Read [section 2](#2-how-a-mod-attaches) before adding a producer: the bridge now carries covered contact/UI/lifecycle/supervisor receipts, and every new source must preserve bounded ingress and report any history loss.
 
 ## 2. How a mod attaches
 

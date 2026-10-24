@@ -10,6 +10,7 @@
 #include "core/Log.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/Supervisor.hpp"
 
 namespace xfb::plugin
 {
@@ -156,6 +157,19 @@ npc::Ops OpsFor(const std::string& aCid)
 }
 
 } // namespace
+
+nlohmann::json SupervisorNpcs()
+{
+    json result = json::array();
+    const auto status = Service().Status(json::object());
+    for (const auto& entry : status.at("npcs")) {
+        if (entry.value("kind", std::string()) != "actor") continue;
+        RED4ext::CString channel("actors"), who(entry.at("who").get<std::string>().c_str());
+        const auto sample = ScriptCall("XFRecording", "Sample", {"String", "String"}, {&channel, &who}, "supervisor-owned");
+        for (auto actor : sample.value("actors", json::array())) if (actor.value("valid", false)) result.push_back(std::move(actor));
+    }
+    return result;
+}
 
 void RegisterMethodsNpc(Dispatcher& aDispatcher)
 {

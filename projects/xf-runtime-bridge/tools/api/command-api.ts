@@ -135,7 +135,7 @@ const nextCid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${++ci
  * session.resume too, so taking the game back never waits behind another process's polling on the main pipe; its steps
  * (bridge.handover {on: false}, ui.message) are on the control route.
  */
-export const EMERGENCY_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "behave.stop", "player.stop", "test.record.stop", "session.handover", "session.resume"]);
+export const EMERGENCY_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "behave.stop", "player.stop", "test.record.stop", "supervisor.clear", "session.handover", "session.resume"]);
 /** Of those, the ones that supersede everything sent before them: queued commands are cancelled and running ones aborted. */
 export const SUPERSEDING_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "session.handover"]);
 
@@ -149,6 +149,9 @@ export class CommandApi {
   private readonly transportFactory: TransportFactory;
   private readonly idleCloseMs: number;
   private recordingActive = false;
+  private supervisorActive = false;
+  private supervisorGeneration = 0;
+  private supervisorStarts = new AbortController();
   private recordingLease?: ReturnType<typeof setTimeout>;
   private recordingHeartbeat?: ReturnType<typeof setTimeout>;
   private recordingEpoch?: AbortController;
@@ -247,6 +250,11 @@ export class CommandApi {
     // Process-only state: disarm must overtake a queued capture or a long game wait.
     if (name === "capture.disarm" || name === "capture.armed") return this.runNow(name, input ?? {}, options);
     if (name === "test.record.stop") { this.holdRecordingConnection(false); this.eventCaptures.cancel("recorder_stopped"); }
+    if (["supervisor.clear", "bridge.kill", "session.handover"].includes(name)) {
+      this.holdSupervisorConnection(false);
+      if (this.connection && this.inFlight === 0) this.touch();
+    }
+    if (name === "supervisor.set") options = { ...options, signal: options.signal ? AbortSignal.any([options.signal, this.supervisorStarts.signal]) : this.supervisorStarts.signal };
     if (name === "test.record.start") options = { ...options, signal: options.signal ? AbortSignal.any([options.signal, this.recordingStarts.signal]) : this.recordingStarts.signal };
     // Emergency controls go now, beside whatever is running (RB-121); kill and handover first cancel everything sent
     // before them (queued commands never start; a running one sees its signal abort and stops at its next step).
@@ -491,6 +499,7 @@ export class CommandApi {
    */
   async callBridge(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal): Promise<BridgeAnswer> {
     const recordingGeneration = this.recordingGeneration;
+    const supervisorGeneration = this.supervisorGeneration;
     if (signal?.aborted) return { ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };
     const session = readSession(this.runtimeDir);
     if (!session) {
@@ -548,6 +557,10 @@ export class CommandApi {
     }
     if (!response.ok && (response.error?.code === "disconnected" || response.error?.code === "client_timeout") && this.connection === connection) this.disconnect();
     if (response.ok) {
+      if (method === "supervisor.set" && supervisorGeneration === this.supervisorGeneration && !signal?.aborted && this.connection === connection)
+        this.holdSupervisorConnection((response.result as { active?: boolean })?.active === true);
+      if (method === "supervisor.clear" || method === "game.load" || (method === "world.pause" && params.paused === true) ||
+          (method === "supervisor.state" && (response.result as { active?: boolean })?.active === false)) this.holdSupervisorConnection(false);
       if (method === "test.record.start" && recordingGeneration === this.recordingGeneration && !signal?.aborted && this.connection === connection)
         this.holdRecordingConnection(true, Number(params.duration_s ?? 60));
       if (method === "test.record.stop" || method === "game.load" ||
@@ -575,7 +588,7 @@ export class CommandApi {
 
   private touch() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
-    if (this.recordingActive) { this.idleTimer = null; return; }
+    if (this.recordingActive || this.supervisorActive) { this.idleTimer = null; return; }
     this.idleTimer = setTimeout(() => this.disconnect(), this.idleCloseMs);
     // Don't keep a CLI process alive just for the idle timer.
     (this.idleTimer as { unref?: () => void }).unref?.();
@@ -586,44 +599,57 @@ export class CommandApi {
    * session.wait) holds it only during each poll and another process's XF tools can call between polls.
    */
   release() {
-    if (this.inFlight === 0 && !this.recordingActive) this.disconnect();
+    if (this.inFlight === 0 && !this.recordingActive && !this.supervisorActive) this.disconnect();
   }
 
   private holdRecordingConnection(active: boolean, durationS = 60) {
     if (!active) { ++this.recordingGeneration; this.recordingStarts.abort(); this.recordingStarts = new AbortController(); }
     if (this.recordingLease) clearTimeout(this.recordingLease);
-    if (this.recordingHeartbeat) clearTimeout(this.recordingHeartbeat);
-    this.recordingEpoch?.abort();
-    this.recordingEpoch = undefined;
     this.recordingLease = undefined;
     this.recordingActive = active;
     if (active) {
       // Native ownership stops at disconnect. Keep the same connection across thinking/long waits,
       // bounded by the source duration even when the coordinator never reads again.
-      this.recordingEpoch = new AbortController();
       this.recordingLease = setTimeout(() => { this.holdRecordingConnection(false); this.touch(); }, (Math.min(1800, durationS) + 1) * 1000);
       this.recordingLease.unref?.();
+    }
+    this.refreshOwnerHeartbeat();
+  }
+
+  private holdSupervisorConnection(active: boolean) {
+    if (!active) { ++this.supervisorGeneration; this.supervisorStarts.abort(); this.supervisorStarts = new AbortController(); }
+    this.supervisorActive = active;
+    this.refreshOwnerHeartbeat();
+  }
+
+  private refreshOwnerHeartbeat() {
+    if (this.recordingHeartbeat) clearTimeout(this.recordingHeartbeat);
+    this.recordingEpoch?.abort();
+    this.recordingEpoch = undefined;
+    if (this.recordingActive || this.supervisorActive) {
+      this.recordingEpoch = new AbortController();
       this.keepRecordingAlive(this.recordingEpoch);
     }
   }
 
   private keepRecordingAlive(lease: AbortController) {
     this.recordingHeartbeat = setTimeout(async () => {
-      if (!this.recordingActive || this.recordingEpoch !== lease) return;
+      if ((!this.recordingActive && !this.supervisorActive) || this.recordingEpoch !== lease) return;
       // The server is already serving traffic. Do not put a short-timeout ping behind a
       // native step that legitimately takes longer; local work has no request in flight.
       if (this.inFlight > 0) { this.keepRecordingAlive(lease); return; }
       // One bounded, paced transport call, independent of a local burst holding the outer queue.
-      const answer = await this.callBridge("ping", {}, nextCid("recorder-owner"), 2000, lease.signal);
+      const answer = await this.callBridge(this.supervisorActive ? "supervisor.state" : "ping", {}, nextCid("timeline-owner"), 2000, lease.signal);
       if (this.recordingEpoch !== lease) return;
-      if (!answer.ok) { this.holdRecordingConnection(false); this.eventCaptures.cancel("owner_connection_lost"); return; }
-      if (this.recordingActive) this.keepRecordingAlive(lease);
+      if (!answer.ok) { this.holdSupervisorConnection(false); this.holdRecordingConnection(false); this.eventCaptures.cancel("owner_connection_lost"); return; }
+      if (this.recordingActive || this.supervisorActive) this.keepRecordingAlive(lease);
     }, 2000);
     this.recordingHeartbeat.unref?.();
   }
 
   disconnect() {
     this.eventCaptures.cancel("owner_connection_lost");
+    this.holdSupervisorConnection(false);
     this.holdRecordingConnection(false);
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;

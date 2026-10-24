@@ -70,7 +70,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     cursor.event = page.next; eventMore = cursor.event < head;
     if (!eventMore || !advanced) break;
   }
-  const counts: Json = {}, channels: Json = {}, path: number[][] = [];
+  const counts: Json = {}, channels: Json = {}, path: number[][] = [], supervision: Json[] = [];
   let contactObserved = false, vehicleHitObserved = false;
   let travelled = 0;
   let last = cursor.last_v, healthMin: number | null = null, healthMax: number | null = null;
@@ -79,6 +79,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     counts[row.channel] = (counts[row.channel] ?? 0) + 1;
     if (!row.valid) { gaps.push("invalid_source"); continue; }
     const v = row.data;
+    if (v?.event?.startsWith("supervisor.") && v.event !== "supervisor.coverage") supervision.push({ source: "recorder", source_s: row.source_s, ...v });
     if (v?.event === "placement.traffic") alerts.push({ kind: "traffic_risk", seq: row.seq, source_s: row.source_s, ...v });
     if (row.channel === "contacts" && v?.event?.startsWith("contact.") && v.event !== "contact.coverage") {
       contactObserved = true;
@@ -120,6 +121,22 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     contactObserved = true; alerts.push({ kind: event.data?.what ?? event.kind, event });
   }
   for (const event of events) if (event.kind === "traffic_risk") alerts.push({ kind: "traffic_risk", event });
+  // Session receipts also cover supervision with recording stopped. Prefer the recorder copy
+  // when both feeds contain the same generation/incident/method; do not count it twice.
+  const supervisorKey = (v: Json) => seq(v.receipt_seq) ? JSON.stringify([v.world_generation, v.receipt_seq]) :
+    JSON.stringify([v.event, v.generation, v.entry_generation, v.incident, v.method, v.at_s, v.reason, v.contact_seq, v.observed_at_s, v.response?.cid, v.dropped]);
+  const supervisorSeen = new Set(supervision.map(supervisorKey));
+  for (const event of events) if (event.kind?.startsWith("supervisor.")) {
+    const receipt = { source: "session", ...event.data, event: event.kind };
+    const key = supervisorKey(receipt);
+    if (!supervisorSeen.has(key)) { supervision.push(receipt); supervisorSeen.add(key); }
+  }
+  for (const receipt of supervision) if (["supervisor.violation", "supervisor.action", "supervisor.cleared"].includes(receipt.event)) alerts.push({ kind: "supervisor", ...receipt });
+  for (const receipt of supervision) if (receipt.event === "supervisor.contact") {
+    contactObserved = true; vehicleHitObserved ||= receipt.receipt?.vehicle_hit_observed === true;
+    alerts.push({ kind: "contact", source: "supervisor", ...receipt });
+  }
+  if (supervision.some(v => v.event === "supervisor.gap")) gaps.push("supervisor_history_lost");
   cursor.contact_observed = saved?.contact_observed === true || contactObserved;
   cursor.vehicle_hit_observed = saved?.vehicle_hit_observed === true || vehicleHitObserved;
   const coveredPaths = status.channels?.includes("contacts") ? ["PlayerPuppet.OnCarHitPlayer.entry", "AbstractLandEvents.OnEnter", "WallCollisionHelpers.GetWallCollision"] : [];
@@ -136,6 +153,10 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       distance_m: travelled, path_points: path.length,
       health_min: healthMin, health_max: healthMax, changes, latest: last }, channels, counts,
     events: compact(events), alerts: compact(alerts), omitted: { ...omitted, events: options.detail ? 0 : Math.max(0, events.length - 24), alerts: options.detail ? 0 : Math.max(0, alerts.length - 24) },
+    supervisor_summary: { message: supervision.length ? "while you were away: supervisor receipts observed" : "while you were away: no supervisor receipts observed",
+      counts: { violations: supervision.filter(v => v.event === "supervisor.violation").length, actions: supervision.filter(v => v.event === "supervisor.action").length,
+        refused: supervision.filter(v => v.event === "supervisor.action" && v.response?.ok === false).length, cancellations: supervision.filter(v => v.event === "supervisor.cleared").length },
+      receipts: compact(supervision), omitted: options.detail ? 0 : Math.max(0, supervision.length - 24), history_complete: !gaps.length && !recordMore && !eventMore },
     contact_summary: { message: contactObserved ? "contact observed" : `no contact observed (covered paths: ${coveredPaths.join(", ") || "explicit session receipts only"})`,
       observed_since_cursor: contactObserved, observed_in_run: cursor.contact_observed, vehicle_hit_observed_in_run: cursor.vehicle_hit_observed,
       covered_paths: coveredPaths, commissioned: false, continuous: false, no_contact_proof: false,

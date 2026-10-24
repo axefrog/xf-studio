@@ -128,6 +128,7 @@ json BridgeHandover(const MethodContext& aContext)
         const auto cid = aContext.cid;
         try
         {
+            RestoreScope restoring;
             released = Game([cid] { return ScriptCall("XFPlayer", "Stop", {}, {}, cid); }, "bridge.handover.player_stop");
             released.erase("ok");
         }

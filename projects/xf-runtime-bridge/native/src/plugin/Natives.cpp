@@ -14,6 +14,7 @@
 #include <RED4ext/RED4ext.hpp>
 #include "plugin/HandlersInputChoices.hpp"
 #include "plugin/Lifecycle.hpp"
+#include "plugin/Supervisor.hpp"
 
 #include <Windows.h>
 
@@ -395,6 +396,7 @@ void ScriptLayerEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool*
         const bool known = Get().scriptLayer.OnEvent(ToStd(event));
         if (known && ToStd(event) == "detach") InvalidateLifecycle();
         if (known && ToStd(event) == "detach") StopRecording("world_detach");
+        if (known && ToStd(event) == "detach") CancelSupervisor("world_detach");
         if (!known)
         {
             log::Warn("script_layer.unknown_event", "event=" + Sanitize(ToStd(event), 32));

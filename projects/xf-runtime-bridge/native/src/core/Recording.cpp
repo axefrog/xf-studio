@@ -15,7 +15,7 @@ double Now()
 }
 namespace
 {
-unsigned EventBit(const std::string& channel) { return channel == "subtitles" ? 1 : channel == "voice" ? 2 : channel == "face" ? 4 : channel == "ui" ? 8 : channel == "contacts" ? 16 : 0; }
+unsigned EventBit(const std::string& channel) { return channel == "subtitles" ? 1 : channel == "voice" ? 2 : channel == "face" ? 4 : channel == "ui" ? 8 : channel == "contacts" ? 16 : channel == "supervisor" ? 32 : 0; }
 void Keys(const json& p, const std::set<std::string>& keys)
 {
     if (!p.is_object()) throw MethodError("bad_params", "Expected an object.");
@@ -125,14 +125,14 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     const auto duration = Integer(p, "duration_s", 60, 1800);
     const auto cap = Integer(p, "byte_cap", 64 * 1024 * 1024, 512 * 1024 * 1024);
     if (!duration || cap < kPayload) throw MethodError("bad_params", "duration_s must be positive; byte_cap at least 8192.");
-    auto channels = p.value("channels", json::array({"v", "actors", "camera", "contacts"}));
+    auto channels = p.value("channels", json::array({"v", "actors", "camera", "contacts", "supervisor"}));
     auto actors = p.value("actors", json::array());
-    if (!channels.is_array() || channels.empty() || channels.size() > 8 || !actors.is_array() || actors.size() > 16)
-        throw MethodError("bad_params", "Choose 1 to 8 channels and at most 16 actor handles.");
+    if (!channels.is_array() || channels.empty() || channels.size() > 9 || !actors.is_array() || actors.size() > 16)
+        throw MethodError("bad_params", "Choose 1 to 9 channels and at most 16 actor handles.");
     std::vector<std::string> selected, whos;
     for (const auto& c : channels)
     {
-        if (!c.is_string() || (c != "v" && c != "actors" && c != "camera" && c != "subtitles" && c != "voice" && c != "face" && c != "ui" && c != "contacts")) throw MethodError("bad_params", "Unknown recorder channel.");
+        if (!c.is_string() || (c != "v" && c != "actors" && c != "camera" && c != "subtitles" && c != "voice" && c != "face" && c != "ui" && c != "contacts" && c != "supervisor")) throw MethodError("bad_params", "Unknown recorder channel.");
         const auto s = c.get<std::string>();
         if (std::find(selected.begin(), selected.end(), s) != selected.end()) throw MethodError("bad_params", "Duplicate channel.");
         selected.push_back(s);
