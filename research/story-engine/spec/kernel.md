@@ -1,7 +1,7 @@
 # S0. Kernel specification
 
 **Status:** v4.15, 24 October 2026.
-- v4.15: an event a persisted record references keeps its facts, not only its header (§14.1).
+- v4.15: an event a persisted record references keeps its facts, not only its header (§14.1). This changes what every save holds, in every configuration, so both frozen digests were re-frozen with it: v3 `d534e0dc…` → `f924d2c9…`, v4 `da48cabc…` → `42d5a84e…`. The old behaviour lost data, and no native core depended on the old values. A digest is re-frozen only for a deliberate, documented change like this one.
 - v4.14 adds `classifiesAs`, a nominal kind compatibility that queries never widen to (§2.2).
 - v4.13 names the settle step of a boundary (§9.4), which S1 §10.2 relies on.
 - v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (found while building v4 in the reference model).
@@ -1268,7 +1268,7 @@ The [reference model](../../../projects/xf-story-engine/README.md) is on `main`:
 | Matching | Each change is matched on its own values (old values for removals) at its own time, including temporal windows | 22, 57 |
 | Persistence | A save's `meta` carries the world seed, time, evolution cursor, function versions, packs, demand roots and demand history. Ops are produced by a diff at save time. A read-only load changes nothing, packs included | 19, 20, 39, 55 |
 
-**The determinism digest** frozen in the reference model's tests (`d534e0dc…`, 1,067 entries, covering save, load, branching, outstanding batches, beliefs, summaries and group decisions) is the cross-implementation check that the native core must reproduce.
+**The determinism digest** frozen in the reference model's tests (`f924d2c9…` since v4.15, 1,067 entries, covering save, load, branching, outstanding batches, beliefs, summaries and group decisions) is the cross-implementation check that the native core must reproduce.
 
 ## 20. Version 4 additions
 
