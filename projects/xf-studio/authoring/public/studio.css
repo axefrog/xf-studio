@@ -1630,3 +1630,14 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .choice-popover-field .search-field { margin-bottom:var(--sp-2); }
 .popover-choice-text { margin:0; color:var(--text-muted); }
 .choices [role=radio][aria-checked=true] { border-color:var(--accent); background:var(--bg-hover); box-shadow:inset 0 -2px var(--accent); }
+
+/* Layout-default rows carry names and targets; keep full labels in their tooltips. */
+.menu.menu-wide { width: 560px; max-width: calc(100vw - 12px); }
+
+/* Progress overlays the notice edge; changing state adds no height. */
+.workspace-notice { position: relative; }
+.workspace-notice-progress { position: absolute; inset: auto 0 0; height: 3px; margin: 0; }
+.workspace-upgrade { position: absolute; inset: 0; }
+
+.status-item[data-tone="restoring"] { position: relative; }
+.status-restoring-progress { position: absolute; inset: auto 0 0; height: 3px; margin: 0; }

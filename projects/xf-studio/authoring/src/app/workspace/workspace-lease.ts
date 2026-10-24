@@ -17,7 +17,7 @@ import { refusal, type Capability } from "../../platform/api/capability";
 import { WORKSPACE_LEASE_DESCRIPTORS } from "../studio-action-descriptors";
 
 /** The lease's actions: Use it here, and Try again after a handover that couldn't save. */
-export type WorkspaceLeaseAction = { kind: "workspace.takeOver" } | { kind: "workspace.retryRelease" };
+export type WorkspaceLeaseAction = { kind: "workspace.takeOver" } | { kind: "workspace.retryRelease" } | { kind: "workspace.cancelTakeOver" };
 export type WorkspaceLeaseOutcome = { ok: true } | { ok: false; code: string; message: string };
 
 export const LEASE_MESSAGES = {
@@ -80,6 +80,7 @@ export type WorkspaceLeaseSnapshot = {
   readonly canTakeOver: boolean;
   /** Whether Try again is offered (a handover that couldn't save). */
   readonly canRetry: boolean;
+  readonly canCancel?: boolean;
   /** The reason every refused control shows while this page may not write; empty while it may. */
   readonly refusal: string;
 };
@@ -114,7 +115,7 @@ export function leaseSnapshot(state: LeaseState): WorkspaceLeaseSnapshot {
   const refusal = writing(state.phase) ? "" : state.phase === "starting" ? LEASE_MESSAGES.starting
     : state.phase === "disconnected" ? LEASE_MESSAGES.disconnected : state.phase === "reconciling" ? LEASE_MESSAGES.reconciling : LEASE_MESSAGES.refused;
   return { phase: state.phase, writable: writing(state.phase), message: messages[state.phase] ?? "", canTakeOver: state.phase === "read-only",
-    canRetry: state.phase === "release-failed", refusal };
+    canRetry: state.phase === "release-failed", canCancel: state.phase === "waiting", refusal };
 }
 
 /** The mechanics one host supplies. Every call settles; none steals the lease. */
@@ -153,6 +154,7 @@ export class WorkspaceLease {
   private settles: (() => void)[] = [];
   private releasedHooks: (() => void)[] = [];
   private releasing: Promise<boolean> | null = null;
+  private takeover: AbortController | null = null;
   constructor(private readonly adapter: WorkspaceLeaseAdapter, private readonly options: {
     clock: LeaseClock; graceMs?: number;
     /** The page's lifetime: aborting it abandons a takeover still waiting. */
@@ -199,9 +201,12 @@ export class WorkspaceLease {
 
   descriptors() { return structuredClone(WORKSPACE_LEASE_DESCRIPTORS); }
   capability(action: WorkspaceLeaseAction): Capability {
+    if (action?.kind === "workspace.cancelTakeOver")
+      return this.state.phase === "waiting" ? { available: true } : refusal("unavailable", "There’s no waiting request to cancel.");
     if (action?.kind === "workspace.retryRelease")
       return this.state.phase === "release-failed" ? { available: true } : refusal("unavailable", "There's nothing to try again.");
     if (action?.kind !== "workspace.takeOver") return refusal("invalid_value", "Unknown command.");
+    if (this.takeover) return refusal("busy", "Finishing the previous request. Try again in a moment.");
     if (this.writable()) return refusal("unavailable", "This workspace is already editable here.");
     if (asking(this.state.phase) || this.state.phase === "taken-over") return refusal("busy", this.snapshot().message || LEASE_MESSAGES.takingOver);
     if (this.state.phase !== "read-only") return refusal("not_ready", this.snapshot().message);
@@ -211,6 +216,11 @@ export class WorkspaceLease {
   async dispatch(action: WorkspaceLeaseAction): Promise<WorkspaceLeaseOutcome> {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Not available right now." };
+    if (action.kind === "workspace.cancelTakeOver") {
+      this.takeover?.abort();
+      this.apply({ kind: "takeover-failed" });
+      return { ok: true };
+    }
     if (action.kind === "workspace.retryRelease")
       return await this.retryRelease() ? { ok: true } : { ok: false, code: "unavailable", message: LEASE_MESSAGES.releaseFailed };
     const done = await this.takeOver();
@@ -233,21 +243,30 @@ export class WorkspaceLease {
    * fails withdraws its request and returns to `read-only`, where it can be tried again.
    */
   async takeOver(): Promise<{ ok: boolean; message?: string }> {
+    if (this.takeover) return { ok: false, message: "The previous request is still finishing." };
     if (!this.apply({ kind: "takeover-requested" })) return { ok: false, message: "This workspace is already editable here, or is being taken over." };
     const run = new AbortController();
+    this.takeover = run;
     const stop = () => run.abort();
     this.options.signal?.addEventListener("abort", stop, { once: true });
     this.options.clock.after(this.options.graceMs ?? TAKEOVER_GRACE_MS, () => { this.apply({ kind: "grace-elapsed" }); }, run.signal);
     try {
       const granted = await this.adapter.takeOver(run.signal);
+      if (run.signal.aborted) {
+        // A grant already in transit when Cancel was pressed is returned without writing anything.
+        try { await this.adapter.release(); } catch (error) { this.options.report?.(error); this.apply({ kind: "lost" }); }
+        return { ok: true };
+      }
       if (!Number.isSafeInteger(granted?.generation)) throw Error("The host issued no lease generation.");
       this.apply({ kind: "granted", generation: granted.generation });
       return { ok: true };
     } catch (error) {
-      if (!this.options.signal?.aborted) this.options.report?.(error);
+      if (run.signal.aborted) return { ok: true };
+      this.options.report?.(error);
       this.apply({ kind: "takeover-failed" });
       return { ok: false, message: "The workspace couldn't be taken over. Close the other window, then try again." };
     } finally {
+      if (this.takeover === run) this.takeover = null;
       run.abort();
       this.options.signal?.removeEventListener("abort", stop);
     }

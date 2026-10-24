@@ -197,7 +197,7 @@ const MOUNTS: Record<string, Mount> = {
   "lib-reason-tip": () => { const b = button({ label: "Build mod files", icon: "package", onClick: () => {} }); applyCapability(b, { available: false, reason: "Choose your game folder first." }); return b; },
   "lib-menu": () => h("div", { class: "row wrap gap-s" }, button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },
     { kind: "action", label: "Duplicate", icon: "duplicate", shortcut: "Ctrl+D", run: () => {} }, { kind: "action", label: "Merge down", icon: "layers", capability: { available: false, reason: "The bottom layer has nothing below it." }, run: () => {} },
-    { kind: "submenu", label: "Reset to default", icon: "reset", items: () => [
+    { kind: "submenu", label: "Reset to default", icon: "reset", width: "wide", items: () => [
       { kind: "action", label: "Eye makeup — Default feminine V · Preset 1 for the night market", icon: "layouts", run: () => {} }] },
     { kind: "action", label: "Save as new layout…", icon: "plus", run: () => openValuePopover({ kind: "text", label: "Name", value: "Layout 2", maxLength: 48 },
       { x: 120, y: 120 }, { title: "Save layout", apply: "Save", options: [{ label: "Remember shown modules", checked: true }, { label: "Switch to it in wide windows", checked: false }],
@@ -235,7 +235,7 @@ const MOUNTS: Record<string, Mount> = {
       const label = "My lighting — ManualSave-12 · Look 3";
       const main = h("div", { class: "menu-item", role: "menuitem", tabindex: "0", title: label },
         h("span", { class: "menu-text" }, h("span", { class: "menu-label", text: label }),
-          h("small", { class: "menu-hint", text: `Saved ${recordTime(new Date(2026, 9, 24, 13, 43 + index))}` })));
+          h("small", { class: "menu-hint", text: `Saved ${recordTime(new Date(2026, 9, 24, 13, index < 2 ? 43 : 44, index === 0 ? 5 : 25), index < 2)}` })));
       const row = menuSecondaryRow(main, { icon: "trash", name: "Delete default My lighting", run: () => { row.element.remove(); } });
       return row.element;
     });
@@ -381,7 +381,7 @@ const MOUNTS: Record<string, Mount> = {
   "lib-workspace-notice": () => {
     const make = (message: string, actions: readonly WorkspaceNoticeAction[]) => {
       const notice = new WorkspaceNotice({ onAction: () => {} });
-      notice.update({ message, actions });
+      notice.update({ message, actions, progress: /Taking over|Waiting for|Restoring changes/.test(message) });
       return notice.element;
     };
     const narrow = h("div", { style: "max-width:380px" },
@@ -391,7 +391,10 @@ const MOUNTS: Record<string, Mount> = {
       make(BACKUP_PENDING, ["protect", "exportCopy"]),
       make(BACKUP_STORAGE_FULL, ["protect", "exportCopy"]),
       make("Some restored changes need a game save that's no longer on this computer. Import it again, or discard them.", ["importSave", "discardWaiting"]),
-      make("Taking over from the other window…", []), narrow);
+      make("Taking over from the other window…", []),
+      make("Waiting for the other window to finish saving. Close the other window to continue.", ["cancelTakeOver"]),
+      make("Restoring changes from your last session is taking a while. Your library hasn't confirmed them yet.", ["retryRestore", "exportCopy"]),
+      make(UNPROTECTED, ["protect", "exportCopy", "showInFolder"]), narrow);
   },
   "lib-record-list": () => {
     const saved = new RecordList({ label: "Saved collections" });

@@ -35,14 +35,14 @@ test("one page holds the desktop workspace; another takes over only after releas
   expect((await post(leases, { page: "page-bbbbbbbb", action: "release", generation: 1, operation: "release-1aaaa" })).status).toBe(409);
   expect((await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-1aaaa" })).status).toBe(204);
   await Bun.sleep(5);
-  expect(b.events.at(-1)).toEqual({ event: "granted", generation: 2 });
+  expect(b.events.at(-1)).toMatchObject({ event: "granted", generation: 2, request: "request-1" });
   expect((await leases.refuseWrite(write(1), false)!.json())).toMatchObject({ code: "superseded" });
   expect(leases.refuseWrite(write(2), false)).toBeNull();
   // A holder whose page ends (closed, crashed or killed) releases at once to the page waiting for it.
   expect((await post(leases, { page: "page-aaaaaaaa", action: "takeover", request: "request-1" })).status).toBe(202);
   b.end();
   await Bun.sleep(5);
-  expect(a.events.at(-1)).toEqual({ event: "granted", generation: 3 });
+  expect(a.events.at(-1)).toMatchObject({ event: "granted", generation: 3, request: "request-1" });
   // The verification workspace is apart, and a malformed lease is refused.
   expect(leases.check(true, 3)).toBe(false);
   expect(leases.refuseWrite(new Request("http://127.0.0.1/", { method: "POST", headers: { [WORKSPACE_FENCE_HEADER]: "x" } }), false)?.status).toBe(400);
@@ -140,7 +140,7 @@ test("a status check settles a release still in flight as never applied: it is v
   // A new release (a new operation) still works.
   expect((await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-next" })).status).toBe(204);
   await Bun.sleep(5);
-  expect(b.events.at(-1)).toEqual({ event: "granted", generation: 2 });
+  expect(b.events.at(-1)).toMatchObject({ event: "granted", generation: 2, request: "request-1" });
   a.end(); b.end(); leases.close();
 });
 
@@ -154,6 +154,29 @@ test("a cancellation removes only its own takeover request, never a later one fr
   await post(leases, { page: "page-bbbbbbbb", action: "cancel", request: "request-old" });
   await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-1aaaa" });
   await Bun.sleep(5);
-  expect(b.events.at(-1)).toEqual({ event: "granted", generation: 2 });
+  expect(b.events.at(-1)).toMatchObject({ event: "granted", generation: 2, request: "request-new" });
   a.end(); b.end(); leases.close();
+});
+
+
+test("Cancel returns a racing grant and a delayed cancelled request never queues again", async () => {
+  let issued = 0;
+  const leases = new DesktopWorkspaceLeases(() => ++issued, 60_000);
+  const a = await page(leases, "page-aaaaaaaa"), b = await page(leases, "page-bbbbbbbb");
+  try {
+    await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-race" });
+    await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-race" });
+    expect(leases.holder(false)?.page).toBe("page-bbbbbbbb");
+    await post(leases, { page: "page-bbbbbbbb", action: "cancel", request: "request-race" });
+    expect(leases.holder(false)).toBeNull();
+    await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-race" });
+    expect(leases.holder(false)).toBeNull();
+    await post(leases, { page: "page-bbbbbbbb", action: "cancel", request: "request-late" });
+    await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-late" });
+    expect(leases.holder(false)).toBeNull();
+    await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-fresh" });
+    expect(leases.holder(false)?.page).toBe("page-bbbbbbbb");
+    await post(leases, { page: "page-bbbbbbbb", action: "cancel", request: "request-race" });
+    expect(leases.holder(false)?.page).toBe("page-bbbbbbbb");
+  } finally { a.end(); b.end(); leases.close(); }
 });

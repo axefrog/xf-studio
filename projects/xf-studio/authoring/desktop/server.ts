@@ -387,6 +387,14 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
           { headers: { "Cache-Control": "no-store" } }); }
         catch { return new Response("Update operation is unavailable", { status: 409 }); }
       }
+      if (url.pathname === "/api/desktop/workspace/reveal") {
+        if (routedRequest.method !== "POST") return new Response("Method not allowed", { status: 405 });
+        try {
+          const path = resolve(dataRoot, workspaceStore.fileName(url.searchParams.has("verify")));
+          if (!hostOptions.revealPath?.(path)) throw Error("The folder couldn’t be opened.");
+          return Response.json({ ok: true });
+        } catch { return Response.json({ error: "The workspace folder couldn’t be opened. Try again." }, { status: 500 }); }
+      }
       if (url.pathname === "/api/desktop/workspace/start-fresh") {
         const response = desktopWorkspaceStartFresh(routedRequest, workspaceStore, url.searchParams.has("verify"));
         if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");

@@ -23,7 +23,7 @@ export type MenuItem =
        */
       tip?: string;
       secondary?: { icon: IconName; name: string; capability?: Capability; run(): void } }
-  | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[] }
+  | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[]; width?: "wide" }
   | { kind: "separator" }
   | { kind: "heading"; label: string; detail?: string };
 export type MenuAnchor = { x: number; y: number } | Element;
@@ -191,6 +191,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     const items = item.items();
     if (!hasCommands(items)) return;
     self.child = build(items, entry, item.label, self, entry);
+    if (item.width === "wide") { self.child.element.classList.add("menu-wide"); place(self.child.element, entry, true); }
     if (focusFirst) focusEntry(self.child, 0);
   }
   element.addEventListener("keydown", event => {

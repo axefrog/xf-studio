@@ -23,8 +23,8 @@ type Channel = {key:string; size:number; data:Uint8Array};
 /** One current job with cooperative cancellation. Only complete bundles publish.
  * The compact one-channel caches are independent of transferred RGBA outputs. */
 export function createRasterProcessor(post: (result: RasterResponse) => void,
-  pause: () => Promise<void> = () => new Promise(resolve => setTimeout(resolve, 0)),
-  now: () => number = () => performance.now()) {
+  pause: () => Promise<void>,
+  now: () => number) {
   let active: { i: number; version: number; cancelled: boolean } | undefined;
   let cachedAlpha: Channel | undefined, cachedCoverage: Channel | undefined;
   let cachedCentres:{key:string;uv:Float32Array}|undefined;

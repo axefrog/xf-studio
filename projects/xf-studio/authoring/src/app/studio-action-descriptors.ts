@@ -261,7 +261,8 @@ export const DOCUMENT_OUTBOX_DESCRIPTORS = {
 export const WORKSPACE_LEASE_DESCRIPTORS = {
   "workspace.takeOver": request("host", "lease"),
   "workspace.retryRelease": request("host", "lease"),
-} satisfies Record<"workspace.takeOver" | "workspace.retryRelease", RequestDescriptor>;
+  "workspace.cancelTakeOver": request("host", "lease"),
+} satisfies Record<"workspace.takeOver" | "workspace.retryRelease" | "workspace.cancelTakeOver", RequestDescriptor>;
 
 export const UPDATE_CHECK_DESCRIPTORS = {
   "updates.startupCheck": request("host", "read", {}, true),
@@ -303,13 +304,14 @@ export const GESTURE_DESCRIPTORS = EYE_MAKEUP_GESTURE_DESCRIPTORS satisfies Reco
  */
 /** A file workflow; `payload`: what one that waits for a picker names when it is asked (profiles design §3.3). */
 export type FileDescriptor = { scope: readonly ActionScope[];
-  effect: "import" | "download" | "package" | "recover"; device: "picker" | "download" | "none";
+  effect: "import" | "download" | "package" | "recover" | "reveal"; device: "picker" | "download" | "none";
   async: true; cancellable: false; savesFirst: boolean; undo: UndoPolicy; payload: PayloadSchema };
 const file = (scope: ActionScope | readonly ActionScope[], effect: FileDescriptor["effect"],
   device: FileDescriptor["device"], options: { savesFirst?: boolean; undo?: UndoPolicy; payload?: PayloadSchema } = {}): FileDescriptor =>
   ({ scope: typeof scope === "string" ? [scope] : scope, effect, device, async: true, cancellable: false,
     savesFirst: options.savesFirst ?? false, undo: options.undo ?? "none", payload: options.payload ?? {} });
 export const FILE_DESCRIPTORS = {
+  "workspace.showInFolder": file("workspace", "reveal", "none"),
   "recipe.import": file(["file", "collection"], "import", "picker", { payload: { collection: TARGET_SCHEMA.collection } }),
   "recipe.export": file(["file", "layer"], "download", "download"),
   "mask.export": file(["file", "layer"], "download", "download"),

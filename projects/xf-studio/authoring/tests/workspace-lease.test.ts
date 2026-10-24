@@ -71,7 +71,7 @@ test("a read-only window refuses, says so, takes over after the grace with the w
   const lease = new WorkspaceLease(script.adapter, { clock: time.clock, graceMs: 1000 });
   expect(lease.refusal()?.reason).toBe(LEASE_MESSAGES.starting);
   await lease.start();
-  expect(lease.snapshot()).toEqual({ phase: "read-only", writable: false, message: LEASE_MESSAGES.readOnly, canTakeOver: true, canRetry: false, refusal: LEASE_MESSAGES.refused });
+  expect(lease.snapshot()).toEqual({ phase: "read-only", writable: false, message: LEASE_MESSAGES.readOnly, canTakeOver: true, canRetry: false, canCancel: false, refusal: LEASE_MESSAGES.refused });
   expect(lease.refusal()).toEqual({ available: false, code: "unavailable", reason: LEASE_MESSAGES.refused });
   expect(lease.capability({ kind: "workspace.takeOver" }).available).toBe(true);
   const taking = lease.dispatch({ kind: "workspace.takeOver" });
@@ -199,7 +199,7 @@ test("a read-only window refuses every dispatch with unavailable, keeps reads, a
   expect(shell.authoring.requestCapability({ kind: "refresh" }).code).not.toBe("unavailable");
   expect(shell.workspace.snapshot()).toMatchObject({ phase: "read-only", canTakeOver: true });
   expect(shell.workspace.capability({ kind: "workspace.takeOver" }).available).toBe(true);
-  expect(Object.keys(shell.workspace.descriptors())).toEqual(["workspace.takeOver", "workspace.retryRelease"]);
+  expect(Object.keys(shell.workspace.descriptors())).toEqual(["workspace.takeOver", "workspace.retryRelease", "workspace.cancelTakeOver"]);
 });
 
 test("the window that holds its workspace behaves as before", async () => {
@@ -581,4 +581,35 @@ test("desktop: a release and its status check name one operation; takeovers and 
   expect(cancelFirst!.request).toBe(first!.request);
   expect(cancelSecond!.request).toBe(second!.request);
   expect(first!.request).not.toBe(second!.request);
+});
+
+
+test("Cancel withdraws Waiting, leaves read-only, and permits a fresh takeover", async () => {
+  const time = simulatedClock(), script = scriptedAdapter(true);
+  const lease = new WorkspaceLease(script.adapter, { clock: time.clock });
+  await lease.start();
+  expect(lease.capability({ kind: "workspace.cancelTakeOver" }).available).toBe(false);
+  const taking = lease.dispatch({ kind: "workspace.takeOver" });
+  time.advance(1500);
+  expect(lease.snapshot().canCancel).toBe(true);
+  expect(await lease.dispatch({ kind: "workspace.cancelTakeOver" })).toEqual({ ok: true });
+  await taking;
+  expect(lease.snapshot()).toMatchObject({ phase: "read-only", writable: false, canTakeOver: true, canCancel: false });
+  expect(lease.capability({ kind: "workspace.takeOver" }).available).toBe(true);
+  const again = lease.dispatch({ kind: "workspace.takeOver" });
+  script.grant(8); await again;
+  expect(lease.snapshot().phase).toBe("taken-over");
+});
+
+test("Cancel returns a grant already in transit without writing or becoming editable", async () => {
+  const time = simulatedClock(), script = scriptedAdapter(true);
+  const lease = new WorkspaceLease(script.adapter, { clock: time.clock });
+  await lease.start();
+  const taking = lease.dispatch({ kind: "workspace.takeOver" });
+  time.advance(1500);
+  script.grant(8);
+  await lease.dispatch({ kind: "workspace.cancelTakeOver" });
+  await taking;
+  expect(script.calls).toEqual(["takeOver", "release"]);
+  expect(lease.snapshot()).toMatchObject({ phase: "read-only", writable: false, canTakeOver: true });
 });

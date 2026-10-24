@@ -330,6 +330,10 @@ let flushRequest = null;
 window.addEventListener("xfs-desktop-close-flush", () => flushRequest?.());
 void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
   storage: workspaceStorage,
+  revealWorkspace: async () => {
+    const response = await fetch(`/api/desktop/workspace/reveal${verification ? "?verify=1" : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    if (!response.ok) throw Error("The workspace folder couldn’t be opened. Try again.");
+  },
   // The desktop host file (16 MB limit) holds more than browser storage.
   storageBudget: 12_000_000,
   previewPreparation: createBrowserPreviewPreparation("/api/desktop/preview"),

@@ -126,7 +126,8 @@ export function layoutTabs(deps: TabsDeps) {
       const plan = tabs.substitution(view.id), one = "subjects" in plan && plan.oneClick;
       const names = one ? summary(plan) : "";
       const duplicate = view.owner.kind === "user" && defaults.some(other => other.id !== view.id && other.owner.kind === "user" && other.name === view.name);
-      const saved = view.owner.kind === "user" ? recordTime(view.owner.savedAt) : "";
+      const saved = view.owner.kind === "user" ? recordTime(view.owner.savedAt, defaults.some(other => other.id !== view.id && other.owner.kind === "user" &&
+        view.owner.kind === "user" && other.name === view.name && Math.floor(other.owner.savedAt / 60_000) === Math.floor(view.owner.savedAt / 60_000))) : "";
       return { kind: "action", label: `${view.name}${names ? ` — ${names}` : ""}${!one ? "…" : ""}`, icon: iconOf(view),
         capability: cap(defaultAction(view, reset)), stage: view.owner.kind === "module" && view.owner.earlyAccess ? "preview" : undefined,
         hint: duplicate ? `Saved ${saved}` : undefined,
@@ -158,7 +159,7 @@ export function layoutTabs(deps: TabsDeps) {
       { kind: "action", label: "Rename…", icon: "rename", capability: cap({ kind: "tabs.rename", tab: id, name: tab.name }), run: () => rename(id, invoker) }];
     const resets = tabs.defaults().map(view => cap(defaultAction(view, id)));
     if (resets.length) items.push({ kind: "submenu", label: "Reset to default", icon: "reset",
-      capability: resets.find(choice => choice.available) ?? resets[0], items: () => defaultItems(invoker, id) });
+      width: "wide", capability: resets.find(choice => choice.available) ?? resets[0], items: () => defaultItems(invoker, id) });
     items.push({ kind: "action", label: "Save as default…", icon: "save", capability: cap({ kind: "tabs.saveAsDefault", tab: id, name: tab.name }), run: () => rename(id, invoker, true) });
     if (origin?.owner.kind === "user") items.push(command(`Update “${origin.name}”`, { kind: "tabs.updateDefault", tab: id }, "save"));
     items.push(command("Close tab", { kind: "tabs.close", tab: id }, "close"));

@@ -35,9 +35,9 @@ afterEach(() => {
   if (previousWindow === undefined) delete (globalThis as Record<string, unknown>).window; else (globalThis as Record<string, unknown>).window = previousWindow;
 });
 
-async function harness(feedback?: Pick<Feedback, "announce" | "toast">) {
+async function harness(feedback?: Pick<Feedback, "announce" | "toast">, now?: () => number) {
   const documents = storeDocuments(), outbox = new DocumentOutbox(documents, memoryOutboxStorage()); outbox.open();
-  const defaults = new LayoutDefaults({ documents, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(31) });
+  const defaults = new LayoutDefaults({ documents, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(31), now });
   await defaults.load();
   const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "Eye makeup", character: V1.id, look: LOOK }, seededRandom(1)));
   const candidates: { subjects: typeof V1[]; looks: typeof LOOK[]; scenes: SubstitutionContext["scenes"] } = { subjects: [V1], looks: [LOOK], scenes: [] };
@@ -298,13 +298,14 @@ test("U4: substitution names the default's views locally, preserving saved view 
   expect(lightDocument.body.querySelector(".choice-popover")!.textContent).toContain("Scene · Front portrait");
 });
 
-test("Review B 5/13: same-named defaults use the Library date and minute, never their IDs", async () => {
-  const h = await harness();
-  for (let n = 0; n < 2; n++) h.defaults.dispatch({ kind: "create", name: "My lighting", fragment: STUDIO_LAYOUT_DEFAULTS[0]!.fragment });
+test("same-named defaults show seconds only when their saved minute collides", async () => {
+  const times = [0, 12_000, 62_000]; let i = 0;
+  const h = await harness(undefined, () => 1_800_000_000_000 + times[i++]!);
+  for (let n = 0; n < 3; n++) h.defaults.dispatch({ kind: "create", name: "My lighting", fragment: STUDIO_LAYOUT_DEFAULTS[0]!.fragment });
   const own = h.defaults.list().filter(view => view.name === "My lighting");
   h.view.newMenu();
   const hints = lightDocument.body.querySelectorAll(".menu-hint").map(element => element.textContent);
-  expect(hints).toEqual(own.map(view => `Saved ${recordTime(view.owner.kind === "user" ? view.owner.savedAt : 0)}`));
+  expect(hints).toEqual(own.map((view, index) => `Saved ${recordTime(view.owner.kind === "user" ? view.owner.savedAt : 0, index < 2)}`));
   for (const view of own) expect(lightDocument.body.textContent).not.toContain(view.id);
 });
 
@@ -314,6 +315,7 @@ test("Review B 6: Reset submenu rows keep their complete names in tooltips", asy
   key(h.row("Reset to default") as unknown as HTMLElement, "ArrowRight");
   const row = lightDocument.body.querySelectorAll(".menu-item").find(item => item.querySelector(".menu-label")?.textContent?.includes("— ManualSave-12 · Look 3"))!;
   expect(row.title).toBe("Eye makeup — ManualSave-12 · Look 3");
+  expect(lightDocument.body.querySelector(".menu-wide")).not.toBeNull();
 });
 
 test("Review B 7: dragging dims only its source and clears on cancellation", async () => {

@@ -130,7 +130,7 @@ export function browserWorkspaceLease(options: {
 }
 
 /** The desktop host's lease events, one JSON object per line. */
-export type DesktopLeaseEvent = { event: "granted"; generation: number } | { event: "held" } | { event: "release" } | { event: "ping" };
+export type DesktopLeaseEvent = { event: "granted"; generation: number; request?: string } | { event: "held" } | { event: "release" } | { event: "ping" };
 
 /** Desktop: the host's lease route, with the page's lifetime as one open stream. */
 export function desktopWorkspaceLease(options: {
@@ -146,7 +146,7 @@ export function desktopWorkspaceLease(options: {
   const separator = options.endpoint.includes("?") ? "&" : "?";
   let current: number | null = null, asked: () => void = () => {}, lost: () => void = () => {};
   let first: { resolve(held: boolean): void; reject(error: unknown): void } | null = null;
-  let grant: { resolve(generation: number): void; reject(error: unknown): void } | null = null;
+  let grant: { id: string; resolve(generation: number): void; reject(error: unknown): void } | null = null;
   let ended = false, operation: string | null = null;
   const send = (body: Record<string, unknown>) => options.send(options.endpoint, { method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-lease-1", page, ...body }) });
@@ -158,8 +158,8 @@ export function desktopWorkspaceLease(options: {
     if (event.event === "granted") {
       current = event.generation;
       if (first) { first.resolve(true); first = null; }
-      else if (grant) { grant.resolve(event.generation); grant = null; }
-    } else if (event.event === "held") { if (first) { first.resolve(false); first = null; } }
+      else if (grant && (!event.request || event.request === grant.id)) { grant.resolve(event.generation); grant = null; }
+    } else if (event.event === "held") { if (first) { first.resolve(false); first = null; } else current = null; }
     else if (event.event === "release") asked();
   };
   /** The stream ended (the host stopped, or dropped this page): nothing waits on it any more, and this page may not write. */
@@ -202,7 +202,7 @@ export function desktopWorkspaceLease(options: {
       return new Promise((resolve, reject) => {
         let granted = false;
         const id = crypto.randomUUID();
-        const request = { resolve: (generation: number) => { granted = true; resolve({ generation }); }, reject };
+        const request = { id, resolve: (generation: number) => { granted = true; resolve({ generation }); }, reject };
         grant = request;
         // Withdrawn (abandoned, or failed even when the host may have queued it, its answer lost): the host forgets the request, so
         // a later holder isn't asked on this page's behalf and a later takeover starts clean. Sent whatever became of `grant`.
@@ -210,8 +210,7 @@ export function desktopWorkspaceLease(options: {
           if (granted) return;
           if (grant === request) grant = null;
           // Names this request only: a later takeover's request, even one that reached the host first, is never removed by it.
-          void post({ action: "cancel", request: id }).catch(() => {});
-          reject(signal.reason);
+          void post({ action: "cancel", request: id }).catch(() => { end(); }).finally(() => reject(signal.reason));
         }, { once: true });
         post({ action: "takeover", request: id }).catch(error => { if (grant === request) grant = null; reject(error); });
       });

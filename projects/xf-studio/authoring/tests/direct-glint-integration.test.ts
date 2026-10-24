@@ -78,7 +78,7 @@ test("denser fine speckles opt into recipe-10 while old direct looks remain byte
 test("direct-light model uses the cancellable mask worker without optical textures",async()=>{
   const layer=initialRecipe().layers[0]!;layer.finish="glitter";layer.flakes=defaultDirectGlintFlakes();
   const responses:RasterResponse[]=[];
-  const worker=createRasterProcessor(r=>responses.push(r));
+  const worker=createRasterProcessor(r=>responses.push(r), async()=>{}, ()=>0);
   await worker.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:64,bakeOptics:false});
   const result=responses[0]!;expect(result.cancelled).not.toBe(true);
   if(result.cancelled)return;

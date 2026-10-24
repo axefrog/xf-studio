@@ -20,7 +20,7 @@ export const DESKTOP_WORKSPACE = "desktop";
 type Page = { id: string; send(event: object): void; close(): void };
 /** A queued takeover: the page, and the request's own ID (a cancellation names it, so it never removes a later request). */
 type Waiting = { page: string; request: string };
-type Scope = { pages: Map<string, Page>; holder: { page: string; generation: number } | null; waiting: Waiting[];
+type Scope = { pages: Map<string, Page>; holder: { page: string; generation: number; request?: string } | null; cancelled: Set<string>; waiting: Waiting[];
   /**
    * Release operations by ID: `done` once applied, `void` once a status check settled it as never applied (it is then refused if it
    * arrives later). Bounded: the oldest are forgotten.
@@ -42,11 +42,11 @@ export class DesktopWorkspaceLeases {
 
   private scope(verification: boolean): Scope {
     let scope = this.scopes.get(verification);
-    if (!scope) this.scopes.set(verification, scope = { pages: new Map(), holder: null, waiting: [], releases: new Map() });
+    if (!scope) this.scopes.set(verification, scope = { pages: new Map(), holder: null, cancelled: new Set(), waiting: [], releases: new Map() });
     return scope;
   }
   /** The holder's generation, or null when no page holds the scope (tests and diagnostics). */
-  holder(verification: boolean) { const holder = this.scope(verification).holder; return holder ? { ...holder } : null; }
+  holder(verification: boolean) { const holder = this.scope(verification).holder; return holder ? { page: holder.page, generation: holder.generation } : null; }
   /**
    * Whether a workspace write fenced with `generation` may land: only the holder's. A write without one (tools, tests and builds
    * from before the lease) is accepted.
@@ -56,17 +56,17 @@ export class DesktopWorkspaceLeases {
     return this.scope(verification).holder?.generation === generation;
   }
 
-  private grant(verification: boolean, scope: Scope, page: Page) {
+  private grant(verification: boolean, scope: Scope, page: Page, request?: string) {
     const generation = this.issue(verification);
-    scope.holder = { page: page.id, generation };
+    scope.holder = { page: page.id, generation, request };
     scope.waiting = scope.waiting.filter(item => item.page !== page.id);
-    page.send({ event: "granted", generation });
+    page.send({ event: "granted", generation, ...(request ? { request } : {}) });
     this.report(`Workspace lease ${generation} granted${verification ? " (verification workspace)" : ""}.`);
   }
   private grantNext(verification: boolean, scope: Scope) {
     while (!scope.holder && scope.waiting.length) {
-      const next = scope.pages.get(scope.waiting.shift()!.page);
-      if (next) this.grant(verification, scope, next);
+      const queued = scope.waiting.shift()!, next = scope.pages.get(queued.page);
+      if (next) this.grant(verification, scope, next, queued.request);
     }
   }
   private ended(verification: boolean, scope: Scope, id: string) {
@@ -138,10 +138,19 @@ export class DesktopWorkspaceLeases {
     if (body.action === "takeover" || body.action === "cancel") {
       if (typeof body.request !== "string" || !OPERATION_ID.test(body.request)) return Response.json({ error: "Invalid lease request." }, { status: 400 });
       const id = body.request;
+      const key = `${page.id}:${id}`;
       if (body.action === "cancel") {
+        scope.cancelled.add(key);
+        while (scope.cancelled.size > REMEMBERED_RELEASES) scope.cancelled.delete(scope.cancelled.values().next().value!);
+        if (scope.holder?.page === page.id && scope.holder.request === id) {
+          scope.holder = null;
+          page.send({ event: "held" });
+          this.grantNext(verification, scope);
+        }
         scope.waiting = scope.waiting.filter(item => !(item.page === page.id && item.request === id));
         return new Response(null, { status: 204 });
       }
+      if (scope.cancelled.has(key)) return new Response(null, { status: 204 });
       if (scope.holder?.page === page.id) return new Response(null, { status: 204 });
       if (!scope.waiting.some(item => item.request === id)) scope.waiting.push({ page: page.id, request: id });
       const holder = scope.holder && scope.pages.get(scope.holder.page);

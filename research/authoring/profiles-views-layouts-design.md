@@ -1,6 +1,6 @@
 # Profiles, views and layout tabs: design
 
-**Status:** approved design. Phase 1 and scene runtimes (phase 4a) are built; phase 2's P2-i through P2-vi are built on `claude/profiles-p2` ([experiment 044](../../experiments/044-profile-tabs/README.md); P2-vi is uncommitted). Feature focus and U6's Choose routes are implemented. P2-iv's synthetic timing test could not start Chrome in the sandbox; timing, captures and independent reviews remain with the coordinator, as does P2-vii's real-data G4. The design was revised after independent reviews and the spikes ([Review changes](#review-changes)); the whole proposal is pre-beta work (§9). The [architecture contract](architecture-contract.md) governs throughout, and the backlog's [profiles entry](../backlog/README.md#profiles-and-multiple-vs-after-the-beta) records the product decisions this page builds on.
+**Status:** approved design. Phase 1, scene runtimes (phase 4a), and phase 2’s P2-i through P2-vi are built and merged ([experiment 044](../../experiments/044-profile-tabs/README.md)). Feature focus and U6's Choose routes are implemented. P2-iv's synthetic timing test could not start Chrome in the sandbox; timing, captures and independent reviews remain with the coordinator, as does P2-vii's real-data G4. The design was revised after independent reviews and the spikes ([Review changes](#review-changes)); the whole proposal is pre-beta work (§9). The [architecture contract](architecture-contract.md) governs throughout, and the backlog's [profiles entry](../backlog/README.md#profiles-and-multiple-vs-after-the-beta) records the product decisions this page builds on.
 
 **What this page supersedes in the [view graph design](view-graph-design.md).** This page is the one contract for these topics:
 
@@ -260,6 +260,7 @@ flowchart TB
 - **Takeover happens only after release.**
   - The holder is asked to release. It stops accepting edits at once, drains its outbox (flushes), stops its timers and callbacks, writes the workspace a last time, then releases the lease and confirms.
   - If the holder doesn't answer, the new window waits: "Waiting for the other window to finish saving. Close the other window to continue." The lease moves only when the holder terminates (localhost: the browser releases its Web Lock `xfs.workspace.<key>`; desktop: the host sees its page end).
+  - Taking over and Waiting show the library’s indeterminate progress in the notice’s existing height. Waiting offers **Cancel**: abort the adapter request, stop asking, and return to read-only with **Use it here**. A grant racing Cancel is returned without writing; desktop requests and cancellations carry their own ID, so a cancelled request cannot acquire later or cancel a retry.
   - There is no timed steal.
 - **Built in phase 1a, with these details:**
   - **The desktop app is single-instance.** A second launch brings the running window forward and quits, so two host processes never share `workspace.json`.
@@ -547,6 +548,12 @@ The owner groups are a module's label, **Shared**, **Output** or **Tools**.
 
 ## 6. Presentation
 
+**Workspace polish.** Taking over, Waiting and Restoring use the shared progress bar in reserved space; short restores stay in the status line, long restores use the workspace notice. An unsafe long restore explains “Your library hasn’t confirmed them yet.” before offering Export. Desktop backup warnings and Settings › Appearance offer **Show in folder** for the host-owned workspace file (`workspace.showInFolder`, Files registry); browser workspaces omit the controls. The desktop host chooses the normal or verification file and accepts no caller-supplied path.
+
+**Verification.** In `?verify=1`, `xfStudioPolish4.state(name)` selects a visual specimen: `older`, `taking-over`, `waiting`, `restore-short`, `restore-safe`, `restore-unsafe`, `unprotected`, or `normal` to reset. `workspaceFile(true/false)` toggles the visual desktop capability (no folder is opened); `defaults()` adds three same-named defaults, two within one minute. The existing `xfStudioAddView("Side view")` puts a renamed view beside the unnamed one. These are visual specimens, not lease simulations; the real adapter tests cover Cancel and grant races. The coordinator runs `bun tools/polish4-look.ts <output-folder-on-C> [port=4564]` from the authoring folder: it owns fresh data and processes, captures light/dark at 900/1600 px, and writes `review.html` with app/guide pairs. It has not been run in the implementation sandbox (no browser/GPU).
+
+**Names in tab menus.** Reset to default uses the wide submenu (up to 560 px within the viewport), keeping full row names in tooltips. Same-named own defaults show date and minute; only those sharing that minute add seconds. Only unnamed 3D views count towards numbering within a tab; renamed views keep their own names.
+
 **Built in phase 2.** U1–U9 are implemented: the layout tab strip and keys; tab commands; grouped New tab defaults; substitution and naming popovers; the three captured empty-state Choose routes; not-drawn view panes; and the tab-scoped Panels menu/header. The component library and generated style guide define these patterns ([044 §3](../../experiments/044-profile-tabs/README.md#3-ui-spec-list)). P2-i–P2-vi are accepted; the real-data G4 measurement remains the coordinator’s gate. The panel picker, binding selector, profile flyout and Duplicate UI below still belong to later phases.
 
 The UI component track builds these. This section gives behaviour, states and accessibility only; aesthetics are the track's. Everything passes the [visual QA checklist](ui-visual-qa-checklist.md) and the UI review.
@@ -627,6 +634,8 @@ Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+PageUp/PageDown are not used, because the brow
 | `src/preview/preview-actions.ts`, `src/app/view-actions.ts`: the focused-view default | A required `view` (and `sceneGen`), resolved by the input layer and the panels | 1. `FocusService` takes focus over from the graph. 2. Panels pass captured targets. 3. Make `view` required, with a boundary test. |
 
 ## 8. Migration into the first profile
+
+**Read-only before migration.** The migration resolves identities and creates library documents in a transaction; it is not a pure transformation of the stored workspace. A read-only window whose holder has not migrated therefore shows a centred head-pane-family state with no layout tab: “This workspace is open in an older XF Studio window. Reload that window, or choose Use it here.” **Use it here** dispatches the lease action. It writes no migration or session; the holder still migrates for real.
 
 A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal one and `?verify=1` separately), by the lease holder:
 

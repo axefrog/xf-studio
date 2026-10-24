@@ -116,13 +116,14 @@ export const viewPanelId = (view: ViewId) => view === MAIN_VIEW ? "head" : `view
 /** A view's name when it has none of its own. */
 export const DEFAULT_VIEW_TITLE = "3D view";
 /**
- * Each view's title, in graph order: its own name, else "3D view", numbered within its tab when that tab has several views.
+ * Each view's title, in graph order: its own name, else "3D view", numbered within its tab when that tab has several unnamed views.
  * Derived, never stored, so the panel's ID and the saved layouts never depend on it. Pure.
  */
 export function viewTitles(views: readonly Pick<ViewRecord, "id" | "title" | "tab">[]): string[] {
   const counts = new Map<string | undefined, number>(), positions = new Map<string | undefined, number>();
-  for (const view of views) counts.set(view.tab, (counts.get(view.tab) ?? 0) + 1);
+  for (const view of views) if (!view.title) counts.set(view.tab, (counts.get(view.tab) ?? 0) + 1);
   return views.map(view => {
+    if (view.title) return view.title;
     const position = (positions.get(view.tab) ?? 0) + 1;
     positions.set(view.tab, position);
     return view.title || (counts.get(view.tab)! > 1 ? `${DEFAULT_VIEW_TITLE} ${position}` : DEFAULT_VIEW_TITLE);

@@ -1,3 +1,5 @@
+import { polish4Defaults, polish4Verification, type Polish4State } from "./polish4-verification";
+import { profileWorkspaceLease } from "../app/profiles/profile-window";
 import { layoutTabsPort } from "../app/profiles/tab-presentation";
 import { emptyChoicesPort } from "../app/profiles/empty-choices";
 import { defaultViewGraph } from "../preview/preview-view-graph";
@@ -100,6 +102,8 @@ export type StudioHost = {
   storage: Pick<Storage, "getItem" | "setItem">;
   /** Serialized workspace budget; the desktop host file allows more than browser storage. */
   storageBudget?: number;
+  /** Desktop host’s reveal route for this workspace; omitted on localhost. */
+  revealWorkspace?: () => Promise<void>;
   /** The host's 3D preview preparation service. */
   previewPreparation: PreviewPreparationActions;
   /** The host's WolvenKit setup service (download with consent, .NET check). */
@@ -160,6 +164,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     savedV: byId<HTMLInputElement>("device-save-picker"),
     characterPreset: byId<HTMLInputElement>("device-character-picker"),
   } });
+  const workspaceFiles: import("../app/studio-file-operations").StudioFilePort = { ...fileDevice, revealWorkspace: host.revealWorkspace };
   let port: StudioPresentationPort<HTMLElement> | undefined;
   const diagnosticsDevice = createBrowserDiagnostics({ window, download: (blob, name) => fileDevice.download(blob, name) });
   // The presentation names the view settings a report carries; the root adds only which workspace this is.
@@ -258,12 +263,14 @@ async function start(host: StudioHost, root: HTMLElement) {
   const region = STUDIO_COMPOSITION.region;
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
+  const polishFixture = verification ? polish4Verification(() => statusSource.changed()) : undefined;
   const statusSource = new PresentationStatusSource(() => {
     const head = shownHead(), eye = head?.scene.eyeAppearance().optics;
-    return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), outbox: outboxView(documents.outbox.status()),
+    const snapshot = { ...status, ...(lease ? { lease: profileWorkspaceLease(lease, sessionStored) } : {}), outbox: outboxView(documents.outbox.status()),
       glitter: measurements.snapshot(), assets: { ...status.assets,
       characterDetails: head?.characterDetails.snapshot(),
       eyeOptics: eye ? { requested: eye.requested, active: eye.active, reason: eye.reason, error: eye.error } : undefined } };
+    return polishFixture?.snapshot(snapshot) ?? snapshot;
   });
   // The outbox's warning follows its status (a failed outbox write, a send that failed, a conflict).
   documents.outbox.subscribe(event => { if (event.kind !== "acknowledged") statusSource.changed(); });
@@ -493,7 +500,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       ready: character => !!heads.showing(character),
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
-    fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
+    fileDevice: workspaceFiles, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
     panelInstance: panel => sessionState.instance(panel),
     tabs: layoutTabsPort(sessionState, layoutTabs, services),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
@@ -527,6 +534,16 @@ async function start(host: StudioHost, root: HTMLElement) {
     const viewer = () => heads.shown()?.scene;
     Object.assign(window, { xfStudioPresentation: port,
     xfStudioTabFixtures: tabFixtures,
+    xfStudioPolish4: {
+      state: (state: Polish4State) => polishFixture!.state(state),
+      /** Visual host-capability specimen; no folder is opened by this fixture. */
+      workspaceFile: (offered: boolean) => { workspaceFiles.revealWorkspace = offered ? async () => {} : host.revealWorkspace; statusSource.changed(); },
+      defaults: () => {
+        const fragment = layoutTabs.contributionOf(sessionState.tabId(), { id: "polish4", name: "Polish4", description: "Capture fixture" }).fragment;
+        polish4Defaults(services.defaults, documents.outbox, fragment);
+        statusSource.changed();
+      },
+    },
     // Verification only (experiment 044 decision M1): a tab (default: the shown one) printed as a module's default layout, to paste into
     // the module's `defaults.ts`, so supplied layouts are arranged in the Studio and replace the contributed ones as data.
     xfStudioTabAsDefault: (meta: { id: string; name: string; description: string }, tab = sessionState.tabId()) =>

@@ -484,3 +484,20 @@ test("the smoke report logs the page's startup times, and refuses malformed ones
     expect(smokeMessage({ ...base, timings })).toBeNull();
   expect(smokeMessage({ ...base, state: "ready" })).toBeNull();
 });
+
+test("workspace Show in folder reveals only the host-owned scoped file", async () => {
+  const revealed: string[] = [];
+  const server = createDesktopServer(staticRoot, dataRoot, { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" },
+    undefined, undefined, undefined, undefined, undefined, { revealPath: path => { revealed.push(path); return true; } });
+  try {
+    const base = `http://127.0.0.1:${server.port}`;
+    const login = await fetch(server.url), cookie = login.headers.get("set-cookie")!.split(";")[0]!;
+    const headers = { Cookie: cookie, Origin: base, "Content-Type": "application/json" };
+    expect((await fetch(`${base}/api/desktop/workspace/reveal`, { method: "POST", headers, body: "{}" })).status).toBe(200);
+    expect((await fetch(`${base}/api/desktop/workspace/reveal?verify=1`, { method: "POST", headers, body: JSON.stringify({ path: "other-file" }) })).status).toBe(200);
+    expect(revealed).toEqual([resolve(dataRoot, "workspace.json"), resolve(dataRoot, "verification-workspace.json")]);
+    expect((await fetch(`${base}/api/desktop/workspace/reveal`, { headers })).status).toBe(405);
+    expect((await fetch(`${base}/api/desktop/workspace/reveal`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status).toBe(403);
+    expect(revealed).toHaveLength(2);
+  } finally { server.stop(); }
+});

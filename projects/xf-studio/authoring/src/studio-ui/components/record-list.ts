@@ -47,6 +47,6 @@ export class RecordList {
   }
 }
 
-/** A saved time as the record lists show it: the date and the minute, never the seconds ("29 Sep 2026, 6:02 pm" in the person's locale). */
-export const recordTime = (time: number | string | Date) =>
-  new Date(time).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+/** A saved time as the record lists show it: the date and the minute (seconds only when requested to distinguish same-minute own defaults) ("29 Sep 2026, 6:02 pm" in the person's locale). */
+export const recordTime = (time: number | string | Date, seconds = false) =>
+  new Date(time).toLocaleString(undefined, { dateStyle: "medium", timeStyle: seconds ? "medium" : "short" });

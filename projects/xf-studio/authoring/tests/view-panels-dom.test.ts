@@ -243,9 +243,9 @@ describe("a pane per view", () => {
     session.show(a); expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view"]);
     const first = session.graph.snapshot().views.find(view => view.tab === a)!;
     session.addView(first.id, {}, { tab: a, title: "Side view" });
-    expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view 1", "Side view"]);
+    expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view", "Side view"]);
     const paneTabs = (h.dock.element as unknown as LightElement).querySelectorAll(".dock-tab").map(tab => tab.textContent);
-    expect(paneTabs).toContain("3D view 1"); expect(paneTabs).toContain("Side view");
+    expect(paneTabs).toContain("3D view"); expect(paneTabs).toContain("Side view");
     session.show(b); expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view"]);
   });
   test("a dock save between showing B and syncing belongs to rendered A and keeps B's floating pane", async () => {

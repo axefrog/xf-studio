@@ -1,3 +1,4 @@
+import { progressBar } from "./progress";
 import { button } from "../controls";
 import { h, setText } from "../dom";
 import { openConfirmPopover } from "../menu";
@@ -12,9 +13,10 @@ import { openConfirmPopover } from "../menu";
  * It never moves the dock for something transient: it opens only when the owner hands it a state, and an owner that is mid-gesture
  * asks it to wait (`deferOpen`): a closed notice stays closed until the gesture ends, an open one keeps showing.
  */
-export type WorkspaceNoticeAction = "takeOver" | "retryRelease" | "exportCopy" | "protect" | "keepRestored" | "retryRestore" | "importSave" | "discardWaiting";
+export type WorkspaceNoticeAction = "takeOver" | "cancelTakeOver" | "showInFolder" | "retryRelease" | "exportCopy" | "protect" | "keepRestored" | "retryRestore" | "importSave" | "discardWaiting";
 export type WorkspaceNoticeState = {
   readonly message: string;
+  readonly progress?: boolean;
   /** The ways out, in the order they show. */
   readonly actions: readonly WorkspaceNoticeAction[];
 };
@@ -26,6 +28,8 @@ export type WorkspaceNoticeOptions = {
 /** Each way out's label and tooltip (shared with the style guide's specimens). */
 export const WORKSPACE_NOTICE_ACTIONS: Record<WorkspaceNoticeAction, { label: string; title?: string }> = {
   takeOver: { label: "Use it here", title: "Edit in this window: the other window finishes saving and becomes read-only" },
+  cancelTakeOver: { label: "Cancel", title: "Stop asking for the workspace and keep this window read-only" },
+  showInFolder: { label: "Show in folder", title: "Show the workspace file in its folder" },
   retryRelease: { label: "Try again", title: "Save your latest changes again, then hand the workspace over" },
   // The recovery export: this window's own copy, with the changes the library doesn't have yet. It needs nothing from the library, so it
   // works in the states that offer it (a handover that couldn't save, a stuck restore, a failed backup), where saving first would fail.
@@ -49,6 +53,7 @@ export class WorkspaceNotice {
   private readonly row = h("div", { class: "workspace-notice-actions" });
   private readonly buttons: Record<WorkspaceNoticeAction, HTMLButtonElement>;
   private order = "";
+  private readonly progress = progressBar({ label: "Workspace", className: "workspace-notice-progress" });
 
   constructor(private readonly options: WorkspaceNoticeOptions) {
     const make = (action: WorkspaceNoticeAction) => {
@@ -60,7 +65,7 @@ export class WorkspaceNotice {
     };
     this.buttons = Object.fromEntries(ORDER.map(action => [action, make(action)])) as Record<WorkspaceNoticeAction, HTMLButtonElement>;
     this.row.append(...ORDER.map(action => this.buttons[action]));
-    this.element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, this.text, this.row);
+    this.element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, this.text, this.row, this.progress.element);
   }
 
   /**
@@ -71,6 +76,8 @@ export class WorkspaceNotice {
     if (this.element.hidden && state && options.deferOpen) return;
     this.element.hidden = !state;
     setText(this.text, state?.message ?? "");
+    this.progress.element.hidden = !state?.progress;
+    this.progress.element.setAttribute("aria-label", state?.message ?? "Workspace");
     const shown = new Set(state?.actions ?? []);
     for (const action of ORDER) this.buttons[action].hidden = !shown.has(action);
     // The ways out keep the owner's order; reordered only when it changes, so focus stays on a button that stays.

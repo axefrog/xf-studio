@@ -35,7 +35,10 @@ export type PresentationStatus = {
   glitter: GlitterPreviewMeasurement[];
   message?: AdapterMessage;
   /** Whether this page holds its workspace (profiles design §2.3); absent where nothing else can hold it (fixtures). */
-  lease?: WorkspaceLeaseSnapshot;
+  lease?: WorkspaceLeaseSnapshot & {
+    /** Profile projection: the older workspace has no migrated session this build can show yet. */
+    readonly migrationPending?: boolean;
+  };
   /** The outbox (profiles design §2.2): whether this window's latest changes are protected on this computer. Absent without one. */
   outbox?: OutboxView;
 };

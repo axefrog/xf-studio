@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { eyeCheck } from "./fixtures/package-results";
 import { CollectionServiceError } from "../src/library/collection-service";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
-import { StudioFileOperations, type StudioPickedFile } from "../src/app/studio-file-operations";
+import { StudioFileOperations, type StudioFilePort, type StudioPickedFile } from "../src/app/studio-file-operations";
 import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON } from "../src/app/alpha-availability";
 import { initialRecipe } from "./fixtures/eye-region";
 import { profileStudio } from "./fixtures/profile-studio";
@@ -25,11 +25,12 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
   let maskInput: typeof layer | undefined, imported: { recipe: Recipe; name: string } | undefined;
   let loadedBytes: Uint8Array | undefined, loadedFor: string | undefined;
   let bakeMask = async (_value: typeof layer) => new Blob(["png"], { type: "image/png" });
-  const files = new StudioFileOperations({
+  const device: StudioFilePort = {
     pick: async () => { const file = nextFile; nextFile = undefined; return file; },
     download: (blob, name) => { downloads.push({ name, type: blob.type, blob }); },
     bakeMask: async value => { maskInput = value; return bakeMask(value); },
-  }, {
+  };
+  const files = new StudioFileOperations(device, {
     recipe: () => studio.document.recipe, selectedLayer: () => layer,
     importRecipe: (value, name) => { imported = { recipe: value, name }; },
     hasSavedV: () => true,
@@ -52,7 +53,7 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
       { id: crypto.randomUUID(), name: "Eye", revision: 1, parts: studio.owner.look(studio.scene.look()!)!.parts }] });
     return service.execute({ kind: "import", text, bytes: text.length });
   };
-  return { files, service, transport, recipe, studio, editor: () => ({ recipe: studio.document.recipe }), layer: () => layer,
+  return { files, device, service, transport, recipe, studio, editor: () => ({ recipe: studio.document.recipe }), layer: () => layer,
     setFile: (file?: StudioPickedFile) => nextFile = file, downloads, saved: () => studio.library.collections.list().length,
     setBakeMask: (next: typeof bakeMask) => bakeMask = next, setColor, importOther,
     packageInput: () => studio.packageInput() as { presets: { recipe: Recipe }[] } | undefined, imported: () => imported, maskInput: () => maskInput,
@@ -249,4 +250,19 @@ test("Build explains the missing developer setup everywhere Build is offered, wh
   expect(f.files.capability({ kind: "package.build" })).toEqual({ available: true });
   // Hosts without a Build setup keep deciding at request time.
   expect((await fixture()).files.capability({ kind: "package.build" })).toEqual({ available: true });
+});
+
+
+test("workspace file reveal is capability driven and reports host failure", async () => {
+  const f = await fixture();
+  expect(f.files.snapshot().workspaceFile).toBe(false);
+  expect(f.files.capability({ kind: "workspace.showInFolder" }).available).toBe(false);
+  expect((await f.files.execute({ kind: "workspace.showInFolder" })).ok).toBe(false);
+  let reveals = 0;
+  f.device.revealWorkspace = async () => { reveals++; };
+  expect(f.files.snapshot().workspaceFile).toBe(true);
+  expect((await f.files.execute({ kind: "workspace.showInFolder" })).ok).toBe(true);
+  expect(reveals).toBe(1);
+  f.device.revealWorkspace = async () => { throw Error("The folder couldn’t be opened."); };
+  expect(await f.files.execute({ kind: "workspace.showInFolder" })).toMatchObject({ ok: false, message: "The folder couldn’t be opened." });
 });

@@ -216,3 +216,8 @@ export function historyScopeName(scope: string, deps: { services: Pick<ProfileSe
   if (kind === "view") return "View and lighting";
   return undefined;
 }
+
+/** An unmigrated read-only workspace has no session this build can show yet. */
+export function profileWorkspaceLease(lease: Pick<import("../workspace/workspace-lease").WorkspaceLease, "snapshot" | "writable">, stored: boolean) {
+  return { ...lease.snapshot(), migrationPending: !stored && !lease.writable() };
+}

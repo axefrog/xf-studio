@@ -49,7 +49,7 @@ test("combined worker publishes exact shape alpha and independent pale flakes, t
   const layer=initialRecipe().layers[0];layer.finish="glitter";layer.color="#271044";
   layer.flakes={...defaultIrregularFlakes(),count:1000,radius:.003,color:"#f5df9f"};
   const result:RasterResponse[]=[];
-  const processor=createRasterProcessor(x=>result.push(x));
+  const processor=createRasterProcessor(x=>result.push(x), async()=>{}, ()=>0);
   await processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:64,bakeOptics:true});
   const first=result[0];expect(first.cancelled).not.toBe(true);
   if(first.cancelled)return;
@@ -75,7 +75,7 @@ test("combined worker publishes exact shape alpha and independent pale flakes, t
 test("fine studio default reports bounded-region and resolved-coverage counts",async()=>{
   const layer=initialRecipe().layers[0];layer.finish="glitter";layer.flakes=defaultStudioIrregularFlakes();
   const results:RasterResponse[]=[];
-  const worker=createRasterProcessor(r=>results.push(r));
+  const worker=createRasterProcessor(r=>results.push(r), async()=>{}, ()=>0);
   await worker.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:512,bakeOptics:true});
   const result=results[0];expect(result.cancelled).not.toBe(true);
   if(result.cancelled)return;
@@ -122,7 +122,7 @@ test("candidate material binds one complete RGBA albedo and disposes it on legac
   stack.setCanvases([canvas()]);
   const layer=initialRecipe().layers[0];layer.finish="glitter";layer.flakes={...defaultIrregularFlakes(),count:0};
   const results:RasterResponse[]=[];
-  const processor=createRasterProcessor(x=>results.push(x));
+  const processor=createRasterProcessor(x=>results.push(x), async()=>{}, ()=>0);
   return processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:32,bakeOptics:true}).then(()=>{
     const result=results[0];if(result.cancelled)throw Error("Unexpected cancellation");
     stack.updateLayer(0,layer,result.optics,result.albedo);

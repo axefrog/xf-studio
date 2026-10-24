@@ -15,12 +15,15 @@ export type StudioFilePort = {
   pick(kind: StudioFileKind): Promise<StudioPickedFile | undefined>;
   download(blob: Blob, name: string): void;
   bakeMask(layer: Layer): Promise<Blob>;
+  /** Desktop-only host-owned file; the browser supplies no route. */
+  revealWorkspace?: () => Promise<void>;
 };
 /**
  * A file workflow. One that waits for a file picker names, when it is asked, what the file goes to (profiles design §3.3: an asynchronous
  * picker holds a capture): a save or character preset names its V (`character`), a recipe its collection (`collection`).
  */
 export type StudioFileAction =
+  | { kind: "workspace.showInFolder" }
   | { kind: "recipe.export" | "mask.export" | "savedV.export" }
   | { kind: "recipe.import"; collection: string }
   | { kind: "savedV.import"; character: string }
@@ -47,7 +50,7 @@ type PackageResult = { kind: "packageCheck"; result: PackageCheckResult } | { ki
  */
 export type StudioActivity = { id: string; scope: "file" | "collection" | "package"; kind: string;
   startedAt: number; requestId?: number; cancellable: false };
-export type StudioFileState = { busy?: StudioFileAction["kind"];
+export type StudioFileState = { workspaceFile?: boolean; busy?: StudioFileAction["kind"];
   collectionBusy: boolean;
   /** The last finished file or collection request; `at` is when it finished (ms since the epoch). */
   last?: { kind: StudioFileAction["kind"] | CollectionRequest["kind"];
@@ -108,7 +111,7 @@ export class StudioFileOperations {
     const shown = this.collection?.draftIdentity()?.collectionId ?? "";
     const recovery = this.collection?.actionCapability({ kind: "collection.undoOpen", collection: shown }) ??
       { available: false, reason: "Collection is still loading." };
-    return structuredClone({ busy: this.busy?.kind, collectionBusy: collection?.busy ?? false,
+    return structuredClone({ workspaceFile: !!this.port.revealWorkspace, busy: this.busy?.kind, collectionBusy: collection?.busy ?? false,
       last: this.last, package: this.package && { ...this.package,
         freshness: this.collection?.lastPackageIsCurrent() ? "current" : "stale" },
       progress, activity: this.activity(), recovery });
@@ -139,6 +142,7 @@ export class StudioFileOperations {
     if (action.kind === "recipe.import" && !action.collection) return refusal("missing_target", "Open a collection first.");
     if ((action.kind === "savedV.import" || action.kind === "characterPreset.import") && !action.character) return refusal("missing_target", "Choose a V first.");
     switch (action.kind) {
+      case "workspace.showInFolder": return this.port.revealWorkspace ? { available: true } : { available: false, reason: "This workspace is stored in your browser." };
       case "recipe.import": case "recipe.export": return { available: true };
       case "mask.export": return this.sources.selectedLayer() ? { available: true } :
         { available: false, reason: "Select a layer before exporting a mask." };
@@ -183,6 +187,10 @@ export class StudioFileOperations {
     try {
       let outcome: StudioFileOutcome;
       switch (action.kind) {
+        case "workspace.showInFolder": {
+          await this.port.revealWorkspace!();
+          outcome = { ok: true, code: "revealed", message: "Workspace file shown in its folder." }; break;
+        }
         case "recipe.import": {
           const file = await this.port.pick("recipe");
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Recipe selection cancelled." });

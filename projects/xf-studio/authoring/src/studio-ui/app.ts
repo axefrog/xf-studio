@@ -40,8 +40,8 @@ import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
 import { HeaderFit } from "./header-fit";
-import { BACKUP_PENDING, BACKUP_STORAGE_FULL, LIBRARY_CHIP_WIDEST, MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
-import { WorkspaceNotice, type WorkspaceNoticeAction, type WorkspaceNoticeState } from "./components";
+import { BACKUP_PENDING, BACKUP_STORAGE_FULL, LIBRARY_CHIP_WIDEST, MISSING_SAVE, RESTORING, RESTORING_LONG, RESTORING_UNCONFIRMED, UNPROTECTED } from "./notice-text";
+import { EmptyChoices, progressBar, WorkspaceNotice, type WorkspaceNoticeAction, type WorkspaceNoticeState } from "./components";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -225,6 +225,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     dispatch: action => port.authoring.dispatch(action), feedback, dock: main,
     moduleIcon: id => modules.find(module => module.id === id)?.icon,
     changed: () => { viewPanes.sync(); schedule(); } }) : undefined;
+  const upgrade = new EmptyChoices("viewport");
+  upgrade.element.classList.add("workspace-upgrade");
+  main.append(upgrade.element);
   if (tabs) rt.anchors.register("tabs.strip", tabs.element);
   // A read-only window: controls marked unavailable never act, whatever kind of control they are (the reason tip answers instead).
   const refuseUnavailable = (event: Event) => {
@@ -316,6 +319,13 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const paint = () => {
     queued = false;
     tabs?.sync();
+    const pendingMigration = !!port.status.snapshot().lease?.migrationPending;
+    if (tabs) tabs.element.hidden = pendingMigration;
+    dock.element.hidden = pendingMigration;
+    const takeover = port.workspace.capability({ kind: "workspace.takeOver" });
+    upgrade.update(pendingMigration ? { title: "Workspace needs updating", body: "This workspace is open in an older XF Studio window. Reload that window, or choose Use it here.",
+      choices: [{ id: "takeOver", label: "Use it here", name: "Use this workspace here", capability: takeover,
+        choose: () => { void port.workspace.dispatch({ kind: "workspace.takeOver" }); } }] } : null);
     syncOptional();
     // The shown tab's 3D views each have their pane, and the canvas is in the one holding the picture.
     if (headEntry) viewPanes.sync();
@@ -583,14 +593,14 @@ export function workspaceNoticeState(frame: Frame): WorkspaceNoticeState | null 
   if (lease?.message) {
     // A handover that couldn't save names two ways on, so it offers both: Try again, and the recovery export, which needs nothing from the
     // library that couldn't take the changes (condition 1).
-    const actions: WorkspaceNoticeAction[] = [...(lease.canTakeOver ? ["takeOver" as const] : []), ...(lease.canRetry ? ["retryRelease" as const, "exportCopy" as const] : [])];
-    return { message: lease.message, actions };
+    const actions: WorkspaceNoticeAction[] = [...(lease.canTakeOver ? ["takeOver" as const] : []), ...(lease.canCancel ? ["cancelTakeOver" as const] : []), ...(lease.canRetry ? ["retryRelease" as const, "exportCopy" as const] : [])];
+    return { message: lease.message, actions, progress: lease.phase === "taking-over" || lease.phase === "waiting" };
   }
   const outbox = frame.status.outbox, restoring = outbox?.recovering;
   if (outbox?.unprotected) return { message: outbox.unprotectedReason === "pending" ? BACKUP_PENDING : outbox.unprotectedReason === "storage-full" ? BACKUP_STORAGE_FULL : UNPROTECTED,
-    actions: ["protect", "exportCopy"] };
+    actions: ["protect", "exportCopy", ...(frame.files.workspaceFile ? ["showInFolder" as const] : [])] };
   if (restoring?.missing) return { message: MISSING_SAVE, actions: ["importSave", "discardWaiting"] };
-  if (restoring?.shown && restoring.long) return { message: RESTORING_LONG, actions: restoring.safe ? ["retryRestore", "keepRestored"] : ["retryRestore", "exportCopy"] };
+  if (restoring?.shown && restoring.long) return { message: restoring.safe ? RESTORING_LONG : RESTORING_UNCONFIRMED, progress: true, actions: restoring.safe ? ["retryRestore", "keepRestored"] : ["retryRestore", "exportCopy"] };
   return null;
 }
 
@@ -603,10 +613,12 @@ export function workspaceNotice(rt: StudioRuntime) {
   const toastRefusal = (outcome: { ok: boolean; message?: string; code?: string }) => {
     if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message ?? "", [], { code: outcome.code });
   };
-  const workspace = (kind: "workspace.takeOver" | "workspace.retryRelease") => void rt.port.workspace.dispatch({ kind }).then(toastRefusal);
+  const workspace = (kind: "workspace.takeOver" | "workspace.retryRelease" | "workspace.cancelTakeOver") => void rt.port.workspace.dispatch({ kind }).then(toastRefusal);
   const documents = (kind: "documents.protect" | "documents.retryRecovery" | "documents.keepRestored" | "documents.discardWaiting") =>
     void rt.port.documents.dispatch({ kind }).then(toastRefusal);
   const run: Record<WorkspaceNoticeAction, () => void> = {
+    showInFolder: () => void rt.file({ kind: "workspace.showInFolder" }),
+    cancelTakeOver: () => workspace("workspace.cancelTakeOver"),
     takeOver: () => workspace("workspace.takeOver"), retryRelease: () => workspace("workspace.retryRelease"),
     exportCopy: () => void rt.file({ kind: "collection.exportWindowCopy" }), protect: () => documents("documents.protect"),
     keepRestored: () => documents("documents.keepRestored"), retryRestore: () => documents("documents.retryRecovery"),
@@ -646,7 +658,10 @@ export function statusActivity(frame: Frame, last: { message: string; tone: stri
 const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
 function statusBar(rt: StudioRuntime) {
   // Restoring's first seconds (t-recovering) take this fixed line, not the workspace notice: nothing moves when they come and go.
-  const restoring = h("span", { class: "status-item", "data-tone": "restoring", role: "status", hidden: true });
+  const restoring = h("div", { class: "status-item", "data-tone": "restoring", role: "status", hidden: true });
+  const restoringProgress = progressBar({ label: RESTORING, className: "status-restoring-progress" });
+  const restoringTextNode = h("span");
+  restoring.append(restoringTextNode, restoringProgress.element);
   const workspace = h("span", { class: "status-item" }), activity = h("button", { class: "status-item status-message", type: "button",
     title: "Open the activity log" }), ready = h("span", { class: "status-item ready-badge" }), gesture = h("span", { class: "status-item muted" });
   activity.addEventListener("click", () => rt.dock.reveal("activity"));
@@ -665,7 +680,7 @@ function statusBar(rt: StudioRuntime) {
       workspace.title = problem ? save.message : "";
       const restoringText = restoringLine(frame);
       restoring.hidden = !restoringText;
-      setText(restoring, restoringText);
+      setText(restoringTextNode, restoringText);
       const shown = statusActivity(frame, rt.feedback.log.at(-1));
       setText(activity, shown.text); activity.dataset.tone = shown.tone; activity.hidden = shown.hidden;
       const preview = frame.preview;
@@ -796,6 +811,7 @@ export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, 
     { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
       run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),
+    ...(port.files.snapshot().workspaceFile ? [file("workspace.showInFolder", "Show workspace file in folder", "Files", { kind: "workspace.showInFolder" }, { icon: "folder" })] : []),
     file("collection.exportWindowCopy", "Export this window's copy", "Files", { kind: "collection.exportWindowCopy" },
       { icon: "export", keywords: "backup recovery changes file without saving library" }),
     ...research([file("collection.plan", "Export compiler plan (saves first; not a mod)", "Research", { kind: "collection.plan" }, { icon: "export", keywords: "build plan" })]),

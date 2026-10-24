@@ -687,7 +687,7 @@ export class StudioApplication {
    * the lease's documents, only this page's own copy out to a file, and it is how a page that kept or lost the workspace gets
    * its work out.
    */
-  private readOnlyFile(kind: string) { return kind === "collection.exportWindowCopy"; }
+  private readOnlyFile(kind: string) { return kind === "collection.exportWindowCopy" || kind === "workspace.showInFolder"; }
   capability(action: StudioAction): StudioCapability {
     const s = this.services, route = this.routes.route(action.kind);
     if (!route.ok) return unknownCommand();
