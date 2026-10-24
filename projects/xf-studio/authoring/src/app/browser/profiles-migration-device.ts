@@ -38,6 +38,7 @@ export const PROFILES_MIGRATION_ENABLED: boolean = true;
  * migration makes (a migrated workspace costs nothing). It ends with `signal`, and starts again with the next page load if it didn't finish.
  */
 export function startProfilesMigration(options: {
+  initial?: import("../profiles/profiles-migration").ProfilesMigrationDeps["initial"];
   endpoint: string;
   send: (url: string, init?: RequestInit) => Promise<Response>;
   workspace: string;
@@ -56,7 +57,7 @@ export function startProfilesMigration(options: {
   if (!(options.enabled ?? PROFILES_MIGRATION_ENABLED)) return Promise.resolve("disabled");
   // A migrated workspace costs nothing at start: its stored mark says so, without capturing the workspace.
   if (migrated(options.marks)) return Promise.resolve("already");
-  const migration = new ProfilesMigration({ workspace: options.workspace, model: options.model, state: options.state,
+  const migration = new ProfilesMigration({ workspace: options.workspace, model: options.model, state: options.state, initial: options.initial,
     record: next => {
       options.marks.migration = next.migration;
       if (next.profiles) options.marks.profiles = next.profiles; else delete options.marks.profiles;

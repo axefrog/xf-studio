@@ -66,6 +66,25 @@ A restart is measured by `tools/measure-warm-restart.ts <folder> [port] [runs]` 
 
 ## Known costs and candidate work (27 September 2026)
 
+### Profiles phase 2: tab-switch budgets (G4)
+
+Results are from G4 on real game-derived head data (24 October 2026, `aed74de9`; warm cache, then a fresh Chrome profile; all eight rows pass). The [isolated headless harness](../../experiments/044-profile-tabs/README.md#15-p2-vii-as-built) runs a primed browser cache, then a fresh Chrome profile; a shell-only smoke never satisfies these gates. These are browser-preview budgets, not game-rendering evidence.
+
+| Row | Setup | Budget | Result |
+|---|---|---|---|
+| T-a | Two tabs sharing one scene | Click to first presented frame ≤100 ms | **Pass**: 34–51 ms (warm and fresh, 5 trials each); 0 links, 0 rasters |
+| T-b | Two scenes of one V, destination warm/prepared | ≤100 ms; zero links and program creations in first shown frame | **Pass**: 32–45 ms; 0 links and 0 programs in the first frame |
+| T-c | Two Vs with different bodies, destination warm | ≤100 ms; zero first-frame links | **Pass**: 29–51 ms; 0 links |
+| T-d | Two warm scenes with different authored looks | ≤100 ms; zero raster requests and first-frame links | **Pass**: 33–51 ms; 0 rasters, 0 links (after the readiness fix, `aed74de9`) |
+| T-e | Third scene beyond the shown + one-warm budget | In-place progress ≤150 ms; no blank pane; no task ≥50 ms; eventual takeover | **Pass**: progress in 23–31 ms, no blank pane, no task ≥50 ms; the cold takeover took **9.1–10.3 s**. That duration isn't gated, but it is a multi-second wait (see below) |
+| T-f | A, B, C, A within 300 ms, cold intermediates | Only A presented; no superseded draw or late result | **Pass**: only A presented, at 310–317 ms; no superseded draw or late result |
+| T-g | Dock load, rebind and paint | No task ≥50 ms from click through 1 s afterward | **Pass**: 40–58 ms, with no task ≥50 ms through 1 s after |
+| T-h | Close the last tab referencing a scene | Runtime absent; live GL counts at baseline; collected heap/OS memory returns within recorded sampling tolerances | **Pass**: runtime gone; GL counts at baseline; memory within tolerances |
+
+**Next biggest cost (from G4 T-e): a cold scene beyond the warm budget takes 9–10 s to prepare.** Progress shows at once and nothing blocks, but it is a multi-second wait the 1.0 bar rules out. The levers are the warm budget (count or bytes, D2), preparing a likely next tab while idle, and the M2 default (share the scene), which avoids most cold scenes. Measure which of these closes it before beta.
+
+T-h reports the exact before/after values alongside conservative noise tolerances (JS heap +16 MiB, Chrome private bytes +64 MiB, dedicated/shared GPU bytes +16 MiB each). Missing counters fail the measurement; tolerances are harness measurement policy, not evidence that a retained runtime is acceptable.
+
 | Cost | Measured | Candidate |
 |---|---|---|
 | WolvenKit geometry export on a cold V | ~17–27 s | **Done**: native mesh decoding ([native reader](native-archive-reader.md) phase 4); the default V's 18 meshes and morph targets decode in 1.75 s, and a cold preparation took 19.9–20.0 s against 56–63 s with WolvenKit's geometry export the same day |

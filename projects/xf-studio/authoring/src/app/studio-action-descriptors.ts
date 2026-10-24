@@ -21,6 +21,7 @@ import { TRANSITION_SECONDS, TRANSITION_SOURCES } from "../platform/core/transit
 import { EASING_IDS } from "../platform/api/easing";
 import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS } from "../legacy/eye-makeup/eye-makeup-descriptors";
 import { TARGET_SCHEMA } from "./action-targets";
+import { TAB_NAME_LIMIT } from "./profiles/profile-sessions";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
@@ -69,6 +70,27 @@ export const ACTION_DESCRIPTORS = {
     look: { type: "object", required: false, from: "input" } }),
   "scene.setSubject": desc("viewport", "workspace", "none", { scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen,
     subject: { type: "object", required: false, from: "input" } }),
+  // The session's layout tabs (app/profiles/profile-sessions.ts): each names its tab; each operation but showing and arranging is one View
+  // and lighting step (the session's own history), never a look's.
+  "tabs.show": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab }),
+  "tabs.rename": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, name: inputText(1, TAB_NAME_LIMIT) }),
+  "tabs.move": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, to: input("integer", 0) }),
+  "tabs.close": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab }),
+  "tabs.reopen": desc("workspace", "workspace", "none", { closed: { ...target("string"), required: false } }),
+  "tabs.duplicate": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab }),
+  // The arrangement the dock saved for a tab: the tab's own state, never Undo.
+  "tabs.arrange": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, layout: { type: "object", required: false, from: "input" } }),
+  // Tabs and default layouts (app/profiles/tab-defaults.ts): a new tab or a reset names its default and the person's substitution choices
+  // (absent: each slot's default); saving a tab as a default, and changing an own default, write the library through the outbox.
+  "tabs.new": desc("workspace", "workspace", "none", { default: target("string"), choice: { type: "object", required: false, from: "input" } }),
+  "tabs.reset": desc("workspace", "workspace", "none", { tab: TARGET_SCHEMA.tab, default: { ...target("string"), required: false },
+    choice: { type: "object", required: false, from: "input" } }),
+  "tabs.saveAsDefault": desc("workspace", "library", "none", { tab: TARGET_SCHEMA.tab, name: inputText(1, TAB_NAME_LIMIT) }),
+  "tabs.updateDefault": desc("workspace", "library", "none", { tab: TARGET_SCHEMA.tab }),
+  "defaults.rename": desc("workspace", "library", "none", { default: target("string"), name: inputText(1, TAB_NAME_LIMIT) }),
+  // Deleting an own default is a tombstone; restoring it is the Undo notice's action.
+  "defaults.delete": desc("workspace", "library", "recovery", { default: target("string") }),
+  "defaults.restore": desc("workspace", "library", "recovery", { default: target("string") }),
   "camera.front": inView("viewport", "workspace", "none"),
   "camera.body": inView("viewport", "workspace", "none"),
   "camera.setFov": inView("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),
@@ -332,6 +354,11 @@ export const PREVIEW_PREPARATION_DESCRIPTORS = {
   "preview.cancel": request("host", "derive"),
   "preview.rebuild": request("host", "derive", {}, true),
 } satisfies Record<PreviewAction["kind"], RequestDescriptor>;
+
+/** U6's captured Choose route; existing scene actions still perform subject and look selection. */
+export const EMPTY_CHOICE_DESCRIPTORS = {
+  "empty.choose": request("workspace", "save", { destination: target("object"), choice: input("object") }),
+} satisfies Record<"empty.choose", RequestDescriptor>;
 
 /**
  * WolvenKit CLI setup. `wolvenkit.install` is the person's consent to download exactly the pinned

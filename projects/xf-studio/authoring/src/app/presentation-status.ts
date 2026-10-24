@@ -25,9 +25,9 @@ export type GlitterPreviewMeasurement = {
 };
 /**
  * Latest human-readable message from an editor or preview adapter (limits, rejected insertions, timings): `source` is the editor's
- * slot (`uv`, the flat editor; `surface`, the main view's on-head editor) or `preview`.
+ * slot (`uv`, the flat editor; `surface`, the main view's on-head editor), `preview`, or an own-default preservation notice.
  */
-export type AdapterMessage = { id: number; source: EditorSlot | "preview"; text: string };
+export type AdapterMessage = { id: number; source: EditorSlot | "preview" | "layout-default"; text: string };
 export type PresentationStatus = {
   verification: boolean;
   workspace: WorkspaceSaveStatus;

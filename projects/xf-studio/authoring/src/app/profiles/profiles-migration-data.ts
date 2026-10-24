@@ -19,6 +19,7 @@ import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_SLOTS, type ViewSlot } from "../../pl
 import type { PartRegistry } from "../../platform/core/document";
 import { sha256Hex } from "../../platform/core/sha256";
 import { lookScope } from "../../platform/core/history-service";
+import { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment } from "../../platform/api/layout-fragment";
 import { workspaceViewGraph } from "../../preview/preview-view-graph";
 import type { SavedV } from "../../saves/save-reader";
 import type { DockLayout, JsonValue } from "../ui-preferences";
@@ -33,7 +34,7 @@ export const MIGRATION_SNAPSHOT_SCHEMA = "xfs/profiles-migration-snapshot-1";
 export const MIGRATION_RESULT_SCHEMA = "xfs/profiles-migration-1";
 export const LAYOUT_DEFAULT_DOCUMENT = "layout-default";
 export const LAYOUT_DEFAULT_SCHEMA = "xfs/layout-default-1";
-export const LAYOUT_FRAGMENT_SCHEMA = "xfs/layout-fragment-1";
+export { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment };
 /** The subject and look slots a migrated fragment has (one V, one look, as today's single-V Studio shows). */
 export const FRAGMENT_SUBJECT = "v1", FRAGMENT_LOOK = "look1";
 
@@ -44,17 +45,6 @@ export type MigrationDraft = { readonly id: string; readonly name: string; reado
   readonly looks: readonly MigrationLook[]; readonly removed: readonly MigrationLook[] };
 /** The V: its character document as `character.create` writes it (without an ID), and the decoded save the workspace holds. */
 export type MigrationCharacter = { readonly document: Omit<CharacterDocument, "id">; readonly saved?: { readonly id: string; readonly value: SavedV } };
-/** A default layout as a graph fragment (§4.2): every key is local; subjects and looks are slots. */
-export type LayoutFragment = {
-  readonly schema: typeof LAYOUT_FRAGMENT_SCHEMA;
-  readonly tab: { readonly name: string; readonly dock: DockLayout };
-  readonly subjects: readonly { readonly key: string; readonly kinds: readonly string[] }[];
-  readonly looks: readonly { readonly key: string }[];
-  readonly nodes: readonly { readonly key: string; readonly slot: ViewSlot; readonly kind?: string; readonly state: Readonly<Record<string, unknown>>;
-    readonly subject?: string; readonly look?: string }[];
-  readonly views: readonly ({ readonly key: string; readonly title?: string } & { readonly [S in ViewSlot]: string })[];
-  readonly panels: readonly { readonly key: string; readonly type: string }[];
-};
 /** A saved layout as an own default; `active`: the layout the live arrangement belongs to (tab 1's origin). */
 export type MigrationLayout = { readonly name: string; readonly fragment: LayoutFragment; readonly active?: true };
 export type MigrationSnapshot = {
@@ -182,6 +172,55 @@ export function dockPanels(dock: DockLayout | undefined | null): string[] {
   rewriteDock(dock, id => { found.add(id); return id; });
   return [...found];
 }
+/**
+ * A dock arrangement without the panels `drop` names, in both size classes: gone from their groups (a group left empty goes, a split
+ * left with one child is that child, and a split or floating window left empty goes), the closed list, and the parked and last places (as a place's group member or anchor too).
+ * A tab saved as a default leaves out the panels of views it no longer holds, which the dock keeps parked.
+ */
+export function withoutDockPanels(dock: DockLayout, drop: (id: string) => boolean): DockLayout {
+  const keep = (value: unknown) => typeof value !== "string" || !drop(value);
+  const node = (value: unknown, depth: number): unknown => {
+    if (!value || typeof value !== "object" || Array.isArray(value) || depth > 16) return value;
+    const v = value as Record<string, unknown>;
+    if (Array.isArray(v.panels)) {
+      const panels = v.panels.filter(keep);
+      if (!panels.length) return undefined;
+      return { ...v, panels, ...("active" in v && !panels.includes(v.active) ? { active: panels[0] } : {}) };
+    }
+    if (!Array.isArray(v.children)) return v;
+    const kept = v.children.map((child, index) => ({ child: node(child, depth + 1), index })).filter(item => item.child !== undefined);
+    if (kept.length <= 1) return kept[0]?.child;
+    const sizes = Array.isArray(v.sizes) ? kept.map(item => (v.sizes as unknown[])[item.index]) : v.sizes;
+    return { ...v, children: kept.map(item => item.child), ...(sizes !== undefined ? { sizes } : {}) };
+  };
+  const place = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const v = value as Record<string, unknown>, anchor = v.anchor as Record<string, unknown> | undefined;
+    const out: Record<string, unknown> = { ...v, ...(Array.isArray(v.group) ? { group: v.group.filter(keep) } : {}) };
+    if (anchor && typeof anchor === "object" && !keep(anchor.panel)) delete out.anchor;
+    return out;
+  };
+  const tree = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const v = value as Record<string, unknown>;
+    const root = node(v.root, 0);
+    return { ...v, ...("root" in v ? { root: root ?? null } : {}),
+      ...(Array.isArray(v.floating) ? { floating: v.floating.flatMap(window => {
+        if (!window || typeof window !== "object") return [window];
+        const inner = node((window as Record<string, unknown>).node, 0);
+        return inner === undefined ? [] : [{ ...window, node: inner }];
+      }) } : {}),
+      ...(Array.isArray(v.closed) ? { closed: v.closed.filter(keep) } : {}),
+      ...Object.fromEntries((["parked", "lastPlace"] as const).flatMap(key => {
+        const places = v[key];
+        return places && typeof places === "object" && !Array.isArray(places)
+          ? [[key, Object.fromEntries(Object.entries(places).filter(([panel]) => keep(panel)).map(([panel, item]) => [panel, place(item)]))]] : [];
+      })) };
+  };
+  const state = dock.state as Record<string, unknown> | null;
+  if (!state || typeof state !== "object" || Array.isArray(state)) return structuredClone(dock);
+  return { ...dock, state: Object.fromEntries(Object.entries(state).map(([size, value]) => [size, tree(value)])) as unknown as JsonValue };
+}
 /** A dock arrangement with every panel ID passed through `rename`. */
 export function rewriteDock(dock: DockLayout | undefined | null, rename: (id: string) => string): DockLayout | null {
   if (!dock || typeof dock !== "object") return null;
@@ -268,12 +307,12 @@ export const FIRST_TAB_NAME = "Layout 1";
  * draft's selected look.
  */
 export function buildProfileSession(state: WorkspaceState, snapshot: Pick<MigrationSnapshot, "selected" | "layouts">, result: MigrationResult,
-  random: () => number = Math.random): ProfileSessionData {
+  random: () => number = Math.random, initial?: { origin: string; dock: DockLayout }): ProfileSessionData {
   const active = snapshot.layouts.findIndex(layout => layout.active);
   const lookId = snapshot.selected ? result.idMap.looks[snapshot.selected] : undefined;
   return sessionOfWorkspace(state, { tab: active >= 0 ? snapshot.layouts[active]!.name : FIRST_TAB_NAME,
     ...(active >= 0 && result.defaults[active] ? { origin: result.defaults[active] } : {}), character: result.character,
-    ...(lookId ? { look: { collection: result.collection, look: lookId } } : {}) }, random);
+    ...(lookId ? { look: { collection: result.collection, look: lookId } } : {}) }, random, initial);
 }
 /**
  * A session made from the workspace's live arrangement and view graph: tab 1 (named `tab`, made from the own default `origin`) holds the
@@ -281,23 +320,25 @@ export function buildProfileSession(state: WorkspaceState, snapshot: Pick<Migrat
  * context (§3.7) is the look's history, so Undo reaches it as it did before the session existed.
  */
 export function sessionOfWorkspace(state: WorkspaceState, input: { tab: string; origin?: string; character?: string; look?: { collection: string; look: string } },
-  random: () => number = Math.random): ProfileSessionData {
+  random: () => number = Math.random, initial?: { origin: string; dock: DockLayout }): ProfileSessionData {
   const tab = `t-${base36(random)}`;
-  const live = state.uiPreferences.layout ?? null;
+  const live = state.uiPreferences.layout ?? initial?.dock ?? null;
   const instances = new Map<string, PanelInstance>();
   for (const panel of dockPanels(live)) {
     const view = viewOfPanel(panel);
     instances.set(panel, view ? { id: `view--${base36(random)}`, type: "view", binding: { policy: "pinned", target: { view } } }
       : { id: `${panel}--${base36(random)}`, type: panel });
   }
-  const tabValue: LayoutTab = { id: tab, name: input.tab, ...(input.origin ? { origin: input.origin } : {}),
+  const origin = input.origin ?? (!state.uiPreferences.layout ? initial?.origin : undefined);
+  const tabValue: LayoutTab = { id: tab, name: input.tab, ...(origin ? { origin } : {}),
     dock: rewriteDock(live, panel => instances.get(panel)?.id ?? panel), panels: [...instances.values()] };
   const graph = workspaceViewGraph(state.preview, state.views), look = input.look;
   const scenes: SessionScene[] = graph.scenes.map(scene => scene.kind === "character"
     ? { ...scene, ...(input.character ? { subject: { kind: "character", id: input.character } } : {}), ...(look ? { look } : {}), gen: 0 } : { ...scene, gen: 0 });
   const views: SessionView[] = graph.views.map(view => ({ ...(view as ViewRecord | KeptView), tab }));
   return { schema: PROFILE_SESSION_SCHEMA, tabs: [tabValue], views: { ...graph, views, scenes },
-    focus: { views: { [graph.focused]: 1 }, ...(look ? { editing: lookScope(look) } : {}) }, closed: [], seq: 1 };
+    focus: { views: graph.focused !== undefined ? { [graph.focused]: 1 } : {}, ...(look ? { editing: lookScope(look) } : {}) }, closed: [],
+    seq: graph.focused !== undefined ? 1 : 0 };
 }
 /** The workspace's `profiles` holding one session. */
 export const workspaceProfiles = (profile: string, session: ProfileSessionData): WorkspaceProfiles =>

@@ -26,6 +26,9 @@ export function previewSetupCard(rt: StudioRuntime) {
   const links = h("div", { class: "setup-card-links" });
   let primaryAction: PreviewSetupAction | undefined, secondaryAction: PreviewSetupAction | undefined;
   const later = button({ label: "Not now", variant: "quiet", onClick: () => {
+    // A queued or programmatic click can outlive the card (the head may already be ready).
+    const card = port.previewSetup.snapshot().card;
+    if (!card.open || !card.canDismiss) return;
     void run({ kind: "previewSetup.dismiss" }).then(() => requestAnimationFrame(focusHeadStep));
   } });
   const secondary = button({ label: "", onClick: () => { if (secondaryAction) void run(secondaryAction); } });
@@ -63,6 +66,8 @@ export function previewSetupCard(rt: StudioRuntime) {
     rt.changed();
   }
   function focusHeadStep() {
+    // The frame can come after the card has left the page (its window closed, or a test's page torn down): nothing to focus then.
+    if (!element.isConnected || typeof document === "undefined") return;
     const next = document.querySelector<HTMLElement>(".viewport-state:not([hidden]) .btn:not([hidden])");
     next?.focus();
   }
@@ -89,6 +94,7 @@ export function previewSetupCard(rt: StudioRuntime) {
     update(frame: Frame) {
       const setup = frame.previewSetup, card = setup.card;
       element.hidden = !card.open;
+      later.hidden = !card.open || !card.canDismiss;
       // Only a person's request to show the card moves focus into it; the card opening by itself
       // (first run, or running work bringing it back) never takes focus from what they are doing (UI-34).
       if (setup.showRequests !== showRequests) {
@@ -112,7 +118,6 @@ export function previewSetupCard(rt: StudioRuntime) {
             { note: question.chosen === "mo2" ? `Uses ${question.detail}. You can change it in Settings › Game.` : "Mods go into your game folder. You can change it in Settings › Game." });
         }
         linkKey = paintLinks(links, card.links, linkKey);
-        later.hidden = !card.canDismiss;
         primaryAction = paintButton(primary, card.primary);
         secondaryAction = paintButton(secondary, card.secondary);
       }

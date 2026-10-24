@@ -13,7 +13,7 @@ import { DEFAULT_MOTION, previewMotion, recoverSceneMotion, sceneMotionOf, type 
 import { graphMotionScene, createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/workspace-state";
-import { ProfileSessionState } from "../src/app/profiles/profile-session-state";
+import { openSession } from "./fixtures/profile-sessions";
 import { sessionOfWorkspace, workspaceProfiles } from "../src/app/profiles/profiles-migration-data";
 import { PROFILES_MIGRATION } from "../src/app/profiles/profile-session";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
@@ -51,23 +51,22 @@ function upgradedWorkspace(): WorkspaceState {
   Object.assign(state.preview, { idle: true, idleTime: 3.5, idlePaused: true, idleBody: false, idleFace: true, idleClip: "inventory",
     pose: { id: "PhotoModePoses.lean", label: "Lean" } });
   // The session as the window stores it, then without the scenes' motion (as a build before the move wrote it).
-  const made = new ProfileSessionState("p-1", sessionOfWorkspace(state, { tab: "Layout 1", character: "c-1", look: LOOK }, seeded()), seeded());
-  const session = made.stored({ graph: sessionViewGraph(createStudioViewGraph(state.preview, made.graph())), dock: made.dock() }).sessions["p-1"]!;
-  const before = { ...session, views: { ...session.views, scenes: session.views.scenes.map(({ motion: _motion, ...scene }) => scene) } };
+  const made = openSession(sessionOfWorkspace(state, { tab: "Layout 1", character: "c-1", look: LOOK }, seeded()), { preview: state.preview });
+  const session = made.stored().sessions["p-1"]!;
+  const before = { ...session, views: { ...session.views, scenes: session.views.scenes.map(({ motion: _motion, ...scene }: Record<string, unknown>) => scene) } };
   return parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...state, migration: { id: PROFILES_MIGRATION, token: "00000000-0000-4000-8000-000000000001",
     state: "done" }, profiles: workspaceProfiles("p-1", before as never) }, MODEL))), MODEL);
 }
 
 /** A window over a stored workspace: its session, the graph the core makes from it, and the composer that stores it back. */
 function open(state: WorkspaceState, sample?: () => void) {
-  const sessionState = new ProfileSessionState("p-1", state.profiles!.sessions["p-1"]!, seeded());
   const history = createHistoryService();
-  const graph = createStudioViewGraph(state.preview, sessionState.graph(), history, viewScope("p-1"));
+  const sessionState = openSession(state.profiles!.sessions["p-1"]!, { preview: state.preview, history }), graph = sessionState.graph;
   const composer = new WorkspaceComposer(state, {
     editor: () => ({ recipe: state.recipe, active: state.active, selected: state.selected, fieldSelection: state.fieldSelection, history: state.history }),
     uvView: () => state.uvView, savedV: () => state.savedV, collections: () => state.collections, quality: () => state.preview.textureSize,
     preview: () => undefined, views: () => state.views, ...(sample ? { sample } : {}),
-    profiles: () => ({ migration: state.migration, profiles: sessionState.stored({ graph: sessionViewGraph(graph), dock: sessionState.dock() }, state.profiles) }),
+    profiles: () => ({ migration: state.migration, profiles: sessionState.stored(state.profiles) }),
   });
   const save = () => JSON.stringify(serializeWorkspace(composer.capture(), MODEL));
   return { graph, history, save };

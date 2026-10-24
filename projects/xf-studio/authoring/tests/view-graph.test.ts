@@ -61,11 +61,18 @@ test("a new view shares scene, lights and display, forks the camera and starts w
   expect(views.data().lights.map(node => node.id)).toContain(fork);
   views.link(v2, "lights", MAIN_VIEW, { label: "Link lights" });
   expect(views.data().lights.map(node => node.id)).not.toContain(fork);
-  // Closing a view collects what only it referenced; the main view can't be closed.
+  // Closing a view collects what only it referenced. The main view is ordinary (profiles design §4.4): it closes too, and a graph may
+  // hold no view; Undo brings each back, its nodes in their places.
   const camera = views.node(v2, "camera").id;
   views.closeView(v2, { label: "Close view" });
   expect(views.data().cameras.map(node => node.id)).not.toContain(camera);
-  expect(() => views.closeView(MAIN_VIEW)).toThrow("can't be closed");
+  const before = views.data();
+  views.closeView(MAIN_VIEW, { label: "Close view" });
+  expect(views.viewIds()).toEqual([]);
+  expect(views.data()).toEqual({ ...before, views: [], scenes: [], cameras: [], lights: [], display: [], tools: [], focused: undefined } as never);
+  expect(parseViewGraph(views.data(), STUDIO_VIEW_GRAPH_RULES)).toEqual(views.data());
+  expect(views.undo()).toBe(true);
+  expect(views.data()).toEqual(before);
 });
 
 test("edits are validated by the slot's codec, and a camera or rig must suit the view's scene kind", () => {
@@ -89,10 +96,10 @@ test("edits are validated by the slot's codec, and a camera or rig must suit the
   expect(world).toBeDefined();
   const mixed = new ViewGraph(world!, rules);
   expect(() => mixed.link(MAIN_VIEW, "camera", "w1")).toThrow("can't look at a character scene");
-  // A graph whose view breaks its scene's rules, names a missing node or lacks the main view is refused as a whole.
+  // A graph whose view breaks its scene's rules or names a missing node is refused as a whole; one without a main view is a graph.
   expect(parseViewGraph({ ...data, cameras: [{ id: "c1", kind: "fly" }] }, rules)).toBeUndefined();
   expect(parseViewGraph({ ...data, views: [{ ...data.views[0], camera: "c7" }] }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
-  expect(parseViewGraph({ ...data, views: [{ ...data.views[0], id: "other" }], focused: "other" }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
+  expect(parseViewGraph({ ...data, views: [{ ...data.views[0], id: "other" }], focused: "other" }, STUDIO_VIEW_GRAPH_RULES)?.views.map(view => view.id)).toEqual(["other"]);
 });
 
 test("the View and lighting history records settings and camera jumps, coalesces a drag until it is sealed, and never records navigation or tools", () => {
@@ -314,6 +321,7 @@ test("views and nodes of kinds this build doesn't know are kept and written back
   const views = new ViewGraph(parsed!, STUDIO_VIEW_GRAPH_RULES);
   expect(views.viewIds()).toEqual([MAIN_VIEW]);
   expect(views.snapshot().views.map(view => view.id)).toEqual([MAIN_VIEW]);
+  expect(views.snapshot().retained).toEqual([{ id: "w1", panel: "view.w1" }, { id: "m1", panel: "view.m1" }]);
   // Edits here never touch them: new IDs avoid theirs, and a node they name stays while they do.
   const v2 = views.addView(MAIN_VIEW, { scene: true, lights: true });
   views.unlink(MAIN_VIEW, "lights");
@@ -324,7 +332,10 @@ test("views and nodes of kinds this build doesn't know are kept and written back
   // Through a workspace round trip too.
   const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...workspace, views: parsed }, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
   expect(read.views).toEqual(parsed);
-  // Damage is still refused: a kept view naming a missing node, or a main view this build can't show.
+  // Damage is still refused: a kept view naming a missing node. A main view this build can't show is kept like any other view.
   expect(parseViewGraph({ ...newer, views: [data.views[0], { id: "m1", kind: "map2d", lights: "l7" }] }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
-  expect(parseViewGraph({ ...newer, views: [{ ...data.views[0], scene: "s9" }], focused: MAIN_VIEW }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
+  const unshown = parseViewGraph({ ...newer, views: [{ ...data.views[0], scene: "s9" }], focused: MAIN_VIEW }, STUDIO_VIEW_GRAPH_RULES);
+  expect(new ViewGraph(unshown!, STUDIO_VIEW_GRAPH_RULES).viewIds()).toEqual([]);
+  expect(new ViewGraph(unshown!, STUDIO_VIEW_GRAPH_RULES).snapshot().retained).toEqual([{ id: MAIN_VIEW, panel: "head" }]);
+  expect(unshown!.views.map(view => view.id)).toEqual([MAIN_VIEW]);
 });

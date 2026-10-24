@@ -378,9 +378,9 @@ export class CharacterService implements CharactersPort {
 
   /**
    * Make a character: its decoded save (when it comes from one), the character and, with `profile`, its membership there, as one
-   * command. Default: the creator's default feminine V.
+   * command. Default: the creator's default feminine V. The local result is synchronous; the outbox sends it in the background.
    */
-  async create(input: { source?: CharacterSourceChange; name?: string; save?: SaveReference; profile?: { id: ProfileId; base: number } } = {}): Promise<CharacterAnswer> {
+  create(input: { source?: CharacterSourceChange; name?: string; save?: SaveReference; profile?: { id: ProfileId; base: number } } = {}): CharacterAnswer {
     const id = newCharacterId(this.deps.random);
     const made = this.prepareSource(input.source ?? { kind: "default", bodyGender: "female" }, input.save);
     if (!("source" in made)) return failed(made);

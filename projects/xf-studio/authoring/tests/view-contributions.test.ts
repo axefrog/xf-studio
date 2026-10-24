@@ -63,8 +63,8 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   expect(STUDIO_CATALOGUE.heavy).toEqual(["library", "package"]);
   expect(PANEL_META.warp).toEqual({ title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask." });
   expect(PANEL_META["package"].title).toBe("Mod package");
-  // Eye makeup's view contributes its six panels; the shell the rest.
-  expect(EYE_MAKEUP_GRANDFATHERED_PANELS).toEqual(["layers", "uv", "finish", "shape", "edge", "warp"]);
+  // Eye makeup's view contributes its eight panels (Presets and Library since P2-v); the shell the rest. The IDs are unchanged.
+  expect(EYE_MAKEUP_GRANDFATHERED_PANELS).toEqual(["presets", "library", "layers", "uv", "finish", "shape", "edge", "warp"]);
   expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup", "save-explorer", "expressions", "poses"]);
 });
 
@@ -121,7 +121,9 @@ test("a second feature's view slots into the shell's layouts, and a saved layout
   // Without eye makeup's view the shell's layout drops the slots nobody fills.
   const shellOnly = defaultWide(viewCatalogue([SHELL_VIEW]));
   expect(locate(shellOnly, "uv")).toBeUndefined();
-  expect(locate(shellOnly, "presets")!.group.panels).toEqual(["presets", "library", "package"]);
+  // Presets and Library are eye makeup's (P2-v): without its view, the collection group keeps only the shell's Mod package.
+  expect(locate(shellOnly, "presets")).toBeUndefined();
+  expect(locate(shellOnly, "package")!.group.panels).toEqual(["package"]);
 });
 
 test("the shell names no feature's panels: panel modules are bound only by the view factories", () => {
@@ -132,4 +134,16 @@ test("the shell names no feature's panels: panel modules are bound only by the v
     // The files that held the hand-kept panel lists name none of eye makeup's panels now (app.ts uses the same words as icons).
     if (name !== "app.ts") for (const id of EYE_MAKEUP_GRANDFATHERED_PANELS) expect(code, `${name} names ${id}`).not.toMatch(new RegExp(`["']${id}["']`));
   }
+});
+
+
+test("features declare the primary panel for the missing-view chooser", () => {
+  expect(STUDIO_CATALOGUE.primary("uv")?.id).toBe("layers");
+  expect(STUDIO_CATALOGUE.primary("finish")?.title).toBe("Layers");
+  const view: ViewContribution = { owner: "other", primary: "other.main", activity: [], panels: [
+    { id: "other.main", title: "Main", icon: "layers", description: "", order: 1, slot: "stack" },
+    { id: "other.side", title: "Side", icon: "layers", description: "", order: 2, slot: "inspect" },
+  ] };
+  expect(viewCatalogue([view]).primary("other.side")?.id).toBe("other.main");
+  expect(() => viewCatalogue([{ ...view, primary: "missing" }])).toThrow("not contributed");
 });

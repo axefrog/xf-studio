@@ -1,3 +1,7 @@
+import { layoutTabsPort } from "../app/profiles/tab-presentation";
+import { emptyChoicesPort } from "../app/profiles/empty-choices";
+import { defaultViewGraph } from "../preview/preview-view-graph";
+import { tabVerification } from "./tab-verification";
 import type { StudioAction } from "../app/studio-application";
 import { browserReferenceTextures } from "../character/browser/browser-reference-textures-device";
 import { OFF_EXPERIMENTS } from "../platform/core/experiments";
@@ -60,7 +64,7 @@ import { TransitionSettings } from "../platform/core/transition-settings";
 import { createBrowserFacialDevice } from "../animation/browser/browser-facial-device";
 import { PartPresetService, partPresetTransport, setExportTransport } from "../library/part-presets";
 import { UIPreferenceActions } from "../app/ui-preferences";
-import { sessionViewGraph } from "../preview/preview-view-graph";
+import { createStudioViewGraph, sessionViewGraph } from "../preview/preview-view-graph";
 import { DiagnosticsActions } from "../diagnostics/actions";
 import { createBrowserDiagnostics } from "../diagnostics/browser/browser-device";
 import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-device";
@@ -72,13 +76,16 @@ import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-s
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
-import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
-import { viewPanel } from "../app/profiles/profile-session-state";
+import { createProfileServices, createTargetResolver, drawnScene, drawnView as drawnViewOf, historyScopeName, openProfileSession,
+  sceneHeadTargets, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
+import { starterParts } from "../app/workspace/collection-workspace";
+import { printDefault } from "../app/profiles/layout-fragment";
+import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS, STUDIO_INITIAL_LAYOUT } from "./layout-defaults";
+import { viewPanel } from "../app/profiles/profile-sessions";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
-import { lookRef, type LookRef } from "../library/collection-documents";
-import { lookScope, viewScope } from "../platform/core/history-service";
-import { MAIN_VIEW } from "../platform/api/view-graph";
+import { lookRef, sameLook, type LookRef } from "../library/collection-documents";
+import { lookScope } from "../platform/core/history-service";
 import { emptyLookHistory } from "../platform/core/look-history";
 import { emptyRecipe } from "../engines/layered-makeup/recipe";
 
@@ -176,7 +183,13 @@ async function start(host: StudioHost, root: HTMLElement) {
   // One creator catalogue for the page (creator-catalogue.ts): every character, and every head made again for another body, shares it.
   const creatorCatalogue = new CreatorCatalogue(createBrowserCreatorDevice());
   // The library's owners (profiles design §7): profiles, Vs, collections and looks, each changed only through its commands (the outbox).
+  // Startup preservation can finish before the presentation exists. Deliver its information through the usual message route once mounted.
+  const defaultNotes: string[] = [];
+  let defaultNote: (text: string) => void = text => { defaultNotes.push(text); };
   const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
+    layouts: { contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE,
+      // The library's own write authority (the lease), not the workspace file's protection: a protected workspace still edits defaults.
+      writable: () => lease?.writable() ?? true, note: text => defaultNote(text) },
     catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
     report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
   // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
@@ -189,17 +202,17 @@ async function start(host: StudioHost, root: HTMLElement) {
       ...(lease ? { canWrite: () => lease.draining() } : {}) });
     early.activate();
     await startProfilesMigration({ endpoint: `${base}/profiles/migrate`, send: fetch, workspace: documents.workspace, fence: documents.fence,
-      model: STUDIO_COMPOSITION.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal,
+      model: STUDIO_COMPOSITION.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal, initial: STUDIO_INITIAL_LAYOUT,
       report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
   }
   await services.load();
-  // The session this window opens on (tab 1, the views and scenes, and what each scene shows), with the window's focus: the history
-  // service records the editing context into it (profiles design §3.3, §3.7).
-  const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, historyService.focus);
-  // Tab 1's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
-  const legacyLayout = workspace.uiPreferences.layout, tabDock = sessionState.dock();
-  const { layout: _legacy, ...uiPreferences } = workspace.uiPreferences;
-  const preferences = new UIPreferenceActions({ ...uiPreferences, ...(tabDock ? { layout: tabDock } : {}) });
+  // The session this window opens on (its tabs, the views and scenes, and what each scene shows), with the window's focus: the history
+  // service records the editing context into it (profiles design §3.3, §3.7). The session owns the view graph and its View and lighting
+  // history: its operations and the graph's edits are one history (§4.1).
+  const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, { history: historyService,
+    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph });
+  // The shown tab's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
+  const preferences = new UIPreferenceActions(workspace.uiPreferences);
   // How a held expression's changes animate (design §5.5): the workspace's setting, available before the head loads.
   const transitions = new TransitionSettings(workspace.preview.transitions);
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
@@ -235,8 +248,11 @@ async function start(host: StudioHost, root: HTMLElement) {
    * when they are made (the live face starts following, the UV editor draws its first frame), before the owner exists: none is shown then.
    */
   let shownHead: () => AttachedHead | undefined = () => undefined;
-  /** The view drawn now: the scene runtime owner's once it exists; the window draws the main view first (phase 2's tabs choose others). */
-  let drawnView: () => string = () => MAIN_VIEW;
+  /**
+   * The view drawn now (undefined: none): the scene runtime owner's once it exists. The window draws the shown tab's most recently focused
+   * view, and follows it (experiment 044 P2-iii).
+   */
+  let drawnView: () => string | undefined = () => drawnViewOf(sessionState);
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
   const region = STUDIO_COMPOSITION.region;
@@ -257,35 +273,41 @@ async function start(host: StudioHost, root: HTMLElement) {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
   // The look the drawn view's scene shows, read from its working copy: what the editor document starts with (the look editor keeps it).
-  const firstLook = sessionState.scene(drawnScene(sessionState)).look, firstView = firstLook ? services.collections.look(firstLook) : null;
+  const firstScene = drawnScene(sessionState), firstLook = firstScene ? sessionState.scene(firstScene).look : undefined;
+  const firstView = firstLook ? services.collections.look(firstLook) : null;
   let first: ReturnType<typeof lookContent> | null = null;
   if (firstView?.state === "live") {
     try { first = lookContent(firstView, STUDIO_COMPOSITION.documents); }
     catch (error) { pageFailure("library", "look_unreadable", "A look couldn't be read.", error); }
   }
   const shownState = first?.state ?? { recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() };
-  const core = createTrustedAuthoringCore({ ...workspace, views: sessionState.graph(), recipe: shownState.recipe, active: shownState.active,
+  const core = createTrustedAuthoringCore({ ...workspace, recipe: shownState.recipe, active: shownState.active,
     selected: shownState.selected, fieldSelection: shownState.fieldSelection, history: shownState.history, historyTrimmed: shownState.historyTrimmed,
     liveFeatures: shownState.liveFeatures, liveLocked: shownState.liveLocked }, {
-    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}), viewScope: viewScope(sessionState.profile),
+    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}), views: sessionState.graph,
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
   // One writer per workspace: while another window holds it, every action, request, control and gesture is refused here.
   if (lease) core.app.attach({ access: lease });
-  // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
+  // The session's view graph (view-graph-design.md §3.3), which the core acts on: the head restores and follows its main view.
   const views = core.views;
-  // The scene the drawn view shows and the look it shows, which the collection service changes.
-  const drawn = () => views.node(drawnView(), "scene").id;
-  const shownScene = { look: () => sessionState.scene(drawn()).look, setLook: (ref: LookRef | undefined) => sessionState.setLook(drawn(), ref),
+  // The scene the drawn view shows (none while no view is drawn) and the look it shows, which the collection service changes.
+  const sceneOf = (view: string | undefined) => view === undefined || !views.has(view) ? undefined : views.node(view, "scene").id;
+  const lookOf = (view: string | undefined) => { const scene = sceneOf(view); return scene === undefined ? undefined : sessionState.scene(scene).look; };
+  const shownScene = { look: () => lookOf(drawnView()),
+    setLook: (ref: LookRef | undefined) => { const scene = sceneOf(drawnView()); if (scene !== undefined) sessionState.setLook(scene, ref); },
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
-  core.app.attach({ scenes: sceneCommands(sessionState, services) });
-  const targets: TargetResolver = createTargetResolver({ state: sessionState, graph: views, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
+  // The layout tabs' actions: the session's operations, and those naming a default (the modules' and the person's own).
+  const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: STUDIO_FRAGMENT_KNOWLEDGE });
+  core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
+  const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
   core.app.attach({ targetCheck: targets });
+  const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.named()), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
@@ -294,8 +316,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     history: workspace.history, ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}), ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}) };
   // The session as it is now, stored with the migration's mark (a session made for this window from the library is stored nowhere).
   const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
-    profiles: sessionStored ? sessionState.stored({ graph: sessionViewGraph(views), dock: preferences.snapshot().layout ?? null },
-      workspace.profiles) : workspace.profiles });
+    profiles: sessionStored ? sessionState.stored(workspace.profiles) : workspace.profiles });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).
@@ -307,7 +328,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
       preview: () => shownHead()?.preview.snapshot(), sample: () => shownHead()?.motion.sample(), views: () => workspace.views,
-      uiPreferences: () => { const { layout: _live, ...rest } = preferences.snapshot(); return { ...rest, ...(legacyLayout ? { layout: legacyLayout } : {}) }; },
+      uiPreferences: () => preferences.snapshot(),
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
       profiles: profileMarks,
@@ -344,6 +365,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const drawUV = () => viewportDevice.drawUV();
   previewDevice = createBrowserPreviewDevice({
     document: core.document, region: rasterRegion(region), initialSize: workspace.preview.textureSize,
+    // The look the document shows: a warm head's surface keeps that look's makeup, given back when the document shows it again (D3).
+    look: () => { const ref = lookEditor.ref(); return ref ? lookScope(ref) : undefined; },
     makeWorker: () => new Worker("/build/raster-worker.js", { type: "module" }),
     frame: run => requestAnimationFrame(run),
     refresh: () => { drawUV(); persist(); }, refreshSelection: () => { drawUV(); persist(); },
@@ -374,8 +397,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   previewDevice.coordinator.quality.subscribe(persist);
   // The editors (scene-editors.ts): every composed layered surface is registered, and each view's on-head editor edits the look that view's
   // scene shows, naming it through the view's panel (the input layer's resolution, profiles design §3.6). The root names no feature.
-  const panelOf = (view: string) => sessionState.instance(viewPanel(view));
-  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature: core.document.feature, preview: previewDevice, ref: () => lookEditor.ref() }, core,
+  const panelOf = (view: string | undefined) => view === undefined ? undefined : sessionState.instance(viewPanel(view));
+  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature: core.document.feature, preview: previewDevice }, core,
     naming: { look: view => targets.named(panelOf(view)).look,
       complete: (action, view) => targets.complete(action, core.app.descriptor(action.kind as StudioAction["kind"]), { instance: panelOf(view) }) as StudioAction },
     drawn: () => drawnView(), viewport: viewportDevice, attach: services => core.app.attach(services), message: adapterMessage });
@@ -395,9 +418,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       colourScheme: matchMedia("(prefers-color-scheme: dark)"),
       quality: previewDevice.coordinator.quality,
       attach: attached => core.app.attach(attached), persist, changed: () => statusSource.changed() },
-    scenes: { view: () => MAIN_VIEW, of: view => views.has(view) ? views.node(view, "scene").id : undefined,
-      subject: id => { const subject = sessionState.scene(id).subject; return subject?.kind === "character" ? subject.id : undefined; },
-      ensureSubject: id => sceneCharacter(sessionState, id, services), subscribe: listener => sessionState.subscribe(listener) },
+    scenes: sceneHeadTargets(sessionState, services),
     characters: services.characters,
     // The shown V's body decides the core head (the masculine V's is prepared on first use, and stops when a newer change supersedes it).
     prepareCore: (body, pending, signal) => host.previewPreparation.ensureBody(body, pending, signal),
@@ -406,10 +427,14 @@ async function start(host: StudioHost, root: HTMLElement) {
     notice: text => adapterMessage("preview", text),
     onContext: listener => viewportDevice.onContext(listener),
     editors,
+    // The one editor document follows the drawn view's look (experiment 044 decision D3).
+    document: { shows: view => { const shows = lookOf(view), edited = lookEditor.ref(); return shows && edited ? sameLook(shows, edited) : !shows && !edited; },
+      follow: view => { lookEditor.show(lookOf(view)); } },
     shown: head => {
+      syncDrawn();
       stopPrefetch?.(); stopPrefetch = undefined;
       facial.attachScene(head?.scene.face);
-      poseStage.attach(head ? { view: drawnView(), motion: head.motion, details: head.characterDetails, context: head.characterContext } : null);
+      poseStage.attach(head ? { view: drawnView() ?? head.preview.view(), motion: head.motion, details: head.characterDetails, context: head.characterContext } : null);
       if (!head) return;
       stopPrefetch = prefetchWhenQuiet(() => facial.prefetch(), headQuiet({ details: head.characterDetails, scene: head.scene }));
       status = { ...status, assets: { ...status.assets, loaded: true } };
@@ -421,6 +446,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
   shownHead = () => heads.shown();
   drawnView = () => heads.shownView();
+  /** The presentation's read of which view is drawn and whose picture the canvas holds (each 3D view's pane follows it, P2-iii-b). */
+  function syncDrawn() { viewportDevice.attachment.setDrawn({ drawn: heads.shownView(), onCanvas: heads.shown()?.preview.view() }); }
+  syncDrawn();
   // Camera, preview and motion actions go to the runtime holding the view they name (view-routes.ts).
   core.app.attach({ runtimes: heads.runtimes });
   // 3D preview setup: follows the host's preparation and WolvenKit setup, then loads the head.
@@ -467,21 +495,46 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
     panelInstance: panel => sessionState.instance(panel),
+    tabs: layoutTabsPort(sessionState, layoutTabs, services),
+    emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
+      createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),
+      starter: () => starterParts(core.documents), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
     targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
+    characterName: character => services.characters.character(character)?.label,
   });
-  // The editor shows the scene's look, and follows it when the scene shows another one.
-  lookShown = () => { previewDevice.coordinator.resetStack(); drawUV(); };
+  // The editor shows the drawn scene's look, and follows it when the scene shows another one. A warm head's look comes back with its makeup.
+  lookShown = () => { previewDevice.showLook(); drawUV(); };
   lookEditor.show(shownScene.look());
-  sessionState.subscribe(() => lookEditor.show(shownScene.look()));
+  // The drawn view follows the shown tab's most recently focused view (another tab shown, another view focused, the view drawn closed):
+  // the heads owner draws it, switching the document first when it shows another look (D3). Otherwise the drawn scene's look may change.
+  sessionState.subscribe(() => {
+    const target = drawnViewOf(sessionState);
+    if (target !== heads.shownView()) {
+      const shown = heads.show(target);
+      syncDrawn();
+      void shown.then(syncDrawn, () => { syncDrawn(); /* Superseded, or noticed by the owner. */ });
+    } else lookEditor.show(shownScene.look());
+  });
   // The only object handed to the presentation.
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
+  defaultNote = text => adapterMessage("layout-default", text);
+  if (defaultNotes.length) { defaultNote(defaultNotes.join("\n\n")); defaultNotes.length = 0; }
   host.onMounted?.({ openGameSetup: () => void previewSetup.dispatch({ kind: "previewSetup.openSetup" }) });
   if (verification) {
     /** The scene runtime shown now (developer evidence reads only that one). */
     const viewer = () => heads.shown()?.scene;
     Object.assign(window, { xfStudioPresentation: port,
+    xfStudioTabFixtures: tabFixtures,
+    // Verification only (experiment 044 decision M1): a tab (default: the shown one) printed as a module's default layout, to paste into
+    // the module's `defaults.ts`, so supplied layouts are arranged in the Studio and replace the contributed ones as data.
+    xfStudioTabAsDefault: (meta: { id: string; name: string; description: string }, tab = sessionState.tabId()) =>
+      printDefault(layoutTabs.contributionOf(tab, meta)),
+    // Verification only (experiment 044 P2-iii-b's captures, until New view has a control): another view in the drawn view's tab, sharing
+    // its scene (the same V and look) with a camera of its own.
+    xfStudioAddView: (title?: string) => { const from = drawnViewOf(sessionState);
+      return from === undefined ? undefined : sessionState.addView(from, { scene: true, lights: true, display: true }, title ? { title } : {}); },
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing, and which runtimes are
     // resident (profiles phase 4a-iv).
     xfStudioSceneEvidence: () => { const scene = viewer(); return scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),

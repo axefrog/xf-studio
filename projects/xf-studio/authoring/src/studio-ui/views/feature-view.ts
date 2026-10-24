@@ -24,7 +24,7 @@ import type { IconName } from "../icons";
 import type { ViewportInputHints } from "../input-hints";
 import type { MenuAnchor, MenuSection } from "../menu";
 import type { PanelController } from "../panels/collection";
-import type { DispatchFeedback, Port } from "../runtime";
+import type { DispatchFeedback, Frame, Port, StudioRuntime } from "../runtime";
 import type { ViewContribution } from "./contribution";
 import type { SettingsSection } from "../settings-sections";
 
@@ -85,6 +85,22 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   undoAction(): FeedbackAction;
   readonly feedback: Pick<Feedback, "toast" | "announce" | "record">;
   readonly anchors: Pick<AnchorRegistry, "register">;
+  /** Collection presentation services for feature-owned Presets and Library; no runtime or mutable document access. */
+  readonly collection: {
+    summary: Port["library"]["summary"];
+    capability: Port["library"]["capability"];
+    requestCapability: Port["authoring"]["requestCapability"];
+    fileCapability: Port["files"]["capability"];
+    request: StudioRuntime["request"];
+    file: StudioRuntime["file"];
+    refresh(): void;
+    state(frame: Frame): ReturnType<typeof import("../panels/collection").libraryState>;
+    menu(anchor: MenuAnchor, invoker?: Element): void;
+    menuCapability(anchor: MenuAnchor): { available: boolean; reason?: string };
+    presetMenu(id: string, anchor: MenuAnchor, invoker?: Element): void;
+    reopenPreviousAction(): FeedbackAction;
+    import(): void;
+  };
   /** Open (or bring forward) a panel. */
   reveal(panel: string, focus?: boolean): void;
   /** Open the Settings panel at one of its groups (the game folder and WolvenKit are chosen in Settings › Game and › Tools). */

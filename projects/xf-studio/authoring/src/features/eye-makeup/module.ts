@@ -1,13 +1,15 @@
 /**
- * Eye makeup's Studio module (view-graph-design.md §3.9, §4): the manifest the Modules menu lists, the view tools it contributes
+ * Eye makeup's Studio module (view-graph-design.md §3.9, §4): its contributed defaults and the view tools it contributes
  * to character scenes (Surface controls on the toolbar; Plate wireframe as a research tool, everywhere at once), and its crumb.
  * Data only: the application derives each view's tools from it, and eye makeup's view renders its summary and readiness.
  */
 import type { StudioModule, ViewSummaryContribution, ViewToolContribution } from "../../platform/api";
+import { EYE_MAKEUP_DEFAULTS } from "./defaults";
 
 export const EYE_MAKEUP_MODULE: StudioModule = Object.freeze({
   id: "eye-makeup", label: "Eye makeup", icon: "category", group: "character", stage: "stable", feature: "eye-makeup", shownByDefault: true,
   description: "Design layered eye makeup for your V.",
+  defaults: EYE_MAKEUP_DEFAULTS,
 });
 
 export const EYE_MAKEUP_VIEW_TOOLS: readonly ViewToolContribution[] = Object.freeze([

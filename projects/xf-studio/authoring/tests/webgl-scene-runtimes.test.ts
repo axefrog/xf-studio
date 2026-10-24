@@ -20,6 +20,8 @@ import type { SceneRuntimesProbe } from "./webgl-scene-runtimes-probe-page";
  * | Warm residency | a hidden runtime holds none of its frame-sized targets (display, skin scatter, contact shadows), and switching back and forth leaves the live GL objects flat |
  * | Memory returned | closing a subject (`close(scene)`) and closing everything leave the GPU objects and Three's programs at the baseline |
  * | One output | every program the page's runtimes build writes one output into one colour attachment, as the driver is asked |
+ * | Look switch (P2-iii) | between warm runtimes showing different looks: ≤ 100 ms to the first presented frame, no raster, no composite draw, no link; eviction releases the kept makeup |
+ * | Canvas move (P2-iii-b) | moving the canvas to another view's pane (another size) links and makes nothing, draws at the new size, loses no context and keeps the warm runtime; a warm switch after it links nothing |
  *
  * The page's other steps are 4a-v's and its reviews' (preparation, the lighting change on the shown V, context loss in the middle of GPU
  * work): a cold V prepared while another is shown keeps the page's thread free and draws nothing until it is shown; a lighting setup never
@@ -81,6 +83,10 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
       expect(close.after.programs).toEqual(close.before.programs);
       expect(close.shownAfter).toBe(false);
     }
+  });
+
+  test("G4 T-d: a look edited and fully drawn while shown stays prepared on its first warm visit", () => {
+    for (const probe of [parallel, fallback]) expect(probe.lookSwitch.editedShownPrepared).toBe(true);
   });
 
   test("the morph-target texture is made ahead in steps under 50 ms each, the first on a renderer too, byte for byte Three's, and the draw that follows builds none (4a-vi)", () => {
@@ -276,6 +282,45 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
+  test("P2-iii: a look switch between warm runtimes takes ≤ 100 ms with no makeup redraw (no raster, no composite draw) and no link; eviction releases the kept makeup", () => {
+    for (const probe of [parallel, fallback]) {
+      const { cold, switches, evicted, evictedLookKept, before, after } = probe.lookSwitch;
+      // The cold look was rastered afresh (nothing held it); every warm switch took its look back from the warm runtime's hold.
+      expect(cold.adopted).toBe(false);
+      expect(switches).toHaveLength(8);
+      for (const item of switches) {
+        expect(item.adopted).toBe(true);
+        expect(item.ms).toBeLessThanOrEqual(100);
+        expect([item.links, item.programs, item.rasters, item.compositeDraws]).toEqual([0, 0, 0, 0]);
+        expect(item.firstFrame).toEqual({ links: 0, programs: 0 });
+      }
+      // The least recently shown runtime went with its look's makeup; once everything closed the GPU objects and programs are as before.
+      expect([evicted, evictedLookKept]).toEqual(["s3|v1|female|studio", false]);
+      expect(after.gl).toEqual(before.gl);
+      expect(after.programs).toEqual(before.programs);
+    }
+  });
+
+  test("P2-iii-b: moving the canvas between view panes links nothing, draws at the pane's size, keeps the context and the warm runtime", () => {
+    for (const probe of [parallel, fallback]) {
+      const { moves, switchAfter, before, after } = probe.canvasMove;
+      expect(moves).toHaveLength(6);
+      for (const move of moves) {
+        expect([move.links, move.programs, move.contextEvents]).toEqual([0, 0, 0]);
+        expect(move.frames).toBeGreaterThan(0);
+        expect(move.warm).toBe(true);
+        const [width, height] = move.size.split("x").map(Number);
+        expect(move.expected).toBe(`${Math.floor(width! * move.pixelRatio)}x${Math.floor(height! * move.pixelRatio)}`);
+        expect(move.drawn).toBe(move.expected);
+      }
+      // The panes alternate: 240 × 180, then 200 × 150, and the host fills each.
+      expect(moves.map(move => move.size)).toEqual(["240x180", "200x150", "240x180", "200x150", "240x180", "200x150"]);
+      expect(switchAfter.links).toBe(0);
+      expect(switchAfter.firstFrame).toEqual({ links: 0, programs: 0 });
+      expect(after.gl).toEqual(before.gl);
+    }
+  });
+
   test("closing everything returns the GPU objects and Three's programs to the baseline (4a-i's gate holds with preparation); no fence outlives its preparation", () => {
     for (const probe of [parallel, fallback]) {
       expect(probe.closed.gl).toEqual(probe.baseline.gl);
@@ -346,6 +391,14 @@ function gateTable(probe: SceneRuntimesProbe) {
       pass: warm.targets.every(entry => same(entry.hidden, [0, 0, 0])) && warm.gl.every((counts, i) => i < 2 || same(counts, warm.gl[i - 2])) },
     "memory returned": { value: `${closeSubject.after.programs.length} programs after closing a subject`,
       pass: same(closeSubject.after, closeSubject.before) && same(probe.closed.gl, probe.baseline.gl) && same(probe.closed.programs, probe.baseline.programs) },
+    "look switch (P2-iii)": { value: `${Math.round(Math.max(...probe.lookSwitch.switches.map(item => item.ms)) * 10) / 10} ms (worst of ${probe.lookSwitch.switches.length}); `
+      + `${probe.lookSwitch.switches.reduce((sum, item) => sum + item.rasters + item.compositeDraws + item.links, 0)} rasters, composite draws and links`,
+      pass: probe.lookSwitch.switches.every(item => item.adopted && item.ms <= 100 && item.rasters === 0 && item.compositeDraws === 0 && item.links === 0 && item.programs === 0)
+        && same(probe.lookSwitch.after.gl, probe.lookSwitch.before.gl) },
+    "canvas move (P2-iii-b)": { value: `${probe.canvasMove.moves.length} moves; ${probe.canvasMove.moves.reduce((sum, move) => sum + move.links + move.programs, 0)} links and programs`,
+      pass: probe.canvasMove.moves.every(move => move.links === 0 && move.programs === 0 && move.frames > 0 && move.warm && move.contextEvents === 0 && move.drawn === move.expected)
+        && same(probe.canvasMove.switchAfter.firstFrame, { links: 0, programs: 0 }) && probe.canvasMove.switchAfter.links === 0
+        && same(probe.canvasMove.after.gl, probe.canvasMove.before.gl) },
     "one output": { value: `${probe.singleOutput.fragments} fragment shaders, ${probe.singleOutput.attachments} attachments`, pass: probe.singleOutput.issues.length === 0 },
   };
 }

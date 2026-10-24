@@ -32,7 +32,8 @@ export type PreviewRenderPort = {
   releaseDisabled(index: number, layer: Layer): void;
   request(index: number, layer: Layer, priority: boolean, size: number, needsOptics: boolean): void;
   updateLayer(index: number, layer: Layer): void;
-  publish(result: CompleteRaster, layer: Layer): void;
+  /** `painted` is the layer the completed request was made for (what the pixels show), which a later edit may already have overtaken. */
+  publish(result: CompleteRaster, layer: Layer, painted: Layer): void;
   renderAll(order?: "stack" | "active-first"): void;
   refresh(): void;
   refreshQuality(): void;
@@ -112,10 +113,10 @@ export class AuthoringPreviewCoordinator {
     this.port.refresh();
   }
   /** RasterClient validates a complete bundle and its version first; this guards replacement tiers/slots. */
-  publish(result: CompleteRaster) {
+  publish(result: CompleteRaster, painted?: Layer) {
     const layer = this.document.recipe.layers[result.i];
     if (!layer || result.size !== (layer.enabled ? this.size : 1)) return false;
-    this.port.publish(result, layer);
+    this.port.publish(result, layer, painted ?? layer);
     this.lastRaster = result.ms;
     this.notify();
     this.port.refreshQuality();
@@ -131,15 +132,15 @@ export class AuthoringPreviewCoordinator {
     this.port.reset(); this.port.replaceResources(); this.port.renderAll("stack"); this.port.refresh();
     this.notify();
   }
-  /** Keep complete resources by stable layer ID; only changed inputs require new work. */
-  syncStack(previous: Recipe) {
+  /** Keep complete resources by stable layer ID; changed inputs and slots whose raster never completed require new work. */
+  syncStack(previous: Recipe, incomplete: ReadonlySet<string> = new Set()) {
     const current = this.document.recipe.layers, old = previous.layers;
     const oldById = new Map(old.map(layer => [layer.id, layer]));
     const orderChanged = old.length !== current.length || old.some((layer, i) => layer.id !== current[i]?.id);
     const interrupted = orderChanged ? this.port.reconcileResources(old, current) : new Set<string>();
     for (let i = 0; i < current.length; i++) {
       const prior = oldById.get(current[i].id);
-      if (!prior || !samePreviewInputs(prior, current[i]) || interrupted.has(current[i].id) ||
+      if (!prior || !samePreviewInputs(prior, current[i]) || incomplete.has(current[i].id) || interrupted.has(current[i].id) ||
           orderChanged && current[i].enabled &&
             (this.port.resourceSize(i) !== this.size || this.port.needsPresentationMaps(i, current[i], this.size)))
         this.render(i);

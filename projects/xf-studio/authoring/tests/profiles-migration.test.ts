@@ -21,6 +21,9 @@ import { alpha2Library, alpha2SaveNamed, COLLECTION, documentRows, fixtureSave, 
 import { HarnessHost, HarnessWorkspace, migrateUntilDone } from "./fixtures/profiles-migration-harness";
 import { restore } from "./fixtures/workspace-observable";
 import { looseWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
+import { STUDIO_INITIAL_LAYOUT } from "../src/compose/layout-defaults";
+import { openSession } from "./fixtures/profile-sessions";
+import { freshWorkspace } from "./fixtures/eye-region";
 import { tempDir } from "./temp-dir";
 
 const scratch = tempDir("xfs-profiles-migration-");
@@ -498,4 +501,26 @@ describe("second review of chunk 1d-i", () => {
     host.close();
     expect(results(byPlan.path).at(-1)!.collection).toBe(byPlan.collection);
   });
+});
+
+
+test("Review A design 1: a fresh workspace migrates the default arrangement in both sizes, preserving legacy bytes", async () => {
+  const { path } = library(), host = new HarnessHost(path), state = freshWorkspace();
+  const legacy = structuredClone(state.uiPreferences);
+  const outcome = await startProfilesMigration({ endpoint: "http://localhost/api/profiles/migrate", workspace: "fresh-default", fence: () => null,
+    model: MODEL, state: () => state, marks: state, flush: () => true, signal: new AbortController().signal, initial: STUDIO_INITIAL_LAYOUT,
+    send: async (_url, init) => { const answer = await host.send(JSON.parse(init!.body as string)); if (!answer.ok) throw Error(answer.reason); return Response.json(answer.result); } });
+  expect(outcome).toBe("done");
+  const data = Object.values(state.profiles!.sessions)[0]!, session = openSession(data);
+  expect(data.tabs[0]!.origin).toBe("eye-makeup/default");
+  expect(session.dock()).toEqual(STUDIO_INITIAL_LAYOUT.dock);
+  expect(dockPanels(session.dock())).toContain("head");
+  expect(state.uiPreferences).toEqual(legacy);
+  const empty = structuredClone(state);
+  empty.uiPreferences.layout = { format: "xfs/dock", version: 1, state: { wide: { root: null, floating: [], closed: [] }, compact: { root: null, floating: [], closed: [] } } };
+  const snap = migrationSnapshot(empty, MODEL, "fresh-default"), answer = await host.send({ token: crypto.randomUUID(), digest: snapshotDigest(snap), snapshot: snap });
+  if (!answer.ok) throw Error(answer.reason);
+  const deliberatelyEmpty = openSession(buildProfileSession(empty, snap, answer.result, Math.random, STUDIO_INITIAL_LAYOUT));
+  expect(deliberatelyEmpty.dock()).toEqual(empty.uiPreferences.layout);
+  host.close();
 });

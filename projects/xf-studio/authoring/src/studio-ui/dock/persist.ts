@@ -1,6 +1,6 @@
 import { recoverDockLayout, type DockLayout, type JsonValue } from "../../app/ui-preferences";
 import { DOCK_FORMAT, DOCK_VERSION, keepDockExpanded, parkPanels, parseTree, recoverWindows, unparkPanels, type DockState, type DockTree, type PanelId,
-  type Rect } from "./layout";
+  openViewPanel, type Rect } from "./layout";
 import { defaultDockState } from "../layout-defaults";
 import type { ViewCatalogue } from "../views/contribution";
 
@@ -20,6 +20,19 @@ export function defaultDockStateFor(catalogue: ViewCatalogue, parked: readonly P
 
 const MAX_UNKNOWN = 64;
 const panelId = (id: unknown): id is string => typeof id === "string" && id.length > 0 && id.length <= 80 && /^[a-z0-9.-]+$/i.test(id);
+/** Remove deleted views from every kind of remembered place before recovery can park them as unknown panels. Other unknown panels stay. */
+function pruneViewPanels(value: unknown, views: ReadonlySet<string>, depth = 0): unknown {
+  if (!value || typeof value !== "object" || depth > 20) return value;
+  if (Array.isArray(value)) return value.map(item => pruneViewPanels(item, views, depth + 1));
+  const stale = (id: unknown) => typeof id === "string" && (id === "head" || id.startsWith("view.")) && !views.has(id);
+  return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => {
+    if ((key === "active" || key === "panel") && stale(item)) return [];
+    if (["panels", "closed", "group"].includes(key) && Array.isArray(item)) return [[key, item.filter(id => !stale(id))]];
+    if ((key === "parked" || key === "lastPlace") && item && typeof item === "object" && !Array.isArray(item))
+      return [[key, Object.fromEntries(Object.entries(item).filter(([id]) => !stale(id)).map(([id, place]) => [id, pruneViewPanels(place, views, depth + 1)]))]];
+    return [[key, pruneViewPanels(item, views, depth + 1)]];
+  }));
+}
 /** The panels a saved tree names (in its groups, its closed list and its parked places), and the ones it parked. */
 function namedPanels(tree: unknown): { named: Set<string>; parked: Set<string> } {
   const named = new Set<string>(), parked = new Set<string>();
@@ -39,6 +52,18 @@ function namedPanels(tree: unknown): { named: Set<string>; parked: Set<string> }
   return { named, parked };
 }
 
+/** Read the tab's former view slot before stale view IDs are pruned by normal recovery. */
+export function openViewDockState(state: DockState, saved: unknown, defaults: DockState, panel: PanelId, width: number): DockState {
+  const layout = saved as DockLayout | null | undefined;
+  const source = layout?.format === DOCK_FORMAT && layout.version === DOCK_VERSION ? layout.state as Record<string, unknown> : undefined;
+  const tree = (size: "wide" | "compact") => {
+    const value = source?.[size], known = [...namedPanels(value).named];
+    const arrangement = parseTree(value, known, { root: null, floating: [], closed: [] });
+    return openViewPanel(state[size], panel, defaults[size], arrangement, width);
+  };
+  return { wide: tree("wide"), compact: tree("compact") };
+}
+
 /**
  * Apply a saved preference only through the ui-preferences recovery gate: the
  * engine parses both size classes, re-adds missing panels and pulls floating
@@ -46,13 +71,17 @@ function namedPanels(tree: unknown): { named: Set<string>; parked: Set<string> }
  * the panels of hidden modules (view-graph-design.md §4.3): never re-added, their
  * places kept.
  *
- * Saved layouts outlive builds (§4.5): a panel the catalogue doesn't know (a newer build's, or a view this workspace lacks) is kept
- * parked with its place, never dropped, so saving the arrangement again keeps it; and a panel the saved arrangement parked whose module
- * is shown now comes back at its parked place rather than its factory home.
+ * Saved layouts outlive builds (§4.5): unknown feature panels stay parked, as do live views of other tabs and retained newer-version
+ * views (`viewPanels`). Deleted views are pruned, including their remembered places. A known panel whose module is shown now comes back
+ * at its parked place rather than its factory home. Without a graph, only the catalogue's views are known to exist.
  */
-export function restoreDockPreference(saved: unknown, area: Rect, catalogue: ViewCatalogue, parked: readonly PanelId[] = []): { state: DockState; recovered: boolean } {
-  const factory = defaultDockState(catalogue), defaults = defaultDockStateFor(catalogue, parked);
-  const layout = recoverDockLayout(saved, {
+export function restoreDockPreference(saved: unknown, area: Rect, catalogue: ViewCatalogue, parked: readonly PanelId[] = [],
+  viewPanels: readonly PanelId[] = catalogue.ids, tab = false): { state: DockState; recovered: boolean } {
+  // A tab supplies its own complete arrangement; missing panels stay closed. Empty means empty.
+  const empty = (): DockTree => ({ root: null, floating: [], closed: [...catalogue.ids] });
+  const factory = tab ? { wide: empty(), compact: empty() } : defaultDockState(catalogue);
+  const defaults = tab ? factory : defaultDockStateFor(catalogue, parked);
+  const layout = recoverDockLayout(pruneViewPanels(saved, new Set(viewPanels)), {
     workAreas: [{ x: area.x, y: area.y, width: Math.max(1, area.w), height: Math.max(1, area.h) }],
     panelIds: [...catalogue.ids],
   }, (candidate, context) => {

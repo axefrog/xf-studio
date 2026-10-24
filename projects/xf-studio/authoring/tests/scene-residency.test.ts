@@ -106,6 +106,31 @@ describe("residency and the superseding subject change (4a-iv T1)", () => {
     expect(h.log).toEqual([`built:${female.key}`, `show:${female.key}`]);
   });
 
+  test("P2-iii: showing nothing stops the build in flight and keeps the shown runtime warm; the residents never outnumber the shown one plus `warm`", async () => {
+    const clock = new Clock(), h = harness(clock);
+    const a = wantOf("s1", "v1", "female"), b = wantOf("s2", "v2", "female"), c = wantOf("s3", "v3", "female");
+    h.want(a); await clock.advance(200);
+    h.want(b); await clock.advance(200);
+    expect(h.residency.snapshot().residents.map(item => `${item.key}:${item.state}`)).toEqual([`${a.key}:warm`, `${b.key}:shown`]);
+    // C is building when the window comes to draw nothing: C stops, B is hidden and stays warm beside A.
+    const toC = h.want(c);
+    await clock.advance(20);
+    h.residency.hideShown();
+    await clock.advance(100);
+    expect(await toC).toBe("superseded");
+    expect(h.residency.shown()).toBeUndefined();
+    expect(h.residency.snapshot().residents.map(item => `${item.key}:${item.state}`)).toEqual([`${a.key}:warm`, `${b.key}:warm`]);
+    // B wanted again is shown at once, with no build; A stays warm.
+    const builds = h.built.length;
+    expect(await h.want(b)).toBe("shown");
+    expect(h.built.length).toBe(builds);
+    // With nothing shown and a third runtime wanted, the least recently shown goes once it is shown (A), never more.
+    h.residency.hideShown();
+    h.want(c); await clock.advance(200);
+    expect(h.residency.snapshot().residents.map(item => `${item.key}:${item.state}`)).toEqual([`${b.key}:warm`, `${c.key}:shown`]);
+    expect(h.log.filter(line => line.startsWith("dispose:"))).toEqual([`dispose:${a.key}`]);
+  });
+
   test("the previous runtime stays shown until the new one is built; a late result is never shown, and goes", async () => {
     const clock = new Clock(), h = harness(clock);
     const a = wantOf("s1", "v1", "female"), b = wantOf("s1", "v2", "female"), c = wantOf("s1", "v3", "female");

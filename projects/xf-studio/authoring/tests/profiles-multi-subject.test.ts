@@ -7,7 +7,9 @@
  *
  * It checks that edits stay independent (each V's choices and each look's content reach only their own document), that each Undo acts on
  * its own scope, that resolution never leaves the shown tab, that captures and named actions are refused with what changed once their
- * target moves, is changed elsewhere or is gone, and that the session stores and reads back with its tabs, pins and focus.
+ * target moves, is changed elsewhere or is gone, and that the session stores and reads back with its tabs, pins and focus. Phase 2 (P2-i):
+ * the tab operations over these two tabs keep every pin and look, and the session with five closed tabs stays a small share of the
+ * workspace's storage budget.
  */
 import { describe, expect, test } from "bun:test";
 import { CHARACTER_DOCUMENT, type CharacterDocument } from "../src/character/character-document";
@@ -15,7 +17,7 @@ import { characterScope } from "../src/character/character-history";
 import { CreatorCatalogue } from "../src/character/creator-catalogue";
 import { createProfileServices, createTargetResolver, sceneCommands } from "../src/app/profiles/profile-window";
 import { profileSessionOf, type ProfileSessionData, type SessionScene, type SessionView } from "../src/app/profiles/profile-session";
-import { ProfileSessionState } from "../src/app/profiles/profile-session-state";
+import { openSession } from "./fixtures/profile-sessions";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import type { StudioAction } from "../src/app/studio-application";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
@@ -29,7 +31,8 @@ import { characterRef } from "../src/platform/api/characters";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { FocusService } from "../src/platform/core/focus";
-import { createHistoryService, lookScope, viewScope } from "../src/platform/core/history-service";
+import { createHistoryService, lookScope } from "../src/platform/core/history-service";
+import { WORKSPACE_STORAGE_BUDGET } from "../src/app/workspace/workspace-budget";
 import { createStudioViewGraph, sessionViewGraph } from "../src/preview/preview-view-graph";
 import { fixtureHost } from "./fixtures/creator-host";
 import { freshWorkspace, initialRecipe } from "./fixtures/eye-region";
@@ -91,20 +94,23 @@ async function world() {
   // Read as a window reads a stored session (validated), then opened with the window's focus.
   const read = profileSessionOf(structuredClone(data));
   if (!read) throw Error("The session didn't read.");
-  const state = new ProfileSessionState(profile.profile, read, seeded(), focus);
+  const state = openSession(read, { profile: profile.profile, history });
 
   // The core with the drawn view's look in its editor, the scenes' commands and the window's resolver, as the startup wires them.
-  const drawn = () => core.views.node(MAIN_VIEW, "scene").id;
+  // The drawn view: the main view while it is open (one drawn view, phase 1), else the first view of the shown tab (P2-iii draws the
+  // shown tab's most recently focused view).
+  const drawn = () => { const views = core.views, view = views.has(MAIN_VIEW) ? MAIN_VIEW : views.viewIds().find(id => views.tabOf(id) === state.tabId());
+    return view === undefined ? "" : views.node(view, "scene").id; };
   const firstView = services.collections.look(L[0]!);
   if (firstView?.state !== "live") throw Error("The first look isn't live.");
   const first = lookContent(firstView, STUDIO_DOCUMENTS);
-  const core = createTrustedAuthoringCore({ ...freshWorkspace(), views: state.graph(), ...first.state }, { history, scope: lookScope(L[0]!),
-    viewScope: viewScope(profile.profile), resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = createTrustedAuthoringCore({ ...freshWorkspace(), ...first.state }, { history, scope: lookScope(L[0]!),
+    views: state.graph, resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   const editor = new LookEditor({ model: STUDIO_DOCUMENTS, sessions: services.looks, document: core.document, store: () => outbox.store() });
   editor.show(state.scene(drawn()).look);
   state.subscribe(() => editor.show(state.scene(drawn()).look));
   core.app.attach({ scenes: sceneCommands(state, services) });
-  const targets = createTargetResolver({ state, graph: core.views, history, services, contexts: type => STUDIO_CATALOGUE.context(type) });
+  const targets = createTargetResolver({ state, history, services, contexts: type => STUDIO_CATALOGUE.context(type) });
   core.app.attach({ targetCheck: targets });
   const app = named(core.app, targets);
 
@@ -246,7 +252,7 @@ describe("three Vs of both bodies, three looks, five views in two tabs, three pi
     const w = await world();
     w.focus.focusView(w.ids[2]!);
     expect(w.core.app.dispatch({ kind: "scene.setLook", scene: w.sceneOf(w.ids[1]!), sceneGen: 0, look: w.L[0]! })).toMatchObject({ ok: true });
-    const stored = w.state.stored({ graph: sessionViewGraph(w.core.views), dock: null });
+    const stored = w.state.stored();
     const session = profileSessionOf(structuredClone(stored.sessions[w.profile]))!;
     expect(session.tabs.map(tab => tab.id)).toEqual([w.t1, w.t2]);
     expect(session.views.views.map(view => view.tab)).toEqual([w.t1, w.t1, w.t1, w.t2, w.t2]);
@@ -254,11 +260,43 @@ describe("three Vs of both bodies, three looks, five views in two tabs, three pi
       .toEqual(w.vs.map(id => ({ policy: "pinned", target: { subject: characterRef(id) } })));
     expect(session.views.scenes.find(scene => scene.id === w.sceneOf(w.ids[1]!))).toMatchObject({ look: w.L[0], gen: 1 });
     // Opened again, the session resolves as before.
-    const again = new ProfileSessionState(w.profile, session, seeded(), new FocusService());
+    const again = openSession(session, { profile: w.profile });
     expect(again.focus.topView(w.ids)).toBe(w.ids[2]);
-    const resolver = createTargetResolver({ state: again, graph: createStudioViewGraph(freshWorkspace().preview, again.graph()), history: w.history,
+    const resolver = createTargetResolver({ state: again, history: w.history,
       services: w.services, contexts: type => STUDIO_CATALOGUE.context(type) });
     expect(["character--v1aaa", "character--v2aaa", "character--v3aaa"].map(panel => resolver.named(panel).character)).toEqual(w.vs);
     expect(resolver.named("presets--follow")).toMatchObject({ view: w.ids[2], look: w.L[2] });
+  });
+
+  test("tab operations over the two tabs (P2-i): a closed tab's pins, scenes and looks come back with Undo and Reopen; switching keeps each tab's own resolution", async () => {
+    const w = await world(), before = JSON.stringify(w.state.session());
+    // Tab 2 shown: its Presets panel follows its own views, never tab 1's.
+    w.focus.focusView(w.ids[3]!);
+    w.state.show(w.t2);
+    expect(w.targets.named("presets--second")).toMatchObject({ view: w.ids[3], look: w.L[1], character: w.vs[0], tab: w.t2 });
+    expect(w.targets.named("presets--follow")).toMatchObject({ view: w.ids[0], tab: w.t2 });
+    // Close tab 1 (three views, three pinned Character panels): its views and scenes go; Undo brings all of it back.
+    w.state.close(w.t1);
+    expect(w.state.tabList().map(tab => tab.id)).toEqual([w.t2]);
+    expect(w.core.views.viewIds()).toEqual(w.ids.slice(3));
+    expect(w.core.app.dispatch({ kind: "view.undo" })).toMatchObject({ ok: true });
+    expect(w.state.tabList().map(tab => tab.id)).toEqual([w.t1, w.t2]);
+    expect(["character--v1aaa", "character--v2aaa", "character--v3aaa"].map(panel => w.targets.named(panel).character)).toEqual(w.vs);
+    // Close it again and reopen: the same.
+    w.state.close(w.t1);
+    w.state.reopen(w.t1);
+    expect(w.targets.named("view--v1aaa")).toMatchObject({ view: w.ids[1], look: w.L[1], character: w.vs[1] });
+    w.state.show(w.t1);
+    const after = JSON.parse(JSON.stringify(w.state.session())), expected = JSON.parse(before);
+    expect({ ...after, focus: { ...after.focus, views: {} }, seq: 0 }).toEqual({ ...expected, focus: { ...expected.focus, views: {} }, seq: 0 });
+  });
+
+  test("size: the session with both tabs and five closed tabs (value copies of every node) is a small share of the workspace's budget", async () => {
+    const w = await world();
+    for (let n = 0; n < 5; n++) w.state.close(w.state.duplicate(w.t1));
+    const size = JSON.stringify(w.state.stored()).length;
+    expect(w.state.closedTabs()).toHaveLength(5);
+    // About 4 KB a closed tab of three views: well inside the budget (2,000,000 UTF-16 units) beside a look's 160K.
+    expect(size).toBeLessThan(WORKSPACE_STORAGE_BUDGET / 20);
   });
 });

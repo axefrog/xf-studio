@@ -9,7 +9,10 @@
 
 /** A view's identity. `main` is the first 3D view, shown in the dock panel `head`; other views use `view.<id>` panels. */
 export type ViewId = string;
-/** The one view every graph has; it cannot be closed. */
+/**
+ * The first view a workspace's graph was made with. An ordinary view (profiles design §4.4): a session may close it or hold no view at all;
+ * `main` and the `head` panel survive as aliases in capture tools and evidence keys.
+ */
 export const MAIN_VIEW: ViewId = "main";
 /** The node types a view references, one of each. */
 export const VIEW_SLOTS = ["scene", "camera", "lights", "display", "tools"] as const;
@@ -23,8 +26,11 @@ export type RigKind = "studio" | "creator" | (string & {});
 
 /** One node: its identity, its kind within its slot (a scene's, camera's or rig's; display and tools have none) and its state. */
 export type GraphNode = { readonly id: string; readonly kind?: string; readonly state: Readonly<Record<string, unknown>> };
-/** One view: one node reference per slot. `title` is the name a person gave it (absent: derived from its scene). */
-export type ViewRecord = { readonly id: ViewId; readonly kind: "3d"; readonly title?: string } & { readonly [S in ViewSlot]: string };
+/**
+ * One view: one node reference per slot. `title` is the name a person gave it (absent: derived from its scene). `tab`: the layout tab it is
+ * in (profiles design §1.1); its owner (the profile session) keeps it valid, and a graph no session holds leaves it out.
+ */
+export type ViewRecord = { readonly id: ViewId; readonly kind: "3d"; readonly title?: string; readonly tab?: string } & { readonly [S in ViewSlot]: string };
 /**
  * A view this build can't show, kept as stored: a newer build's view kind (a `map2d`), or a 3D view whose scene, camera or rig kind
  * this build doesn't know (a World `location`). The graph writes it back unchanged and keeps the nodes it references alive; it is
@@ -47,9 +53,9 @@ export type ViewGraphData = {
   readonly display: readonly StoredNode[]; readonly tools: readonly StoredNode[];
   /**
    * Not focus (that is the session's, platform/core/focus.ts): the field older builds require, kept as stored while it names a shown
-   * view, else the main view. Nothing reads it to decide a target.
+   * view, else the first shown view (absent with none). Nothing reads it to decide a target.
    */
-  readonly focused: ViewId;
+  readonly focused?: ViewId;
 };
 export type StoredNode = { readonly id: string; readonly kind?: string } & Readonly<Record<string, unknown>>;
 
@@ -73,6 +79,8 @@ export type ViewGraphRules = { readonly codecs: { readonly [S in ViewSlot]: Node
 /** A detached read of the graph for presentations: each view with its nodes, and which of them other views share. */
 export type ViewGraphSnapshot = {
   readonly views: readonly (ViewRecord & { readonly shared: readonly ViewSlot[]; readonly sceneKind: SceneKind; /** The dock panel that shows it. */ readonly panel: string })[];
+  /** Views this build cannot display, kept for a newer build. Their dock places must survive recovery too. */
+  readonly retained?: readonly { readonly id: ViewId; readonly panel: string }[];
 };
 
 /** What changed in one graph commit, for the devices that draw it and the views that repaint. */
@@ -108,9 +116,15 @@ export const viewPanelId = (view: ViewId) => view === MAIN_VIEW ? "head" : `view
 /** A view's name when it has none of its own. */
 export const DEFAULT_VIEW_TITLE = "3D view";
 /**
- * Each view's title, in graph order: its own name, else "3D view", numbered ("3D view 1", "3D view 2") when there are several.
+ * Each view's title, in graph order: its own name, else "3D view", numbered within its tab when that tab has several views.
  * Derived, never stored, so the panel's ID and the saved layouts never depend on it. Pure.
  */
-export function viewTitles(views: readonly Pick<ViewRecord, "id" | "title">[]): string[] {
-  return views.map((view, index) => view.title || (views.length > 1 ? `${DEFAULT_VIEW_TITLE} ${index + 1}` : DEFAULT_VIEW_TITLE));
+export function viewTitles(views: readonly Pick<ViewRecord, "id" | "title" | "tab">[]): string[] {
+  const counts = new Map<string | undefined, number>(), positions = new Map<string | undefined, number>();
+  for (const view of views) counts.set(view.tab, (counts.get(view.tab) ?? 0) + 1);
+  return views.map(view => {
+    const position = (positions.get(view.tab) ?? 0) + 1;
+    positions.set(view.tab, position);
+    return view.title || (counts.get(view.tab)! > 1 ? `${DEFAULT_VIEW_TITLE} ${position}` : DEFAULT_VIEW_TITLE);
+  });
 }

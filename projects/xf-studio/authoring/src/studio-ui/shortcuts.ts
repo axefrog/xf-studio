@@ -21,4 +21,4 @@ export function studioShortcut(event: ShortcutKey, context: { textInput: boolean
   return binding ? COMMANDS[binding.id] : undefined;
 }
 /** Binding IDs the shell handles; a test checks every global key binding is one of them. */
-export const SHELL_KEY_BINDINGS = Object.keys(COMMANDS);
+export const SHELL_KEY_BINDINGS = [...Object.keys(COMMANDS), "layout-tabs.number", "layout-tabs.neighbour"];

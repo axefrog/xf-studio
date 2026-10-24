@@ -18,8 +18,10 @@
  *   or a V's history (an edit, an Undo, a look shown again) makes that scope the editing context there, and an experiment's document
  *   takes it when it records or moves. Undo and Redo act on the scope they name; the input layer names it, from the editing contexts
  *   newest first, through `acting`: the first that can act now (an open scope, or a document its experiment offers). There is no other
- *   fallback: with none, Undo is unavailable. The View and lighting history has commands of its own (`view.undo`, `view.redo`) and
- *   never takes the editing context.
+ *   fallback: with none, Undo is unavailable. The View and lighting history has commands of its own (`view.undo`, `view.redo`); its
+ *   owner, the profile session, makes it the editing context when it records a tab operation (`ProfileSessions`).
+ * - **One move at a time.** An Undo, Redo or jump asked for while a move is settling (from a listener) waits and runs once it has
+ *   settled, so each move applies and publishes whole.
  * - **Documents.** `documents` is the `DocumentHistory` API over the `doc:*` scopes: a step keeps the document's value after it
  *   by reference (no copy, whatever its size), and moving hands back the value to restore.
  */
@@ -30,6 +32,7 @@ import { HISTORY_LIMIT, HISTORY_START_ID, UNKNOWN_HISTORY_LABEL, type DocumentHi
 import { HistoryStack, ReferenceStore, WHOLE_VALUES, type LookReader } from "./history-stack";
 import { HistoryTransaction, type TransactionHost, type TransactionPolicy } from "./history-transaction";
 import { FocusService } from "./focus";
+import { notifyAll } from "./listeners";
 
 const VIEW_PREFIX = "view:";
 /** A profile session's View and lighting history (`view:<profile>`, §3.7): its views and lighting, never a look's. */
@@ -200,8 +203,25 @@ class Scope implements HistoryScope {
 
   canUndo() { return this.stack.canUndo; }
   canRedo() { return this.redoValid(); }
-  undo() { return this.stack.canUndo && this.move({ direction: "undo", count: 1 }); }
-  redo() { return this.move({ direction: "redo", count: 1 }); }
+  undo() { return this.settledFirst(() => this.stack.canUndo && this.move({ direction: "undo", count: 1 })); }
+  redo() { return this.settledFirst(() => this.move({ direction: "redo", count: 1 })); }
+  /**
+   * Run a move once any move in progress has settled. A move asked for while one is settling (a listener that undoes again) waits in
+   * order and runs after it, so each move applies and publishes whole; it answers true (accepted), and does nothing when it can't run then.
+   */
+  private settledFirst(run: () => boolean): boolean {
+    if (this.moving) { this.waiting.push(run); return true; }
+    this.moving = true;
+    try { return run(); }
+    finally {
+      this.moving = false;
+      // The next waiting move, in the order asked (each one's own finally runs the one after it).
+      const next = this.waiting.shift();
+      if (next) this.settledFirst(next);
+    }
+  }
+  private moving = false;
+  private readonly waiting: (() => boolean)[] = [];
   plan(stepId: string): HistoryJumpPlan | undefined {
     const timeline = this.timeline();
     const index = stepId === timeline.startId ? -1 : timeline.steps.findIndex(step => step.id === stepId);
@@ -210,8 +230,7 @@ class Scope implements HistoryScope {
     return { direction: delta < 0 ? "undo" : delta > 0 ? "redo" : "none", count: Math.abs(delta) };
   }
   jumpTo(stepId: string) {
-    const plan = this.plan(stepId);
-    return !!plan && plan.direction !== "none" && this.move(plan);
+    return this.settledFirst(() => { const plan = this.plan(stepId); return !!plan && plan.direction !== "none" && this.move(plan); });
   }
   command(action: HistoryMove): boolean {
     if (this.options.command) return this.options.command(action);
@@ -266,8 +285,8 @@ class Scope implements HistoryScope {
       return false;
     }
     this.expected = { revision: this.target.revision?.(), fingerprint: this.target.fingerprint?.() ?? "", top: this.stack.topId };
-    this.changed(true);
-    this.target.settled?.();
+    // The target settles even when a listener throws, so it never stays half published.
+    try { this.changed(true); } finally { this.target.settled?.(); }
     return true;
   }
   private redoValid() {
@@ -296,13 +315,12 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
   const scopes = new Map<HistoryScopeId, Scope>();
   const listeners = new Set<() => void>(), documentListeners = new Set<() => void>();
   const providers = new Set<() => readonly HistoryParticipant[]>();
-  const emit = (set: Set<() => void>) => { for (const listener of [...set]) listener(); };
+  const emit = (set: Set<() => void>) => notifyAll(set);
   /** Inside `batch`, listeners hear once at the end, however many changes the operation made. */
   let batching = 0, pending = { all: false, documents: false };
   const notify = (documentChange: boolean) => {
     if (batching) { pending.all = true; pending.documents ||= documentChange; return; }
-    if (documentChange) emit(documentListeners);
-    emit(listeners);
+    notifyAll([...(documentChange ? [() => emit(documentListeners)] : []), () => emit(listeners)]);
   };
   const batch = <T>(work: () => T): T => {
     batching++;

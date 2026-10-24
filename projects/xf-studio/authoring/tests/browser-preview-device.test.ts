@@ -94,3 +94,118 @@ test("a moved layer keeps its completed canvas and rejects a worker result for i
   expect(device.queueDiagnostics().completed).toBe(1);
   expect(device.coordinator.readiness().phase).toBe("ready");
 });
+
+for (const completed of [true, false]) test(`adopting a hold rerasterizes a ${completed ? "stale" : "never completed"} slot and keeps completed siblings`, () => {
+  const authoring = new AuthoringDocument(freshWorkspace());
+  const sent: RasterRequest[] = [];
+  const worker: RasterPort = { onmessage: null, onerror: null, terminate() {},
+    postMessage(message) { if (!("cancel" in message)) sent.push(message); } };
+  let answered = 0, look = "A";
+  const drain = () => {
+    while (answered < sent.length) {
+      const request = sent[answered++]!;
+      worker.onmessage!({ data: { i: request.i, version: request.version, size: request.size, ms: 1,
+        data: new Uint8ClampedArray(request.size * request.size * 4) } } as MessageEvent);
+    }
+  };
+  const device = createBrowserPreviewDevice({ region: EYE_RASTER_REGION,
+    document: authoring, look: () => look, initialSize: 512, makeWorker: () => worker,
+    frame: run => run(), refresh() {}, refreshSelection() {}, refreshQuality() {}, drawUV() {}, report() {}, measurement() {},
+    createCanvas: size => ({ width: size, height: size, getContext: () => ({ putImageData() {} }) }) as unknown as HTMLCanvasElement,
+    createPixels: (data, size) => ({ data, width: size, height: size }) as ImageData,
+  });
+  // Two enabled masks; the sibling is complete and must survive adoption without new work.
+  const initial = structuredClone(authoring.recipe);
+  initial.layers[1]!.enabled = true;
+  authoring.replaceRecipe(initial);
+  for (let i = completed ? 0 : 1; i < initial.layers.length; i++) {
+    const size = initial.layers[i]!.enabled ? 512 : 1;
+    device.coordinator.publish({ i, size, version: 1, ms: 1, data: new Uint8ClampedArray(size * size * 4) });
+  }
+  const scene = { maxTextureSize: 4096, layers: {
+    needsOptics: () => false, needsAlbedo: () => false,
+    setCanvases() {}, setLayerCanvas() {}, updateLayer() {},
+  } } as unknown as LayeredMakeupSurface;
+  device.connectScene(scene); device.presentInitialLayers();
+  const before = [...device.canvases];
+  const edited = structuredClone(authoring.recipe);
+  edited.layers[0]!.points[0]!.u += 0.01;
+  authoring.publishLayer(edited, 0);
+  expect(sent).toHaveLength(1);
+  // Leave A while its new mask is in flight. Its hold has the edited layer and the old (or empty) canvas.
+  device.disconnectScene(scene);
+  look = "B";
+  authoring.replaceRecipe({ ...edited, layers: edited.layers.map(layer => ({ ...layer, id: `b-${layer.id}` })) });
+  expect(device.showLook()).toBe(false);
+  drain(); // A's late response is discarded; B finishes.
+  expect(device.queueDiagnostics().discarded).toBe(1);
+  look = "A";
+  authoring.replaceRecipe(edited);
+  const requests = sent.length;
+  expect(device.showLook()).toBe(true);
+  expect(sent.slice(requests).map(request => request.i)).toEqual([0]);
+  expect(sent[requests]!.layer.points).toEqual(edited.layers[0]!.points);
+  expect(device.coordinator.readiness().layers[0]!.state).toBe("updating");
+  expect(device.canvases[1]).toBe(before[1]);
+  drain();
+  expect(device.coordinator.readiness().phase).toBe("ready");
+  expect(device.canvases[0]).not.toBe(before[0]);
+  expect(device.canvases[1]).toBe(before[1]);
+  expect(sent).toHaveLength(requests + 1);
+  device.releaseScene(scene);
+});
+
+test("a mask completed after a deferred edit is recorded with the inputs it was made for, so returning to the look re-rasters the edit", () => {
+  const authoring = new AuthoringDocument(freshWorkspace());
+  const sent: RasterRequest[] = [], frames: (() => void)[] = [];
+  const worker: RasterPort = { onmessage: null, onerror: null, terminate() {},
+    postMessage(message) { if (!("cancel" in message)) sent.push(message); } };
+  const answer = (request: RasterRequest) => worker.onmessage!({ data: { i: request.i, version: request.version, size: request.size, ms: 1,
+    data: new Uint8ClampedArray(request.size * request.size * 4) } } as MessageEvent);
+  const flush = () => { while (frames.length) frames.shift()!(); };
+  let look = "A", answered = 0;
+  const drain = () => { flush(); while (answered < sent.length) { answer(sent[answered++]!); flush(); } };
+  const device = createBrowserPreviewDevice({ region: EYE_RASTER_REGION,
+    document: authoring, look: () => look, initialSize: 512, makeWorker: () => worker,
+    // Frames are deferred, as requestAnimationFrame defers them.
+    frame: run => { frames.push(run); }, refresh() {}, refreshSelection() {}, refreshQuality() {}, drawUV() {}, report() {}, measurement() {},
+    createCanvas: size => ({ width: size, height: size, getContext: () => ({ putImageData() {} }) }) as unknown as HTMLCanvasElement,
+    createPixels: (data, size) => ({ data, width: size, height: size }) as ImageData,
+  });
+  for (let i = 0; i < authoring.recipe.layers.length; i++) {
+    const size = authoring.recipe.layers[i]!.enabled ? 512 : 1;
+    device.coordinator.publish({ i, size, version: 1, ms: 1, data: new Uint8ClampedArray(size * size * 4) });
+  }
+  const scene = { maxTextureSize: 4096, layers: {
+    needsOptics: () => false, needsAlbedo: () => false,
+    setCanvases() {}, setLayerCanvas() {}, updateLayer() {},
+  } } as unknown as LayeredMakeupSurface;
+  device.connectScene(scene); device.presentInitialLayers(); flush();
+  const first = structuredClone(authoring.recipe);
+  first.layers[0]!.points[0]!.u += 0.01;
+  authoring.publishLayer(first, 0); flush();
+  expect(sent).toHaveLength(1);
+  answered = 1;
+  // The second edit is a gesture: written in place, its mask asked for on the next frame.
+  authoring.recipe.layers[0]!.points[0]!.u += 0.01;
+  authoring.gestureChanged(0);
+  const second = structuredClone(authoring.recipe);
+  // The first edit's mask completes before the second edit's frame asks for its own: its pixels show the first edit, not the second.
+  answer(sent[0]!);
+  expect(device.queueDiagnostics().completed).toBe(1);
+  expect(sent).toHaveLength(1);
+  // Leave A before the second edit's mask is made, then come back.
+  device.disconnectScene(scene);
+  look = "B";
+  authoring.replaceRecipe({ ...second, layers: second.layers.map(layer => ({ ...layer, id: `b-${layer.id}` })) });
+  device.showLook();
+  drain();
+  look = "A";
+  authoring.replaceRecipe(second);
+  const requests = sent.length;
+  expect(device.showLook()).toBe(true);
+  flush();
+  expect(sent.slice(requests).map(request => request.i)).toEqual([0]);
+  expect(sent[requests]!.layer.points).toEqual(second.layers[0]!.points);
+  device.releaseScene(scene);
+});

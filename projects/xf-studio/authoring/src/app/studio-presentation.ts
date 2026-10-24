@@ -14,7 +14,11 @@ import type { StudioAction, StudioApplication, StudioCapability, StudioDispatchR
 import type { StudioBoundContext, StudioContextHit } from "./studio-context-targets";
 import { nameTargets, type NamedTargets, type Unnamed } from "./action-targets";
 import type { TargetResolver } from "./profiles/targets";
+import type { LayoutTabsPort } from "./profiles/tab-presentation";
+import type { EmptyChoiceRequest, EmptyChoicesPort } from "./profiles/empty-choices";
 import type { FocusService } from "../platform/core/focus";
+import { lookScope } from "../platform/core/history-service";
+import { viewPanelId } from "../platform/api/view-graph";
 import type { HistorySnapshot, HistoryState } from "../platform/api/history";
 import type { ConsequenceSubject, PresentationSubject } from "./action-consequences";
 import type { ModuleService, PlannedModule, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "../platform/api";
@@ -203,6 +207,11 @@ export type StudioPresentationPort<Slot> = {
     summaries(view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">): readonly ViewSummaryContribution[];
     /** Each view's derived title and its scene's subject, with the panel that shows it. */
     titles(): readonly { readonly view: ViewId; readonly panel: string; readonly title: string; readonly subject: string }[];
+    /**
+     * What a view shows, as names a person reads (its V, "Valerie", and its look, "Smoky"), resolved through the view's own panel (a
+     * view this page isn't drawing names its own V and look, experiment 044 U7). Absent names: it shows none, or nothing resolves it.
+     */
+    shows(view: ViewId): { readonly v?: string; readonly look?: string };
     /** Turn a view's tool on or off (`view.setTool` through the registry). */
     setTool(view: ViewId | undefined, tool: string, enabled: boolean): StudioDispatchResult;
     /**
@@ -283,6 +292,8 @@ export type StudioPresentationPort<Slot> = {
    * The panel instances of the tab shown (profiles design §1.1; phase 1, one instance of each panel): a module panel's own instance ID
    * (`<panel>--<base36>`), which names its session in its module's service.
    */
+  readonly tabs?: LayoutTabsPort;
+  readonly emptyChoices?: EmptyChoicesPort;
   readonly panels: {
     instance(panel: string): string;
     /**
@@ -394,6 +405,8 @@ export function createStudioPresentation<Slot>(sources: {
   outbox?: DocumentOutbox;
   /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
   panelInstance?: (panel: string) => string;
+  tabs?: LayoutTabsPort;
+  emptyChoices?: EmptyChoicesPort;
   /**
    * The input layer's target resolution (app/profiles/targets.ts) and the session's focus: what each action the presentation dispatches
    * names. Without them (tools) actions are dispatched as given, and one that leaves a target out is refused.
@@ -402,6 +415,8 @@ export function createStudioPresentation<Slot>(sources: {
   focus?: Pick<FocusService, "focusView" | "focusPanel">;
   /** A history scope's name for people ("Look 3"); without it the scope ID. */
   scopeName?: (scope: string) => string | undefined;
+  /** A V's label without History's "V ·" kind prefix, for a view's metadata. */
+  characterName?: (character: string) => string | undefined;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -554,6 +569,14 @@ export function createStudioPresentation<Slot>(sources: {
     tools: (view: ViewId | undefined, filter: ViewToolFilter) => { const id = viewOf(view); return id === undefined ? [] : a.viewTools(id, filter); },
     summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => { const id = viewOf(view); return id === undefined ? [] : a.viewSummaries(id, filter); },
     titles: () => a.viewTitles(),
+    shows: (view: ViewId) => {
+      if (!resolver || !sources.panelInstance) return {};
+      const target = resolver.named(sources.panelInstance(viewPanelId(view)));
+      if (target.view !== view) return {};
+      const v = target.character === undefined ? undefined : sources.characterName?.(target.character);
+      const look = target.look ? sources.scopeName?.(lookScope(target.look)) : undefined;
+      return { ...(v ? { v } : {}), ...(look ? { look } : {}) };
+    },
     setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch(name<StudioAction>({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled })),
     withdraw: (tools: readonly string[]) => a.withdrawViewTools(tools),
     settings: (filter: Pick<ViewToolFilter, "research">) => a.viewSettings(filter),
@@ -634,6 +657,9 @@ export function createStudioPresentation<Slot>(sources: {
     installDetection: Object.freeze(leased(installDetection)), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
+    ...(sources.tabs ? { tabs: sources.tabs } : {}),
+    ...(sources.emptyChoices ? { emptyChoices: Object.freeze({ ...sources.emptyChoices,
+      capability: (request: EmptyChoiceRequest) => a.emptyChoiceCapability(request), execute: (request: EmptyChoiceRequest) => a.executeEmptyChoice(request) }) } : {}),
     panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local`,
       historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
     focus: Object.freeze({

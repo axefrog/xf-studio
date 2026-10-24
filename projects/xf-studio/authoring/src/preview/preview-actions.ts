@@ -197,6 +197,8 @@ export class PreviewActions {
    */
   private follow(change: ViewGraphChange) {
     if (!change.views.includes(this.shown) && !change.structure) return;
+    // The view it draws went (its tab closed): the head keeps what it shows until another takes over, and then it goes too.
+    if (!this.graph.has(this.shown)) return;
     if (change.applied) this.applied = this.shownFields();
     else this.apply(true);
     if (!this.dispatching) this.notify();

@@ -8,10 +8,11 @@ import type { PresentationAction } from "../../app/studio-presentation";
 import type { EasingId } from "../../platform/api/easing";
 import type { Command } from "../commands";
 import { ViewportInputHints } from "../input-hints";
-import { menuFromSections, openMenu, type MenuItem, type MenuSection } from "../menu";
+import { menuCapability, menuFromSections, openMenu, type MenuItem, type MenuSection } from "../menu";
 import { Frame, type StudioRuntime } from "../runtime";
 import { readinessText } from "../readiness-text";
-import { contextItems, viewportMenu } from "../target-menus";
+import { collectionMenu, collectionSections, contextItems, presetMenu, viewportMenu } from "../target-menus";
+import { importCollection, libraryState, reopenPreviousAction } from "../panels/collection";
 import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
 import type { PartPresetRequest } from "../../library/part-presets";
 import { modInstallLabel, openModInstallSheet } from "../panels/mod-install-sheet";
@@ -54,6 +55,22 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       record: (...args: Parameters<StudioRuntime["feedback"]["record"]>) => rt.feedback.record(...args),
     }),
     anchors: Object.freeze({ register: (...args: Parameters<StudioRuntime["anchors"]["register"]>) => rt.anchors.register(...args) }),
+    collection: Object.freeze({
+      summary: () => port.library.summary(),
+      capability: action => port.library.capability(action),
+      requestCapability: request => port.authoring.requestCapability(request),
+      fileCapability: action => port.files.capability(action),
+      request: (request, options) => rt.request(request, options),
+      file: (action, options) => rt.file(action, options),
+      refresh: () => { if (port.authoring.requestCapability({ kind: "refresh" }).available) void port.library.execute({ kind: "refresh" }); },
+      state: libraryState,
+      menu: (anchor, invoker) => collectionMenu(rt, anchor, invoker),
+      menuCapability: anchor => menuCapability(menuFromSections(collectionSections(rt, anchor)),
+        port.library.summary().busy ? "Wait for the library to finish." : "Your collection is still loading."),
+      presetMenu: (id, anchor, invoker) => presetMenu(rt, id, anchor, invoker),
+      reopenPreviousAction: () => reopenPreviousAction(rt),
+      import: () => importCollection(rt),
+    } satisfies FeatureViewContext["collection"]),
     reveal: (panel, focus) => rt.dock.reveal(panel, focus),
     openSettings: section => rt.settings.open(section),
     links: Object.freeze({ open: (link: Parameters<typeof port.links.open>[0]) => port.links.open(link) }),

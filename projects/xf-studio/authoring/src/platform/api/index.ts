@@ -7,6 +7,7 @@ export * from "./history";
 export * from "./export";
 export * from "./view-graph";
 export * from "./module";
+export * from "./layout-fragment";
 export * from "./facial";
 export * from "./easing";
 export * from "./subjects";

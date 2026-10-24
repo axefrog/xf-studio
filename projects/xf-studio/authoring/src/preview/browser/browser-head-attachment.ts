@@ -12,6 +12,9 @@
  *   head shown for it by the scene editors (scene-editors.ts).
  * - **Hidden** (`hide`): its camera pose goes to the view's camera node and its motion is released, then everything `show` connected is let
  *   go, newest first. A hidden head is warm: it stops following its V and catches up when shown again.
+ * - **Holding its makeup** (`holdSurfaces`, experiment 044 decision D3): a shown head about to hand over to a view of another look lets its
+ *   layered surfaces go first, while it stays drawn. Each keeps exactly the layers it shows (the preview device's hold), so no frame of it
+ *   ever holds the other look's layers. `connectSurfaces` connects them again (the person went back before the takeover).
  *
  * `dispose` releases everything, hidden first when shown. Every connection registers its release as it is made, so a failure part-way
  * through releases what was made, newest first (PREV-20). The V's context is not this head's: it outlives every head (its owner hands it
@@ -70,8 +73,8 @@ export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
   /** The workspace's view graph (it outlives any one head): the head restores the view it is made for and follows the view it draws. */
   graph?: ViewGraph;
-  /** The view the head is made for (its runtime owner's drawn view when it was wanted); `show` may draw it for another view of the scene. */
-  view?: ViewId;
+  /** The destination view, resolved after construction and preparation waits so a surviving view of its scene can take over. */
+  view?: ViewId | (() => ViewId);
   viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
   /** Every layered-makeup surface to connect, in composition order; at most one is the on-head editor's. */
   layered: readonly LayeredSurfaceWiring[];
@@ -152,6 +155,13 @@ export type AttachedHead = {
   draw(view: ViewId): void;
   /** Hand over to the head shown next: its camera to the node, its motion released, its connections let go. Safe to call when hidden. */
   hide(): void;
+  /**
+   * The shown head keeps drawing the layers its layered surfaces hold now, and stops following the layers' owner (the editor document is
+   * about to show another look: decision D3). Does nothing when hidden or already holding.
+   */
+  holdSurfaces(): void;
+  /** The shown head's layered surfaces follow the layers' owner again (brought up to date); does nothing when hidden or connected. */
+  connectSurfaces(): void;
   /** Show a save's V on this head (the V's context asks while this head is shown): null for the default V. */
   showSave(save: SavedV | null): void;
   /** Releases everything, hidden first when shown. Safe to call more than once. */
@@ -182,6 +192,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     // A build that fails releases what it made itself (createSceneRuntime does), so there is nothing to dispose until it returns.
     const scene = await ports.viewport.buildHead(body, signal);
     releases.push(() => ports.viewport.disposeHead(scene));
+    signal.throwIfAborted();
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     {
       const preferences = ports.preferences, follow = () => scene.setResearchTools?.(preferences.snapshot().researchTools === true);
@@ -206,9 +217,10 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     // The view's Surface controls tool, which the on-head editor mounted on this head follows (scene-editors.ts).
     let surfaceEnabled = true;
     const surfaceListeners = new Set<() => void>();
+    const view = typeof ports.view === "function" ? ports.view() : ports.view;
     const services = createTrustedPreviewServices({ ...ports.workspace, savedV: ports.character.save }, createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => { surfaceEnabled = enabled; for (const listener of [...surfaceListeners]) listener(); },
-    }), ports.graph ? { graph: ports.graph, view: ports.view ?? ports.graph.viewIds()[0]! } : undefined);
+    }), ports.graph ? { graph: ports.graph, view: view ?? ports.graph.viewIds()[0]! } : undefined);
     const savedAppearance = services.savedAppearance;
     const restored = services.finish();
     const { preview, motion } = restored;
@@ -217,9 +229,31 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     signal.throwIfAborted();
 
     const context = ports.character.context;
+    /** Preparation follows the runtime owner's current destination, without showing it or restoring a camera or motion. */
+    const bindPreparationView = (signal: AbortSignal) => {
+      signal.throwIfAborted();
+      const view = typeof ports.view === "function" ? ports.view() : ports.view;
+      signal.throwIfAborted();
+      if (view !== undefined) { preview.draw(view); preview.draw(null); }
+      const state = preview.snapshot();
+      context.setBodyShown(state.body !== false);
+      context.setUncensored(state.uncensored === true);
+    };
     /** What `show` connected, released by `hide`. */
     const shownReleases: (() => void)[] = [];
-    let shown = false, disposed = false;
+    let shown = false, disposed = false, connected = false;
+    /** The layered surfaces follow their owner (the editor document's layers), each brought up to date from what it holds. */
+    const connectSurfaces = () => {
+      if (connected) return;
+      connected = true;
+      for (const wiring of ports.layered) wiring.preview.connectScene(wiring.surface(scene)!);
+    };
+    /** Each layered surface keeps what it holds now (the preview device's hold) and stops following. */
+    const holdSurfaces = () => {
+      if (!connected) return;
+      connected = false;
+      for (const wiring of ports.layered) wiring.preview.disconnectScene(wiring.surface(scene)!);
+    };
     /** The save this head's saved-V service shows (the one it was built with, then each one shown on it). */
     let savedShown: SavedV | null = ports.character.save ?? null;
     const showSave = (save: SavedV | null) => {
@@ -240,42 +274,44 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
       showSave,
       async prepare(prepareSignal, progress) {
         if (disposed) throw Error("The head was released.");
-        prepareSignal.throwIfAborted();
-        // The V's own details on a head of its body (the feminine head standing in for an unavailable masculine one shows none), with its
-        // own makeup hidden as the view hides it, as show would place them.
-        // The view's Body switch and uncensored setting decide what the V's request draws (as `show` follows them). They are the view's,
-        // the same for every head of the scene, so setting them now asks for no other V than the shown head already shows, and the body
-        // isn't loaded only to be dropped at show.
-        const view = preview.snapshot();
-        context.setBodyShown(view.body !== false);
-        context.setUncensored(view.uncensored === true);
-        const request = context.detailRequest();
-        if (request.bodyGender === scene.body) {
-          scene.setHiddenOptions(context.hiddenOptions());
-          progress({ stage: "details", fraction: 0, waiting: "host" });
-          await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }));
-        }
-        progress({ stage: "details", fraction: 1 });
-        // The authored makeup as it is now, so the plate's composite, its masks and maps and their programs are prepared with the scene.
-        // The surface holds this snapshot until show connects it, which brings only what changed since.
-        prepareSignal.throwIfAborted();
-        for (const wiring of ports.layered) wiring.preview.fillScene(wiring.surface(scene)!);
-        // Every lighting setup another view of this scene shows (the view it draws is the scene's own now).
-        const setups: LightingSource[] = [];
-        if (ports.graph) {
-          const graph = ports.graph, drawn = preview.view(), own = graph.node(drawn, "scene").id;
-          for (const view of graph.viewIds()) if (view !== drawn && graph.node(view, "scene").id === own) {
-            const lights = previewFields(graph, view).lights;
-            setups.push(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
+        for (;;) {
+          bindPreparationView(prepareSignal);
+          // The V's own details on a head of its body (the feminine head standing in for an unavailable masculine one shows none), with its
+          // own makeup hidden as the view hides it, as show would place them.
+          // The destination's Body switch and uncensored setting decide what the V's request draws, as `show` follows them.
+          const request = context.detailRequest();
+          if (request.bodyGender === scene.body) {
+            scene.setHiddenOptions(context.hiddenOptions());
+            progress({ stage: "details", fraction: 0, waiting: "host" });
+            await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }));
+            bindPreparationView(prepareSignal);
+            // Another destination can hide the body or change its cover while the details load. Settle that request before warming it.
+            if (JSON.stringify(request) !== JSON.stringify(context.detailRequest())) continue;
           }
+          progress({ stage: "details", fraction: 1 });
+          // The authored makeup as it is now, so the plate's composite, its masks and maps and their programs are prepared with the scene.
+          // The surface holds this snapshot until show connects it, which brings only what changed since.
+          prepareSignal.throwIfAborted();
+          for (const wiring of ports.layered) wiring.preview.fillScene(wiring.surface(scene)!);
+          // Every lighting setup another view of this scene shows (the view it draws is the scene's own now).
+          const setups: LightingSource[] = [];
+          if (ports.graph) {
+            const graph = ports.graph, drawn = preview.view(), own = graph.node(drawn, "scene").id;
+            for (const view of graph.viewIds()) if (view !== drawn && graph.node(view, "scene").id === own) {
+              const lights = previewFields(graph, view).lights;
+              setups.push(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
+            }
+          }
+          // The on-head editor, which show mounts: its guides compiled with the scene (their first frame links nothing), and its parts (the
+          // surface map and occlusion trees) made ahead between frames, so mounting it makes none of them.
+          const edited = ports.layered.find(wiring => wiring.edited), viewport = ports.viewport;
+          const guides = edited && viewport.surfaceGuides ? () => viewport.surfaceGuides!(scene) : undefined;
+          const work = edited && viewport.surfaceSteps ? () => viewport.surfaceSteps!(scene, edited.surface(scene)!.surface) : undefined;
+          await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
+            ...(work ? { work } : {}) });
+          bindPreparationView(prepareSignal);
+          if (JSON.stringify(request) === JSON.stringify(context.detailRequest())) return;
         }
-        // The on-head editor, which show mounts: its guides compiled with the scene (their first frame links nothing), and its parts (the
-        // surface map and occlusion trees) made ahead between frames, so mounting it makes none of them.
-        const edited = ports.layered.find(wiring => wiring.edited), viewport = ports.viewport;
-        const guides = edited && viewport.surfaceGuides ? () => viewport.surfaceGuides!(scene) : undefined;
-        const work = edited && viewport.surfaceSteps ? () => viewport.surfaceSteps!(scene, edited.surface(scene)!.surface) : undefined;
-        await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
-          ...(work ? { work } : {}) });
       },
       prepared: () => (scene.prepared?.() ?? true) && ports.layered.every(wiring => wiring.preview.holdsCurrent(wiring.surface(scene)!)),
       async prepareShown(prepareSignal, progress) {
@@ -304,11 +340,8 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
           ports.attach({ savedV: savedAppearance, preview, motion, characterDetails });
           add(() => ports.attach({ savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined }));
           add(savedAppearance.subscribe(ports.persist)); add(savedAppearance.subscribe(ports.changed));
-          for (const wiring of ports.layered) {
-            const makeup = wiring.surface(scene)!;
-            wiring.preview.connectScene(makeup);
-            add(() => wiring.preview.disconnectScene(makeup));
-          }
+          add(holdSurfaces);
+          connectSurfaces();
           add(preview.subscribe(ports.persist)); add(motion.subscribe(ports.persist)); add(preview.subscribe(ports.changed));
           for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
           add(characterDetails.subscribe(ports.changed)); add(characterDetails.subscribe(ports.persist));
@@ -354,6 +387,12 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
         }
       },
       hide,
+      holdSurfaces() { if (shown) holdSurfaces(); },
+      connectSurfaces() {
+        if (!shown || connected) return;
+        connectSurfaces();
+        for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
+      },
       dispose() {
         if (disposed) return;
         hide();

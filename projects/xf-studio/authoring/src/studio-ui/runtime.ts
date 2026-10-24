@@ -12,42 +12,33 @@ import { AnchorRegistry } from "./guidance/anchors";
 import { activitySource, viewCatalogue, type ViewCatalogue } from "./views/contribution";
 import { SHELL_VIEW } from "./views/shell";
 import type { StudioModule } from "../platform/api";
+import type { LayoutTab } from "../app/profiles/profile-session";
+import { allGroups, type DockTree } from "./dock/layout";
 import type { SettingsSection } from "./settings-sections";
 
 export type Port = StudioPresentationPort<HTMLElement>;
 
-/**
- * Which Studio modules show (view-graph-design.md §4.2): the person's choice in the UI preferences, else each manifest's default.
- * Presentation state only: the application is handed it (as a view-tool filter), never reads it.
- */
-export function shownModules(port: Pick<Port, "preferences" | "views">): string[] {
-  const chosen = port.preferences.snapshot().modules ?? {};
-  return port.views.modules().filter(module => chosen[module.id] ?? module.shownByDefault).map(module => module.id);
+/** Feature focus follows actual docked instances, including floating and collapsed groups; closed instances activate nothing. */
+export function activeModules(tab: LayoutTab | undefined, tree: DockTree | undefined, modules: readonly StudioModule[], catalogue: ViewCatalogue): string[] {
+  if (!tree || !tab) return [];
+  // The rendered dock uses type aliases in phase 2; resolve them to this tab's instances. Always read the recovered, current tree.
+  const instances = new Map(tab.panels.map(panel => [panel.type, panel.id]));
+  const docked = new Set(allGroups(tree).flatMap(({ group }) => group.panels.map(id => instances.get(id) ?? id)));
+  const owners = new Set(tab.panels.filter(panel => docked.has(panel.id))
+    .map(panel => catalogue.panels.find(entry => entry.id === panel.type)?.owner));
+  return modules.filter(module => owners.has(module.feature ?? module.id)).map(module => module.id);
 }
-/**
- * Where the dock must change so each module's panels match whether it shows (CORE-115): the panels of a shown module the dock lacks
- * come back, and those of a hidden module the dock holds leave (parked). The one path from the modules preference to the dock: the
- * Modules menu, the palette and a typed `modules.set` from anywhere all end here, so they never disagree. Nothing to do: empty lists.
- */
-export function modulePanelChanges<Module extends { id: string }, Panel extends string>(modules: readonly Module[], shown: readonly string[],
-  panelsOf: (module: Module) => readonly Panel[], docked: (panel: Panel) => boolean): { add: Panel[]; remove: Panel[] } {
-  const on = new Set(shown), add: Panel[] = [], remove: Panel[] = [];
-  for (const module of modules) for (const panel of panelsOf(module)) {
-    if (on.has(module.id) && !docked(panel)) add.push(panel);
-    else if (!on.has(module.id) && docked(panel)) remove.push(panel);
-  }
-  return { add, remove };
-}
-/** The filter every derived view-tool list uses: the shown modules and whether research tools show. */
-export function toolFilter(port: Pick<Port, "preferences" | "views">) {
-  return { modules: shownModules(port), research: !!port.preferences.snapshot().researchTools };
+/** The same tab-derived filter feeds the toolbar, menus, palette and display controls. Legacy preferences are never interpreted. */
+export function toolFilter(port: Pick<Port, "preferences" | "views" | "tabs">, catalogue: ViewCatalogue, tree?: DockTree) {
+  const snapshot = port.tabs?.snapshot(), tab = snapshot?.tabs.find(tab => tab.id === snapshot.shown);
+  return { modules: activeModules(tab, tree, port.views.modules(), catalogue), research: !!port.preferences.snapshot().researchTools };
 }
 type Ret<T extends (...args: never[]) => unknown> = ReturnType<T>;
 
 /** Reads for one paint. Each getter touches the port at most once per frame. */
 export class Frame {
   private cache = new Map<string, unknown>();
-  constructor(private port: Port) {}
+  constructor(private port: Port, private catalogue: ViewCatalogue = SHELL_CATALOGUE, private tree?: DockTree) {}
   private once<T>(key: string, read: () => T): T {
     if (!this.cache.has(key)) this.cache.set(key, read());
     return this.cache.get(key) as T;
@@ -64,7 +55,7 @@ export class Frame {
   get canUndo() { return this.once("canUndo", () => this.port.authoring.history().undo !== undefined); }
   /** The plain reason when the selected look was made with a newer XF Studio (its eye makeup is kept as it is); else undefined. */
   get locked() { return this.once("locked", () => this.port.feature("eye-makeup").locked()); }
-  get library() { return this.once("library", () => this.port.library.summary()); }
+  get library() { return this.once("librarySummary", () => this.port.library.summary()); }
   get persistence() { return this.once("persistence", () => this.port.library.persistence()); }
   get files() { return this.once("files", () => this.port.files.snapshot()); }
   get preview() { return this.once("preview", () => this.port.authoring.previewState()); }
@@ -78,7 +69,7 @@ export class Frame {
   get preferences() { return this.once("preferences", () => this.port.preferences.snapshot()); }
   get history() { return this.once("history", () => this.port.authoring.historyTimeline()); }
   /** The shown modules and the research preference: the filter of every derived view-tool list (view-graph-design.md §3.9). */
-  get toolFilter() { return this.once("toolFilter", () => toolFilter(this.port)); }
+  get toolFilter() { return this.once("toolFilter", () => toolFilter(this.port, this.catalogue, this.tree)); }
   /** The focused view's derived tools (the main view while there is one). */
   get viewTools() { return this.once("viewTools", () => this.port.views.tools(undefined, this.toolFilter)); }
   /** The view graph: views, what they share, the focus and the View and lighting history. */
@@ -108,9 +99,6 @@ export class StudioRuntime {
   readonly eyeMakeup: EyeMakeupFacade;
   readonly finishes: Ret<EyeMakeupFacade["finishCatalogue"]>;
   private listeners = new Set<() => void>();
-  /** The Studio modules, each module's panels, and showing or hiding one (the shell sets this once the dock exists). */
-  modules: { list: readonly StudioModule[]; panels(module: StudioModule): string[]; set(id: string, shown: boolean): void } =
-    { list: [], panels: () => [], set: () => {} };
   /**
    * Open the Settings panel at a group (UI-109): floating when it was closed (it has no home among the docked groups), otherwise brought
    * forward and expanded where it is, then the group is shown and focused. The shell sets this once the dock exists.
@@ -125,10 +113,10 @@ export class StudioRuntime {
     this.eyeMakeup = port.feature("eye-makeup");
     this.finishes = this.eyeMakeup.finishCatalogue();
   }
-  /** Which Studio modules show (the person's choice, else each manifest's default). */
-  shownModules() { return shownModules(this.port); }
+  /** Which modules have an instance docked in the shown tab. */
+  shownModules() { return this.toolFilter().modules; }
   /** The filter of every derived view-tool list: the shown modules and the research preference. */
-  toolFilter() { return toolFilter(this.port); }
+  toolFilter() { return toolFilter(this.port, this.views, this.dock?.tree); }
   /** Eye makeup's live editor view (cheap, cached and read-only). */
   get editor() { return this.eyeMakeup.view(); }
   /** Descriptor limits drive control ranges, so the view keeps no copy of domain constants. */

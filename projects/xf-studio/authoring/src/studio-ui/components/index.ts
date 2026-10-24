@@ -26,6 +26,7 @@ export { GroupSection, type GroupSectionOptions } from "./group-section";
 export { RememberedSet } from "../view-state";
 export { holdScroll, revealInView, ScrollMemory, VIEW_KEY, type ScrollMemoryOptions } from "../scroll-anchor";
 export { SearchField, type SearchFieldOptions } from "./search-field";
+export { EmptyChoices, EmptyTargetPointer, type EmptyChoice, type EmptyChoicesState } from "./empty-choices";
 export { Combobox, type ComboboxOptions, type ComboGroup, type ComboOption } from "./combobox";
 export { blockSection, codeBlock, PageHeader, propertyList, stack, type Gap, type Property } from "./layout";
 export { SplitView, type SplitViewOptions } from "./split-view";
@@ -49,3 +50,7 @@ export { installPreviewFilter, PREVIEW_FILTER_IDS, PreviewSpin, previewStage, pr
   type PreviewTileState } from "./choice-preview";
 export { pageStep, TypeAhead } from "./listbox-keys";
 export { stageLabel, stageShortLabel, stageTag, type Stage } from "./stage-tag";
+// Feature-specific: a 3D view that is not drawn (c-setup, U7).
+export { notDrawnState, notDrawnStateMarkup, notDrawnStateName, type NotDrawnStateData } from "./not-drawn-state";
+export { menuSecondaryRow } from "./menu-secondary";
+export { openChoicePopover, type ChoicePopoverField, type ChoicePopoverState } from "./choice-popover";

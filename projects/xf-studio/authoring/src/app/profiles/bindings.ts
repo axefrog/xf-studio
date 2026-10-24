@@ -52,7 +52,7 @@ export type Resolution =
   /** `named`: the panel header names its target (§3.3): pinned, more than one candidate, or no view in the tab shows it. */
   | { readonly state: "resolved"; readonly target: Target; readonly candidates: number; readonly named: boolean }
   /** No candidate: the panel shows its empty state (Choose…, phase 2). */
-  | { readonly state: "empty"; readonly reason: string }
+  | { readonly state: "empty"; readonly reason: string; readonly missing?: Requirement; readonly target?: Target }
   /** A pin whose target is gone: the pin is kept, and the panel says what is missing (Follow focus, Choose…, Restore). */
   | { readonly state: "dangling"; readonly missing: Requirement; readonly reason: string };
 
@@ -80,11 +80,18 @@ function eligible(world: BindingWorld, view: ViewId, tab: TabId, context: PanelC
   if (!scene || ("scenes" in context && context.scenes && !context.scenes.includes(scene.kind))) return undefined;
   const target = chainOfView(world, view);
   if (!target) return undefined;
-  if (context.kind === "subject" && !(target.subject && context.subjects.includes(target.subject.kind))) return undefined;
+  if (context.kind === "subject" && (target.subject ? !context.subjects.includes(target.subject.kind) : !context.subjects.includes(scene.kind))) return undefined;
   return passes(context, target, rules) ? target : undefined;
 }
 const passes = (context: PanelContext, target: Target, rules: readonly ConstraintRule[]) =>
   rules.every(rule => !rule.applies(context) || rule.check(target).available);
+const emptyTarget = (world: BindingWorld, context: PanelContext, target: Target): Resolution | undefined => {
+  if ((context.kind === "subject" || context.kind === "view" && target.scene && world.scenes[target.scene]?.kind === CHARACTER_KIND) && !target.subject)
+    return { state: "empty", missing: "subject", target, reason: "This 3D view has no V yet." };
+  if (context.kind === "look" && !target.look)
+    return { state: "empty", missing: "look", target, reason: "This scene has no look yet." };
+  return undefined;
+};
 
 /**
  * A panel's target (§3.2–3.4): its binding (absent: follow focus) resolved in its tab. A `profile` panel has no binding and resolves to
@@ -97,10 +104,10 @@ export function resolveBinding(world: BindingWorld, request: { readonly tab: Tab
   const binding = request.binding ?? { policy: "follow-focus" as const };
   if (binding.policy === "follow-focus") {
     const candidates = Object.keys(world.views).flatMap(view => { const target = eligible(world, view, tab, context, rules); return target ? [target] : []; });
-    let best: Target | undefined, at = 0;
+    let best: Target | undefined = candidates[0], at = 0;
     for (const target of candidates) { const seq = world.focus[target.view!] ?? 0; if (seq > at) { at = seq; best = target; } }
-    if (!best) return { state: "empty", reason: candidates.length ? "Click a 3D view to work on what it shows." : "No 3D view in this tab shows anything to work on here." };
-    return { state: "resolved", target: best, candidates: candidates.length, named: candidates.length > 1 };
+    if (!best) return { state: "empty", missing: "view", reason: "No 3D view in this tab shows anything to work on here." };
+    return emptyTarget(world, context, best) ?? { state: "resolved", target: best, candidates: candidates.length, named: candidates.length > 1 };
   }
   const pin = binding.target;
   let target: Target | undefined, missing: Requirement, reason: string;
@@ -112,7 +119,7 @@ export function resolveBinding(world: BindingWorld, request: { readonly tab: Tab
   } else { target = world.look(pin.look) ? { look: pin.look } : undefined; missing = "look"; reason = "The look this panel was pinned to was removed."; }
   if (!target) return { state: "dangling", missing, reason };
   if (!passes(context, target, rules)) return { state: "empty", reason: "What this panel is pinned to can't be shown here." };
-  return { state: "resolved", target, candidates: 1, named: true };
+  return emptyTarget(world, context, target) ?? { state: "resolved", target, candidates: 1, named: true };
 }
 
 const NEEDS: Record<Requirement, string> = {

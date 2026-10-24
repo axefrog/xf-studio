@@ -7,9 +7,10 @@
  * not compile.
  */
 import type { PanelController } from "../panels/collection";
+import type { ViewPaneController } from "../panels/view-panels";
 import { activityPanel, lightingPanel, motionPanel, qualityPanel } from "../panels/preview";
 import { characterPanel } from "../panels/character";
-import { libraryPanel, packagePanel, presetsPanel } from "../panels/collection";
+import { packagePanel } from "../panels/collection";
 import { historyPanel } from "../panels/history";
 import { headPanel } from "../panels/viewports";
 import { settingsPanel } from "../panels/settings";
@@ -39,11 +40,16 @@ export type AppearanceControls = {
 };
 /** One of the shell's own panel factories. A feature's panels get a `FeatureViewContext` instead (`feature-view.ts`). */
 export type PanelFactory = (rt: StudioRuntime, context: ViewContext) => PanelController;
+/**
+ * The 3D view's factory (`head`): one pane per view of the shown tab, `panel` its panel ID, `head` for the main view (the default) and
+ * `view.<id>` otherwise (panels/view-panels.ts).
+ */
+export type ViewPaneFactory = (rt: StudioRuntime, context: ViewContext, panel?: string) => ViewPaneController;
 /** A view's factories, keyed by exactly its panel IDs. */
 export type PanelFactories<V extends { panels: readonly { id: string }[] }> = { readonly [K in V["panels"][number]["id"]]: PanelFactory };
 
 export const SHELL_PANELS: PanelFactories<typeof SHELL_VIEW> = {
-  presets: presetsPanel, history: historyPanel, library: libraryPanel, package: packagePanel, head: (rt, context) => headPanel(rt, context),
+  history: historyPanel, package: packagePanel, head: headPanel,
   character: characterPanel, lighting: lightingPanel, motion: motionPanel, quality: qualityPanel, activity: activityPanel,
   settings: settingsPanel, help: (rt, context) => helpPanel(rt, context.guidance),
 };

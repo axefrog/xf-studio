@@ -5,10 +5,7 @@ import { setAttr } from "./dom";
  * lower-priority items give way first, one at a time and always in this order, until the names have room. Each stage is a token in
  * the header's `data-fit` attribute; studio.css says what each one does.
  *
- * 0. `category`: the shown modules' names go, whole, and their button shows its icon alone (the names stay its tooltip and accessible
- *    name): never a name cut to a letter.
  * 1. `commands`: the Commands button shows its icon alone (Ctrl+K opens the palette anywhere).
- * 2. `layout`: the Layouts button shows its icon alone (its tooltip and menu name the layout).
  * 3. `flag`: the verification label shortens to "Verification".
  * 4. `package`: the Package button shows its icon alone.
  * 5. `brand`: the word "Studio" goes; the XF mark and the Beta badge stay.
@@ -21,9 +18,9 @@ import { setAttr } from "./dom";
  *
  * What changes as the person works never moves the header: the library chip's room is reserved at its widest word (`reserve`), so a
  * save or an edit that changes the chip changes no stage, and the fit depends only on the window, the names, the verification label and
- * the layout's name.
+ * their names.
  */
-export const HEADER_STAGES = ["category", "commands", "layout", "flag", "package", "brand", "save", "collection"] as const;
+export const HEADER_STAGES = ["commands", "flag", "package", "brand", "save", "collection"] as const;
 export type HeaderStage = typeof HEADER_STAGES[number];
 /** The fewest characters of a name the header keeps before the next stage gives way: about 12, so "Night market…" still reads. */
 export const MIN_CHARACTERS = 12;

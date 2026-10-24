@@ -11,9 +11,10 @@ import type { Stage } from "../components/stage-tag";
 import { ScrollMemory } from "../scroll-anchor";
 import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, foldAxes, isStripStack, keepDockExpanded, lastExpandedDocked, locate,
   openShares, parkPanels, raiseWindow, recoverWindows, revealPanel, setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, splitShares, splitterPair,
-  summonPanel, unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
+  summonPanel, unparkPanels, MIN_WINDOW, MIN_GROUP, type DockNode, type DockState, type DockTree,
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
+import { openViewDockState } from "./persist";
 
 /** A tab's tooltip: its title, what it shows, and how to move it. */
 const tabTip = (title: string, context: string) => `${title}${context ? ` · ${context}` : ""} — drag to move, right-click for layout options`;
@@ -38,10 +39,11 @@ export type DockViewOptions = {
   announce(message: string): void;
   beforeLayout?(): void;
   afterLayout?(): void;
+  /** The shell may supply its own empty state when there is no layout to reset. */
+  emptyState?(): HTMLElement | undefined;
   /** Someone asked to open a panel this dock doesn't hold now (its module is hidden): the shell offers to show it. */
   withdrawn?(id: PanelId): void;
 };
-const MIN_GROUP = { w: 150, h: 96 };
 const sideNames: Record<Side, string> = { left: "left", right: "right", top: "above", bottom: "below" };
 const edgeNames: Record<Side, string> = { left: "Left edge", right: "Right edge", top: "Top edge", bottom: "Bottom edge" };
 
@@ -122,10 +124,23 @@ export class DockView {
    * Withdraw panels at run time (a module was hidden): each leaves the dock in every size class with its place remembered
    * (parked), and its element leaves the page until it is added again.
    */
-  removePanels(ids: readonly PanelId[]) {
+  removePanels(ids: readonly PanelId[], options: { forget?: boolean } = {}) {
     const known = ids.filter(id => this.panels.has(id));
     if (!known.length) return;
-    this.state = { wide: keepDockExpanded(parkPanels(this.state.wide, known)), compact: keepDockExpanded(parkPanels(this.state.compact, known)) };
+    // `forget`: the panel's subject is gone (a closed 3D view, view-graph-design.md §3.5): it leaves no parked place or last place behind.
+    const leave = (tree: DockTree) => {
+      const next = parkPanels(tree, known);
+      if (!options.forget) return next;
+      const drop = (places: Record<PanelId, unknown> | undefined) => {
+        if (!places) return undefined;
+        const kept = Object.fromEntries(Object.entries(places).filter(([id]) => !known.includes(id)));
+        return Object.keys(kept).length ? kept : undefined;
+      };
+      const parked = drop(next.parked), lastPlace = drop(next.lastPlace);
+      const { parked: _p, lastPlace: _l, ...rest } = next;
+      return { ...rest, ...(parked ? { parked } : {}), ...(lastPlace ? { lastPlace } : {}) } as DockTree;
+    };
+    this.state = { wide: keepDockExpanded(leave(this.state.wide)), compact: keepDockExpanded(leave(this.state.compact)) };
     this.render();
     for (const id of known) { this.panels.get(id)!.element.remove(); this.panels.delete(id); }
     this.options.save(this.dockState);
@@ -201,10 +216,9 @@ export class DockView {
     const maximized = tree.maximized ? findGroup(tree, tree.maximized)?.group : undefined;
     if (maximized) this.surface.append(this.renderGroup(maximized, false, shown, true));
     else if (tree.root) this.surface.append(this.renderNode(tree.root, false, shown));
-    else this.surface.append(h("div", { class: "dock-empty" },
+    else this.surface.append(this.options.emptyState?.() ?? h("div", { class: "dock-empty" },
       h("p", { text: "Every panel is floating or closed." }),
-      h("p", { class: "muted", text: "Drag a panel onto an edge guide, or reset the layout." }),
-      button({ label: "Reset layout", onClick: () => this.reset() })));
+      h("p", { class: "muted", text: "Use Panels to open one, or Reset to default in the tab menu." })));
     // Floating windows stay available above a maximized docked group.
     tree.floating.forEach((window, index) => this.floatingLayer.append(this.renderWindow(window, index, shown)));
     const previous = this.visible;
@@ -483,6 +497,13 @@ export class DockView {
       : before.group.collapsed ? `${this.describeGroup(before.group)} expanded, showing ${this.title(id)}` : undefined);
     if (focus) this.focusTab(id);
   }
+  /** A newly created first 3D view uses its tab's view slot, shown and focused, in both size classes. */
+  openView(id: PanelId, arrangement: unknown) {
+    if (!this.panels.has(id)) return;
+    this.state = openViewDockState(this.state, arrangement,
+      { wide: this.options.defaults("wide"), compact: this.options.defaults("compact") }, id, this.area().w);
+    this.render(); this.options.save(this.dockState); this.focusTab(id);
+  }
   /** Move focus to a panel's tab once the layout it just got has rendered. */
   private focusTab(id: PanelId) {
     requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
@@ -517,9 +538,6 @@ export class DockView {
   toggleMaximize(groupId: string) {
     const on = this.tree.maximized !== groupId;
     this.update(setMaximized(this.tree, on ? groupId : undefined), on ? "Group maximized. Double-click its tab bar or use Restore to return." : "Layout restored");
-  }
-  reset() {
-    this.update(this.options.defaults(this.sizeClass), `${this.sizeClass === "wide" ? "Wide" : "Compact"} layout reset`);
   }
   private groupRect(groupId?: string): Rect | undefined {
     if (!groupId) return;
@@ -569,8 +587,7 @@ export class DockView {
     return items;
   }
   openPanelMenu(id: PanelId, anchor: Element | { x: number; y: number }, invoker?: Element) {
-    openMenu([...this.panelMenuItems(id), { kind: "separator" },
-      { kind: "action", label: "Reset layout", icon: "reset", run: () => this.reset() }], anchor, { label: `${this.title(id)} layout options`, invoker });
+    openMenu(this.panelMenuItems(id), anchor, { label: `${this.title(id)} layout options`, invoker });
   }
   private openWindowMenu(windowId: string, anchor: Element) {
     const window = this.tree.floating.find(item => item.id === windowId);

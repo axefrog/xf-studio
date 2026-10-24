@@ -1,15 +1,21 @@
 /**
  * Profile sessions as workspace data (profiles design §1.1, §4.1, §5): what a workspace holds per profile, and the profiles migration's
- * mark (§8 step 1). Plain typed data and its validation; the window's `ProfileSessionState` holds one session and stores it back, and
- * `ProfileSessions` (its operations and the tab UI) comes with phase 2.
+ * mark (§8 step 1). Plain typed data and its validation; the window's `ProfileSessions` (profile-sessions.ts) holds one session, changes
+ * it only through its operations, and stores it back.
  *
  * - **Reading validates everything a later phase relies on:** tab IDs are unique; panel instance IDs have the instance grammar and are
  *   unique across the session (a duplicate is dropped: IDs are never reused); a binding is `follow-focus` or pinned to exactly one view,
  *   scene, subject or look (an unreadable one is dropped, so the instance follows its type's default); scenes' subject and look references
- *   are well formed and `gen` is a non-negative integer; focus is the focus service's (positive, unique view numbers no higher than `seq`).
+ *   are well formed and `gen` is a non-negative integer; focus is the focus service's (positive, unique view numbers no higher than `seq`),
+ *   and the shown tab is one of the session's; each closed-tab fragment is read whole or dropped (its tab, views and instances must not
+ *   collide with the session's or another fragment's).
  *
- * - **A session** (`xfs/profile-session-1`) holds the profile's layout tabs, its view graph (each view in one tab; each character scene
- *   naming the subject and the look it shows), focus, the closed-tab fragments (the last 5) and a sequence number.
+ * - **A session** (`xfs/profile-session-1`) holds the profile's layout tabs in order, its view graph (each view in one tab; each character
+ *   scene naming the subject and the look it shows), focus (with the shown tab), the closed-tab fragments (the last 5) and a sequence
+ *   number.
+ * - **A closed-tab fragment** (§4.1) is a closed tab as it was: the tab with its arrangement and instances, its views and a value copy of
+ *   every node they named (scenes with what they showed), each with its place, and its views' focus numbers (decision D13 of experiment
+ *   044), so reopening it restores the session as it was.
  * - **A tab** holds its dock arrangement, whose panels are **panel instances** (`<type>--<base36>`, never reused), each with its type and
  *   binding. A view's panel is an instance of type `view`, pinned to its view.
  * - **The workspace keeps them under `profiles`**, beside the legacy fields, and the migration's mark under `migration`. An older build
@@ -19,7 +25,7 @@
 import type { DockLayout } from "../ui-preferences";
 import type { SubjectRef } from "../../platform/api/subjects";
 import type { LookRef } from "../../library/collection-documents";
-import type { KeptView, StoredNode, ViewGraphData, ViewRecord } from "../../platform/api/view-graph";
+import { VIEW_SLOTS, type KeptView, type StoredNode, type ViewGraphData, type ViewRecord, type ViewSlot } from "../../platform/api/view-graph";
 import { focusDataOf } from "../../platform/core/focus";
 
 export const PROFILE_SESSION_SCHEMA = "xfs/profile-session-1";
@@ -46,13 +52,28 @@ export type SessionViews = Omit<ViewGraphData, "views" | "scenes"> & { readonly 
  * Focus: each view's focus sequence number (the highest is the most recently focused), the focused panel instance, and the editing
  * context (§3.7): the history scope of the last editing interaction, where Undo goes.
  */
-export type SessionFocus = { readonly views: Readonly<Record<string, number>>; readonly panel?: string; readonly editing?: string };
+export type SessionFocus = { readonly views: Readonly<Record<string, number>>; readonly panel?: string; readonly tab?: TabId; readonly editing?: string };
+/**
+ * A closed tab (§4.1): the tab as it was (arrangement and instances), where it stood (`at`), its views and a value copy of every node they
+ * named, each with its place (a scene with what it showed), and its views' focus numbers. `reset`: pushed by Reset to default, holding
+ * the content before the reset.
+ */
+export type ClosedTab = {
+  /** This fragment's identity, independent of the tab it came from. Absent in older sessions. */
+  readonly id?: string;
+  readonly tab: LayoutTab;
+  readonly at: number;
+  readonly views: readonly { readonly view: SessionView & ViewRecord; readonly at: number }[];
+  readonly nodes: readonly { readonly slot: ViewSlot; readonly node: StoredNode | SessionScene; readonly at: number }[];
+  readonly focus: Readonly<Record<string, number>>;
+  readonly reset?: true;
+};
 export type ProfileSessionData = {
   readonly schema: typeof PROFILE_SESSION_SCHEMA;
   readonly tabs: readonly LayoutTab[];
   readonly views: SessionViews;
   readonly focus: SessionFocus;
-  readonly closed: readonly unknown[];
+  readonly closed: readonly ClosedTab[];
   readonly seq: number;
 };
 /** The workspace's sessions, by profile ID. */
@@ -123,21 +144,47 @@ const sceneOf = (value: unknown): unknown => {
   const { subject: storedSubject, look: storedLook, gen, ...rest } = value, subject = subjectOf(storedSubject), look = lookOf(storedLook);
   return { ...rest, ...(subject ? { subject } : {}), ...(look ? { look } : {}), gen: Number.isSafeInteger(gen) && (gen as number) >= 0 ? gen : 0 };
 };
+const place = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+/**
+ * A stored closed-tab fragment, validated (null: not one, or one whose views or instances collide with what `taken` holds, which then
+ * takes them). Its tab's ID may be a live tab's (a reset's fragment; reopening it makes a tab of its own). Node states are checked when it
+ * is reopened (by the graph's codecs), so a fragment from another build is refused then.
+ */
+function closedTabOf(value: unknown, taken: { views: Set<string>; instances: Set<string> }): ClosedTab | null {
+  if (!object(value) || !place(value.at) || !Array.isArray(value.views) || !Array.isArray(value.nodes) || !object(value.focus)) return null;
+  const instances = new Set(taken.instances), tab = tabOf(value.tab, instances);
+  if (!tab || tab.panels.length !== (value.tab as { panels: unknown[] }).panels.length) return null;
+  const views = value.views.map(item => object(item) && place(item.at) && object(item.view) && text(item.view.id) && item.view.tab === tab.id
+    && item.view.kind === "3d" && VIEW_SLOTS.every(slot => text((item.view as Record<string, unknown>)[slot])) ? item : null);
+  const nodes = value.nodes.map(item => object(item) && place(item.at) && (VIEW_SLOTS as readonly unknown[]).includes(item.slot) && object(item.node)
+    && text(item.node.id) ? { ...item, node: item.slot === "scene" ? sceneOf(item.node) : item.node } : null);
+  const ids = views.map(item => (item?.view as { id?: string } | undefined)?.id);
+  if (views.some(item => !item) || nodes.some(item => !item) || ids.some(id => taken.views.has(id!)) || new Set(ids).size !== ids.length) return null;
+  const focus = Object.fromEntries(Object.entries(value.focus).filter(([view, at]) => ids.includes(view) && Number.isSafeInteger(at) && (at as number) > 0));
+  for (const id of ids) taken.views.add(id!);
+  for (const id of instances) taken.instances.add(id);
+  return { ...(text(value.id) ? { id: value.id } : {}), tab, at: value.at as number, views, nodes, focus, ...(value.reset === true ? { reset: true } : {}) } as unknown as ClosedTab;
+}
 /** A stored session, validated (null when it isn't one); unknown fields are kept. */
 export function profileSessionOf(value: unknown): ProfileSessionData | null {
   if (!object(value) || value.schema !== PROFILE_SESSION_SCHEMA || !Array.isArray(value.tabs) || !object(value.views) || !object(value.focus)) return null;
   const views = value.views as Record<string, unknown>;
   if (!Array.isArray(views.views) || !Array.isArray(views.scenes)) return null;
-  const taken = new Set<string>(), tabs = value.tabs.map(tab => tabOf(tab, taken));
+  const instances = new Set<string>(), tabs = value.tabs.map(tab => tabOf(tab, instances));
   if (tabs.some(tab => !tab)) return null;
   const ids = new Set(tabs.map(tab => tab!.id));
   if (ids.size !== tabs.length) return null;
   // Every view is in one of the session's tabs (structural references are always valid, §1.4).
   if ((views.views as unknown[]).some(view => !object(view) || typeof view.tab !== "string" || !ids.has(view.tab))) return null;
-  // Focus as the focus service reads it (platform/core/focus.ts): the sequence is never below a view's number.
-  const { seq, ...focus } = focusDataOf(value.focus, value.seq), { views: _views, panel: _panel, editing: _editing, ...unknown } = value.focus;
-  return { ...value, tabs, views: { ...views, scenes: (views.scenes as unknown[]).map(sceneOf) }, focus: { ...unknown, ...focus },
-    closed: Array.isArray(value.closed) ? value.closed.slice(-CLOSED_TAB_LIMIT) : [], seq } as unknown as ProfileSessionData;
+  // Focus as the focus service reads it (platform/core/focus.ts): the sequence is never below a view's number; the shown tab is one of these.
+  const { seq, ...read } = focusDataOf(value.focus, value.seq), { tab: shown, ...others } = read, focus = shown && ids.has(shown) ? read : others;
+  const { views: _views, panel: _panel, tab: _tab, editing: _editing, ...unknown } = value.focus;
+  // Closed-tab fragments, newest last: one whose views or instances collide with the session's (or a newer fragment's) is dropped.
+  const taken = { views: new Set((views.views as { id: string }[]).map(view => view.id)), instances };
+  const closed = (Array.isArray(value.closed) ? value.closed.slice(-CLOSED_TAB_LIMIT) : []).reverse()
+    .map(item => closedTabOf(item, taken)).filter((item): item is ClosedTab => !!item).reverse();
+  return { ...value, tabs, views: { ...views, scenes: (views.scenes as unknown[]).map(sceneOf) },
+    focus: { ...unknown, ...focus }, closed, seq } as unknown as ProfileSessionData;
 }
 /** The workspace's `profiles`, validated: sessions that don't read are left out (a session is rebuilt from the library's result). */
 export function workspaceProfilesOf(value: unknown): WorkspaceProfiles | undefined {

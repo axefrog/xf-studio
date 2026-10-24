@@ -43,6 +43,8 @@ export type PanelContribution = {
    * by default. Absent: the panel works on the profile (no binding).
    */
   readonly context?: PanelContext;
+  /** A default layout saved from a tab keeps this panel's instance state (profiles design §4.2); absent: it starts afresh. */
+  readonly stateInDefaults?: boolean;
 };
 
 /** Which activity-log source an action kind reports under (first matching pattern wins within a contribution). */
@@ -51,6 +53,8 @@ export type ActivitySource = { readonly pattern: RegExp; readonly label: string 
 export type ViewContribution = {
   /** `shell` for the platform's own panels, else the feature ID whose view this is. */
   readonly owner: string;
+  /** Primary editor: owns the missing-view chooser; other feature panels point here. */
+  readonly primary?: string;
   readonly panels: readonly PanelContribution[];
   readonly activity: readonly ActivitySource[];
 };
@@ -69,9 +73,15 @@ export function viewCatalogue(views: readonly ViewContribution[]) {
     if (seen.has(panel.id)) throw Error(`Panel ${panel.id} is contributed twice.`);
     seen.add(panel.id); panels.push({ ...panel, owner: view.owner });
   }
+  for (const view of views) if (view.primary && !view.panels.some(panel => panel.id === view.primary))
+    throw Error(`Primary panel ${view.primary} is not contributed by ${view.owner}.`);
   panels.sort((a, b) => a.order - b.order);
   return {
     panels,
+    primary: (type: string) => {
+      const view = views.find(view => view.panels.some(panel => panel.id === type));
+      return view?.panels.find(panel => panel.id === view.primary);
+    },
     ids: panels.map(panel => panel.id),
     /** Each panel type's context (§3.1, §5); a type no contribution names, or one without a context, works on the profile. */
     context: (type: string): PanelContext => panels.find(panel => panel.id === type)?.context ?? { kind: "profile" },

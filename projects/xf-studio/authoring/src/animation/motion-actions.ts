@@ -298,12 +298,12 @@ export class MotionActions {
   }
   /**
    * Another runtime takes the scene (this one is hidden, or goes): the playing idle's phase now is stored in the scene, so the next runtime
-   * starts there. Until the next `restore`, nothing this service had under way (an idle load, its rollback, a pose) reaches the device or
-   * the scene, and it refuses actions.
+   * starts there (`store` false: the scene is gone, its tab closed). Until the next `restore`, nothing this service had under way (an idle
+   * load, its rollback, a pose) reaches the device or the scene, and it refuses actions.
    */
-  release() {
+  release(store = true) {
     if (this.released) return;
-    this.sample(true);
+    if (store) this.sample(true);
     this.released = true; this.epoch++; this.loading = null; this.poseGeneration++; this.poseBusy = false; this.pose = null;
     this.selecting?.abort(); this.selecting = null;
   }

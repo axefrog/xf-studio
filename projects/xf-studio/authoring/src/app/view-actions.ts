@@ -30,11 +30,11 @@ export const NO_MODULES: ModuleRegistration = Object.freeze({ modules: [], tools
 
 /**
  * The view graph over a workspace's preview (and its stored views) and the views family over it, with the platform's tools beside
- * the composition's modules. The trusted core builds one per session; fixtures build their own.
+ * the composition's modules. `graph`: the session's own (`ProfileSessions` records it); without it one is made here (fixtures).
  */
 export function createViewServices(preview: PreviewState, stored?: ViewGraphData, modules: ModuleRegistration = NO_MODULES,
-  history?: HistoryService, scope?: string) {
-  const views = createStudioViewGraph(preview, stored, history, scope);
+  history?: HistoryService, graph?: ViewGraph) {
+  const views = graph ?? createStudioViewGraph(preview, stored, history);
   const viewActions = new ViewActions(views, { ...modules, tools: [...PLATFORM_VIEW_TOOLS, ...modules.tools.filter(tool => tool.module !== "platform")] });
   return { views, viewActions };
 }
@@ -75,8 +75,12 @@ export class ViewActions {
    */
   settings(filter: Pick<ViewToolFilter, "research">): readonly string[] { return filter.research ? Object.keys(RESEARCH_RENDERING) : []; }
   capability(action: ViewAction): Capability {
-    if (action.kind === "view.undo") return this.graph.history().depth ? { available: true } : refusal("invalid_value", "There is no view or lighting change to undo.");
-    if (action.kind === "view.redo") return this.graph.history().redoDepth ? { available: true } : refusal("invalid_value", "There is no undone view or lighting change to redo.");
+    if (action.kind === "view.undo" || action.kind === "view.redo") {
+      const undo = action.kind === "view.undo", history = this.graph.history();
+      if (!(undo ? history.depth : history.redoDepth))
+        return refusal("invalid_value", undo ? "There is no view or lighting change to undo." : "There is no undone view or lighting change to redo.");
+      return { available: true };
+    }
     if (action.kind === "view.endEdit") return { available: true };
     if (typeof action.view !== "string") return refusal("missing_target", "Open a 3D view to use this.");
     if (!this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");

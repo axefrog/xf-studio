@@ -181,6 +181,21 @@ export class SceneResidency<W extends ResidencyWant, R> {
   }
   /** The renderer's context was lost: the warm runtimes go first; the shown one, and one still being built, are restored by the device. */
   contextLost(): void { for (const resident of [...this.residents.values()]) if (resident.state === "warm") this.evict(resident); }
+  /**
+   * Show nothing (the window draws no view: experiment 044 P2-iii): the build in flight stops, and the shown runtime is hidden and kept warm.
+   * With nothing shown the budget holds one more warm runtime, so the residents never outnumber the shown one plus `warm`; drawing it again
+   * needs no build.
+   */
+  hideShown(): void {
+    if (this.disposed) return;
+    this.supersede();
+    const shown = this.shownResident();
+    if (!shown) return;
+    this.shownPutOff = false;
+    shown.state = "warm";
+    this.port.hide(shown.runtime);
+    this.keepBudget();
+  }
   /** A scene closed: its build stops and its runtimes go (a shown one is hidden first, and nothing is shown in its place). */
   close(scene: string): void {
     if (this.building?.want.scene === scene) this.supersede();
@@ -302,8 +317,12 @@ export class SceneResidency<W extends ResidencyWant, R> {
       if (previous) { previous.state = "shown"; previous.shownAt = ++this.sequence; this.port.show(previous.runtime, previous.want); }
       throw error;
     }
+    this.keepBudget();
+  }
+  /** At most the shown runtime plus `warm` others stay (nothing shown: `warm` + 1 warm): the least recently shown go first. */
+  private keepBudget() {
     const warm = [...this.residents.values()].filter(resident => resident.state === "warm").sort((a, b) => a.shownAt - b.shownAt);
-    for (const resident of warm.slice(0, Math.max(0, warm.length - this.warm))) this.evict(resident);
+    for (const resident of warm.slice(0, Math.max(0, this.residents.size - this.warm - 1))) this.evict(resident);
   }
   private evict(resident: Resident<W, R>) {
     // A warm runtime being prepared again stops first.

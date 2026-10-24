@@ -8,7 +8,12 @@ import { panelMeta, type ViewContribution } from "../../../studio-ui/views/contr
 
 export const EYE_MAKEUP_VIEW = {
   owner: "eye-makeup",
+  primary: "layers",
   panels: [
+    { id: "presets", context: { kind: "look" }, title: "Presets", icon: "presets", order: 10, slot: "collection",
+      description: "Named looks in the current collection; each is one choice in the game selector." },
+    { id: "library", context: { kind: "look" }, title: "Library", icon: "library", order: 40, slot: "collection", heavy: true,
+      description: "Saved versions of your collection, recovery and files." },
     { id: "layers", context: { kind: "look" }, title: "Layers", icon: "layers", order: 20, slot: "stack",
       description: "The current preset's layer stack, front first." },
     { id: "uv", context: { kind: "look" }, title: "UV map", icon: "uv", order: 70, slot: "canvas",

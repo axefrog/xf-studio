@@ -108,16 +108,16 @@ describe("binding resolution", () => {
     expect(resolveBinding(world(), { tab: "t2", context: { kind: "scene", scenes: ["character"] } })).toMatchObject({ target: { view: "d" } });
     // No candidate in the tab: the empty state, with no fallback to another tab or any "current" V.
     expect(resolveBinding(world(), { tab: "t3", context: { kind: "view" } })).toMatchObject({ state: "empty" });
-    // Never focused: nothing to follow.
-    expect(resolveBinding(world({ focus: {} }), { tab: "t1", context: { kind: "view" } })).toMatchObject({ state: "empty" });
+    // An eligible view with no focus number is still present; use the first until one is focused.
+    expect(resolveBinding(world({ focus: {} }), { tab: "t1", context: { kind: "view" } })).toMatchObject({ state: "resolved", target: { view: "a" } });
     // A profile panel has no binding and resolves to nothing in particular.
     expect(resolveBinding(world(), { tab: "t1", context: { kind: "profile" } })).toEqual({ state: "resolved", target: {}, candidates: 0, named: false });
   });
 
-  test("a scene whose look was removed, or whose V was deleted, resolves without it: a partial context, and actions say what they need", () => {
+  test("a scene without its look offers U6 with its captured partial context, and actions say what they need", () => {
     const resolved = resolveBinding(world({ look: ref => ref.look !== "l2" }), { tab: "t1", context: { kind: "look" } });
-    expect(resolved).toMatchObject({ state: "resolved", target: { view: "b", subject: v("c-2") } });
-    const target = resolved.state === "resolved" ? resolved.target : {};
+    expect(resolved).toMatchObject({ state: "empty", missing: "look", target: { view: "b", subject: v("c-2") } });
+    const target = resolved.state === "empty" ? resolved.target! : {};
     expect("look" in target).toBe(false);
     expect(requirementsMet(target, ["scene"])).toEqual({ available: true });
     expect(requirementsMet(target, ["scene", "look"])).toEqual(refusal("missing_target", "Choose a look first."));

@@ -36,6 +36,7 @@ export type SizeClass = "wide" | "compact";
 export type DockState = { wide: DockTree; compact: DockTree };
 export const DOCK_FORMAT = "xfs/dock";
 export const DOCK_VERSION = 1;
+export const MIN_GROUP = { w: 150, h: 96 };
 
 export type DropTarget =
   | { kind: "tab"; groupId: string; index: number }
@@ -344,6 +345,125 @@ export function summonPanel(tree: DockTree, panel: PanelId, fallback: DockTree, 
       ?? insertNode(base, group([panel]), { kind: "float", ...floatRect });
   }
   return showPanelDocked(revealPanel(tree, panel), panel);
+}
+/** Fraction of the dock width a group receives when expanded. Floating groups use their window width. */
+function viewSlotWidth(tree: DockTree, id: string, width: number): number {
+  const visit = (node: DockNode | null, available: number): number | undefined => {
+    if (!node) return;
+    if (node.kind === "group") return node.id === id ? available : undefined;
+    for (let i = 0; i < node.children.length; i++) {
+      const found = visit(node.children[i], available * (node.axis === "row" ? node.sizes[i] : 1));
+      if (found !== undefined) return found;
+    }
+  };
+  return visit(tree.root, width) ?? tree.floating.map(window => visit(window.node, window.w)).find(value => value !== undefined) ?? width;
+}
+/** Keep the slot, but restore its factory width proportion when its remembered size cannot hold a head pane. */
+function fitViewSlot(tree: DockTree, panel: string, fallback: DockTree, width: number, collapsed: boolean): DockTree {
+  const at = locate(tree, panel)!, factory = allGroups(fallback).find(({ group }) => group.panels.some(id => id === "head" || id.startsWith("view.")));
+  if (!factory || (!collapsed && viewSlotWidth(tree, at.group.id, width) >= 320)) return tree;
+  if (at.windowId) return { ...tree, floating: tree.floating.map(window => window.id === at.windowId
+    ? { ...window, w: Math.max(320, viewSlotWidth(fallback, factory.group.id, width)) } : window) };
+  const desired = viewSlotWidth(fallback, factory.group.id, width);
+  const visit = (node: DockNode | null, available: number): DockNode | null => {
+    if (!node || node.kind === "group") return node;
+    const index = node.children.findIndex(child => [...groups(child)].some(group => group.id === at.group.id));
+    if (index < 0) return node;
+    // The nearest row split controls this slot's width. Preserve all other siblings' relative proportions.
+    const child = node.children[index];
+    const deeperRow = (value: DockNode): boolean => value.kind === "split" &&
+      (value.axis === "row" || value.children.filter(child => [...groups(child)].some(group => group.id === at.group.id)).some(deeperRow));
+    if (node.axis === "row" && !deeperRow(child)) {
+      const share = Math.min(.95, desired / available), rest = 1 - node.sizes[index];
+      return { ...node, sizes: node.sizes.map((size, i) => i === index ? share : size * (1 - share) / rest) };
+    }
+    return { ...node, children: node.children.map((child, i) => i === index
+      ? visit(child, available * (node.axis === "row" ? node.sizes[i] : 1))! : child) };
+  };
+  return { ...tree, root: visit(tree.root, width) };
+}
+/** Insert a missing head beside the factory slot's neighbouring subtrees, never inside its nearest panel. */
+function createFactoryViewSlot(tree: DockTree, panel: PanelId, fallback: DockTree): DockTree {
+  const home = allGroups(fallback).find(({ group }) => group.panels.some(id => id === "head" || id.startsWith("view.")))?.group;
+  if (!home) return tree;
+  const parentOf = (node: DockNode | null): SplitNode | undefined => {
+    if (!node || node.kind === "group") return;
+    if (node.children.some(child => child.id === home.id)) return node;
+    return node.children.map(parentOf).find(Boolean);
+  };
+  const parent = parentOf(fallback.root), created = group([panel], panel, home.id);
+  if (!tree.root) return { ...tree, root: created };
+  if (!parent) return { ...tree, root: split("row", [tree.root, created], [.63, .37]) };
+  const index = parent.children.findIndex(child => child.id === home.id);
+  const members = (nodes: DockNode[]) => new Set(nodes.flatMap(node => [...groups(node)].flatMap(group => group.panels)));
+  const left = members(parent.children.slice(0, index)), right = members(parent.children.slice(index + 1));
+  const contains = (node: DockNode, panels: Set<string>) => [...groups(node)].some(group => group.panels.some(id => panels.has(id)));
+  const relevant = new Set([...left, ...right]);
+  // Descend only while all surviving factory neighbours share one child; the insertion belongs beside their common subtree.
+  const insert = (node: DockNode): DockNode => {
+    if (node.kind === "split") {
+      const hits = node.children.map((child, i) => contains(child, relevant) ? i : -1).filter(i => i >= 0);
+      if (hits.length === 1 && node.id !== parent.id) return { ...node, children: node.children.map((child, i) => i === hits[0] ? insert(child) : child) };
+      if (node.axis === parent.axis) {
+        const before = node.children.findIndex(child => contains(child, right));
+        const at = before >= 0 ? before : node.children.length, share = parent.sizes[index];
+        const children = [...node.children], sizes = node.sizes.map(size => size * (1 - share));
+        children.splice(at, 0, created); sizes.splice(at, 0, share);
+        return { ...node, children, sizes };
+      }
+    }
+    const before = contains(node, right) && !contains(node, left), share = parent.sizes[index];
+    return split(parent.axis, before ? [created, node] : [node, created], before ? [share, 1 - share] : [1 - share, share]);
+  };
+  return { ...tree, root: insert(tree.root) };
+}
+/** Allocate widths with lower bounds for every subtree, preserving requested proportions wherever they fit. */
+function keepViewSiblingsUsable(tree: DockTree, panel: string, width: number): DockTree {
+  const minimum = (node: DockNode): number => node.kind === "group" ? node.panels.includes(panel) ? 320 : MIN_GROUP.w
+    : node.axis === "row" ? node.children.reduce((sum, child) => sum + minimum(child), 0) + (node.children.length - 1) * 8
+    : Math.max(...node.children.map(minimum));
+  const fit = (node: DockNode, available: number): DockNode => {
+    if (node.kind === "group") return node;
+    if (node.axis === "column") return { ...node, children: node.children.map(child => fit(child, available)) };
+    const usable = Math.max(1, available - (node.children.length - 1) * 8), sizes = [...node.sizes];
+    const lower = node.children.map(minimum), head = node.children.findIndex(child => [...groups(child)].some(group => group.panels.includes(panel)));
+    if (head >= 0) lower[head] = Math.max(lower[head], Math.min(usable * node.sizes[head], usable - lower.reduce((sum, value, i) => sum + (i === head ? 0 : value), 0)));
+    const pending = new Set(node.children.map((_, i) => i));
+    let remaining = usable;
+    while (pending.size) {
+      const total = [...pending].reduce((sum, i) => sum + node.sizes[i], 0);
+      const small = [...pending].filter(i => remaining * node.sizes[i] / total < lower[i]);
+      if (!small.length) { for (const i of pending) sizes[i] = remaining * node.sizes[i] / total / usable; break; }
+      for (const i of small) { sizes[i] = lower[i] / usable; remaining -= lower[i]; pending.delete(i); }
+    }
+    return { ...node, sizes, children: node.children.map((child, i) => fit(child, sizes[i] * usable)) };
+  };
+  return { ...tree, root: tree.root && fit(tree.root, width) };
+}
+/** U6's first view fills the tab's former 3D slot, else the factory slot, and becomes visible there. */
+export function openViewPanel(tree: DockTree, panel: PanelId, fallback: DockTree, arrangement?: DockTree, width = 1600): DockTree {
+  const base = detachPanel(tree, panel);
+  const isView = (id: string) => id === "head" || id.startsWith("view.");
+  for (const source of [arrangement]) {
+    if (!source) continue;
+    const home = allGroups(source).find(({ group }) => group.panels.some(isView));
+    if (!home) continue;
+    const old = home.group.panels.find(isView)!, current = findGroup(base, home.group.id);
+    let placed: DockTree | undefined;
+    if (current) placed = insertNode(base, group([panel]), { kind: "tab", groupId: current.group.id, index: current.group.panels.length });
+    else if (!home.windowId) placed = createFactoryViewSlot(base, panel, source);
+    else {
+      const place = placeOf(source, old, new Set(home.group.panels.filter(isView)));
+      if (place && !("closed" in place)) placed = restorePlace(base, panel, { ...place,
+        group: place.group.map(id => id === old ? panel : id), active: true, collapsed: false });
+    }
+    if (placed) {
+      if (!current) placed = mapGroups(placed, item => item.panels.includes(panel) ? { ...item, id: home.group.id } : item);
+      return keepViewSiblingsUsable(fitViewSlot(showPanelDocked(revealPanel(placed, panel), panel), panel, fallback, width, !!home.group.collapsed), panel, width);
+    }
+  }
+  const placed = createFactoryViewSlot(base, panel, fallback);
+  return keepViewSiblingsUsable(showPanelDocked(revealPanel(placed, panel), panel), panel, width);
 }
 /** Reopen a closed panel as a tab beside a preferred sibling, else floating. */
 export function openPanel(tree: DockTree, panel: PanelId, preferredSiblings: PanelId[], area: Rect): DockTree {

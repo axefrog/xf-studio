@@ -61,7 +61,7 @@ function validResult(data: Completed, request: RasterRequest): boolean {
  * `region` (the live feature's mirror and fine-Glitter scope) travels with every request.
  */
 export function createRasterClient(makeWorker: () => RasterPort,
-  publish: (result: Completed) => void, failed: (reason?: string) => void, region: RasterRegion, size = 1024) {
+  publish: (result: Completed, requested: Layer) => void, failed: (reason?: string) => void, region: RasterRegion, size = 1024) {
   region = structuredClone(region);
   const queue = new Map<number, RasterRequest>(), versions = new Map<number, number>();
   let running: RasterRequest | undefined, cancelSent = false, sequence = 0;
@@ -108,10 +108,11 @@ export function createRasterClient(makeWorker: () => RasterPort,
         failed(data.error);dispatch();return;
       }
       if (!data.cancelled && !validResult(data,running)) {recover(port); return;}
+      const request = running;
       running = undefined; cancelSent = false;
       if (!data.cancelled && versions.get(data.i) === data.version) {
         if (queue.get(data.i)?.version === data.version) queue.delete(data.i);
-        completed++; publish(data);
+        completed++; publish(data, request.layer);
       }
       else discarded++;
       dispatch();

@@ -5,6 +5,8 @@ import { plannedModules } from "../src/platform/api";
 import { PLANNED_MODULES, STUDIO_MODULE_REGISTRATION, STUDIO_MODULES } from "../src/compose/modules";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { COMING_SOON, comingSoon, isLive, plannedShown, type ComingSoonEntry } from "../src/studio-ui/coming-soon";
+import { panelMenuItems } from "../src/studio-ui/app";
+import { STUDIO_CATALOGUE } from "../src/compose/views";
 
 /**
  * Coming soon placeholders (ui-copy-and-layout-review.md §6) never outlive their feature: a placeholder and the live feature it waits
@@ -77,4 +79,36 @@ test("module views show no Coming soon placeholders", () => {
   const views = sources(resolve(src, "features")).filter(path => /[\\/]view[\\/]/.test(path));
   expect(views.length).toBeGreaterThan(0);
   expect(views.filter(path => /coming-soon|tag: "Soon"/.test(readFileSync(path, "utf8")))).toEqual([]);
+});
+
+test("U8: Panels owns the folded Coming soon menu, only with research tools on", () => {
+  const calls: string[] = [];
+  const rt = { views: STUDIO_CATALOGUE,
+    port: { views: { modules: () => STUDIO_MODULES, titles: () => [], plannedModules: () => PLANNED_MODULES } },
+    dock: { panel: () => ({}), panelState: (id: string) => id === "presets" ? "open" : id === "layers" ? "collapsed" : "closed",
+      toggle: (id: string) => calls.push(`toggle:${id}`), reveal: (id: string) => calls.push(`reveal:${id}`) },
+    settings: { open: () => calls.push("settings") } };
+  const off = panelMenuItems(rt as never, false), on = panelMenuItems(rt as never, true);
+  expect(off.some(item => item.kind === "submenu" && item.label === "Coming soon")).toBe(false);
+  const folded = on.find(item => item.kind === "submenu" && item.label === "Coming soon");
+  expect(folded?.kind).toBe("submenu");
+  if (folded?.kind !== "submenu") throw Error("Missing Coming soon");
+  const planned = folded.items();
+  expect(planned.map(item => item.kind === "action" ? item.label : "")).toEqual(PLANNED_MODULES.map(module => module.label));
+  for (const item of planned) if (item.kind === "action") {
+    expect(item.capability).toMatchObject({ available: false });
+    expect(item.capability?.reason?.startsWith("Coming soon: ")).toBe(true);
+  }
+  expect(on.filter(item => "label" in item && /^(Show|Hide) /.test(item.label))).toEqual([]);
+  const row = (label: string) => {
+    const item = off.find(item => item.kind === "action" && item.label === label);
+    if (item?.kind !== "action") throw Error(`Missing ${label}`);
+    return item;
+  };
+  expect(row("Presets").checked).toBe(true); row("Presets").run();
+  expect(row("Layers").hint).toBe("Collapsed"); row("Layers").run();
+  expect(row("Library").checked).toBe(false); row("Library").run();
+  row("Settings").run();
+  expect(calls).toEqual(["toggle:presets", "reveal:layers", "toggle:library", "settings"]);
+  expect(row("Poses").stage).toBe("preview");
 });

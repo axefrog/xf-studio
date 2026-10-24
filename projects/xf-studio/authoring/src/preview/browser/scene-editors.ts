@@ -11,11 +11,11 @@
  *   follows the head's Surface controls tool. Its selections and gestures name the look `view`'s scene shows (the input layer's naming for
  *   that view, `naming`: its panel's resolution, profiles design §3.3, §3.6), and its gestures come from `view`. The release unmounts it,
  *   settling a gesture still open (cancelled), and withdraws the surface's outline.
- * - **One edited look until phase 2.** The look editor edits one document, the drawn scene's look, and the editors' preview source rasters
- *   it. Until phase 2 gives each view its own document, a view whose scene shows another look can't be drawn: `refusal(view)` says so
- *   plainly, and the runtime owner refuses `show(view)` with it, so the editor never names one look while showing another's layers.
- * - **The UV editor** is a panel, not a view, until view graph P6: it edits the look the drawn view shows (`drawn`), so only its naming lives
- *   here; the root mounts it with its canvas and the device's reads.
+ * - **One editor document follows the drawn view** (experiment 044 decision D3). The look editor edits the drawn scene's look, and the
+ *   editors' preview source rasters it. Drawing a view of another look switches the document only after the head on screen let its layers
+ *   go and this editor was unmounted (browser-scene-heads.ts), so the editor never names one look while showing another's layers.
+ * - **The UV editor** is a panel, not a view, until view graph P6: it edits the look the drawn view shows (`drawn`; none while no view is
+ *   drawn), so only its naming lives here; the root mounts it with its canvas and the device's reads.
  */
 import type { FeatureRendererFactory } from "../../platform/api/scene";
 import type { ViewId } from "../../platform/api/view-graph";
@@ -23,7 +23,7 @@ import type { LayeredSurfaceRenderer } from "../../engines/layered-makeup/render
 import { surfaceOutline } from "../../engines/layered-makeup/surface-edge";
 import type { StudioAction } from "../../app/studio-application";
 import type { AdapterMessage } from "../../app/presentation-status";
-import { sameLook, type LookRef } from "../../library/collection-documents";
+import type { LookRef } from "../../library/collection-documents";
 import type { createTrustedAuthoringCore } from "../../app/trusted-authoring-core";
 import type { AttachedHead, HeadServices, LayeredSurfaceWiring } from "./browser-head-attachment";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
@@ -38,8 +38,8 @@ export type LayeredSurfaces = ReadonlyMap<string, FeatureRendererFactory<Layered
 
 export type SceneEditorPorts = {
   surfaces: LayeredSurfaces;
-  /** The look editor: the feature whose part it edits, the device that rasters its layers, and the look its document shows (`ref`). */
-  look: { readonly feature: string; readonly preview: LayeredSurfaceWiring["preview"]; ref(): LookRef | undefined };
+  /** The look editor: the feature whose part it edits and the device that rasters its layers. */
+  look: { readonly feature: string; readonly preview: LayeredSurfaceWiring["preview"] };
   /** The authoring core: the layers and selection the editors draw, and the application's gestures and dispatch. */
   core: { geometry: Pick<Core["geometry"], "layer" | "recipe">; presentation: Pick<Core["presentation"], "selected" | "layer" | "selectedField">;
     app: Pick<Core["app"], "dispatch" | "beginGesture" | "applyGesture" | "endGesture" | "surfaceEdge"> };
@@ -47,9 +47,9 @@ export type SceneEditorPorts = {
    * The input layer's naming for a view (the resolution of the panel that shows it; only the input layer reads the resolver): the look the
    * view's scene shows, and an action with the targets it leaves out named as that view names them.
    */
-  naming: { look(view: ViewId): LookRef | undefined; complete(action: { kind: string } & Record<string, unknown>, view: ViewId): StudioAction };
-  /** The view drawn now (the UV editor edits the look it shows). */
-  drawn(): ViewId;
+  naming: { look(view: ViewId | undefined): LookRef | undefined; complete(action: { kind: string } & Record<string, unknown>, view: ViewId | undefined): StudioAction };
+  /** The view drawn now (the UV editor edits the look it shows; undefined: none is drawn). */
+  drawn(): ViewId | undefined;
   viewport: Pick<ViewportDevice, "mountSurface" | "unmountSurface">;
   /** Connects head services to the application: the edited surface's outline while the on-head editor is mounted. */
   attach(services: Pick<HeadServices, "surfaceOutline">): void;
@@ -57,8 +57,6 @@ export type SceneEditorPorts = {
   message(source: AdapterMessage["source"], text: string): void;
 };
 
-/** Why a view whose scene shows another look can't be drawn yet (phase 2 edits each view's look). */
-export const ANOTHER_LOOK = "That view shows a different look from the one you're editing, and two looks can't be edited side by side yet.";
 
 export function createSceneEditors(ports: SceneEditorPorts) {
   const { core, naming } = ports;
@@ -66,14 +64,14 @@ export function createSceneEditors(ports: SceneEditorPorts) {
   const wiring: readonly LayeredSurfaceWiring[] = edited
     ? [{ feature: edited.feature, surface: scene => scene.feature(edited), preview: ports.look.preview, edited: true }] : [];
   /** The selection hooks both editors share, naming what `view` shows. */
-  const selection = (view: () => ViewId) => ({
+  const selection = (view: () => ViewId | undefined) => ({
     layer: () => core.geometry.layer(), selected: () => core.presentation.selected,
     selectedField: () => core.presentation.selectedField()?.id,
     selectField: (id: string) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(naming.complete({ kind: "field.select", layerId: layer.id, fieldId: id }, view())); },
     select: (index: number) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(naming.complete({ kind: "point.select", layerId: layer.id, index }, view())); },
   });
   /** A gesture from `source`, on the look `view` shows when it begins. */
-  const gestures = (source: string, view: () => ViewId) => ({
+  const gestures = (source: string, view: () => ViewId | undefined) => ({
     begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture(source, layer.id, naming.look(view())); },
     apply: (proposal: Parameters<Core["app"]["applyGesture"]>[1]) => core.app.applyGesture(source, proposal),
     cancel: () => core.app.endGesture(source, true), finish: () => core.app.endGesture(source),
@@ -114,15 +112,7 @@ export function createSceneEditors(ports: SceneEditorPorts) {
         ports.attach({ surfaceOutline: undefined });
       };
     },
-    /**
-     * Why `view` can't be drawn now (undefined: it can): its scene shows another look than the one the look editor's document shows, and
-     * until phase 2 one document is edited at a time (see the header).
-     */
-    refusal(view: ViewId): string | undefined {
-      const shows = naming.look(view), edited = ports.look.ref();
-      const same = shows && edited ? sameLook(shows, edited) : !shows && !edited;
-      return same ? undefined : ANOTHER_LOOK;
-    },
+
     /** The UV editor's hooks: the drawn view's look (a panel until view graph P6), its gestures from the UV view. */
     uvHooks(): Pick<UVHooks, "recipe" | "layer" | "selected" | "selectedField" | "selectField" | "select" | "surfaceEdge" | "begin" | "apply" | "cancel" | "finish" | "message"> {
       return { ...selection(ports.drawn), ...gestures("uv", ports.drawn), recipe: () => core.geometry.recipe(),

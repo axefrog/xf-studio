@@ -20,6 +20,8 @@ import { stageLabel, stageShortLabel, stageTag, type Stage } from "./stage-tag";
  */
 export type TabItem = {
   id: string; label: string; icon: IconName;
+  /** Accessible name with origin context (layout tabs). */
+  name?: string;
   /** The tab's tooltip (defaults to its label). */
   tooltip?: string;
   /** Whether the active tab shows a close mark (the keyboard closes with the strip's own key binding). */
@@ -111,10 +113,12 @@ export class TabStrip {
 
   /** Show `items` with `active` selected (entries are reused by ID, so focus and listeners survive). */
   update(items: readonly TabItem[], active: string) {
+    const focused = this.entries.find(entry => entry.tab === document.activeElement)?.item.id;
     this.active = active;
     const byId = new Map(this.entries.map(entry => [entry.item.id, entry]));
     this.entries = items.map(item => {
       const entry = byId.get(item.id) ?? this.create(item);
+      if (entry.item.icon !== item.icon) entry.tab.firstElementChild?.replaceWith(icon(item.icon));
       entry.item = item;
       const selected = item.id === active;
       setAttr(entry.tab, "aria-selected", String(selected));
@@ -126,6 +130,7 @@ export class TabStrip {
     this.tablist.replaceChildren(...this.entries.map(entry => entry.tab));
     this.show(this.entries.map((_, index) => index), false);
     this.paintTags();
+    if (focused) this.tab(focused)?.focus({ preventScroll: true });
   }
   /** Change one tab's label and tooltip in place (nothing is laid out again). */
   retitle(id: string, label: string, tooltip?: string) {
@@ -137,7 +142,7 @@ export class TabStrip {
   private describe(entry: TabEntry) {
     setText(entry.label, entry.item.label);
     const stage = stageLabel(entry.item.stage), tip = entry.item.tooltip ?? entry.item.label;
-    setAttr(entry.tab, "aria-label", stage ? `${entry.item.label}, ${stage}` : entry.item.label);
+    setAttr(entry.tab, "aria-label", stage ? `${entry.item.name ?? entry.item.label}, ${stage}` : entry.item.name ?? entry.item.label);
     entry.tab.title = stage ? `${stage} · ${tip}` : tip;
     entry.close.title = `Close ${entry.item.label}`;
     // A reused tab whose stage changed gains or loses its tag (paintTags shows and words it).

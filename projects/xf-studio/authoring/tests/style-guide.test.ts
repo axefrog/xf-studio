@@ -5,12 +5,42 @@ import { iconNames } from "../src/studio-ui/icons";
 import { PANEL_IDS, PANEL_META } from "../src/compose/views";
 import { contrastTable } from "../src/studio-ui/style-guide/contrast";
 import { finishCatalogue } from "./fixtures/eye-region";
+import { notDrawnStateMarkup } from "../src/studio-ui/components";
+import { XF_STUDIO_SITE } from "../src/studio-ui/style-guide/back-link";
 
 const root = resolve(import.meta.dir, "..");
 const lf = (text: string) => text.replace(/\r\n/g, "\n");
 const guide = lf(readFileSync(resolve(root, "public/style-guide.html"), "utf8"));
 const css = lf(readFileSync(resolve(root, "public/studio.css"), "utf8"));
 const has = (text: string) => guide.includes(text);
+
+test("c-setup uses the library's resting state and the app's game-folder next step", () => {
+  const setup = guide.split('id="c-setup"')[1]!.split("</article>")[0]!;
+  expect(setup).toContain(notDrawnStateMarkup({ title: "3D view 2", shows: "Valerie · Smoky" }));
+  expect(setup).toContain("The 3D view needs your Cyberpunk 2077 game folder.");
+  expect(setup).toContain("You can keep working in the UV map.");
+  expect(setup).toContain("Set up 3D view");
+  expect(setup).not.toContain("V · Valerie");
+});
+
+test("U6 documents one chooser per missing target, a quiet owner pointer and the centred head state", () => {
+  const empty = guide.split('id="c-empty"')[1]!.split("</article>")[0]!;
+  expect(empty).toContain("One chooser per missing target");
+  expect(empty).toContain('class="empty-target-pointer muted small"');
+  expect(empty).toContain('Choose one in <button type="button" class="link-button" data-read-safe>Presets</button>.');
+  expect(empty).toContain('class="viewport-state empty-choices"'); expect(empty).toContain('class="viewport-state-icon"');
+  expect(empty).toContain("the new panel is shown, drawn and focused");
+});
+
+test("d-summon groups early-access panels with their stages and documents the fixed anchor", () => {
+  const summon = guide.split('id="d-summon"')[1]!.split("</article>")[0]!;
+  for (const name of ["Save Explorer", "Expressions", "Poses"]) {
+    expect(summon).toContain(`<div class="menu-heading"><span>${name}</span></div>`);
+    expect(summon).toContain(`<span class="menu-label">${name}<span class="stage-tag menu-tag" data-stage="preview">Early access</span></span>`);
+  }
+  expect(summon).toContain("stays under its button");
+  expect(summon).toContain("scrolls inside");
+});
 
 test("the committed style guide embeds the current design system verbatim", () => {
   // Regenerate with: bun tools/build-style-guide.ts
@@ -46,7 +76,8 @@ test("design tokens meet their contrast minimums in both themes", () => {
 test("the style guide is self-contained", () => {
   expect(/<link[^>]+stylesheet/.test(guide)).toBe(false);
   expect(/<script[^>]+src=/.test(guide)).toBe(false);
-  expect(guide.match(/https?:\/\/(?!www\.w3\.org)[^\s"')]+/g) ?? []).toEqual([]);
+  // Nothing is loaded from elsewhere. The one outside address is the Back link's destination on a localhost copy (the site), which is navigation.
+  expect((guide.match(/https?:\/\/(?!www\.w3\.org)[^\s"')]+/g) ?? []).filter(url => url !== XF_STUDIO_SITE)).toEqual([]);
   // Exactly one closing tag: the inline module's own.
   expect(guide.match(/<\/script/gi)?.length).toBe(1);
 });
@@ -55,4 +86,25 @@ test("the guide names the site link and closes a tab opened by the localhost Stu
   expect(has('<a class="guide-back" href="./"')).toBe(true);
   expect(has("XF Studio site</span></a>")).toBe(true);
   expect(has("Close this guide and return to XF Studio")).toBe(true);
+});
+
+
+test("Review A design 3: entry text never opens a raw-text title or script element", async () => {
+  const { LIBRARY } = await import("../src/studio-ui/style-guide/library");
+  const unsafe = LIBRARY.flatMap(entry => Object.entries(entry).flatMap(([field, value]) =>
+    typeof value === "string" && /<(?:title|script)(?:\s|>)/i.test(value) ? [`${entry.id}.${field}`] : []));
+  expect(unsafe).toEqual([]);
+  // Cover every generated pattern too; the document's head title and its one script live outside these articles.
+  const entries = [...guide.matchAll(/<article\b[^>]*>[\s\S]*?<\/article>/g)];
+  expect(entries.length).toBeGreaterThan(60);
+  expect(entries.filter(([html]) => /<(?:title|script)(?:\s|>)/i.test(html)).map(([html]) => /id="([^"]+)"/.exec(html)?.[1])).toEqual([]);
+});
+
+
+test("U6 round 2 documents primary ownership, one gated creation action, ordering, width and choice focus", () => {
+  const empty = guide.split('id="c-empty"')[1]!.split("</article>")[0]!;
+  for (const rule of ["primary panel in its view contribution", "chooser first", "no duplicate Add preset", "same capability and conflict reason", "focuses its first choice", "narrower than 320 px", "every Redo"])
+    expect(empty).toContain(rule);
+  expect(empty).toContain("No 3D view in this tab. Open one in");
+  expect(empty).toContain("This collection changed in another window too. Choose which version to keep first.");
 });

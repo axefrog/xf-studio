@@ -16,8 +16,10 @@ import type { QualityAction } from "../legacy/eye-makeup/preview/preview-quality
 import type { SavedAppearanceAction } from "../character/saved-appearance-actions";
 import type { ViewAction } from "../app/view-actions";
 import type { SceneAction } from "../app/profiles/scene-commands";
+import type { LayoutTabAction } from "../app/profiles/tab-defaults";
 import type { PartPresetRequest } from "../library/part-presets";
-import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
+import type { EmptyChoiceRequest } from "../app/profiles/empty-choices";
+import { ACTION_DESCRIPTORS, EMPTY_CHOICE_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
   type RequestDescriptor } from "../app/studio-action-descriptors";
 
 export type { CollectionStudioAction, HistoryAction };
@@ -30,10 +32,12 @@ const TRANSITIONS_ID = familyId("transitions");
 const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
 const SCENES_ID = familyId("scenes");
+const TABS_ID = familyId("tabs");
 const VIEWS_ID = familyId("views");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
 const PRESETS_ID = familyId("presets");
+const EMPTY_ID = familyId("empty");
 
 export const HISTORY_FAMILY: SystemFamily<HistoryAction, ActionScope, typeof HISTORY_ID> = Object.freeze({
   owner: "system", id: HISTORY_ID, label: "History",
@@ -114,6 +118,19 @@ export const SCENES_FAMILY: SystemFamily<SceneAction, ActionScope, typeof SCENES
 });
 
 /**
+ * The session's layout tabs and the default layouts (app/profiles/profile-sessions.ts and tab-defaults.ts, profiles design §4.1, §4.2):
+ * show, rename, move, close, reopen, duplicate, arrange; a new tab from a default, reset, save as default, update; an own default's rename,
+ * delete and restore.
+ */
+export const TABS_FAMILY: SystemFamily<LayoutTabAction, ActionScope, typeof TABS_ID> = Object.freeze({
+  owner: "system", id: TABS_ID, label: "Layout tabs",
+  actions: actionTable<LayoutTabAction, ActionScope>(ACTION_DESCRIPTORS, { "tabs.show": true, "tabs.rename": true, "tabs.move": true, "tabs.close": true,
+    "tabs.reopen": true, "tabs.duplicate": true, "tabs.arrange": true, "tabs.new": true, "tabs.reset": true, "tabs.saveAsDefault": true,
+    "tabs.updateDefault": true, "defaults.rename": true, "defaults.delete": true, "defaults.restore": true },
+    { "tabs.rename": { name: "characters" }, "tabs.move": { to: "index" }, "tabs.saveAsDefault": { name: "characters" }, "defaults.rename": { name: "characters" } }),
+});
+
+/**
  * The character context (character-context.ts, owned by `CharacterContextActions`): which V the makeup is shown on and every creator
  * choice set on it (CORE-58). It keeps its own Undo history (CORE-59), so its actions record nothing in a look's history.
  */
@@ -136,4 +153,9 @@ export const FILES_FAMILY: AsyncSystemFamily<StudioFileAction, FileDescriptor, t
 export const PRESETS_FAMILY: AsyncSystemFamily<PartPresetRequest, RequestDescriptor, typeof PRESETS_ID> = Object.freeze({
   owner: "system", async: true, id: PRESETS_ID, label: "Presets",
   actions: asyncActionTable<PartPresetRequest, RequestDescriptor>(PART_PRESET_DESCRIPTORS),
+});
+/** Captured choices for a panel whose view, subject or look is missing. */
+export const EMPTY_CHOICES_FAMILY: AsyncSystemFamily<EmptyChoiceRequest, RequestDescriptor, typeof EMPTY_ID> = Object.freeze({
+  owner: "system", async: true, id: EMPTY_ID, label: "Empty choices",
+  actions: asyncActionTable<EmptyChoiceRequest, RequestDescriptor>(EMPTY_CHOICE_DESCRIPTORS),
 });
