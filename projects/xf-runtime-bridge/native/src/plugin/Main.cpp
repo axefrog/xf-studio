@@ -35,6 +35,7 @@
 #include "plugin/Natives.hpp"
 #include "plugin/Overlay.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/Lifecycle.hpp"
 #include "plugin/ScriptCall.hpp"
 
 namespace
@@ -550,6 +551,7 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     state.overlayHost.Configure(state.config.overlayEnabled, xfb::overlay::ThemeFromName(state.config.overlayTheme), state.config.overlayScalePercent);
     xfb::plugin::overlay::Install(aHandle, aSdk, state.overlayHost);
 
+    InstallLifecycle(aHandle, aSdk);
     RegisterStates(aHandle, aSdk);
 
     auto* rtti = RED4ext::CRTTISystem::Get();
@@ -584,6 +586,7 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
 void Unload()
 {
     auto& state = Get();
+    StopLifecycle();
     StopInputChoices("plugin_unload");
     StopRecording("plugin_unload");
     // RB-107: the overlay's detours stay attached until RED4ext detaches them at exit; from here they only pass through.

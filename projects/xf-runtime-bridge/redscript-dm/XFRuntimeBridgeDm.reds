@@ -464,6 +464,7 @@ public abstract class XFDmSpawn {
     entry.kind = kind;
     entry.id = id;
     registry.Add(entry);
+    XFNavigation.Note(point, kind);
     XFBridgeLog.Info(cid, "dm spawned " + kind + " " + IntToString(handle) + " at " + XFScene.Arr(point) + " (non-persistent, tag xfs_dm)");
     return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(point) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"grounded\":" + XFJson.Flag(grounded) + ",\"traffic_check\":" + XFNavigation.Classify(point, 10.0) + "}";
   }

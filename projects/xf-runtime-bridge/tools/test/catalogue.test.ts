@@ -23,7 +23,7 @@ import { validate, type JsonSchema } from "../api/schema.ts";
 import { toolsFor } from "../mcp/server.ts";
 import { projectDir, tempDir } from "./helpers.ts";
 
-const pluginSource = ["native/src/plugin/GameHandlers.cpp", "native/src/plugin/Handlers060.cpp", "native/src/plugin/Handlers070.cpp", "native/src/plugin/HandlersSenses.cpp", "native/src/core/Dispatcher.cpp", "native/src/core/Bridge.cpp", "native/src/core/Events.cpp", "native/src/core/Npc.cpp", "native/src/core/DmService.cpp", "native/src/core/InputChoices.cpp", "native/src/core/Recording.cpp"]
+const pluginSource = ["native/src/plugin/GameHandlers.cpp", "native/src/plugin/Handlers060.cpp", "native/src/plugin/Handlers070.cpp", "native/src/plugin/HandlersSenses.cpp", "native/src/plugin/Lifecycle.cpp", "native/src/core/Dispatcher.cpp", "native/src/core/Bridge.cpp", "native/src/core/Events.cpp", "native/src/core/Npc.cpp", "native/src/core/DmService.cpp", "native/src/core/InputChoices.cpp", "native/src/core/Recording.cpp"]
   .map((file) => readFileSync(join(projectDir, file), "utf8"))
   .join("\n");
 const selftestSource = ["native/src/selftest/Main.cpp", "native/src/selftest/Sim060.cpp", "native/src/selftest/Sim070.cpp", "native/src/selftest/SimSenses.cpp", "native/src/core/Events.cpp", "native/src/core/Npc.cpp", "native/src/core/DmService.cpp", "native/src/core/InputChoices.cpp", "native/src/core/Recording.cpp"]

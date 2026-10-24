@@ -1,14 +1,6 @@
-// 0.8.2 (session 9: after game_load the game sat on its "press any key" screen until the maintainer pressed one): waiting
-// for the end of a load and saying plainly when the game waits on that screen.
-//
-// When: the plugin's game.status, answered by the plugin while the game loads, says waiting_for_input once the loaded
-// session's player puppet is in the world and the player hasn't attached yet (core/ScriptLayer.hpp; in session 9's load
-// that stretch was the press-any-key screen [hypothesis]).
-//
-// No key is pressed (the 0.8.2 review's High finding): a synthetic key goes through Windows' global input, after checks made
-// a moment earlier, so it could reach another window if the focus moved, or gameplay if the player had already pressed one.
-// The bridge dismisses the screen only once it has a route inside the game (the loading screen's own controller on the game
-// thread), which session 10's I4 looks for; until then the answer asks the player to press a key.
+// R8 / 0.8.15: only current UI observations identify a prompt. Attach intervals and
+// waiting_for_input alone never qualify. Start/UI_Skip consumers are located but their
+// event ABI/execution lifetime remains uncommissioned; this helper sends nothing.
 
 import type { CommandContext } from "./catalogue.ts";
 
@@ -21,7 +13,7 @@ export const POLL_MS = 500;
 const planError = (code: string, message: string) => Object.assign(new Error(message), { plain: { code, message } });
 
 export const PRESS_ANY_KEY_NOTE =
-  "The save has loaded and the game is waiting on its press-any-key screen: ask the player to press a key in the game (the bridge doesn't press it: no route inside the game is known yet that can't reach another window or gameplay). game_wait with phase gameplay then follows.";
+  "The initial loading controller offers its continue panel: ask the player to press a key in the game. The located UI_Skip consumer is not commissioned for bridge invocation; game_wait with phase gameplay then follows.";
 
 export type ContinueOptions = { waitMs: number; now?: () => number; sleep?: (ms: number, signal?: AbortSignal) => Promise<void> };
 
@@ -58,15 +50,16 @@ export async function waitForLoadEnd(context: CommandContext, options: ContinueO
     }
     const phase = String(s.phase ?? "unknown");
     const waited = Math.round(now() - started);
-    if (phase === "gameplay") return { reached: "gameplay", waited_ms: waited };
-    if (s.waiting_for_input === true) {
+    const observation = { prompt_state: s.prompt_state ?? "unknown", prompt_observed: s.prompt_observed === true, ...(s.lifecycle ? { lifecycle: s.lifecycle } : {}) };
+    if (phase === "gameplay") return { reached: "gameplay", waited_ms: waited, ...observation };
+    if (s.prompt_observed === true && s.prompt_state === "initial_continue" && s.lifecycle?.fresh === true && s.lifecycle?.complete === true) {
       waitingSince ??= now();
-      if (now() - waitingSince >= PROMPT_SETTLE_MS) return { reached: "press_any_key", waiting_for_input: true, waited_ms: waited, note: PRESS_ANY_KEY_NOTE };
+      if (now() - waitingSince >= PROMPT_SETTLE_MS) return { reached: "press_any_key", waiting_for_input: true, waited_ms: waited, ...observation, note: PRESS_ANY_KEY_NOTE };
     } else {
       waitingSince = null;
     }
     if (now() - started >= options.waitMs) {
-      return { reached: phase, waited_ms: waited, note: "The game hasn't finished loading yet: game_wait with phase gameplay goes on waiting (the player may need to press a key on the press-any-key screen)." };
+      return { reached: phase, waited_ms: waited, ...observation, note: "The game hasn't finished loading yet: game_wait with phase gameplay goes on waiting. Unknown UI state is not a prompt report." };
     }
     await sleep(POLL_MS, context.signal);
   }
@@ -76,6 +69,6 @@ export async function waitForLoadEnd(context: CommandContext, options: ContinueO
 export function refuseContinue(): never {
   throw planError(
     "no_safe_route",
-    "The bridge can't press past the press-any-key screen yet: the only way it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key in the game; game_wait with phase gameplay then follows.",
+    "The Start/UI_Skip consumers are located, but their event ABI, executing thread and current-owner lifetime remain uncommissioned. game.lifecycle.probe records a read-only plan in the autonomous test build. No consumer is invoked; ask the player to dismiss an observed prompt.",
   );
 }

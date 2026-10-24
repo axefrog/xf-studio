@@ -537,7 +537,7 @@ export const BEHAVE_COMMANDS: CommandDef[] = [
     name: "behave.glide.path",
     title: "Glide V along a walkable path",
     description:
-      "Unavailable in 0.8.15: refuses road_safety_unknown before acquiring a movement hold. Human navmesh cannot certify road/pavement/crosswalk containment for the per-tick teleport path. No implicit road-risk override; world.probe reports INCONCLUSIVE lane safety.",
+      "Glides V along a human-navmesh path with a per-tick teleport and a movement hold, released on stop, failure, timeout or human takeover. Traffic risk is unknown while lane containment is uncommissioned: the answer and catch-up carry a warning; inspect the path for traffic. Navmesh is not road-safety proof.",
     permission: "write-player",
     input: obj({
       to: point3("The world point to glide to [x, y, z]."),
@@ -545,7 +545,7 @@ export const BEHAVE_COMMANDS: CommandDef[] = [
       speed_m_s: num("Speed, 0.2 to 6 m/s. Default 1.4 (a walk).", 0.2, 6),
       ...behaviourLimits,
     }),
-    undo: "Nothing acquired on refusal.",
+    undo: "behave_stop ends it and releases its movement hold; the stop event carries the return teleport.",
     bridge: { method: "behave.glide.path", timeoutMs: () => 5000 },
   },
   {
@@ -603,7 +603,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.teleport",
     title: "Teleport V",
     description:
-      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). Road/pavement/crosswalk containment is INCONCLUSIVE: displacement refuses road_safety_unknown unless allow_road:true explicitly accepts that risk. A turn in place remains allowed. Probe returns no fabricated pavement suggestion. Navmesh glides also refuse displacement until lane containment is commissioned. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. ${playerBusyNote}`,
+      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). Refuses only a positive Road classification unless allow_road:true; positive CrossWalk is allowed with a traffic caution. Unknown containment proceeds with traffic_risk unknown and a plain warning in the answer and catch-up; the override is not needed for unknown. The current reader returns unknown everywhere, with no fabricated pavement suggestion. A turn in place remains exact. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. ${playerBusyNote}`,
     permission: "write-player",
     input: obj({
       position: point3("The world point [x, y, z]."),
@@ -612,7 +612,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
       turn: num("Turn by this many degrees (left positive).", -360, 360),
       ground: oneOf("snap (default: walkable ground within 2 m) or exact (no snap; the world must still be loaded there).", ["snap", "exact"]),
       far: bool("Allow more than 50 m (the destination must be loaded)."),
-      allow_road: bool("Explicitly accept road risk, including INCONCLUSIVE lane containment. Default refuses displacement while classification is unavailable."),
+      allow_road: bool("Override a positive Road refusal. Unknown proceeds with a warning and does not need this option; CrossWalk is allowed with a caution."),
     }),
     undo: "The result's undo teleports V back to where she stood, facing the same way; loading the save undoes it too.",
     bridge: { method: "player.teleport" },

@@ -1,5 +1,6 @@
 #include "core/Recording.hpp"
 #include "core/Bridge.hpp"
+#include "core/Lifecycle.hpp"
 #include <cstdio>
 #include <fstream>
 #include <future>
@@ -14,6 +15,40 @@ template<class F> void Refuses(F fn, const char* code)
 int RecordingUnitTests()
 {
     using namespace xfb::recording;
+    {
+        // R8 §3–4: presence/readiness are observations, not an attach heuristic or invocation ABI.
+        lifecycle::Snapshot s; s.observed = s.complete = true; s.atMs = 1000; s.generation = 7;
+        auto state = [&](uint64_t now = 1000) { return lifecycle::Describe(s, now); };
+        Check(state()["prompt_state"] == "unknown", "lifecycle: missing engagement scope is unknown");
+        s.engagementKnown = true;
+        Check(state()["prompt_state"] == "none", "lifecycle: complete observed scope with no prompt");
+        s.engagementVisible = true;
+        Check(state()["prompt_state"] == "start_screen" && state()["start_accepting"].is_null(), "lifecycle: visible engagement is presence, not GSM acceptance");
+        Check(lifecycle::Probe(state())["would_call"]["action"] == "Start" && lifecycle::Probe(state())["admissible"] == false, "lifecycle: Start plan remains read-only and inadmissible");
+        s.engagementVisible = false; s.initialCount = 1;
+        Check(state()["prompt_state"] == "loading", "lifecycle: initial controller alone is not an offered prompt");
+        s.loadingReady = true;
+        Check(state()["prompt_state"] == "loading", "lifecycle: both native readiness gates required");
+        s.animationReady = s.subscribed = s.panelResolved = s.panelVisible = true;
+        Check(state()["prompt_state"] == "initial_continue" && state()["waiting_for_input"] == true, "lifecycle: current initial controller offers visible panel with subscription");
+        Check(lifecycle::Probe(state())["would_call"]["action"] == "UI_Skip" && lifecycle::Probe(state())["called"] == false, "lifecycle: UI_Skip consumer is planned, never called");
+        s.panelVisible = false;
+        Check(state()["prompt_state"] == "unknown", "lifecycle: hidden initial skip panel cannot offer continue");
+        s.panelVisible = true; s.subscribed = false;
+        Check(state()["prompt_state"] == "unknown", "lifecycle: no subscription cannot offer continue");
+        s.subscribed = true; s.consumed = true;
+        Check(state()["prompt_state"] == "continuing" && state()["waiting_for_input"] == false, "lifecycle: consumed prompt is not offered again");
+        s.consumed = false; s.automatic = true;
+        Check(state()["prompt_state"] == "continuing", "lifecycle: automatic completion is not UI_Skip attribution");
+        s.automatic = false; s.initialCount = 2;
+        Check(state()["prompt_state"] == "unknown", "lifecycle: duplicate initial controllers are ambiguous");
+        s.initialCount = 1; s.complete = false;
+        Check(state()["prompt_state"] == "unknown", "lifecycle: truncated native tree cannot classify");
+        s.complete = true;
+        Check(state(1501)["prompt_state"] == "unknown" && state(999)["prompt_state"] == "unknown", "lifecycle: stale/future snapshots cannot identify a current prompt");
+        s.observed = false;
+        Check(state()["prompt_state"] == "unknown" && lifecycle::Probe(state())["would_call"].is_null(), "lifecycle: missing observer never invents a route");
+    }
     {
         Service cancelled;
         const auto pending = cancelled.CancellationGeneration();

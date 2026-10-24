@@ -79,6 +79,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     counts[row.channel] = (counts[row.channel] ?? 0) + 1;
     if (!row.valid) { gaps.push("invalid_source"); continue; }
     const v = row.data;
+    if (v?.event === "placement.traffic") alerts.push({ kind: "traffic_risk", seq: row.seq, source_s: row.source_s, ...v });
     if (row.channel === "contacts" && v?.event?.startsWith("contact.") && v.event !== "contact.coverage") {
       contactObserved = true;
       vehicleHitObserved ||= v.vehicle_hit_observed === true;
@@ -118,6 +119,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   for (const event of events) if (["contact", "collision"].includes(event.kind) || ["contact", "collision"].includes(event.data?.what)) {
     contactObserved = true; alerts.push({ kind: event.data?.what ?? event.kind, event });
   }
+  for (const event of events) if (event.kind === "traffic_risk") alerts.push({ kind: "traffic_risk", event });
   cursor.contact_observed = saved?.contact_observed === true || contactObserved;
   cursor.vehicle_hit_observed = saved?.vehicle_hit_observed === true || vehicleHitObserved;
   const coveredPaths = status.channels?.includes("contacts") ? ["PlayerPuppet.OnCarHitPlayer.entry", "AbstractLandEvents.OnEnter", "WallCollisionHelpers.GetWallCollision"] : [];

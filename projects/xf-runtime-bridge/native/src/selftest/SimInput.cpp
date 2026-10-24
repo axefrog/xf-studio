@@ -1,5 +1,7 @@
 #include "selftest/SimInput.hpp"
 #include "core/Win32.hpp"
+#include "core/Lifecycle.hpp"
+#include "core/Params.hpp"
 namespace xfb::selftest
 {
 namespace { double Now() { return static_cast<double>(win32::MonotonicMs()) / 1000.0; } }
@@ -8,6 +10,16 @@ SimInput::SimInput(Dispatcher& d, SimNpc& npc, EventLog& events, bool hooks, std
     : m_service(events), m_dispatcher(d), m_npc(npc), m_context(std::move(context)), m_world(std::move(world)), m_live(std::move(live)), m_connection(std::move(connection)), m_hooks(hooks)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    d.Register({"game.lifecycle.probe", Access::Read, RunOn::BridgeThread, "Read-only lifecycle plan with unavailable simulated UI observer.", [this, &events](const MethodContext& c) {
+        if (!m_hooks) throw MethodError("test_hooks_off", "Lifecycle probe requires test hooks.");
+        params::RequireOnly(c.params, {"generation"});
+        if (const auto generation = params::CheckInteger(c.params, "generation", 0, 9007199254740991LL); generation && *generation != 0)
+            throw MethodError("precondition_failed", "Simulated observer generation is zero; no native UI is present.");
+        auto out = lifecycle::Probe(lifecycle::Describe({}, 0));
+        out["simulated"] = true;
+        events.Push("lifecycle.probe", "info", "simulation", "Read-only lifecycle plan; native UI unavailable", out);
+        return out;
+    }});
     recording::RegisterMethods(d, m_recording, hooks, m_world, m_connection, [] { return "simulated"; }, [this] {
         if (!m_live() || m_dispatcher.IsKilled()) throw MethodError("game_loading", "Simulation gate closed.");
     });

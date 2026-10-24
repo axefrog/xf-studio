@@ -15,6 +15,8 @@ This page answers requirement S1 of the [runtime requirements](../research/story
 
 **Bridge 0.8.15 contact receipts [source/offline]:** autonomous recording wraps V's script-bodied `OnCarHitPlayer` on entry, before knockdown/cooldown returns, and reads bounded controller reports in valid landing/wall callbacks. Original behavior is preserved. The default `contacts` channel and `game.catchup` expose time, position, car identity/speed where available, and explicit unknown controller identity/continuous coverage. It is independent of damage attribution and makes no negative no-contact proof. Supporting ground may appear. [R6 implementation/limits](navigation-and-safety.md#bridge-0815-round-1-implementation-offline-24-october-2026), [commissioning rows](../research/runtime/runtime-bridge-test-card.md#safety-and-navigation-0815).
 
+**Bridge 0.8.15 lifecycle observations [source/offline]:** Round 2 adds bounded native ink-callback snapshots plus engagement-menu observation seams in autonomous builds. Changes emit `lifecycle.prompt`; the read-only `game.lifecycle.probe` emits `lifecycle.probe` with candidate Start/UI_Skip metadata and `called:false`. These use the existing session event ring, including while gameplay scripts are detached; normal recorder runs still stop on load. Start GSM acceptance and all actual native continue invocation remain uncommissioned (RB-234). See [R8](game-lifecycle-control.md#bridge-0815-round-2-offline-observer-and-read-only-plan).
+
 ## 1. The short answers
 
 | Family | Best hook for a feed | Carries | Rate | Grade | Bridge today |

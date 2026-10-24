@@ -45,7 +45,8 @@ public:
 
     // "attach", "player_attach", "detach", and (0.8.2) "puppet": the loaded session's player puppet joined the world
     // (PlayerPuppet.OnGameAttached). This is lifecycle evidence only, not evidence of a loading-screen prompt.
-    // Describe reports prompt_state unobserved; a future UI consumer tap must commission prompt detection. Any thread.
+    // Describe reports prompt_state unobserved: attach state never detects UI. The autonomous
+    // native lifecycle observer supplies its own separate observation to game.status. Any thread.
     bool OnEvent(const std::string& aEvent, Clock::time_point aNow = Clock::now());
     void OnAttach(Clock::time_point aNow = Clock::now());
     void OnPlayerAttach(Clock::time_point aNow = Clock::now());

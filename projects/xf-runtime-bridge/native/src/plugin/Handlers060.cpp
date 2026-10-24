@@ -6,6 +6,7 @@
 
 #include <RED4ext/RED4ext.hpp>
 #include "plugin/InputDispatch.hpp"
+#include "plugin/Natives.hpp"
 #include <RED4ext/Detail/AddressHashes.hpp>
 
 #include <Windows.h>
@@ -272,11 +273,16 @@ behave::Ops BehaviourOps()
 // behave.<kind>: the input's own keys are the behaviour's parameters; max_s and every_ticks are the runner's.
 json BehaveStart(const std::string& aKind, const MethodContext& aContext)
 {
-    // No movement hold or per-tick placement before lane containment can certify a glide.
-    if (aKind == "glide_path") throw MethodError("road_safety_unknown", "Teleport glides are unavailable until lane containment is commissioned; world.probe reports INCONCLUSIVE traffic safety.");
     auto& dispatcher = TheDispatcher();
     Get().restore.MarkWrite();
-    return Get().behaviours.Start(behave::StartParams(aKind, aContext.params), [&dispatcher](Access aAccess) { dispatcher.RequireWriteClass(aAccess); });
+    auto out = Get().behaviours.Start(behave::StartParams(aKind, aContext.params), [&dispatcher](Access aAccess) { dispatcher.RequireWriteClass(aAccess); });
+    if (aKind == "glide_path") {
+        out["traffic_risk"] = "unknown"; out["warnings"] = json::array({"Traffic risk is unknown: inspect the path for traffic."});
+        const json note{{"event", "placement.traffic"}, {"traffic_risk", "unknown"}, {"subject", "V glide"}, {"stage", "requested"}};
+        Get().events.Push("traffic_risk", "warn", "bridge", "Glide traffic risk is unknown: navmesh does not classify traffic lanes.", note);
+        RecordingIngress("contacts", SerializeJson(note));
+    }
+    return out;
 }
 
 // --- player -------------------------------------------------------------------------------------
@@ -324,8 +330,8 @@ json PlayerTeleport(const MethodContext& aContext)
     const double off = std::hypot(now[0] - target[0], now[1] - target[1], now[2] - target[2]);
     return json{{"before", done.value("before", json())}, {"target", done.at("target")}, {"yaw", done.value("yaw", yawBefore)},
                 {"snapped", done.value("snapped", false)}, {"now", after.at("position")}, {"off_m", std::round(off * 1000.0) / 1000.0},
-                {"held", false}, {"settled", off < 0.3}, {"traffic_check", done.value("traffic_check", json())}, {"allow_road", request.allowRoad},
-                {"warnings", json::array({"Traffic classification is INCONCLUSIVE; no safe-placement or no-contact proof."})},
+                {"held", false}, {"settled", off < 0.3}, {"traffic_risk", "unknown"}, {"traffic_check", done.value("traffic_check", json())}, {"allow_road", request.allowRoad},
+                {"warnings", json::array({"Traffic risk is unknown: lane containment and nearest pavement are uncommissioned. Inspect the destination for traffic."})},
                 {"undo", player::TeleportUndo(from, yawBefore, now)},
                 {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
 }

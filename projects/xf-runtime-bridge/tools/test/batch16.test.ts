@@ -200,7 +200,7 @@ describe("0.8.2 session 9 (offline)", () => {
     const context = {
       cid: "t",
       api: {
-        callBridge: async () => ({ ok: true, result: now < 2000 ? { phase: "loading" } : { phase: "loading", waiting_for_input: true } }),
+        callBridge: async () => ({ ok: true, result: now < 2000 ? { phase: "loading" } : { phase: "loading", waiting_for_input: true, prompt_state: "initial_continue", prompt_observed: true, lifecycle: { fresh: true, complete: true } } }),
         session: () => ({ pid: 0 }),
         keyTarget: () => ({ hwnd: 1n, pid: 1 }),
         keySender: () => async () => {
@@ -236,7 +236,7 @@ describe("0.8.2 session 9 (offline)", () => {
     const api = new CommandApi({ runtimeDir: dir, auditDir: join(dir, "logs"), captureRoot: join(dir, "captures"), transport: async () => ({ call: async (m) => (sent.push(m), answer({})), close: () => undefined }) });
     const out = await api.run("game.continue", {});
     expect(codeOf(out)).toBe("no_safe_route");
-    expect(!out.ok && out.error.message).toContain("never sends one");
+    expect(!out.ok && out.error.message).toContain("uncommissioned");
     expect(sent).toEqual([]);
     api.close();
   });

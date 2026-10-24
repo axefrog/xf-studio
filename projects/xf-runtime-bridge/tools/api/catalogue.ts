@@ -634,7 +634,7 @@ async function runGameLoad(input: Record<string, unknown>, context: CommandConte
   const wait = ((waitS as number | undefined) ?? 75) * 1000;
   if (wait <= 0) return { value: loaded };
   const continued = await waitForLoadEnd(context, { waitMs: wait });
-  return { value: { ...loaded, continued, note: continued.reached === "gameplay" ? "the save loaded and gameplay started" : continued.note } };
+  return { value: { ...loaded, continued, prompt_state: continued.prompt_state, prompt_observed: continued.prompt_observed, lifecycle: continued.lifecycle, note: continued.reached === "gameplay" ? "the save loaded and gameplay started" : continued.note } };
 }
 
 function loadParams(input: Record<string, unknown>): Record<string, unknown> {
@@ -1557,7 +1557,7 @@ export const CATALOGUE: readonly CommandDef[] = addWhen(applyCatalogue080([
     name: "game.load",
     title: "Load a save",
     description:
-      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or reaches its timeout. Puppet attachment cannot identify a press-any-key prompt; prompt_state is unobserved until a UI consumer reader is commissioned. The bridge never sends a key. continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.",
+      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or reaches its timeout. Puppet attachment cannot identify a press-any-key prompt; the autonomous detector reports fresh UI observations with generation/age and readiness signals, or unknown when unavailable. Start-screen presence is distinct from GSM acceptance, which remains unknown. The bridge never sends a key. continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.",
     permission: "write-save",
     input: obj(
       {
@@ -1575,7 +1575,7 @@ export const CATALOGUE: readonly CommandDef[] = addWhen(applyCatalogue080([
     name: "game.continue",
     title: "Press past the press-any-key screen",
     description:
-      "Not available yet: refuses (no_safe_route). The bridge would press past the game's press-any-key screen after a load only through a route inside the game (the loading screen's own controller); the only route it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key; game_load says when the screen waits.",
+      "Refuses no_safe_route. Start and UI_Skip consumers are located, but their event ABI, executing thread and current-owner lifetime remain uncommissioned. The autonomous game.lifecycle.probe records a read-only plan against the observed prompt generation; it never invokes a consumer or readiness callback. No game.quit is implemented; shutdown/save-flush ordering remains unresolved.",
     permission: "write-save",
     input: obj({}),
     undo: "None.",

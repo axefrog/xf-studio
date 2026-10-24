@@ -40,6 +40,7 @@
 #include "plugin/GameHandlers.hpp"
 #include "plugin/LivePoseMemory.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/Lifecycle.hpp"
 #include "plugin/ScriptCall.hpp"
 
 namespace xfb::plugin
@@ -530,10 +531,16 @@ json GameStatus(const MethodContext& aContext)
              {"writes_paused", state.bridge && state.bridge->GetDispatcher().WritesPaused()},
              {"handed_over", state.bridge && state.bridge->GetDispatcher().HandedOver()},
              {"allow_live_pose", state.config.allowLivePose}};
+    auto finish = [&out] {
+        auto observation = LifecycleStatus();
+        out["lifecycle"] = observation;
+        for (auto* key : {"prompt_state", "prompt_observed", "waiting_for_input"}) out[key] = observation[key];
+        return out;
+    };
     if (!state.queue.IsPumping())
     {
         out["phase"] = state.gameState.load() == 3 ? "shutting_down" : "starting";
-        return out;
+        return finish();
     }
     // While the game's scripts can't be called (a save loading, the game starting), the plugin answers by itself
     // (RB-76): game.wait polls this through a load, and session 5's crash was this very call made just after the
@@ -543,7 +550,7 @@ json GameStatus(const MethodContext& aContext)
     if (!state.scriptLayer.Ready())
     {
         out.update(writes::StatusWhileLoading(state.scriptLayer.Phase(), state.scriptLayer.Describe()));
-        return out; // no game-thread step at all: the engine may not tick during a load
+        return finish(); // no game-thread step at all: the engine may not tick during a load
     }
     auto answer = RunGameTask(
         state.queue, Timeout(),
@@ -559,7 +566,7 @@ json GameStatus(const MethodContext& aContext)
         },
         "game.status", false);
     out.update(answer);
-    return out;
+    return finish();
 }
 
 json PlayerAppearance(const MethodContext& aContext)
@@ -1209,7 +1216,11 @@ json GameLoadMethod(const MethodContext& aContext)
     };
     ops.guard = WritesGuard();
     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
-    return writes::GameLoad(request, ops);
+    auto out = writes::GameLoad(request, ops);
+    out["lifecycle"] = LifecycleStatus();
+    out["prompt_state"] = out["lifecycle"]["prompt_state"];
+    out["prompt_observed"] = out["lifecycle"]["prompt_observed"];
+    return out;
 }
 
 json PhotoHudHide(const MethodContext& aContext)
@@ -2199,6 +2210,8 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register({"script.describe", Access::Read, RunOn::GameThread,
                           "Calls the redscript layer (XFBridgeQuery.DescribeJson) from native code.",
                           &ScriptDescribe});
+
+    RegisterLifecycle(aDispatcher);
 
     // Phase 2. Reads.
     aDispatcher.Register({"game.status", Access::Read, RunOn::BridgeThread,

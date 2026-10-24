@@ -38,6 +38,12 @@ test("unknown traffic is explicit and the displacement override is strictly bool
   expect(validate(schema, { position: [1, 2, 3], allow_road: true })).toEqual([]);
   expect(validate(schema, { position: [1, 2, 3], allow_road: "true" }).length).toBeGreaterThan(0);
   const navigation = source("XFRuntimeBridgeNavigation.reds");
+  const expression = navigation.match(/func Refuses\([^)]*\) -> Bool \{\s*return ([^;]+);/)![1]!;
+  const refuses = new Function("road", "crosswalk", "allowRoad", `return ${expression}`) as (road: boolean, crosswalk: boolean, allow: boolean) => boolean;
+  expect(refuses(false, false, false)).toBe(false); // Unknown has no positive Road membership.
+  expect(refuses(true, false, false)).toBe(true);
+  expect(refuses(true, false, true)).toBe(false);
+  expect(refuses(true, true, false)).toBe(false); // Overlapping CrossWalk remains allowed.
   expect(navigation).toContain("INCONCLUSIVE");
   expect(navigation).toContain('\\"nearest_pavement\\":null');
   expect(navigation).toContain("IsPathIntersectingWithTraffic(path, 0.0, intersection)");

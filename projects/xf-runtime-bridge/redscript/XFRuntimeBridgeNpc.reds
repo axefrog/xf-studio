@@ -893,6 +893,7 @@ public abstract class XFNpc {
     entry.attitude = attitude;
     entry.immortal = immortal;
     registry.Add(entry);
+    XFNavigation.Note(found.point, who);
     XFBridgeLog.Info(cid, "npc spawned " + who + " record=" + record + " at " + XFScene.Arr(found.point) + " attitude=" + IntToString(attitude) + " immortal=" + (immortal ? "true" : "false") + " (non-persistent, tag xfs_npc)");
     return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(found.point) + ",\"traffic_check\":" + XFNavigation.Classify(found.point, 10.0) + "}";
   }
@@ -1051,6 +1052,7 @@ public abstract class XFNpc {
         }
       }
     }
+    if Equals(kind, "place") { XFNavigation.Note(new Vector4(x, y, z, 1.0), who); }
     XFBridgeLog.Info(cid, "npc " + who + " command " + kind + " sent");
     return "{\"ok\":true,\"sent\":true,\"before\":" + before + (Equals(kind, "place") ? ",\"traffic_check\":" + XFNavigation.Classify(new Vector4(x, y, z, 1.0), 10.0) : "") + "}";
   }

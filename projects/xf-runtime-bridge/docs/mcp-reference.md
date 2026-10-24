@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 148 tools, 87 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 149 tools, 87 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -25,7 +25,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
-- [Other tools](#other-tools) (6)
+- [Other tools](#other-tools) (7)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -34,7 +34,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 52 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 53 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -1031,13 +1031,13 @@ No parameters.
 
 ### `player_teleport`
 
-**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). Road/pavement/crosswalk containment is INCONCLUSIVE: displacement refuses road_safety_unknown unless allow_road:true explicitly accepts that risk. A turn in place remains allowed. Probe returns no fabricated pavement suggestion. Navmesh glides also refuse displacement until lane containment is commissioned. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). Refuses only a positive Road classification unless allow_road:true; positive CrossWalk is allowed with a traffic caution. Unknown containment proceeds with traffic_risk unknown and a plain warning in the answer and catch-up; the override is not needed for unknown. The current reader returns unknown everywhere, with no fabricated pavement suggestion. A turn in place remains exact. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `player.teleport`, the bridge method `player.teleport`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo teleports V back to where she stood, facing the same way; loading the save undoes it too.
-- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable), `road_safety_unknown`
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1050,7 +1050,7 @@ No parameters.
 | `turn` | number | -360 to 360 | Turn by this many degrees (left positive). |
 | `ground` | string | `snap`, `exact` | snap (default: walkable ground within 2 m) or exact (no snap; the world must still be loaded there). |
 | `far` | boolean | `true`, `false` | Allow more than 50 m (the destination must be loaded). |
-| `allow_road` | boolean | `true`, `false` | Explicitly accept road risk, including INCONCLUSIVE lane containment. Default refuses displacement while classification is unavailable. |
+| `allow_road` | boolean | `true`, `false` | Override a positive Road refusal. Unknown proceeds with a warning and does not need this option; CrossWalk is allowed with a caution. |
 | `when` | object | the fields below | Conditions compared on each executing game frame |
 | `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
 | `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
@@ -1203,13 +1203,13 @@ Routines that run inside the game at frame rate: a turntable, a smooth look, a g
 
 ### `behave_glide_path`
 
-**Glide V along a walkable path.** Unavailable in 0.8.15: refuses road_safety_unknown before acquiring a movement hold. Human navmesh cannot certify road/pavement/crosswalk containment for the per-tick teleport path. No implicit road-risk override; world.probe reports INCONCLUSIVE lane safety.
+**Glide V along a walkable path.** Glides V along a human-navmesh path with a per-tick teleport and a movement hold, released on stop, failure, timeout or human takeover. Traffic risk is unknown while lane containment is uncommissioned: the answer and catch-up carry a warning; inspect the path for traffic. Navmesh is not road-safety proof.
 
 - **Command:** `behave.glide.path`, the bridge method `behave.glide.path`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
-- **Undo:** Nothing acquired on refusal.
-- **Refusals:** [`behaviour_limit`](#refusal-behaviour-limit), [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`user_took_over`](#refusal-user-took-over), [`no_path`](#refusal-no-path), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`bridge_effects_active`](#refusal-bridge-effects-active), `road_safety_unknown`
+- **Undo:** behave_stop ends it and releases its movement hold; the stop event carries the return teleport.
+- **Refusals:** [`behaviour_limit`](#refusal-behaviour-limit), [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`user_took_over`](#refusal-user-took-over), [`no_path`](#refusal-no-path), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`bridge_effects_active`](#refusal-bridge-effects-active)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1278,7 +1278,7 @@ The DM toolkit: bring props, vehicles and lights in, change doors and vehicles, 
 
 ### `world_spawn`
 
-**Bring in a prop or a vehicle.** Brings a prop or a vehicle into the world near V: a prop from an entity template (the depot path of a .ent file) or a record, a vehicle from its record (such as Vehicle.v_standard2_archer_hella_player), placed offset metres from V along her facing (default two metres ahead) or at a world point within 60 m, snapped to the ground below unless ground is false, facing yaw, or V with face_v. It is never saved: world_despawn, the kill switch, a pause, a handover or loading a save removes it, and game_save refuses while one exists. At most 24 spawned things (props, vehicles and lights together). Answers its handle (use spawn:&lt;n> as a target in other commands) and its entity id at once; the thing appears a moment later. Traffic classification at the final placement is INCONCLUSIVE; nearest pavement is unavailable and this is not safe placement proof. Needs Codeware and the -writes package's toolkit scripts. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+**Bring in a prop or a vehicle.** Brings a prop or a vehicle into the world near V: a prop from an entity template (the depot path of a .ent file) or a record, a vehicle from its record (such as Vehicle.v_standard2_archer_hella_player), placed offset metres from V along her facing (default two metres ahead) or at a world point within 60 m, snapped to the ground below unless ground is false, facing yaw, or V with face_v. It is never saved: world_despawn, the kill switch, a pause, a handover or loading a save removes it, and game_save refuses while one exists. At most 24 spawned things (props, vehicles and lights together). Answers its handle (use spawn:&lt;n> as a target in other commands) and its entity id at once; the thing appears a moment later. Unknown traffic classification proceeds with traffic_risk unknown and a warning; nearest pavement is unavailable and this is not safe placement proof. Needs Codeware and the -writes package's toolkit scripts. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `world.spawn`, the bridge method `world.spawn`
 - **Permission:** Direct the scene (`write-dm`)
@@ -2359,7 +2359,7 @@ No parameters.
 
 ### `npc_place`
 
-**Place an actor.** Puts one of the bridge's actors at a world point within 30 m of V, facing yaw degrees if given, at once (for staging a shot, not for drama). Traffic classification at the final snapped point is INCONCLUSIVE; nearest pavement is unavailable. The answer's undo puts it back where it stood.
+**Place an actor.** Puts one of the bridge's actors at a world point within 30 m of V, facing yaw degrees if given, at once (for staging a shot, not for drama). Unknown traffic classification proceeds with traffic_risk unknown and a warning; nearest pavement is unavailable. The answer's undo puts it back where it stood.
 
 - **Command:** `npc.place`, the bridge method `npc.place`
 - **Permission:** Direct NPCs (`write-npc`)
@@ -2772,7 +2772,7 @@ List, make and load saves. Only `game_save` ever saves the game, and never over 
 
 ### `game_load`
 
-**Load a save.** Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or reaches its timeout. Puppet attachment cannot identify a press-any-key prompt; prompt_state is unobserved until a UI consumer reader is commissioned. The bridge never sends a key. continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.
+**Load a save.** Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or reaches its timeout. Puppet attachment cannot identify a press-any-key prompt; the autonomous detector reports fresh UI observations with generation/age and readiness signals, or unknown when unavailable. Start-screen presence is distinct from GSM acceptance, which remains unknown. The bridge never sends a key. continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.
 
 - **Command:** `game.load`, run by the tools (it may call the bridge several times)
 - **Permission:** Save and load the game (`write-save`)
@@ -2925,7 +2925,7 @@ Tools not yet sorted into an area above.
 
 ### `game_continue`
 
-**Press past the press-any-key screen.** Not available yet: refuses (no_safe_route). The bridge would press past the game's press-any-key screen after a load only through a route inside the game (the loading screen's own controller); the only route it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key; game_load says when the screen waits. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+**Press past the press-any-key screen.** Refuses no_safe_route. Start and UI_Skip consumers are located, but their event ABI, executing thread and current-owner lifetime remain uncommissioned. The autonomous game.lifecycle.probe records a read-only plan against the observed prompt generation; it never invokes a consumer or readiness callback. No game.quit is implemented; shutdown/save-flush ordering remains unresolved. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `game.continue`, run by the tools (it may call the bridge several times)
 - **Permission:** Save and load the game (`write-save`)
@@ -2941,6 +2941,20 @@ Tools not yet sorted into an area above.
 | `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
 | `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
 | `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
+
+### `game_lifecycle_probe`
+
+**Inspect lifecycle continue plan.** Autonomous -writes test build and allow_test_hooks only. Read-only plan against the fresh native UI snapshot; optionally compare its generation. Records the observed prompt and hypothetical Start/UI_Skip consumer in session.events. Never invokes a consumer, readiness callback or gameplay script. It is not an execution-frame guarantee: Start acceptance, action event ABI and targeted invocation remain uncommissioned. No game.quit is implemented; shutdown/save-flush ordering remains unresolved.
+
+- **Command:** `game.lifecycle.probe`, the bridge method `game.lifecycle.probe`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`precondition_failed`](#refusal-precondition-failed)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `generation` | integer | 0 to 9007199254740991 | Optional expected detector generation |
 
 ### `game_catchup`
 
@@ -3101,4 +3115,4 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 
 Codes the tools above name that have no shared wording yet; the answer's own message (from the tools) or its `detail` (from the game) explains each in context:
 
-`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `road_safety_unknown`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.
+`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.

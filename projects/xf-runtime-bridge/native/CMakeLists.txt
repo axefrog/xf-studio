@@ -188,6 +188,7 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/HandlersRecording.cpp
   src/plugin/HandlersInputChoices.cpp
   src/plugin/InputDispatch.cpp
+  src/plugin/Lifecycle.cpp
   src/plugin/HandlersSenses.cpp
   src/plugin/LivePoseMemory.cpp
   src/plugin/Overlay.cpp

@@ -401,7 +401,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
          json{{"what", "spawned"}, {"handle", handle}, {"kind", request.kind}, {"entity", item.entity}});
     json out = ItemJson(item);
     out["grounded"] = done.value("grounded", false);
-    if (done.contains("traffic_check")) out["traffic_check"] = done["traffic_check"];
+    if (done.contains("traffic_check")) { out["traffic_check"] = done["traffic_check"]; out["traffic_risk"] = "unknown"; out["warnings"] = json::array({"Traffic risk is unknown: inspect the destination for traffic."}); }
     out["spawned"] = total;
     out["limit"] = kMaxSpawned;
     out["undo"] = SpawnUndo(handle);

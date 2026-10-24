@@ -252,12 +252,14 @@ public abstract class XFPlayer {
       target = found.point;
     }
     // Check the final snapped point, in the execution frame, before any save lock or movement.
-    if Vector4.Distance(before, target) > 0.001 && !allowRoad { return XFNavigation.Refuse(target); }
+    // No positive memberships are available yet. Unknown proceeds under the coordinator's policy.
+    if XFNavigation.Refuses(false, false, allowRoad) { return XFJson.Fail("on_road", "Road placement requires allow_road:true; CrossWalk remains allowed with a caution."); }
     let traffic = XFNavigation.Classify(target, 10.0);
     let angles: EulerAngles;
     angles.Yaw = hasYaw ? yaw : beforeYaw;
     XFBridgeActions.EnsureSaveLock(cid);
     GameInstance.GetTeleportationFacility(game).Teleport(player, target, angles);
+    XFNavigation.Note(target, "V");
     XFBridgeLog.Info(cid, "player teleported from " + XFScene.Arr(before) + " to " + XFScene.Arr(target) + "; undo: teleport back");
     return "{\"ok\":true,\"before\":{\"position\":" + XFScene.Arr(before) + ",\"yaw\":" + XFJson.Num(beforeYaw) + "},\"target\":" + XFScene.Arr(target) + ",\"yaw\":" + XFJson.Num(angles.Yaw) + ",\"snapped\":" + XFJson.Flag(ground == 0) + ",\"traffic_check\":" + traffic + "}";
   }
@@ -275,8 +277,7 @@ public abstract class XFPlayer {
     if StrLen(refusal) > 0 {
       return refusal;
     }
-    // A navmesh glide has no proven lane containment either. No implicit override for per-tick placement.
-    if Vector4.Distance(player.GetWorldPosition(), new Vector4(x, y, z, 1.0)) > 0.001 { return XFNavigation.Refuse(new Vector4(x, y, z, 1.0)); }
+    // Unknown lane membership is permitted. The behaviour emits one traffic-risk note on start.
     let angles: EulerAngles;
     angles.Yaw = yaw;
     GameInstance.GetTeleportationFacility(GetGameInstance()).Teleport(player, new Vector4(x, y, z, 1.0), angles);

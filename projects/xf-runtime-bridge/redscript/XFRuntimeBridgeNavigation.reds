@@ -6,7 +6,7 @@ module XFRuntimeBridge
 public abstract class XFNavigation {
   public static func Classify(point: Vector4, radius: Float) -> String {
     return "{\"status\":\"INCONCLUSIVE\",\"classification\":\"unknown\",\"point\":" + XFScene.Arr(point)
-      + ",\"road\":null,\"pavement\":null,\"crosswalk\":null,\"lane_flags\":null,\"road_safety\":\"unknown\""
+      + ",\"road\":null,\"pavement\":null,\"crosswalk\":null,\"lane_flags\":null,\"road_safety\":\"unknown\",\"traffic_risk\":\"unknown\""
       + ",\"nearest_pavement\":null,\"radius_m\":" + XFJson.Num(radius)
       + ",\"reason\":\"live_lane_containment_uncommissioned\",\"nearest_pavement_status\":\"INCONCLUSIVE\"}";
   }
@@ -26,7 +26,21 @@ public abstract class XFNavigation {
       + ",\"filter\":\"Road; excludes TrafficDisabled and GPSOnly\",\"containment\":\"INCONCLUSIVE\"}";
   }
 
-  public static func Refuse(point: Vector4) -> String {
-    return XFJson.Fail("road_safety_unknown", "Placement refused: road/pavement/crosswalk containment and nearest pavement are INCONCLUSIVE. allow_road: true explicitly accepts this unknown traffic risk. " + XFNavigation.Classify(point, 10.0));
+  // Policy is independent of availability: unknown proceeds; only positive Road refuses.
+  // A positive CrossWalk membership permits the placement, including overlapping Road.
+  public static func Refuses(road: Bool, crosswalk: Bool, allowRoad: Bool) -> Bool {
+    return road && !crosswalk && !allowRoad;
+  }
+  public static func Warning(opt crosswalk: Bool) -> String {
+    if crosswalk { return "CrossWalk placement is allowed; crossing traffic can still reach this point."; }
+    return "Traffic risk is unknown: lane containment and nearest pavement are uncommissioned. Inspect the destination for traffic.";
+  }
+  public static func Note(point: Vector4, subject: String) -> Void {
+    XFBridge_Note("warn", subject + " placed at " + XFScene.Arr(point) + ": " + XFNavigation.Warning());
+    // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+    if XFBridge_RecordEnabled("contacts") {
+      XFBridge_Record("contacts", "{\"event\":\"placement.traffic\",\"subject\":" + XFJson.Str(subject) + ",\"position\":" + XFScene.Arr(point) + ",\"traffic_risk\":\"unknown\",\"warning\":" + XFJson.Str(XFNavigation.Warning()) + "}");
+    }
+    // END XFB_AUTONOMOUS_TEST_HOOKS
   }
 }

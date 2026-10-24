@@ -223,7 +223,7 @@ const DEFINITIONS: CommandDef[] = [
   {
     name: "npc.place",
     title: "Place an actor",
-    description: "Puts one of the bridge's actors at a world point within 30 m of V, facing yaw degrees if given, at once (for staging a shot, not for drama). Traffic classification at the final snapped point is INCONCLUSIVE; nearest pavement is unavailable. The answer's undo puts it back where it stood.",
+    description: "Puts one of the bridge's actors at a world point within 30 m of V, facing yaw degrees if given, at once (for staging a shot, not for drama). Unknown traffic classification proceeds with traffic_risk unknown and a warning; nearest pavement is unavailable. The answer's undo puts it back where it stood.",
     permission: "write-npc",
     input: obj({ who: who("The actor."), at: point3("The world point [x, y, z]."), yaw: num("Its facing in degrees (the game's yaw).", -360, 360) }, ["who", "at"]),
     undo: "The result's undo places the actor back where it stood.",

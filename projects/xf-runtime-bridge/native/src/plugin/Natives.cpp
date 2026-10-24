@@ -7,12 +7,13 @@
 // Game.XFBridge_* (CET RTTIHelper::ResolveFunction searches global functions by short name).
 //
 // All of them run on the thread that calls them (the game's script thread). None of them
-// touches game objects; they only read and write bridge bookkeeping. Each one reads its
+// touches gameplay objects; LifecycleMenu observes a scoped ink handle, the others use bridge bookkeeping. Each reads its
 // parameters first (the script stack must always be consumed) and then runs its body inside
 // a catch-all: an exception must never unwind into the game's script VM.
 
 #include <RED4ext/RED4ext.hpp>
 #include "plugin/HandlersInputChoices.hpp"
+#include "plugin/Lifecycle.hpp"
 
 #include <Windows.h>
 
@@ -392,6 +393,7 @@ void ScriptLayerEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool*
     }
     Guarded("XFBridge_ScriptLayer", [&] {
         const bool known = Get().scriptLayer.OnEvent(ToStd(event));
+        if (known && ToStd(event) == "detach") InvalidateLifecycle();
         if (known && ToStd(event) == "detach") StopRecording("world_detach");
         if (!known)
         {
@@ -863,6 +865,11 @@ void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aO
 }
 
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
+void LifecycleMenu(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, void*, int64_t)
+{
+    RED4ext::Handle<RED4ext::ink::Widget> menu; RED4ext::GetParameter(frame, &menu); frame->code++;
+    Guarded("XFBridge_LifecycleMenu", [&] { ObserveEngagementMenu(menu); });
+}
 void RecordEnabled(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool* out, int64_t)
 {
     RED4ext::CString channel; RED4ext::GetParameter(frame, &channel); frame->code++;
@@ -986,6 +993,7 @@ void PostRegisterTypes()
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
         RegisterGlobal(rtti, "XFBridge_TestUiTake", &TestUiTake, "String", {"draw"});
         RegisterGlobal(rtti, "XFBridge_TestUiReport", &TestUiReport, "String", {"receipt"});
+        RegisterGlobalTyped(rtti, "XFBridge_LifecycleMenu", &LifecycleMenu, nullptr, {{"handle:inkWidget", "menu"}});
         RegisterGlobal(rtti, "XFBridge_RecordEnabled", &RecordEnabled, "Bool", {"channel"});
         RegisterGlobal(rtti, "XFBridge_Record", &RecordIngress, "Bool", {"channel", "payload"});
 #endif
@@ -994,7 +1002,7 @@ void PostRegisterTypes()
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
         #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-        log::Info("rtti.register_types", "phase=post_register natives=31");
+        log::Info("rtti.register_types", "phase=post_register natives=32");
 #else
         log::Info("rtti.register_types", "phase=post_register natives=27");
 #endif
