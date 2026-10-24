@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -84,6 +85,9 @@ private:
     // handover's steps (IsControlRouteMethod), so a stop or a handover is read at once while the main pipe still serves a
     // long request (a five-second look). session.json names it (control_pipe).
     PipeServer m_control;
+    // Fixed endpoints preserve the exclusive writer and its connection generation.
+    // Each endpoint owns exactly one bounded connection worker.
+    std::vector<std::unique_ptr<PipeServer>> m_readers;
 
     std::thread m_watcher;
     std::function<void()> m_stopObserver;

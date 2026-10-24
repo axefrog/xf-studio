@@ -5367,6 +5367,96 @@ int SupervisorUnitTests();
 
 int RunUnitTests()
 {
+    {
+        using namespace xfb;
+        Config config; config.allowWrites = true; config.maxRequestsPerSecond = 20;
+        Session session; session.token = "multiclient";
+        GameThreadQueue queue(2); queue.SetPumping(true);
+        Dispatcher dispatcher(config, session, queue);
+        int writes = 0;
+        dispatcher.Register({"test.events", Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
+        dispatcher.Register({"fixture.write", Access::Write, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
+        dispatcher.Register({"fixture.notify", Access::Notify, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
+        dispatcher.Register({"test.record.start", Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
+        for (const auto method : {"game.saves", "game.options.read"})
+            dispatcher.Register({method, Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
+        dispatcher.Register({"bridge.kill", Access::Control, RunOn::BridgeThread, "", [](const MethodContext&) { return json::object(); }});
+        auto request = [&](const char* method, bool reader) {
+            return json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", method}}.dump(), 1, false, reader).line);
+        };
+        for (const auto method : {"fixture.write", "fixture.notify", "test.record.start", "game.saves", "game.options.read"})
+            Check("multiclient: native reader refuses mutation/lease", request(method, true)["error"]["code"] == "read_only_connection");
+        const auto stims = json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", "test.events"}, {"params", {{"stims", true}}}}.dump(), 1, false, true).line);
+        Check("multiclient: read-class stim mutation refused", stims["error"]["code"] == "read_only_connection");
+        Check("multiclient: reader refusals never call handlers", writes == 0);
+        bool limited = false;
+        for (int i = 0; i < 50; ++i) if (request("ping", true).contains("error")) { limited = true; break; }
+        Check("multiclient: reader aggregate pacing reaches limit", limited);
+        Check("multiclient: writer retains reserved rate tokens", request("fixture.write", false)["ok"] == true);
+        for (int i = 0; i < 50; ++i) request("ping", false);
+        Check("multiclient: emergency survives exhausted aggregate bucket", request("bridge.kill", true)["ok"] == true);
+        Check("multiclient: connection config bounds", ParseConfig("[bridge]\nmax_read_only_connections=8").maxReadOnlyConnections == 8 &&
+            ParseConfig("[bridge]\nmax_read_only_connections=9").maxReadOnlyConnections == 3 &&
+            ParseConfig("[bridge]\nmax_read_only_connections=0").maxReadOnlyConnections == 0);
+
+        std::vector<int> order;
+        auto enqueue = [&](int value, bool reader) { return std::thread([&, value, reader] {
+            json result; std::string error;
+            queue.Run([&, value] { order.push_back(value); return json(); }, 2s, result, error, "priority", 1s, {}, reader);
+        }); };
+        const auto awaitPending = [&](size_t count) {
+            const auto deadline = std::chrono::steady_clock::now() + 1s;
+            while (queue.Pending() < count && std::chrono::steady_clock::now() < deadline) std::this_thread::sleep_for(1ms);
+        };
+        auto reader = enqueue(1, true); awaitPending(1);
+        json refusedResult; std::string refusedError;
+        Check("multiclient: readers cannot consume final queue slot", queue.Run([] { return json(); }, 1ms,
+              refusedResult, refusedError, "capacity", 1ms, {}, true) == QueueResult::QueueFull);
+        auto writer = enqueue(2, false); awaitPending(2);
+        Check("multiclient: game frame task budget unchanged", queue.Drain(1) == 1 && order == std::vector<int>{2});
+        queue.Drain(1); reader.join(); writer.join();
+        Check("multiclient: queued reader follows writer", order == std::vector<int>({2, 1}));
+    }
+
+    {
+        using namespace xfb;
+        Config config; config.bridgeEnabled = true;
+        Session session; std::string error;
+        const auto dir = std::filesystem::current_path() / ("xfb-multiclient-unit-" + std::to_string(GetCurrentProcessId()));
+        const bool owned = std::filesystem::create_directory(dir);
+        Check("multiclient: isolated native transport fixture", owned && CreateSession(session, error, dir));
+        if (owned) {
+            GameThreadQueue queue; queue.SetPumping(true);
+            Bridge bridge(config, session, queue);
+            const bool started = bridge.Start(error);
+            Check("multiclient: bounded reader pool starts", started, error);
+            if (started) {
+                auto open = [](const std::wstring& name) { return CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, nullptr); };
+                const auto writer = open(session.pipeName);
+                const auto readerName = session.pipeName + L"-read-0";
+                const auto reader = open(readerName);
+                const auto deadline = std::chrono::steady_clock::now() + 1s;
+                while (!bridge.HasClient() && std::chrono::steady_clock::now() < deadline) std::this_thread::sleep_for(1ms);
+                const auto generation = bridge.ConnectionsAccepted();
+                Check("multiclient: writer plus reader admitted independently", writer != INVALID_HANDLE_VALUE && reader != INVALID_HANDLE_VALUE && bridge.HasClient());
+                if (reader != INVALID_HANDLE_VALUE) CloseHandle(reader);
+                auto replacement = open(readerName);
+                const auto readerDeadline = std::chrono::steady_clock::now() + 1s;
+                while (replacement == INVALID_HANDLE_VALUE && std::chrono::steady_clock::now() < readerDeadline) {
+                    std::this_thread::sleep_for(1ms); replacement = open(readerName);
+                }
+                Check("multiclient: reader disconnect releases only its slot", replacement != INVALID_HANDLE_VALUE && bridge.HasClient() && bridge.ConnectionsAccepted() == generation && !bridge.TakeIdleDisconnect());
+                if (replacement != INVALID_HANDLE_VALUE) CloseHandle(replacement);
+                if (writer != INVALID_HANDLE_VALUE) CloseHandle(writer);
+                const auto closedDeadline = std::chrono::steady_clock::now() + 1s;
+                while (bridge.HasClient() && std::chrono::steady_clock::now() < closedDeadline) std::this_thread::sleep_for(1ms);
+                Check("multiclient: writer disconnect releases owner", !bridge.HasClient());
+            }
+            bridge.Stop("unit");
+            std::filesystem::remove(dir / "session.json");
+            std::filesystem::remove(dir);
+        }
+    }
     SanitizeTests();
     NestingTests();
     SerializeTests();

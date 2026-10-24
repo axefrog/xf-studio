@@ -1,6 +1,7 @@
 #include "core/GameThreadQueue.hpp"
 
 #include "core/Log.hpp"
+#include <algorithm>
 
 namespace xfb
 {
@@ -11,7 +12,7 @@ GameThreadQueue::GameThreadQueue(size_t aCapacity)
 
 QueueResult GameThreadQueue::Run(Task aTask, std::chrono::milliseconds aTimeout, nlohmann::json& aResult,
                                  std::string& aError, const std::string& aLabel,
-                                 std::chrono::milliseconds aRunningGrace, Task aOnClosed)
+                                 std::chrono::milliseconds aRunningGrace, Task aOnClosed, bool aReadOnly)
 {
     const auto defer = [&]() -> QueueResult {
         // Under m_mutex: the closure is settled here, before or after any Close().
@@ -35,6 +36,7 @@ QueueResult GameThreadQueue::Run(Task aTask, std::chrono::milliseconds aTimeout,
     auto item = std::make_shared<Item>();
     item->task = std::move(aTask);
     item->label = aLabel;
+    item->readOnly = aReadOnly;
     {
         std::scoped_lock _(m_mutex);
         // Checked again under the lock: Close() sets m_closed before it takes the lock, so a
@@ -43,7 +45,7 @@ QueueResult GameThreadQueue::Run(Task aTask, std::chrono::milliseconds aTimeout,
         {
             return aOnClosed ? defer() : QueueResult::NotPumping;
         }
-        if (m_items.size() >= m_capacity)
+        if (m_items.size() >= m_capacity || (aReadOnly && m_items.size() + 1 >= m_capacity))
         {
             return QueueResult::QueueFull;
         }
@@ -97,6 +99,12 @@ QueueResult GameThreadQueue::Run(Task aTask, std::chrono::milliseconds aTimeout,
     return QueueResult::Done;
 }
 
+size_t GameThreadQueue::Pending() const
+{
+    std::scoped_lock _(m_mutex);
+    return m_items.size();
+}
+
 size_t GameThreadQueue::Drain(size_t aMaxTasks)
 {
     m_ticks.fetch_add(1);
@@ -112,8 +120,12 @@ size_t GameThreadQueue::Drain(size_t aMaxTasks)
             {
                 break;
             }
-            item = m_items.front();
-            m_items.pop_front();
+            // Preserve FIFO within each role, with writer/control steps first. Drain's
+            // task budget and the queue's total capacity remain unchanged.
+            auto next = std::find_if(m_items.begin(), m_items.end(), [](const auto& queued) { return !queued->readOnly; });
+            if (next == m_items.end()) next = m_items.begin();
+            item = *next;
+            m_items.erase(next);
             int expected = Queued;
             if (!item->state.compare_exchange_strong(expected, Running))
             {

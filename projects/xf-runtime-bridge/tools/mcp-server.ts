@@ -35,6 +35,7 @@ const allow = flags.allow;
 const hwnd = option("--capture-hwnd");
 const api = new CommandApi({
   runtimeDir: option("--runtime-dir"),
+  readOnly: args.includes("--read-only"),
   captureRoot: option("--capture-root"),
   ...(hwnd ? { captureTarget: { hwnd: BigInt(hwnd) } } : {}),
 });

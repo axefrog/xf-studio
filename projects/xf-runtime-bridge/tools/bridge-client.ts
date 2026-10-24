@@ -40,13 +40,15 @@ function parseArgs(argv: string[]) {
   const positional: string[] = [];
   let runtimeDir: string | undefined;
   let cid: string | undefined;
+  let readOnly = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--runtime-dir") runtimeDir = argv[++i];
+    else if (arg === "--read-only") readOnly = true;
     else if (arg === "--cid") cid = argv[++i];
     else positional.push(arg);
   }
-  return { positional, runtimeDir: runtimeDir ?? defaultRuntimeDir(), cid };
+  return { positional, runtimeDir: runtimeDir ?? defaultRuntimeDir(), cid, readOnly };
 }
 
 function listCommands(asJson: boolean) {
@@ -63,7 +65,7 @@ function listCommands(asJson: boolean) {
   console.log("\nDetails and input schemas: commands --json. Run one: run <command> [json-input].");
 }
 
-async function runCommand(name: string | undefined, inputText: string | undefined, runtimeDir: string, cid: string | undefined) {
+async function runCommand(name: string | undefined, inputText: string | undefined, runtimeDir: string, cid: string | undefined, readOnly: boolean) {
   if (!name) {
     console.error("run needs a command name; list them with: commands");
     process.exit(2);
@@ -75,7 +77,7 @@ async function runCommand(name: string | undefined, inputText: string | undefine
     console.error(`The input isn't valid JSON: ${inputText}`);
     process.exit(2);
   }
-  const api = new CommandApi({ runtimeDir });
+  const api = new CommandApi({ runtimeDir, readOnly });
   const started = performance.now();
   const outcome = await api.run(name, input, { source: "cli", ...(cid ? { cid } : {}) });
   api.close();
@@ -94,10 +96,10 @@ async function runCommand(name: string | undefined, inputText: string | undefine
 }
 
 async function main() {
-  const { positional, runtimeDir, cid } = parseArgs(process.argv.slice(2));
+  const { positional, runtimeDir, cid, readOnly } = parseArgs(process.argv.slice(2));
   const command = positional[0] ?? "ping";
   if (command === "commands") return listCommands(process.argv.includes("--json"));
-  if (command === "run") return runCommand(positional[1], positional[2], runtimeDir, cid);
+  if (command === "run") return runCommand(positional[1], positional[2], runtimeDir, cid, readOnly);
   const session = readSession(runtimeDir);
   if (!session) {
     console.error(`No bridge session at ${runtimeDir}\\session.json.`);
@@ -111,7 +113,7 @@ async function main() {
 
   const client = new BridgeClient(session);
   try {
-    await client.connect();
+    await client.connect({ readOnly });
   } catch (error) {
     console.error(`Could not open ${session.pipe}: ${(error as Error).message}`);
     if (error instanceof PipeConnectError && error.code === "wrong_server") process.exit(3);

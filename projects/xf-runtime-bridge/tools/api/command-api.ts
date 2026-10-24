@@ -41,6 +41,8 @@ export interface BridgeTransport {
 export type TransportFactory = (session: BridgeSession, options?: { busyWaitMs?: number }) => Promise<BridgeTransport>;
 
 export type CommandApiOptions = {
+  /** Observe through a native reader endpoint; never falls back to the writer. */
+  readOnly?: boolean;
   /** Runtime folder holding session.json; the default is the one the plugin uses. Tests pass their own. */
   runtimeDir?: string;
   /** Where captures and the audit log go (ignored by git). */
@@ -107,10 +109,10 @@ export function rateLimitWaits(patienceMs: number): number[] {
 }
 
 const pipeTransport =
-  (timeoutMs: number): TransportFactory =>
+  (timeoutMs: number, readOnly = false): TransportFactory =>
   async (session, options = {}) => {
     const client = new BridgeClient(session, timeoutMs);
-    await client.connect({ busyWaitMs: options.busyWaitMs });
+    await client.connect({ busyWaitMs: options.busyWaitMs, readOnly });
     return { call: (method, params, cid, timeoutMs, claims) => client.call(method, params, cid, claims ?? {}, timeoutMs), close: () => client.close() };
   };
 
@@ -191,13 +193,15 @@ export class CommandApi {
     this.runtimeDir = options.runtimeDir ?? defaultRuntimeDir();
     this.captureRoot = resolve(options.captureRoot ?? DEFAULT_CAPTURE_ROOT);
     this.auditDir = resolve(options.auditDir ?? join(this.captureRoot, "..", "logs"));
-    this.transportFactory = options.transport ?? pipeTransport(options.clientTimeoutMs ?? 8000);
+    this.transportFactory = options.transport ?? pipeTransport(options.clientTimeoutMs ?? 8000, options.readOnly);
     // With a fake main transport and no fake control one (tests), everything goes on the main one.
     this.controlFactory = options.controlTransport ?? (options.transport ? null : controlPipeTransport(options.clientTimeoutMs ?? 8000));
     this.idleCloseMs = options.idleCloseMs ?? 3000;
     this.pacer = new RequestPacer(Math.max(1, options.requestsPerSecond ?? 18));
     this.rateLimitPatienceMs = options.rateLimitPatienceMs ?? 4000;
   }
+
+  get readOnly(): boolean { return this.options.readOnly === true; }
 
   /** The catalogue every frontend derives its tools or commands from. */
   commands(): readonly CommandDef[] {
@@ -247,6 +251,12 @@ export class CommandApi {
    */
   run(name: string, input: unknown = {}, options: RunOptions = {}): Promise<CommandOutcome> {
     name = findCommand(name)?.name ?? name;
+    const command = findCommand(name);
+    if (this.options.readOnly && !EMERGENCY_COMMANDS.has(name) &&
+        (command?.permission !== "read" || name === "test.record.start")) {
+      return Promise.resolve({ ok: false, command: name, cid: options.cid ?? nextCid("read"),
+        error: { code: "read_only_connection", message: "This connection observes only; use a writer for this command." } });
+    }
     // Process-only state: disarm must overtake a queued capture or a long game wait.
     if (name === "capture.disarm" || name === "capture.armed") return this.runNow(name, input ?? {}, options);
     if (name === "test.record.stop") { this.holdRecordingConnection(false); this.eventCaptures.cancel("recorder_stopped"); }

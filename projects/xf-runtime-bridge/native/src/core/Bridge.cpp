@@ -1,6 +1,7 @@
 #include "core/Bridge.hpp"
 
 #include <Windows.h>
+#include <algorithm>
 
 #include "core/Log.hpp"
 #include "core/Win32.hpp"
@@ -15,6 +16,8 @@ Bridge::Bridge(const Config& aConfig, const Session& aSession, GameThreadQueue& 
     , m_queue(aQueue)
     , m_dispatcher(aConfig, aSession, aQueue)
 {
+    for (uint32_t i = 0; i < std::min<uint32_t>(8, m_config.maxReadOnlyConnections); ++i)
+        m_readers.push_back(std::make_unique<PipeServer>());
     // Control, not read or write: it changes only the bridge (it can only take access away),
     // never the game, so it stays available when allow_writes = false.
     m_dispatcher.Register({"bridge.kill", Access::Control, RunOn::BridgeThread,
@@ -70,6 +73,23 @@ bool Bridge::Start(std::string& aError)
         log::Warn("bridge.control_pipe_failed", "what=" + controlError);
     }
 
+    json readerPipes = json::array();
+    // Allocate the complete fixed pool before publishing discovery. Fail closed on partial start.
+    for (size_t i = 0; i < m_readers.size(); ++i) {
+        auto& reader = m_readers[i];
+        const auto name = m_session.pipeName + L"-read-" + std::to_wstring(i);
+        if (!reader->Start(name, m_config.idleDisconnectSeconds,
+            [this](const std::string& line, uint32_t pid) {
+                auto reply = m_dispatcher.Handle(line, pid, false, true);
+                return PipeReply{std::move(reply.line), reply.rejected};
+            }, aError)) {
+            for (auto& started : m_readers) started->Stop();
+            m_server.Stop(); m_control.Stop();
+            return false;
+        }
+        readerPipes.push_back(win32::Narrow(name));
+    }
+
     json discovery{{"protocol", kProtocolVersion},
                          {"sid", m_session.sessionId},
                          {"pid", m_session.processId},
@@ -83,12 +103,14 @@ bool Bridge::Start(std::string& aError)
     {
         discovery["control_pipe"] = win32::Narrow(controlName);
     }
+    discovery["read_only_pipes"] = std::move(readerPipes);
     std::string writeError;
     if (!win32::WriteFileAtomic(m_session.SessionFile(),
                                 discovery.dump(2, ' ', false, json::error_handler_t::replace), writeError))
     {
         m_server.Stop();
         m_control.Stop();
+        for (auto& reader : m_readers) reader->Stop();
         aError = "could not write session.json: " + writeError;
         return false;
     }
@@ -143,6 +165,7 @@ void Bridge::StopListener(const std::string& aReason)
         log::Info("bridge.stopping", "reason=" + aReason);
         m_server.Stop();
     }
+    for (auto& reader : m_readers) reader->Stop();
     if (m_control.IsRunning())
     {
         m_control.Stop();
@@ -159,6 +182,7 @@ void Bridge::Kill(const std::string& aReason)
     if (m_stopObserver) m_stopObserver();
     m_server.DropClient();
     m_control.DropClient();
+    for (auto& reader : m_readers) reader->DropClient();
     RemoveSessionFile();
     m_watchWake.notify_all(); // the watcher stops the listener off this thread
 }
@@ -271,6 +295,8 @@ json Bridge::Status() const
                 {"killed", m_dispatcher.IsKilled()},
                 {"kill_reason", m_dispatcher.KillReason()},
                 {"has_client", m_server.HasClient()},
+                {"read_only_limit", m_readers.size()},
+                {"read_only_connected", std::count_if(m_readers.begin(), m_readers.end(), [](const auto& reader) { return reader->HasClient(); })},
                 {"control_pipe", m_control.IsRunning()},
                 {"connections", m_server.ConnectionsAccepted()},
                 {"requests", m_dispatcher.RequestCount()},

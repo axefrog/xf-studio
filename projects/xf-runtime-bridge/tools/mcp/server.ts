@@ -25,7 +25,7 @@ export type McpServerOptions = {
 };
 
 /**
- * Reads the permission flags of the command line: `--read-only` (read, notify and control tools: nothing
+ * Reads the permission flags of the command line: `--read-only` (read and control tools: nothing
  * that changes the game) or
  * `--allow <classes>` (a comma-separated list), never both. `control` (the kill switch) is always
  * included. Returns undefined for "every class", or a plain error.
@@ -33,7 +33,7 @@ export type McpServerOptions = {
 export function parsePermissionFlags(args: readonly string[]): { allow?: Permission[] } | { error: string } {
   const readOnly = args.includes("--read-only");
   const at = args.indexOf("--allow");
-  if (at < 0) return readOnly ? { allow: ["read", "notify", "control"] } : {};
+  if (at < 0) return readOnly ? { allow: ["read", "control"] } : {};
   if (readOnly) return { error: "Use either --read-only or --allow <classes>, not both." };
   if (args.indexOf("--allow", at + 1) >= 0) return { error: "Give --allow once, with a comma-separated list." };
   const value = args[at + 1];
@@ -123,7 +123,7 @@ export function createMcpServer(api: CommandApi, options: McpServerOptions = {})
     }
     // While the session runner holds its lock, only commands that never use the pipe (captures)
     // and the kill switch go ahead; everything else would compete with the session for the bridge.
-    if (!PIPE_FREE.has(command!.name) && command!.permission !== "control") {
+    if (!api.readOnly && !PIPE_FREE.has(command!.name) && command!.permission !== "control") {
       const lock = readSessionLock(api.runtimeDir);
       if (lock) return { isError: true, content: [{ type: "text", text: sessionRunningMessage(lock) + "\n[session_running]" }] };
     }

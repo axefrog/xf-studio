@@ -24,6 +24,8 @@ export type BridgeSession = {
   allow_writes: boolean;
   /** 0.8.1 (RB-121): the control pipe for the emergency controls, beside the main one; absent in older builds. */
   control_pipe?: string;
+  /** Fixed bounded observation endpoints; absent on older bridges. */
+  read_only_pipes?: string[];
 };
 
 export type BridgeError = { code: string; message: string };
@@ -197,8 +199,23 @@ export class BridgeClient {
    * reads (for the self-test's non-reading client). busyWaitMs: how long a busy pipe is tried again (default the client's
    * timeout; 0 tries once), never blocking the event loop.
    */
-  async connect(options: { read?: boolean; busyWaitMs?: number } = {}): Promise<void> {
-    this.pipe = await PipeHandle.connect(this.session.pipe, this.session.pid, options.busyWaitMs ?? this.timeoutMs);
+  async connect(options: { read?: boolean; busyWaitMs?: number; readOnly?: boolean } = {}): Promise<void> {
+    if (options.readOnly) {
+      const names = this.session.read_only_pipes?.slice(0, 8) ?? [];
+      if (!names.length) throw new PipeConnectError("This bridge has no read-only connections", "failed");
+      const deadline = performance.now() + (options.busyWaitMs ?? this.timeoutMs);
+      for (;;) {
+        for (const name of names) {
+          try { this.pipe = await PipeHandle.connect(name, this.session.pid, 0); break; }
+          catch (error) { if (!(error instanceof PipeConnectError) || error.code !== "busy") throw error; }
+        }
+        if (this.pipe) break;
+        if (performance.now() >= deadline) throw new PipeConnectError("All read-only connections are busy", "busy");
+        await sleep(BUSY_RETRY_MS);
+      }
+    } else {
+      this.pipe = await PipeHandle.connect(this.session.pipe, this.session.pid, options.busyWaitMs ?? this.timeoutMs);
+    }
     if (options.read !== false) void this.pump();
   }
 

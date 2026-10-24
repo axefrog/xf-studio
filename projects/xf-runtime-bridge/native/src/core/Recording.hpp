@@ -31,7 +31,7 @@ public:
     json Stop(const std::string& reason, double now);
     // Nonblocking emergency notification. reason must have static lifetime (a string literal).
     void RequestStop(const char* reason);
-    json Read(const json& params, double now);
+    json Read(const json& params, double now, bool acknowledge = true);
     void Tick(double now, uint64_t world, uint64_t connection, bool live, uint64_t tick, const Ops& ops);
     bool Wants(const std::string& channel) const; // atomic fast gate, no game access
     bool Ingress(const std::string& channel, const std::string& payload, double now,

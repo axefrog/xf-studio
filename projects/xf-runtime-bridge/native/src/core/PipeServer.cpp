@@ -313,6 +313,7 @@ void PipeServer::Run()
 
 std::string PipeServer::PipeKind() const
 {
+    if (m_pipeName.find(L"-read-") != std::wstring::npos) return "reader";
     const std::wstring suffix = L"-control";
     return m_pipeName.size() >= suffix.size() && m_pipeName.compare(m_pipeName.size() - suffix.size(), suffix.size(), suffix) == 0 ? "control" : "main";
 }

@@ -211,6 +211,13 @@ GameGate gGate;
 // RB-122 (0.8.1): how many RestoreScopes are open on this thread. Steps queued inside one put something back (a relock, a
 // withdrawal, the selection after a failure), so Dispatcher::RunWrite doesn't refuse them on a closed write gate.
 thread_local int tRestoreDepth = 0;
+thread_local bool tReadOnly = false;
+thread_local bool tEmergency = false;
+struct ReaderScope {
+    bool previous = tReadOnly, previousEmergency = tEmergency;
+    explicit ReaderScope(bool value) { tReadOnly = value; tEmergency = false; }
+    ~ReaderScope() { tReadOnly = previous; tEmergency = previousEmergency; }
+};
 thread_local json tWhen;
 thread_local Dispatcher::ExecutionGuard tExecutionGuard;
 struct ExecutionScope {
@@ -252,6 +259,14 @@ const std::set<std::string>& ControlMethods()
     static const std::set<std::string> methods{"bridge.kill", "behave.stop", "player.stop", "test.record.stop", "supervisor.clear", "bridge.handover",
                                                "game.status", "photo.hud.hide", "showroom.clear", "ui.message"};
     return methods;
+}
+
+// Only cancellation/ownership controls bypass observer roles and aggregate pacing.
+// Handover helper writes remain available on the separately restricted control route.
+bool IsEmergencyMethod(const std::string& method)
+{
+    return method == "bridge.kill" || method == "behave.stop" || method == "player.stop" ||
+           method == "test.record.stop" || method == "supervisor.clear" || method == "bridge.handover";
 }
 
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
@@ -366,7 +381,7 @@ json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const 
                 return json{{"ok", false}, {"code", e.code}, {"message", e.what()}};
             }
         },
-        aTimeout, envelope, error, aLabel, GameThreadQueue::kDefaultRunningGrace, std::move(onClosed));
+        aTimeout, envelope, error, aLabel, GameThreadQueue::kDefaultRunningGrace, std::move(onClosed), tReadOnly && !tEmergency);
     switch (result)
     {
     case QueueResult::Deferred:
@@ -632,7 +647,7 @@ uint64_t Dispatcher::RequestCount() const
     return m_requests.load();
 }
 
-bool Dispatcher::TakeRateToken()
+bool Dispatcher::TakeRateToken(bool aReadOnly)
 {
     std::scoped_lock _(m_mutex);
     const auto now = std::chrono::steady_clock::now();
@@ -640,7 +655,7 @@ bool Dispatcher::TakeRateToken()
     m_lastRefill = now;
     const double capacity = m_config.maxRequestsPerSecond * 2.0;
     m_tokens = std::min(capacity, m_tokens + elapsed * m_config.maxRequestsPerSecond);
-    if (m_tokens < 1.0)
+    if (m_tokens < 1.0 + (aReadOnly ? m_config.maxRequestsPerSecond : 0))
     {
         return false;
     }
@@ -659,8 +674,9 @@ DispatchResult Dispatcher::HandleGuarded(const std::string& line, uint32_t pid, 
     return Handle(line, pid);
 }
 
-DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute) noexcept
+DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute, bool aReadOnly) noexcept
 {
+    ReaderScope readerScope(aReadOnly);
     try
     {
         return HandleUnchecked(aLine, aClientPid, aControlRoute);
@@ -739,9 +755,12 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     const bool authenticated = tokenIt != request.end() && tokenIt->is_string() &&
                                ConstantTimeEquals(tokenIt->get<std::string>(), m_session.token);
 
-    // The rate limit covers every well-formed request, authenticated or not, so a client
-    // guessing tokens is throttled too. The reply is the same either way.
-    if (!TakeRateToken())
+    // Ordinary requests share one aggregate bucket, including unauthenticated attempts.
+    // Authenticated emergency cancellation never waits behind exhausted read pacing.
+    const auto methodForPacing = request.value("method", json());
+    const bool emergency = authenticated && methodForPacing.is_string() &&
+        IsEmergencyMethod(methodForPacing.get<std::string>());
+    if (!emergency && !TakeRateToken(tReadOnly))
     {
         return refuse("bridge.rate_limited", id, cid, "rate_limited",
                       "more than " + std::to_string(m_config.maxRequestsPerSecond) + " requests per second",
@@ -789,6 +808,18 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
                       "method=" + methodName);
     }
 
+    // Readers cannot acquire recorder leases or overwrite the legacy singleton
+    // save-list/CET request exchanges. Those reads remain writer-only this round.
+    // test.events may observe the tap but cannot switch it.
+    if (tReadOnly && ((!IsEmergencyMethod(methodName) && spec.access != Access::Read) ||
+                     methodName == "test.record.start" || methodName == "game.saves" || methodName == "game.options.read" ||
+                     (methodName == "test.events" && request.contains("params") &&
+                      request["params"].is_object() && request["params"].contains("stims")))) {
+        return refuse("bridge.read_only_refused", id, cid, "read_only_connection",
+                      "This connection observes only; use the writer connection for changes, recorder leases or exclusive save/options reads", false);
+    }
+
+    tEmergency = IsEmergencyMethod(methodName);
     log::Info("bridge.request", "method=" + methodName + " access=" + accessName + pidText, cid);
     m_lastRequestMs.store(std::chrono::duration_cast<std::chrono::milliseconds>(started.time_since_epoch()).count());
 
@@ -836,6 +867,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     }
 
     MethodContext context;
+    context.readOnlyConnection = tReadOnly;
     context.cid = cid;
     context.clientPid = aClientPid;
     const auto paramsIt = request.find("params");
@@ -911,7 +943,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
                     }
                 },
                 std::chrono::milliseconds(m_config.requestTimeoutMs), envelope, error,
-                "method=" + methodName + " cid=" + cid, grace);
+                "method=" + methodName + " cid=" + cid, grace, {}, tReadOnly && !tEmergency);
 
             switch (result)
             {

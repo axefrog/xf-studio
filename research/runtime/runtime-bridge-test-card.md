@@ -9,6 +9,7 @@
 | [Recorder and taps (Borg-mode session)](#recorder-and-taps-borg-mode-session) | RT1–RT7, BR1–BR13, TL1–TL3 | Explicit 0.8.14 autonomous candidate, one persistent tool connection and pinned disposable fixture; runtime commissioning pending |
 | [Safety and navigation (0.8.15)](#safety-and-navigation-0815) | SN1–SN7 | Explicit 0.8.15 autonomous candidate; unknown lanes and partial contacts stay INCONCLUSIVE |
 | [Lifecycle detection and continue plan](#lifecycle-detection-and-continue-plan-0815-round-2) | LC8151–LC8156 | Explicit Round 2 autonomous candidate; read-only UI detector/plan, no actual continue or quit |
+| [Concurrent readers (0.8.15)](#concurrent-readers-0815) | MC1-MC6, about 8 min | Multi-client candidate; watcher + writer MCP + reader CLI; all rows unrun |
 | [Supervisor (0.8.15 Round 3)](#supervisor-0815-round-3) | SV8151–SV8156 | V only, autonomous candidate, quiet anchor and partial contact/input coverage; all rows unrun |
 | [Input and choices (Borg-mode session)](#input-and-choices-borg-mode-session) | IC0–IC4 about 10 min; IC5 separately scoped | Explicit 0.8.13 autonomous candidate, pinned disposable save/current logs; Codeware, CET open for IC4; external read-only receiver trace required for IC5 (recorder not shipped) |
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
@@ -2112,3 +2113,25 @@ Built 26 September 2026 from `main` at `509f5995f681`, clean tree (`XFB_BUILD=50
 | (`XFRuntimeBridge.dll` inside each) | `6f386846bcc6e3fb180f2bc091f7cb34ff79e980d7812b8e60fe7df0fcc43dca` |
 
 Staged on 26 September 2026 into the MO2 mod `XF Runtime Bridge` in the test profile (first row of its `modlist.txt`; nothing else changed), with `%LOCALAPPDATA%\XFStudio\runtime-bridge\` emptied. The plugin log must show `evt=script.addresses_resolved … script_calls=on` at start.
+
+
+## Concurrent readers (0.8.15)
+
+**All rows unrun.** Coordinator records the reviewed `claude/bridge-multiclient` checkpoint (base 3d0dabfc), DLL SHA-256, isolated profile and config before staging the explicit autonomous -writes candidate with test hooks. Keep existing frameworks and the safety manual save; maintainer launches/operates the game. End by loading that save. No automatic deployment.
+
+Use the session's existing private evidence root with a versioned `multiclient-<candidate-sha>/` child: redacted discovery (no token), native log, per-process timestamp/correlation/result/elapsed-ms logs, recorder manifest and row verdicts. Keep a friction log. For responsiveness R&D, measure writer p50/p95/max for the same ten short commands before and during observer load; record retries, timeouts, frame/tick counts and visible hitches.
+
+Persistent bounded watcher, from the bridge project (one reader API for about 60 seconds):
+
+```powershell
+bun -e 'import {CommandApi} from "./tools/api/command-api.ts"; const a=new CommandApi({readOnly:true,idleCloseMs:60000}); try {for(let i=0;i<120;i++){const t=performance.now(); const r=await a.run("game.digest",{events:0,sky:false}); console.log(JSON.stringify({i,ms:performance.now()-t,...r})); await Bun.sleep(500);}} finally {a.close();}'
+```
+
+| Row | Prepared action | Required observation |
+|---|---|---|
+| MC1 | Log baseline writer MCP timings for ten short reads and approved reversible clock/notification commands, including undo. Start the watcher; keep MCP as writer; repeatedly run `bun tools/bridge-client.ts --read-only run game.digest` from another terminal while repeating the writer batch. | Three tools overlap without busy/timeout/hitch. Compare baseline/concurrent latency distribution. One MCP writer plus two readers is the intended arrangement. |
+| MC2 | While MCP holds the writer, try default CLI `ping`; use reader CLI `--read-only call` for an approved clock write and `test.record.start`. Try reader `game.saves` / `game.options.read`, then their writer versions. | Second writer gets `bridge_busy`; reader changes/leases/exclusive queries get `read_only_connection`, change nothing; writer queries still work. |
+| MC3 | MCP starts a short source recording. Readers replay with different `since` cursors; close/reopen both readers while MCP continues commands and drains/stops recording. Then separately close the writer. | Reader cursors/acks are independent; reader disconnect never changes writer generation, stops recording or cancels writer input/supervisor leases. Writer loss still ends its run. Record manifest/cadence evidence. |
+| MC4 | With a watcher, start three more persistent reader clients against the default pool; close one admitted reader and retry the fourth. Repeat with an idle reader. | At most three admitted; fourth busy; released slot reused. Idle reader has no effect on writer cursor/leases/recorder. No sustained thread/handle growth. |
+| MC5 | Poll heavily from readers while MCP sends short commands. Reader issues `behave.stop` / `player.stop`, then `bridge.kill`; exercise the physical kill switch too. | Bounded reader pacing/refusals; writer queued steps take priority. Emergency cancellation responds; kill closes all endpoints and restores/drains as before. In-game rearm creates fresh discovery; old tokens/endpoints cannot resume. |
+| MC6 | Repeat three-tool overlap across an approved safety-save reload, then close all tools and review logs/thread/handle counts. | Load-detach gate protects every client; no crash, stale run continuation or off-thread game access. Observer reconnect cannot resurrect writer leases. Log all friction and unproven coverage. |

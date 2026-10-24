@@ -71,6 +71,7 @@ struct MethodContext
     std::string cid;
     nlohmann::json params;
     uint32_t clientPid = 0;
+    bool readOnlyConnection = false;
     // Authenticated client may narrow config permissions. Missing claims are forbidden for arming.
     std::optional<uint32_t> callerWriteClasses;
 };
@@ -126,7 +127,7 @@ public:
 
     // Never throws: an unexpected failure is logged and answered with code "failed". aControlRoute (0.8.1, RB-121): the
     // request came on the control pipe, which answers only IsControlRouteMethod's methods (refused not_on_control_route).
-    DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false) noexcept;
+    DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false, bool aReadOnly = false) noexcept;
     // Trusted in-process caller only. Propagates an execution-frame guard to every queued step;
     // never accepted from request data. Cleanup inside RestoreScope remains unconditional.
     using ExecutionGuard = std::function<void(bool changing)>;
@@ -190,7 +191,7 @@ public:
 
 private:
     DispatchResult HandleUnchecked(const std::string& aLine, uint32_t aClientPid, bool aControlRoute);
-    bool TakeRateToken();
+    bool TakeRateToken(bool aReadOnly);
     std::string NextCid();
 
     const Config& m_config;

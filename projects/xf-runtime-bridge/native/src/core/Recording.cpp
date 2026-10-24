@@ -237,7 +237,7 @@ bool Service::Ingress(const std::string& channel, const std::string& payload, do
         (parsed.contains("valid") && !parsed["valid"].is_boolean())) { ++m_invalid; ++m_dropped; return false; }
     return Append(channel, payload, now, now, tick, parsed.value("valid", true));
 }
-json Service::Read(const json& p, double now)
+json Service::Read(const json& p, double now, bool acknowledge)
 {
     std::scoped_lock lock(m_mutex);
     if (m_startedGeneration.load() != CancellationGeneration()) Stop(m_requested.load(), now);
@@ -245,7 +245,7 @@ json Service::Read(const json& p, double now)
     if (Integer(p, "run", 0, UINT64_MAX) != m_run || !m_run) throw MethodError("recording_changed", "Use the run returned by start.");
     const auto since = Integer(p, "since", 0, UINT64_MAX), limit = Integer(p, "limit", 5, 5);
     if (since > m_latest || !limit) throw MethodError("bad_params", "Invalid recording cursor or limit.");
-    m_ack = std::max(m_ack, since);
+    if (acknowledge) m_ack = std::max(m_ack, since);
     auto out = Status(now); auto rows = json::array(); uint64_t next = since, lost = 0;
     const auto first = m_latest > kCapacity ? m_latest - kCapacity + 1 : 1;
     if (next + 1 < first) { lost += first - next - 1; next = first - 1; }
@@ -273,7 +273,7 @@ void RegisterMethods(Dispatcher& d, Service& s, bool hooks, std::function<uint64
             }, "test.record.start");
         }});
     d.Register({"test.record.read", Access::Read, RunOn::BridgeThread, "Drain source records without a game read.",
-        [&, enabled](const MethodContext& c) { enabled(); return s.Read(c.params, Now()); }});
+        [&, enabled](const MethodContext& c) { enabled(); return s.Read(c.params, Now(), !c.readOnlyConnection); }});
     d.Register({"test.record.stop", Access::Control, RunOn::BridgeThread, "Stop recording; retained rows remain drainable.",
         [&, enabled](const MethodContext& c) { enabled(); Keys(c.params, {}); s.RequestStop("cancelled"); return json{{"stop_requested", true}}; }});
 }

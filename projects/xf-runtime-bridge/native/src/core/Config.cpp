@@ -227,6 +227,10 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseU32(value, 1, 200, config.maxRequestsPerSecond);
         }
+        else if (key == "bridge.max_read_only_connections")
+        {
+            ok = ParseU32(value, 0, 8, config.maxReadOnlyConnections);
+        }
         else if (key == "bridge.idle_disconnect_seconds")
         {
             ok = ParseU32(value, 5, 3600, config.idleDisconnectSeconds);
@@ -375,6 +379,7 @@ std::string DescribeConfig(const Config& aConfig)
     text += " bridge.allow_test_hooks=" + std::string(aConfig.allowTestHooks ? "true" : "false");
     text += " bridge.request_timeout_ms=" + std::to_string(aConfig.requestTimeoutMs);
     text += " bridge.max_requests_per_second=" + std::to_string(aConfig.maxRequestsPerSecond);
+    text += " bridge.max_read_only_connections=" + std::to_string(aConfig.maxReadOnlyConnections);
     text += " bridge.idle_disconnect_seconds=" + std::to_string(aConfig.idleDisconnectSeconds);
     text += " ui.hud_panel=" + std::string(aConfig.hudPanel ? "true" : "false");
     text += " ui.layer=" + aConfig.hudLayer;

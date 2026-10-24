@@ -55,10 +55,11 @@ public:
     // starting (refused at the door, or cancelled by Close() while queued), decided under the queue's lock, so a kill can
     // never slip between a check and the enqueue: such a task either runs, has started, or its cleanup is posted (Deferred).
     QueueResult Run(Task aTask, std::chrono::milliseconds aTimeout, nlohmann::json& aResult, std::string& aError,
-                    const std::string& aLabel = "-", std::chrono::milliseconds aRunningGrace = kDefaultRunningGrace, Task aOnClosed = {});
+                    const std::string& aLabel = "-", std::chrono::milliseconds aRunningGrace = kDefaultRunningGrace, Task aOnClosed = {}, bool aReadOnly = false);
 
     // Game thread: run at most aMaxTasks queued tasks. Returns how many ran.
     size_t Drain(size_t aMaxTasks);
+    size_t Pending() const;
 
     // The game thread says whether it is currently draining (set by state callbacks).
     void SetPumping(bool aPumping);
@@ -105,6 +106,7 @@ private:
     struct Item
     {
         Task task;
+        bool readOnly = false;
         std::string label;
         std::atomic<int> state{Queued};
         std::mutex mutex;

@@ -77,6 +77,17 @@ int RecordingUnitTests()
         const auto answer = pending.get();
         Check(answer["ok"] == false && answer["error"]["code"] == "interrupted", "queued native start cannot overwrite emergency stop");
     }
+    {
+        Service replay;
+        replay.Start({{"channels", {"v"}}}, 10, 1, 1, "reader-ack");
+        Ops sample; sample.guard = [] {}; sample.sample = [](const auto&, const auto&) { return json{{"valid", true}}; };
+        replay.Tick(10, 1, 1, true, 1, sample);
+        replay.Stop("test", 10.1);
+        replay.Read({{"run", 1}, {"since", 1}}, 10.2, false);
+        Refuses([&] { replay.Start({{"channels", {"v"}}}, 11, 1, 1, "reader-ack"); }, "recording_busy");
+        replay.Read({{"run", 1}, {"since", 1}}, 10.3);
+        Check(replay.Start({{"channels", {"v"}}}, 11, 1, 1, "owner-ack")["active"] == true, "only owner/native persistence acknowledges replay");
+    }
     Service s; int reads = 0, guarded = 0;
     Ops ops; ops.guard = [&] { ++guarded; }; ops.sample = [&](const std::string&, const std::vector<std::string>&) {
         ++reads; return json{{"valid", true}, {"position", {1, 2, 3}}}; };

@@ -477,10 +477,10 @@ describe("MCP server permissions, no bridge, and captures", () => {
     synthetic?.close();
   });
 
-  test("--read-only exposes only read, notify and control tools", async () => {
+  test("--read-only exposes only read and control tools", async () => {
     const { tools } = await mcp.client.listTools();
-    expect(tools.length).toBe(CATALOGUE.filter((c) => ["read", "notify", "control"].includes(c.permission)).length);
-    expect(tools.some((t) => t.name === "ui_message")).toBe(true);
+    expect(tools.length).toBe(CATALOGUE.filter((c) => ["read", "control"].includes(c.permission)).length);
+    expect(tools.some((t) => t.name === "ui_message")).toBe(false);
     expect(tools.some((t) => t.name === "game_save" || t.name === "inventory_equip")).toBe(false);
     expect(tools.some((t) => t.name === "photo_enter")).toBe(false);
     const refused = await call(mcp, "photo_enter");
@@ -488,16 +488,16 @@ describe("MCP server permissions, no bridge, and captures", () => {
     expect(text(refused)).toContain('no tool called "photo_enter"');
   });
 
-  test("while a session runner holds its lock, bridge tools refuse plainly; captures still work", async () => {
+  test("read-only MCP does not compete for the session runner writer; captures still work", async () => {
     // A live process that isn't this one: the test runner's parent.
     writeFileSync(join(noBridgeDir, LOCK_FILE), JSON.stringify({ pid: process.ppid, script: "session-2", started_at: new Date().toISOString() }));
     try {
       const refused = await call(mcp, "game_status");
       expect(refused.isError).toBe(true);
-      expect(text(refused)).toContain("A scripted session (session-2");
-      expect(text(refused)).toContain("session_running");
+      expect(text(refused)).toContain("no_bridge");
+      expect(text(refused)).not.toContain("session_running");
       const wait = await call(mcp, "game_wait", { phase: ["gameplay"], timeout_ms: 1000 });
-      expect(text(wait)).toContain("session_running");
+      expect(text(wait)).not.toContain("session_running");
       const shot = await call(mcp, "capture_screenshot", { region: "eyes", name: "during-session" });
       expect(shot.isError).toBeFalsy();
       const kill = await call(mcp, "bridge_kill");
@@ -546,7 +546,7 @@ describe("MCP server permissions, no bridge, and captures", () => {
 describe("MCP permission flags", () => {
   test("--read-only and --allow are exclusive; an empty or missing --allow list is refused", () => {
     expect(parsePermissionFlags([])).toEqual({});
-    expect(parsePermissionFlags(["--read-only"])).toEqual({ allow: ["read", "notify", "control"] });
+    expect(parsePermissionFlags(["--read-only"])).toEqual({ allow: ["read", "control"] });
     for (const args of [["--read-only", "--allow", "read"], ["--allow", "read", "--read-only"], ["--allow", ""], ["--allow", " , "], ["--allow"], ["--allow", "--no-inline-images"], ["--allow", "read", "--allow", "write-world"], ["--allow", "read,constructor"], ["--allow", "read,write-everything"]]) {
       expect("error" in parsePermissionFlags(args), args.join(" ")).toBe(true);
     }
