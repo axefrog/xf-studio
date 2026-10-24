@@ -178,7 +178,7 @@ describe('roots, marks and forgetting (spec 7.3, I-3)', () => {
     expect(snapshot()).toEqual(before);
   });
 
-  test('an event kept as the evidence of a memorable belief is a bare header after a load; minting it again restates its fields, silently', () => {
+  test('an event kept as memorable belief evidence retains its facts after a load; re-minting is silent and idempotent', () => {
     const k = coreKernel('restate');
     const place = k.root('place', 'core:place');
     const alice = k.root('alice', 'core:person');
@@ -189,7 +189,10 @@ describe('roots, marks and forgetting (spec 7.3, I-3)', () => {
     k.persistence.save('A');
     k.persistence.load('A');
     expect(k.store.header(e)).toBeDefined();
-    expect(k.value(e, 'kind')).toBeUndefined();
+    expect(k.value(e, 'kind')).toBe('sale');
+    expect(k.value(e, 'time')).toBe(77);
+    expect(k.value(e, 'place')).toBe(place);
+    expect(k.value(k.address(e, 'participants[0]'), 'who')).toBe(alice);
     const announced = k.pending.length;
     expect(k.events.mintEvent(spec)).toBe(e);
     expect(k.value(e, 'time')).toBe(77);

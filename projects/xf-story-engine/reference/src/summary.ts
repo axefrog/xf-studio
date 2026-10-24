@@ -3,7 +3,8 @@
 // A summary says "n events of one kind happened in a scope over a span". Item i is derivable from the
 // summary alone: its Id, time and place are pure functions of (summary, i), so overlapping queries see
 // the same items and nothing is counted twice. Materialising an item is silent cache population: it
-// adds a header and bumps no revision. Only canon items persist (their fields become pins).
+// adds a header and bumps no revision. Canon items persist as pins; referenced opened items also keep
+// their materialisation facts, with time/kind/place still supplied by the summary (S0 14.1).
 
 import { ln } from './fdlibm-log.ts';
 import { H, i as hi, id as hid, mintedId, rand, s as hs } from './id.ts';

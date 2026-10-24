@@ -73,6 +73,13 @@ also checks a non-canon raw event referenced by an outstanding output batch: its
 batch applies. A closure saved before the next director tick remains unconsumed, so the next tick establishes the arc
 opening lock; saving after consumption cannot extend it again. These are reference-model checks, not game-save evidence.
 
+The kernel's S3B regressions extend this to pin evidence, frame focus, edge causes, canon causes/participants/served,
+memorable beliefs and transitive header creator/cause links. Referenced summary items keep participant/effect facts
+under their opening process's materialisation owner (`scene.acts` in the fixture); their time and place still change
+with the summary descriptor. Both direct seed references and pending output batches agree with uninterrupted execution
+after fresh replacement loads. A retained event's own location edge persists for spatial discovery without rooting
+unreferenced events. These [offline] checks implement S0 v4.15 §14.1; the old bare-header expectation is superseded.
+
 | Event | State inside the save (fields, facts, entity state) | An external store | Grade |
 |---|---|---|---|
 | **New game** | A fresh facts table and default fields: GameSession mints a key because the fact reads 0; the AI NPC mod treats a detach with no restore after it as a new game | Untouched: Codeware services and CET files carry on, so a store without a key mixes playthroughs | [source] [community]; the facts reset itself is [hypothesis], session card 6 |

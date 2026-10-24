@@ -396,8 +396,10 @@ moves when a save, a load, belief state, summary canon, outstanding batches or d
 (SR-14), and when a group decision's weight, status or interests or an order's pressure changes directly
 (SR2-08), so these cannot drift unnoticed. It freezes primitive vectors for `H`, `toUnit`, `rand` and fdlibm `ln`.
 
-The golden digest is `d534e0dcef3f85d27cefa552217152ec` over 1,067 entries, and the run ends at revision
-2,057 with 135 pins and 51 contributions. It replaces `c896b062fda81bacfbb6d84563a2c77d` (1,053 entries,
+The golden digest is `f924d2c9d1159bca85bbfa4cf18dba6c` over 1,067 entries, and the run ends at revision
+2,058 with 135 pins and 121 contributions (S0 v4.15 event-fact persistence, entry 191). Its predecessor
+`d534e0dcef3f85d27cefa552217152ec` ended at revision 2,057 with 51 contributions; that replaced
+`c896b062fda81bacfbb6d84563a2c77d` (1,053 entries,
 revision 1,956, the same 135 pins and 51 contributions), which hashed a group decision only through the
 emissions and counts that followed it: replacing the weight decision with weight zero left it unchanged
 (SR2-08). The script now hashes each decision's resulting frame and each order whole (14 more entries). The
@@ -429,9 +431,12 @@ change observable behaviour or a frozen digest come before the ones that only fi
 
 58. **The v4 changes move the frozen v3 digest; both are switchable. S0 v4.12 now says so.** The `frame` change
     (V4-4) adds two emissions to the v3 run, and the v4 schema (V4-2, V4-3, V4-22) changes function versions and
-    so the schema hash. The frozen v3 digest `d534e0dcef3f85d27cefa552217152ec` therefore runs with
-    `frameChanges: false` and `coreDefs({ v4: false })`, and is unchanged: S0 v4.12 section 20 defines the digest
-    on the v3 schema with frame changes off. A second frozen digest, `da48cabc405ed361ce6ad5f3b895a822` over 1,069
+    so the schema hash. The v3-mode digest runs with `frameChanges: false` and `coreDefs({ v4: false })`:
+    S0 v4.12 section 20 defines the digest on the v3 schema with frame changes off. S0 v4.15 event-fact
+    persistence applies in both modes (entry 191), changing the v3-mode golden from
+    `d534e0dcef3f85d27cefa552217152ec` to `f924d2c9d1159bca85bbfa4cf18dba6c`.
+    The second frozen digest is now `42d5a84e16dde21cc0bca7fe50c01d72` (previously
+    `da48cabc405ed361ce6ad5f3b895a822`) over 1,069
     entries, covers the same script with both on (`test/digest-v4.test.ts`); a native core must reproduce both. The
     defaults of the kernel are v4 on. Fix round 1 changed neither digest: the change payload snapshot (L2-01), the
     operation Id without the epoch (L2-04) and the captured focus (L2-13) moved no result the script exercises.
@@ -1178,11 +1183,12 @@ entry is reclaimed, until the last live or closing consumer finishes. `Layer3Sta
 and restores silently after S1. Summary-item provenance is preserved: time/place remain live summary dependencies.
 There is no cut at the story event that delegates its constituent facts back to an unspecified producer. Unreachable
 history is released. These mechanical facts are unrelated to the local player-response evidence log. The kernel also
-preserves own event constants for explicit persisted consumer roots (191).
+preserves own event constants for every persisted reference category (191).
 
 **181. Non-canon event retention did not follow participants or causes.** The marker followed headers and owned values,
-not event simulation constants. SeedRecord and outstanding-output event roots retain owned fields and Id references
-transitively, without recursive resolution. Ordinary marking and event-field traversal have separate visited sets:
+not event simulation constants. Every root category, including pins, frames, edges, memorable beliefs, canon fields,
+SeedRecords and outstanding outputs, retains event fields and Id references transitively, without recursive resolution.
+Header creator/cause and owned-field owner links also enable event traversal. Ordinary marking and event-field traversal have separate visited sets:
 an event first reached through a frame is revisited when another event needs its fields. Adding roots is monotone,
 and either root order has the same closure. The frozen control arms remain checked independently.
 S2 also roots fixed overlay identities before first casting. Pool `nodes` remains its stage/story events plus buffered
@@ -1212,7 +1218,9 @@ at the Settings boundary, and conflicting simultaneous alias writes are refused.
 lists. S2 casting, cached tentative recasting and preparation of every director-sown role use the same typed NPC source
 as S3. S2 and S3 read spine membership through one shared `worldRegistry` port, supplied by S1's reads or replaced by
 S3's registry when it explicitly supplies `isSpine`. Attaching only an event-kind registry preserves S1's authority;
-`opts.spine` is removed. Exclusions are hard filters, never scores.
+`opts.spine` is removed. Exclusions are hard filters, never scores. Effective-document validation checks only fixed
+identities and actual casts: an excluded preferred identity does not veto a kit with allowed alternatives. S2's shared
+authority filters the candidate set, including after a fresh load (S3B-03).
 
 **183. S2 promises a skeleton classifier but specifies no implementation.** `L2Registry.skeleton` is the pure seam.
 Its default reads explicit fragment `features`, declared tone/outcome, an unambiguous offer stake and actual channel;
@@ -1254,14 +1262,26 @@ skeleton verbs, tags, envelope classes and soft levels. A refused variant rolls 
 unselected excluded alternative does not veto a safe selected document. `telling` and `sowable` have closed core field
 sets; `atStage`, `from`, `subject` and unknown additions receive explicit "not supported yet" findings.
 
-**191. Persisted output references need event facts (S0 §14.1 clarification).** SF3-38 has an outstanding S1 mirror batch
+**191. Persisted references need event facts (S0 v4.15 §14.1).** SF3-38 has an outstanding S1 mirror batch
 that cites a raw non-canon event before a pool entry exists. Saving only its retained header loses the raw facts before
-the batch applies. The kernel now preserves the own simulation constants of events reached from SeedRecord nodes and
-outstanding output operations, with transitive causes/fields, using ordinary `ContributionAdded` records. Resolved
-overlays are never substituted for the minted facts; other simulation contributions remain regenerable. This lives at
+the batch applies. The kernel preserves own simulation constants of events reached from every retained reference category:
+SeedRecord nodes, outstanding output operations, pins, frames, edges, canon fields and memorable beliefs. Both creator
+and cause links propagate event dependencies transitively, independently of root order. A retained event's own location
+edge also persists so spatial queries work immediately after replacement; it does not make an unreferenced event a root.
+Summary-item participant/effect constants keep their materialisation owner (such as `scene.acts`), while time/kind/place
+remain live summary dependencies. Facts use ordinary `ContributionAdded` records. Resolved
+overlays are never substituted for minted facts; other simulation contributions remain regenerable. This lives at
 retention/persistence, shared by every layer, not in S3's evidence boundary. `process-evidence.test.ts` checks a pending
-batch, replacement replay, application and transitive raw facts against uninterrupted execution. The coordinator owns
-the corresponding S0 wording. SF3-38's strict state comparison is unchanged.
+batch, replacement replay, application and transitive raw facts against uninterrupted execution. S3B-01/02 cover each
+additional category and both SeedRecord and pending-output summary materialisations; all twelve S3B regressions fail
+at their named semantic assertions with their fixes reversed. The transcript now compares its named persisted fields
+exactly and includes a fresh-load leg. SF3-38's strict state comparison is unchanged.
+
+The saved records themselves enter the frozen kernel digests, so the v3-mode golden intentionally changes from
+`d534e0dcef3f85d27cefa552217152ec` to `f924d2c9d1159bca85bbfa4cf18dba6c`, and v4 from
+`da48cabc405ed361ce6ad5f3b895a822` to `42d5a84e16dde21cc0bca7fe50c01d72`. Entries remain 1,067/1,069;
+the v3-mode run ends at revision 2,058 with 135 pins and 121 contributions. An in-memory reversal of root/edge
+discovery restores both previous hashes exactly; this is a persistence-contract change, not a draw-key change.
 
 The project README and fixture index record validation. The review regressions also have a source-loader mutation
 runner that rejects setup errors and requires the intended semantic assertion for each reversed fix. Changes remain

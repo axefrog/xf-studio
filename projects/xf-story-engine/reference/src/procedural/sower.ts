@@ -309,9 +309,10 @@ export class Sower {
           st.slots.open.next = k + 1;
         }, (inst) => {
           const nodes = Object.values(inst.st.document.roles).flatMap((role) => {
-            const identity = bound(role.identity).value;
-            return identity ? [this.l2.k.expandId(identity)] : [];
+            const identity = bound(role.identity);
+            return identity.status === 'fixed' && identity.value ? [this.l2.k.expandId(identity.value)] : [];
           });
+          nodes.push(...Object.values(inst.st.roles).flatMap((role) => role.cast ? [role.cast] : []));
           return this.excluded(inst.st.document, kit.pack, nodes)
             ? [{ code: 'S3-gate-7', level: 'error', message: 'The effective variant-expanded kit matches an exclusion.' }]
             : [];

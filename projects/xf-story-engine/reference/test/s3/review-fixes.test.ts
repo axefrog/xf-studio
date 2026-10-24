@@ -131,6 +131,27 @@ function openRoleWorld(name: string) {
   w.l2.packs.get('xf.fixture')!.pack.seeds[0].roles.other.must = [{ path: 'age', op: 'eq', arg: 42 }];
   return w;
 }
+test('S3B-03: an excluded preferred NPC leaves an allowed replacement for the shared S2 caster', () => {
+  const name = 'review-preferred-excluded',
+    p = pattern({ telling: { form: 'recap', binds: { subject: '?a' } } }),
+    t = kit({ roles: { ...kit().roles, other: { kind: 'core:person',
+      identity: { prefer: 'root:dex', strength: 1 }, onUnfilled: ['wait'] } } }),
+    create = () => world(name, { patterns: [p], seeds: [t] });
+  const run = (load: boolean) => {
+    let w = create();
+    complete(w);
+    w.k.settings.set({ storyExclusions: [{ kind: 'npc', value: w.b }] });
+    if (load) w = reload(w, create(), 'preferred-excluded');
+    sow(w);
+    expect(w.l2.all(), 'S3B-03 semantic: preferred exclusion cannot veto an allowed cast').toHaveLength(1);
+    const inst = w.l2.all()[0];
+    expect(inst.st.roles.other.cast).toBeDefined();
+    expect(inst.st.roles.other.cast).not.toBe(w.b);
+    expect(w.l2.directorExcludes(inst.st.roles.other.cast!)).toBe(false);
+    return inst.st.roles.other.cast;
+  };
+  expect(run(true)).toEqual(run(false));
+});
 for (const source of ['npc', 'spine'] as const) {
   function exclude(w: World) {
     if (source === 'npc') w.k.settings.set({ storyExclusions: [{ kind: 'npc', value: w.b }] });

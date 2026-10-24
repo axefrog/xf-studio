@@ -92,13 +92,17 @@ export class Retention {
 
   // ---- roots ----
 
+  /** A minted event's spatial link is part of its facts, rather than an independent retention root. */
+  isOwnEventLocation(e: Edge): boolean {
+    const h = this.k.store.header(e.from);
+    return e.cause === e.from && e.type === 'core:located-in' && h !== undefined && this.k.schema.hasFacet(h.kind, 'event');
+  }
+
   /** Whether an edge is a root: not ended, or ended but referenced by a canon event. An event's own location edge is not. */
   isRootEdge(e: Edge, canonEvents: Set<Id> = new Set(this.k.events.canonEvents())): boolean {
     const k = this.k;
     const live = e.valid.to === undefined || e.valid.to > k.now;
-    const fromHeader = k.store.header(e.from);
-    const ownEventEdge = e.cause === e.from && e.type === 'core:located-in' && fromHeader !== undefined &&
-      k.schema.hasFacet(fromHeader.kind, 'event') && !canonEvents.has(e.from);
+    const ownEventEdge = this.isOwnEventLocation(e) && !canonEvents.has(e.from);
     const referenced = canonEvents.has(e.from) || canonEvents.has(e.to) || canonEvents.has(e.cause);
     return (live && !ownEventEdge) || (!live && referenced);
   }
@@ -200,10 +204,12 @@ export class Retention {
     const store = this.k.store;
     const marked = new Set<Id>();
     const stack = [...this.rootIds()];
-    const eventRoots = new Set([...this.seeds.values()].flatMap(s => s.nodes));
-    for (const st of this.k.evolution.states.values())
-      for (const batch of st.outstanding)
-        for (const ref of idFields(batch.ops, (id) => this.k.expandId(id))) eventRoots.add(ref);
+    // Every persisted reference can depend on event facts, including pins, frames, edges and canon fields.
+    const eventRoots = new Set(stack);
+    const follow = (...refs: Id[]): void => {
+      stack.push(...refs);
+      for (const ref of refs) eventRoots.add(ref);
+    };
     const traversedEvents = new Set<Id>();
     const eventFacts = new Set<Id>();
     while (stack.length > 0) {
@@ -215,25 +221,32 @@ export class Retention {
       const h = store.header(id);
       if (!h) continue;
       if (traverseEvent) traversedEvents.add(id);
-      if (h.origin.by === 'value' || h.origin.by === 'member') stack.push(h.origin.owner);
-      else if (h.origin.by === 'minted') stack.push(h.origin.creator, h.origin.cause);
+      if (h.origin.by === 'value' || h.origin.by === 'member') follow(h.origin.owner);
+      else if (h.origin.by === 'minted') follow(h.origin.creator, h.origin.cause);
       // A retained non-canon event keeps its described people, place and causes too (S3-I-22).
       // Its fields are simulation constants, so they need not have canon pins. Read the stored
       // constants directly: resolution here would recursively ask retention about member counts.
       if (traverseEvent && this.k.schema.isKind(h.kind, 'core:event')) {
+        // Summary descriptors own time/kind/place; the process that opens an item owns its other facts.
+        const descriptor = h.origin.by === 'minted' ? store.header(h.origin.creator) : undefined;
+        const summaryItem = h.origin.by === 'minted' && h.origin.creator === h.origin.cause && /^item:\d+$/.test(h.origin.name) &&
+          descriptor !== undefined && this.k.schema.hasFacet(descriptor.kind, 'summary');
+        const materialisation = summaryItem ? store.contributionsNaming(id).find((c) =>
+          c.source.layer === 'simulation' && c.target.slot === 'participants#count' && c.form.f === 'const')?.source.origin : undefined;
         const fields = [id], seenFields = new Set<Id>();
         for (let n = 0; n < fields.length; n++) {
           const field = fields[n]; if (seenFields.has(field)) continue; seenFields.add(field);
           stack.push(field);
           fields.push(...store.ownedOf(field));
           for (const c of store.contributionsNaming(field)) if (c.form.f === 'const') {
-            if (c.source.layer === 'simulation' && c.source.origin === id) eventFacts.add(c.id);
-            const refs: Id[] = []; this.idsIn(c.form.value, refs); stack.push(...refs); for (const ref of refs) eventRoots.add(ref);
+            if (c.source.layer === 'simulation' && (c.source.origin === id ||
+              (c.source.origin === materialisation && !(field === id && ['time', 'kind', 'place'].includes(c.target.slot))))) eventFacts.add(c.id);
+            const refs: Id[] = []; this.idsIn(c.form.value, refs); follow(...refs);
           }
         }
       }
       for (const o of store.ownedOf(id)) {
-        if (store.header(o)?.origin.by === 'value') stack.push(o);
+        if (store.header(o)?.origin.by === 'value') follow(o);
       }
     }
     const maxMember = new Map<string, number>();

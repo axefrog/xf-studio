@@ -5,12 +5,19 @@ export interface Probe {
   also?: Array<{ source: string; from: string; to: string }>;
 }
 const probe = (name: string, test: string, source: string, from: string, to: string): Probe => ({ name, test, source, from, to });
+const restrictedRoots = { source: 'src/retention.ts', from: 'const eventRoots = new Set(stack);',
+  to: `const eventRoots = new Set([...this.seeds.values()].flatMap(s => s.nodes));
+    for (const st of this.k.evolution.states.values())
+      for (const batch of st.outstanding)
+        for (const ref of idFields(batch.ops, (id) => this.k.expandId(id))) eventRoots.add(ref);` };
 export const probes: Probe[] = [
   { ...probe('S3-01', 'S3-01', 'src/procedural/layer3.ts',
     "if (ref && this.kv.kind(ref) && this.k.schema.isKind(this.kv.kind(ref)!, 'core:event')) held.add(ref);", '/* omit transitive descriptors */'),
     // Undo both complementary parts of the hand-over fix: S3 descriptors and kernel own facts.
     also: [{ source: 'src/persistence.ts', from: 'const eventFacts = k.retention.eventFacts();', to: 'const eventFacts = new Set<string>();' }] },
-  probe('S3-02', 'S3-02', 'src/retention.ts', 'if (!firstVisit && !traverseEvent) continue;', 'if (!firstVisit) continue;'),
+  { ...probe('S3-02', 'S3-02', 'src/retention.ts', 'if (!firstVisit && !traverseEvent) continue;', 'if (!firstVisit) continue;'),
+    // With all root categories now traversed, also restore the earlier restricted discovery to expose revisitation.
+    also: [restrictedRoots] },
   probe('S3-03', 'S3-03', 'src/procedural/layer3.ts', 'this.state.consumedOutcomes ??= [];',
     'this.state.consumedOutcomes = this.l2.all().flatMap((inst) => inst.st.closed ? [inst.st.closed.event] : []);'),
   probe('S3-04-npc', 'S3-04-npc', 'src/seeding/cast.ts', '!l2.directorExcludes(c, t)', '!l2.isSpine(c)'),
@@ -28,4 +35,27 @@ export const probes: Probe[] = [
     "Object.keys(sow).some((key) => !['serves', 'firstClass', 'weight', 'climactic', 'tags'].includes(key))", 'false'),
   { ...probe('S3-kernel', 'S3-kernel', 'src/persistence.ts', 'const eventFacts = k.retention.eventFacts();',
     'const eventFacts = new Set<string>();'), file: 'test/process-evidence.test.ts' },
+  ...['canon-causes', 'canon-participants', 'canon-served', 'pin-evidence', 'frame-focus', 'edge-cause', 'belief-evidence'].map((ref) => ({
+    ...probe(`S3B-01-${ref}`, `S3B-01-${ref}`, restrictedRoots.source, restrictedRoots.from, restrictedRoots.to),
+    file: 'test/process-evidence.test.ts',
+    also: [{ source: 'src/retention.ts', from: 'follow(h.origin.owner);', to: 'stack.push(h.origin.owner);' },
+      { source: 'src/retention.ts', from: 'follow(h.origin.creator, h.origin.cause);', to: 'stack.push(h.origin.creator, h.origin.cause);' }],
+  })),
+  ...['creator', 'cause'].map((link) => ({
+    ...probe(`S3B-01-origin-${link}`, `S3B-01-origin-${link}`, 'src/retention.ts',
+      'follow(h.origin.creator, h.origin.cause);', 'stack.push(h.origin.creator, h.origin.cause);'),
+    file: 'test/process-evidence.test.ts',
+  })),
+  ...['batch', 'seed'].map((ref) => ({
+    ...probe(`S3B-02-${ref}`, `S3B-02-${ref}`, 'src/retention.ts',
+      'c.source.origin === materialisation &&', 'false &&'), file: 'test/process-evidence.test.ts',
+  })),
+  probe('S3B-03', 'S3B-03', 'src/procedural/sower.ts', "identity.status === 'fixed' && identity.value ?", 'identity.value ?'),
+  { ...probe('S3B-01-location', 'S3B-01-location', 'src/persistence.ts',
+    '(k.retention.isOwnEventLocation(e) ? marked.has(e.from) : base.edges.has(e.id))', 'base.edges.has(e.id)'),
+    file: 'test/process-evidence.test.ts' },
+  { ...probe('S3B-01-location-history', 'S3B-01-location', 'src/persistence.ts',
+    '(k.retention.isOwnEventLocation(e) ? marked.has(e.from) : base.edges.has(e.id))',
+    '(base.edges.has(e.id) || (k.retention.isOwnEventLocation(e) && marked.has(e.from)))'),
+    file: 'test/process-evidence.test.ts' },
 ];

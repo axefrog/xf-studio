@@ -288,7 +288,10 @@ export class Persistence {
     }
     // Edges that are retention roots.
     // (An edge or pin the chain already holds stays in the view, so its end or withdrawal is recorded even when it is no longer a root.)
-    for (const e of k.store.allEdges()) if (k.retention.isRootEdge(e) || base.edges.has(e.id)) v.edges.set(e.id, clone(e));
+    // A retained event's own location edge is needed by spatial queries, but must not root an otherwise unretained event.
+    // Its lifetime follows the event, including when an earlier save held the edge (S3B-01).
+    for (const e of k.store.allEdges()) if (k.retention.isRootEdge(e) ||
+      (k.retention.isOwnEventLocation(e) ? marked.has(e.from) : base.edges.has(e.id))) v.edges.set(e.id, clone(e));
     // Event facts referenced by persisted consumers (including outstanding output batches)
     // cannot be regenerated from a header. Preserve their own constants, never a resolved overlay.
     const eventFacts = k.retention.eventFacts();

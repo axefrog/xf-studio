@@ -34,7 +34,14 @@ test('S3 frozen transcript: independently encoded identities, draw values and pe
     op = saved.ops.find((op) => op.op === 'SeedState' && op.id === expected.record);
   expect(op?.op).toBe('SeedState');
   if (!op || op.op !== 'SeedState') throw new Error('S3 record missing');
-  expect(op.seed).toMatchObject({ id: expected.record, nodes: [], state: {
+  if (!op.seed) throw new Error('S3 record is null');
+  const persisted = op.seed.state as typeof w.l3.state;
+  const named = { id: op.seed.id, nodes: op.seed.nodes, state: {
+    schema: persisted.schema, slots: persisted.slots, nextSeq: persisted.nextSeq, openLockUntil: persisted.openLockUntil,
+    consumedOutcomes: persisted.consumedOutcomes, pool: persisted.pool, buffer: persisted.buffer,
+    tombstones: persisted.tombstones, pending: persisted.pending, recent: persisted.recent,
+  } };
+  expect(named).toEqual({ id: expected.record, nodes: [], state: {
     schema: 1, slots: { open: { next: 2 } }, nextSeq: 1, openLockUntil: 0, consumedOutcomes: [], pool: [], buffer: [],
     tombstones: [{ pattern: p.id, key: expected.tombstone, until: 1301 }],
     pending: [{ instance: expected.instance, sownAt: expected.slot.time }],
@@ -44,4 +51,11 @@ test('S3 frozen transcript: independently encoded identities, draw values and pe
     .toEqual([{ id: expected.first, time: 100, kind: 'insult', causes: [] },
       { id: expected.last, time: 101, kind: 'assault', causes: [expected.first] },
       { id: expected.story, time: 101, kind: 'meta:story', causes: [expected.first, expected.last] }]);
+  const fresh = world('S3-TRANSCRIPT', { seeds: [t], patterns: [p] });
+  for (const [id, record] of w.k.persistence.chain) fresh.k.persistence.chain.set(id, structuredClone(record));
+  fresh.k.newEpoch(); fresh.k.persistence.load('s3-transcript');
+  expect(fresh.l3.state).toEqual(w.l3.state);
+  expect(fresh.l2.all().map((i) => i.id)).toEqual([expected.instance]);
+  expect([expected.first, expected.last, expected.story].map((id) => fresh.l3.kv.event(id)))
+    .toEqual([expected.first, expected.last, expected.story].map((id) => w.l3.kv.event(id)));
 });
