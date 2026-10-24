@@ -437,7 +437,7 @@ The general adapter's first public test affordance, if needed, is a narrowly all
 
 ### Save anyway test build
 
-**Resolve the policy discrepancy first.** Current `tools/api/catalogue.ts` exposes `game.save.override_lock`, `native/src/core/Params.cpp::ParseGameSave` accepts it, and `SaveWith` honours it. The supported API therefore already permits an agent override with save permission. To meet the requested normal-build guarantee, remove the override from the public catalogue and **reject it at the pipe/game-side entry** (including legacy callers), while retaining `PlayerSaveAnyway`'s private call into `SaveWith`. Do not remove the internal override needed by the human button. Treat this as a visible policy correction, with coordinator review of existing callers/tests/docs; this research does not make that change.
+**Policy discrepancy, resolved 24 October 2026:** `game.save.override_lock` stays, test-build only through the `save` class. Background: Current `tools/api/catalogue.ts` exposes `game.save.override_lock`, `native/src/core/Params.cpp::ParseGameSave` accepts it, and `SaveWith` honours it. The supported API therefore already permits an agent override with save permission. To meet the requested normal-build guarantee, remove the override from the public catalogue and **reject it at the pipe/game-side entry** (including legacy callers), while retaining `PlayerSaveAnyway`'s private call into `SaveWith`. Do not remove the internal override needed by the human button. Treat this as a visible policy correction, with coordinator review of existing callers/tests/docs; this research does not make that change.
 
 Build the button test as a separate autonomous-test package mode, not an INI-only switch:
 
