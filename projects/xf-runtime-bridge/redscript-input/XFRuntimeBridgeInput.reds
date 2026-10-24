@@ -135,7 +135,10 @@ public class XFChoiceObserver extends ScriptableSystem {
       out += (StrLen(out) > 0 ? "," : "") + "{\"ok\":true,\"id\":" + IntToString(hub.id) + ",\"choices\":[" + choices + "]}";
       count += 1;
     }
-    XFBridge_Event("choice.offer", "{\"generation\":" + IntToString(this.m_generation) + ",\"truncated\":" + XFJson.Flag(truncated) + ",\"hubs\":[" + out + "]}");
+    // [source] Seed current highlight along with the offer; never seed LastAttemptedChoice.
+    // Eligibility/dedicated-action semantics are uncommissioned: do not publish input_eligible.
+    let defs = GetAllBlackboardDefs().UIInteractions;
+    XFBridge_Event("choice.offer", "{\"generation\":" + IntToString(this.m_generation) + ",\"active_hub\":" + IntToString(this.m_board.GetInt(defs.ActiveChoiceHubID)) + ",\"index\":" + IntToString(this.m_board.GetInt(defs.SelectedIndex)) + ",\"truncated\":" + XFJson.Flag(truncated) + ",\"hubs\":[" + out + "]}");
   }
   protected cb func OnXFActive(value: Int32) -> Bool {
     if XFBridge_Live() { XFBridge_Event("choice.selection", "{\"ok\":true,\"active_hub\":" + IntToString(value) + "}"); }

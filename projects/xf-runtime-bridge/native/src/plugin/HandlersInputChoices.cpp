@@ -3,6 +3,7 @@
 #include "plugin/InputDispatch.hpp"
 #include "plugin/Plugin.hpp"
 #include "plugin/GameHandlers.hpp"
+#include "plugin/ScriptCall.hpp"
 #include "core/Win32.hpp"
 
 namespace xfb::plugin
@@ -30,7 +31,7 @@ void Guard()
 input::Ops Ops()
 {
     input::Ops ops;
-    ops.guard = Guard;
+    ops.guard = [] { RequireGameThread(); Guard(); };
     ops.connection = [] { return Get().bridge ? Get().bridge->ConnectionsAccepted() : uint64_t{0}; };
     ops.seedOffers = [] { ScriptCall("XFInputActions", "ObserveChoices", {}, {}, "input-seed"); };
     ops.hub = [] { return ScriptCall("XFInputActions", "HubState", {}, {}, "input-hub"); };
@@ -52,7 +53,12 @@ input::Ops Ops()
         return ScriptCall("XFInputActions", comparison ? "PhotoExitControl" : "PhotoExitAttempt", {"Int32"}, {&gen}, "input-photo-exit");
     };
     ops.inputReady = [] { return InputDispatchStatus().value("available", false); };
-    // No game object is retained; a future commissioned adapter must supply its own load-safe release.
+    ops.inputStatus = InputDispatchStatus;
+    ops.physicalHeld = PhysicalInputHeld;
+    ops.dispatch = DispatchInput;
+    ops.releaseGuard = [] { RequireGameThread(); Get().scriptLayer.Require("native-input-release"); };
+    // No receiver is retained. This guard alone cannot establish load-safe neutralisation:
+    // InputDispatchStatus remains unavailable until the native lifetime contract is known.
     return ops;
 }
 uint64_t LockGeneration()

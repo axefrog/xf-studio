@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 133 tools, 81 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 141 tools, 87 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -13,6 +13,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Connection, session and answers](#connection-session-and-answers) (14)
 - [Photo mode](#photo-mode) (18)
 - [Appearance screen (character creator)](#appearance-screen-character-creator) (6)
+- [Autonomous input and choice tests](#autonomous-input-and-choice-tests) (8)
 - [Player](#player) (8)
 - [Behaviours](#behaviours) (6)
 - [Live direction](#live-direction) (26)
@@ -32,18 +33,18 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 44 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 46 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
-| `write-photo` | Control photo mode | 15 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
+| `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-character` | Change V's appearance | 5 | Yes | Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile). | `allow_writes = true` and `character` in `allow_write_classes` (on by default once writes are allowed); opening, confirming and leaving the appearance screen also need `allow_creator_leave = true`. |
 | `write-inventory` | Change V's clothing | 5 | Yes | Equips and unequips V's clothing, and can add a test item to V's inventory (and remove it again). Off in the bridge's settings until the maintainer allows it; undo by equipping the earlier item. | `allow_writes = true` and `inventory` listed by name. Off in every package unless the test build is made with `--allow-inventory`. |
-| `write-save` | Save and load the game | 5 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
+| `write-save` | Save and load the game | 6 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
 | `write-showroom` | Set up the finish showroom | 5 | Yes | Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `showroom` listed by name (the test profile's build lists it). |
-| `write-player` | Move V | 6 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
-| `write-npc` | Direct NPCs | 13 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
+| `write-player` | Move V | 7 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
+| `write-npc` | Direct NPCs | 14 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
 | `write-dm` | Direct the scene | 21 | Yes | Brings props, vehicles and lights into the world near V and changes doors and vehicles; plays sounds and a vehicle's radio; shows message toasts and a real incoming call from a contact the player has, with subtitle lines; puts an XF quest in the HUD's tracker; shows the game's own banners and quest toasts; and arms watchers that run micro-actions inside the game without the agent. Nothing is saved: the answers' undos, the kill switch, the pause, a handover or loading a save take it all back, and saving waits until the spawned things and changed doors are gone. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only. |
-| `act-player` | Act for V | 0 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
+| `act-player` | Act for V | 2 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
 | `control` | Stop the bridge | 5 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
 
 ## Refusals any tool can give
@@ -263,7 +264,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `kinds` | array of string | 1 to 33 items; each `answer`, `comment`, `note`, `behaviour`, `kill`, `handover`, `resume`, `write`, `refused`, `npc.spawned`, `npc.arrived`, `npc.blocked`, `npc.move_failed`, `npc.follow_ended`, `npc.turned`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.dissolved`, `npc.handed_back`, `npc.lost`, `npc.died`, `npc.auto_released`, `dm.watch`, `dm.micro`, `dm.phone`, `dm.quest`, `dm.world`, `dm.audio`, `dm.light`, `dm.notify`, `dm.released` | Event kinds that end the wait (default answer and comment). |
+| `kinds` | array of string | 1 to 47 items; each `answer`, `comment`, `note`, `behaviour`, `kill`, `handover`, `resume`, `write`, `refused`, `save`, `input.submitted`, `input.result`, `input.photo.callback`, `input.photo.hide`, `input.photo.confirm`, `input.ui.consumed`, `input.ui.queued`, `input.ui.dequeued`, `input.ui.native`, `choice.offer`, `choice.selection`, `choice.attempt`, `choice.result`, `npc.spawned`, `npc.arrived`, `npc.blocked`, `npc.move_failed`, `npc.follow_ended`, `npc.turned`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.dissolved`, `npc.handed_back`, `npc.lost`, `npc.died`, `npc.auto_released`, `dm.watch`, `dm.micro`, `dm.phone`, `dm.quest`, `dm.world`, `dm.audio`, `dm.light`, `dm.notify`, `dm.released` | Event kinds that end the wait (default answer and comment). |
 | `message_id` | integer | 1 to 1000000000 | Only the answer to this question (ui_message's id) ends the wait, even one given before the call; other kinds still count. |
 | `after` | integer | 0 to 1000000000000 | Wait for events after this sequence number (session_events' next); default: the newest when the call starts. |
 | `timeout_s` | number | 1 to 600 | Give up after this many seconds, 1 to 600. Default 120. |
@@ -717,6 +718,140 @@ No parameters.
 - **Refusals:** [`creator_leave_disabled`](#refusal-creator-leave-disabled), [`not_in_character_menu`](#refusal-not-in-character-menu)
 
 No parameters.
+
+## Autonomous input and choice tests
+
+Explicit autonomous -writes candidate only. XF hub actions, queued photo exit and rendered CET activation require authoritative read-back. Engine input and real-hub dispatch remain refused pending R1 commissioning. The read-only input_probe inventory does not capture receiver lifetime.
+
+### `test_input_arm`
+
+**Arm an input test fixture.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Bind one run to the current world and exact gameplay, photo_mode or menu context, for at most 120 seconds. A stop or context change disarms it.
+
+- **Command:** `test.input.arm`, the bridge method `test.input.arm`
+- **Permission:** Move V (`write-player`)
+- **Changes the game:** Yes
+- **Undo:** The test owns only its submitted controls. Completion, expiry or bridge.kill releases them and cancels pending work.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run_id` (required) | string | at most 80 characters | Armed fixture ID (test_input_arm), at most 80 characters. |
+| `context` (required) | string | `gameplay`, `photo_mode`, `menu` | Expected fixture context |
+| `duration_ms` | integer | 100 to 120000 | Run lifetime |
+
+### `test_input_state`
+
+**Read the input test receipt.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Pending request, terminal receipt, cleanup debt, source sequence, world and lock generations, current XF hub and photo controller, and engine-input availability with its precise blocker/proposed probe. A submission is not a commit; status is not a native receiver trace.
+
+- **Command:** `test.input.state`, the bridge method `test.input.state`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+
+No parameters.
+
+### `test_npc_choice`
+
+**Choose through the XF hub action handler.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Coverage xf_action_handler. Scroll at most once per update and apply on a later update; commit requires the matching authoritative npc.choice event. commit false only highlights. No engine input delivery is claimed.
+
+- **Command:** `test.npc.choice`, the bridge method `test.npc.choice`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** A committed answer cannot be undone. Select-only changes the highlight; bridge.kill stops pending steps.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run_id` (required) | string | at most 80 characters | Armed fixture ID (test_input_arm), at most 80 characters. |
+| `hub` (required) | integer | 1 to 2147483647 | Expected XF hub |
+| `generation` (required) | integer | 1 to 2147483647 | Hub generation from test_input_state |
+| `index` (required) | integer | 0 to 15 | Zero-based line |
+| `commit` | boolean | `true`, `false` | Commit after selecting; default true |
+| `timeout_ms` | integer | 100 to 5000 | Receipt deadline in milliseconds; no automatic retry. |
+
+### `test_photo_exit_attempt`
+
+**Queue the native photo exit event.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Coverage native_exit_event. Queues Codeware's TryExitPhotomodeEvent once to exercise the existing modal hold. Requires the current shown controller; receipt distinguishes held from confirmation token. This is not an injected Esc key.
+
+- **Command:** `test.photo.exit_attempt`, the bridge method `test.photo.exit_attempt`
+- **Permission:** Control photo mode (`write-photo`)
+- **Changes the game:** Yes
+- **Undo:** Cancel a confirmation through its normal game controls, or reopen photo mode after an exit. bridge.kill cancels a pending attempt.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run_id` (required) | string | at most 80 characters | Armed fixture ID (test_input_arm), at most 80 characters. |
+| `controller_generation` (required) | integer | 1 to 2147483647 | Current controller generation |
+| `route` | string | `event`, `callback` | event queues the native event (default); callback is the comparison control with consumer_callback coverage |
+| `timeout_ms` | integer | 100 to 5000 | Receipt deadline in milliseconds; no automatic retry. |
+
+### `test_ui_activate`
+
+**Activate the rendered Save anyway button.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Coverage rendered_button_activation, excluding ImGui hit-testing. Arms one expiring token, consumed only after the real visible, settled CET item is drawn. CET must already be open. The request cannot save by itself. Wait for queue/native/save receipts and a new settled manual slot; never retry an uncertain save.
+
+- **Command:** `test.ui.activate`, the bridge method `test.ui.activate`
+- **Permission:** Save and load the game (`write-save`)
+- **Changes the game:** Yes
+- **Undo:** A completed save cannot be undone. Before consumption the token expires or bridge.kill cancels it; never retry an uncertain save.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run_id` (required) | string | at most 80 characters | Armed fixture ID (test_input_arm), at most 80 characters. |
+| `target` (required) | string | `save_anyway` | Exact rendered target |
+| `lock_generation` (required) | integer | 1 to 2147483647 | Current real offer generation |
+| `timeout_ms` | integer | 100 to 5000 | Receipt deadline in milliseconds; no automatic retry. |
+
+### `test_input_pulse`
+
+**Commission a bounded engine input pulse.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Also requires XFB_ENGINE_INPUT_TESTS and explicit act permission. confirm press/release or move_y axis/zero, 10–150 ms, owned controls only. Currently fails input_unavailable: concrete receiver lifetime, dispatch virtual implementation and release ABI remain unvalidated. No native call or external fallback is made.
+
+- **Command:** `test.input.pulse`, the bridge method `test.input.pulse`
+- **Permission:** Act for V (`act-player`)
+- **Changes the game:** Yes
+- **Undo:** The test owns only its submitted controls. Completion, expiry or bridge.kill releases them and cancels pending work.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run_id` (required) | string | at most 80 characters | Armed fixture ID (test_input_arm), at most 80 characters. |
+| `control` (required) | string | `confirm`, `move_y` | Allowlisted control |
+| `duration_ms` (required) | integer | 10 to 150 | Pulse duration |
+| `value` | number | -0.2 to 0.2 | Axis value |
+| `timeout_ms` | integer | 100 to 5000 | Receipt deadline in milliseconds; no automatic retry. |
+
+### `player_choice_state`
+
+**Read fresh native choice observations.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Immediate offer, highlight and LastAttemptedChoice notifications; identical consecutive attempts remain separate. Native acceptance and hub attribution are separate: LastAttemptedChoice has no hub ID. Never seeds historical attempts.
+
+- **Command:** `player.choice.state`, the bridge method `player.choice.state`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+
+No parameters.
+
+### `player_choice_select`
+
+**Select a native quest or vendor line.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Also requires XFB_ENGINE_INPUT_TESTS and explicit act permission. The bounded owner waits for highlight read-back and a fresh successful native attempt correlated with the observed hub; correlation is not native scene identity. Currently refuses input_unavailable: receiver lifetime, release and physical overlap remain unvalidated, and retail offers have no certified eligibility/dedicated-action protocol. No engine call, blackboard write, quest-fact patch or fabricated interaction event is made.
+
+- **Command:** `player.choice.select`, the bridge method `player.choice.select`
+- **Permission:** Act for V (`act-player`)
+- **Changes the game:** Yes
+- **Undo:** A committed answer cannot be undone. Select-only changes the highlight; bridge.kill stops pending steps.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run_id` (required) | string | at most 80 characters | Armed fixture ID (test_input_arm), at most 80 characters. |
+| `hub` (required) | integer | 1 to 2147483647 | Expected native hub |
+| `generation` (required) | integer | 1 to 2147483647 | Observed offer generation |
+| `index` (required) | integer | 0 to 15 | Zero-based line |
+| `commit` | boolean | `true`, `false` | Commit |
+| `timeout_ms` | integer | 100 to 5000 | Receipt deadline in milliseconds; no automatic retry. |
 
 ## Player
 
@@ -2468,6 +2603,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | Code | Message |
 |---|---|
 | <a id="refusal-access-denied"></a>`access_denied` | Windows refused access to the game bridge. Run the XF tools as the same Windows user as the game. |
+| <a id="refusal-activation-expired"></a>`activation_expired` | The test activation expired. Check the current screen before arming a fresh fixture. |
 | <a id="refusal-arms-drawn"></a>`arms_drawn` | V has her arm cyberware out, and the game doesn't swap arm cyberware while it is drawn. Nothing was changed. Holster it first (player_action with weapon.holster), or leave holster_first on so the tools do it. |
 | <a id="refusal-bad-input"></a>`bad_input` | A value doesn't fit the tool's input schema (the message lists each problem), or two options that exclude each other were both given. Nothing was sent to the game. |
 | <a id="refusal-bad-params"></a>`bad_params` | Some of the values given aren't valid for this action. |
@@ -2481,6 +2617,8 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-call-failed"></a>`call_failed` | The game refused the call, and nothing is known to have changed. |
 | <a id="refusal-carrier-not-loaded"></a>`carrier_not_loaded` | The animation set isn't loaded. For the XF live carrier: install the XF Live Pose test package, open photo mode and select the carrier pose (photo_pose_set with record xfs_live_carrier), then try again. |
 | <a id="refusal-carrier-not-selected"></a>`carrier_not_selected` | The XF live carrier isn't the selected photo-mode pose, so nothing was written. Select it with photo_pose_set (record xfs_live_carrier), then try again. |
+| <a id="refusal-choice-changed"></a>`choice_changed` | The dialogue offer changed before the requested line was confirmed. Read it again before choosing. |
+| <a id="refusal-choice-unsupported"></a>`choice_unsupported` | This dialogue's input and eligibility rules have not been validated. Leave this choice to the player. |
 | <a id="refusal-client-timeout"></a>`client_timeout` | The game bridge didn't answer. The game may be frozen or loading; try again shortly. |
 | <a id="refusal-clip-not-found"></a>`clip_not_found` | The animation set is loaded but has no clip with that name. Check the name, or the test package's build. |
 | <a id="refusal-codeware-missing"></a>`codeware_missing` | The showroom spawns its heads and lights through Codeware, which the game hasn't loaded. Install Codeware 1.20 or newer from its official release page (the bridge never installs it), then restart the game. Nothing was spawned. |
@@ -2500,6 +2638,9 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-in-combat"></a>`in_combat` | V is in combat, so the bridge won't move or act for her now. Nothing was changed. Try again once the fight is over. |
 | <a id="refusal-in-scene"></a>`in_scene` | A scene is playing (or V is in a dialogue), where the bridge doesn't move or act for V. Nothing was changed. Wait for the scene to end. |
 | <a id="refusal-in-vehicle"></a>`in_vehicle` | V is in a vehicle, so the bridge won't move her or act for her now. Nothing was changed. Get out first. |
+| <a id="refusal-input-busy"></a>`input_busy` | An input test is already pending. Wait for its receipt before starting another. |
+| <a id="refusal-input-overlap"></a>`input_overlap` | A real held control overlaps this test. Release it before preparing another pulse. |
+| <a id="refusal-input-unavailable"></a>`input_unavailable` | The native input adapter has not been commissioned for this game build. No input was sent. |
 | <a id="refusal-killed"></a>`killed` | The game bridge was switched off with its kill switch. In the game, open the Cyber Engine Tweaks overlay and press Reconnect in the XF Runtime Bridge window (test builds), or restart the game. |
 | <a id="refusal-layout-unrecognised"></a>`layout_unrecognised` | The clip's keys aren't laid out the way the bridge expects on this game version, so it stopped without writing anything. Keep the answer (its detail lists every mismatch) and stop the live-pose steps. |
 | <a id="refusal-live-pose-disabled"></a>`live_pose_disabled` | Writing the live-pose carrier is switched off in this bridge's config.ini (allow_live_pose; only the XF test profile's -writes build allows it). Nothing was changed. |
@@ -2546,13 +2687,18 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-session-running"></a>`session_running` | A scripted session is driving the game, so the MCP server stays off the bridge until it finishes or pauses at a question for the player. Screenshots and the kill switch still work. |
 | <a id="refusal-showroom-missing"></a>`showroom_missing` | The game doesn't have the XF Finish Showroom build these heads come from. Stage that showroom build in the test profile (the coordinator does this), restart the game, then try again. Nothing was spawned. |
 | <a id="refusal-spawn-refused"></a>`spawn_refused` | The game's entity spawner refused the showroom entity, so nothing was spawned. The plugin log has the details. |
+| <a id="refusal-stale-context"></a>`stale_context` | The expected game screen or choices changed. Read the current state and prepare a fresh fixture. |
 | <a id="refusal-stale-match"></a>`stale_match` | The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh. |
 | <a id="refusal-superseded"></a>`superseded` | An emergency control (bridge_kill or session_handover) came after this command and cancelled it: a command still waiting never ran, and a running one stopped at its next step. Check the game's state, then send it again if it is still wanted. |
+| <a id="refusal-test-build-required"></a>`test_build_required` | This action needs the separate autonomous test candidate. Stage that candidate in the dedicated test profile. |
 | <a id="refusal-test-hooks-off"></a>`test_hooks_off` | Test hooks are off in this build. Only the -writes package for the dedicated XF test profile has them ([bridge] allow_test_hooks in its config.ini). |
+| <a id="refusal-test-run-required"></a>`test_run_required` | Arm a bounded test fixture before submitting this input. |
 | <a id="refusal-timeout"></a>`timeout` | The game was too busy to answer in time, and nothing was changed. Try again in a moment. |
 | <a id="refusal-timeout-after-start"></a>`timeout_after_start` | The game started this action but took too long to confirm it. It may still have happened: check the game (or the plugin log) before repeating it. |
 | <a id="refusal-too-far"></a>`too_far` | That place is more than 30 m from V, so nothing was spawned there. Move V closer or spawn nearer (distance_m). |
 | <a id="refusal-too-large"></a>`too_large` | The request was too large for the game bridge. |
+| <a id="refusal-ui-target-not-drawn"></a>`ui_target_not_drawn` | The target button was not drawn and available. Open the CET window and let its layout settle. |
+| <a id="refusal-ui-target-unavailable"></a>`ui_target_unavailable` | Save anyway is not currently offered. Wait for a real save-lock offer in the open CET window. |
 | <a id="refusal-unauthorized"></a>`unauthorized` | The game bridge refused the connection key. Restart the game so the bridge writes a fresh session file. |
 | <a id="refusal-unavailable"></a>`unavailable` | That part of the game isn't available right now. |
 | <a id="refusal-unknown-method"></a>`unknown_method` | The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build. |

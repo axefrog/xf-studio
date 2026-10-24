@@ -163,7 +163,7 @@ describe.skipIf(!candidate)("input consumer routes through the native simulated 
     throw new Error("input result missing");
   };
   beforeAll(async () => {
-    host = await startSelftestHost(["--allow-writes", "--allow-test-hooks", "--write-classes", "player,npc,photo,save"]);
+    host = await startSelftestHost(["--allow-writes", "--allow-test-hooks", "--write-classes", "player,npc,photo,save,act"]);
     api = new CommandApi({ runtimeDir: host.dir, auditDir: tempDir("xfb-input-audit-") });
   }, HOOK_TIMEOUT_MS);
   afterAll(async () => { await api?.close(); await host?.stop(); });
@@ -203,6 +203,21 @@ describe.skipIf(!candidate)("input consumer routes through the native simulated 
     api.close();
     await sleep(150);
     expect((await command("test.input.state")).run_id).toBe("");
+  });
+  test("the simulated host cannot commission retail pulses or native quest choices", async () => {
+    await call("selftest.phase", { phase: "gameplay" });
+    await command("test.input.arm", { run_id: "uncommissioned", context: "gameplay" });
+    expect((await command("test.input.state")).engine_input).toMatchObject({ available: false, coverage: "simulation_only" });
+    for (const [method, params] of [
+      ["test.input.pulse", { run_id: "uncommissioned", control: "confirm", duration_ms: 30 }],
+      ["player.choice.select", { run_id: "uncommissioned", hub: 20, generation: 1, index: 1 }],
+    ] as const) {
+      const result = await api.callBridge(method, params, "native-refusal");
+      expect(result).toMatchObject({ ok: false, error: { code: "input_unavailable" } });
+    }
+    const state = await command("test.input.state");
+    expect(state.held).toBe("");
+    expect(state.pending).toBeNull();
   });
   test("allow_test_hooks off refuses the test surface even in a candidate binary", async () => {
     const normal = await startSelftestHost(["--allow-writes", "--write-classes", "player,npc,photo,save"]);

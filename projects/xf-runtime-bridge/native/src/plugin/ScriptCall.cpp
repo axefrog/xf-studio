@@ -167,6 +167,12 @@ bool ScriptCallsAvailable()
 {
     return gAddressesResolved.load();
 }
+void RequireGameThread()
+{
+    const auto thread = gGameThread.load();
+    if (thread == 0 || thread != GetCurrentThreadId())
+        throw MethodError("failed", "Input dispatch requires the game's update thread.");
+}
 
 void CallFunction(RED4ext::CBaseFunction* aFn, RED4ext::IScriptable* aContext, const std::vector<void*>& aValues,
                   void* aOut, const std::string& aWhat, const std::string& aCid)

@@ -1,7 +1,7 @@
 #pragma once
 
 // 0.8.13: one bounded autonomous-test owner. Submissions are never results. Game adapters are
-// injected; the retail input adapter deliberately remains unavailable until its ABI is validated.
+// injected; retail dispatch refuses until the receiver AND its release lifetime are validated.
 #include <functional>
 #include <mutex>
 #include <nlohmann/json.hpp>
@@ -21,8 +21,10 @@ struct Ops
     std::function<json()> photo;
     std::function<json(int32_t, bool)> exitAttempt; // bool: comparison callback, otherwise queued native event
     std::function<bool()> inputReady;
+    std::function<json()> inputStatus;
     std::function<bool(const std::string&)> physicalHeld;
     std::function<void(const std::string&, const std::string&, float)> dispatch;
+    std::function<void()> releaseGuard; // game thread + live, also after writes/client ownership closes
 };
 class Service
 {
@@ -43,14 +45,17 @@ private:
     void CheckRun(const json& aParams, double aNow) const;
     void Finish(const std::string& aReason, json aData = json::object());
     void Neutralize(const Ops& aOps);
+    json NativeHub() const;
+    void TickNative(double aNow, const Ops& aOps);
     EventLog& m_events;
     mutable std::recursive_mutex m_mutex;
-    std::string m_run, m_context, m_held, m_heldKind;
+    std::string m_run, m_context, m_held, m_heldKind, m_stopReason;
     double m_expires = 0, m_deadline = 0;
     uint64_t m_world = 0, m_lock = 0, m_serial = 0, m_cursor = 0, m_sourceSeq = 0;
     uint64_t m_connection = 0;
     bool m_offered = false;
     json m_job = nullptr, m_result = nullptr, m_offer = nullptr, m_photoReceipt = nullptr;
+    json m_selection = json::object(), m_choiceReceipt = nullptr;
 };
 void RegisterMethods(Dispatcher& aDispatcher, Service& aService, bool aHooks, bool aEngineGate,
                      std::function<double()> aNow, std::function<uint64_t()> aWorld,

@@ -22,6 +22,8 @@ void CallFunction(RED4ext::CBaseFunction* aFn, RED4ext::IScriptable* aContext, c
 
 // Game thread, once per tick: remembers which thread may call (CallFunction refuses any other).
 void NoteGameThread();
+// Shared by native adapters: the same thread identity as script calls, no engine call.
+void RequireGameThread();
 
 // At load: resolves every engine address a call needs through RED4ext's RED4ext_ResolveAddress
 // (RB-32). When one is missing from the game's address library, script calls stay off for the whole

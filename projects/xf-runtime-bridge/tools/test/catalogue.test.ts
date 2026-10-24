@@ -36,7 +36,7 @@ function nativeAccess(source: string, method: string): string | null {
   const match =
     new RegExp(`(?:WriteMethod|MarkedWrite|marked)\\("${name}",\\s*Access::(\\w+)`).exec(source) ??
     new RegExp(`simWrite\\("${name}",\\s*xfb::Access::(\\w+)`).exec(source) ??
-    new RegExp(`add\\("${name}",\\s*"[a-z]+",\\s*Access::(\\w+)`).exec(source) ??
+    new RegExp(`add\\("${name}",\\s*"[a-z_]+",\\s*Access::(\\w+)`).exec(source) ??
     new RegExp(`\\{"${name}",\\s*(?:xfb::)?Access::(\\w+)`).exec(source);
   return match ? match[1].replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase() : null;
 }

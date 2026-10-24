@@ -1,0 +1,804 @@
+{
+  "schema": "xfb/session-script-2",
+  "card": "research/runtime/runtime-bridge-test-card.md#input-and-choices-borg-mode-session",
+  "name": "input-and-choices",
+  "title": "Input and choices (Borg-mode session)",
+  "requires": [
+    "Approved dedicated 2.31 profile and disposable save. This script never launches or deploys the game.",
+    "Both test CMake flags, allow_test_hooks and write classes player/npc/photo/save. No act permission is required; no native pulse is requested.",
+    "Override candidate and log placeholders from the approved clean manifest/current launch. Dirty worktrees are not release candidates.",
+    "Baseline XF panel visible, layer photo_menu, modal false. One spare manual save slot; no autosave during IC4. CET open only for IC4.",
+    "Never resume or replay IC4 after an uncertain acknowledgement. IC5 runs separately against a pinned external read-only trace."
+  ],
+  "fixtures": {
+    "candidate": {
+      "plugin_version": "0.8.13",
+      "build_commit": "0000000000000000000000000000000000000000",
+      "natives": 29,
+      "write_classes": [
+        "photo",
+        "world",
+        "character",
+        "save",
+        "showroom",
+        "player",
+        "npc",
+        "dm"
+      ]
+    },
+    "logs": {
+      "plugin": "SET_CURRENT_PLUGIN_LOG_IN_PRIVATE_FIXTURE",
+      "redscript": "SET_CURRENT_REDSCRIPT_LOG_IN_PRIVATE_FIXTURE"
+    }
+  },
+  "diagnostic_logs": {
+    "plugin": "$fixture.logs.plugin",
+    "redscript": "$fixture.logs.redscript"
+  },
+  "steps": [
+    {
+      "do": "run",
+      "label": "IC0-info",
+      "command": "bridge.info",
+      "bind": "bridge"
+    },
+    {
+      "do": "assert",
+      "label": "IC0-candidate",
+      "row": "IC0",
+      "check": "bridge_ready",
+      "actual": "$bridge",
+      "candidate": "$fixture.candidate",
+      "logs": "$fixture.logs"
+    },
+    {
+      "do": "ask",
+      "label": "IC1-ready",
+      "text": "Stand still on the disposable on-foot fixture. Ready for one XF-owned dialogue pick?"
+    },
+    {
+      "do": "cursor",
+      "label": "IC1-spawn-cursor",
+      "bind": "spawnCursor"
+    },
+    {
+      "do": "run",
+      "label": "IC1-spawn",
+      "command": "npc.spawn",
+      "input": {
+        "cast": "woman_corpo",
+        "ahead_m": 3
+      },
+      "bind": "actor"
+    },
+    {
+      "do": "await",
+      "label": "IC1-spawned",
+      "cursor": "$spawnCursor",
+      "kind": "npc.spawned",
+      "subject": "$actor.who",
+      "timeout_s": 20,
+      "bind": "spawned"
+    },
+    {
+      "do": "run",
+      "label": "IC1-offer",
+      "command": "npc.choices",
+      "input": {
+        "who": "$actor.who",
+        "choices": [
+          "XF input first",
+          "XF input second"
+        ],
+        "max_s": 30
+      }
+    },
+    {
+      "do": "run",
+      "label": "IC1-arm",
+      "command": "test.input.arm",
+      "input": {
+        "run_id": "borg-xf-choice",
+        "context": "gameplay",
+        "duration_ms": 30000
+      }
+    },
+    {
+      "do": "run",
+      "label": "IC1-state",
+      "command": "test.input.state",
+      "bind": "xfState"
+    },
+    {
+      "do": "cursor",
+      "label": "IC1-select-cursor",
+      "bind": "selectCursor"
+    },
+    {
+      "do": "run",
+      "label": "IC1-select-only",
+      "command": "test.npc.choice",
+      "input": {
+        "run_id": "borg-xf-choice",
+        "hub": "$xfState.xf_hub.id",
+        "generation": "$xfState.xf_hub.generation",
+        "index": 1,
+        "commit": false
+      },
+      "bind": "selection"
+    },
+    {
+      "do": "observe",
+      "label": "IC1-highlight-readback",
+      "command": "test.input.state",
+      "duration_s": 1,
+      "bind": "highlight"
+    },
+    {
+      "do": "assert",
+      "label": "IC1-selected",
+      "row": "IC1",
+      "check": "eventually",
+      "window": "$highlight",
+      "path": "last.reason",
+      "expected": "selected"
+    },
+    {
+      "do": "events",
+      "label": "IC1-no-commit-window",
+      "cursor": "$selectCursor",
+      "duration_s": 2,
+      "bind": "selectedEvents"
+    },
+    {
+      "do": "assert",
+      "label": "IC1-highlight-is-not-commit",
+      "row": "IC1",
+      "check": "event_count",
+      "window": "$selectedEvents",
+      "kind": "npc.choice",
+      "data": {},
+      "count": 0
+    },
+    {
+      "do": "assert",
+      "label": "IC1-selected-request",
+      "row": "IC1",
+      "check": "event_count",
+      "window": "$selectedEvents",
+      "kind": "input.result",
+      "data": {
+        "request_id": "$selection.request_id",
+        "run_id": "borg-xf-choice",
+        "world_generation": "$selection.world_generation",
+        "reason": "selected",
+        "committed": false
+      },
+      "count": 1
+    },
+    {
+      "do": "cursor",
+      "label": "IC1-commit-cursor",
+      "bind": "commitCursor"
+    },
+    {
+      "do": "run",
+      "label": "IC1-commit",
+      "command": "test.npc.choice",
+      "input": {
+        "run_id": "borg-xf-choice",
+        "hub": "$xfState.xf_hub.id",
+        "generation": "$xfState.xf_hub.generation",
+        "index": 1,
+        "commit": true
+      },
+      "bind": "commit"
+    },
+    {
+      "do": "events",
+      "label": "IC1-commit-window",
+      "cursor": "$commitCursor",
+      "duration_s": 2,
+      "bind": "commitEvents"
+    },
+    {
+      "do": "assert",
+      "label": "IC1-one-choice",
+      "row": "IC1",
+      "check": "event_count",
+      "window": "$commitEvents",
+      "kind": "npc.choice",
+      "data": {},
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC1-authoritative-answer",
+      "row": "IC1",
+      "check": "event_count",
+      "window": "$commitEvents",
+      "kind": "npc.choice",
+      "data": {
+        "hub": "$xfState.xf_hub.id",
+        "index": 1,
+        "label": "XF input second"
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC1-correlated-result",
+      "row": "IC1",
+      "check": "event_count",
+      "window": "$commitEvents",
+      "kind": "input.result",
+      "data": {
+        "request_id": "$commit.request_id",
+        "run_id": "borg-xf-choice",
+        "world_generation": "$commit.world_generation",
+        "reason": "committed",
+        "coverage": "xf_action_handler"
+      },
+      "count": 1
+    },
+    {
+      "do": "run",
+      "label": "IC1-release",
+      "command": "npc.release",
+      "input": {
+        "who": "$actor.who",
+        "how": "despawn"
+      }
+    },
+    {
+      "do": "ask",
+      "label": "IC2-photo-fixture",
+      "text": "Open photo mode, change one real option and leave its menu visible with no exit prompt. XF panel visible, layer photo_menu, modal initially off; CET closed. Ready?"
+    },
+    {
+      "do": "run",
+      "label": "IC2-modal",
+      "command": "ui.hud",
+      "input": {
+        "show": true,
+        "layer": "photo_menu",
+        "modal": true
+      }
+    },
+    {
+      "do": "run",
+      "label": "IC2-question",
+      "command": "ui.message",
+      "input": {
+        "level": "ask",
+        "text": "Do not answer yet: checking the photo exit attempt.",
+        "choices": [
+          "Continue"
+        ],
+        "seconds": 30
+      },
+      "bind": "IC2Question"
+    },
+    {
+      "do": "run",
+      "label": "IC2-arm",
+      "command": "test.input.arm",
+      "input": {
+        "run_id": "IC2",
+        "context": "photo_mode",
+        "duration_ms": 10000
+      }
+    },
+    {
+      "do": "run",
+      "label": "IC2-state",
+      "command": "test.input.state",
+      "bind": "IC2State"
+    },
+    {
+      "do": "assert",
+      "label": "IC2-before-shown",
+      "row": "IC2",
+      "check": "equals",
+      "actual": "$IC2State.photo.shown",
+      "expected": true
+    },
+    {
+      "do": "assert",
+      "label": "IC2-before-changed",
+      "row": "IC2",
+      "check": "equals",
+      "actual": "$IC2State.photo.changed",
+      "expected": true
+    },
+    {
+      "do": "assert",
+      "label": "IC2-before-confirmation",
+      "row": "IC2",
+      "check": "equals",
+      "actual": "$IC2State.photo.confirmation",
+      "expected": false
+    },
+    {
+      "do": "cursor",
+      "label": "IC2-cursor",
+      "bind": "IC2Cursor"
+    },
+    {
+      "do": "run",
+      "label": "IC2-exit-event",
+      "command": "test.photo.exit_attempt",
+      "input": {
+        "run_id": "IC2",
+        "controller_generation": "$IC2State.photo.generation",
+        "route": "event"
+      },
+      "bind": "IC2Request"
+    },
+    {
+      "do": "events",
+      "label": "IC2-events",
+      "cursor": "$IC2Cursor",
+      "duration_s": 2,
+      "bind": "IC2Events"
+    },
+    {
+      "do": "assert",
+      "label": "IC2-one-callback",
+      "row": "IC2",
+      "check": "event_count",
+      "window": "$IC2Events",
+      "kind": "input.photo.callback",
+      "data": {
+        "request_id": "$IC2Request.request_id",
+        "generation": "$IC2State.photo.generation",
+        "held": true,
+        "changed": true,
+        "confirmation": false
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC2-receipt",
+      "row": "IC2",
+      "check": "event_count",
+      "window": "$IC2Events",
+      "kind": "input.result",
+      "data": {
+        "request_id": "$IC2Request.request_id",
+        "run_id": "IC2",
+        "world_generation": "$IC2Request.world_generation",
+        "reason": "callback",
+        "coverage": "native_exit_event"
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC2-hide",
+      "row": "IC2",
+      "check": "event_count",
+      "window": "$IC2Events",
+      "kind": "input.photo.hide",
+      "data": {},
+      "count": 0
+    },
+    {
+      "do": "run",
+      "label": "IC2-withdraw-question",
+      "command": "ui.message",
+      "input": {
+        "withdraw": "$IC2Question.id"
+      }
+    },
+    {
+      "do": "run",
+      "label": "IC3-modal",
+      "command": "ui.hud",
+      "input": {
+        "show": true,
+        "layer": "photo_menu",
+        "modal": false
+      }
+    },
+    {
+      "do": "run",
+      "label": "IC3-question",
+      "command": "ui.message",
+      "input": {
+        "level": "ask",
+        "text": "Do not answer yet: checking the photo exit attempt.",
+        "choices": [
+          "Continue"
+        ],
+        "seconds": 30
+      },
+      "bind": "IC3Question"
+    },
+    {
+      "do": "run",
+      "label": "IC3-arm",
+      "command": "test.input.arm",
+      "input": {
+        "run_id": "IC3",
+        "context": "photo_mode",
+        "duration_ms": 10000
+      }
+    },
+    {
+      "do": "run",
+      "label": "IC3-state",
+      "command": "test.input.state",
+      "bind": "IC3State"
+    },
+    {
+      "do": "assert",
+      "label": "IC3-before-shown",
+      "row": "IC3",
+      "check": "equals",
+      "actual": "$IC3State.photo.shown",
+      "expected": true
+    },
+    {
+      "do": "assert",
+      "label": "IC3-before-changed",
+      "row": "IC3",
+      "check": "equals",
+      "actual": "$IC3State.photo.changed",
+      "expected": true
+    },
+    {
+      "do": "assert",
+      "label": "IC3-before-confirmation",
+      "row": "IC3",
+      "check": "equals",
+      "actual": "$IC3State.photo.confirmation",
+      "expected": false
+    },
+    {
+      "do": "cursor",
+      "label": "IC3-cursor",
+      "bind": "IC3Cursor"
+    },
+    {
+      "do": "run",
+      "label": "IC3-exit-event",
+      "command": "test.photo.exit_attempt",
+      "input": {
+        "run_id": "IC3",
+        "controller_generation": "$IC3State.photo.generation",
+        "route": "event"
+      },
+      "bind": "IC3Request"
+    },
+    {
+      "do": "events",
+      "label": "IC3-events",
+      "cursor": "$IC3Cursor",
+      "duration_s": 2,
+      "bind": "IC3Events"
+    },
+    {
+      "do": "assert",
+      "label": "IC3-one-callback",
+      "row": "IC3",
+      "check": "event_count",
+      "window": "$IC3Events",
+      "kind": "input.photo.callback",
+      "data": {
+        "request_id": "$IC3Request.request_id",
+        "generation": "$IC3State.photo.generation",
+        "held": false,
+        "changed": true,
+        "confirmation": true
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC3-receipt",
+      "row": "IC3",
+      "check": "event_count",
+      "window": "$IC3Events",
+      "kind": "input.result",
+      "data": {
+        "request_id": "$IC3Request.request_id",
+        "run_id": "IC3",
+        "world_generation": "$IC3Request.world_generation",
+        "reason": "callback",
+        "coverage": "native_exit_event"
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC3-hide",
+      "row": "IC3",
+      "check": "event_count",
+      "window": "$IC3Events",
+      "kind": "input.photo.hide",
+      "data": {},
+      "count": 0
+    },
+    {
+      "do": "assert",
+      "label": "IC3-confirmation-token",
+      "row": "IC3",
+      "check": "event_count",
+      "window": "$IC3Events",
+      "kind": "input.photo.confirmation",
+      "data": {
+        "generation": "$IC3State.photo.generation",
+        "confirmation": true
+      },
+      "count": 1
+    },
+    {
+      "do": "run",
+      "label": "IC3-withdraw-question",
+      "command": "ui.message",
+      "input": {
+        "withdraw": "$IC3Question.id"
+      }
+    },
+    {
+      "do": "ask",
+      "label": "IC3-cancel-confirmation",
+      "text": "Cancel the real exit prompt through the game, then leave photo mode normally. Keep the disposable fixture loaded."
+    },
+    {
+      "do": "run",
+      "label": "IC4-save-baseline",
+      "command": "game.saves",
+      "input": {
+        "wait_ms": 500
+      },
+      "bind": "savesBefore"
+    },
+    {
+      "do": "assert",
+      "label": "IC4-baseline-settled",
+      "row": "IC4",
+      "check": "equals",
+      "actual": "$savesBefore.ready",
+      "expected": true
+    },
+    {
+      "do": "ask",
+      "label": "IC4-cet-ready",
+      "text": "Open CET with the XF Runtime Bridge window visible, expanded and settled; do not click Save anyway. Ready for exactly one test activation?"
+    },
+    {
+      "do": "run",
+      "label": "IC4-arm",
+      "command": "test.input.arm",
+      "input": {
+        "run_id": "borg-save-once",
+        "context": "gameplay",
+        "duration_ms": 10000
+      }
+    },
+    {
+      "do": "run",
+      "label": "IC4-state",
+      "command": "test.input.state",
+      "bind": "saveState"
+    },
+    {
+      "do": "assert",
+      "label": "IC4-real-offer",
+      "row": "IC4",
+      "check": "equals",
+      "actual": "$saveState.save_anyway_offered",
+      "expected": true
+    },
+    {
+      "do": "cursor",
+      "label": "IC4-cursor",
+      "bind": "saveCursor"
+    },
+    {
+      "do": "run",
+      "label": "IC4-rendered-activation",
+      "command": "test.ui.activate",
+      "input": {
+        "run_id": "borg-save-once",
+        "target": "save_anyway",
+        "lock_generation": "$saveState.lock_generation"
+      },
+      "bind": "saveRequest"
+    },
+    {
+      "do": "events",
+      "label": "IC4-complete-save-window",
+      "cursor": "$saveCursor",
+      "duration_s": 30,
+      "bind": "saveEvents"
+    },
+    {
+      "do": "assert",
+      "label": "IC4-input-ui-consumed",
+      "row": "IC4",
+      "check": "event_count",
+      "window": "$saveEvents",
+      "kind": "input.ui.consumed",
+      "data": {
+        "request_id": "$saveRequest.request_id",
+        "run_id": "borg-save-once"
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC4-input-ui-queued",
+      "row": "IC4",
+      "check": "event_count",
+      "window": "$saveEvents",
+      "kind": "input.ui.queued",
+      "data": {
+        "request_id": "$saveRequest.request_id",
+        "run_id": "borg-save-once"
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC4-input-ui-dequeued",
+      "row": "IC4",
+      "check": "event_count",
+      "window": "$saveEvents",
+      "kind": "input.ui.dequeued",
+      "data": {
+        "request_id": "$saveRequest.request_id",
+        "run_id": "borg-save-once"
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC4-input-ui-native",
+      "row": "IC4",
+      "check": "event_count",
+      "window": "$saveEvents",
+      "kind": "input.ui.native",
+      "data": {
+        "request_id": "$saveRequest.request_id",
+        "run_id": "borg-save-once"
+      },
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC4-consumer-order",
+      "row": "IC4",
+      "check": "sequence",
+      "window": "$saveEvents",
+      "events": [
+        {
+          "kind": "input.ui.consumed"
+        },
+        {
+          "kind": "input.ui.queued"
+        },
+        {
+          "kind": "input.ui.dequeued"
+        },
+        {
+          "kind": "input.ui.native"
+        },
+        {
+          "kind": "save"
+        }
+      ]
+    },
+    {
+      "do": "assert",
+      "label": "IC4-one-save-total",
+      "row": "IC4",
+      "check": "event_count",
+      "window": "$saveEvents",
+      "kind": "save",
+      "data": {},
+      "count": 1
+    },
+    {
+      "do": "assert",
+      "label": "IC4-one-successful-test-save",
+      "row": "IC4",
+      "check": "event_count",
+      "window": "$saveEvents",
+      "kind": "save",
+      "data": {
+        "via": "save_anyway",
+        "ok": true,
+        "request_id": "$saveRequest.request_id",
+        "run_id": "borg-save-once",
+        "world_generation": "$saveRequest.world_generation"
+      },
+      "count": 1
+    },
+    {
+      "do": "run",
+      "label": "IC4-save-after",
+      "command": "game.saves",
+      "input": {
+        "wait_ms": 500
+      },
+      "bind": "savesAfter"
+    },
+    {
+      "do": "assert",
+      "label": "IC4-one-settled-slot",
+      "row": "IC4",
+      "check": "save_delta",
+      "actual": "$savesAfter",
+      "baseline": "$savesBefore"
+    },
+    {
+      "do": "run",
+      "label": "IC4-lock-readback",
+      "command": "game.status",
+      "bind": "afterSave"
+    },
+    {
+      "do": "assert",
+      "label": "IC4-bridge-relocked",
+      "row": "IC4",
+      "check": "equals",
+      "actual": "$afterSave.bridge_save_lock",
+      "expected": true
+    },
+    {
+      "do": "assert",
+      "label": "IC4-engine-saving-locked",
+      "row": "IC4",
+      "check": "equals",
+      "actual": "$afterSave.saving_locked",
+      "expected": true
+    }
+  ],
+  "restore": [
+    {
+      "do": "run",
+      "label": "restore-modal-baseline",
+      "command": "ui.hud",
+      "input": {
+        "modal": false
+      },
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "IC2-cleanup-question",
+      "command": "ui.message",
+      "input": {
+        "withdraw": "$IC2Question.id"
+      },
+      "if_bound": "IC2Question",
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "IC3-cleanup-question",
+      "command": "ui.message",
+      "input": {
+        "withdraw": "$IC3Question.id"
+      },
+      "if_bound": "IC3Question",
+      "continue_on_error": true
+    },
+    {
+      "do": "run",
+      "label": "cleanup-actor",
+      "command": "npc.release",
+      "input": {
+        "who": "$actor.who",
+        "how": "despawn"
+      },
+      "if_bound": "actor",
+      "allow_error": "npc_unknown",
+      "continue_on_error": true
+    }
+  ]
+}

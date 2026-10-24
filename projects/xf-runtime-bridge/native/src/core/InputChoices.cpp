@@ -44,7 +44,7 @@ json Service::Arm(const json& p, double now, uint64_t world, const std::string& 
     const int duration = Integer(p, "duration_ms", 100, 120000, 30000);
     m_run = run; m_context = context; m_world = world; m_expires = now + duration / 1000.0;
     m_connection = connection;
-    m_result = nullptr; m_offer = nullptr;
+    m_result = nullptr; m_offer = nullptr; m_selection = json::object(); m_stopReason.clear();
     return {{"armed", true}, {"run_id", m_run}, {"world_generation", m_world}, {"context", context}, {"duration_ms", duration}};
 }
 void Service::CheckRun(const json& p, double now) const
@@ -55,22 +55,35 @@ void Service::CheckRun(const json& p, double now) const
 json Service::Submit(const std::string& kind, const json& p, double now, const Ops& ops)
 {
     std::scoped_lock lock(m_mutex);
-    if (kind == "choice") Fields(p, {"run_id", "hub", "generation", "index", "commit", "timeout_ms"});
+    if (kind == "choice" || kind == "native_choice") Fields(p, {"run_id", "hub", "generation", "index", "commit", "timeout_ms"});
     else if (kind == "photo") Fields(p, {"run_id", "controller_generation", "route", "timeout_ms"});
     else if (kind == "ui") Fields(p, {"run_id", "target", "lock_generation", "timeout_ms"});
     else Fields(p, {"run_id", "control", "duration_ms", "value", "timeout_ms"});
     CheckRun(p, now);
     if (ops.connection && ops.connection() != m_connection) { Stop("connection_changed", ops); throw MethodError("stale_context", "Arm a fresh run after reconnecting."); }
-    if (!m_job.is_null() || !m_held.empty()) throw MethodError("input_busy", "Only one test input may be pending.");
+    if (!m_job.is_null() || !m_held.empty() || !m_stopReason.empty()) throw MethodError("input_busy", "Only one test input may be pending; cleanup must finish first.");
     if (now < m_deadline && !m_result.is_null() && m_result.value("reason", std::string()) == "activated" && m_result.value("ui_stage", std::string()) != "native")
         throw MethodError("input_busy", "Wait for the consumed button action to drain or expire.");
     json job = p;
     const int timeout = Integer(p, "timeout_ms", 100, 5000, 2000);
-    if (kind == "choice")
+    if (kind == "choice" || kind == "native_choice")
     {
         Integer(p, "hub", 1, INT32_MAX); Integer(p, "generation", 1, INT32_MAX); Integer(p, "index", 0, 15);
         if (p.contains("commit") && !p["commit"].is_boolean()) throw MethodError("bad_params", "commit must be true or false.");
         job["commit"] = p.value("commit", true);
+        if (kind == "native_choice")
+        {
+            ops.guard();
+            if (!ops.inputReady || !ops.inputReady() || !ops.dispatch || !ops.physicalHeld || !ops.releaseGuard)
+                throw MethodError("input_unavailable", "R1 receiver lifetime, release/axis-zero and physical overlap are not validated. No input was submitted.");
+            if (m_context != "gameplay") throw MethodError("input_unavailable", "Only the commissioned on-foot dialogue fixture is supported.");
+            const auto h = NativeHub();
+            if (h.value("id", 0) != p["hub"].get<int>() || h.value("generation", 0) != p["generation"].get<int>())
+                throw MethodError("stale_context", "Read the current native offer first.");
+            if (!h.value("input_eligible", false) || static_cast<size_t>(p["index"].get<int>()) >= h["choices"].size())
+                throw MethodError("choice_unsupported", "This offer's eligibility and dedicated input protocol have not been validated.");
+            job["offer"] = m_offer;
+        }
     }
     else if (kind == "photo")
     {
@@ -101,19 +114,19 @@ json Service::Submit(const std::string& kind, const json& p, double now, const O
         if (!std::isfinite(value) || std::abs(value) > 0.2) throw MethodError("bad_params", "Axis value must be within -0.2 to 0.2.");
         if (m_context != "gameplay") throw MethodError("input_unavailable", "Only the on-foot fixture can commission this adapter.");
         ops.guard();
-        if (!ops.inputReady || !ops.inputReady()) throw MethodError("input_unavailable", "R1 receiver type, lifetime and release ABI are not validated. No input was submitted.");
+        if (!ops.inputReady || !ops.inputReady() || !ops.dispatch || !ops.releaseGuard) throw MethodError("input_unavailable", "R1 receiver type, lifetime and release ABI are not validated. No input was submitted.");
         if (!ops.physicalHeld || ops.physicalHeld(control)) throw MethodError("input_overlap", "A physical control overlaps this test.");
         // Record ownership BEFORE entering the adapter: even an error after submission owes a release.
         m_held = control; m_heldKind = control == "move_y" ? "axis" : "button";
         try { ops.guard(); ops.dispatch(control, m_heldKind == "axis" ? "axis" : "press", static_cast<float>(value)); }
-        catch (...) { Neutralize(ops); throw; }
+        catch (...) { m_stopReason = "error"; Neutralize(ops); m_stopReason.clear(); throw; }
         job["release_at"] = now + duration / 1000.0;
     }
     job["kind"] = kind; job["request_id"] = ++m_serial; job["steps"] = 0; job["stage"] = "queued";
     job["world_generation"] = m_world;
-    job["coverage"] = kind == "choice" ? "xf_action_handler" : kind == "photo" ? (job["route"] == "callback" ? "consumer_callback" : "native_exit_event") : kind == "ui" ? "rendered_button_activation" : "engine_dispatch";
+    job["coverage"] = kind == "choice" ? "xf_action_handler" : kind == "native_choice" ? "engine_dispatch_correlated_choice" : kind == "photo" ? (job["route"] == "callback" ? "consumer_callback" : "native_exit_event") : kind == "ui" ? "rendered_button_activation" : "engine_dispatch";
     m_cursor = m_events.Latest(); m_deadline = std::min(m_expires, now + timeout / 1000.0);
-    m_photoReceipt = nullptr; m_job = job;
+    m_photoReceipt = nullptr; m_choiceReceipt = nullptr; m_job = job;
     m_events.Push("input.submitted", "info", "xf", kind, job);
     return {{"pending", true}, {"request_id", m_serial}, {"run_id", m_run}, {"world_generation", m_world}, {"coverage", job["coverage"]}};
 }
@@ -130,21 +143,91 @@ void Service::Neutralize(const Ops& ops)
     if (m_held.empty()) return;
     // RestoreScope permits only the adapter's own release/axis-zero; never ReleaseAllInput.
     RestoreScope restore;
-    if (!ops.dispatch) throw MethodError("input_cleanup_failed", "The owned control still needs neutralising.");
+    if (!ops.dispatch || !ops.releaseGuard) throw MethodError("input_cleanup_failed", "The owned control still needs neutralising.");
+    ops.releaseGuard();
     ops.dispatch(m_held, m_heldKind == "axis" ? "axis" : "release", 0);
     m_held.clear(); m_heldKind.clear();
 }
 void Service::Stop(const std::string& reason, const Ops& ops)
 {
     std::scoped_lock lock(m_mutex);
+    m_stopReason = reason; // A refused release must never allow the old job to resume.
     Neutralize(ops);
     if (!m_job.is_null()) Finish(reason);
-    m_run.clear(); m_offer = nullptr; m_photoReceipt = nullptr;
+    m_run.clear(); m_offer = nullptr; m_photoReceipt = nullptr; m_choiceReceipt = nullptr; m_stopReason.clear();
+}
+json Service::NativeHub() const
+{
+    if (m_offer.is_null() || m_offer.value("truncated", true) || !m_offer.contains("hubs") ||
+        !m_offer["hubs"].is_array() || m_offer["hubs"].size() != 1)
+        throw MethodError("choice_unsupported", "A single complete native offer is required.");
+    auto h = m_offer["hubs"][0];
+    if (!h.contains("choices") || !h["choices"].is_array() || h["choices"].empty() ||
+        m_selection.value("active_hub", 0) != h.value("id", 0))
+        throw MethodError("choice_changed", "The observed native hub is no longer active.");
+    h["generation"] = m_offer.value("generation", 0);
+    h["index"] = m_selection.value("index", -1);
+    return h;
+}
+void Service::TickNative(double now, const Ops& ops)
+{
+    // [hypothesis] The bounded protocol is testable offline. Retail inputReady remains false:
+    // neither a callback mock nor LastAttemptedChoice commissions the native receiver.
+    ops.guard();
+    if (!ops.inputReady()) { Stop("input_unavailable", ops); return; }
+    for (const auto* control : {"choice_up", "choice_down", "choice_apply"})
+        if (ops.physicalHeld(control)) { Stop("handover", ops); return; }
+    if (!m_held.empty())
+    {
+        if (now < m_job["release_at"].get<double>()) return;
+        Neutralize(ops);
+    }
+    const auto window = m_events.Read(m_cursor, 1000, {"choice.result"});
+    if (window.value("dropped", uint64_t{0}) != 0) { Finish("inconclusive", {{"terminal", "event_loss"}}); return; }
+    m_cursor = window.value("latest", m_cursor);
+    if (!m_choiceReceipt.is_null())
+    {
+        const auto receipt = m_choiceReceipt;
+        // The observed hub is paired with the attempt, never promoted to native scene identity.
+        Finish(!receipt.value("success", false) ? "native_rejected" :
+               receipt.value("hub_attribution", std::string()) == "correlated" ? "committed" : "inconclusive",
+               {{"attempt", receipt}, {"hub_attribution", receipt.value("hub_attribution", std::string("ambiguous"))}});
+        return;
+    }
+    const auto h = NativeHub();
+    if (h.value("id", 0) != m_job["hub"].get<int>() || h["generation"] != m_job["generation"] ||
+        m_offer["hubs"] != m_job["offer"]["hubs"])
+    { Finish("choice_changed"); return; }
+    const int index = h.value("index", -1), target = m_job["index"].get<int>();
+    if (!h.value("input_eligible", false) || index < 0 || static_cast<size_t>(index) >= h["choices"].size())
+    { Finish("choice_unsupported"); return; }
+    if (m_job["stage"] == "applied") return; // never retry an uncertain commit
+    if (m_job["stage"] == "scroll_wait")
+    {
+        if (index == m_job["previous_index"].get<int>()) return; // no read-back, no repeated press
+        if (index != m_job["next_index"].get<int>()) { Finish("choice_changed"); return; }
+        m_job["stage"] = "queued";
+        return; // a separate update before another scroll or commit
+    }
+    if (index == target && !m_job.value("commit", true))
+    { Finish("selected", {{"selected", h}, {"committed", false}}); return; }
+    if (m_job["steps"].get<int>() >= 32) { Finish("inconclusive", {{"terminal", "step_limit"}}); return; }
+    const bool apply = index == target;
+    const std::string control = apply ? "choice_apply" : index < target ? "choice_down" : "choice_up";
+    m_job["previous_index"] = index;
+    m_job["next_index"] = index + (index < target ? 1 : -1);
+    m_job["stage"] = apply ? "applied" : "scroll_wait";
+    m_job["apply_seq"] = m_sourceSeq;
+    m_job["steps"] = m_job["steps"].get<int>() + 1;
+    m_job["release_at"] = now + 0.03;
+    m_held = control; m_heldKind = "button"; // own the release before an uncertain call
+    ops.guard(); ops.dispatch(control, "press", 1);
 }
 void Service::Tick(double now, uint64_t world, const std::string& context, bool open, const Ops& ops)
 {
     std::scoped_lock lock(m_mutex);
     if (m_run.empty()) return;
+    if (!m_stopReason.empty()) { Stop(m_stopReason, ops); return; }
     if (ops.connection && ops.connection() != m_connection) { Stop("connection_changed", ops); return; }
     // An unchanged photo menu can close synchronously inside the callback. Its receipt was
     // observed in this world before that context transition; do not discard it as a stale menu.
@@ -160,9 +243,12 @@ void Service::Tick(double now, uint64_t world, const std::string& context, bool 
         if (kind == "ui") return; // CET's real draw is the sole consumer.
         if (kind == "pulse")
         {
-            if (ops.physicalHeld(m_held) || now >= m_job["release_at"].get<double>()) { Neutralize(ops); Finish("released"); }
+            ops.guard();
+            if (ops.physicalHeld(m_held)) { Stop("handover", ops); return; }
+            if (now >= m_job["release_at"].get<double>()) { Neutralize(ops); Finish("released"); }
             return;
         }
+        if (kind == "native_choice") { TickNative(now, ops); return; }
         if (kind == "photo")
         {
             ops.guard(); const auto state = ops.photo();
@@ -208,8 +294,10 @@ void Service::Tick(double now, uint64_t world, const std::string& context, bool 
     }
     catch (const std::exception& e)
     {
+        m_stopReason = "error";
         Neutralize(ops);
         if (!m_job.is_null()) Finish("error", {{"detail", e.what()}});
+        m_run.clear(); m_stopReason.clear();
     }
 }
 void Service::SetLock(uint64_t gen, bool offered) { std::scoped_lock lock(m_mutex); m_lock = gen; m_offered = offered; }
@@ -253,7 +341,7 @@ bool Service::ReportUi(const json& report)
 json Service::State() const
 {
     std::scoped_lock lock(m_mutex);
-    return {{"run_id", m_run}, {"connection", m_connection}, {"context", m_context}, {"world_generation", m_world}, {"lock_generation", m_lock}, {"save_anyway_offered", m_offered}, {"pending", m_job}, {"last", m_result}, {"offer", m_offer}, {"source_seq", m_sourceSeq}, {"held", m_held}};
+    return {{"run_id", m_run}, {"connection", m_connection}, {"context", m_context}, {"world_generation", m_world}, {"lock_generation", m_lock}, {"save_anyway_offered", m_offered}, {"pending", m_job}, {"last", m_result}, {"offer", m_offer}, {"selection", m_selection}, {"source_seq", m_sourceSeq}, {"held", m_held}, {"cleanup_pending", m_stopReason}};
 }
 void Service::Observe(const std::string& kind, json data)
 {
@@ -262,7 +350,16 @@ void Service::Observe(const std::string& kind, json data)
     data["source_seq"] = ++m_sourceSeq; data["world_generation"] = m_world;
     data["run_id"] = m_run;
     if (!m_job.is_null() && kind.starts_with("input.photo.")) data["request_id"] = m_job.value("request_id", uint64_t{0});
-    if (kind == "choice.offer") m_offer = data;
+    if (kind == "choice.offer")
+    {
+        m_offer = data;
+        m_selection = {{"active_hub", data.value("active_hub", 0)}, {"index", data.value("index", -1)}};
+    }
+    if (kind == "choice.selection")
+    {
+        if (data.contains("active_hub")) m_selection["active_hub"] = data["active_hub"];
+        if (data.contains("index")) m_selection["index"] = data["index"];
+    }
     if (kind == "choice.attempt")
     {
         // LastAttemptedChoice contains NO hub id. Even a unique match is correlation, not native identity.
@@ -276,6 +373,17 @@ void Service::Observe(const std::string& kind, json data)
             if (matches == 1 && index >= 0 && hub.contains("choices") && static_cast<size_t>(index) < hub["choices"].size() && hub["choices"][index] == data.value("caption", std::string()) && data.value("active_hub", 0) == hub.value("id", 0))
             { data["hub_attribution"] = "correlated"; data["observed_hub"] = hub["id"]; }
         }
+        if (!m_job.is_null() && m_job.value("kind", std::string()) == "native_choice" &&
+            m_job["stage"] == "applied" && m_choiceReceipt.is_null() &&
+            data.value("source_seq", uint64_t{0}) > m_job.value("apply_seq", uint64_t{0}) && data.value("dialog", false))
+        {
+            // A different index/hub or an ambiguous notification invalidates proof; it cannot
+            // be ignored in favour of a later convenient match. No commit is ever retried.
+            if (data.value("index", -1) != m_job["index"].get<int>() ||
+                data.value("observed_hub", 0) != m_job["hub"].get<int>() ||
+                data.value("generation", 0) != m_job["generation"].get<int>()) data["hub_attribution"] = "ambiguous";
+            m_choiceReceipt = data;
+        }
     }
     if (kind == "input.photo.callback" && !m_job.is_null() && m_job.value("kind", std::string()) == "photo" && data.value("generation", 0) == m_job.value("controller_generation", -1) && m_job["stage"] == "submitted") m_photoReceipt = data;
     m_events.Push(kind, "info", kind.starts_with("choice.") ? "game" : "xf", kind, data);
@@ -287,6 +395,7 @@ void RegisterMethods(Dispatcher& dispatcher, Service& service, bool hooks, bool 
     const auto gate = [hooks] { if (!hooks) throw MethodError("test_hooks_off", "Enable allow_test_hooks in the autonomous -writes candidate."); };
     const auto state = [&service, gate, ops](const MethodContext&) {
         gate(); auto out = service.State(); auto adapter = ops();
+        if (adapter.inputStatus) out["engine_input"] = adapter.inputStatus();
         try { adapter.guard(); out["xf_hub"] = adapter.hub(); out["photo"] = adapter.photo(); }
         catch (const MethodError& e) { out["unavailable"] = e.code; }
         return out;
@@ -300,13 +409,13 @@ void RegisterMethods(Dispatcher& dispatcher, Service& service, bool hooks, bool 
     }});
     const auto add = [&](const char* method, const char* kind, Access access) {
         dispatcher.Register({method, access, RunOn::GameThread, "Bounded autonomous test input.", [&service, gate, now, ops, kind, engineGate](const MethodContext& c) {
-            gate(); if (std::string(kind) == "pulse" && !engineGate) throw MethodError("test_build_required", "Rebuild with XFB_ENGINE_INPUT_TESTS; native receiver commissioning is still required.");
+            gate(); if ((std::string(kind) == "pulse" || std::string(kind) == "native_choice") && !engineGate) throw MethodError("test_build_required", "Rebuild with XFB_ENGINE_INPUT_TESTS; native receiver commissioning is still required.");
             return service.Submit(kind, c.params, now(), ops());
         }});
     };
     add("test.npc.choice", "choice", Access::WriteNpc); add("test.photo.exit_attempt", "photo", Access::WritePhoto);
     add("test.ui.activate", "ui", Access::WriteSave); add("test.input.pulse", "pulse", Access::ActPlayer);
     dispatcher.Register({"player.choice.state", Access::Read, RunOn::GameThread, "Observed native offers; no historical commit is seeded.", state});
-    dispatcher.Register({"player.choice.select", Access::ActPlayer, RunOn::GameThread, "Unavailable until R1 is commissioned.", [gate](const MethodContext&) -> json { gate(); throw MethodError("input_unavailable", "Real quest/vendor choices need R1 receiver lifetime and release validation. LastAttemptedChoice has no hub identity; no input was sent."); }});
+    add("player.choice.select", "native_choice", Access::ActPlayer);
 }
 } // namespace xfb::input

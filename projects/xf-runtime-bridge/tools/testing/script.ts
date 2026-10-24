@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { findCommand } from "../api/catalogue.ts";
 import { bool, num, obj, str, validate, type JsonSchema } from "../api/schema.ts";
 import { assertionSchema, evaluateAssertion, facingTimeline, resolveBindings, validateBound, type AssertionResult, type AssertionSpec } from "./assertions.ts";
+import { readR1Trace } from "./input-evidence.ts";
 import { captureCursor, clock, observeActor, observeEvents, observeValues, read, readLogs, waitForEvent, WINDOW_READS,
   type Clock, type EventCursor, type Json, type TestApi } from "./windows.ts";
 
@@ -129,6 +130,7 @@ export class TestSession {
       // Keep incomplete windows for the following assertion/report, but stop unless explicitly continued.
       ok = (result as Json).complete;
     } else if (step.do === "assert") {
+      if (step.check === "r1_trace") step.actual = readR1Trace(step.actual);
       if (step.check === "bridge_ready") {
         const problems = validate(logPathsSchema, step.logs);
         if (problems.length) throw new Error(problems.join("; "));
@@ -139,6 +141,7 @@ export class TestSession {
       (result as AssertionResult).evidence = [raw.window, raw.actual, raw.baseline].filter((v) => typeof v === "string" && v.startsWith("$")).map((v) => `bindings.${v.slice(1)}`);
       if (!(result as AssertionResult).source_time) (result as AssertionResult).source_time = { clock: "tools_monotonic_ms", evaluated_ms: this.time.now(), source_timestamp_available: false };
       if (step.check === "bridge_ready") (result as AssertionResult).evidence = step.logs.evidence ?? [];
+      if (step.check === "r1_trace") (result as AssertionResult).evidence = step.actual.file ? [step.actual.file] : [];
       ok = (result as AssertionResult).verdict === "PASS";
     } else throw new Error("Unknown test step");
     this.bind(raw.bind, result);

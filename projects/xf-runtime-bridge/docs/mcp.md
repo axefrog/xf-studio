@@ -47,10 +47,21 @@ The tools fall into areas, each with its own section in the reference:
 | [Capture and the agent's view](mcp-reference.md#capture-and-the-agents-view) | Screenshots with named crops, re-crops, bursts for flicker checks, contact sheets; `scene_report`, the agent's own view of the shot (where each subject sits in the frame, whether it is blocked, which lights reach it) with pre-capture checks that refuse a bad shot |
 | [Saves](mcp-reference.md#saves) | List saves, make a new manual save, load one |
 | [Overlay and in-game UI](mcp-reference.md#overlay-and-in-game-ui) | The game's UI state, the XF overlay's state, placing the XF panel |
+| [Autonomous input and choice tests](mcp-reference.md#autonomous-input-and-choice-tests) | Explicit 0.8.13 autonomous candidate: bounded XF hub actions, photo exit attempts and rendered CET Save anyway activation. Native engine input remains unavailable pending R1 |
 
 Typical uses: preparing a photo-mode shot and comparing it with an XF Studio preview, checking a makeup finish under several lights, stepping through creator options and capturing each, and running an in-game test session where the player only watches and answers questions.
 
 ## Installing it
+
+### Input and choices candidate (0.8.13)
+
+**[source]** This candidate is separate from normal default, diagnostic and writes packages. Build with `XFB_AUTONOMOUS_TEST_HOOKS=ON` (and `XFB_ENGINE_INPUT_TESTS=ON` for the engine-input gate), and package only with `--autonomous-tests`. It requires `allow_test_hooks=true`, `allow_writes=true`, the relevant write classes and an expiring `test_input_arm` run bound to the current context/world/connection. The normal packages omit the autonomous scripts and CET module; a test DLL is rejected outside that explicit candidate. The test build registers 29 natives; normal builds register 27.
+
+**[source]** `test_npc_choice` uses the XF hub's existing action handler: select-only returns a highlight, and commit waits for the matching `npc.choice`. `test_photo_exit_attempt {route: "event"}` queues the game's exit event; `route: "callback"` is a comparison at the controller. This covers the photo exit/hold callback path, **not physical Esc delivery**. With a real changed photo option, modal on must hold the exit, and modal off must expose the game's confirmation token. `test_ui_activate` consumes one token through the real visible settled CET button path; CET must already be open. Activation/queue acknowledgements do not prove a save: require one `save {via: "save_anyway", ok: true}`, one settled new slot and the engine/bridge lock read-back. Never replay an uncertain activation. The existing `game_save {override_lock: true}` policy is unchanged, pending RB-226; this is no claim of a no-agent-bypass policy.
+
+**[source]** `test_input_state` includes `engine_input`, `selection` and `cleanup_pending`. A release failure keeps ownership and prevents a new run or resumption of the cancelled job. `test_input_pulse` and `player_choice_select` additionally require the `act` class and the engine-test build flag, and currently refuse `input_unavailable`. Receiver lifetime, virtual implementations, physical overlap and load-safe neutralisation remain unknown; real offer eligibility and dedicated-action semantics are also uncertified. `LastAttemptedChoice` has no hub ID: a fresh successful attempt can be correlated with an observed offer, but cannot establish universal scene/hub identity.
+
+**[hypothesis]** The [Borg-mode session card](../../../research/runtime/runtime-bridge-test-card.md#input-and-choices-borg-mode-session) prepares four consumer rows and the separate R1 read-only evidence row, using schema-2 [session assertions](../tools/testing/assertions.ts). `input_probe` is read-only RTTI inventory; **no receiver-lifecycle recorder is shipped**. IC5 needs an externally captured, hash-pinned private native trace. Its assertion checks evidence completeness and context pairing, never enables dispatch or approves an ABI. Missing instrumentation is BLOCKED/NOT RUN; incomplete trace evidence is INCONCLUSIVE. No pulse or test-input native may be used to obtain that trace. Source basis and limits: [input and choices](../../../knowledge/input-and-choices.md).
 
 ### What you need
 

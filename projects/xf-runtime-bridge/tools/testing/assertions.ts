@@ -1,6 +1,7 @@
 // Closed, versioned predicates over observations. Property paths select plain data; nothing evaluates code.
 import { bool, int, num, obj, str, validate, type JsonSchema } from "../api/schema.ts";
 import type { ActorWindow, EventWindow, FileEvidence, Json, ValueWindow } from "./windows.ts";
+import { evaluateInputEvidence } from "./input-evidence.ts";
 
 export type Candidate = { plugin_version: string; build_commit: string; natives: number; write_classes: string[] };
 type EventMatch = { kind: string; subject?: string; message_id?: number };
@@ -20,6 +21,9 @@ export type AssertionSpec = AssertionMeta & (
   | { check: "actor_arrived"; window: ActorWindow; max_range_m: number }
   | { check: "actor_released"; window: ActorWindow; endpoint_tolerance_m?: number }
   | { check: "bridge_ready"; actual: unknown; candidate: Candidate; logs: unknown }
+  | { check: "event_count"; window: EventWindow; kind: string; data?: Json; count: number }
+  | { check: "save_delta"; actual: unknown; baseline: unknown }
+  | { check: "r1_trace"; actual: unknown; sid: string }
 );
 
 export type Verdict = "PASS" | "FAIL" | "INCONCLUSIVE" | "NOT RUN";
@@ -32,6 +36,9 @@ const value: JsonSchema = {}; // JSON data only, never an executable expression.
 const window = str("A bound observation window");
 const fields: Record<string, Record<string, JsonSchema>> = {
   equals: { actual: value, expected: value }, range: { actual: value, min: num("Minimum"), max: num("Maximum") },
+  event_count: { window, kind: str("Event kind"), data: value, count: int("Exact count", 0, 1000) },
+  save_delta: { actual: value, baseline: value },
+  r1_trace: { actual: value, sid: str("Current bridge session") },
   restored: { actual: value, baseline: value }, no_loss: { window },
   eventually: { window, path: str("Property path"), expected: value },
   stable_for: { window, path: str("Property path"), expected: value, duration_s: num("Stable duration", 0.25, 120), max_gap_ms: num("Largest allowed gap", 250, 10000) },
@@ -50,6 +57,7 @@ const fields: Record<string, Record<string, JsonSchema>> = {
 };
 const required: Record<string, string[]> = {
   equals: ["actual", "expected"], range: ["actual", "min", "max"], restored: ["actual", "baseline"], no_loss: ["window"],
+  event_count: ["window", "kind", "count"], save_delta: ["actual", "baseline"], r1_trace: ["actual", "sid"],
   eventually: ["window", "path", "expected"], stable_for: ["window", "path", "expected", "duration_s"],
   no_event: ["window", "kind"], sequence: ["window", "events"], rects_disjoint: ["rects"], moves_forward: ["window"],
   actor_arrived: ["window", "max_range_m"], actor_released: ["window"], bridge_ready: ["actual", "candidate", "logs"],
@@ -157,6 +165,7 @@ export function evaluateAssertion(spec: Json): AssertionResult {
     report.evidence = ["step.result.window (private manifest)"];
   }
   switch (spec.check) {
+    case "event_count": case "save_delta": case "r1_trace": return evaluateInputEvidence(spec, report);
     case "equals": case "restored": {
       const expected = spec.check === "restored" ? spec.baseline : spec.expected;
       return finish(spec.actual === undefined || expected === undefined ? "INCONCLUSIVE" : same(spec.actual, expected) ? "PASS" : "FAIL", spec.actual, expected);

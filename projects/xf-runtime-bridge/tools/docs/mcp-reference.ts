@@ -50,6 +50,12 @@ export const AREAS: readonly Area[] = [
     match: (n) => prefix("cc")(n) || is("player.appearance")(n),
   },
   {
+    id: "input-and-choices",
+    title: "Autonomous input and choice tests",
+    intro: "Explicit autonomous -writes candidate only. XF hub actions, queued photo exit and rendered CET activation require authoritative read-back. Engine input and real-hub dispatch remain refused pending R1 commissioning. The read-only input_probe inventory does not capture receiver lifetime.",
+    match: (n) => prefix("test.input", "test.npc", "test.photo", "test.ui", "player.choice")(n),
+  },
+  {
     id: "player",
     title: "Player",
     intro: "Read V's state, move and turn her, turn her view, crouch, draw or holster, open menus, and give her back.",

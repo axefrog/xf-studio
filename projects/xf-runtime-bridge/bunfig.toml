@@ -3,4 +3,5 @@
 # Before any test file loads: switch key input off (XFB_NO_INPUT=1), so no test, whatever it imports,
 # can ever press a key on this machine's desktop (RB-41); and (0.8.9) remove any scratch folder a test left
 # behind once the whole run ends (tools/test/temp-dir.ts).
+# The preload also isolates LOCALAPPDATA so fake-key tests never read installed game settings.
 preload = ["./tools/test/preload.ts", "./tools/test/temp-dir-sweep.ts"]

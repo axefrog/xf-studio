@@ -53,6 +53,7 @@ input::Ops SimInput::Ops()
         return input::json{{"submitted", true}};
     };
     ops.inputReady = [] { return false; }; // simulation does not commission the retail adapter
+    ops.inputStatus = [] { return input::json{{"available", false}, {"coverage", "simulation_only"}, {"blocker", "Retail receiver lifetime/release is not commissioned by a simulated host."}}; };
     return ops;
 }
 void SimInput::Tick()

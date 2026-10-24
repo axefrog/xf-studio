@@ -1,0 +1,40 @@
+{
+  "schema": "xfb/session-script-2",
+  "card": "research/runtime/runtime-bridge-test-card.md#input-and-choices-borg-mode-session",
+  "name": "input-r1-readonly",
+  "title": "R1 read-only trace completeness",
+  "requires": [
+    "Invoke the session runner with --no-echo; the R1 segment performs reads only, including no UI message echo.",
+    "Approved hash-matched 2.31 debugger capture of EXISTING engine calls, with current bridge sid; no injected input or test-native calls.",
+    "input.probe is RTTI inventory only. Receiver-lifecycle instrumentation is NOT shipped; absent capture means IC5 BLOCKED/NOT RUN.",
+    "Private fixture supplies r1_trace.path and SHA-256. PASS means evidence complete enough for engineering review, never ABI approval or dispatch enablement."
+  ],
+  "fixtures": {
+    "r1_trace": {
+      "path": "SET_PRIVATE_READONLY_R1_TRACE",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "steps": [
+    {
+      "do": "run",
+      "label": "IC5-rtti-inventory",
+      "command": "input.probe",
+      "bind": "inventory"
+    },
+    {
+      "do": "run",
+      "label": "IC5-current-session",
+      "command": "bridge.info",
+      "bind": "bridge"
+    },
+    {
+      "do": "assert",
+      "label": "IC5-native-evidence-completeness",
+      "row": "IC5",
+      "check": "r1_trace",
+      "actual": "$fixture.r1_trace",
+      "sid": "$bridge.sid"
+    }
+  ]
+}

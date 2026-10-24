@@ -14,6 +14,7 @@ export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   test_run_required: "Arm a bounded test fixture before submitting this input.",
   stale_context: "The expected game screen or choices changed. Read the current state and prepare a fresh fixture.",
   choice_changed: "The dialogue offer changed before the requested line was confirmed. Read it again before choosing.",
+  choice_unsupported: "This dialogue's input and eligibility rules have not been validated. Leave this choice to the player.",
   input_unavailable: "The native input adapter has not been commissioned for this game build. No input was sent.",
   input_busy: "An input test is already pending. Wait for its receipt before starting another.",
   input_overlap: "A real held control overlaps this test. Release it before preparing another pulse.",

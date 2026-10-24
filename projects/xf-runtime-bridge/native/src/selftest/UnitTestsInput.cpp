@@ -34,6 +34,7 @@ struct Fixture
             return json{{"submitted", true}};
         };
         ops.inputReady = [this] { return available; };
+        ops.releaseGuard = [] {};
         ops.physicalHeld = [this](const std::string&) { return physical; };
         ops.dispatch = [this](const std::string& key, const std::string& kind, float value) {
             dispatched.push_back(key + ":" + kind + ":" + std::to_string(value));
@@ -45,6 +46,16 @@ struct Fixture
     json Choice(bool commit = true) { return {{"run_id", "fixture"}, {"hub", 20}, {"generation", 1}, {"index", 1}, {"commit", commit}}; }
     json Ui() { return {{"run_id", "fixture"}, {"target", "save_anyway"}, {"lock_generation", 1}}; }
     json Pulse(const std::string& control = "confirm") { return {{"run_id", "fixture"}, {"control", control}, {"duration_ms", 100}}; }
+    void NativeOffer(int index = 0, bool eligible = true)
+    {
+        available = true;
+        service.Observe("choice.offer", {{"generation", 1}, {"truncated", false}, {"active_hub", 20}, {"index", index},
+            {"hubs", json::array({json{{"id", 20}, {"input_eligible", eligible}, {"choices", json::array({"one", "two", "three"})}}})}});
+    }
+    void Attempt(bool success = true, int index = 1, const std::string& caption = "two")
+    {
+        service.Observe("choice.attempt", {{"generation", 1}, {"success", success}, {"dialog", true}, {"index", index}, {"caption", caption}, {"active_hub", 20}});
+    }
     void Tick(double now = 0.1, uint64_t world = 1, const std::string& phase = "gameplay", bool open = true) { service.Tick(now, world, phase, open, ops); }
     std::string Reason() { return service.State()["last"].value("reason", std::string()); }
 };
@@ -142,7 +153,7 @@ int InputUnitTests()
         Fixture f; f.Arm(); f.service.SetLock(1, true); f.service.Submit("ui", f.Ui(), 0, f.ops); f.Tick(3);
         Check(f.service.TakeUi(3, 1, 1, true).is_null(), "undrawn button expires without saving");
     }
-    for (const auto* stop : {"kill", "pause", "handover", "load", "error", "disconnect"})
+    for (const auto* stop : {"kill", "pause", "handover", "load", "error", "disconnect", "timeout"})
     for (const auto* control : {"confirm", "move_y"})
     {
         Fixture f; f.Arm(); f.available = true; f.service.Submit("pulse", f.Pulse(control), 0, f.ops);
@@ -172,6 +183,66 @@ int InputUnitTests()
         Fixture f; f.Arm(); f.service.Submit("choice", f.Choice(), 0, f.ops);
         f.Tick(mode == 0 ? 31 : 0.1, mode == 1 ? 2 : 1, mode == 2 ? "menu" : "gameplay", mode != 3);
         Check(f.actions == 0 && f.service.State()["run_id"] == "", "expiry, load, context and closed gate disarm before game calls");
+    }
+    {
+        Fixture f; f.Arm();
+        Refuses([&] { f.service.Submit("native_choice", f.Choice(), 0, f.ops); }, "input_unavailable");
+        f.NativeOffer(0, false);
+        Refuses([&] { f.service.Submit("native_choice", f.Choice(), 0, f.ops); }, "choice_unsupported");
+        Check(f.dispatched.empty(), "unvalidated native receiver or offer sends nothing");
+    }
+    {
+        Fixture f; f.Arm(); f.NativeOffer();
+        f.service.Submit("native_choice", f.Choice(false), 0, f.ops);
+        f.Tick(); f.Tick(0.15); f.Tick(0.16);
+        Check(f.dispatched.size() == 2 && f.service.State()["last"].is_null(), "scroll releases and waits for actual native highlight");
+        f.service.Observe("choice.selection", {{"index", 1}});
+        f.Tick(0.2); Check(f.service.State()["last"].is_null(), "scroll read-back and apply separated by update");
+        f.Tick(0.3); Check(f.Reason() == "selected" && f.dispatched.size() == 2, "native select-only never commits");
+    }
+    for (int mode = 0; mode < 4; ++mode)
+    {
+        Fixture f; f.Arm(); f.NativeOffer(1);
+        f.Attempt(); // historical retained success is never a receipt for the next submission
+        f.service.Submit("native_choice", f.Choice(), 0, f.ops);
+        f.Tick(); Check(f.service.State()["last"].is_null(), "commit dispatch is not acceptance");
+        if (mode != 3) f.Attempt(mode != 1, mode == 2 ? 0 : 1, mode == 2 ? "one" : "two");
+        f.Tick(0.15);
+        if (mode == 3) { f.Tick(0.5); f.Tick(3); }
+        Check(f.Reason() == (mode == 0 ? "committed" : mode == 1 ? "native_rejected" : "inconclusive"), "fresh native result or timeout classified independently");
+        Check(f.dispatched.size() == 2 && f.service.State()["held"] == "", "one commit press paired with one release; no retry");
+        if (mode == 0) Check(f.service.State()["last"]["attempt"]["observed_hub"] == 20 && f.service.State()["last"]["hub_attribution"] == "correlated", "LastAttemptedChoice paired with observed hub, correlation explicit");
+    }
+    for (const auto* stop : {"kill", "pause", "handover", "load", "error", "timeout"})
+    {
+        Fixture f; f.Arm(); f.NativeOffer(1); f.service.Submit("native_choice", f.Choice(), 0, f.ops); f.Tick();
+        f.service.Stop(stop, f.ops);
+        Check(f.dispatched.size() == 2 && f.service.State()["held"] == "", "native choice stop releases only its control");
+    }
+    {
+        Fixture f; f.Arm(); f.available = true; f.service.Submit("pulse", f.Pulse(), 0, f.ops);
+        f.ops.releaseGuard = [] { throw MethodError("game_loading", "release cannot use a dead receiver"); };
+        Refuses([&] { f.service.Stop("load", f.ops); }, "game_loading");
+        Check(f.service.State()["held"] == "confirm" && f.service.State()["cleanup_pending"] == "load", "failed release keeps cleanup debt");
+        Refuses([&] { f.Arm(); }, "input_busy");
+        Refuses([&] { f.service.Submit("pulse", f.Pulse(), 0, f.ops); }, "input_busy");
+        f.ops.releaseGuard = [] {}; f.Tick();
+        Check(f.dispatched.size() == 2 && f.service.State()["run_id"] == "" && f.Reason() == "load", "recovered release drains debt without resuming the cancelled job");
+    }
+    {
+        Fixture f; f.Arm(); f.available = true; f.service.Submit("pulse", f.Pulse(), 0, f.ops); f.physical = true; f.Tick();
+        Check(f.Reason() == "handover" && f.service.State()["run_id"] == "" && f.dispatched.size() == 2, "physical takeover releases and disarms");
+    }
+    for (int mode = 0; mode < 4; ++mode)
+    {
+        Fixture f; f.Arm(); f.NativeOffer(1); f.service.Submit("native_choice", f.Choice(), 0, f.ops); f.Tick();
+        if (mode == 0) f.NativeOffer(1); // even identical offer notification changes source ordering, not identity
+        if (mode == 0) f.service.Observe("choice.offer", {{"generation", 2}, {"truncated", false}, {"hubs", json::array()}});
+        if (mode == 1) for (int i = 0; i < 1001; ++i) f.events.Push("noise", "info", "game", "fixture");
+        if (mode == 2) f.physical = true;
+        if (mode == 3) f.ops.connection = [] { return uint64_t{2}; };
+        f.Tick(0.15);
+        Check(f.Reason() != "committed" && f.dispatched.size() == 2 && f.service.State()["held"] == "", "offer loss/event loss/physical takeover/reconnect neutralises before result");
     }
     {
         Fixture f; f.Arm();
