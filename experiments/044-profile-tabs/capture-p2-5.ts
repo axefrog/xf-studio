@@ -330,9 +330,9 @@ async function status(page: Session) {
     texts[`status-show-here-${size}`] = await showHere(page);
     await snap("after-pane-change", `Status bar after a pane change (Show here on the resting 3D view pane, which the window now draws), at ${size}px`, size);
     // Another pane change: the first view's pane again.
-    const names = (await viewNames(page)).dockTabs.filter(n => /3D view|Side view/.test(n));
+    const names = (await viewNames(page)).dockTabs.filter((n: string) => /3D view|Side view/.test(n));
     texts[`status-view-tabs-${size}`] = names;
-    const other = (await idlePanes(page)).length ? null : names.find(n => n !== names[0]);
+    const other = (await idlePanes(page)).length ? null : names.find((n: string) => n !== names[0]);
     if (other) { await pressPaneTab(page, other); await page.wait(500); await showHere(page); await snap("after-second-pane-change", `Status bar after a second pane change, at ${size}px`, size); }
   }
 }
@@ -365,7 +365,7 @@ async function names(page: Session) {
       await capture(page, `names-${key}-panels-menu`, [], `View names: ${what}, in the Panels menu at ${size}px (its top edge under the Panels button)`, { whole: true, section: "names", paired: "d-summon" });
       await closeAll(page);
       // A resting pane: choose the other view's pane tab in this tab, so its not-drawn state shows its name.
-      const titles = (await viewNames(page)).dockTabs.filter(n => /^3D view|^Close-up/.test(n));
+      const titles = (await viewNames(page)).dockTabs.filter((n: string) => /^3D view|^Close-up/.test(n));
       let resting = await idlePanes(page);
       if (!resting.length && titles.length > 1) {
         for (const name of titles) { await pressPaneTab(page, name); await page.wait(500); resting = await idlePanes(page); if (resting.length) break; }
