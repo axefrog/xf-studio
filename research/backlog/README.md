@@ -42,26 +42,9 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### Polish lane (before 1.0)
 - **In-game styling spec for the bridge surfaces** (the XF Runtime Bridge window, the XF box and the CET line). A coat of slickness, with CharLi's CET plugin as the reference: dense ImGui theming, type hierarchy through font scale, styled value bars, child panels and subtle pulses. It never comes ahead of function. The UI track writes the spec in the style guide for the in-game theme generator (`projects/xf-runtime-bridge/tools/overlay/theme.ts`), and XF · Runtime bridge builds it. CharLi is credited if we borrow ideas. The XF box's text size stays, since it matches other CET windows. *22 Oct*
-- **Polish batch 2 follow-ups** (from its design review; they don't block it):
-  - "Back to XF Studio" in the interface guide opens a second, read-only Studio on localhost. Close the tab when the Studio opened it; elsewhere, label it as the site.
-  - The unprotected warning's edge cases:
-    - it says "couldn't" when a desktop backup copy is only more than 2 s late;
-    - it stays after the library already has the changes;
-    - it doesn't name storage-full when that is the known cause;
-    - "Back up" now also means export in Help.
-  - Stale style-guide copy:
-    - the c-chips "Open now" button;
-    - the t-saved specimen;
-    - a Try again reason that says "recorded";
-    - the Recent drafts help, the draft rows and the glossary's "Draft" disagree.
-  - Package's tooltip should name the button once its label is hidden, and the workspace notice's buttons should come in one order in every state.
-  - "Export this window's copy" has a tooltip that says "Save … to a file", which collides with Save version. Use "Write … to a file … Nothing goes to your library."
-  - The style guide's chip reference and specimens should show "Version N".
-  - The desktop save-failure message still points to Export collection, the export that saves first. Point it at "Export this window's copy".
-  - Optional: in verification workspaces, move the verification label so it doesn't float in the chip's gap.
-  - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there.
-
-  *22 Oct*
+- **Polish batch 3 leftovers** (polish-3 merged 24 Oct, `54b109bb`):
+  - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there. They need a real V, so the coordinator takes them.
+  - The unsafe slow-restore notice reads the same as the safe one (only its second button differs, per `t-recovering`). Add one clause saying why it offers Export ("your library hasn't confirmed them yet"). That is a guide change. *24 Oct*
 - **Profiles phase 1 UI follow-ups** (from its design review): progress for Taking over, Waiting and Restoring, and a way back from Waiting (a Cancel that leaves the window read-only). Polish batch 2 (`claude/polish-2`) did the rest: the header keeps the names readable, the workspace notice is a library component, the wording leftovers, "couldn't be backed up", and the save-toast, open-row, "Use other window's", read-only-fade and Interface guide polish; its design review passed with conditions (the follow-ups above). *22 Oct*
 - **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, receipt matching. *21 Oct*
