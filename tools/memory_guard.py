@@ -138,10 +138,13 @@ def available_headroom() -> int:
     info = PERFORMANCE_INFORMATION()
     info.cb = ctypes.sizeof(info)
     if not psapi.GetPerformanceInfo(ctypes.byref(info), info.cb):
+        # Fallback: GlobalMemoryStatusEx's commit figure is per calling process, but never
+        # above the system's, so the minimum stays conservative. Fail closed if both fail.
         status = MEMORYSTATUSEX()
         status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-        kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
-        return status.ullAvailPhys
+        if not kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return 0
+        return min(status.ullAvailPhys, status.ullAvailPageFile)
     page = info.PageSize
     commit_free = (info.CommitLimit - info.CommitTotal) * page
     return min(info.PhysicalAvailable * page, commit_free)
