@@ -215,13 +215,13 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
       };
       const priceValue = (regimes: RegimeRec[], district: Id): number =>
         clamp(sim.w.district(district).priceAnchor + regimes.filter((r) => r.scope === district).reduce((a, r) => a + r.priceShift, 0), 0, 3);
-      const regimesChanged = (district: Id, time: GameTime, before: RegimeRec[], after: RegimeRec[]): void => {
+      const regimesChanged = (district: Id, time: GameTime, before: RegimeRec[], after: RegimeRec[], source: string): void => {
         const rb = regimeValue(before, district);
         const ra = regimeValue(after, district);
-        if (rb !== ra) changes.push({ key: `regime|${district}`, t: time, value: ra, prev: rb });
+        if (rb !== ra) changes.push({ key: `regime|${district}`, t: time, value: ra, prev: rb, source });
         const pb = priceValue(before, district);
         const pa = priceValue(after, district);
-        if (pb !== pa) changes.push({ key: `price|${district}`, t: time, value: PRICE_NAMES[pa]!, prev: PRICE_NAMES[pb]! });
+        if (pb !== pa) changes.push({ key: `price|${district}`, t: time, value: PRICE_NAMES[pa]!, prev: PRICE_NAMES[pb]!, source });
       };
 
       // (2) exits: a lifecycle notice, never refused and never counted; applied before the window's arrivals
@@ -235,7 +235,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         const before = [...st.regimes];
         st.regimes = st.regimes.filter((x) => x.id !== r.id);
         ops.push({ op: 'mint-event', spec: { name: `regime-end/${r.id}`, time: T, kind: 'regime-end', place: r.scope, causes: [r.id], outcome: 'done' } });
-        regimesChanged(r.scope, T, before, st.regimes);
+        regimesChanged(r.scope, T, before, st.regimes, `regime-end/${r.id}`);
       }
       liveAtStart = [...st.regimes];
 
@@ -389,7 +389,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
           st.regimes.push(r);
           st.regimes.sort((a, b) => cmp(a.id, b.id));
           ops.push({ op: 'mint-event', spec: { name: `regime/${w}/${r.scope}/${r.kind}`, time: r.start, kind: 'regime-start', place: r.scope, outcome: 'done' } });
-          regimesChanged(r.scope, r.start, before, st.regimes);
+          regimesChanged(r.scope, r.start, before, st.regimes, `regime-start/${r.id}`);
           continue;
         }
         const d = cd.d!;

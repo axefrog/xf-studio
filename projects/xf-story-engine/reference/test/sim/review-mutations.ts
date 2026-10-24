@@ -21,7 +21,7 @@ export const probes: Probe[] = [
   probe('R3-08', 'audits', 'src/sim/source-audit.ts', ['        const p = property(node);', '        if (ts.isTemplateExpression(node)) return;\n        const p = property(node);']),
   probe('R3-09', 'audits', 'src/sim/source-audit.ts', ['function guardsMeta(file: ts.SourceFile, method: string): boolean {', 'function guardsMeta(file: ts.SourceFile, method: string): boolean { return true;']),
   probe('A1-01', 'review-round4', 'src/sim/divergence.ts', ['ord: e.ord', 'ord: e.ord - 1000000']),
-  probe('A1-01b', 'review-round4', 'src/sim/s1ctx.ts', ['if (tr.ord === undefined) tr.ord = sim.record.ord++;', '/* mutation: publication never stamps transitions */']),
+  probe('A1-01b', 'review-round4', 'src/sim/s1ctx.ts', ['if (tr.ord === undefined) tr.ord = (tr.source === undefined ? undefined : ordBySource.get(tr.source)) ?? sim.record.ord++;', '/* mutation: publication never stamps transitions */']),
   probe('A1-01c', 'review-round4', 'src/sim/sim.ts', ['    this.k.readingHooks.push((node, slot) => this.divergence.noteReading(node, slot));', '    // mutation: wait for relevance dispatch']),
   probe('A1-02', 'review-round4', 'src/events.ts', ['if (!provenance) {', '{']),
   probe('A1-03', 'review-round4', 'src/sim/tie-policy.ts', [' || e.valid.to > this.k.now', '']),
@@ -33,6 +33,9 @@ export const probes: Probe[] = [
     "return exitCode !== 0 && lines.some((line) => line.startsWith('(fail) ') && (line.startsWith(`(fail) ${name}:`) || line.includes(` > ${name}:`))) && lines.some((line) => line.startsWith(`error: ${name} semantic:`));",
     'return exitCode !== 0;',
   ]),
+  probe('A2-01', 'review-round5', 'src/sim/tie-policy.ts', ['const reopening = !ended && log[start + 1] !== undefined && edge.valid.to === undefined;', 'const reopening = false;']),
+  probe('A2-02', 'review-round5', 'src/sim/s1ctx.ts', ['ordBySource.get(tr.source)', 'undefined']),
+  probe('A2-02b', 'review-round5', 'src/sim/proc-events.ts', ['prev: rb, source', "prev: rb, source: 'regime'"], ['prev: PRICE_NAMES[pb]!, source', "prev: PRICE_NAMES[pb]!, source: 'regime'"]),
 ];
 
 export function mutate(text: string, p: Probe): string {

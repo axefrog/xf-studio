@@ -1045,7 +1045,8 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
 163. **A source transition is atomic, and independent transitions have persistent order. (R3-03, R3-07; completes R2-01, R2-09)**
     Equal `ord` entries are aliases of one source transition, applied together before testing a compound closing predicate. All reads
     contribute their initial value, including those without a change. Feeds, divergence and ties now share `S1Record.ord` (168);
-    the four feed producers are version 3. One mirrored reading shares one ordinal among every affected divergence pair. Tie boundary
+    the feed producers are version 3 except `city.events`, now version 4 for atomic regime/price changes (174). One mirrored reading
+    shares one ordinal among every affected divergence pair. Tie boundary
     logs wait for staged commits and keep the original ordinals while their intervals remain answerable (170), including the coverage floor.
     Older saves with unordered retained history open read-only: the missing chronology cannot be reconstructed honestly.
 164. **Extra rules bypass resident and block caches. (R3-04; completes R2-06)** Only the exact installed world-pack contributions
@@ -1071,20 +1072,22 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
 168. **One persistent sequence records actual application order. (A1-01, A1-04; S2 v1.10 §4.2, S1 v0.5 §4.7)**
     `S1Record.ord` allocates across every feed publication, belief/divergence update and tie validity boundary. A process computes
     unstamped transitions; its application hook stamps them when the digest is published, between the preceding and following writes.
-    Mirrored readings notify divergence immediately, rather than waiting for reconciliation's relevance dispatch. Aliases of a feed
-    entry or a mirrored reading share their source ordinal. There are no source ranks, per-source counters or read-time reconstruction.
-    Saved ordinals and the next counter survive replacement loads. The four transition producers rise from version 2 to 3 so old
-    lineages with incompatible chronology open read-only. These rulings were read from the main checkout's specs because the sandbox
-    refused the rebase's Git metadata write; the worktree specs remain untouched.
+    Mirrored readings notify divergence immediately, rather than waiting for reconciliation's relevance dispatch. Dependent feed
+    entries carrying one atomic source identity (174), aliases of an entry and affected pairs of a mirrored reading share their source
+    ordinal. There are no source ranks, per-source counters or read-time reconstruction. Saved ordinals and the next counter survive
+    replacement loads. The four transition producers reject lineages with incompatible chronology through their process versions:
+    version 3 for shared ordering, and version 4 for `city.events`' atomic regime/price publication.
 169. **An opened item's descriptor remains a dependency, not a restored constant. (A1-02)** `Events.restoreEvent` restores participants,
     effects, witnesses, causes, outcome and served from the evidence record with the original materialisation source. For an item with
     summary provenance it leaves `time`, `kind` and `place` to `Summaries.itemConstraint`, creates no fixed place edge and caches no minted
     descriptor. The evidence record still holds the original committed descriptor for provenance, not a permanent override of the
     summary. Repeated reloads and edits after reload preserve that distinction.
-170. **Tie history contains only ended intervals; attributes cannot erase chronology. (A1-03, A1-04)** Saving captures a finite interval
+170. **Tie history contains only ended intervals; attributes cannot erase chronology. (A1-03, A1-04, A2-01)** Saving captures a finite interval
     only when its end is at or before now. A live edge's scheduled end is not copied into history, so shortening it leaves no stale
-    future interval. The boundary log compares validity with its last interval: attributes allocate nothing, shortening replaces only
-    the superseded end, and the opening keeps its ordinal. Log pruning follows the retained 16 ended intervals, the current edge and
+    future interval. A reopening clears a preceding end while an attribute write retains it, even if the opening timestamps match.
+    Reopening appends a fresh opening ordinal and preserves the completed closing boundary, including after a save/load between those
+    writes. Attributes allocate nothing; shortening replaces only the latest interval's superseded end and keeps its opening ordinal.
+    Log pruning follows the retained 16 ended intervals, the current edge and
     the coverage floor; there is no independent 64-entry eviction and no fallback to today's counter.
 171. **Guard evaluation preserves JavaScript operands. (A1-05)** `||` and `&&` return an operand, using its truthiness; strict equality
     compares those operand values. An unknown operand stays unknown where it could alter the result. A separate truthiness proof can
@@ -1094,11 +1097,23 @@ An independent read-only review (GPT-6.1 Sol, xhigh) of the branch found 15 prob
 173. **Mutation probes must fail at the semantic assertion. (A1-07)** The helper uses small compatible changes to the current sources,
     including reverting only `Kernel.emit`'s snapshot expression for R3-06. A rejected probe requires a nonzero exit, the named failing
     test and that test's explicit semantic-assertion error. Constructor/import errors and failures during setup do not count. The
-    checker itself has a regression and a surgical mutation. All 23 probes (13 R3 and 10 A1) reach their intended assertions.
-    Validation: 185 targeted tests across 15 files pass, including all ten A1 regressions, and `bun run check` is clean. The frozen
+    checker itself has a regression and a surgical mutation. All 26 probes (13 R3, 10 A1 and 3 A2) reach their intended assertions.
+    Validation: 141 targeted tests across 12 files pass, including all six A2 checks, and `bun run check` is clean. The frozen
     digests remain unchanged: v3 `d534e0dcef3f85d27cefa552217152ec`, v4 `da48cabc405ed361ce6ad5f3b895a822`, and S1 transcript
     `158e89e481c3cd72aaf891c55c1c75f1`. Persisted S1 transition ordinals change as required by 168; no golden digest was edited.
     The coordinator owns the guarded full-suite run.
+
+### Fix round 4 (entry 174)
+
+174. **A regime lifecycle change publishes every dependent transition atomically. (A2-02; S2 v1.10 §4.2)** Regime starts and ends attach
+    their source identity (`regime-start/<id>` or `regime-end/<id>`) to their regime and price feed entries during generation. Publication
+    allocates one shared ordinal per source within each feed window; entries without a source retain independent ordinals. Distinct
+    regime changes keep distinct source identities and ordinals even when they share a district and second. The source identity survives
+    an outstanding batch's save/load, and already published ordinals survive later publication and replacement loads unchanged.
+    Ending a lockdown now replays `lockdown/high` → `none/fair` in one step, so a closing condition `none AND high` never latches.
+    Two independent same-second expiries still expose the real state between them. `city.events` is version 4: a version 3 lineage with
+    split source transitions is incompatible and opens read-only. Persisted S1 source metadata and ordinal allocation deliberately
+    change; the frozen v3, v4 and S1 transcript digests above do not.
 
 ### Spec findings for the coordinator (S1)
 
@@ -1107,7 +1122,7 @@ The ones that need a decision, worst first. The six questions of the first build
 - **S0 9.4 (the order of a boundary).** S1 10.2 relies on a step the kernel specification does not list: between the external operations
   and the snapshot, the frame work and the relevance dispatch they queued run to their end (109, 142). S0 should say so.
 - **S2 4.2 and the read port (resolved by S2 v1.10).** The port carries transitions from one persistent sequence (123, 155, 163, 168);
-  aliases of one source transition are evaluated atomically. The current worktree's older spec copy is left unchanged.
+  aliases and dependent feed entries of one source transition are evaluated atomically (174).
 - **S1 8.4 (assimilate).** "The listener's default reasons for the actor's group" is not defined. The reference uses `attr@1` from the
   listener's side with no constraint visible, which makes everyone dispositional at the default data (150). Is that meant, or is the
   default a table?

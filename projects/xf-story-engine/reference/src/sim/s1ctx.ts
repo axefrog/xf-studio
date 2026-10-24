@@ -17,7 +17,7 @@ import type { Sim } from './sim.ts';
  * a save made under another version opens read-only instead of resuming old state under new code.
  */
 export const PROCESS_VERSIONS: Record<string, number> = {
-  'city.events': 3, 'group.decide': 3, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 3, 'order.norms': 3, 'scene.acts': 1,
+  'city.events': 4, 'group.decide': 3, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 3, 'order.norms': 3, 'scene.acts': 1,
 };
 
 export type CoarseFine = { kind: 'exact' } | { kind: 'count' } | { kind: 'distribution'; tolerance: string };
@@ -88,8 +88,12 @@ export function toProcessDef<S, D>(sim: Sim, p: S1Process<S, D>): ProcessDef {
     ...(p.cloneState ? { cloneState: (state: unknown) => p.cloneState!(state as S) } : {}),
     applied(digest) {
       const changes = (digest as { changes?: Feed<Transition> } | undefined)?.changes;
-      for (const win of changes?.windows ?? []) for (const tr of win.items) {
-        if (tr.ord === undefined) tr.ord = sim.record.ord++;
+      for (const win of changes?.windows ?? []) {
+        const ordBySource = new Map<string, number>();
+        for (const tr of win.items) {
+          if (tr.ord === undefined) tr.ord = (tr.source === undefined ? undefined : ordBySource.get(tr.source)) ?? sim.record.ord++;
+          if (tr.source !== undefined) ordBySource.set(tr.source, tr.ord);
+        }
       }
     },
     run(pctx: ProcessCtx, k: number): ProcessResult {

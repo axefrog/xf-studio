@@ -116,6 +116,8 @@ export type LogDraft = Omit<LogEntry, 'seq'>;
 export interface Transition {
   /** Persistent S1-wide ordinal, assigned when this digest applies, never during speculative computation. */
   ord?: number;
+  /** Atomic source identity within this process's feed window; dependent transitions share one publication ordinal. */
+  source?: string;
   key: string;
   t: GameTime;
   value: string;

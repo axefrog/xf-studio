@@ -80,7 +80,8 @@ bun test
 bun x tsc --noEmit
 ```
 
-The third review-fix round adds ten focused A1 regressions, with 23 mutation probes that must reach their intended semantic assertions;
+The review regressions include six A2 checks for same-second tie reopening and atomic regime/price publication, with and without reloads.
+All 26 mutation probes must reach their intended semantic assertions;
 the guarded full run and timing remain the coordinator's check.
 The preceding measured baseline was 1,058 tests in about 83 seconds. Run the full suite under the repository memory guard
 with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:

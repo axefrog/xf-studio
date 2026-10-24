@@ -149,8 +149,12 @@ export class TiePolicy {
     let start = log.length - 1;
     while (start >= 0 && log[start]!.value !== 'yes') start--;
     const opening = log[start];
-    if (!opening || opening.t !== edge.valid.from) push(edge.valid.from, 'yes');
-    if (!opening || opening.t !== edge.valid.from) start = log.length - 1;
+    // Reopening clears the end; an attribute update keeps it. The new interval may start in the very same second.
+    const reopening = !ended && log[start + 1] !== undefined && edge.valid.to === undefined;
+    if (!opening || opening.t !== edge.valid.from || reopening) {
+      push(edge.valid.from, 'yes');
+      start = log.length - 1;
+    }
     const end = log[start + 1];
     if (end?.t !== edge.valid.to) {
       // A scheduled end is still the kernel's. Replace its superseded boundary, keeping the opening's ordinal.
@@ -158,7 +162,6 @@ export class TiePolicy {
       if (edge.valid.to !== undefined) push(edge.valid.to, 'no');
     }
     this.pruneLog(edge.from, edge.to);
-    void ended;
   }
 
   private pruneLog(a: Id, b: Id): void {
