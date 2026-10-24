@@ -5,7 +5,7 @@
  * - **T1, model-based and seeded.** Random runs of operations (new tab, close, reopen, reset, rename, move, duplicate, add and close a view,
  *   a light change) with Undo and Redo between them are checked after every move against an independent model: a plain-data account of
  *   the tabs, their views in the graph's order and the closed fragments, with its own history of states. The stored session is
- *   byte-identical to the one each state recorded, at every Undo and Redo, at the start and at the end. Runs with navigation interleaved
+ *   byte-identical apart from the monotonic focus counter, at every Undo and Redo, at the start and at the end. Runs with navigation interleaved
  *   (showing tabs, focusing views, arranging panels, showing another look) keep every structural invariant and the model's account.
  * - **The phase's gate:** close, then Undo, restores the session byte for byte; close, then Reopen, too (the fragment keeps its views'
  *   focus numbers, D13); an Undo can never put a view into a missing tab.
@@ -36,7 +36,9 @@ import { openSession, seededRandom } from "./fixtures/profile-sessions";
 
 const LOOK = { collection: "11111111-1111-4111-8111-111111111111", look: "22222222-2222-4222-8222-222222222222" };
 const OTHER_LOOK = { collection: "11111111-1111-4111-8111-111111111111", look: "33333333-3333-4333-8333-333333333333" };
-const json = (s: ProfileSessions) => JSON.stringify(s.session());
+// Creating a tab focuses its first view. The sequence never rewinds with Undo; all other stored bytes still match.
+const json = (s: ProfileSessions) => { const { seq: _seq, ...session } = s.session(); return JSON.stringify(session); };
+const lastSequence = new WeakMap<ProfileSessions, number>();
 const pick = <T>(random: () => number, list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
 /** A dock arrangement holding `panels` (panel IDs) in one group, in both size classes. */
 const dockOf = (panels: readonly string[]): DockLayout => ({ format: "xfs-dock", version: 1, state: {
@@ -53,7 +55,7 @@ function startData(seed: number): ProfileSessionData {
   s.duplicate(s.tabId());
   s.rename(s.tabId(), "Second");
   s.show(s.tabList()[0]!.id);
-  return profileSessionOf(structuredClone(s.session()))!;
+  return profileSessionOf(JSON.parse(JSON.stringify(s.session())))!;
 }
 /** A window opening that session: a fresh history over it. */
 const open = (seed: number, history?: HistoryService) => openSession(startData(seed), { random: seededRandom(seed + 7919), ...(history ? { history } : {}) });
@@ -171,6 +173,8 @@ const model = {
 
 /** The structural rules every state keeps: tabs unique, each view in a live tab, instance IDs unique, a shown tab while any exists. */
 function invariants(s: ProfileSessions) {
+  expect(s.session().seq).toBeGreaterThanOrEqual(lastSequence.get(s) ?? 0);
+  lastSequence.set(s, s.session().seq);
   const tabs = s.tabList(), ids = new Set(tabs.map(tab => tab.id));
   expect(ids.size).toBe(tabs.length);
   for (const view of s.graph.viewIds()) expect(ids.has(s.graph.tabOf(view)!)).toBe(true);
@@ -406,7 +410,7 @@ describe("the phase's gates", () => {
     expect(json(s)).toBe(before);
     // Closed fragments survive a restart, with their views' focus numbers, and a reopen there is byte-identical too.
     s.close(first!.id);
-    const restarted = openSession(profileSessionOf(JSON.parse(json(s)))!);
+    const restarted = openSession(profileSessionOf(JSON.parse(JSON.stringify(s.session())))!);
     expect(json(restarted)).toBe(json(s));
     expect(restarted.focus.viewOrder()).not.toHaveProperty(MAIN_VIEW);
     restarted.reopen(first!.id);
@@ -759,7 +763,7 @@ describe("replays keep what Undo doesn't hold (review P2-1, finding 3)", () => {
     const arranged = s.tab(second!.id)!;
     expect(s.graph.redo()).toBe(true);
     expect(s.closedTabs().at(-1)!.tab).toMatchObject({ dock: arranged.dock, panels: arranged.panels });
-    const restarted = openSession(profileSessionOf(JSON.parse(json(s)))!);
+    const restarted = openSession(profileSessionOf(JSON.parse(JSON.stringify(s.session())))!);
     for (const session of [s, restarted]) {
       session.reopen(second!.id);
       expect(session.dock(second!.id)).toEqual(dockOf(["layers", "presets"]));
@@ -776,7 +780,7 @@ describe("replays keep what Undo doesn't hold (review P2-1, finding 3)", () => {
     expect(shown).toMatchObject({ look: OTHER_LOOK, gen: 1 });
     expect(s.graph.redo()).toBe(true);
     expect(s.closedTabs().at(-1)!.nodes.find(item => item.node.id === scene)!.node).toMatchObject({ look: OTHER_LOOK, gen: 1 });
-    const restarted = openSession(profileSessionOf(JSON.parse(json(s)))!);
+    const restarted = openSession(profileSessionOf(JSON.parse(JSON.stringify(s.session())))!);
     for (const session of [s, restarted]) {
       session.reopen(second!.id);
       expect(session.knownScene(scene)).toEqual(shown);
@@ -887,7 +891,7 @@ describe("review P2-1-2: committed changes are always heard, one move at a time,
     expect(s.tab(tab)!.panels).toHaveLength(1);
     expect(s.graph.redo()).toBe(true);
     expect(s.closedTabs().at(-1)!.tab.dock).not.toBeNull();
-    const restarted = openSession(profileSessionOf(JSON.parse(json(s)))!);
+    const restarted = openSession(profileSessionOf(JSON.parse(JSON.stringify(s.session())))!);
     for (const session of [s, restarted]) {
       session.reopen(tab);
       expect(session.dock(tab)).toEqual(dockOf(["presets"]));

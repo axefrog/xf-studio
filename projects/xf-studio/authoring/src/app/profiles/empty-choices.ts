@@ -3,6 +3,7 @@ import { refusal, type Capability } from "../../platform/api/capability";
 import type { SubjectRef } from "../../platform/api/subjects";
 import type { ViewGraphData } from "../../platform/api/view-graph";
 import type { LookRef } from "../../library/collection-documents";
+import type { LookInput } from "../../library/collection-owner";
 import type { StudioDispatchResult } from "../studio-application";
 import { EMPTY_CHOICE_DESCRIPTORS } from "../studio-action-descriptors";
 import { captureCurrent, type Target } from "./bindings";
@@ -24,6 +25,7 @@ export type EmptyChoicesPort = {
 };
 type Deps = { readonly session: ProfileSessions; readonly resolver: TargetResolver;
   readonly services: Pick<ProfileServices, "profiles" | "characters" | "collections">;
+  starter(): LookInput["parts"];
   access(): Capability; baseline(): ViewGraphData; dispatch(action: SceneAction): StudioDispatchResult };
 const failed = (allowed: Capability): StudioDispatchResult => ({ ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "That choice is unavailable." });
 
@@ -103,8 +105,9 @@ export function emptyChoicesPort(deps: Deps): EmptyChoicesPort {
     }
     if ("createLook" in choice) {
       const existing = (profile()?.collections ?? []).map(id => services.collections.collection(id)).find(Boolean);
-      const made = services.collections.dispatch(existing ? { kind: "collection.addLook", collection: existing.id, base: existing.revision, look: { name: "Look 1" } }
-        : { kind: "collection.create", name: "My looks", looks: [{ name: "Look 1" }] },
+      const starter = { name: "Look 1", parts: deps.starter() };
+      const made = services.collections.dispatch(existing ? { kind: "collection.addLook", collection: existing.id, base: existing.revision, look: starter }
+        : { kind: "collection.create", name: "My looks", looks: [starter] },
       { also: collection => { const edit = services.profiles.collectionMembership(session.profile, collection); return edit ? [edit] : []; } });
       if (!made.ok) return failed({ available: false, code: made.code, reason: made.reason });
       look = made.look ?? { collection: made.collection, look: services.collections.collection(made.collection)!.looks[0]! };

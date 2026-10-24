@@ -15,7 +15,7 @@ import type { StudioBoundContext, StudioContextHit } from "./studio-context-targ
 import { nameTargets, type NamedTargets, type Unnamed } from "./action-targets";
 import type { TargetResolver } from "./profiles/targets";
 import type { LayoutTabsPort } from "./profiles/tab-presentation";
-import type { EmptyChoicesPort } from "./profiles/empty-choices";
+import type { EmptyChoiceRequest, EmptyChoicesPort } from "./profiles/empty-choices";
 import type { FocusService } from "../platform/core/focus";
 import { lookScope } from "../platform/core/history-service";
 import { viewPanelId } from "../platform/api/view-graph";
@@ -658,7 +658,8 @@ export function createStudioPresentation<Slot>(sources: {
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     ...(sources.tabs ? { tabs: sources.tabs } : {}),
-    ...(sources.emptyChoices ? { emptyChoices: sources.emptyChoices } : {}),
+    ...(sources.emptyChoices ? { emptyChoices: Object.freeze({ ...sources.emptyChoices,
+      capability: (request: EmptyChoiceRequest) => a.emptyChoiceCapability(request), execute: (request: EmptyChoiceRequest) => a.executeEmptyChoice(request) }) } : {}),
     panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local`,
       historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
     focus: Object.freeze({

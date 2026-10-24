@@ -369,7 +369,10 @@ export class ProfileSessions {
   newTab(content: TabContent, at: number = this.tabs.length): TabId {
     const id = this.fresh("tab"), added = this.contentNodes(content);
     this.checkContent(content);
-    this.operate("New tab", "tabs.new", () => this.insert(id, content, added, at));
+    this.operate("New tab", "tabs.new", () => {
+      this.insert(id, content, added, at);
+      if (content.views[0]) this.focus.focusView(content.views[0].id);
+    });
     return id;
   }
   /** A copy of a tab beside it, with fresh IDs everywhere (scenes included: the copy shares nothing with it), shown. */

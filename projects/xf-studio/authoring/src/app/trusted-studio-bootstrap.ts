@@ -79,6 +79,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   };
 }) {
   const { core } = options;
+  if (options.emptyChoices) core.app.attach({ emptyChoices: options.emptyChoices });
   let collection: CollectionApplication;
   const files = new StudioFileOperations(options.fileDevice, {
     recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),

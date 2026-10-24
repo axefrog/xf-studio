@@ -22,6 +22,7 @@ import type { ViewGraph } from "../platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
 import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
 import type { LayoutTabAction } from "./profiles/tab-defaults";
+import type { EmptyChoiceRequest, EmptyChoicesPort } from "./profiles/empty-choices";
 import type { LookRef } from "../library/collection-documents";
 import { isLookScope as lookScoped, lookScope } from "../platform/core/history-service";
 import { plannedModules, type PlannedModule, type StudioModule, type ViewSummaryContribution, type ViewToolContribution, type ViewToolFilter } from "../platform/api";
@@ -79,6 +80,7 @@ export type StudioOwnerRequests = {
   library: CollectionRequest;
   files: StudioFileAction;
   presets: PartPresetRequest;
+  empty: EmptyChoiceRequest;
 };
 export type StudioRequestOwnerId = keyof StudioOwnerRequests;
 /** Every action a presentation may dispatch: the union of the registered owners' actions. */
@@ -113,6 +115,7 @@ type AsyncHandlers = {
   readonly library: AsyncActionHandler<CollectionRequest, Awaited<ReturnType<CollectionService["execute"]>>>;
   readonly files: AsyncActionHandler<StudioFileAction, StudioFileOutcome>;
   readonly presets: AsyncActionHandler<PartPresetRequest, PartPresetOutcome>;
+  readonly empty: AsyncActionHandler<EmptyChoiceRequest, StudioDispatchResult>;
 };
 type Services = { document: AuthoringDocument;
   /** Eye makeup's live part and editor state, and where its pure action results are published. */
@@ -158,6 +161,7 @@ type Services = { document: AuthoringDocument;
   viewActions?: ViewActions;
   /** Part presets in the library (part-presets.ts), for every feature's favourites. */
   presets?: PartPresetService;
+  emptyChoices?: Pick<EmptyChoicesPort, "capability" | "execute">;
   /** The live facial preview (facial-preview.ts): the held expression on the head, and what a feature's drawer shows. */
   facial?: FacialPreview;
   /** The edited layered surface's outer boundary in UV, once the head is loaded (surface-edge.ts). */
@@ -265,7 +269,7 @@ export class StudioApplication {
   }
   /** Every action, request, gesture proposal and file workflow ID with its family, scope and Undo policy. */
   registry() {
-    return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>, { requests: this.routes.asyncDescriptors("library"),
+    return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>, { requests: { ...this.routes.asyncDescriptors("library"), ...this.routes.asyncDescriptors("empty") },
       gestures: this.gestureDescriptors(), files: this.routes.asyncDescriptors("files") });
   }
   /** The registered feature modules in catalogue order, for the presentation's feature facades (step 5). */
@@ -919,6 +923,11 @@ export class StudioApplication {
   private bindAsyncHandlers(): AsyncHandlers {
     const app = this;
     return {
+      empty: {
+        capability: request => coded(app.services.emptyChoices?.capability(request) ?? missing("Choices are still loading.")),
+        execute: async request => app.services.emptyChoices?.execute(request)
+          ?? { ok: false as const, code: "unavailable", message: "Choices are still loading." },
+      },
       library: {
         capability: request => coded(app.services.collection?.capability(request) ?? missing("Collection is still loading.")),
         execute: async request => app.services.collection?.execute(request)
@@ -1093,6 +1102,16 @@ export class StudioApplication {
   }
   /** The open generic feature control, if any. */
   featureControlSnapshot() { return this.featureControl ? { feature: this.featureControl.feature, id: this.featureControl.id } : undefined; }
+  /** A captured missing-target choice, routed by its registered request owner. */
+  emptyChoiceCapability(request: EmptyChoiceRequest): StudioCapability {
+    const denied = this.denied();
+    return denied ?? (this.ownsAsync("empty", request.kind) ? this.asyncHandlers.empty.capability(request) : unknownCommand());
+  }
+  async executeEmptyChoice(request: EmptyChoiceRequest): Promise<StudioDispatchResult> {
+    const allowed = this.emptyChoiceCapability(request);
+    if (!allowed.available) return { ok: false, code: allowed.code!, message: allowed.reason! };
+    return this.asyncHandlers.empty.execute(request);
+  }
   /** A part preset request's capability, routed by the registry to the `presets` family. */
   presetCapability(request: PartPresetRequest): StudioCapability {
     const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();

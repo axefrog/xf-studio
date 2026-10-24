@@ -2,11 +2,16 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { EmptyChoices, type EmptyChoicesState } from "../src/studio-ui/components/empty-choices";
 import { withEmptyChoices } from "../src/studio-ui/panels/empty-choices";
 import { h } from "../src/studio-ui/dom";
-import type { Frame, StudioRuntime } from "../src/studio-ui/runtime";
+import { Frame, StudioRuntime } from "../src/studio-ui/runtime";
+import { trustedFixture } from "./studio-presentation-fixture";
+import { featureViewContext } from "../src/studio-ui/views/feature-context";
+import { presetsPanel, libraryPanel } from "../src/features/eye-makeup/view/collection";
+import { STUDIO_CATALOGUE } from "../src/compose/views";
+import type { Feedback } from "../src/studio-ui/feedback";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 let previousWindow: unknown;
 beforeEach(() => { installLightDom(); previousWindow = (globalThis as Record<string, unknown>).window;
-  (globalThis as Record<string, unknown>).window = { innerWidth: 1400, innerHeight: 1000 }; });
+  (globalThis as Record<string, unknown>).window = { innerWidth: 1400, innerHeight: 1000, addEventListener: () => {}, removeEventListener: () => {} }; });
 afterEach(() => { for (const picker of lightDocument.body.querySelectorAll(".empty-choice-picker")) picker.dispatchEvent(lightEvent("keydown", { key: "Escape" }));
   uninstallLightDom(); if (previousWindow === undefined) delete (globalThis as Record<string, unknown>).window; else (globalThis as Record<string, unknown>).window = previousWindow; });
 const el = (value: HTMLElement) => value as unknown as LightElement;
@@ -25,6 +30,38 @@ for (const count of [0, 1, 4, 8]) test(`U6's ${count}-candidate specimen compose
   component.update(state(count, chosen)); expect(el(component.element).querySelectorAll("button")[0]).toBe(buttons[0]);
   buttons[0]!.focus(); buttons[0]!.click(); expect(chosen).toEqual(["Look 1"]);
   component.dispose(); component.element.remove();
+});
+
+test("after the last preset is removed, real collection panels keep recovery and imports beside the chooser", () => {
+  const { shell } = trustedFixture(), snapshot = { title: "Show which look?", body: "There are no looks in this profile yet.", capability: { available: true }, choices: [] };
+  const port = { ...shell, emptyChoices: { snapshot: () => snapshot } } as unknown as ConstructorParameters<typeof StudioRuntime>[0];
+  const rt = new StudioRuntime(port, { toast: () => {}, record: () => {}, announce: () => {} } as unknown as Feedback, STUDIO_CATALOGUE);
+  const ctx = featureViewContext(rt, "eye-makeup"), panels = [presetsPanel(ctx), libraryPanel(ctx)].map(panel => withEmptyChoices(rt, panel));
+  const selected = shell.library.summary().draft!.selected!;
+  expect(shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "remove", id: selected } }).ok).toBe(true);
+  const visible = (node: LightElement) => { for (let at: LightElement | null = node; at; at = at.parentNode) if (at.hidden) return false; return true; };
+  try {
+    for (const panel of panels) { lightDocument.body.append(el(panel.spec.element)); panel.update(new Frame(port, STUDIO_CATALOGUE)); }
+    const presets = el(panels[0]!.spec.element), library = el(panels[1]!.spec.element);
+    const restore = presets.querySelectorAll("button").find(button => button.textContent.includes("Restore “"))!;
+    expect(restore).toBeDefined(); expect(visible(restore)).toBe(true);
+    for (const [root, label] of [[presets, "Import recipe as preset…"], [library, "Import collection…"]] as const) {
+      const button = root.querySelectorAll("button").find(button => button.textContent.includes(label))!;
+      expect(button).toBeDefined(); expect(visible(button)).toBe(true);
+      expect(visible(root.querySelector(".empty-choices")!)).toBe(true);
+    }
+    // Conflict notices can arrive after the empty state, while the collection controller keeps painting.
+    const summary = shell.library.summary();
+    const conflicted = { ...summary, draft: { ...summary.draft!, conflicts: [
+      { id: "conflict", message: "This collection changed elsewhere.", keepBoth: true, subject: "this collection" },
+    ] } };
+    panels[0]!.update(new Frame({ ...port, library: { ...port.library, summary: () => conflicted } }, STUDIO_CATALOGUE));
+    const conflict = presets.querySelector(".doc-conflict")!;
+    expect(visible(conflict)).toBe(true);
+    expect(conflict.querySelectorAll("button").filter(visible)).toHaveLength(3);
+    restore.click();
+    expect(shell.library.summary().draft!.presets).toHaveLength(1);
+  } finally { for (const panel of panels) { panel.dispose?.(); panel.spec.element.remove(); } }
 });
 test("Choose… focuses searchable results, keeps their captured callbacks, and Escape returns focus", async () => {
   const component = new EmptyChoices(), chosen: string[] = [];

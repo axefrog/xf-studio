@@ -18,7 +18,8 @@ import type { ViewAction } from "../app/view-actions";
 import type { SceneAction } from "../app/profiles/scene-commands";
 import type { LayoutTabAction } from "../app/profiles/tab-defaults";
 import type { PartPresetRequest } from "../library/part-presets";
-import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
+import type { EmptyChoiceRequest } from "../app/profiles/empty-choices";
+import { ACTION_DESCRIPTORS, EMPTY_CHOICE_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
   type RequestDescriptor } from "../app/studio-action-descriptors";
 
 export type { CollectionStudioAction, HistoryAction };
@@ -36,6 +37,7 @@ const VIEWS_ID = familyId("views");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
 const PRESETS_ID = familyId("presets");
+const EMPTY_ID = familyId("empty");
 
 export const HISTORY_FAMILY: SystemFamily<HistoryAction, ActionScope, typeof HISTORY_ID> = Object.freeze({
   owner: "system", id: HISTORY_ID, label: "History",
@@ -151,4 +153,9 @@ export const FILES_FAMILY: AsyncSystemFamily<StudioFileAction, FileDescriptor, t
 export const PRESETS_FAMILY: AsyncSystemFamily<PartPresetRequest, RequestDescriptor, typeof PRESETS_ID> = Object.freeze({
   owner: "system", async: true, id: PRESETS_ID, label: "Presets",
   actions: asyncActionTable<PartPresetRequest, RequestDescriptor>(PART_PRESET_DESCRIPTORS),
+});
+/** Captured choices for a panel whose view, subject or look is missing. */
+export const EMPTY_CHOICES_FAMILY: AsyncSystemFamily<EmptyChoiceRequest, RequestDescriptor, typeof EMPTY_ID> = Object.freeze({
+  owner: "system", async: true, id: EMPTY_ID, label: "Empty choices",
+  actions: asyncActionTable<EmptyChoiceRequest, RequestDescriptor>(EMPTY_CHOICE_DESCRIPTORS),
 });

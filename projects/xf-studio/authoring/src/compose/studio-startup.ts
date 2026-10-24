@@ -77,7 +77,8 @@ import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
 import { createProfileServices, createTargetResolver, drawnScene, drawnView as drawnViewOf, historyScopeName, openProfileSession,
-  sceneCharacter, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
+  sceneHeadTargets, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
+import { starterParts } from "../app/workspace/collection-workspace";
 import { printDefault } from "../app/profiles/layout-fragment";
 import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS, STUDIO_INITIAL_LAYOUT } from "./layout-defaults";
 import { viewPanel } from "../app/profiles/profile-sessions";
@@ -412,9 +413,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       colourScheme: matchMedia("(prefers-color-scheme: dark)"),
       quality: previewDevice.coordinator.quality,
       attach: attached => core.app.attach(attached), persist, changed: () => statusSource.changed() },
-    scenes: { view: () => drawnViewOf(sessionState), of: sceneOf, has: scene => views.viewsOf(scene).length > 0,
-      subject: id => { const subject = sessionState.scene(id).subject; return subject?.kind === "character" ? subject.id : undefined; },
-      ensureSubject: id => sceneCharacter(sessionState, id, services), subscribe: listener => sessionState.subscribe(listener) },
+    scenes: sceneHeadTargets(sessionState, services),
     characters: services.characters,
     // The shown V's body decides the core head (the masculine V's is prepared on first use, and stops when a newer change supersedes it).
     prepareCore: (body, pending, signal) => host.previewPreparation.ensureBody(body, pending, signal),
@@ -493,7 +492,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     panelInstance: panel => sessionState.instance(panel),
     tabs: layoutTabsPort(sessionState, layoutTabs, services),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
-      baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
+      starter: () => starterParts(core.documents), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
     targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
     characterName: character => services.characters.character(character)?.label,

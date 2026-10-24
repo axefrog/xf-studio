@@ -15,6 +15,8 @@ import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles
 import { openSession } from "./fixtures/profile-sessions";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { layoutTabsPort } from "../src/app/profiles/tab-presentation";
+import { starterParts } from "../src/app/workspace/collection-workspace";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 test("verification fixtures drive the real substitution and default readers, and refuse writes in a read-only page", async () => {
   const documents = storeDocuments(), outbox = new DocumentOutbox(documents, memoryOutboxStorage()); outbox.open();
@@ -44,6 +46,7 @@ test("verification fixtures drive the real substitution and default readers, and
   expect(actions.capability({ kind: "tabs.new", default: newer }).available).toBe(false);
   const resolver = createTargetResolver({ state: session, services, history: createHistoryService(), contexts: type => STUDIO_CATALOGUE.context(type) });
   const scenes = sceneCommands(session, services), choices = emptyChoicesPort({ session, resolver, services, access: hooks.choiceAccess,
+    starter: () => starterParts(STUDIO_DOCUMENTS),
     baseline: () => defaultViewGraph(freshWorkspace().preview), dispatch: action => { scenes.dispatch(action); return { ok: true }; } });
   for (const route of ["subject", "look", "view"] as const) for (const count of [0, 1, 8]) {
     const capture = await hooks.u6(route, count), state = choices.snapshot(capture.panel)!;

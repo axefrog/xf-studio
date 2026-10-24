@@ -178,6 +178,18 @@ export function drawnScene(state: Pick<ProfileSessions, "graph" | "focus" | "tab
   return view === undefined ? "" : state.graph.node(view, "scene").id;
 }
 
+/** The head loader's scene targets, shared by startup and its device-free regression tests. */
+export function sceneHeadTargets(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "characters">) {
+  return {
+    view: () => drawnView(state),
+    of: (view: string) => state.graph.has(view) ? state.graph.node(view, "scene").id : undefined,
+    has: (scene: string) => state.graph.viewsOf(scene).length > 0,
+    subject: (scene: string) => { const subject = state.scene(scene).subject; return subject?.kind === CHARACTER_KIND ? subject.id : undefined; },
+    ensureSubject: (scene: string) => sceneCharacter(state, scene, services),
+    subscribe: (listener: () => void) => state.subscribe(listener),
+  };
+}
+
 /**
  * The V a scene shows, made when it has none (or its V was deleted): a new default V, listed in the session's profile, shown on the scene.
  * Answers its ID (null when no V could be made: this window may not write).

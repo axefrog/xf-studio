@@ -108,8 +108,8 @@ describe("binding resolution", () => {
     expect(resolveBinding(world(), { tab: "t2", context: { kind: "scene", scenes: ["character"] } })).toMatchObject({ target: { view: "d" } });
     // No candidate in the tab: the empty state, with no fallback to another tab or any "current" V.
     expect(resolveBinding(world(), { tab: "t3", context: { kind: "view" } })).toMatchObject({ state: "empty" });
-    // Never focused: nothing to follow.
-    expect(resolveBinding(world({ focus: {} }), { tab: "t1", context: { kind: "view" } })).toMatchObject({ state: "empty" });
+    // An eligible view with no focus number is still present; use the first until one is focused.
+    expect(resolveBinding(world({ focus: {} }), { tab: "t1", context: { kind: "view" } })).toMatchObject({ state: "resolved", target: { view: "a" } });
     // A profile panel has no binding and resolves to nothing in particular.
     expect(resolveBinding(world(), { tab: "t1", context: { kind: "profile" } })).toEqual({ state: "resolved", target: {}, candidates: 0, named: false });
   });

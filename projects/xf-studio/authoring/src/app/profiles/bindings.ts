@@ -104,9 +104,9 @@ export function resolveBinding(world: BindingWorld, request: { readonly tab: Tab
   const binding = request.binding ?? { policy: "follow-focus" as const };
   if (binding.policy === "follow-focus") {
     const candidates = Object.keys(world.views).flatMap(view => { const target = eligible(world, view, tab, context, rules); return target ? [target] : []; });
-    let best: Target | undefined, at = 0;
+    let best: Target | undefined = candidates[0], at = 0;
     for (const target of candidates) { const seq = world.focus[target.view!] ?? 0; if (seq > at) { at = seq; best = target; } }
-    if (!best) return { state: "empty", missing: "view", reason: candidates.length ? "Click a 3D view to work on what it shows." : "No 3D view in this tab shows anything to work on here." };
+    if (!best) return { state: "empty", missing: "view", reason: "No 3D view in this tab shows anything to work on here." };
     return emptyTarget(world, context, best) ?? { state: "resolved", target: best, candidates: candidates.length, named: candidates.length > 1 };
   }
   const pin = binding.target;

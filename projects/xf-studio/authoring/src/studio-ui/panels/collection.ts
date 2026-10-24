@@ -21,6 +21,8 @@ import { modInstallLabel, openModInstallSheet } from "./mod-install-sheet";
 import { PANEL_META } from "../panel-meta";
 
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
+  /** Management and recovery controls remain usable beside a missing-target chooser. */
+  emptyChoices?: "alongside";
   /** Reuse this controller for the shown tab's instance; undefined while the session is empty. */
   bind?(instance: string | undefined): void;
   /** The panel is gone for good (its module was hidden): what it holds in a service lets go (a Save Explorer's open save). */

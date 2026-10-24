@@ -125,9 +125,13 @@ export function newLook(id: string, name: string, model: DocumentModel): Look {
  * ready to shape instead of empty (release-readiness-audit.md item 12). Without a starter, the empty part.
  */
 export function starterLook(id: string, name: string, model: DocumentModel): Look {
+  return { id, name, revision: 1, parts: starterParts(model) };
+}
+/** The contributed starting content, shared by every route that creates a starter look. */
+export function starterParts(model: DocumentModel): Look["parts"] {
   const starter = model.parts.feature(model.live)?.part.starter();
-  return starter === undefined ? newLook(id, name, model)
-    : { id, name, revision: 1, parts: { [model.live]: model.parts.envelope(model.live, structuredClone(starter)) } };
+  return starter === undefined ? newLook("", "", model).parts
+    : { [model.live]: model.parts.envelope(model.live, structuredClone(starter)) };
 }
 
 /**
@@ -308,4 +312,3 @@ export function newPresetName(presets: readonly { name: string }[], removed: rea
   while (taken.has(`Preset ${n}`)) n++;
   return `Preset ${n}`;
 }
-

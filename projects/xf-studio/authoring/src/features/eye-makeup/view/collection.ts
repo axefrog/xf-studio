@@ -91,6 +91,7 @@ export function presetsPanel(ctx: EyeMakeupViewContext): PanelController {
   ctx.anchors.register("presets.list", list.element);
   return {
     spec: { id: "presets", ...EYE_MAKEUP_PANEL_META["presets"], element },
+    emptyChoices: "alongside",
     update(frame) {
       const library = frame.library, draft = library.draft, busy = library.busy;
       if (draft) setValue(nameInput, draft.name);
@@ -179,6 +180,7 @@ export function libraryPanel(ctx: EyeMakeupViewContext): PanelController {
     filesSection);
   return {
     spec: { id: "library", ...EYE_MAKEUP_PANEL_META["library"], element, visibility: visible => { if (visible) syncList(); } },
+    emptyChoices: "alongside",
     update(frame) {
       const library = frame.library, draft = library.draft;
       const state = collection.state(frame);

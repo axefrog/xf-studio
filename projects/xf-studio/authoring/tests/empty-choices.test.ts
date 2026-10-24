@@ -12,11 +12,19 @@ import { fixtureHost } from "./fixtures/creator-host";
 import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
 import { openSession } from "./fixtures/profile-sessions";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { starterParts } from "../src/app/workspace/collection-workspace";
+import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { profileStudio } from "./fixtures/profile-studio";
+import { lookContent } from "../src/library/look-editor";
+import { tabDefaults } from "../src/app/profiles/profile-window";
+import { STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS } from "../src/compose/layout-defaults";
 
 async function fixture(count: number) {
   const documents = storeDocuments(), outbox = new DocumentOutbox(documents, memoryOutboxStorage()); outbox.open();
   const host = await fixtureHost(), history = createHistoryService(), workspace = freshWorkspace();
-  const services = createProfileServices({ documents, outbox, subjects: createStudioSubjects(), catalogue: new CreatorCatalogue(host.port), history });
+  const services = createProfileServices({ documents, outbox, subjects: createStudioSubjects(), catalogue: new CreatorCatalogue(host.port), history,
+    layouts: { contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE } });
   await services.load();
   const p = await services.profiles.dispatch({ kind: "profile.create", name: "U6" });
   if (!p.ok) throw Error(p.reason);
@@ -35,6 +43,7 @@ async function fixture(count: number) {
   const scenes = sceneCommands(session, services), dispatched: string[] = [];
   let writable = true;
   const port = emptyChoicesPort({ session, resolver, services, baseline: () => defaultViewGraph(workspace.preview),
+    starter: () => starterParts(STUDIO_DOCUMENTS),
     access: () => writable ? { available: true } : { available: false, code: "unavailable", reason: "This workspace is read-only." },
     dispatch: action => { dispatched.push(action.kind); const allowed = resolver.check(action);
       if (!allowed.available) return { ok: false, code: allowed.code!, message: allowed.reason! };
@@ -78,6 +87,55 @@ describe.each([0, 1, 8])("U6 with %i profile candidates", count => {
     expect(f.session.graph.undo()).toBe(true); expect(f.session.graph.viewIds()).toHaveLength(0);
     expect(f.session.graph.redo()).toBe(true); expect(f.session.graph.viewIds()).toEqual([view]); await f.outbox.settle();
   });
+});
+
+test("a real default's tab resolves its V and look without any explicit focus", async () => {
+  const f = await fixture(1), look = f.services.collections.looksOf(f.services.profiles.profile(f.session.profile)!.collections[0]!)[0]!;
+  f.session.setSubject(f.scene, { kind: "character", id: f.subjects[0]! });
+  f.session.setLook(f.scene, { collection: look.collection, look: look.id });
+  const tabs = tabDefaults(f.session, f.services);
+  tabs.dispatch({ kind: "tabs.new", default: "eye-makeup/default" });
+  const view = f.session.graph.viewIds().find(view => f.session.viewTab(view) === f.session.tabId())!;
+  expect(f.session.focus.topView([view])).toBe(view);
+  expect(f.port.snapshot("layers")).toBeNull();
+  expect(f.port.snapshot("presets")).toBeNull();
+  // Sessions from before focus was initialised still have a candidate, rather than a missing view.
+  f.session.focus.forgetView(view);
+  expect(f.port.snapshot("layers")).toBeNull();
+  expect(f.session.graph.viewIds()).toHaveLength(2);
+  await f.outbox.settle();
+});
+
+test("empty.choose has a registered request owner and the application routes its capability and execution", async () => {
+  const f = await fixture(1), request = f.port.snapshot("layers")!.choices[0]!.action;
+  expect(STUDIO_REGISTRY.routeAsync("empty.choose")).toMatchObject({ ok: true, owner: { id: "empty", async: true } });
+  const core = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  core.app.attach({ emptyChoices: f.port });
+  expect(core.app.registry().find(entry => entry.id === "empty.choose")).toBeDefined();
+  expect(core.app.emptyChoiceCapability(request)).toEqual({ available: true });
+  expect(await core.app.executeEmptyChoice(request)).toEqual({ ok: true });
+  expect(f.session.scene(f.scene).look).toBeDefined();
+  expect(await core.app.executeEmptyChoice(request)).toMatchObject({ ok: false, code: "missing_target" });
+  await f.outbox.settle();
+});
+
+for (const existing of [false, true]) test(`Create a look uses Add preset's contributed starter (existing collection: ${existing})`, async () => {
+  const f = await fixture(0);
+  if (existing) {
+    const made = f.services.collections.dispatch({ kind: "collection.create", name: "Empty collection" },
+      { also: id => { const edit = f.services.profiles.collectionMembership(f.session.profile, id); return edit ? [edit] : []; } });
+    expect(made.ok).toBe(true);
+  }
+  const added = await profileStudio();
+  try {
+    expect(added.app.dispatch({ kind: "preset.edit", command: { kind: "add" } }).ok).toBe(true);
+    const expected = added.owner.look(added.scene.look()!)!;
+    expect(await f.port.execute(f.port.snapshot("layers")!.choices[0]!.action)).toEqual({ ok: true });
+    const look = f.services.collections.look(f.session.scene(f.scene).look!)!;
+    expect(lookContent(look, STUDIO_DOCUMENTS)!.state.recipe).toEqual(lookContent(expected, STUDIO_DOCUMENTS)!.state.recipe);
+    expect(lookContent(look, STUDIO_DOCUMENTS)!.state.recipe.layers).toHaveLength(1);
+    expect(Object.keys(look.parts)).toContain(STUDIO_DOCUMENTS.live);
+  } finally { await f.outbox.settle(); await added.settle(); added.collection.dispose(); added.library.close(); }
 });
 
 test("a choice keeps the scene it was shown for across a focus move", async () => {

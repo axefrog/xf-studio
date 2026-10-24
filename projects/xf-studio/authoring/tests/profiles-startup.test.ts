@@ -7,7 +7,10 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { createProfileServices, drawnScene, openProfileSession, sceneCharacter } from "../src/app/profiles/profile-window";
+import { createProfileServices, drawnScene, openProfileSession, sceneHeadTargets } from "../src/app/profiles/profile-window";
+import { createBrowserSceneHeads } from "../src/preview/browser/browser-scene-heads";
+import { harness } from "./fixtures/fake-heads";
+import { freshWorkspace } from "./fixtures/eye-region";
 import { CreatorCatalogue } from "../src/character/creator-catalogue";
 import { decodedSaveId } from "../src/character/character-document";
 import { lookContent } from "../src/library/look-editor";
@@ -42,9 +45,20 @@ async function start(library: TestLibrary, workspace: WorkspaceState) {
   await services.load();
   const { state, stored } = openProfileSession(workspace, services, { history,
     graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph });
-  const scene = drawnScene(state), character = await sceneCharacter(state, scene, services);
+  const scene = drawnScene(state), device = harness();
+  const viewport = { ...device.ports.viewport, buildHead: async (...args: Parameters<typeof device.ports.viewport.buildHead>) => {
+    const head = await device.ports.viewport.buildHead(...args);
+    head.applySavedV = () => ({ applied: [], appearanceReferences: 0 });
+    return head;
+  } };
+  // The production startup adapter and loader, replacing only the scene-rendering devices.
+  const heads = createBrowserSceneHeads({ head: { ...device.ports, viewport, workspace, graph: state.graph }, scenes: sceneHeadTargets(state, services),
+    characters: services.characters, prepareCore: async () => {}, pending: () => {}, notice: () => {}, shown: () => {}, previews: null });
+  let loaded: boolean;
+  try { await heads.load(); loaded = !!heads.shown(); } finally { heads.dispose(); }
+  const character = state.scene(scene).subject?.id;
   await outbox.settle();
-  return { services, state, stored, scene, character, look: state.scene(scene).look };
+  return { services, state, stored, scene, character, loaded, builds: device.builds, look: state.scene(scene).look };
 }
 
 test("a real-shaped workspace with a V from a save migrates at start; its V and looks show, and the same again after a restart", async () => {
@@ -82,5 +96,30 @@ test("a real-shaped workspace with a V from a save migrates at start; its V and 
     // A restart: new services over the same library, the workspace as stored.
     const again = await seen();
     expect(again).toEqual(first);
+  } finally { library.close(); }
+});
+
+test("fresh startup loads its migrated V, while an explicitly V-less scene stays empty after restart", async () => {
+  const dir = join(scratch, "fresh"); mkdirSync(dir, { recursive: true });
+  const path = join(dir, "library.sqlite"), workspace = new HarnessWorkspace(freshWorkspace(), "fresh-startup");
+  const host = new HarnessHost(path);
+  await migrateUntilDone(workspace, host); host.close();
+  const library = openTestLibrary(path);
+  try {
+    const first = await start(library, workspace.state());
+    expect(first.stored).toBe(true);
+    expect(first.character).toBeDefined();
+    expect(first.services.characters.document(first.character!)!.source.kind).toBe("default");
+    expect(first.services.characters.list()).toHaveLength(1);
+    expect(first.loaded).toBe(true); expect(first.builds).toBe(1);
+    const characters = first.services.characters.list().length;
+    first.state.setSubject(first.scene, undefined);
+    const empty: WorkspaceState = { ...workspace.state(), profiles: { ...workspace.state().profiles!,
+      sessions: { ...workspace.state().profiles!.sessions, [first.state.profile]: first.state.session() } } };
+    const reopened = await start(library, empty);
+    expect(reopened.character).toBeUndefined();
+    expect(reopened.loaded).toBe(false); expect(reopened.builds).toBe(0);
+    expect(reopened.services.characters.list()).toHaveLength(characters);
+    expect(reopened.state.scene(reopened.scene).subject).toBeUndefined();
   } finally { library.close(); }
 });
