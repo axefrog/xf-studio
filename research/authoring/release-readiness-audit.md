@@ -111,7 +111,7 @@ These are preview only by nature: they let the user judge a look on a V. They st
 
 | Module | Export status | Recommendation |
 |---|---|---|
-| Expressions (Expression, Expression sets) | Expression sets **export** XF Expressions, unverified in game (Build-verified only) | Keep hidden and tagged for the beta; it isn't in the default path, which is right |
+| Expressions (Expression, Expression sets) | Expression sets **export** XF Expressions. A Studio-built set loaded and played in game in session 4, but the formal match against the preview (R4) hasn't run; the exit list is in [module stages §3](module-stages.md#3-expressions) | Keep hidden and tagged for the beta; it isn't in the default path, which is right |
 | Poses | Preview only | Keep hidden |
 | Save Explorer | Research (a read-only save inspector) | Keep hidden; consider moving it under research tools rather than the Modules menu, since it isn't a user feature |
 

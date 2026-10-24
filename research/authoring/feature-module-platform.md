@@ -77,7 +77,7 @@ export interface FeatureModule<P, E, A extends { kind: string }, T extends { kin
   readonly id: FeatureId;                    // "eye-makeup"
   readonly api: 1;
   readonly label: string;                    // "Eye makeup"
-  readonly stage: "stable" | "preview" | "dev";
+  readonly stage: "stable" | "preview" | "dev";   // meanings and each module's exit list: module-stages.md
   readonly part: PartCodec<P>;
   readonly editor: EditorCodec<E, P>;
   readonly actions: ActionTable<P, E, A, T>;
