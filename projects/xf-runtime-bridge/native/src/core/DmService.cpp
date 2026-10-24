@@ -503,6 +503,18 @@ json Service::Despawn(const json& aParams, const Ops& aOps)
     return out;
 }
 
+json Service::Present(const Ops& aOps) const
+{
+    std::map<std::string, std::string> entities;
+    {
+        std::scoped_lock lock(m_mutex);
+        for (const auto& [handle, item] : m_items) entities[std::to_string(handle)] = item.entity;
+    }
+    if (entities.empty()) return json::object();
+    if (!aOps.presence) throw MethodError("precondition_unavailable", "No entity-presence reader.");
+    return aOps.presence(entities);
+}
+
 json Service::Spawned(const json& aParams, const Ops& aOps)
 {
     p::RequireOnly(aParams, {});

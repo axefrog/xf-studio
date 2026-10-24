@@ -56,13 +56,23 @@ export function checkSubtitleRecording(rows: Json[], status: Json, expected: Sub
   if (![bound[0]!, removals[0]!].every(r => r.data.consumer?.controller_id === consumer.controller_id && r.data.consumer?.controller === consumer.controller))
     return inconclusive("Widget consumer identity changed");
   const reading = removals[0]!.source_s - bound[0]!.source_s;
+  // Binding alone is not a reading opportunity. Track visibility observations until removal;
+  // the removal's detached/hidden state itself is expected and is not part of the interval.
+  const visibility = [bound[0]!, ...interval.filter(r => r.channel === "subtitles" && r.data.event === "line.widget_state" &&
+    r.data.widget_id === widget && r.data.line_id === line && r.source_s >= bound[0]!.source_s && r.source_s < removals[0]!.source_s)];
+  const hidden = visibility.some(r => r.data.effective_visible === false || (Number.isFinite(r.data.opacity) && r.data.opacity <= 0));
+  const visibilityKnown = visibility.every(r => r.data.effective_visible === true && Number.isFinite(r.data.opacity) && r.data.opacity > 0 &&
+    r.data.ancestor_limit !== true && r.data.consumer?.controller_id === consumer.controller_id && r.data.consumer?.controller === consumer.controller);
   const greetings = interval.filter(r => r.channel === "voice" && r.data.event === "voice.requested" && r.data.entity === expected.speaker && r.data.trigger === "greeting");
   const failures: string[] = [];
+  if (hidden) failures.push("Widget was hidden or transparent during the reading interval");
   if (bound[0]!.data.actual_text !== expected.text) failures.push("Widget text differs from the question");
   if (reading < expected.minimum_reading_s) failures.push("Widget reading interval is too short");
   if (greetings.length) failures.push("Script greeting request observed from scene actor");
-  return { verdict: failures.length ? "FAIL" : "PASS", failures, line_id: line, widget_id: widget, reading_interval_s: reading, events_for_line: interval.filter(r => r.data.line_id === line).length,
+  if (!failures.length && !visibilityKnown) return inconclusive("Missing positive widget visibility during the reading interval");
+  return { verdict: failures.length ? "FAIL" : "PASS", failures, line_id: line, widget_id: widget,
+    widget_lifetime_s: reading, reading_interval_s: visibilityKnown && !hidden ? reading : null, events_for_line: interval.filter(r => r.data.line_id === line).length,
     voice_control_seq: voiceControl.seq,
     voice_result: greetings.length ? "script greeting request observed" : "no greeting voice request observed on covered paths",
-    coverage: "subtitle_widget_lifetime_and_covered_script_requests", audible_proof: false, rendered_proof: false };
+    coverage: "subtitle_widget_visibility_and_covered_script_requests", audible_proof: false, rendered_proof: false };
 }

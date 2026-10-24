@@ -6,23 +6,32 @@ export type CaptureArm = { run: number; event: string; channel?: string; match?:
 type Active = { id: number; input: CaptureArm; cursor: TimelineCursor; until: number; remaining: number; stop: AbortController };
 export class EventCaptures {
   private active?: Active;
+  private pending?: { id: number; stop: AbortController };
+  private generation = 0;
   private receipts: Json[] = [];
   private nextId = 1;
   private timer?: ReturnType<typeof setTimeout>;
   constructor(private api: TestApi, private clock: Clock = defaultClock) {}
   async arm(input: CaptureArm, initialApi: TestApi): Promise<Json> {
-    if (this.active) throw new Error("A capture is already armed; cancel it first");
-    const initial = await catchUp(initialApi, { run: input.run, digest: false, archive: false });
-    if (!initial.source.active) throw new Error("Start a live recorder before arming a capture");
-    initial.cursor.record = Math.max(initial.cursor.record, initial.source.latest);
-    const arm: Active = { id: this.nextId++, input, cursor: initial.cursor, until: this.clock.now() + (input.expires_s ?? 30) * 1000,
-      remaining: input.count ?? 1, stop: new AbortController() };
-    this.active = arm; this.schedule(arm);
-    return { id: arm.id, armed: true, cursor: arm.cursor, expires_in_s: input.expires_s ?? 30, count: arm.remaining,
-      lifetime: "This tools process; close, kill or handover cancels. Polling/command contention may make captures late." };
+    if (this.active || this.pending) throw new Error("A capture is already armed; cancel it first");
+    const pending = { id: this.nextId++, stop: new AbortController() }, generation = this.generation;
+    this.pending = pending;
+    try {
+      const initial = await catchUp(initialApi, { run: input.run, digest: false, archive: false, signal: pending.stop.signal });
+      if (generation !== this.generation || pending.stop.signal.aborted) throw new Error("Capture arm was cancelled");
+      if (!initial.source.active) throw new Error("Start a live recorder before arming a capture");
+      initial.cursor.record = Math.max(initial.cursor.record, initial.source.latest);
+      const arm: Active = { id: pending.id, input, cursor: initial.cursor, until: this.clock.now() + (input.expires_s ?? 30) * 1000,
+        remaining: input.count ?? 1, stop: pending.stop };
+      this.active = arm; this.schedule(arm);
+      return { id: arm.id, armed: true, cursor: arm.cursor, expires_in_s: input.expires_s ?? 30, count: arm.remaining,
+        lifetime: "This tools process; close, kill or handover cancels. Polling/command contention may make captures late." };
+    } finally { if (this.pending === pending) this.pending = undefined; }
   }
-  status(): Json { return { armed: !!this.active, id: this.active?.id, remaining: this.active?.remaining, receipts: [...this.receipts] }; }
+  status(): Json { return { armed: !!this.active || !!this.pending, id: this.active?.id ?? this.pending?.id, remaining: this.active?.remaining, receipts: [...this.receipts] }; }
   cancel(reason = "cancelled"): Json {
+    ++this.generation;
+    if (this.pending) { this.pending.stop.abort(); this.note({ id: this.pending.id, status: reason }); this.pending = undefined; }
     const arm = this.active;
     if (arm) { arm.stop.abort(); this.active = undefined; this.note({ id: arm.id, status: reason, remaining: arm.remaining }); }
     if (this.timer) clearTimeout(this.timer);
@@ -41,6 +50,7 @@ export class EventCaptures {
       if (!result.ok) throw new Error(result.error.message);
       const page = result.result as Json;
       if (this.active !== arm) return;
+      if (!page.source.active) { this.cancel("recorder_stopped"); return; }
       arm.cursor = page.cursor;
       if (!page.complete) throw new Error(`Timeline coverage gap: ${page.gaps.join(", ")}`);
       const sources = [
@@ -72,7 +82,6 @@ export class EventCaptures {
           outcome: capture });
         if (!--arm.remaining) { this.active = undefined; return; }
       }
-      if (!page.source.active) { this.cancel("recorder_stopped"); return; }
     } catch (error) {
       if (this.active === arm) this.cancel(`failed: ${(error as Error).message}`);
       return;

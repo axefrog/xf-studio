@@ -10,7 +10,7 @@ function fixture() {
     rows.push({ channel, source_s: time, data: { event: "tap.coverage", valid: true, source_listeners: 3, controller_count: 2, controller_listeners: 6, controllers } });
   rows.push({ channel: "voice", source_s: 0.5, data: { event: "voice.requested", entity: "control-actor", trigger: "bump" } });
   for (const [event, source_s] of [["line.requested", 1.1], ["line.widget_created", 1.2], ["line.widget_bound", 1.21], ["line.widget_removed", 4]] as const)
-    rows.push({ channel: "subtitles", source_s, data: { ...data, event, actual_text: expected.text, detached: true } });
+    rows.push({ channel: "subtitles", source_s, data: { ...data, event, actual_text: expected.text, detached: true, effective_visible: true, opacity: 1 } });
   rows.sort((a, b) => a.source_s - b.source_s);
   rows.forEach((r, i) => Object.assign(r, { seq: i + 1, run: 1, session: "fixture", world_generation: 1, valid: true }));
   const status = { active: false, run: 1, session: "fixture", world_generation: 1, start_s: 0, end_s: 6,
@@ -32,6 +32,21 @@ test("actual text, too-short interval and actor greeting are failures", () => {
       f.status.latest = f.rows.length;
     }
     expect(checkSubtitleRecording(f.rows, f.status, expected).verdict).toBe("FAIL");
+  }
+});
+test("reading time requires positive visibility; hidden, transparent or later-hidden widgets fail", () => {
+  for (const mode of ["missing", "hidden", "transparent", "later_hidden", "later_unknown"]) {
+    const f = fixture(), bound = f.rows.find(r => r.data.event === "line.widget_bound")!;
+    if (mode === "missing") { delete bound.data.effective_visible; delete bound.data.opacity; }
+    if (mode === "hidden") bound.data.effective_visible = false;
+    if (mode === "transparent") bound.data.opacity = 0;
+    if (mode.startsWith("later_")) {
+      f.rows.push({ ...bound, source_s: 2, data: { ...bound.data, event: "line.widget_state", effective_visible: mode === "later_hidden" ? false : undefined } });
+      f.rows.sort((a, b) => a.source_s - b.source_s); f.rows.forEach((r, i) => { r.seq = i + 1; }); f.status.latest = f.rows.length;
+    }
+    const result = checkSubtitleRecording(f.rows, f.status, expected);
+    expect(result.verdict, mode).toBe(mode === "missing" || mode === "later_unknown" ? "INCONCLUSIVE" : "FAIL");
+    expect(result.reading_interval_s ?? null).toBeNull();
   }
 });
 test("loss, stale/missing listeners, duplicate controller, widget and incomplete drain stay inconclusive", () => {

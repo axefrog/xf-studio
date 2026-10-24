@@ -174,6 +174,12 @@ dm::Ops OpsFor(const std::string& aCid)
         return ScriptCall("XFDmPhone", "Text", {"String", "String"}, {&contact, &text}, aCid);
     };
     ops.phoneContacts = [aCid] { return ScriptCall("XFDmPhone", "Contacts", {}, {}, aCid); };
+    ops.presence = [aCid](const std::map<std::string, std::string>& entities) {
+        std::string joined;
+        for (const auto& [key, id] : entities) joined += (joined.empty() ? "" : ",") + key + "=" + id;
+        RED4ext::CString text(joined.c_str());
+        return ScriptCall("XFDmSense", "Presence", {"String"}, {&text}, aCid);
+    };
     ops.sample = [aCid](const dm::SampleWants& aWants, const std::map<std::string, std::string>& aEntities) {
         std::string wants;
         const auto add = [&wants](const std::string& aToken) { wants += (wants.empty() ? "" : ",") + aToken; };
@@ -335,12 +341,7 @@ json DmHolds()
 
 json DmGuardPresent()
 {
-    json present = json::object();
-    // Spawned resolves each entity through the live game reader; registry membership alone is insufficient.
-    const auto snapshot = Service().Spawned(json::object(), OpsFor("action-guard"));
-    for (const auto& item : snapshot["spawned"])
-        present[std::to_string(item["handle"].get<int32_t>())] = item.value("present", false);
-    return present;
+    return Service().Present(OpsFor("action-guard"));
 }
 
 void StopDm()

@@ -52,10 +52,13 @@ describe("input session evidence", () => {
     expect(check("save_delta", { baseline, actual: { ...actual, ready: false } }).verdict).toBe("INCONCLUSIVE");
     expect(check("save_delta", { baseline, actual: { ready: true, names: ["fixture-old", "fixture-new", "fixture-new"] } }).verdict).toBe("INCONCLUSIVE");
   });
-  test("save window rollover does not invent deletions; total count measures additions", () => {
+  test("save window rollover leaves unobserved removals inconclusive", () => {
     const baseline = { ready: true, count: 50, names: ["c", "b", "a"] };
     const actual = { ready: true, count: 51, names: ["new", "c", "b"] };
-    expect(check("save_delta", { baseline, actual }).verdict).toBe("PASS");
+    expect(check("save_delta", { baseline, actual }).verdict).toBe("INCONCLUSIVE");
+    expect(check("save_delta", { baseline, actual: { ...actual, names: ["new2", "new1", "c"] } }).verdict).toBe("FAIL");
+    // Even retaining every previously seen name cannot rule out older, unobserved removals.
+    expect(check("save_delta", { baseline, actual: { ...actual, names: ["new", "c", "b", "a"] } }).verdict).toBe("INCONCLUSIVE");
     expect(check("save_delta", { baseline, actual: { ...actual, count: 52 } }).verdict).toBe("FAIL");
     expect(check("save_delta", { baseline, actual: { ...actual, names: ["new", "c", "a"] } }).verdict).toBe("FAIL");
     expect(check("save_delta", { baseline, actual: { ...actual, names: ["x", "y", "z"] } }).verdict).toBe("INCONCLUSIVE");

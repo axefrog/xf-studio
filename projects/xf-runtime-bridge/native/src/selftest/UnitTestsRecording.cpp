@@ -2,6 +2,7 @@
 #include "core/Bridge.hpp"
 #include <cstdio>
 #include <fstream>
+#include <future>
 namespace
 {
 using namespace xfb;
@@ -13,6 +14,34 @@ template<class F> void Refuses(F fn, const char* code)
 int RecordingUnitTests()
 {
     using namespace xfb::recording;
+    {
+        Service cancelled;
+        const auto pending = cancelled.CancellationGeneration();
+        cancelled.RequestStop("cancelled");
+        Refuses([&] { cancelled.Start(json::object(), 1, 1, 1, "fixture", pending); }, "interrupted");
+        Check(cancelled.Start({{"channels", {"voice"}}}, 2, 1, 1, "fixture")["active"] == true, "fresh start allowed after cancelled pending start");
+        Check(cancelled.Wants("voice"), "fresh generation opens ingress despite previous stop reason");
+        cancelled.RequestStop("cancelled");
+        Check(!cancelled.Read({{"run", 1}}, 3)["active"].get<bool>(), "new stop still closes fresh generation");
+    }
+    {
+        // A stop on the control route wins over a start admitted but not yet run by the game.
+        Config config; config.maxRequestsPerSecond = 1000;
+        Session session; session.token = "fixture";
+        GameThreadQueue queue; queue.SetPumping(true);
+        Dispatcher dispatcher(config, session, queue); Service queued;
+        RegisterMethods(dispatcher, queued, true, [] { return 1; }, [] { return 1; }, [] { return "fixture"; }, [] {});
+        auto request = [&](const char* method, bool control = false) {
+            return json::parse(dispatcher.Handle(SerializeJson(json{{"v", 1}, {"token", session.token}, {"method", method}, {"params", json::object()}}), 1, control).line);
+        };
+        auto pending = std::async(std::launch::async, [&] { return request("test.record.start"); });
+        // No game pumping during admission; the future must remain waiting for its queued step.
+        Check(pending.wait_for(std::chrono::milliseconds(40)) == std::future_status::timeout, "recorder start awaits game queue");
+        Check(request("test.record.stop", true)["ok"] == true, "control stop acknowledged before pending start executes");
+        queue.Drain(1);
+        const auto answer = pending.get();
+        Check(answer["ok"] == false && answer["error"]["code"] == "interrupted", "queued native start cannot overwrite emergency stop");
+    }
     Service s; int reads = 0, guarded = 0;
     Ops ops; ops.guard = [&] { ++guarded; }; ops.sample = [&](const std::string&, const std::vector<std::string>&) {
         ++reads; return json{{"valid", true}, {"position", {1, 2, 3}}}; };

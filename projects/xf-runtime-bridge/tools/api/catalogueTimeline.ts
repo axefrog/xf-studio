@@ -6,9 +6,10 @@ import type { TestApi } from "../testing/windows.ts";
 
 // Inside a local command, use its existing connection rather than recursively entering run's queue.
 export function timelineApi(context: CommandContext): TestApi {
-  return { run: async (name, input = {}) => {
+  return { run: async (name, input = {}, options = {}) => {
     if (!["bridge.info", "test.record.read", "session.events", "game.digest"].includes(name)) throw new Error("Unsupported timeline read");
-    const answer = await context.api.callBridge(name, input as Record<string, unknown>, context.cid, undefined, context.signal);
+    const signal = context.signal && options.signal ? AbortSignal.any([context.signal, options.signal]) : options.signal ?? context.signal;
+    const answer = await context.api.callBridge(name, input as Record<string, unknown>, context.cid, undefined, signal);
     return answer.ok ? { ok: true, command: name, cid: context.cid, result: answer.result } : { ok: false, command: name, cid: context.cid, error: answer.error };
   } };
 }

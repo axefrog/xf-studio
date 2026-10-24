@@ -309,6 +309,11 @@ json Dispatcher::RunWrite(std::chrono::milliseconds aTimeout, const std::functio
     }, aLabel, true, restoring ? nullptr : this, restoring);
 }
 
+json Dispatcher::RunRead(const std::function<json()>& aTask, const std::string& aLabel) const
+{
+    return RunGameTask(m_queue, std::chrono::milliseconds(m_config.requestTimeoutMs), aTask, aLabel);
+}
+
 namespace
 {
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,

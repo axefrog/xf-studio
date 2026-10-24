@@ -55,9 +55,14 @@ export function evaluateInputEvidence(spec: Json, report: AssertionResult): Asse
     const removed = beforeOverlap.filter((n: string) => !after.names.includes(n));
     // Complete lists also prove removals beyond the shared interval.
     if (full(after) === after.names.length) for (const n of before.names) if (!after.names.includes(n) && !removed.includes(n)) removed.push(n);
-    const added = afterOverlap.filter((n: string) => !before.names.includes(n));
+    const added = (full(after) === after.names.length ? after.names : afterOverlap).filter((n: string) => !before.names.includes(n));
     const addedTotal = full(after) - full(before);
-    return finish(addedTotal === 1 && removed.length === 0 ? "PASS" : "FAIL", { added, added_total: addedTotal, removed }, { added_total: 1, removed: 0 });
+    const complete = [before, after].every(v => full(v) === v.names.length);
+    const contradicted = addedTotal !== 1 || added.length > 1 || removed.length > 0;
+    const proven = complete && added.length === 1;
+    return finish(contradicted ? "FAIL" : proven ? "PASS" : "INCONCLUSIVE",
+      { added, net_growth: addedTotal, removed, removals_complete: complete }, { observed_additions: 1, net_growth: 1, removed: 0 },
+      contradicted || proven ? [] : ["Truncated save windows cannot rule out unobserved additions/removals"]);
   }
   const capture = spec.actual, t = capture?.trace;
   report.evidence = capture?.file ? [capture.file] : [];

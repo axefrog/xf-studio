@@ -1622,6 +1622,19 @@ public abstract class XFDmSense {
     return Cast<Float>(GameTime.Hours(now) * 3600 + GameTime.Minutes(now) * 60 + GameTime.Seconds(now));
   }
 
+  // Presence checks are read-only: watcher subscriptions and pending events belong to Sample.
+  public static func Presence(cid: String, entities: String) -> String {
+    let out = "{\"ok\":true";
+    for pair in StrSplit(entities, ",") {
+      let parts = StrSplit(pair, "=");
+      if ArraySize(parts) >= 2 {
+        let object = XFDmIds.Find(parts[1]);
+        out += "," + XFJson.Str(parts[0]) + ":" + XFJson.Flag(IsDefined(object) && object.IsAttached());
+      }
+    }
+    return out + "}";
+  }
+
   // wants: comma-separated tokens: look, occ, events, call:<contact id>. entities: key=entity id pairs, comma-separated.
   public static func Sample(cid: String, wants: String, entities: String) -> String {
     let game = GetGameInstance();

@@ -86,7 +86,7 @@ void Service::WriteFiles()
             // writer at 20 rows/s, below the default three 10 Hz sources even without taps.
             if (cursor < page.at("latest").get<uint64_t>()) continue;
             std::unique_lock lock(m_mutex);
-            m_wake.wait_for(lock, std::chrono::milliseconds(250), [this] { return !m_active || m_requested.load(); });
+            m_wake.wait_for(lock, std::chrono::milliseconds(250), [this] { return !m_active || m_startedGeneration.load() != CancellationGeneration(); });
         }
     }
     catch (const std::exception& e)
@@ -113,9 +113,12 @@ json Service::Status(double now) const
         {"output", m_output.string()}, {"writer_pending", m_writerBusy}, {"file_error", m_fileError},
         {"coverage", "source_snapshots + subtitle/controller + script_voice_requests + facial_submissions + UI_consumers; not rendered, evaluated face or audible proof"}};
 }
-json Service::Start(const json& p, double now, uint64_t world, uint64_t connection, const std::string& session)
+json Service::Start(const json& p, double now, uint64_t world, uint64_t connection, const std::string& session,
+                    std::optional<uint64_t> generation)
 {
+    const auto admitted = generation.value_or(CancellationGeneration());
     std::scoped_lock lock(m_mutex);
+    if (admitted != CancellationGeneration()) throw MethodError("interrupted", "Recorder start was cancelled before execution.");
     Keys(p, {"channels", "actors", "rate_hz", "duration_s", "byte_cap"});
     if (m_active || m_writerBusy || m_ack < m_latest) throw MethodError("recording_busy", "Stop and drain the previous recording before starting another.");
     if (Integer(p, "rate_hz", 10, 10) != 10) throw MethodError("bad_params", "This recorder samples at 10 Hz.");
@@ -149,7 +152,12 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     m_start = m_next = now; m_until = now + static_cast<double>(duration); m_last = m_gap = m_end = 0;
     m_ingressDropped.store(0); m_nextHeartbeat = now;
     unsigned mask = 0; for (const auto& c : m_channels) mask |= EventBit(c); m_eventMask.store(mask);
-    m_cap = cap; m_active = true; m_reason.clear(); m_requested.store(nullptr);
+    m_cap = cap; m_active = true; m_reason.clear(); m_startedGeneration.store(admitted);
+    if (admitted != CancellationGeneration())
+    {
+        Stop("cancelled", now);
+        throw MethodError("interrupted", "Recorder start was cancelled during execution.");
+    }
     m_fileError.clear(); m_output.clear();
     if (!m_root.empty())
     {
@@ -166,12 +174,12 @@ json Service::Stop(const std::string& reason, double now)
     if (m_active) { m_eventMask.store(0); m_active = false; m_reason = reason; m_end = now; m_wake.notify_all(); }
     return Status(now);
 }
-void Service::RequestStop(const char* reason) { m_eventMask.store(0); m_requested.store(reason); m_wake.notify_all(); }
+void Service::RequestStop(const char* reason) { m_requested.store(reason); ++m_cancelGeneration; m_eventMask.store(0); m_wake.notify_all(); }
 void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, uint64_t tick, const Ops& ops)
 {
     std::scoped_lock lock(m_mutex);
     if (!m_active) return;
-    if (const auto reason = m_requested.load()) { Stop(reason, now); return; }
+    if (m_startedGeneration.load() != CancellationGeneration()) { Stop(m_requested.load(), now); return; }
     if (!live || world != m_world || connection != m_connection) { Stop(world != m_world ? "world_changed" : "owner_or_live_gate_closed", now); return; }
     if (now >= m_until) { Stop("duration", now); return; }
     if (now + 1e-9 < m_next) return;
@@ -184,7 +192,7 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
     for (const auto& channel : m_channels)
     {
         if (EventBit(channel) && channel != "ui" && !heartbeat) continue; // event channels have a 1 Hz coverage heartbeat only
-        if (const auto reason = m_requested.load()) { Stop(reason, Now()); break; }
+        if (m_startedGeneration.load() != CancellationGeneration()) { Stop(m_requested.load(), Now()); break; }
         const double at = Now();
         json payload; bool valid = false;
         try { ops.guard(); payload = ops.sample(channel, m_actors); valid = !payload.is_null() && payload.value("valid", true); }
@@ -195,7 +203,7 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
         if (!m_active) break;
     }
 }
-bool Service::Wants(const std::string& channel) const { return (m_eventMask.load() & EventBit(channel)) != 0; }
+bool Service::Wants(const std::string& channel) const { return m_startedGeneration.load() == CancellationGeneration() && (m_eventMask.load() & EventBit(channel)) != 0; }
 bool Service::Append(const std::string& channel, const std::string& text, double at, double end, uint64_t tick, bool valid)
 {
     ++m_counts[channel][0]; if (valid) ++m_counts[channel][1];
@@ -219,7 +227,7 @@ bool Service::Ingress(const std::string& channel, const std::string& payload, do
     if (!Wants(channel)) return false;
     std::unique_lock lock(m_mutex, std::try_to_lock);
     if (!lock.owns_lock()) { ++m_ingressDropped; return false; }
-    if (!m_active || m_requested.load()) return false;
+    if (!m_active || m_startedGeneration.load() != CancellationGeneration()) return false;
     if (world != m_world || connection != m_connection) { Stop("owner_or_world_changed", now); return false; }
     if (now >= m_until) { Stop("duration", now); return false; }
     // Script callbacks only; reject before parsing. Never use this on audio/render hooks.
@@ -232,7 +240,7 @@ bool Service::Ingress(const std::string& channel, const std::string& payload, do
 json Service::Read(const json& p, double now)
 {
     std::scoped_lock lock(m_mutex);
-    if (const auto reason = m_requested.load()) Stop(reason, now);
+    if (m_startedGeneration.load() != CancellationGeneration()) Stop(m_requested.load(), now);
     Keys(p, {"run", "since", "limit"});
     if (Integer(p, "run", 0, UINT64_MAX) != m_run || !m_run) throw MethodError("recording_changed", "Use the run returned by start.");
     const auto since = Integer(p, "since", 0, UINT64_MAX), limit = Integer(p, "limit", 5, 5);
@@ -256,8 +264,14 @@ void RegisterMethods(Dispatcher& d, Service& s, bool hooks, std::function<uint64
                      std::function<uint64_t()> connection, std::function<std::string()> session, std::function<void()> guard)
 {
     const auto enabled = [hooks] { if (!hooks) throw MethodError("test_hooks_off", "Recorder needs allow_test_hooks."); };
-    d.Register({"test.record.start", Access::Read, RunOn::GameThread, "Start bounded source recording.",
-        [&, enabled, world, connection, session, guard](const MethodContext& c) { enabled(); guard(); return s.Start(c.params, Now(), world(), connection(), session()); }});
+    d.Register({"test.record.start", Access::Read, RunOn::BridgeThread, "Start bounded source recording.",
+        [&, enabled, world, connection, session, guard](const MethodContext& c) {
+            enabled();
+            const auto generation = s.CancellationGeneration();
+            return d.RunRead([&s, c, generation, world, connection, session, guard] {
+                guard(); return s.Start(c.params, Now(), world(), connection(), session(), generation);
+            }, "test.record.start");
+        }});
     d.Register({"test.record.read", Access::Read, RunOn::BridgeThread, "Drain source records without a game read.",
         [&, enabled](const MethodContext& c) { enabled(); return s.Read(c.params, Now()); }});
     d.Register({"test.record.stop", Access::Control, RunOn::BridgeThread, "Stop recording; retained rows remain drainable.",

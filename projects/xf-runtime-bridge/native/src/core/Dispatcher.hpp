@@ -132,6 +132,8 @@ public:
     // RunGameTask, and steps inside a RestoreScope (putting something back) skip the write gate.
     nlohmann::json RunWrite(std::chrono::milliseconds aTimeout, const std::function<nlohmann::json()>& aTask,
                             const std::string& aLabel) const;
+    // Admit bookkeeping on the bridge thread, then perform a guarded read on the game thread.
+    nlohmann::json RunRead(const std::function<nlohmann::json()>& aTask, const std::string& aLabel) const;
 
     // Kill switch: every later request is refused with "killed" until the bridge is re-armed from the
     // game (Bridge::Rearm) or the game restarts.

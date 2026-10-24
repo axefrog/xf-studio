@@ -152,6 +152,8 @@ export class CommandApi {
   private recordingLease?: ReturnType<typeof setTimeout>;
   private recordingHeartbeat?: ReturnType<typeof setTimeout>;
   private recordingEpoch?: AbortController;
+  private recordingGeneration = 0;
+  private recordingStarts = new AbortController();
   private connection: { transport: BridgeTransport; sid: string } | null = null;
   private connecting: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -244,7 +246,8 @@ export class CommandApi {
     name = findCommand(name)?.name ?? name;
     // Process-only state: disarm must overtake a queued capture or a long game wait.
     if (name === "capture.disarm" || name === "capture.armed") return this.runNow(name, input ?? {}, options);
-    if (name === "test.record.stop") this.holdRecordingConnection(false);
+    if (name === "test.record.stop") { this.holdRecordingConnection(false); this.eventCaptures.cancel("recorder_stopped"); }
+    if (name === "test.record.start") options = { ...options, signal: options.signal ? AbortSignal.any([options.signal, this.recordingStarts.signal]) : this.recordingStarts.signal };
     // Emergency controls go now, beside whatever is running (RB-121); kill and handover first cancel everything sent
     // before them (queued commands never start; a running one sees its signal abort and stops at its next step).
     if (SUPERSEDING_COMMANDS.has(name)) this.eventCaptures.cancel(name);
@@ -487,6 +490,7 @@ export class CommandApi {
    * an emergency control (or the session runner's Ctrl+C) has cancelled isn't sent; cleanup steps pass none.
    */
   async callBridge(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal): Promise<BridgeAnswer> {
+    const recordingGeneration = this.recordingGeneration;
     if (signal?.aborted) return { ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };
     const session = readSession(this.runtimeDir);
     if (!session) {
@@ -544,7 +548,8 @@ export class CommandApi {
     }
     if (!response.ok && (response.error?.code === "disconnected" || response.error?.code === "client_timeout") && this.connection === connection) this.disconnect();
     if (response.ok) {
-      if (method === "test.record.start") this.holdRecordingConnection(true, Number(params.duration_s ?? 60));
+      if (method === "test.record.start" && recordingGeneration === this.recordingGeneration && !signal?.aborted && this.connection === connection)
+        this.holdRecordingConnection(true, Number(params.duration_s ?? 60));
       if (method === "test.record.stop" || method === "game.load" ||
           (method === "test.record.read" && (response.result as { active?: boolean })?.active === false)) this.holdRecordingConnection(false);
     }
@@ -585,6 +590,7 @@ export class CommandApi {
   }
 
   private holdRecordingConnection(active: boolean, durationS = 60) {
+    if (!active) { ++this.recordingGeneration; this.recordingStarts.abort(); this.recordingStarts = new AbortController(); }
     if (this.recordingLease) clearTimeout(this.recordingLease);
     if (this.recordingHeartbeat) clearTimeout(this.recordingHeartbeat);
     this.recordingEpoch?.abort();
@@ -604,8 +610,11 @@ export class CommandApi {
   private keepRecordingAlive(lease: AbortController) {
     this.recordingHeartbeat = setTimeout(async () => {
       if (!this.recordingActive || this.recordingEpoch !== lease) return;
-      // At most one queued heartbeat, below the native minimum idle timeout (5 s).
-      const answer = await this.run("bridge.ping", {}, { source: "recorder-owner", signal: lease.signal });
+      // The server is already serving traffic. Do not put a short-timeout ping behind a
+      // native step that legitimately takes longer; local work has no request in flight.
+      if (this.inFlight > 0) { this.keepRecordingAlive(lease); return; }
+      // One bounded, paced transport call, independent of a local burst holding the outer queue.
+      const answer = await this.callBridge("ping", {}, nextCid("recorder-owner"), 2000, lease.signal);
       if (this.recordingEpoch !== lease) return;
       if (!answer.ok) { this.holdRecordingConnection(false); this.eventCaptures.cancel("owner_connection_lost"); return; }
       if (this.recordingActive) this.keepRecordingAlive(lease);
@@ -614,6 +623,7 @@ export class CommandApi {
   }
 
   disconnect() {
+    this.eventCaptures.cancel("owner_connection_lost");
     this.holdRecordingConnection(false);
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;

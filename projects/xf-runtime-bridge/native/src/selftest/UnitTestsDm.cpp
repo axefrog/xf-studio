@@ -873,6 +873,20 @@ void ServiceTests()
     {
         Rig rig;
         rig.service.Spawn(json{{"template", "base\\box.ent"}}, rig.Ops());
+        auto ops = rig.Ops(); int pendingEvents = 1; bool subscribed = true;
+        ops.sample = [&](const d::SampleWants&, const std::map<std::string, std::string>&) {
+            pendingEvents = 0; subscribed = false; return json::object();
+        };
+        ops.presence = [](const std::map<std::string, std::string>& entities) {
+            json out = json::object(); for (const auto& [handle, entity] : entities) out[handle] = !entity.empty(); return out;
+        };
+        Check("dm: execution presence preserves pending watcher events/subscriptions", rig.service.Present(ops)["1"] == true && pendingEvents == 1 && subscribed);
+        ops.presence = [](const auto&) { return json{{"1", false}}; };
+        Check("dm: execution presence re-reads disappearance", rig.service.Present(ops)["1"] == false);
+    }
+    {
+        Rig rig;
+        rig.service.Spawn(json{{"template", "base\\box.ent"}}, rig.Ops());
         d::TickInput input; input.handedOver = true;
         rig.service.Tick(0.1, input);
         const auto first = rig.service.ReleaseAllNow("handover", rig.Ops());

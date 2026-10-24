@@ -25,7 +25,9 @@ public:
     ~Service();
     void SetDirectory(const std::filesystem::path& directory);
     void JoinWriter(); // unload only; never joins from a game tick
-    json Start(const json& params, double now, uint64_t world, uint64_t connection, const std::string& session);
+    uint64_t CancellationGeneration() const { return m_cancelGeneration.load(); }
+    json Start(const json& params, double now, uint64_t world, uint64_t connection, const std::string& session,
+               std::optional<uint64_t> generation = {});
     json Stop(const std::string& reason, double now);
     // Nonblocking emergency notification. reason must have static lifetime (a string literal).
     void RequestStop(const char* reason);
@@ -56,6 +58,7 @@ private:
     double m_start = 0, m_end = 0, m_next = 0, m_until = 0, m_last = 0, m_gap = 0;
     bool m_active = false;
     std::atomic<const char*> m_requested{nullptr};
+    std::atomic<uint64_t> m_cancelGeneration{0}, m_startedGeneration{0};
     std::atomic<unsigned> m_eventMask{0};
     std::atomic<uint64_t> m_ingressDropped{0};
     double m_nextHeartbeat = 0;

@@ -126,6 +126,8 @@ struct Ops
     std::function<json()> phoneContacts;
     // The reading for the watchers and the call: aEntities maps a key to an entity id (spawn:<n> resolved by the service).
     std::function<json(const SampleWants&, const std::map<std::string, std::string>& aEntities)> sample;
+    // Entity existence only: must never change subscriptions or consume watcher events.
+    std::function<json(const std::map<std::string, std::string>&)> presence;
     std::function<void(const TimedLine&)> showLine;
     std::function<void(uint64_t aLineId)> hideLine;
     std::function<void(const std::string& aContact, const std::string& aMode, bool aRejectable)> callRing;
@@ -173,6 +175,7 @@ public:
     json Spawn(const json& aParams, const Ops& aOps);
     json Despawn(const json& aParams, const Ops& aOps);
     json Spawned(const json& aParams, const Ops& aOps);
+    json Present(const Ops& aOps) const;
     json Door(const json& aParams, const Ops& aOps);
     json Vehicle(const json& aParams, const Ops& aOps);
     json AudioPlay(const json& aParams, const Ops& aOps);
