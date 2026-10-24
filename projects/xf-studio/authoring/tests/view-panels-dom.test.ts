@@ -6,9 +6,15 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 import type { DrawnViews } from "../src/app/viewport-attachment";
 import type { DockTree, GroupNode } from "../src/studio-ui/dock/layout";
-import { canvasView, tabViews, viewPaneState, ViewPanels, viewPanelEntries, type ShownView, type ViewPaneController } from "../src/studio-ui/panels/view-panels";
+import { canvasView, tabViews, viewPaneState, ViewPanels, viewPanelEntries, viewPanelIds, type ShownView, type ViewPaneController } from "../src/studio-ui/panels/view-panels";
 import { viewCatalogue } from "../src/studio-ui/views/contribution";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
+import { UIPreferenceActions } from "../src/app/ui-preferences";
+import { relayDockSaves } from "../src/app/profiles/profile-window";
+import type { ProfileSessions } from "../src/app/profiles/profile-sessions";
+import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
+import { openSession, seededRandom } from "./fixtures/profile-sessions";
+import { freshWorkspace } from "./fixtures/eye-region";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
@@ -43,7 +49,7 @@ function fakePane(id: string): ViewPaneController & { disposed: boolean } {
   return pane;
 }
 
-async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree) {
+async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, session?: ProfileSessions) {
   const { DockView } = await import("../src/studio-ui/dock/dock-view");
   const { restoreDockPreference, serializeDockState } = await import("../src/studio-ui/dock/persist");
   const { defaultDockStateFor } = await import("../src/studio-ui/dock/persist");
@@ -54,23 +60,30 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree) {
     catalogue.ids.splice(0, catalogue.ids.length, ...catalogue.panels.map(panel => panel.id));
   };
   const state = { views: [...initial], drawn: { ...drawn } };
+  const readViews = () => session ? tabViews(session.graph.snapshot().views, session.tabId()) : shownOf(state.views);
+  const preferences = new UIPreferenceActions({ ...freshWorkspace().uiPreferences, ...(session?.dock() ? { layout: session.dock()! } : {}) });
+  if (session) relayDockSaves(preferences, session, action => session.dispatch(action));
   const attached: string[] = [], made = new Map<string, ReturnType<typeof fakePane>>(), saves: unknown[] = [];
   let dock!: InstanceType<typeof DockView>;
   const panes = new ViewPanels({
-    views: () => shownOf(state.views), drawn: () => state.drawn,
+    views: readViews, drawn: () => state.drawn,
+    arrangement: () => ({ tab: session?.tabId(), layout: preferences.snapshot().layout ?? null }),
     make: panel => { const pane = fakePane(panel); made.set(panel, pane); return pane; },
     catalogue: setViews,
-    dock: { addPanels: specs => dock.addPanels(specs), removePanels: (ids, options) => dock.removePanels(ids, options) },
+    dock: { addPanels: specs => dock.addPanels(specs), removePanels: (ids, options) => dock.removePanels(ids, options), get dockState() { return dock.dockState; } },
     spec: pane => pane.spec,
+    restore: layout => dock.load(restoreDockPreference(layout, area, catalogue, [], session ? viewPanelIds(session.graph.snapshot()) : readViews().map(view => view.panel)).state,
+      [...others, ...panes.controllers().map(pane => pane.spec)]),
     attach: slot => attached.push([...made].find(([, pane]) => pane.slot === slot)![0]),
   });
   panes.start();
   const area = { x: 0, y: 0, w: 1600, h: 900 };
-  const restored = restoreDockPreference(saved ? serializeDockState({ wide: saved, compact: saved }) : undefined, area, catalogue);
+  const restored = restoreDockPreference(saved ? serializeDockState({ wide: saved, compact: saved }) : preferences.snapshot().layout, area, catalogue);
   const others = catalogue.panels.filter(panel => !panel.id.startsWith("view.") && panel.id !== "head")
     .map(panel => ({ id: panel.id, title: panel.title, icon: panel.icon, description: panel.description, element: document.createElement("div") }));
   dock = new DockView({ panels: [...others, ...panes.controllers().map(pane => pane.spec)], state: restored.state, sizeClass: () => "wide",
-    defaults: size => defaultDockStateFor(catalogue)[size], save: next => saves.push(next), announce: () => {} });
+    defaults: size => defaultDockStateFor(catalogue)[size], save: next => { saves.push(next);
+      if (session) preferences.dispatch({ kind: "layout.set", layout: serializeDockState(next) }); }, announce: () => {} });
   dock.render();
   panes.sync();
   const group = (panel: string) => { const found = [dock.tree.root, ...dock.tree.floating.map(window => window.node)];
@@ -78,10 +91,56 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree) {
       if (!item) return undefined; if (item.kind === "group") return item.panels.includes(panel) ? item : undefined;
       for (const child of item.children ?? []) { const hit = visit(child); if (hit) return hit; } return undefined; };
     for (const root of found) { const hit = visit(root); if (hit) return hit; } return undefined; };
-  return { panes, dock, state, attached, made, group, restored, catalogue };
+  return { panes, dock, state, attached, made, group, restored, catalogue, saves, preferences };
 }
 
 describe("a pane per view", () => {
+  test("switching A to B keeps B's custom arrangement through the real session, dock and save relay", async () => {
+    const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A", character: "c-1" }, seededRandom(41)));
+    const a = session.tabId(), b = session.duplicate(a), bPanel = session.graph.snapshot().views.find(view => view.tab === b)!.panel;
+    const { panes, dock, group, saves } = await harness([], {}, undefined, session);
+    dock.moveTo(bPanel, { kind: "float", x: 100, y: 100, w: 450, h: 350 }, "");
+    const customB = structuredClone(session.dock(b)), groupB = group(bPanel)!.id;
+    session.show(a); panes.sync();
+    const keptA = structuredClone(session.dock(a));
+    saves.length = 0;
+    session.show(b); panes.sync();
+    expect(session.dock(b)).toEqual(customB);
+    expect(group(bPanel)?.id).toBe(groupB);
+    expect(session.dock(a)).toEqual(keptA);
+    expect(saves).toHaveLength(1);
+    panes.sync();
+    expect(saves).toHaveLength(1);
+    // Closing the shown tab and undoing/redoing that close are switches too. Its fragment keeps the custom arrangement.
+    session.close(b); panes.sync();
+    saves.length = 0;
+    expect(session.graph.undo()).toBe(true); panes.sync();
+    expect(session.dock(b)).toEqual(customB);
+    expect(group(bPanel)?.id).toBe(groupB);
+    expect(saves).toHaveLength(1);
+    expect(session.graph.redo()).toBe(true); panes.sync();
+    expect(session.graph.undo()).toBe(true); panes.sync();
+    expect(session.dock(b)).toEqual(customB);
+    expect(session.dock(a)).toEqual(keptA);
+  });
+
+  test("an external arrangement restore in the same tab loads once; an ordinary dock save does not reload it", async () => {
+    const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A", character: "c-1" }, seededRandom(42)));
+    const { panes, dock, group, catalogue, saves } = await harness([], {}, undefined, session);
+    const { serializeDockState } = await import("../src/studio-ui/dock/persist");
+    const tree: DockTree = { root: { kind: "group", id: "restored-by-session", panels: [...catalogue.ids], active: "head" }, floating: [], closed: [] };
+    session.arrange(session.tabId(), serializeDockState({ wide: tree, compact: tree }));
+    saves.length = 0;
+    panes.sync();
+    expect(group("head")?.id).toBe("restored-by-session");
+    expect(saves).toHaveLength(1);
+    panes.sync(); expect(saves).toHaveLength(1);
+    dock.close("history");
+    const afterSave = saves.length;
+    panes.sync();
+    expect(dock.tree.closed).toContain("history");
+    expect(saves).toHaveLength(afterSave);
+  });
   test("panels follow the shown tab's views: added beside the other 3D views, withdrawn, and the catalogue knows them", async () => {
     const { panes, dock, state, made, group, catalogue } = await harness(["main"], { drawn: "main", onCanvas: "main" });
     expect(panes.controllers().map(pane => pane.spec.id)).toEqual(["head"]);
@@ -107,11 +166,24 @@ describe("a pane per view", () => {
     expect(restored.recovered).toBe(true);
     expect(group("view.v2")?.id).toBe("g-b");
     expect(dock.tree.parked?.["view.v2"]).toBeUndefined();
-    // Without the view in the catalogue the same arrangement keeps it parked as a panel this build doesn't know.
+    // A closed view leaves no place behind when an older arrangement is restored. Unknown features and retained views survive.
     const { restoreDockPreference, serializeDockState } = await import("../src/studio-ui/dock/persist");
     const shellOnly = viewCatalogue([SHELL_VIEW]);
-    const unknown = restoreDockPreference(serializeDockState({ wide: saved, compact: saved }), { x: 0, y: 0, w: 1600, h: 900 }, shellOnly);
-    expect(unknown.state.wide.parked?.["view.v2"]).toBeDefined();
+    const stale = structuredClone(saved);
+    (stale.root as { children: GroupNode[] }).children[1]!.panels.push("future.panel", "view.future");
+    stale.closed.push("view.closed");
+    stale.parked = { "view.parked": { group: ["view.parked", "future.panel"], index: 0, active: true }, "future.closed": { closed: true } };
+    stale.lastPlace = { "view.v2": { group: ["view.v2", "character"], index: 0, active: true },
+      "future.closed": { group: ["view.v2", "future.closed"], index: 1, active: true, anchor: { panel: "view.v2", side: "right", share: .3 } } };
+    const unknown = restoreDockPreference(serializeDockState({ wide: stale, compact: stale }), { x: 0, y: 0, w: 1600, h: 900 }, shellOnly, [], ["head", "view.future"]);
+    for (const tree of [unknown.state.wide, unknown.state.compact]) {
+      expect(tree.parked?.["view.v2"]).toBeUndefined();
+      expect(tree.lastPlace?.["view.v2"]).toBeUndefined();
+      expect(tree.parked?.["future.panel"]).toBeDefined();
+      expect(tree.parked?.["view.future"]).toBeDefined();
+      expect(tree.parked?.["future.closed"]).toEqual({ closed: true });
+      for (const staleId of ["view.v2", "view.closed", "view.parked"]) expect(JSON.stringify(tree)).not.toContain(staleId);
+    }
   });
 
   test("closing a view withdraws only its panel, leaving no place behind; the others stay where they are", async () => {
@@ -153,17 +225,17 @@ describe("a pane per view", () => {
 describe("the not-drawn state (U7)", () => {
   const press = (target: LightElement, type: string, init: Record<string, unknown> = {}) => target.dispatchEvent(lightEvent(type, init));
   test("Show here, a press in the pane, Enter and Space each draw the view; nothing does while it is drawn", async () => {
-    const { notDrawnState } = await import("../src/studio-ui/panels/viewports");
+    const { notDrawnState } = await import("../src/studio-ui/components");
     const pane = lightDocument.createElement("div") as unknown as HTMLElement;
     let drawn = 0;
     const idle = notDrawnState(pane, () => drawn++);
     (pane as unknown as LightElement).append(idle.element as unknown as LightElement);
-    const name = idle.update({ shown: true, title: "3D view 2", shows: "V · Valerie · Smoky" });
+    const name = idle.update({ shown: true, title: "3D view 2", shows: "Valerie · Smoky" });
     expect(name).toBe("3D view 2, not shown. Press Enter to show it here.");
     expect(idle.element.hidden).toBe(false);
     const root = idle.element as unknown as LightElement;
     expect(root.querySelector(".viewport-idle-title")!.textContent).toBe("3D view 2");
-    expect(root.querySelector(".viewport-idle-shows")!.textContent).toBe("V · Valerie · Smoky");
+    expect(root.querySelector(".viewport-idle-shows")!.textContent).toBe("Valerie · Smoky");
     (idle.button as unknown as LightElement).click();
     expect(drawn).toBe(1);
     press(root.querySelector(".viewport-idle-title")!, "click");
@@ -189,7 +261,7 @@ describe("the not-drawn state (U7)", () => {
       port: { viewport: { input: () => ({ modifiers: { ctrl: false, alt: false, shift: false }, head: { editable: false }, uv: { editable: false } }),
         subscribeInput: () => () => {}, resize() {} },
         previewSetup: { dispatch: async () => ({ ok: true }), capability: () => ({ available: true }) },
-        views: { tools: () => [], shows: (view: string) => view === "v2" ? { v: "V · Valerie", look: "Smoky" } : { v: "V · Valerie" } },
+        views: { tools: () => [], shows: (view: string) => view === "v2" ? { v: "Valerie", look: "Smoky" } : { v: "Valerie" } },
         focus: { view: (view: string) => focused.push(view) } } };
     const context = { view: { summaries: () => [], badge: () => undefined } };
     const frame = (head: DrawnViews) => ({
@@ -203,7 +275,7 @@ describe("the not-drawn state (U7)", () => {
     const el = (pane: typeof main) => pane.spec.element as unknown as LightElement;
     expect(el(side).dataset.drawn).toBe("false");
     expect(el(side).querySelector('[data-tone="idle"]')!.hidden).toBe(false);
-    expect(el(side).querySelector(".viewport-idle-shows")!.textContent).toBe("V · Valerie · Smoky");
+    expect(el(side).querySelector(".viewport-idle-shows")!.textContent).toBe("Valerie · Smoky");
     expect(el(side).getAttribute("aria-label")).toBe("3D view 2, not shown. Press Enter to show it here.");
     expect([el(side).querySelector(".viewport-top")!.hidden, el(side).querySelector(".viewport-bottom")!.hidden]).toEqual([true, true]);
     expect(el(main).dataset.drawn).toBe("true");
@@ -219,7 +291,7 @@ describe("the not-drawn state (U7)", () => {
     expect(el(main).dataset.drawn).toBe("true");
     for (const pane of [main, side]) pane.update(frame({ drawn: "v2", onCanvas: "v2" }) as never);
     expect(el(main).querySelector('[data-tone="idle"]')!.hidden).toBe(false);
-    expect(el(main).querySelector(".viewport-idle-shows")!.textContent).toBe("V · Valerie · No look");
+    expect(el(main).querySelector(".viewport-idle-shows")!.textContent).toBe("Valerie · No look");
     expect(rt.anchors.element("head.view")).toBe(side.spec.element);
     expect(viewShowsLine({})).toBe("No look");
     side.dispose?.(); main.dispose?.();

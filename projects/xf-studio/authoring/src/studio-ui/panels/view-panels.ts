@@ -9,6 +9,7 @@
  */
 import type { ViewId } from "../../platform/api/view-graph";
 import type { DrawnViews } from "../../app/viewport-attachment";
+import { serializeDockState } from "../dock/persist";
 import type { DockView, PanelSpec } from "../dock/dock-view";
 import type { PanelId } from "../dock/layout";
 import type { PanelContribution } from "../views/contribution";
@@ -36,6 +37,11 @@ export function tabViews(views: readonly { readonly id: ViewId; readonly tab?: s
   return views.filter(view => (view.tab ?? tab) === tab).map(view => ({ view: view.id, panel: view.panel }));
 }
 
+/** Every live or retained view's panel, including other tabs' and newer builds' views. Missing views have no place to restore. */
+export function viewPanelIds(graph: { readonly views: readonly { readonly panel: string }[]; readonly retained?: readonly { readonly panel: string }[] } | null): string[] {
+  return graph ? [...graph.views, ...(graph.retained ?? [])].map(view => view.panel) : [];
+}
+
 /**
  * The catalogue entries of the shown tab's view panels, from the shell's 3D view entry (`head`): the same title, icon, purpose, context and
  * home (the stage), one per view in graph order, so the factory arrangement puts a new view's panel beside the others.
@@ -48,6 +54,10 @@ export function viewPanelEntries<E extends PanelContribution>(base: E, panels: r
 export type ViewPaneController = PanelController & { readonly slot: HTMLElement };
 
 export type ViewPanelsDeps = {
+  /** The shown tab and its saved arrangement. A tab switch or an external arrangement restore is one dock load, never incremental saves. */
+  arrangement(): { readonly tab?: string; readonly layout: unknown };
+  /** Load the captured destination arrangement with the reconciled controllers and catalogue. Saves once, after the whole load. */
+  restore(layout: unknown): void;
   /** The shown tab's 3D views and their panels, in graph order. */
   views(): readonly ShownView[];
   /** Which view is drawn and whose picture the canvas holds. */
@@ -57,7 +67,7 @@ export type ViewPanelsDeps = {
   /** The panel catalogue now knows these view panels (before the dock places them, so its factory home includes them). */
   catalogue(panels: readonly PanelId[]): void;
   /** The dock: an added pane goes where the arrangement parked it, else to the 3D view's home; a withdrawn one leaves no place behind. */
-  dock: Pick<DockView, "addPanels" | "removePanels">;
+  dock: Pick<DockView, "addPanels" | "removePanels" | "dockState">;
   /** A pane as the dock holds it. */
   spec(controller: ViewPaneController): PanelSpec;
   /** Put the canvas into a pane's slot (`viewport.attach("head", slot)`). */
@@ -72,6 +82,8 @@ export class ViewPanels {
   private readonly panes = new Map<PanelId, ViewPaneController>();
   /** The slot the canvas was put in last. */
   private placed: HTMLElement | undefined;
+  private tab: string | undefined;
+  private layout: string | undefined;
   constructor(private readonly deps: ViewPanelsDeps) {}
 
   /** The panel IDs the shown tab's views need, in graph order. */
@@ -90,6 +102,7 @@ export class ViewPanels {
    * Call once, before the dock exists.
    */
   start(): ViewPaneController[] {
+    this.rememberArrangement();
     const wanted = this.wanted();
     this.deps.catalogue(wanted);
     for (const panel of wanted) this.make(panel);
@@ -100,21 +113,35 @@ export class ViewPanels {
    * leaving no place behind). Then the canvas goes to the pane that holds the picture. Returns whether a pane came or went.
    */
   sync(): boolean {
+    const destination = this.deps.arrangement(), layout = JSON.stringify(destination.layout);
+    // A dock drag has already placed and saved this tree; only an external restore needs loading again. Compare the tree only when the
+    // preference changed, rather than cloning the dock on every paint. Capture the destination before any dock operation can save.
+    const restore = destination.tab !== this.tab || (layout !== this.layout && layout !== JSON.stringify(serializeDockState(this.deps.dock.dockState)));
     const wanted = this.wanted(), want = new Set(wanted);
     const gone = [...this.panes.keys()].filter(panel => !want.has(panel)), fresh = wanted.filter(panel => !this.panes.has(panel));
-    if (gone.length || fresh.length) {
+    if (gone.length || fresh.length || restore) {
       this.deps.catalogue(wanted);
+      const leaving = gone.map(panel => this.panes.get(panel)!);
       if (gone.length) {
         // The canvas never leaves with a withdrawn pane for good: it waits for the pane that holds the picture next (placed below).
-        const leaving = gone.map(panel => this.panes.get(panel)!);
         if (leaving.some(pane => pane.slot === this.placed)) this.placed = undefined;
-        this.deps.dock.removePanels(gone, { forget: true });
-        for (const pane of leaving) { this.panes.delete(pane.spec.id); pane.spec.visibility?.(false); pane.dispose?.(); this.deps.removed?.(pane); }
+        // Only a closed view is forgotten incrementally. On a tab switch the whole destination tree replaces this one: the leaving
+        // tab's own arrangement stays untouched, and no intermediate tree is saved into the destination tab.
+        if (!restore) this.deps.dock.removePanels(gone, { forget: true });
+        for (const pane of leaving) { this.panes.delete(pane.spec.id); this.deps.removed?.(pane); }
       }
-      if (fresh.length) this.deps.dock.addPanels(fresh.map(panel => this.deps.spec(this.make(panel))));
+      const specs = fresh.map(panel => this.deps.spec(this.make(panel)));
+      if (restore) this.deps.restore(destination.layout);
+      else if (specs.length) this.deps.dock.addPanels(specs);
+      for (const pane of leaving) { pane.spec.visibility?.(false); pane.dispose?.(); }
     }
+    this.rememberArrangement();
     this.place();
     return gone.length > 0 || fresh.length > 0;
+  }
+  private rememberArrangement() {
+    const { tab, layout } = this.deps.arrangement();
+    this.tab = tab; this.layout = JSON.stringify(layout);
   }
   /** Put the canvas in the pane that holds the picture (no move when it is there already; none while no pane does). */
   place() {

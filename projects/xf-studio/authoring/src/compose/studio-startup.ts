@@ -493,6 +493,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     panelInstance: panel => sessionState.instance(panel),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
     targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
+    characterName: character => services.characters.character(character)?.label,
   });
   // The editor shows the drawn scene's look, and follows it when the scene shows another one. A warm head's look comes back with its makeup.
   lookShown = () => { previewDevice.showLook(); drawUV(); };

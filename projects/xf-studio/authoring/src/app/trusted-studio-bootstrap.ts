@@ -64,6 +64,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   focus?: Pick<import("../platform/core/focus").FocusService, "focusView" | "focusPanel">;
   /** A history scope's name for people (the editing context Undo names). */
   scopeName?: (scope: string) => string | undefined;
+  characterName?: (character: string) => string | undefined;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -117,7 +118,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
     workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),
     ...(options.targets ? { targets: options.targets } : {}), ...(options.focus ? { focus: options.focus } : {}),
-    ...(options.scopeName ? { scopeName: options.scopeName } : {}) });
+    ...(options.scopeName ? { scopeName: options.scopeName } : {}),
+    ...(options.characterName ? { characterName: options.characterName } : {}) });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

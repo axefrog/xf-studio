@@ -18,6 +18,8 @@ export type LayoutHost = {
   shownModules(): string[];
   /** The panels of hidden modules (withdrawn from the dock). */
   parkedPanels(): PanelId[];
+  /** All live and retained view panels, including other tabs'. Without a graph, only the catalogue's views are known. */
+  viewPanels?(): readonly PanelId[];
   /** Every panel's spec, in catalogue order. */
   panelSpecs(): PanelSpec[];
   /** The dock's work area, for the recovery gate. */
@@ -44,7 +46,7 @@ export function layoutController(host: LayoutHost) {
   const shown = (): LayoutModules => { const on = new Set(host.shownModules()); return Object.fromEntries(host.modules.map(module => [module.id, on.has(module.id)])); };
   const library = (): LayoutLibrary => layoutLibraryOf(prefs(), shown());
   const live = () => serializeDockState(dock.dockState);
-  const restore = (saved: unknown) => restoreDockPreference(saved, host.area(), host.catalogue, host.parkedPanels()).state;
+  const restore = (saved: unknown) => restoreDockPreference(saved, host.area(), host.catalogue, host.parkedPanels(), host.viewPanels?.()).state;
 
   /** Whether the active layout's live arrangement (or, if it remembers them, its modules) differs from its saved one. Cached per state. */
   let cache: { key: string; modified: boolean } | undefined;

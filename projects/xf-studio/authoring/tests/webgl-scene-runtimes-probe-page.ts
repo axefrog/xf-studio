@@ -63,6 +63,7 @@
 import * as THREE from "three";
 import { createSceneRuntime, type SceneHostOptions, type SceneRuntime } from "../src/platform/scene/scene-host";
 import { createRendererDevice } from "../src/platform/scene/renderer-device";
+import { viewportPixelRatio } from "../src/preview/render/device-pixel-ratio";
 import type { MotionLoader } from "../src/platform/scene/head-rig";
 import { STUDIO_RENDERERS } from "../src/compose/renderers";
 import { EYE_MAKEUP_RENDERER } from "../src/features/eye-makeup/render";
@@ -141,7 +142,7 @@ export type SceneRuntimesProbe = {
     compositeDraws: number; firstFrame: { links: number; programs: number } }[];
     evicted: string; evictedLookKept: boolean; before: Counts; after: Counts };
   /** 6e: the canvas moved between two panes of different sizes while one runtime is shown and another is warm. */
-  canvasMove: { moves: { links: number; programs: number; frames: number; size: string; drawn: string; warm: boolean; contextEvents: number }[];
+  canvasMove: { moves: { links: number; programs: number; frames: number; size: string; drawn: string; expected: string; pixelRatio: number; warm: boolean; contextEvents: number }[];
     switchAfter: { links: number; programs: number; firstFrame: { links: number; programs: number }; ms: number }; before: Counts; after: Counts };
   /** What the context showed of programs with several outputs and targets with several colour attachments (none), and how much it saw. */
   singleOutput: { issues: string[]; fragments: number; attachments: number };
@@ -911,8 +912,12 @@ try {
       shown.resize(); shown.requestRender();
       for (let f = 0; f < 60 && shown.frameTiming().frames === framesBefore; f++) await frame();
       await frame(); await frame();
+      const pixelRatio = viewportPixelRatio(devicePixelRatio);
+      const drawn = `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`;
+      const expected = `${Math.floor(element.clientWidth * pixelRatio)}x${Math.floor(element.clientHeight * pixelRatio)}`;
+      if (drawn !== expected) probe.errors.push(`Canvas move ${i}: drawing buffer ${drawn}, expected ${expected} at pixel ratio ${pixelRatio}.`);
       moves.push({ links: calls.links - at.links, programs: counter.made().program - at.programs, frames: shown.frameTiming().frames - framesBefore,
-        size: `${element.clientWidth}x${element.clientHeight}`, drawn: `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`,
+        size: `${element.clientWidth}x${element.clientHeight}`, drawn, expected, pixelRatio,
         warm: !!runtimeOf(warmScene.key) && runtimeOf(warmScene.key) !== shown, contextEvents: contextEvents.length - events });
     }
     // The warm runtime shown in the pane the canvas moved to: its first frame links nothing.

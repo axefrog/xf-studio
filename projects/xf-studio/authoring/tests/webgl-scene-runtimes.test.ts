@@ -305,10 +305,12 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
         expect([move.links, move.programs, move.contextEvents]).toEqual([0, 0, 0]);
         expect(move.frames).toBeGreaterThan(0);
         expect(move.warm).toBe(true);
+        const [width, height] = move.size.split("x").map(Number);
+        expect(move.expected).toBe(`${Math.floor(width! * move.pixelRatio)}x${Math.floor(height! * move.pixelRatio)}`);
+        expect(move.drawn).toBe(move.expected);
       }
       // The panes alternate: 240 × 180, then 200 × 150, and the host fills each.
       expect(moves.map(move => move.size)).toEqual(["240x180", "200x150", "240x180", "200x150", "240x180", "200x150"]);
-      expect(new Set(moves.map(move => move.drawn)).size).toBe(2);
       expect(switchAfter.links).toBe(0);
       expect(switchAfter.firstFrame).toEqual({ links: 0, programs: 0 });
       expect(after.gl).toEqual(before.gl);
@@ -390,7 +392,7 @@ function gateTable(probe: SceneRuntimesProbe) {
       pass: probe.lookSwitch.switches.every(item => item.adopted && item.ms <= 100 && item.rasters === 0 && item.compositeDraws === 0 && item.links === 0 && item.programs === 0)
         && same(probe.lookSwitch.after.gl, probe.lookSwitch.before.gl) },
     "canvas move (P2-iii-b)": { value: `${probe.canvasMove.moves.length} moves; ${probe.canvasMove.moves.reduce((sum, move) => sum + move.links + move.programs, 0)} links and programs`,
-      pass: probe.canvasMove.moves.every(move => move.links === 0 && move.programs === 0 && move.frames > 0 && move.warm && move.contextEvents === 0)
+      pass: probe.canvasMove.moves.every(move => move.links === 0 && move.programs === 0 && move.frames > 0 && move.warm && move.contextEvents === 0 && move.drawn === move.expected)
         && same(probe.canvasMove.switchAfter.firstFrame, { links: 0, programs: 0 }) && probe.canvasMove.switchAfter.links === 0
         && same(probe.canvasMove.after.gl, probe.canvasMove.before.gl) },
     "one output": { value: `${probe.singleOutput.fragments} fragment shaders, ${probe.singleOutput.attachments} attachments`, pass: probe.singleOutput.issues.length === 0 },

@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test";
 import { trustedFixture } from "./studio-presentation-fixture";
 
+test("a view names its V and look without History's V kind prefix", () => {
+  const { shell } = trustedFixture({ presentation: {
+    panelInstance: panel => panel,
+    characterName: character => character === "local" ? "Default feminine V" : undefined,
+    scopeName: scope => scope.startsWith("look:") ? "Preset 1" : "V · Default feminine V",
+  } });
+  expect(shell.views.shows("main")).toEqual({ v: "Default feminine V", look: "Preset 1" });
+  expect(shell.views.shows("gone")).toEqual({});
+});
+
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
   expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "desktopApp", "diagnostics", "documents", "experiments", "facial", "feature", "features", "files", "focus", "installDetection", "library", "links", "localSetup", "modInstall", "module", "panels", "preferences",

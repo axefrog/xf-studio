@@ -1,5 +1,5 @@
 import { viewCatalogue } from "./views/contribution";
-import { tabViews, viewPanelEntries, ViewPanels } from "./panels/view-panels";
+import { tabViews, viewPanelEntries, viewPanelIds, ViewPanels } from "./panels/view-panels";
 import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
@@ -139,11 +139,16 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let dockRef: DockView | undefined;
   const paneAnchors = new Map<PanelController, () => void>();
   const viewPanes = new ViewPanels({
+    arrangement: () => ({ tab: port.focus.targets().tab, layout: port.preferences.snapshot().layout ?? null }),
+    restore: layout => { const parked = parkedPanels();
+      dock.load(restoreDockPreference(layout, dock.area(), catalogue, parked, viewPanelIds(port.views.snapshot())).state,
+        panels.filter(panel => !parked.includes(panel.spec.id)).map(specOf)); },
     views: () => { const graph = port.views.snapshot(); return graph ? tabViews(graph.views, port.focus.targets().tab) : []; },
     drawn: () => port.viewport.snapshot().head,
     make: panel => (views.shell.head as ViewPaneFactory)(rt, context, panel),
     catalogue: shown => { viewEntries = headEntry ? viewPanelEntries(headEntry, shown) : []; rebuildCatalogue(); },
-    dock: { addPanels: specs => dockRef?.addPanels(specs), removePanels: (ids, options) => dockRef?.removePanels(ids, options) },
+    dock: { addPanels: specs => dockRef?.addPanels(specs), removePanels: (ids, options) => dockRef?.removePanels(ids, options),
+      get dockState() { return dockRef!.dockState; } },
     spec: pane => specOf(pane),
     attach: slot => port.viewport.attach("head", slot),
     added: pane => { panels.push(pane); byId.set(pane.spec.id, pane); paneAnchors.set(pane, anchorPanel(pane)); },
@@ -152,7 +157,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   if (headEntry) viewPanes.start();
   const parkedAtStart = parkedPanels();
   const restored = restoreDockPreference(port.preferences.snapshot().layout,
-    { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, parkedAtStart);
+    { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, parkedAtStart, viewPanelIds(port.views.snapshot()));
   // A preview module's panels carry its stage on their tabs (components/stage-tag.ts).
   const specOf = (panel: PanelController) => ({ ...panel.spec, stage: moduleOfPanel(panel.spec.id)?.stage, visibility: (visible: boolean) => {
     panel.spec.visibility?.(visible);
@@ -240,6 +245,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   rt.modules = { list: modules, panels: panelsOf, set: setModuleShown };
   // Saved layouts (view-graph-design.md §4.5): a layout loads its arrangement and modules, and the rest is derived as for a module toggle.
   const layouts = layoutController({ port, feedback, dock, catalogue, modules, shownModules: () => rt.shownModules(), parkedPanels,
+    viewPanels: () => viewPanelIds(port.views.snapshot()),
     panelSpecs: () => panels.map(specOf), area: () => dock.area(), finishInput, changed: () => { withdrawUnoffered(); schedule(); } });
   const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
   /**

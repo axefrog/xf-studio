@@ -321,6 +321,7 @@ test("views and nodes of kinds this build doesn't know are kept and written back
   const views = new ViewGraph(parsed!, STUDIO_VIEW_GRAPH_RULES);
   expect(views.viewIds()).toEqual([MAIN_VIEW]);
   expect(views.snapshot().views.map(view => view.id)).toEqual([MAIN_VIEW]);
+  expect(views.snapshot().retained).toEqual([{ id: "w1", panel: "view.w1" }, { id: "m1", panel: "view.m1" }]);
   // Edits here never touch them: new IDs avoid theirs, and a node they name stays while they do.
   const v2 = views.addView(MAIN_VIEW, { scene: true, lights: true });
   views.unlink(MAIN_VIEW, "lights");
@@ -335,5 +336,6 @@ test("views and nodes of kinds this build doesn't know are kept and written back
   expect(parseViewGraph({ ...newer, views: [data.views[0], { id: "m1", kind: "map2d", lights: "l7" }] }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
   const unshown = parseViewGraph({ ...newer, views: [{ ...data.views[0], scene: "s9" }], focused: MAIN_VIEW }, STUDIO_VIEW_GRAPH_RULES);
   expect(new ViewGraph(unshown!, STUDIO_VIEW_GRAPH_RULES).viewIds()).toEqual([]);
+  expect(new ViewGraph(unshown!, STUDIO_VIEW_GRAPH_RULES).snapshot().retained).toEqual([{ id: MAIN_VIEW, panel: "head" }]);
   expect(unshown!.views.map(view => view.id)).toEqual([MAIN_VIEW]);
 });

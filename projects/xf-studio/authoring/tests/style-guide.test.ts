@@ -5,12 +5,22 @@ import { iconNames } from "../src/studio-ui/icons";
 import { PANEL_IDS, PANEL_META } from "../src/compose/views";
 import { contrastTable } from "../src/studio-ui/style-guide/contrast";
 import { finishCatalogue } from "./fixtures/eye-region";
+import { notDrawnStateMarkup } from "../src/studio-ui/components";
 
 const root = resolve(import.meta.dir, "..");
 const lf = (text: string) => text.replace(/\r\n/g, "\n");
 const guide = lf(readFileSync(resolve(root, "public/style-guide.html"), "utf8"));
 const css = lf(readFileSync(resolve(root, "public/studio.css"), "utf8"));
 const has = (text: string) => guide.includes(text);
+
+test("c-setup uses the library's resting state and the app's game-folder next step", () => {
+  const setup = guide.split('id="c-setup"')[1]!.split("</article>")[0]!;
+  expect(setup).toContain(notDrawnStateMarkup({ title: "3D view 2", shows: "Valerie · Smoky" }));
+  expect(setup).toContain("The 3D view needs your Cyberpunk 2077 game folder.");
+  expect(setup).toContain("You can keep working in the UV map.");
+  expect(setup).toContain("Set up 3D view");
+  expect(setup).not.toContain("V · Valerie");
+});
 
 test("the committed style guide embeds the current design system verbatim", () => {
   // Regenerate with: bun tools/build-style-guide.ts

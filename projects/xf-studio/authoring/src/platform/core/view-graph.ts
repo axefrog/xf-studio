@@ -232,7 +232,8 @@ export class ViewGraph {
   /** The stored form (`xfs/view-graph-1`), detached, with every kept view and node as it was stored. */
   data(): ViewGraphData { return writeData(this.views, this.nodes, this.legacyFocus, this.keptViews, this.keptNodes); }
   snapshot(): ViewGraphSnapshot {
-    return { views: this.views.map(view => ({ ...clone(view),
+    return { ...(this.keptViews.length ? { retained: this.keptViews.map(({ record }) => ({ id: record.id, panel: viewPanelId(record.id) })) } : {}),
+      views: this.views.map(view => ({ ...clone(view),
       shared: VIEW_SLOTS.filter(slot => this.views.some(other => other !== view && other[slot] === view[slot])),
       sceneKind: this.nodes.get(view.scene)!.kind as SceneKind, panel: viewPanelId(view.id) })) };
   }

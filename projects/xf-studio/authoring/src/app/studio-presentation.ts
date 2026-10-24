@@ -16,7 +16,6 @@ import { nameTargets, type NamedTargets, type Unnamed } from "./action-targets";
 import type { TargetResolver } from "./profiles/targets";
 import type { FocusService } from "../platform/core/focus";
 import { lookScope } from "../platform/core/history-service";
-import { characterScope } from "../character/character-history";
 import { viewPanelId } from "../platform/api/view-graph";
 import type { HistorySnapshot, HistoryState } from "../platform/api/history";
 import type { ConsequenceSubject, PresentationSubject } from "./action-consequences";
@@ -207,7 +206,7 @@ export type StudioPresentationPort<Slot> = {
     /** Each view's derived title and its scene's subject, with the panel that shows it. */
     titles(): readonly { readonly view: ViewId; readonly panel: string; readonly title: string; readonly subject: string }[];
     /**
-     * What a view shows, as names a person reads (its V, "V · Valerie", and its look, "Smoky"), resolved through the view's own panel (a
+     * What a view shows, as names a person reads (its V, "Valerie", and its look, "Smoky"), resolved through the view's own panel (a
      * view the window isn't drawing names its own V and look, experiment 044 U7). Absent names: it shows none, or nothing resolves it.
      */
     shows(view: ViewId): { readonly v?: string; readonly look?: string };
@@ -410,6 +409,8 @@ export function createStudioPresentation<Slot>(sources: {
   focus?: Pick<FocusService, "focusView" | "focusPanel">;
   /** A history scope's name for people ("Look 3"); without it the scope ID. */
   scopeName?: (scope: string) => string | undefined;
+  /** A V's label without History's "V ·" kind prefix, for a view's metadata. */
+  characterName?: (character: string) => string | undefined;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -566,7 +567,7 @@ export function createStudioPresentation<Slot>(sources: {
       if (!resolver || !sources.panelInstance) return {};
       const target = resolver.named(sources.panelInstance(viewPanelId(view)));
       if (target.view !== view) return {};
-      const v = target.character === undefined ? undefined : sources.scopeName?.(characterScope(target.character));
+      const v = target.character === undefined ? undefined : sources.characterName?.(target.character);
       const look = target.look ? sources.scopeName?.(lookScope(target.look)) : undefined;
       return { ...(v ? { v } : {}), ...(look ? { look } : {}) };
     },

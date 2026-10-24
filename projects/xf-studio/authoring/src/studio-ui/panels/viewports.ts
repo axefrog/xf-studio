@@ -2,6 +2,7 @@ import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointe
 import { ViewportInputHints } from "../input-hints";
 import { button, applyCapability, setButtonLabel } from "../controls";
 import { progressBar } from "../components/progress";
+import { notDrawnState } from "../components";
 import { h, setAttr, setText, isTextInput, uid } from "../dom";
 import { icon, isIconName, type IconName } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
@@ -89,36 +90,7 @@ function viewToolbar(rt: StudioRuntime) {
   } };
 }
 
-/**
- * A 3D view's pane while the window draws another view (U7, style guide c-setup): its title, what it shows (its V and look) and Show here.
- * Show here, a press anywhere in the pane, and Enter or Space on the pane each call `show` (drawing it is the person's focus, `focus.view`);
- * moving keyboard focus into the pane draws it too, through the shell's focus report. Hidden while the pane draws its view.
- */
-export function notDrawnState(pane: HTMLElement, show: () => void) {
-  const title = h("p", { class: "viewport-idle-title" }), shows = h("p", { class: "viewport-idle-shows" });
-  const here = button({ label: "Show here", small: true, onClick: show });
-  const element = h("div", { class: "viewport-state", "data-tone": "idle", hidden: true },
-    h("span", { class: "viewport-state-icon" }, icon("head")), h("div", { class: "viewport-idle-text" }, title, shows), here);
-  let active = false;
-  // A press anywhere in the pane (Show here answers its own).
-  element.addEventListener("click", event => { if (active && !here.contains(event.target as Node)) show(); });
-  pane.addEventListener("keydown", event => {
-    if (!active || event.target !== pane || (event.key !== "Enter" && event.key !== " ")) return;
-    event.preventDefault();
-    show();
-  });
-  return { element, button: here,
-    /** Show it (with the view's title and what it shows) or hide it. Returns the pane's accessible name while shown. */
-    update(state: { shown: false } | { shown: true; title: string; shows: string }): string | undefined {
-      active = state.shown;
-      element.hidden = !state.shown;
-      if (!state.shown) return undefined;
-      setText(title, state.title); title.title = state.title;
-      setText(shows, state.shows); shows.title = state.shows;
-      return `${state.title}, not shown. Press Enter to show it here.`;
-    } };
-}
-/** What a view shows, in the not-drawn state's words ("V · Valerie · Smoky"; "No look" when its scene shows none). */
+/** What a view shows, in the not-drawn state's words ("Valerie · Smoky"; "No look" when its scene shows none). */
 export function viewShowsLine(shows: { readonly v?: string; readonly look?: string }): string {
   return [shows.v, shows.look ?? "No look"].filter(Boolean).join(" · ");
 }
@@ -251,7 +223,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext, id = "head"): Vi
     slot,
     spec: { id, ...PANEL_META["head"], element,
       visibility: visible => { if (visible && holds()) requestAnimationFrame(() => port.viewport.resize("head")); } },
-    dispose() { releaseAnchor?.(); releaseAnchor = undefined; clearTimeout(lineTimer); hints.dispose(); },
+    dispose() { releaseAnchor?.(); releaseAnchor = undefined; clearTimeout(lineTimer); hints.dispose(); idle.dispose(); },
     update(frame) {
       paneView = frame.views?.views.find(entry => entry.panel === id)?.id;
       const state = frame.viewport.head, title = frame.viewTitles.find(entry => entry.panel === id)?.title ?? "3D view";

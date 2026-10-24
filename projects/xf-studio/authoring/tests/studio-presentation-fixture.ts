@@ -35,6 +35,7 @@ import { eyeMakeupPort } from "./fixtures/eye-region";
  * for the viewport pickers (default: the selected layer's first point).
  */
 export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>["hitAt"];
+  presentation?: Pick<Parameters<typeof createStudioPresentation<string>>[0], "panelInstance" | "scopeName" | "characterName">;
   /** The window's workspace lease (profiles design §2.3); without it the window is the only one. */
   lease?: WorkspaceLease } = {}): {
   shell: StudioPresentationPort<string>; packageInput: () => PresetCollection | undefined;
@@ -101,6 +102,6 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,
     pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: (_listener: () => void) => () => {} };
   return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
-    previewReadiness, targets, focus: history.focus, ...(options.lease ? { workspace: options.lease } : {}) }),
+    previewReadiness, targets, focus: history.focus, ...options.presentation, ...(options.lease ? { workspace: options.lease } : {}) }),
     packageInput: () => packageInput, downloads, locations, outbox };
 }
