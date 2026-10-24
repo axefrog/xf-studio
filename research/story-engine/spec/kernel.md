@@ -2,7 +2,7 @@
 
 **Status:** v4.16, 24 October 2026.
 - v4.16: the save chain is append-only truth; recovering a swept node replays its saved records; and a sweep drops only what recovery restores exactly (§14.1).
-- v4.15: an event a persisted record references keeps its facts, not only its header (§14.1). This changes what every save holds, in every configuration, so both frozen digests were re-frozen with it: v3 `d534e0dc…` → `f924d2c9…`, v4 `da48cabc…` → `42d5a84e…`. The old behaviour lost data, and no native core depended on the old values. A digest is re-frozen only for a deliberate, documented change like this one.
+- v4.15: an event a persisted record references keeps its facts, not only its header (§14.1). This changes what every save holds, in every configuration, so both frozen digests were re-frozen with it: v3 `d534e0dc…` → `f924d2c9…`, v4 `da48cabc…` → `42d5a84e…`. The old behaviour lost data, and no native core depended on the old values. A digest is re-frozen only for a deliberate, documented change like this one. v4.16 re-freezes them again, for the same kind of reason: a save now records non-regenerable changes to records it never held before (the digest script ends a never-saved `core:located-in` edge before save s75). This takes v3 to `746601727380a3fd…` and v4 to `8fce55b19462a1e0…`; the reference model's SPEC-NOTES give the entry-by-entry difference.
 - v4.14 adds `classifiesAs`, a nominal kind compatibility that queries never widen to (§2.2).
 - v4.13 names the settle step of a boundary (§9.4), which S1 §10.2 relies on.
 - v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (found while building v4 in the reference model).
