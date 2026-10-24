@@ -67,6 +67,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, receipt matching. *21 Oct*
 - **A check that pure engine code never reads the clock, randomness or timers** (`engines/layered-makeup/raster-processor.ts` does today). *21 Oct*
 - **A Show in folder route for the workspace file** (desktop). *21 Oct*
+- **"Your first eye makeup mod" guided tour** (low priority). A spotlight walk-through on the existing guidance system: make two eye makeup looks, then Package (Check, Build) and install the mod, ready to test in game. It offers "Do it for me" where a step is tedious, and finishes by saying plainly what to check in game. Start it after profiles phase 2's UI lands (the tab strip, and the Layouts and Modules menus going in P2-iv and P2-v), so its anchors don't move under it. *24 Oct*
 
 ### Next tracks (ranked)
 1. **The rest of the job scheduler (F-2):** the facial, idle, pose, grading LUT, swatch, icon and preview-core hosts move onto the scheduler ([performance](performance.md)). *21 Oct*
