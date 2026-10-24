@@ -657,7 +657,7 @@ A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal o
 
    all in the one profile, with one V. A second round trip with nothing edited adds only its migration record (S3).
 
-There is no post-migration layout recovery pass or take-over receipt. Neither `v0.1.0-alpha.1` nor `v0.1.0-alpha.2` contained `src/app/layout-library.ts`; it arrived on 21 October, so only development builds from 22–24 October could save layouts after `profiles-1`, and the one real workspace checked has no `uiPreferences.layouts`. The original one-time import above is unchanged. Legacy `uiPreferences.layouts` is still parsed and left stored; it is never silently deleted or imported a second time.
+There is no post-migration layout recovery pass or take-over receipt. Neither `v0.1.0-alpha.1` nor `v0.1.0-alpha.2` contained the saved-layout library (its module, since removed); it arrived on 21 October, so only development builds from 22–24 October could save layouts after `profiles-1`, and the one real workspace checked has no `uiPreferences.layouts`. The original one-time import above is unchanged. Legacy `uiPreferences.layouts` is still parsed and left stored; it is never silently deleted or imported a second time.
 
 | Kept | May be dropped |
 |---|---|
