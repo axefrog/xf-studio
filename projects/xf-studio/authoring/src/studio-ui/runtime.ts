@@ -161,7 +161,8 @@ export class StudioRuntime {
   async request(request: CollectionRequest, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<CollectionOutcome> {
     const outcome = await this.port.library.execute(request);
     const source = request.kind === "package" ? "Mod package" : "Library";
-    if (!outcome.ok) this.feedback.toast(outcome.code === "unavailable" ? "warning" : "error", source, outcome.message, recoveryFor(outcome.code, this), { code: outcome.code });
+    if (!outcome.ok && outcome.code === "package_build_cancelled") this.feedback.record("info", source, outcome.message);
+    else if (!outcome.ok) this.feedback.toast(outcome.code === "unavailable" ? "warning" : "error", source, outcome.message, recoveryFor(outcome.code, this), { code: outcome.code });
     else {
       const message = this.port.library.summary().progress?.message ?? "Done.";
       if (options.quietSuccess) this.feedback.record("success", source, message);

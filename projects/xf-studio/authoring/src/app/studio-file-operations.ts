@@ -30,7 +30,7 @@ export type StudioFileAction =
   /** A portable character preset (`xfs/cc-preset-1`): load it as the V it names, or save the choices set on the shown V. */
   | { kind: "characterPreset.import"; character: string }
   | { kind: "characterPreset.export" }
-  | { kind: "collection.import" | "collection.export" | "collection.plan" | "package.check" | "package.build" }
+  | { kind: "collection.import" | "collection.export" | "collection.plan" | "package.check" | "package.build" | "package.stop" }
   /**
    * The recovery export: this page's own copy of the open collection, its changes the library doesn't have yet included, written as
    * the portable collection file without saving or reading anything (the workspace notice's recovery export button).
@@ -46,10 +46,10 @@ type PackageResult = { kind: "packageCheck"; result: PackageCheckResult } | { ki
 /**
  * One unified list of work in flight (audit A-3): a local file workflow and/or the collection
  * request it (or another caller) started. `requestId` links an entry to collection progress.
- * Nothing here is cancellable today; see `cancel`.
+ * Build can be stopped through its collection request; library writes finish once accepted.
  */
 export type StudioActivity = { id: string; scope: "file" | "collection" | "package"; kind: string;
-  startedAt: number; requestId?: number; cancellable: false };
+  startedAt: number; requestId?: number; cancellable: boolean };
 export type StudioFileState = { workspaceFile?: boolean; busy?: StudioFileAction["kind"];
   collectionBusy: boolean;
   /** The last finished file or collection request; `at` is when it finished (ms since the epoch). */
@@ -122,21 +122,27 @@ export class StudioFileOperations {
     const scopeOf = (kind: string) => kind.startsWith("package") ? "package" as const :
       kind.startsWith("collection") || kind === "initialize" || kind === "refresh" || kind === "open" ||
       kind === "save" || kind === "saveCopy" || kind === "import" || kind.startsWith("export") ? "collection" as const : "file" as const;
+    // A Build started through the collection port may run beside a file picker. It keeps its own Stop.
+    const separateBuild = request?.kind === "package" && request.action === "build" && this.busy?.kind !== "package.build";
     if (this.busy) list.push({ id: `file-${this.busy.id}`, scope: scopeOf(this.busy.kind), kind: this.busy.kind,
-      startedAt: this.busy.startedAt, ...(request ? { requestId: request.requestId } : {}), cancellable: false });
-    else if (request) list.push({ id: `request-${request.requestId}`, scope: request.kind === "package" ? "package" : "collection",
+      startedAt: this.busy.startedAt, ...(request && !separateBuild ? { requestId: request.requestId } : {}), cancellable: !separateBuild && (request?.cancellable ?? false) });
+    if (request && (!this.busy || separateBuild)) list.push({ id: `request-${request.requestId}`, scope: request.kind === "package" ? "package" : "collection",
       kind: request.kind === "package" ? `package.${request.action}` : request.kind, startedAt: request.startedAt,
-      requestId: request.requestId, cancellable: false });
+      requestId: request.requestId, cancellable: request.cancellable });
     return list;
   }
-  /** Honest cancellation: file pickers close themselves, and local library/package work cannot be aborted. */
+  /** Build delegates cancellation to its collection owner; other accepted work finishes. */
   cancel(id: string): CancelResult {
+    const entry = this.activity().find(entry => entry.id === id);
+    if (entry?.cancellable && entry.requestId !== undefined) return this.collection!.cancel(entry.requestId);
     const known = this.activity().some(entry => entry.id === id);
     return { accepted: false, reason: known
       ? "This work cannot be cancelled once started; its result will still arrive and can be retried after it completes."
       : "Nothing with that ID is running." };
   }
   capability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
+    if (action.kind === "package.stop") return this.activity().some(entry => entry.kind === "package.build" && entry.cancellable)
+      ? { available: true } : { available: false, reason: "No stoppable Build is running." };
     if (this.busy) return { available: false, reason: "Another file operation is in progress." };
     // What a picker's file goes to is named when it is asked (profiles design §3.3), never decided when the file arrives.
     if (action.kind === "recipe.import" && !action.collection) return refusal("missing_target", "Open a collection first.");
@@ -182,6 +188,12 @@ export class StudioFileOperations {
     const allowed = this.capability(action);
     // A refused call never acquired the transaction, so it must not release or replace its result.
     if (!allowed.available) return { ok: false, code: this.busy ? "busy" : "unavailable", message: allowed.reason! };
+    if (action.kind === "package.stop") {
+      const entry = this.activity().find(entry => entry.kind === "package.build" && entry.cancellable)!;
+      const answer = this.cancel(entry.id);
+      return answer.accepted ? { ok: true, code: "stopping", message: "Stopping Build…" }
+        : { ok: false, code: "unavailable", message: answer.reason! };
+    }
     const owner = Symbol(action.kind);
     this.busy = { kind: action.kind, owner, id: ++this.sequence, startedAt: Date.now() }; this.notify();
     try {

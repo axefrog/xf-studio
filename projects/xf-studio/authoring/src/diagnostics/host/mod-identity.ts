@@ -1,3 +1,4 @@
+import { fileFingerprint } from "../../installation/host/file-fingerprint";
 /**
  * Which mods a problem involves, identified well enough to reproduce the setup without shipping their files (docs/diagnostics.md
  * §Your mod setup). From the load-order winners the rolling window recorded, every archive that supplied or lost a resource the
@@ -61,12 +62,14 @@ export type ModSource = { site: "nexusmods"; modId: string | null; fileId: strin
  * A build XF Studio placed, from its install receipt: its archive folder (`archive/pc/mod`) and each file's folder, name, size and
  * SHA-256 (the archive and `.xl` and any extra archive in that folder, TweakXL files in the mod's `r6/tweaks/<archive>`).
  */
-export type OwnInstall = { folder: string; files: readonly { name: string; folder: string; bytes: number; sha256: string }[]; build: string; installedAt: string };
+export type OwnInstall = { folder: string; files: readonly { name: string; folder: string; bytes: number; sha256: string; fingerprint?: string }[]; build: string; installedAt: string };
 export type InvolvedArchive = { name: string; group: string | null; bytes: number | null; sha256: string | null; modified: string | null;
   /** How many of the V's resources it supplied, and how many it lost to another archive. */
   won: number; lost: number;
-  /** How the report identifies it: its SHA-256, its size and date (too large, or out of time), the game's version, or not found. */
-  identifiedBy: "sha-256" | "size and date" | "game version" | "not found";
+  /** SHA-256 of size and the first/last 64 KiB, when sampled within the report budget. */
+  fingerprint?: string;
+  /** How the report identifies it: its SHA-256, its bounded end fingerprint, its size and date (too large, or out of time), the game's version, or not found. */
+  identifiedBy: "sha-256" | "end fingerprint" | "size and date" | "game version" | "not found";
   /** Private: where it is, for the report's optional file; never sent to the page. */
   path: string | null };
 export type IdentityOptions = {
@@ -79,7 +82,9 @@ export type IdentityOptions = {
   ownInstalls?: readonly OwnInstall[];
 };
 export type InvolvedMod = { name: string; kind: "mo2-mod" | "mo2-overwrite" | "vortex-mod" | "game-folder" | "manual" | "base-game" | "unknown";
-  version: string | null; source: ModSource | null; status: ModStatus; archives: InvolvedArchive[] };
+  version: string | null; source: ModSource | null; status: ModStatus;
+  /** A receipt names this path and size, but this report could not verify its content. */
+  receiptIdentity?: "unconfirmed"; archives: InvolvedArchive[] };
 
 type Winner = { archive: unknown; provider: unknown; group: unknown; alternatives: unknown };
 const ALTERNATIVE = /^(.+?) \(([a-z0-9-]+), (.+)\)$/i;
@@ -190,10 +195,21 @@ export async function involvedMods(winners: readonly Winner[] | null, settings: 
       : kind === "vortex-mod" ? identity?.name ?? name : name, kind,
       version: meta?.get("version") || identity?.version || null, source, status, archives });
   }
+  // Give receipted files priority for a bounded cheap read before full hashes use the shared budget.
+  let sampled = 0;
+  for (const mod of mods) for (const archive of mod.archives) {
+    if (sampled >= 32 || now() >= deadline) break;
+    if (archive.path && (options.ownInstalls ?? []).some(install => install.files.some(file =>
+      receiptFileMatches(archive, file) && file.fingerprint))) {
+      sampled++;
+      try { archive.fingerprint = fileFingerprint(archive.path); archive.identifiedBy = "end fingerprint"; } catch { /* Unconfirmed until a full hash is available. */ }
+    }
+  }
   await fingerprint(stamps, { ...options, now }, started);
   for (const mod of mods) {
     const own = ownInstallOf(mod, options.ownInstalls ?? []);
     if (own) { mod.source = { site: "xf-studio", build: own.build, installedAt: own.installedAt }; mod.status = "built-by-xf-studio"; }
+    else if ((options.ownInstalls ?? []).some(install => receiptMatch(mod, install) === "unconfirmed")) mod.receiptIdentity = "unconfirmed";
   }
   return mods;
 }
@@ -201,18 +217,25 @@ export async function involvedMods(winners: readonly Winner[] | null, settings: 
 const samePath = (a: string, b: string) => process.platform === "win32" ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b);
 /**
  * The install that placed every located archive of a mod: each is where the receipt put a file of that name, with the size
- * the receipt records and, when it was hashed, the same SHA-256 (a file edited or replaced since is not XF Studio's any more).
+ * the receipt records and the same SHA-256 or bounded end fingerprint. Without either, the receipt match is unconfirmed.
+ * An end fingerprint detects ordinary replacements, not edits confined to the middle of a large file; full hashing still follows.
  */
 export function ownInstallOf(mod: Pick<InvolvedMod, "kind" | "archives">, installs: readonly OwnInstall[]): OwnInstall | null {
-  if (mod.kind === "base-game" || !installs.length) return null;
-  const located = mod.archives.filter(archive => archive.path);
-  if (!located.length || located.length !== mod.archives.length) return null;
-  for (const install of installs) {
-    const matches = located.every(archive => install.files.some(file => samePath(dirname(archive.path!), file.folder) &&
-      file.name.toLowerCase() === archive.name.toLowerCase() && file.bytes === archive.bytes && (archive.sha256 === null || archive.sha256 === file.sha256)));
-    if (matches) return install;
+  return installs.find(install => receiptMatch(mod, install) === "confirmed") ?? null;
+}
+const receiptFileMatches = (archive: InvolvedArchive, file: OwnInstall["files"][number]) => !!archive.path &&
+  samePath(dirname(archive.path), file.folder) && file.name.toLowerCase() === archive.name.toLowerCase() && file.bytes === archive.bytes;
+function receiptMatch(mod: Pick<InvolvedMod, "kind" | "archives">, install: OwnInstall): "confirmed" | "unconfirmed" | false {
+  if (mod.kind === "base-game" || !mod.archives.length) return false;
+  let confirmed = true;
+  for (const archive of mod.archives) {
+    const file = install.files.find(file => receiptFileMatches(archive, file));
+    if (!file) return false;
+    if (archive.sha256 !== null) { if (archive.sha256 !== file.sha256) return false; }
+    else if (file.fingerprint && archive.fingerprint) { if (file.fingerprint !== archive.fingerprint) return false; }
+    else confirmed = false;
   }
-  return null;
+  return confirmed ? "confirmed" : "unconfirmed";
 }
 
 /**
@@ -227,14 +250,15 @@ export function readOwnInstalls(folders: readonly string[]): OwnInstall[] {
     for (const name of names.slice(0, 256)) {
       try {
         const receipt = JSON.parse(readFileSync(join(folder, name), "utf8")) as { schema?: unknown; target?: unknown; candidateId?: unknown; installedAt?: unknown;
-          files?: { path?: unknown; bytes?: unknown; sha256?: unknown }[] };
+          files?: { path?: unknown; bytes?: unknown; sha256?: unknown; fingerprint?: unknown }[] };
         if (receipt.schema !== "xfs/install-receipt-1" || typeof receipt.target !== "string" || typeof receipt.candidateId !== "string" || !Array.isArray(receipt.files)) continue;
         // The receipt's paths are below the install root, whose `archive/pc/mod` is its target.
         const target = receipt.target, root = resolve(target, "..", "..", "..");
         const rooted = /[\\/]archive[\\/]pc[\\/]mod[\\/]?$/i.test(target);
         const files = receipt.files.flatMap(file => typeof file?.path === "string" && typeof file.bytes === "number" && typeof file.sha256 === "string" &&
           !file.path.split("/").some(part => !part || part === "..")
-          ? [{ name: basename(file.path), folder: rooted ? dirname(join(root, ...file.path.split("/"))) : target, bytes: file.bytes, sha256: file.sha256 }] : []);
+          ? [{ name: basename(file.path), folder: rooted ? dirname(join(root, ...file.path.split("/"))) : target, bytes: file.bytes, sha256: file.sha256,
+            ...(typeof file.fingerprint === "string" && /^ends-1:[a-f0-9]{64}$/.test(file.fingerprint) ? { fingerprint: file.fingerprint } : {}) }] : []);
         if (files.length) out.push({ folder: receipt.target, files, build: receipt.candidateId, installedAt: typeof receipt.installedAt === "string" ? receipt.installedAt : "" });
       } catch { /* Not a receipt we can read. */ }
     }

@@ -20,8 +20,8 @@ export function collectionTransport(endpoint: string): CollectionTransport {
   return {
     list: () => api<CollectionSummary[]>(),
     get: id => api<StoredCollection>(`/${encodeURIComponent(id)}`),
-    package: async (action, collection) => {
-      try { return await requestPackage(action, collection); }
+    package: async (action, collection, signal) => {
+      try { return await requestPackage(action, collection, signal); }
       catch (error) {
         if (error instanceof PackageRequestError) throw new CollectionServiceError(error.code, error.message);
         throw error;

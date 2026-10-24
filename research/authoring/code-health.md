@@ -63,6 +63,10 @@ The open code and design findings of Medium severity and above, from merge revie
 |---|---|---|---|---|
 | CORE-240 | High | Profiles phase-1 → phase-2 layout upgrade | Phase 2 skipped completed `profiles-1` sessions and treated phase 1's null factory dock as empty. This affected the upgrade path for every existing workspace; the observed result was an empty Layout 1, with no looks lost. Fixed by converting the phase-1 first tab before opening it, preserving live custom arrangements and panel identities, supplying the contributed default only when no arrangement exists, and adding enabled module panels. Legacy preferences remain unchanged. Already-saved phase-2 empty tabs are ambiguous and recover through Reset to default. | `tests/profiles-phase-one-upgrade.test.ts` (writer shapes from `3d0dabfc`); [migration design §8](profiles-views-layouts-design.md#8-migration-into-the-first-profile) |
 
+## Receipt identity resolution
+
+CORE-118 was already a Low item in the small-bugs queue, with no remaining open ledger row. It is closed by the receipt fingerprint change: new receipts record a versioned SHA-256 of size plus the first and last 64 KiB; reports sample at most 32 receipted archives within the existing hash deadline before full hashing. Matching uses the full SHA-256 when present, otherwise the bounded fingerprint. Legacy or out-of-budget name/size matches are explicitly unconfirmed. Evidence: `tests/receipt-fingerprint.test.ts`, `tests/diagnostics-report.test.ts` and `tests/mod-install-transport.test.ts`. Limit: end samples do not detect an edit confined to the middle of a large archive; full hashing and every install/update/uninstall verification remain unchanged.
+
 ## Subsystem register
 
 What each subsystem is made of, with the focus a reviewer should keep on it.

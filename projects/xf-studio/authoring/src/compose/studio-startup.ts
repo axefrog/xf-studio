@@ -1,3 +1,4 @@
+import { polish5Verification } from "./polish5-verification";
 import { polish4Defaults, polish4Verification, type Polish4State } from "./polish4-verification";
 import { profileWorkspaceLease } from "../app/profiles/profile-window";
 import { layoutTabsPort } from "../app/profiles/tab-presentation";
@@ -472,6 +473,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     declined: { get: () => declined, set: on => { if (declined !== on) { declined = on; persist(); } } },
     loadHead: () => loadHead(),
   });
+  const packageTransport = collectionTransport(`${base}/collections`);
+  const polish5 = verification ? polish5Verification(packageTransport) : undefined;
   bootstrap = createTrustedStudioBootstrap({
     core, preferences, localSetup, installDetection, modInstall, previewSetup, viewport: viewportDevice.attachment,
     links: { open: async link => {
@@ -481,7 +484,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     previewReadiness: previewDevice.coordinator, status: statusSource, about: host.about, desktopApp: host.desktopApp,
     // Both hosts serve the update check; a verification workspace keeps what it found apart (UI-98).
     updates: createBrowserUpdateCheck(verification ? "/api/verification/update-check" : "/api/update-check"),
-    collections: { owner: services.collections, scene: shownScene, transport: collectionTransport(`${base}/collections`),
+    collections: { owner: services.collections, scene: shownScene, transport: polish5?.transport ?? packageTransport,
       flushLook: () => lookEditor.commit(),
       membership: id => services.profiles.collectionMembership(sessionState.profile, id),
       join: id => {
@@ -539,6 +542,14 @@ async function start(host: StudioHost, root: HTMLElement) {
     const viewer = () => heads.shown()?.scene;
     Object.assign(window, { xfStudioPresentation: port,
     xfStudioTabFixtures: tabFixtures,
+    xfStudioPolish5: {
+      running: () => {
+        if (bootstrap.collection.service.activity()) throw Error("Wait for the current request first.");
+        polish5!.arm();
+        void bootstrap.files.executeCollection({ kind: "package", action: "build" });
+      },
+      stopped: () => port!.files.execute({ kind: "package.stop" }),
+    },
     xfStudioPolish4: {
       state: (state: Polish4State) => polishFixture!.state(state),
       /** Visual host-capability specimen; no folder is opened by this fixture. */

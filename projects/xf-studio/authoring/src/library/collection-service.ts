@@ -68,10 +68,10 @@ export type CollectionProgress = { phase: "working" | "success" | "error"; code:
   fraction?: number;
   /** The request this progress belongs to (audit A-9). */
   requestId?: number };
-/** One accepted async request in flight. Library and package requests cannot be cancelled. */
+/** One accepted async request in flight. Only Build can be stopped. */
 export type CollectionActivity = { requestId: number; kind: CollectionRequest["kind"]; action?: PackageAction;
-  startedAt: number; cancellable: false };
-export type CancelResult = { accepted: false; reason: string };
+  startedAt: number; cancellable: boolean };
+export type CancelResult = { accepted: true; reason?: undefined } | { accepted: false; reason: string };
 /** Cheap detached projection for frequently repainted views. */
 export type CollectionServiceSummary = { busy: boolean; progress?: CollectionProgress;
   summaries: CollectionSummary[]; draft?: CollectionDraftSummary;
@@ -100,7 +100,7 @@ export type CollectionTransport = {
   list(): Promise<CollectionSummary[]>;
   get(id: string): Promise<StoredCollection>;
   /** Sends the collection's stored form (with its package plan); the host plans every product and answers them all. */
-  package(action: PackageAction, collection: unknown): Promise<PackageCheckResult | PackageBuildResult>;
+  package(action: PackageAction, collection: unknown, signal?: AbortSignal): Promise<PackageCheckResult | PackageBuildResult>;
   /** The running Build's stage (PIPE-131); null when none runs or the host can't say. Optional. */
   packageProgress?(): Promise<PackageBuildProgress | null>;
 };
@@ -141,6 +141,7 @@ export class CollectionService {
   private busy = false;
   private progress?: CollectionProgress;
   private packageKey?: string;
+  private buildAbort?: AbortController;
   private summaries: CollectionSummary[] = [];
   private listeners = new Set<() => void>();
   /**
@@ -184,7 +185,7 @@ export class CollectionService {
     });
     this.unsubscribe = () => { offOwner(); offScene(); };
   }
-  dispose() { this.unsubscribe(); this.listeners.clear(); }
+  dispose() { this.buildAbort?.abort(); this.unsubscribe(); this.listeners.clear(); }
   private newId() { return (this.deps.newId ?? (() => crypto.randomUUID()))(); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private notify() { for (const listener of [...this.listeners]) listener(); }
@@ -328,8 +329,12 @@ export class CollectionService {
 
   /** The accepted request in flight, if any (requests are serialized). */
   activity(): CollectionActivity | undefined { return this.running && { ...this.running }; }
-  /** Library and package requests can't be cancelled once sent; their result still arrives. */
+  /** Only Build is cancellable; library writes finish once accepted. */
   cancel(requestId: number): CancelResult {
+    if (this.running?.requestId === requestId && this.buildAbort && !this.buildAbort.signal.aborted) {
+      this.buildAbort.abort(); this.running.cancellable = false; this.notify();
+      return { accepted: true };
+    }
     return this.running?.requestId === requestId
       ? { accepted: false, reason: "Library and package requests cannot be cancelled once started; the result will still arrive." }
       : { accepted: false, reason: "No running request has that ID." };
@@ -720,7 +725,8 @@ export class CollectionService {
     }
     this.busy = true;
     const requestId = ++this.requestSeq;
-    this.running = { requestId, kind: request.kind, ...(request.kind === "package" ? { action: request.action } : {}), startedAt: Date.now(), cancellable: false };
+    this.buildAbort = request.kind === "package" && request.action === "build" ? new AbortController() : undefined;
+    this.running = { requestId, kind: request.kind, ...(request.kind === "package" ? { action: request.action } : {}), startedAt: Date.now(), cancellable: !!this.buildAbort };
     this.setProgress({ phase: "working", code: request.kind, requestId,
       message: request.kind === "package" ? request.action === "check"
         ? "Checking which layers in the current collection can become Cyberpunk mod files…" : "Starting the build…"
@@ -815,7 +821,10 @@ export class CollectionService {
           const key = this.draftKey(), collection = await this.snapshot(this.shown()!.id);
           const stopFollowing = request.action === "build" ? this.followBuild(requestId) : () => {};
           let response: PackageCheckResult | PackageBuildResult;
-          try { response = await this.deps.transport.package(request.action, this.deps.model.parts.writeMinimal(collection)); } finally { stopFollowing(); }
+          try {
+            this.buildAbort?.signal.throwIfAborted();
+            response = await this.deps.transport.package(request.action, this.deps.model.parts.writeMinimal(collection), this.buildAbort?.signal);
+          } finally { stopFollowing(); }
           this.packageKey = key;
           if (request.action === "check") {
             const checked = response as PackageCheckResult;
@@ -852,11 +861,12 @@ export class CollectionService {
       this.setProgress({ phase: "success", code: result.kind, message, requestId });
       return { ok: true, result, requestId };
     } catch (error) {
-      const code = error instanceof CollectionServiceError ? error.code : error instanceof SyntaxError ? "invalid_json" : "request_failed";
-      const message = (error as Error).message;
+      const stopped = this.buildAbort?.signal.aborted;
+      const code = stopped ? "package_build_cancelled" : error instanceof CollectionServiceError ? error.code : error instanceof SyntaxError ? "invalid_json" : "request_failed";
+      const message = stopped ? "Build stopped. Nothing was promoted. Your collection is unchanged." : (error as Error).message;
       this.setProgress({ phase: "error", code, message, requestId });
       return { ok: false, code, message, requestId };
-    } finally { this.busy = false; this.running = undefined; this.notify(); }
+    } finally { this.buildAbort = undefined; this.busy = false; this.running = undefined; this.notify(); }
   }
   /** A snapshot's looks with their own editor memory (Save as new collection keeps each look's Undo history). */
   private storedLooksWithMemory(collection: LookCollection): LookInput[] {

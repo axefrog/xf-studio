@@ -1,3 +1,4 @@
+import { fileFingerprint } from "./file-fingerprint";
 /** Trusted, offline transport for an independently verified local package.
  * A host supplies fixed private roots and parsed settings; browser input is only a
  * candidate ID from that root. This module never compiles or changes a recipe.
@@ -24,7 +25,7 @@ import { decodeModlist } from "../mo2-modlist-text";
 
 const schema = "xfs/install-receipt-1" as const;
 const fileNames = ["archive", "archive.xl"] as const;
-type FileEntry = { path: string; sha256: string; bytes: number };
+type FileEntry = { path: string; sha256: string; bytes: number; fingerprint?: string };
 /** The kinds of extra file a package may carry that an install knows where to put. */
 export type ExtraFileKind = "overlay-archive" | "tweakxl";
 /**
@@ -658,11 +659,11 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       config.afterStaging?.();
       checkCurrent(prior, manifest.files, gone);
       const receipt: InstallReceipt = { schema, targetId, route: target.route, target: target.target,
-        candidateId: plan.candidateId, namespace: manifest.namespace, files: manifest.files,
+        candidateId: plan.candidateId, namespace: manifest.namespace, files: manifest.files.map((entry, index) => ({ ...entry, fingerprint: fileFingerprint(staged[index]) })),
         installedAt: new Date().toISOString(), features: manifest.features.map(({ feature, namespace }) => ({ feature, namespace })),
         rollback: prior && backup ? { prior: { ...prior, rollback: null }, backup } : null };
       writeJsonDurably(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
-        names: manifest.files.map(f => basename(f.path)), next: manifest.files, prior, backup, pending: receipt } satisfies Journal);
+        names: receipt.files.map(f => basename(f.path)), next: receipt.files, prior, backup, pending: receipt } satisfies Journal);
       for (let i = 0; i < manifest.files.length; i++) renameSync(staged[i], destination(manifest.files[i]));
       for (const entry of dropped) rmSync(destination(entry));
       for (const entry of manifest.files) assert(hash(destination(entry)) === entry.sha256, "Installed payload changed.");

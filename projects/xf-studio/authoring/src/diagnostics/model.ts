@@ -156,7 +156,7 @@ export function parseForward(value: unknown): { ok: true; entries: DiagnosticEnt
  */
 const EXPECTED_CODES = new Set([
   "missing_target", "busy", "limit", "invalid_value", "incompatible_mode", "asset_unavailable", "not_ready", "unavailable", "needs_input",
-  "cancelled", "conflict", "stale_result", "invalid_json", "invalid_collection", "no_exportable_content",
+  "cancelled", "package_build_cancelled", "conflict", "stale_result", "invalid_json", "invalid_collection", "no_exportable_content",
   "required", "range", "format", "mode", "name.blank", "name.too-long",
 ]);
 export const isExpectedFailure = (code: string | undefined): boolean => !!code && EXPECTED_CODES.has(code);

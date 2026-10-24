@@ -1,3 +1,4 @@
+import { fileFingerprint } from "../src/installation/host/file-fingerprint";
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -54,6 +55,7 @@ for (const route of ["direct", "mo2"] as const) {
       expect(plan.route).toBe(route);
       expect(plan.files).toHaveLength(2);
       const receipt = f.transport.install("first");
+      expect(receipt.files.every(entry => entry.fingerprint === fileFingerprint(join(f.target, entry.path.split("/").at(-1)!)))).toBe(true);
       if (route === "mo2") unrelated();
       expect(receipt.files.map(x => readFileSync(join(f.target, x.path.split("/").at(-1)!), "utf8")))
         .toEqual(["one-0", "one-1"]);
@@ -340,7 +342,8 @@ function interrupt(f: ReturnType<typeof fixture>, next: string, done: 0 | 1 | 2)
   const prior = f.transport.receipt()!;
   const backup = join(f.receiptsRoot, `${prior.targetId}-test-backup`); mkdirSync(backup);
   for (const entry of prior.files) writeFileSync(join(backup, entry.path.split("/").at(-1)!), readFileSync(join(f.target, entry.path.split("/").at(-1)!)));
-  const files = JSON.parse(readFileSync(join(f.store, next, "manifest.json"), "utf8")).files as { path: string }[];
+  const entries = JSON.parse(readFileSync(join(f.store, next, "manifest.json"), "utf8")).files as { path: string }[];
+  const files = entries.map(entry => ({ ...entry, fingerprint: fileFingerprint(join(f.store, next, ...entry.path.split("/"))) }));
   const pending = { ...prior, candidateId: next, files, installedAt: new Date().toISOString(), rollback: { prior: { ...prior, rollback: null }, backup } };
   writeFileSync(join(f.receiptsRoot, `${prior.targetId}.journal.json`), JSON.stringify({ schema: "xfs/install-journal-1", targetId: prior.targetId,
     target: prior.target, names: files.map(x => x.path.split("/").at(-1)), next: files, prior, backup, pending }));

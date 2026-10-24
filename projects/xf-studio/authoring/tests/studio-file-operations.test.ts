@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { eyeCheck } from "./fixtures/package-results";
+import { eyeBuild, eyeCheck } from "./fixtures/package-results";
 import { CollectionServiceError } from "../src/library/collection-service";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import { StudioFileOperations, type StudioFilePort, type StudioPickedFile } from "../src/app/studio-file-operations";
@@ -59,6 +59,41 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
     packageInput: () => studio.packageInput() as { presets: { recipe: Recipe }[] } | undefined, imported: () => imported, maskInput: () => maskInput,
     loadedBytes: () => loadedBytes, loadedFor: () => loadedFor };
 }
+
+test("Stop aborts the current Build request and leaves no package result; a later Build is independent", async () => {
+  const f = await fixture();
+  let sent!: AbortSignal;
+  let began!: () => void;
+  const ready = new Promise<void>(resolve => { began = resolve; });
+  f.transport.package = (_action, _input, signal) => new Promise((_, reject) => {
+    sent = signal!; began();
+    signal!.addEventListener("abort", () => reject(new DOMException("Stopped", "AbortError")), { once: true });
+  });
+  expect(f.files.capability({ kind: "package.stop" }).available).toBe(false);
+  const build = f.files.execute({ kind: "package.build" });
+  await ready;
+  expect(f.files.activity()[0]).toMatchObject({ kind: "package.build", cancellable: true });
+  expect(f.files.capability({ kind: "package.stop" }).available).toBe(true);
+  expect(await f.files.execute({ kind: "package.stop" })).toMatchObject({ ok: true, code: "stopping" });
+  expect(sent.aborted).toBe(true);
+  expect(await build).toMatchObject({ ok: false, code: "package_build_cancelled", message: expect.stringContaining("Nothing was promoted") });
+  expect(f.files.snapshot()).toMatchObject({ last: { kind: "package.build", code: "package_build_cancelled" }, activity: [] });
+  expect(f.files.snapshot().package).toBeUndefined();
+  expect(f.files.capability({ kind: "package.stop" }).available).toBe(false);
+  f.transport.package = async (_action, input, signal) => { expect(signal?.aborted).toBe(false); return eyeBuild(eyeCheck(input as { id: string }, { presets: [] })); };
+  expect(await f.files.execute({ kind: "package.build" })).toMatchObject({ ok: true });
+});
+
+test("Stop during the Build's collection snapshot never sends a package request", async () => {
+  const f = await fixture();
+  let sent = false;
+  f.transport.package = async () => { sent = true; throw Error("Must not start"); };
+  const build = f.files.execute({ kind: "package.build" });
+  expect(await f.files.execute({ kind: "package.stop" })).toMatchObject({ ok: true });
+  expect(await build).toMatchObject({ ok: false, code: "package_build_cancelled" });
+  expect(sent).toBe(false);
+  expect(f.files.snapshot().package).toBeUndefined();
+});
 
 test("recipe and mask workflows use typed file ports with the original names, limits and detached layer", async () => {
   const f = await fixture();

@@ -325,6 +325,7 @@ export const FILE_DESCRIPTORS = {
   "collection.exportWindowCopy": file("collection", "download", "download"),
   "package.check": file("collection", "package", "none"),
   "package.build": file("collection", "package", "none"),
+  "package.stop": file("collection", "package", "none"),
   "collection.recover": file("collection", "recover", "none", { undo: "recovery" }),
 } satisfies Record<StudioFileAction["kind"], FileDescriptor>;
 

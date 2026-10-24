@@ -158,7 +158,7 @@ export function compositions() {
       combine: "Opening or importing a collection replaces nothing (the one open stays in the library) and always offers Reopen previous. Reopen is the one name for showing a collection you had open again: Reopen previous on the toast, Reopen previous collection in the palette and the Presets panel's menu, and Reopen on a recent draft's row (glossary)." }),
     pattern({ id: "k-package", title: "Package review", status: "implemented", wide: true, specimen: packaging,
       what: "Mod package panel with Check/Build and a result card beside the Layers panel, where preview-study layers carry a warning flag and the finish explains its export status.",
-      when: "Before building: Check, read omissions, fix or accept them, then Build (confirmed in place).",
+      when: "Before building: Check, read omissions, fix or accept them, then Build (confirmed in place). A running Build composes Progress and readiness (c-progress), with Stop beside the progress text. A stopped Build shows the information note from that pattern.",
       combine: "Result freshness turns Stale as soon as the collection changes; the finish status and the omission list use the same catalogue wording." }),
     pattern({ id: "k-compact", title: "Compact workspace", status: "implemented", wide: true, specimen: compact,
       what: "Head and UV map side by side above two condensed tab groups; the head keeps a portrait cell; header actions become icons. Crowded tab strips condense in stages: shortened labels, then icon-only inactive tabs (named by tooltip and accessible name), then an overflow menu (UI-111).",

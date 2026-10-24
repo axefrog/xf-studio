@@ -102,9 +102,10 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // While the latest Build is current, its result's Add is the one primary action: Build again is a secondary one.
   const rebuild = button({ label: "Build mod files…", icon: "package", onClick: event => confirmBuild(event.currentTarget as Element) });
   // The progress line keeps its place while nothing runs, so starting or finishing work never moves the panel (UI-90).
-  const progressText = h("p", { class: "progress-text" });
+  const progressText = h("p", { class: "progress-text grow" });
   const progressLine = progressBar({ label: "Package request in progress" });
-  const progress = h("div", { class: "package-progress idle" }, progressLine.element, progressText);
+  const stop = button({ label: "Stop", icon: "close", small: true, onClick: () => void port.files.execute({ kind: "package.stop" }) });
+  const progress = h("div", { class: "package-progress idle" }, progressLine.element, h("div", { class: "row gap-s" }, progressText, stop));
   const result = h("div", { class: "package-result", "aria-live": "polite" });
   let resultSignature = "";
   // Which XF mods the draft builds: one by default, named after its feature; the person may rename a mod and, once the
@@ -173,7 +174,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     await rt.request({ kind: "package", action }, { quietSuccess: false });
   }
   function confirmBuild(anchor: Element) {
-    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses this collection as it is now, your latest edits included. Can take a minute or two, and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to." },
+    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses this collection as it is now, your latest edits included. Can take a minute or two. Use Stop beside the progress to stop the Build. Nothing is added to your game or mod manager until you choose to." },
       { kind: "action", label: "Build now", icon: "package", capability: buildCapability(), run: () => void runPackage("build") },
       { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
     anchor, { label: "Confirm build", invoker: anchor });
@@ -205,6 +206,11 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
       wolvenKitStep.update(frame, wantsWolvenKitStep(frame));
       const working = library.busy && library.progress?.code === "package";
+      const stopCapability = port.files.capability({ kind: "package.stop" });
+      const buildRunning = files.activity.some(entry => entry.kind === "package.build");
+      if (!buildRunning && stop.contains(document.activeElement)) (builtCurrent ? rebuild : build).focus();
+      stop.hidden = !buildRunning;
+      applyCapability(stop, stopCapability);
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? library.progress!.message : "");
       // A Build that says which stage it has reached fills the bar that far (PIPE-131); otherwise it sweeps.
@@ -240,6 +246,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
  * the failure's reference when it wasn't an ordinary refusal. The code and time stay in Details for the report.
  */
 function failureCard(rt: StudioRuntime, failed: ReadonlyDeep<{ kind: string; code: string; message: string; at: number }>) {
+  if (failed.code === "package_build_cancelled") return note("Build stopped. Nothing was promoted. Your collection is unchanged.", "info");
   const build = failed.kind === "package.build";
   const expected = rt.port.diagnostics.expected(failed.code);
   const report = button({ label: "Report this problem", icon: "warning", small: true, onClick: () => { openReportDialog(rt, null); } });

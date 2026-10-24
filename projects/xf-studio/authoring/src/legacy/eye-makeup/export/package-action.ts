@@ -53,9 +53,9 @@ export function packageBuildStageLine(progress: PackageBuildProgress): string {
 /** The package routes' one network read. */
 const packageRequest = (path: string, init: RequestInit) => fetch(path, init);
 
-export async function requestPackage(action: PackageAction, collection: unknown): Promise<PackageCheckResult | PackageBuildResult> {
+export async function requestPackage(action: PackageAction, collection: unknown, signal?: AbortSignal): Promise<PackageCheckResult | PackageBuildResult> {
   const response = await packageRequest("/api/package", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, collection }) });
+    signal, body: JSON.stringify({ action, collection }) });
   if (!(response.headers.get("Content-Type") ?? "").includes("application/json"))
     throw new PackageRequestError("transport", "Restart XF Studio to build mod files.");
   const result = await response.json();

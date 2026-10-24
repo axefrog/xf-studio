@@ -45,7 +45,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **Polish batch 3 leftovers** (polish-3 merged 24 Oct, `54b109bb`):
   - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there. They need a real V, so the coordinator takes them.
 - **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
-- **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, receipt matching. *21 Oct*
+- **The rest of [Small bugs and friction](#small-bugs-and-friction):** starter shapes, the browser-without-locks fallback and WebView2 security. *21 Oct*
 - **"Your first eye makeup mod" guided tour** (low priority). A spotlight walk-through on the existing guidance system: make two eye makeup looks, then Package (Check, Build) and install the mod, ready to test in game. It offers "Do it for me" where a step is tedious, and finishes by saying plainly what to check in game. Start it after profiles phase 2's UI lands (the tab strip, and the Layouts and Modules menus going in P2-iv and P2-v), so its anchors don't move under it. *24 Oct*
 
 ### Next tracks (ranked)
@@ -299,11 +299,9 @@ Existing brow, lash, hair and piercing *preview context* is not permission to bu
 Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
 
 - **Starter eye-makeup shapes** (21 October 2026, polish before 1.0). A new look and a new layer start from a lopsided wing whose control points every design first drags back into place. Following the contributed-defaults convention (AGENTS.md, UX policy), eye makeup contributes several natural starter shapes as read-only choices: a soft lid wash along the upper lash line, a classic wing, a crease or smoky shape, and a lower-lash smudge. The person can save any layer's shape as their own starter, and choose which starter New layer and New look use. The current starter (`starterRecipe()` and the new-layer shape in `src/features/eye-makeup/region.ts`) stays intact for existing drafts. Check each starter on the default and the reference V, in both eye modes.
-- **Build has no Stop.** A Build runs for many seconds and can't be stopped from the Mod panel; the host already stops a Build whose request is dropped, so the panel only needs a Stop button.
-- **Two windows overwrite each other's draft.** Two Studio tabs or windows on one workspace each autosave over the other's draft; the second should see the first's changes, or at least warn.
-- **Install receipts matched on name and size** (CORE-118): an archive not hashed within the problem report's budget matches a receipt on name and size alone (`src/diagnostics/host/mod-identity.ts`).
+- **Browser without workspace-lock APIs.** Normal browser tabs and desktop windows already have one-writer leases (profiles phase 1). The browser adapter still returns no lease when Web Locks or BroadcastChannel is unavailable, permitting an unfenced writable fallback. Decide the supported-browser message and fail closed there; the standard localhost and desktop paths are covered by `tests/workspace-lease.test.ts`.
 - **WebView2 runs with `--disable-web-security`** (DESK-09): Electrobun's native wrapper hard-codes the flag and no setting removes it; the CSP, session cookie and navigation rules still hold. Raise it upstream, or bundle CEF at the cost of a much larger installer.
 
 ## Working rules for this queue
 
-This is a durable queue, not a scheduled automation. Bounded parallel subagents are explicitly authorised; code-changing agents work in their own worktree under `D:/Dev/worktrees/<slug>` on a `claude/` branch. Offline verification never substitutes for in-game proof: batch game-only questions into one prepared session for the maintainer to run.
+This is a durable queue, not a scheduled automation. Bounded parallel subagents are explicitly authorised; code-changing agents work in their own worktree under `%USERPROFILE%/xfs-worktrees/<slug>` on a `claude/` branch. Offline verification never substitutes for in-game proof: batch game-only questions into one prepared session for the maintainer to run.
