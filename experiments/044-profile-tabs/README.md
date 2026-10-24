@@ -1,6 +1,6 @@
 # Experiment 044: profile tabs and contributed defaults (profiles phase 2)
 
-**Status:** plan agreed, with the coordinator's decisions on M1–M3 (§6). P2-i (session operations and one history, §8), P2-ii (fragments, substitution, the modules' defaults and Save as default, §9) and P2-iii's per-view editing, kept makeup and drawn view (§10) are built on `claude/profiles-p2`; P2-iii-b (a 3D view panel per view, U7) and P2-iv to P2-vii are to come. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
+**Status:** plan agreed, with the coordinator's decisions on M1–M3 (§6). P2-i (session operations and one history, §8), P2-ii (fragments, substitution, the modules' defaults and Save as default, §9), P2-iii's per-view editing, kept makeup and drawn view (§10) and P2-iii-b's 3D view panel per view with the "not drawn" state (U7, §11) are built on `claude/profiles-p2`; P2-iv to P2-vii are to come. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `076a7a65`. Tests are in `projects/xf-studio/authoring/tests/`. Effort is in the design's units (agent-days).
 
@@ -322,7 +322,7 @@ Each new gate was checked against a deliberate fault: without the outbox's pendi
 
 ## 10. P2-iii as built
 
-On `claude/profiles-p2`, after P2-ii. Source paths as in §1. The chunk proved too big for one pass, so it is split as its brief allowed: this part is items 1, 3 and 4 of the brief (per-view editing, the warm look's makeup kept, the drawn view following the shown tab) with their gates; **P2-iii-b** is item 2, a 3D view panel per view with the "not drawn" state (U7), which is presentation work with its style-guide entry first, captures and the UI review. Until it lands there is still one 3D view panel, and it shows whichever view is drawn.
+On `claude/profiles-p2`, after P2-ii. Source paths as in §1. The chunk proved too big for one pass, so it is split as its brief allowed: this part is items 1, 3 and 4 of the brief (per-view editing, the warm look's makeup kept, the drawn view following the shown tab) with their gates; **P2-iii-b** is item 2, a 3D view panel per view with the "not drawn" state (U7), which is presentation work with its style-guide entry first, captures and the UI review. P2-iii-b is built (§11).
 
 **The drawn view follows the shown tab** (`drawnView`, `app/profiles/profile-window.ts`): the shown tab's most recently focused view, else its first, else none.
 
@@ -380,7 +380,7 @@ Each offline gate was checked against a deliberate fault: without holding the su
 - **Adoption needs no surface connected.** A look shown on the drawn scene itself (Presets) while its head is connected rasters afresh as before, because the connected surface would need every slot given again.
 - **The history refusal mechanism** existed only for the drawn-view rule, so it was removed rather than left without a user.
 
-**What P2-iii-b needs.**
+**What P2-iii-b needed** (built: §11).
 
 - **U7 first:** the style guide's "not drawn" state, extending *Setup card and head pane states* (`c-setup`) and *Viewport overlays* (`c-viewport`): the view's title, its V and look, and **Show here**; pressing in the pane or focusing it draws it.
 - **Panels per view:** the shell's `head` panel becomes one controller per view panel ID (`head` for the main view, `view.<id>` otherwise; `viewPanel`), made and withdrawn as the shown tab's views change. The catalogue must know `view.*` IDs so `restoreDockPreference` places them instead of keeping them as unknown. The device's canvas (`viewport.attach("head", slot)`) follows the drawn view's panel; the presentation needs the drawn view (a `viewport.snapshot()` field) and Show here dispatches focus to the view (`focus.view`), which the root already follows.
@@ -391,6 +391,63 @@ Each offline gate was checked against a deliberate fault: without holding the su
 - Switching a tab is `tabs.show`; the drawn view and the document follow by themselves (the root's session listener). The strip needs nothing else from the heads owner.
 - A tab whose scene has no V: `heads.show` hides the head on screen and rejects with "That view's V isn't known yet."; P2-vi's empty state takes it from there.
 - `checkClosable(tab)` has one argument now, and close and reset of the drawn view's tab are available.
+
+## 11. P2-iii-b as built
+
+On `claude/profiles-p2`, after P2-iii. Source paths as in §1. Item 2 of P2-iii's brief: a 3D view panel per view and the "not drawn" state (U7), with its style-guide entry written first.
+
+**U7 in the style guide** (`studio-ui/style-guide/components.ts`). *Setup card and head pane states* (`c-setup`) gains the not-drawn state as a specimen and in its What, When, Driven by and access rows: the view's title, what it shows (its V and look, named as History names them: "V · Valerie · Smoky"; "No look" when its scene shows none) and **Show here**; Show here, a press anywhere in the pane, moving keyboard focus into it, Enter or Space draws the view; a V not ready gets the usual progress in its own pane (a third specimen) while the view drawn before keeps its picture. The pane is named "3D view 2, not shown. Press Enter to show it here." *Viewport overlays* (`c-viewport`) says the overlays belong to the pane holding the picture. CSS: `.viewport-state[data-tone="idle"]` and `.viewport-panel[data-drawn="false"]` (`public/studio.css`): one column at most 40ch that can shrink, so a long title or V and look end in an ellipsis with a tooltip; hover only tints the stage.
+
+**A pane per view** (`studio-ui/panels/view-panels.ts`, `ViewPanels`). The shown tab's views (the graph snapshot's views of `focus.targets().tab`, each with the panel the graph names: `head` for the main view, `view.<id>` otherwise) each get one controller, made and withdrawn as they change, on every paint (`sync`).
+
+- **The catalogue knows them.** The shell's live catalogue replaces the composition's `head` entry with one entry per view panel of the shown tab, in graph order, with the 3D view's title, icon, context and home (the stage) (`viewPanelEntries`, `app.ts` `rebuildCatalogue`); the optional experiments' panels follow as before. So `restoreDockPreference` places a saved `view.<id>` where the arrangement keeps it instead of parking it as unknown, and a new view's panel opens as a tab beside the other 3D views (the factory home).
+- **A closed view's panel goes alone, leaving no place behind** (`DockView.removePanels(ids, { forget: true })`): no parked place and no last place, as view-graph-design.md §3.5 asks ("a view panel whose view no longer exists is dropped"). Its controller is disposed (its input-hint subscription ends: `ViewportInputHints.dispose`). A panel closed in the dock stays the view's (it is reopened from the Panels menu); only the view's closing withdraws it.
+- **The canvas follows the picture.** `viewport.snapshot().head` gains `drawn` (the view the window draws: the heads owner's `shownView()`) and `onCanvas` (the view whose picture the canvas holds: the shown head's `preview.view()`); the root sets them (`ViewportAttachment.setDrawn`) after each `heads.show`, when it settles, and whenever the shown head changes. The canvas goes to `onCanvas`'s pane (else `drawn`'s: the first load, or a preview not set up yet) through `viewport.attach("head", slot)`, once per move. While the drawn view's head is made ready, the view drawn before keeps the canvas and its picture (design §4.5) and the drawn view's pane shows the preparation's own progress (`preparationLine(…, "pane")`); the quiet "Next V: …" line on the picture is only for a change of that view's own V.
+- **Each pane** (`headPanel(rt, context, panel)`, `panels/viewports.ts`) finds its view in the graph by its panel ID and shows one of three states (`viewPaneState`): **canvas** (the picture with its chip, tools, hints and badge, or the head's loading, setup or error state, as before), **preparing**, or **not drawn** (`notDrawnState`). Only the canvas pane opens the view menu, takes F and Shift+F10, resizes the device, and holds the `head.view` guidance anchor and the setup card (`dockSetupCard`).
+- **Drawing a view is focus.** Show here, a press and Enter or Space call `focus.view(view)`; keyboard focus and a press already report it through the shell's focus report. The root follows the focus as P2-iii built it, so the panes hold no view state.
+- **Names.** `views.shows(view)` (the presentation port) names a view's V and look through its own panel's resolution and the history scope names. The Panels menu names a view's panel by its view ("3D view 1", "Side view").
+- A verification-only hook, `xfStudioAddView(title?)`, adds a view to the drawn view's tab sharing its scene, for the captures until New view has a control.
+
+**Gates.**
+
+| Gate | Test | Result |
+|---|---|---|
+| Panels follow the shown tab's views | `tests/view-panels-dom.test.ts` (light DOM, the real `DockView`, `restoreDockPreference` and shell catalogue) | A new view's panel is added beside the main view's in the stage group and the catalogue knows it; a second `sync` changes nothing; the main view closed: `head` withdrawn and disposed, `view.v2` kept |
+| Restored by the dock | same | A saved arrangement with `view.v2` in its own group restores it there (not parked); without the view in the catalogue the same arrangement parks it as unknown |
+| Closing a view's panel withdraws only that panel | same | v2 closed: the stage group goes from `head, view.v2, view.v3` to `head, view.v3`, no parked or last place for v2; a panel closed in the dock keeps its pane |
+| The canvas moves to the drawn view's panel | same | Drawn v2 while the main view keeps the picture: no move; at the takeover one move to `view.v2`; the canvas pane closed: back to `head`, never to v3 (not drawn) |
+| Show here, a press, Enter, Space draw the view | same (`notDrawnState`, `headPanel` with a fake runtime) | Each calls `focus.view` once; a stray key or any input while drawn does nothing; Show here on the side pane focuses `v2` |
+| A view not drawn shows U7, never the canvas | same | The not-drawn pane: `data-drawn="false"`, U7 shown with "V · Valerie · Smoky", the chip, tools, hints and badge hidden, named "3D view 2, not shown. Press Enter to show it here."; preparing: progress, no U7; after the takeover the roles swap and the guidance anchor moves |
+| The head's snapshot | `tests/viewport-attachment.test.ts` (1 new) | `drawn` and `onCanvas` in `snapshot().head`, published only when they change |
+| **GPU probe: moving the canvas** | `tests/webgl-scene-runtimes.test.ts`, page section 6e (synthetic heads, fresh headless Chrome, with and without KHR_parallel_shader_compile) | See below |
+| The S2 gate table | same | 27 of 27 tests pass; the table gains the canvas-move row, 11 of 11 rows pass |
+| In the app | `experiments/044-profile-tabs/capture-p2-3b.ts` (isolated `?verify=1` server, headless Chrome) | Two views: the drawn one holds `#device-head`, the other shows U7; Show here moves `#device-head` to the side view's pane and the main view's pane shows U7; no console errors (`run.json`) |
+
+**GPU probe** (24 October 2026; RTX 4070, ANGLE D3D11, headless Chrome; under the 5 GB guard, peak 1.9 GB). One runtime shown and another warm; the device's host element moved six times between two panes (240 × 180 and 200 × 150) as `rehost` moves it, the shown runtime resized to each:
+
+| | With KHR_parallel_shader_compile | Without it |
+|---|---|---|
+| Links and programs made per move | 0 and 0 on every move | the same |
+| Frames drawn after each move, at the pane's size | 1–2, drawn at 240 × 180 and 200 × 150 in turn | the same |
+| Context events; the warm runtime | none; still resident after every move | the same |
+| A warm switch after the moves | 33.2 ms to the first presented frame, 0 links, first frame 0 links and 0 programs | 33.1 ms, the same |
+| GPU objects once the section closed | as before it | the same |
+
+**Captures** (`generated/p2-3b/`, ignored; `index.md` lists them): the not-drawn state and a tab with two views (one drawn, one not), light and dark, a wide pair (two panes stacked, about 584 × 375 each) and a narrow pair (side by side, about 290 px wide each), the hovered not-drawn pane, the same pair after Show here, the whole workspace, and the style guide's `c-setup` and `c-viewport` at the same scheme for comparison. The isolated server has no game folder, so the drawn view shows the head pane's "needs your game folder" state rather than a V; the panes' states, layout and copy are what is under review, and the pane holding the picture is the same element either way.
+
+**Decisions and caveats.**
+
+- **Focus draws.** As the brief says, moving keyboard focus into a not-drawn pane draws it (the shell's focus report), so Enter and Space mostly matter for assistive technology that moves its own cursor without focus; Tab through two views draws each in turn. With one view drawn at a time that is the model the drawn view follows (§10); 4b's simultaneous views will make it moot.
+- **The canvas moves at the next paint** after the takeover (an animation frame), not inside the takeover's task; both land in the same frame as the new head's first draw in the cases seen, and the probe shows the move itself links and builds nothing. A frame of the new head in the old pane is possible if they ever fall in different frames.
+- **The V's name repeats "V"** for the default Vs ("V · Default feminine V · Preset 1"), because the line uses the history scope names so it reads as History and Undo read; a label rule for default Vs would fix both places at once.
+- **Undo of a closed view** brings its pane back at the 3D views' home, not its old place (the place was dropped with the view).
+- **No new actions**, so the spec-fields golden is unchanged.
+
+**What P2-iv needs.**
+
+- The tab switch loads the tab's arrangement (`DockView.load`) after the view panes are in line with the new tab's views: call `ViewPanels.sync()` (it rebuilds the catalogue's view entries) before restoring the arrangement, so `restoreDockPreference` knows the new tab's `view.<id>` panels, and pass the panes' specs with the rest. The panes of the tab left are withdrawn with `forget` only when their views close; a switch should withdraw them without dropping their places in their own tab's arrangement (`removePanels` without `forget`, or `load`, which keeps the trees as given).
+- The canvas follows by itself (`drawn`/`onCanvas` from the root); nothing else is needed from the heads owner.
+- An empty tab has no view panes and the canvas stays where it was, detached from the page with the withdrawn pane, until a view is drawn again.
 
 ## Related pages
 

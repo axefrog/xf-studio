@@ -37,6 +37,10 @@
  *    surface's makeup back, then the runtime is wanted). Each warm switch: the time from the switch to the first presented frame, the links
  *    and programs made, the raster requests, and the makeup composite's draws on the runtime shown (none: nothing is redrawn). Then the
  *    least recently shown runtime is evicted by a third: its look is held no more, and once everything closes the GPU objects are back.
+ * 6e. The canvas moved between panels (experiment 044 P2-iii-b): a 3D view's pane per view, and the one canvas in the pane holding the
+ *    picture, so a switch moves the device's host element to another pane of another size (as `ViewportAttachment.rehost` does), and the
+ *    shown runtime resizes to it. Each move: the links and programs made, the frames drawn, the size drawn at, context events, and whether
+ *    the warm runtime is still resident; then a warm switch after the moves (its first frame links nothing).
  * 7. A context lost while a cold V's programs link (after 6, since a lost context's objects are never deleted): its preparation starts
  *    again once the context is back, and the V is shown and draws.
  * 5. (After 4.) A lighting setup never drawn, asked of the shown V (profiles phase 4a-v-b): it is staged and prepared while the setup before
@@ -136,6 +140,9 @@ export type SceneRuntimesProbe = {
   lookSwitch: { cold: { adopted: boolean; ms: number }; switches: { look: string; adopted: boolean; ms: number; links: number; programs: number; rasters: number;
     compositeDraws: number; firstFrame: { links: number; programs: number } }[];
     evicted: string; evictedLookKept: boolean; before: Counts; after: Counts };
+  /** 6e: the canvas moved between two panes of different sizes while one runtime is shown and another is warm. */
+  canvasMove: { moves: { links: number; programs: number; frames: number; size: string; drawn: string; warm: boolean; contextEvents: number }[];
+    switchAfter: { links: number; programs: number; firstFrame: { links: number; programs: number }; ms: number }; before: Counts; after: Counts };
   /** What the context showed of programs with several outputs and targets with several colour attachments (none), and how much it saw. */
   singleOutput: { issues: string[]; fragments: number; attachments: number };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
@@ -160,7 +167,7 @@ export type SceneRuntimesProbe = {
 };
 const probe: SceneRuntimesProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
   staleMakeup: null as never, editorRemount: null as never,
-  cancel: null as never, setup: null as never, supersede: null as never, closeSubject: null as never, morph: null as never, lookSwitch: null as never, singleOutput: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
+  cancel: null as never, setup: null as never, supersede: null as never, closeSubject: null as never, morph: null as never, lookSwitch: null as never, canvasMove: null as never, singleOutput: null as never, contextLoss: null as never, recovery: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
 /** Every animation frame's time while `recording` is set (frames presented: the GPU process presents none while it builds shaders). */
@@ -880,6 +887,43 @@ try {
     showLook("A");
     await sleep(100);
     probe.lookSwitch = { cold, switches, evicted, evictedLookKept, before, after: counts() };
+  }
+
+  // 6e. The canvas moved between panels (see the header).
+  {
+    const before = counts();
+    residency = new SceneResidency<Want, SceneRuntime>(ports, { warm: 1 });
+    residency.subscribe(follow);
+    const scene = (id: string, subject: string): Want => ({ ...want(subject, "female", "a", "studio"), scene: id, key: `${id}|${subject}|female|studio` });
+    const warmScene = scene("s6", "v1"), shownScene = scene("s7", "v2");
+    await switchTo(warmScene); await settle();
+    await switchTo(shownScene); await settle();
+    // Two panes, as the dock lays two 3D views out; the host fills whichever holds it (the device's host is the slot's `.device-head`).
+    const home = element.parentElement!, style = element.style.cssText;
+    const panes = [[240, 180], [200, 150]].map(([w, h]) => { const pane = document.createElement("div"); pane.style.cssText = `position:relative;width:${w}px;height:${h}px`;
+      document.body.append(pane); return pane; });
+    element.style.cssText = "position:absolute;inset:0";
+    const moves: SceneRuntimesProbe["canvasMove"]["moves"] = [];
+    for (let i = 0; i < 6; i++) {
+      const shown = residency.shown()!, framesBefore = shown.frameTiming().frames, events = contextEvents.length;
+      const at = { links: calls.links, programs: counter.made().program };
+      panes[i % 2]!.append(element);
+      shown.resize(); shown.requestRender();
+      for (let f = 0; f < 60 && shown.frameTiming().frames === framesBefore; f++) await frame();
+      await frame(); await frame();
+      moves.push({ links: calls.links - at.links, programs: counter.made().program - at.programs, frames: shown.frameTiming().frames - framesBefore,
+        size: `${element.clientWidth}x${element.clientHeight}`, drawn: `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`,
+        warm: !!runtimeOf(warmScene.key) && runtimeOf(warmScene.key) !== shown, contextEvents: contextEvents.length - events });
+    }
+    // The warm runtime shown in the pane the canvas moved to: its first frame links nothing.
+    const switched = await measuredSwitch(warmScene);
+    await settle();
+    home.append(element); element.style.cssText = style;
+    for (const pane of panes) pane.remove();
+    residency.dispose();
+    await sleep(100);
+    probe.canvasMove = { moves, switchAfter: { links: switched.links, programs: switched.programs, firstFrame: switched.firstFrame, ms: switched.ms },
+      before, after: counts() };
   }
 
   // 7. The context lost while a cold V's programs link (the masculine head under more lights: never linked here), then restored.
