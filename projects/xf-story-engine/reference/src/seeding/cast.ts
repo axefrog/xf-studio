@@ -278,7 +278,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
   if (ident.status === 'fixed') {
     if (!ident.node) return fail(ident.reason ?? 'its identity is not known');
     const hdr = l2.k.store.header(ident.node)!;
-    if (!l2.k.schema.isKind(hdr.kind, role.kind)) return fail(`${ident.node} is not a ${role.kind}`);
+    if (!l2.k.schema.isCompatibleKind(hdr.kind, role.kind)) return fail(`${ident.node} is not a ${role.kind}`);
     const v = allMust(l2, inst, ident.node, must, t);
     if (v.v === 'maybe') return fail(v.missing ? `waiting for the role "${v.missing}"` : 'a requirement of the role cannot be read yet', { maybe: true });
     if (v.v === 'no') return fail('the fixed person does not meet the role\'s requirements');
@@ -298,7 +298,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
     candidates = out.items.map((x) => x.id);
     if (ident.status === 'prefer' && ident.node && !candidates.includes(ident.node)) {
       const hdr = l2.k.store.header(ident.node);
-      if (hdr && l2.k.schema.isKind(hdr.kind, role.kind) && allMust(l2, inst, ident.node, must, t).v === 'yes') candidates.push(ident.node);
+      if (hdr && l2.k.schema.isCompatibleKind(hdr.kind, role.kind) && allMust(l2, inst, ident.node, must, t).v === 'yes') candidates.push(ident.node);
     }
   }
   candidates = [...new Set(candidates)].sort();

@@ -1153,8 +1153,17 @@ decision before completing this branch.
 **180. S1 residents were not people to S2 or S3.** `xf:resident` extended `core:thing`, so its events could not start a
 human-centred pattern or satisfy a person overlay. Inheriting `core:person`'s slots would put `name` and `age` before
 `profile` and break their dependency order. `KindDef.classifiesAs` supplies nominal kind compatibility without inheriting
-slots; residents classify as `core:person`. Unknown targets and classification cycles fail validation. This is an S0/S1
-contract addition for explicit coordinator review. Existing slot order, generated values and frozen digests are unchanged.
+slots; residents classify as `core:person`. Classification is nominal only: `isKind`, `kindsOf`, selectors and generic
+kernel queries follow `extends` alone (S0 §2.2). `isCompatibleKind` follows both `extends` and `classifiesAs`, for S3's
+pattern/kind checks and S2's explicit fixed/preferred identities and overlays. Unknown targets and classification cycles
+fail validation. This is an S0/S1/S3 contract addition for explicit coordinator review.
+
+The original S3 implementation merged nominal classification into structural ancestry. In A1-01c it widened the open
+`core:person` casting query to residents, exhausted the 5,000,000-unit allowance and left `npc` unfilled (S2 §5.2);
+the latch then stayed empty despite correctly ordered divergence and tie transitions. Restoring `origin/main`'s
+`schema.ts` or `sim/world-schema.ts` independently restored the test; restoring `kernel.ts`, `retention.ts` or
+`seeding/layer2.ts` did not. The classification boundary now has a direct query regression; A1-01c is unchanged.
+Existing slot order, generated values and frozen digests are unchanged.
 
 **175. The chronological buffer is saved state.** S3 v0.3 §6.1 overrides §9.4's older claim that no emission is pending at
 a save, but §9.2 omits the buffer's fields. `Layer3State.buffer` copies events, pattern ids and versions; its events are

@@ -51,7 +51,7 @@ function applyOverlay(l2: Layer2, input: SeedInput, overlay: NonNullable<SowOpts
       continue;
     }
     const h = l2.k.store.header(o.identity);
-    if (!h || !l2.k.schema.isKind(h.kind, role.kind)) {
+    if (!h || !l2.k.schema.isCompatibleKind(h.kind, role.kind)) {
       findings.push({ code: 'overlay', level: 'error', engine: true, message: `The node the overlay names for "${key}" is not a ${role.kind}.` });
       continue;
     }

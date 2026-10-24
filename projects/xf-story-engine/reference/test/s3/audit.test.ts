@@ -6,6 +6,7 @@ import { world, complete, pattern } from './helpers.ts';
 import { coreDefs, mergeDefs } from '../../src/core-schema.ts';
 import { Schema } from '../../src/schema.ts';
 import { coreRegistry } from '../../src/registry.ts';
+import { quietSim } from '../sim/helpers.ts';
 
 test('S3 static audits pass the shipped source, data and a retained completed match', () => {
   const root = new URL('../../src/procedural/', import.meta.url),
@@ -68,15 +69,33 @@ test('classification gives residents person compatibility while preserving profi
   const defs = mergeDefs(coreDefs(), {
     dims: [],
     edgeTypes: [],
-    kinds: [{ id: 'fx:independent-person', extends: ['core:thing'], classifiesAs: ['core:person'], slots: [] }],
+    kinds: [
+      { id: 'fx:independent-person', extends: ['core:thing'], classifiesAs: ['core:person'], slots: [] },
+      { id: 'fx:inherited-person', extends: ['fx:independent-person'], slots: [] },
+      { id: 'fx:nominal-person', classifiesAs: ['fx:inherited-person'], slots: [] },
+    ],
   });
   const schema = Schema.load(defs, coreRegistry());
-  expect(schema.isKind('fx:independent-person', 'core:person')).toBe(true);
+  for (const kind of ['fx:independent-person', 'fx:inherited-person', 'fx:nominal-person']) {
+    expect(schema.isCompatibleKind(kind, 'core:person')).toBe(true);
+    expect(schema.isKind(kind, 'core:person')).toBe(false);
+    expect(schema.kindsOf('core:person')).not.toContain(kind);
+  }
+  expect(schema.isKind('fx:inherited-person', 'fx:independent-person')).toBe(true);
   expect(schema.kind('fx:independent-person').slots).toEqual([]);
   const cyclic = structuredClone(defs);
   cyclic.kinds.push({ id: 'fx:cycle', classifiesAs: ['fx:cycle'], slots: [] });
   expect(() => Schema.load(cyclic, coreRegistry())).toThrow('inheritance cycle');
 });
+
+test('generic person queries exclude residents that only classify as people', () => {
+  const sim = quietSim('nominal-query');
+  const resident = sim.people.residentAt(sim.w.districts[0]!.cellIds[0]!, 0);
+  const person = sim.k.mirrored('person', 'xf:person');
+  expect(sim.k.query({ find: 'core:person', scope: { nodes: [resident, person] }, at: sim.k.now, must: [], limit: 'all' }))
+    .toEqual({ status: 'ok', items: [{ id: person, score: 0 }] });
+});
+
 test('invalid schedule data and deferred director features are refused at attachment', () => {
   const data = defaultData();
   data.sower.maxLevel = 'arc';
