@@ -1,0 +1,2 @@
+# The frozen table artifacts are hashed byte for byte (S1 1.2): LF line ends on every platform.
+*.txt text eol=lf

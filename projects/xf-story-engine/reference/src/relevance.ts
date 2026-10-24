@@ -195,6 +195,49 @@ export class Dispatcher {
     return 1 + ctx.allowance.used;
   }
 
+  /**
+   * The greatest relevance a change has against an actor's eligible frames, as a read (S0 10.5, V4-44). It scans the interests
+   * that reach the actor's frames, optionally those of some types only, and takes `r = pullVia * m * s` as dispatch does, without
+   * the emission threshold: 0 when nothing matches. It writes nothing, queues nothing and does not wait for the frame worklist.
+   */
+  matchStrength(actor: Id, change: Change, types?: readonly InterestType[], time: GameTime = this.k.now): number {
+    const k = this.k;
+    const fr = k.frames;
+    const mine = new Set(fr.all().filter((f) => f.actor === actor && fr.eligible(f)).map((f) => f.id));
+    if (mine.size === 0) return 0;
+    const { bindings, wild } = bindingsOf(change);
+    const own = ownValueOf(change);
+    const includeEdge = change.c === 'edge' && change.ended ? change.edge : undefined;
+    const ctx = newOpCtx(k.config.allowance);
+    let best = 0;
+    for (const e of fr.scanList()) {
+      if (types && !types.includes(e.type)) continue;
+      const targets = fr.deliveryTargets(e.frame).filter((d) => mine.has(d));
+      if (targets.length === 0) continue;
+      let bestS = -1;
+      try {
+        for (const b of bindings) {
+          const env = k.resolver.makeEnv(ctx, time, undefined, b, own);
+          if (includeEdge) env.includeEdge = includeEdge;
+          if (selectorMatches(env, e.selector, b.node, b.slot ?? NO_SLOT)) bestS = Math.max(bestS, this.specificity(e.selector, b.node, env));
+        }
+        if (wild && this.overlaps(e.selector, wild.contribution.target)) {
+          bestS = Math.max(bestS, this.specificity(e.selector, null, k.resolver.makeEnv(ctx, time)));
+        }
+      } catch (err) {
+        if (!(err instanceof LimitExceeded)) throw err;
+        k.defects.record({ kind: 'limit', detail: `matching an interest: ${err.message}` });
+      }
+      if (bestS < 0) continue;
+      const m = k.config.matchWeight[e.type];
+      // the pull of a frame through one source is not the pull through another: the memo is per source, as in `examine`
+      const memo = new Map<Id, number>();
+      const full = new Map<Id, number>();
+      for (const d of targets) best = Math.max(best, fr.pullVia(d, e.frame, memo, full) * m * bestS);
+    }
+    return best;
+  }
+
   private finish(a: Active): void {
     const fr = this.k.frames;
     const typeIdx = (t: InterestType): number => INTEREST_TYPES.indexOf(t);

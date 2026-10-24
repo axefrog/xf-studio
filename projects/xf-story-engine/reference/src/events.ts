@@ -27,6 +27,8 @@ export interface EventSpec {
 }
 
 export type EventField = 'time' | 'place' | 'kind' | 'participants' | 'effects' | 'witnesses' | 'causes' | 'outcome' | 'served';
+/** An opened summary item's descriptor belongs to its summary; its other fields belong to the opening process. */
+export interface EventProvenance { descriptor: Id; materialisation: Id }
 /** The fields every event has (spec 9.2). `outcome` and `served` are optional and joined in only when the event carries them. */
 export const EVENT_FIELDS: readonly EventField[] = ['time', 'place', 'kind', 'participants', 'effects', 'witnesses', 'causes'];
 
@@ -44,6 +46,19 @@ export interface EventCanonRecord {
 
 export class Events {
   private canonRecords = new Map<Id, CanonEntry[]>();
+  /** Summary items published as events in this session (V4-47). Not persisted: the publishing layer keeps its own record. */
+  readonly published = new Set<Id>();
+  /** The kind and time each event was minted with: a cache for queries to reject a candidate before resolving it. Not persisted. */
+  private minted = new Map<Id, { kind: string; time: number; local: number }>();
+
+  /**
+   * The kind and time an event was minted with, while nothing local has touched it since: a pin or a contribution that names the event
+   * may restate either, and then the resolved value is the one a query must test (S0 8.3).
+   */
+  mintedFacts(id: Id): { kind: string; time: number } | undefined {
+    const f = this.minted.get(id);
+    return f !== undefined && this.k.store.localState(id) === f.local ? f : undefined;
+  }
 
   constructor(private readonly k: Kernel) {}
 
@@ -53,23 +68,106 @@ export class Events {
    * Minting the same (creator, cause, name) again returns the same node and does nothing.
    */
   mintEvent(spec: EventSpec): Id {
+    return this.put(spec, false);
+  }
+
+  /**
+   * Put an event's fields back under its own Id and announce nothing (S0 14.3, SPEC-NOTES 116, 140): the occurrence was announced when it
+   * first happened. A load keeps the header of an event that a memorable belief cites, and none of its fields; a layer that can say what
+   * the event was restores it here, whether or not the header survived. An event whose fields are already there is left alone.
+   */
+  restoreEvent(spec: EventSpec, provenance?: EventProvenance): Id {
+    return this.put(spec, true, provenance);
+  }
+
+  /**
+   * The fields a minted event carries, read from the contributions that hold them (the simulation-layer constants whose origin is the event
+   * itself), not from what the event resolves to now: a pin or a rule that restates a field for a while changes what it resolves to and not
+   * what it was minted with. Undefined for a node that is not a minted event, or whose own fields are not there (a load drops them).
+   */
+  mintedSpec(id: Id, item?: { descriptor: Pick<EventSpec, 'time' | 'kind' | 'place'>; provenance: EventProvenance }): EventSpec | undefined {
+    const k = this.k;
+    const h = k.store.header(id);
+    if (!h || h.origin.by !== 'minted' || !k.schema.isKind(h.kind, 'core:event')) return undefined;
+    const own = (node: Id, slot: SlotPath): Value | undefined => {
+      for (const c of k.store.contributionsNaming(node)) {
+        if (c.source.layer === 'simulation' && c.source.origin === (item?.provenance.materialisation ?? id) && c.target.slot === slot && c.form.f === 'const') return c.form.value;
+      }
+      return undefined;
+    };
+    const time = item?.descriptor.time ?? own(id, 'time');
+    const kind = item?.descriptor.kind ?? own(id, 'kind');
+    if (typeof time !== 'number' || typeof kind !== 'string') return undefined;
+    const count = (slot: SlotPath): number | undefined => {
+      const c = own(id, slot);
+      return typeof c === 'number' ? c : undefined;
+    };
+    const np = count('participants#count');
+    const ne = count('effects#count');
+    const nw = count('witnesses#count');
+    const nc = count('causes#count');
+    if (np === undefined || ne === undefined || nw === undefined || nc === undefined) return undefined;
+    const spec: EventSpec = { creator: h.origin.creator, cause: h.origin.cause, name: h.origin.name, time, kind, participants: [], effects: [], witnesses: [], causes: [] };
+    const place = item ? item.descriptor.place : own(id, 'place');
+    if (typeof place === 'string') spec.place = place;
+    for (let i = 0; i < np; i++) {
+      const m = k.address(id, `participants[${i}]`);
+      const who = own(m, 'who');
+      const role = own(m, 'role');
+      if (typeof who !== 'string' || typeof role !== 'string') return undefined;
+      spec.participants!.push({ who, role });
+    }
+    for (let i = 0; i < ne; i++) {
+      const m = k.address(id, `effects[${i}]`);
+      const on = own(m, 'on');
+      const effect = own(m, 'effect');
+      if (typeof on !== 'string' || typeof effect !== 'string') return undefined;
+      spec.effects!.push({ on, effect: effect as Effect });
+    }
+    for (let i = 0; i < nw; i++) {
+      const w = own(id, `witnesses[${i}]`);
+      if (typeof w !== 'string') return undefined;
+      spec.witnesses!.push(w);
+    }
+    for (let i = 0; i < nc; i++) {
+      const c = own(id, `causes[${i}]`);
+      if (typeof c !== 'string') return undefined;
+      spec.causes!.push(c);
+    }
+    const outcome = own(id, 'outcome');
+    if (outcome === 'done' || outcome === 'failed' || outcome === 'prevented') spec.outcome = outcome;
+    const served = own(id, 'served');
+    if (typeof served === 'string') spec.served = served;
+    return spec;
+  }
+
+  private put(spec: EventSpec, quiet: boolean, provenance?: EventProvenance): Id {
     const k = this.k;
     k.assertWritable();
     const nid = H(hs('mint'), hid(spec.creator), hid(spec.cause), hs(spec.name));
-    if (k.store.header(nid)) return nid;
-    k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
+    // A retained header with no fields is an event a load kept as an addressable Id (it is evidence of a memorable belief): its fields
+    // are regenerated by minting it again, silently, because the occurrence was announced when it first happened.
+    const have = k.store.header(nid) !== undefined;
+    if (have && k.store.contributionsNaming(nid).some((c) => c.source.layer === 'simulation' && c.source.origin === (provenance?.materialisation ?? nid))) return nid;
+    if (!have) k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
+    // a pin that survived a load may already restate the kind or the time: then what the event was minted with is not what it resolves to, and nothing is cached
+    const untouched = k.store.localState(nid) === 0;
     const put = (node: Id, slot: SlotPath, value: Value): void => {
       k.contribute({
-        source: { layer: 'simulation', origin: nid },
+        source: { layer: 'simulation', origin: provenance?.materialisation ?? nid },
         target: { slot, scope: { nodes: [node] } },
         form: { f: 'const', value },
         mode: 'constrain',
         silent: true,
       });
     };
-    put(nid, 'time', spec.time);
-    put(nid, 'kind', spec.kind);
-    if (spec.place !== undefined) put(nid, 'place', spec.place);
+    // Summary items keep their live descriptor dependency through Summaries.itemConstraint.
+    // Only their materialisation is restored here; constants would override a later summary edit.
+    if (!provenance) {
+      put(nid, 'time', spec.time);
+      put(nid, 'kind', spec.kind);
+      if (spec.place !== undefined) put(nid, 'place', spec.place);
+    }
     const participants = spec.participants ?? [];
     put(nid, 'participants#count', participants.length);
     participants.forEach((p, i) => {
@@ -92,18 +190,66 @@ export class Events {
     causes.forEach((c, i) => put(nid, `causes[${i}]`, c));
     if (spec.outcome !== undefined) put(nid, 'outcome', spec.outcome);
     if (spec.served !== undefined) put(nid, 'served', spec.served);
-    if (spec.place !== undefined && k.store.header(spec.place)) {
+    if (!provenance && spec.place !== undefined && k.store.header(spec.place)) {
       k.addEdge({ type: 'core:located-in', from: nid, to: spec.place, cause: nid, valid: { from: spec.time }, silent: true });
     }
+    if (untouched && !provenance) this.minted.set(nid, { kind: spec.kind, time: spec.time, local: k.store.localState(nid) });
+    else this.minted.delete(nid);
     k.bump();
+    if (have || quiet) return nid;
     const ch: Parameters<Kernel['emit']>[0] = {
       c: 'event', event: nid, kind: spec.kind,
       participants: participants.map((p) => ({ who: p.who, role: p.role })),
       effects: effects.map((e) => ({ on: e.on, effect: e.effect })),
     };
     if (spec.place !== undefined) ch.place = spec.place;
-    k.emit(ch);
+    k.emit(ch, spec.time);
     return nid;
+  }
+
+  /**
+   * Publish a materialised summary item once, as one `event` change (S0 9.3, V4-47). An opened item carries its fields as
+   * silent contributions; this is the one semantic announcement of it, so a reader that hears events hears the item. A second
+   * call for the same item in a session does nothing (the layer that publishes keeps its own persisted record, which is what
+   * makes a reload quiet), and regeneration never calls it. Returns whether a change was emitted.
+   */
+  publishItem(item: Id): boolean {
+    const k = this.k;
+    k.assertWritable();
+    const h = k.store.header(item);
+    if (!h || h.origin.by !== 'minted' || h.origin.creator !== h.origin.cause || !/^item:\d+$/.test(h.origin.name)) {
+      throw new Error(`not a summary item: ${item}`);
+    }
+    if (this.published.has(item)) return false;
+    const t = k.now;
+    const kind = k.value(item, 'kind', t);
+    const time = k.value(item, 'time', t);
+    if (typeof kind !== 'string' || typeof time !== 'number') throw new Error(`the item has no kind or time yet: ${item}`);
+    const place = k.value(item, 'place', t);
+    const count = (key: 'participants' | 'effects'): number => {
+      const c = k.value(item, `${key}#count`, t);
+      return typeof c === 'number' ? c : 0;
+    };
+    const participants: Array<{ who: Id; role: string }> = [];
+    for (let n = 0; n < count('participants'); n++) {
+      const m = k.address(item, `participants[${n}]`);
+      const who = k.value(m, 'who', t);
+      const role = k.value(m, 'role', t);
+      if (typeof who === 'string' && typeof role === 'string') participants.push({ who, role });
+    }
+    const effects: Array<{ on: Id; effect: Effect }> = [];
+    for (let n = 0; n < count('effects'); n++) {
+      const m = k.address(item, `effects[${n}]`);
+      const on = k.value(m, 'on', t);
+      const effect = k.value(m, 'effect', t);
+      if (typeof on === 'string' && typeof effect === 'string') effects.push({ on, effect: effect as Effect });
+    }
+    this.published.add(item);
+    k.bump();
+    const ch: Parameters<Kernel['emit']>[0] = { c: 'event', event: item, kind, participants, effects };
+    if (typeof place === 'string') ch.place = place;
+    k.emit(ch, time);
+    return true;
   }
 
   // ---- canon ----
@@ -206,16 +352,25 @@ export class Events {
     this.canonRecords.set(rec.event, rec.entries.map((x) => ({ ...x, fields: [...x.fields], pins: [...x.pins] })));
   }
 
+  /** A replacement load: the canon records go, and so do this session's publications and the minting cache (S0 14.3). */
   clear(): void {
     this.canonRecords.clear();
+    this.minted.clear();
+    this.published.clear();
   }
 
+  /** The state a staged batch can discard (S0 14.2a): the canon records and what has been published in this session. */
   capture(): unknown {
-    return structuredClone(this.canonRecords);
+    return structuredClone({ canon: this.canonRecords, published: this.published });
   }
 
   restoreFrom(cap: unknown): void {
-    this.canonRecords = structuredClone(cap) as Map<Id, CanonEntry[]>;
+    const c = structuredClone(cap) as { canon: Map<Id, CanonEntry[]>; published: Set<Id> };
+    this.canonRecords = c.canon;
+    this.published.clear();
+    for (const id of c.published) this.published.add(id);
+    // events minted in the discarded stage are gone from the store: the cache of what they were minted with goes too
+    this.minted.clear();
   }
 
   /** Known events whose `time` resolves to exactly `t` (used by `knows`, SPEC-NOTES 21). */

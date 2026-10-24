@@ -26,11 +26,18 @@ export class Store {
 
   private readonly pinsById = new Map<Id, Pin>();
   private readonly pinIndex = new Map<string, Id[]>();
+  /** node to the Ids of the pins on any of its slots, withdrawn or not (a lookup for layers that cache a node's derived values). */
+  private readonly pinsByNode = new Map<Id, Id[]>();
   readonly withdrawn = new Map<Id, Withdrawal>();
 
   private readonly contribs = new Map<Id, Contribution>();
   private readonly contribByNode = new Map<Id, Id[]>();
   private readonly contribGeneral: Id[] = [];
+  /**
+   * The general contributions by the slot they name, each with its place in `contribGeneral`: a resolution looks at the ones that can name
+   * its slot, in the order the list holds them, not at every rule of the pack. Derived, and rebuilt when the list changes.
+   */
+  private generalIdx: { bySlot: Map<string, Array<{ pos: number; c: Contribution }>>; wild: Array<{ pos: number; c: Contribution }> } | null = null;
 
   readonly edges = new Map<Id, Edge>();
   private readonly edgesFromIdx = new Map<Id, Id[]>();
@@ -40,7 +47,7 @@ export class Store {
   capture(): unknown {
     return structuredClone({
       headers: this.headers, nodes: this.nodes, headersByKind: this.headersByKind, ownedBy: this.ownedBy, membersOf: this.membersOf,
-      pinsById: this.pinsById, pinIndex: this.pinIndex, withdrawn: this.withdrawn, contribs: this.contribs,
+      pinsById: this.pinsById, pinIndex: this.pinIndex, pinsByNode: this.pinsByNode, withdrawn: this.withdrawn, contribs: this.contribs,
       contribByNode: this.contribByNode, contribGeneral: this.contribGeneral, edges: this.edges,
       edgesFromIdx: this.edgesFromIdx, edgesToIdx: this.edgesToIdx,
     });
@@ -61,11 +68,13 @@ export class Store {
     swap(this.membersOf, c.membersOf);
     swap(this.pinsById, c.pinsById);
     swap(this.pinIndex, c.pinIndex);
+    swap(this.pinsByNode, c.pinsByNode);
     swap(this.withdrawn, c.withdrawn);
     swap(this.contribs, c.contribs);
     swap(this.contribByNode, c.contribByNode);
     this.contribGeneral.length = 0;
     this.contribGeneral.push(...(c.contribGeneral as Id[]));
+    this.generalIdx = null;
     swap(this.edges, c.edges);
     swap(this.edgesFromIdx, c.edgesFromIdx);
     swap(this.edgesToIdx, c.edgesToIdx);
@@ -80,10 +89,12 @@ export class Store {
     this.membersOf.clear();
     this.pinsById.clear();
     this.pinIndex.clear();
+    this.pinsByNode.clear();
     this.withdrawn.clear();
     this.contribs.clear();
     this.contribByNode.clear();
     this.contribGeneral.length = 0;
+    this.generalIdx = null;
     this.edges.clear();
     this.edgesFromIdx.clear();
     this.edgesToIdx.clear();
@@ -163,7 +174,73 @@ export class Store {
     let list = this.pinIndex.get(k);
     if (!list) this.pinIndex.set(k, (list = []));
     list.push(p.id);
+    let byNode = this.pinsByNode.get(p.node);
+    if (!byNode) this.pinsByNode.set(p.node, (byNode = []));
+    byNode.push(p.id);
     return true;
+  }
+
+  /** The pins on any slot of a node, in insertion order, withdrawn or not. */
+  pinsOfNode(node: Id): Pin[] {
+    return (this.pinsByNode.get(node) ?? []).map((i) => this.pinsById.get(i)!);
+  }
+
+  /**
+   * A number that moves when a pin or a contribution naming the node is added, removed or withdrawn, or a contribution is ended (a
+   * withdrawn pin and an ended contribution count twice): zero means nothing local narrows what the pack and the seed give it. A cache
+   * of something derived from the node is good while it holds still, and, when it is not zero, only at the time it was made (a
+   * contribution's validity is a window).
+   */
+  localState(node: Id): number {
+    const pins = this.pinsByNode.get(node);
+    const contribs = this.contribByNode.get(node);
+    let n = 0;
+    if (pins) {
+      n += pins.length;
+      for (const id of pins) if (this.withdrawn.has(id)) n++;
+    }
+    if (contribs) {
+      n += contribs.length;
+      for (const id of contribs) if (this.contribs.get(id)?.valid.to !== undefined) n++;
+    }
+    return n;
+  }
+
+  /** The contributions that name the node, in the order they were added. */
+  contributionsNaming(node: Id): Contribution[] {
+    const out: Contribution[] = [];
+    for (const i of this.contribByNode.get(node) ?? []) {
+      const c = this.contribs.get(i);
+      if (c) out.push(c);
+    }
+    return out;
+  }
+
+  /** How many contributions name the node. */
+  namedContributions(node: Id): number {
+    return this.contribByNode.get(node)?.length ?? 0;
+  }
+
+  /**
+   * The contributions that name no node (a rule over a kind, a region or everything), in Id order. What a layer caches of a node's
+   * resolved values depends on these as well as on the pins and contributions that name the node (SIM-05).
+   */
+  generalContributions(): Contribution[] {
+    const out: Contribution[] = [];
+    for (const i of this.contribGeneral) {
+      const c = this.contribs.get(i);
+      if (c) out.push(c);
+    }
+    return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+
+  /** Whether a contribution that names no node (a rule over a kind, or over everything) could touch one of these slots. */
+  generalTouches(slots: readonly string[]): boolean {
+    for (const i of this.contribGeneral) {
+      const c = this.contribs.get(i);
+      if (c && (c.target.slot === '*' || slots.includes(c.target.slot))) return true;
+    }
+    return false;
   }
 
   pin(id: Id): Pin | undefined {
@@ -209,6 +286,12 @@ export class Store {
       if (at >= 0) list.splice(at, 1);
       if (list.length === 0) this.pinIndex.delete(k);
     }
+    const byNode = this.pinsByNode.get(p.node);
+    if (byNode) {
+      const at = byNode.indexOf(id);
+      if (at >= 0) byNode.splice(at, 1);
+      if (byNode.length === 0) this.pinsByNode.delete(p.node);
+    }
   }
 
   /**
@@ -252,7 +335,10 @@ export class Store {
         if (!list) this.contribByNode.set(n, (list = []));
         list.push(c.id);
       }
-    } else this.contribGeneral.push(c.id);
+    } else {
+      this.contribGeneral.push(c.id);
+      this.generalIdx = null;
+    }
     return true;
   }
 
@@ -271,15 +357,40 @@ export class Store {
       if (at >= 0) list.splice(at, 1);
     };
     if (named) for (const n of named) drop(this.contribByNode.get(n));
-    else drop(this.contribGeneral);
+    else {
+      drop(this.contribGeneral);
+      this.generalIdx = null;
+    }
   }
 
   allContributions(): Contribution[] {
     return [...this.contribs.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
-  /** Contributions that may apply to a node: those naming it, and those with no named nodes. Unsorted, deduplicated. */
-  contributionCandidates(node: Id, extraNamed: Id[] = []): Contribution[] {
+  private generalIndex(): NonNullable<Store['generalIdx']> {
+    if (this.generalIdx) return this.generalIdx;
+    const bySlot = new Map<string, Array<{ pos: number; c: Contribution }>>();
+    const wild: Array<{ pos: number; c: Contribution }> = [];
+    this.contribGeneral.forEach((i, pos) => {
+      const c = this.contribs.get(i);
+      if (!c) return;
+      const slot = c.target.slot;
+      if (slot === '*' || slot.endsWith('[*]')) wild.push({ pos, c });
+      else {
+        const list = bySlot.get(slot);
+        if (list) list.push({ pos, c });
+        else bySlot.set(slot, [{ pos, c }]);
+      }
+    });
+    return (this.generalIdx = { bySlot, wild });
+  }
+
+  /**
+   * Contributions that may apply to a node: those naming it, and those with no named nodes. Deduplicated. With the slot being resolved,
+   * the general ones are only those that can name it (its own name, its name without a window, or a wildcard), in the order the list
+   * holds them; the selector still decides.
+   */
+  contributionCandidates(node: Id, extraNamed: Id[] = [], slot?: string): Contribution[] {
     const seen = new Set<Id>();
     const out: Contribution[] = [];
     const take = (ids: Id[] | undefined) => {
@@ -292,7 +403,17 @@ export class Store {
     };
     take(this.contribByNode.get(node));
     for (const e of extraNamed) take(this.contribByNode.get(e));
-    take(this.contribGeneral);
+    if (slot === undefined) take(this.contribGeneral);
+    else {
+      const idx = this.generalIndex();
+      const base = slot.includes('@w') ? slot.replace(/@w-?\d+$/, '') : slot;
+      const lists = [idx.bySlot.get(slot), base !== slot ? idx.bySlot.get(base) : undefined, idx.wild].filter((l): l is Array<{ pos: number; c: Contribution }> => l !== undefined && l.length > 0);
+      if (lists.length === 1) {
+        for (const e of lists[0]!) out.push(e.c);
+      } else if (lists.length > 1) {
+        for (const e of lists.flat().sort((a, b) => a.pos - b.pos)) out.push(e.c);
+      }
+    }
     return out;
   }
 
@@ -334,6 +455,11 @@ export class Store {
 
   edgesTo(node: Id): Edge[] {
     return (this.edgesToIdx.get(node) ?? []).map((i) => this.edges.get(i)!);
+  }
+
+  /** Every edge, in no order: for a walk that builds a set. */
+  edgeValues(): IterableIterator<Edge> {
+    return this.edges.values();
   }
 
   allEdges(): Edge[] {

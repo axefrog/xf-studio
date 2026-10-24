@@ -13,14 +13,17 @@ export function createSurfaceOcclusion(mesh:THREE.Mesh) {
   const identities=new WeakMap<object,number>();let nextIdentity=0;
   const identity=(value:object)=>{let id=identities.get(value);if(id===undefined){id=++nextIdentity;identities.set(value,id);}return id;};
   const read=(id:number,target:THREE.Vector3)=>target.fromArray(positions,id*3);
+  // Each triangle's centre at the last topology change, as plain numbers (the build sorts by them: a typed lookup, not a map, so a head's
+  // tree is built within a frame's share of the page's thread; profiles phase 4a-v-b). The same arithmetic, so the same tree.
+  let centres=new Float64Array();
   function build(ids:number[]):Node {
     const node:Node={box:new THREE.Box3()};
     if(ids.length<=12){node.triangles=ids;return node;}
-    const bounds=new THREE.Box3(),centres=new Map<number,THREE.Vector3>();
-    for(const id of ids){const t=triangles[id],center=read(t.a,a).clone().add(read(t.b,b)).add(read(t.c,c)).divideScalar(3);
-      centres.set(id,center);bounds.expandByPoint(center);}
-    const size=bounds.getSize(new THREE.Vector3()),axis=size.x>=size.y&&size.x>=size.z?"x":size.y>=size.z?"y":"z";
-    ids.sort((x,y)=>centres.get(x)![axis]-centres.get(y)![axis]||x-y);
+    let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+    for(const id of ids){const x=centres[id*3]!,y=centres[id*3+1]!,z=centres[id*3+2]!;
+      if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;if(z<minZ)minZ=z;if(z>maxZ)maxZ=z;}
+    const sx=maxX-minX,sy=maxY-minY,sz=maxZ-minZ,axis=sx>=sy&&sx>=sz?0:sy>=sz?1:2;
+    ids.sort((x,y)=>centres[x*3+axis]!-centres[y*3+axis]!||x-y);
     const split=Math.floor(ids.length/2);node.left=build(ids.slice(0,split));node.right=build(ids.slice(split));return node;
   }
   function refit(node:Node) {
@@ -60,6 +63,10 @@ export function createSurfaceOcclusion(mesh:THREE.Mesh) {
       const ranges=Array.isArray(mesh.material)?g.groups:[{start:0,count,materialIndex:0}];
       for(const range of ranges)for(let i=Math.max(start,range.start),stop=Math.min(end,range.start+range.count);i+2<stop;i+=3)
         triangles.push({a:index?index.getX(i):i,b:index?index.getX(i+1):i+1,c:index?index.getX(i+2):i+2,material:range.materialIndex??0});
+      centres=new Float64Array(triangles.length*3);
+      triangles.forEach((t,i)=>{read(t.a,a);read(t.b,b);read(t.c,c);
+        // Vector3.divideScalar multiplies by the reciprocal: the same here, so every centre (and the sort) is bit for bit as before.
+        centres[i*3]=(a.x+b.x+c.x)*(1/3);centres[i*3+1]=(a.y+b.y+c.y)*(1/3);centres[i*3+2]=(a.z+b.z+c.z)*(1/3);});
       root=triangles.length?build(triangles.map((_,i)=>i)):undefined;
     }
     if(root)refit(root);refits++;
@@ -85,6 +92,9 @@ export function createSurfaceOcclusion(mesh:THREE.Mesh) {
     }
     return false;
   }
-  return {occluded,diagnostics:()=>({refits,sampledVertices,queries,triangleTests,triangles:triangles.length,
+  return {occluded,
+    /** Sample the pose and build (or refit) the tree now, ahead of the first query (a head prepared before it is shown). */
+    warm:refresh,
+    diagnostics:()=>({refits,sampledVertices,queries,triangleTests,triangles:triangles.length,
     cachedPositionBytes:positions.byteLength})};
 }

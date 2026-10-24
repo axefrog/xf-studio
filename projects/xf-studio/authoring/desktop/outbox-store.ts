@@ -73,7 +73,8 @@ export async function desktopOutboxRequest(request: Request, store: DesktopOutbo
     if (refused) return refused;
     store.save(verification, body.key, body.text);
     return new Response(null, { status: 204 });
-  } catch {
-    return Response.json({ error: "The outbox key wasn't stored." }, { status: 422 });
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    return Response.json({ error: "The outbox key wasn't stored.", ...(code === "ENOSPC" || code === "EDQUOT" ? { code } : {}) }, { status: 422 });
   }
 }

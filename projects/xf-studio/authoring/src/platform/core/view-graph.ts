@@ -282,24 +282,44 @@ export class ViewGraph {
   /**
    * A camera jump (Front view, Whole body, a creator framing, a restored camera): the device has already moved the camera
    * (`applied`), so this records the step and leaves the position it jumped from on the camera's Back trail. A jump that left the
-   * camera where it was records nothing and leaves no trail entry.
+   * camera where it was records nothing and leaves no trail entry. `applied: false`: no device moved (a restore naming a view no device
+   * frames edits its node only), so every device that draws through the camera applies it.
    */
-  cameraJump(view: ViewId, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>, label: string): void {
+  cameraJump(view: ViewId, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>, label: string,
+    options: { applied?: boolean } = {}): void {
+    const applied = options.applied ?? true;
     const camera = this.nodes.get(this.record(view).camera)!;
     const from = nodeEntry(this.rules, "camera", camera.id, camera.kind, { ...camera.state, ...before });
     const to = nodeEntry(this.rules, "camera", camera.id, camera.kind, { ...camera.state, ...after });
     if (!from || !to) throw new ViewGraphError("invalid_value", "That camera position isn't valid.");
     // Where the camera really was (navigation records nothing, so the node may lag the device): the step undoes to it.
     this.nodes.set(camera.id, from);
-    if (same(from.state, to.state)) { this.emit([camera.id], false, "edit", true); return; }
+    if (same(from.state, to.state)) { this.emit([camera.id], false, "edit", applied); return; }
     const trail = this.trail(camera.id);
     trail.back.push(clone(from.state)); trail.forward = [];
     if (trail.back.length > CAMERA_TRAIL_LIMIT) trail.back.shift();
-    this.commit([to], undefined, { label, applied: true });
+    this.commit([to], undefined, { label, applied });
   }
-  /** Camera navigation the device did (orbit, zoom, pan, a lens change): kept as the node's state, never recorded (§3.6). */
-  cameraMoved(view: ViewId, pose: Readonly<Record<string, unknown>>): void {
-    this.edit(view, "camera", { state: pose }, { applied: true });
+  /**
+   * Device state read for a save in progress (an idle's phase, which moves without any change): only the slot codec's `unrecorded` fields,
+   * validated, kept as the node's state without recording or publishing anything. No device has to apply it, and the save that read it is
+   * already being written, so publishing would only ask for another save. Returns whether anything changed.
+   */
+  sample(view: ViewId, slot: ViewSlot, state: Readonly<Record<string, unknown>>): boolean {
+    const current = this.nodes.get(this.record(view)[slot])!, fields = this.rules.codecs[slot].unrecorded ?? [];
+    if (Object.keys(state).some(key => !fields.includes(key))) throw new ViewGraphError("invalid_value", "Only live device state can be sampled.");
+    const next = nodeEntry(this.rules, slot, current.id, current.kind, { ...current.state, ...state });
+    if (!next) throw new ViewGraphError("invalid_value", "That setting isn't valid for this view.");
+    if (same(next.state, current.state)) return false;
+    this.nodes.set(current.id, next);
+    return true;
+  }
+  /**
+   * Camera navigation the device did (orbit, zoom, pan, a lens change): kept as the node's state, never recorded (§3.6). `applied: false`:
+   * no device moved (an orbit step naming a view no device frames), so every device that draws through the camera applies it.
+   */
+  cameraMoved(view: ViewId, pose: Readonly<Record<string, unknown>>, options: { applied?: boolean } = {}): void {
+    this.edit(view, "camera", { state: pose }, { applied: options.applied ?? true });
   }
   /** How far the view's camera can go Back and Forward along its trail. */
   cameraTrail(view: ViewId) {
@@ -411,12 +431,20 @@ export class ViewGraph {
     for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) nodes.set(id, value); else nodes.delete(id); }
     if (!this.consistent(views, nodes)) { this.emit([], false, "history", false); return false; }
     if (structure) this.views = clone(structure.views);
-    for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) this.nodes.set(id, clone(value)); else this.nodes.delete(id); }
+    for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) this.nodes.set(id, this.keepUnrecorded(value)); else this.nodes.delete(id); }
     const touched = [...ids];
     this.collect(touched);
     // Published once the scope has settled (`publishHistory`), so subscribers read the history as it stands (Redo included).
     this.settling = { touched, structure: !!structure };
     return true;
+  }
+  /** A node as a step holds it, with its codec's unrecorded fields as the node has them now (they never go back with a step). */
+  private keepUnrecorded(value: NodeEntry): NodeEntry {
+    const fields = this.rules.codecs[value.slot].unrecorded, current = this.nodes.get(value.id);
+    if (!fields?.length || !current) return clone(value);
+    const state = clone(value.state);
+    for (const field of fields) { if (field in current.state) state[field] = clone(current.state[field]); else delete state[field]; }
+    return { ...clone(value), state };
   }
   /** Publish what the last Undo or Redo changed, now that the View and lighting history has settled. */
   private publishHistory() {

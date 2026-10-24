@@ -114,7 +114,10 @@ const outboxStorage = desktopOutboxStorage(localStorage, outboxWorkspace, outbox
   const response = await fetch(outboxEndpoint, { method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/json", [WORKSPACE_FENCE_HEADER]: formatFence({ workspace: "desktop", generation }) },
     body: JSON.stringify({ key, text }) });
-  if (!response.ok) throw Error("The outbox key wasn't stored.");
+  if (!response.ok) {
+    const answer = await response.json().catch(() => null);
+    throw Object.assign(Error("The outbox key wasn't stored."), { code: answer?.code });
+  }
 });
 const documents = startDocumentOutbox({ prefix: `${verification ? "/api/verification" : "/api"}/documents`, send: fetch, workspace: "desktop",
   storage: outboxStorage, immutable: immutableDocumentKind, lease, page: browserPage() });

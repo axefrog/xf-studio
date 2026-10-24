@@ -2,16 +2,15 @@
  * The view graph service (research/authoring/view-graph-design.md §3, phase P1): nodes, sharing, link, fork and collect, validation
  * against scene kinds, the default one-view graph from the workspace's preview, persistence and the View and lighting history.
  */
-import { NOT_DRAWN } from "../src/animation/motion-actions";
+import { VIEW_HIDDEN } from "../src/preview/view-routes";
 import { expect, test } from "bun:test";
 import { MAIN_VIEW, validViewId, viewPanelId, type ViewGraphChange } from "../src/platform/api/view-graph";
 import { parseViewGraph, VIEW_HISTORY_STRUCTURE, ViewGraph } from "../src/platform/core/view-graph";
 import { createHistoryService, LOCAL_VIEW_SCOPE } from "../src/platform/core/history-service";
-import { createStudioViewGraph, defaultViewGraph, isDefaultViewGraph, previewMirror, storedViewGraph, STUDIO_VIEW_GRAPH_RULES,
+import { createStudioViewGraph, defaultViewGraph, previewMirror, sessionViewGraph, STUDIO_VIEW_GRAPH_RULES,
   workspaceViewGraph } from "../src/preview/preview-view-graph";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
-import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
@@ -25,7 +24,6 @@ test("the default graph is one main view over the workspace's preview, and mirro
   const preview = freshWorkspace().preview;
   preview.camera = { position: [0, 1.6, -0.6], target: [0, 1.6, 0], fov: 30 };
   const data = defaultViewGraph(preview);
-  expect(isDefaultViewGraph(data)).toBe(true);
   expect(data.views).toEqual([{ id: "main", kind: "3d", scene: "s1", camera: "c1", lights: "l1", display: "d1", tools: "t1" }]);
   expect(data.lights[0]).toMatchObject({ id: "l1", kind: "studio", exposure: 1.2, lightAngle: 329 });
   expect(data.tools[0]).toEqual({ id: "t1", on: { "eye-makeup.surface": true, "eye-makeup.wire": false } });
@@ -68,7 +66,6 @@ test("a new view shares scene, lights and display, forks the camera and starts w
   views.closeView(v2, { label: "Close view" });
   expect(views.data().cameras.map(node => node.id)).not.toContain(camera);
   expect(() => views.closeView(MAIN_VIEW)).toThrow("can't be closed");
-  expect(isDefaultViewGraph(views.data())).toBe(true);
 });
 
 test("edits are validated by the slot's codec, and a camera or rig must suit the view's scene kind", () => {
@@ -168,12 +165,11 @@ test("a workspace that never adds a view keeps its bytes; one with views round-t
   const restored = parseWorkspace(JSON.parse(bytes), STUDIO_DOCUMENTS);
   expect(restored.views).toBeUndefined();
   const views = createStudioViewGraph(restored.preview, restored.views);
-  expect(storedViewGraph(views)).toBeUndefined();
   expect(JSON.stringify(serializeWorkspace(restored, STUDIO_DOCUMENTS))).toBe(bytes);
-  // Add a view: the graph is now stored, and survives a round trip.
+  // A stored legacy graph (an earlier build's, with a second view) survives a round trip.
   const v2 = views.addView(MAIN_VIEW, { scene: true, lights: true }, { title: "Whole body" });
   views.edit(v2, "display", { state: { hair: false } });
-  const withViews = { ...restored, views: storedViewGraph(views) };
+  const withViews = { ...restored, views: sessionViewGraph(views) };
   const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(withViews, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
   expect(read.views).toEqual(views.data());
   // The legacy preview fields win for the main view (an older build may have changed them): no appearance change.
@@ -183,17 +179,6 @@ test("a workspace that never adds a view keeps its bytes; one with views round-t
   expect(new ViewGraph(again, STUDIO_VIEW_GRAPH_RULES).state(v2, "display")).toMatchObject({ hair: false });
   // A damaged graph falls back to the default one.
   expect(parseWorkspace({ ...JSON.parse(bytes), views: { schema: "xfs/view-graph-1", views: [] } }, STUDIO_DOCUMENTS).views).toBeUndefined();
-});
-
-test("the composer stores the graph only when it differs from the default one", () => {
-  const workspace = freshWorkspace(), views = createStudioViewGraph(workspace.preview);
-  const ports = { editor: () => ({ recipe: workspace.recipe, active: 0, selected: 0, history: workspace.history, fieldSelection: {} }),
-    uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined, quality: () => workspace.preview.textureSize,
-    preview: () => undefined, motion: () => undefined, views: () => storedViewGraph(views) };
-  const composer = new WorkspaceComposer(workspace, ports as never);
-  expect("views" in composer.capture()).toBe(false);
-  views.addView(MAIN_VIEW, { scene: true });
-  expect(composer.capture().views?.views).toHaveLength(2);
 });
 
 test("preview actions edit the graph node of the view they name, and the device follows the view it draws", () => {
@@ -220,7 +205,7 @@ test("preview actions edit the graph node of the view they name, and the device 
   actions.dispatch({ kind: "preview.setHair", enabled: false, view: v2 });
   expect(calls).toEqual(["exposure:3"]);
   expect(actions.snapshot().hair).toBe(true);
-  expect(actions.capability({ kind: "camera.front", view: v2 })).toMatchObject({ available: false, reason: NOT_DRAWN });
+  expect(actions.capability({ kind: "camera.front", view: v2 })).toMatchObject({ available: false, reason: VIEW_HIDDEN });
   expect(actions.capability({ kind: "preview.setHair", enabled: true, view: "gone" })).toMatchObject({ available: false });
   // A camera jump: the device computes it, the graph records it, Undo moves the device back.
   calls.length = 0;
@@ -298,9 +283,8 @@ test("node codecs enforce the ranges parseWorkspace does (CORE-96)", () => {
 test("a main-view tool the legacy fields can't hold is kept on save (CORE-97)", () => {
   const workspace = freshWorkspace(), views = createStudioViewGraph(workspace.preview);
   const on = views.state<{ on: Record<string, boolean> }>(MAIN_VIEW, "tools").on;
-  expect(storedViewGraph(views)).toBeUndefined();
   views.edit(MAIN_VIEW, "tools", { state: { on: { ...on, "poses.menu": true } } });
-  const stored = storedViewGraph(views);
+  const stored = sessionViewGraph(views);
   expect(stored).toBeDefined();
   const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...workspace, views: stored }, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
   // The legacy field still wins for Surface controls (an older build may have changed it); the other tool is kept.
@@ -330,7 +314,6 @@ test("views and nodes of kinds this build doesn't know are kept and written back
   const views = new ViewGraph(parsed!, STUDIO_VIEW_GRAPH_RULES);
   expect(views.viewIds()).toEqual([MAIN_VIEW]);
   expect(views.snapshot().views.map(view => view.id)).toEqual([MAIN_VIEW]);
-  expect(isDefaultViewGraph(views.data())).toBe(false);
   // Edits here never touch them: new IDs avoid theirs, and a node they name stays while they do.
   const v2 = views.addView(MAIN_VIEW, { scene: true, lights: true });
   views.unlink(MAIN_VIEW, "lights");

@@ -400,3 +400,42 @@ test("the research finishes' programs are made ahead only while research tools s
     features.dispose();
   } finally { jest.useRealTimers(); }
 });
+
+test("4a-v: a superseded composite preparation stops waiting on its links at once, and its unused programs free their shaders on release (review 4)", async () => {
+  const { ctx } = context();
+  // The driver never finishes linking here; each compiled pass gets a program of its own, as Three keeps them per material.
+  const properties = new WeakMap<object, { programs?: Map<string, unknown> }>(), deleted: unknown[] = [], programs: { destroy(): void }[] = [];
+  Object.assign(ctx.renderer, {
+    properties: { get: (object: object) => properties.get(object) ?? properties.set(object, {}).get(object)! },
+    getContext: () => ({ deleteShader: (shader: unknown) => deleted.push(shader) }),
+    compileAsync: (scene: THREE.Object3D) => {
+      scene.traverse(child => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const own = properties.get(mesh.material as object) ?? properties.set(mesh.material as object, {}).get(mesh.material as object)!;
+        const program = { vertexShader: { id: programs.length, kind: "vertex" }, fragmentShader: { id: programs.length, kind: "fragment" }, destroy() {} };
+        programs.push(program);
+        (own.programs ??= new Map()).set(`p${programs.length}`, program);
+      });
+      return new Promise(() => {});
+    },
+  });
+  const features = createFeatureRenderers(ctx, [EYE_MAKEUP_RENDERER]);
+  const controller = new AbortController();
+  let outcome = "waiting";
+  void features.prepare(controller.signal).then(() => { outcome = "released"; }, () => { outcome = "rejected"; });
+  // No clock: everything queued settles, and the preparation still waits on the links (they never end here).
+  const settle = async () => { for (let i = 0; i < 50; i++) await Promise.resolve(); };
+  await settle();
+  expect(outcome).toBe("waiting");
+  // Released by the abort itself, with the links still unresolved (measured latency is the GPU probes' gate, not this test's).
+  controller.abort(new DOMException("Superseded.", "AbortError"));
+  await settle();
+  expect(outcome).toBe("released");
+  // The composite's seven passes were compiled (the layer and the resolve for each of its three targets, and the roughness chain); released
+  // unused, each program deletes its two shaders with it.
+  expect(programs).toHaveLength(7);
+  for (const program of programs) program.destroy();
+  expect(deleted).toHaveLength(14);
+  features.dispose();
+});

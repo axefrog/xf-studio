@@ -38,7 +38,7 @@ import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
 import { HeaderFit } from "./header-fit";
-import { LIBRARY_CHIP_WIDEST, MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
+import { BACKUP_PENDING, BACKUP_STORAGE_FULL, LIBRARY_CHIP_WIDEST, MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
 import { WorkspaceNotice, type WorkspaceNoticeAction, type WorkspaceNoticeState } from "./components";
 
 /**
@@ -496,7 +496,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     onClick: () => rt.dock.reveal("history") });
   // The labelled actions carry their stage's class: each shows its icon alone when the header needs the room (header-fit.ts).
   const save = button({ label: "Save version", icon: "save", className: "header-save", title: `Save version (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
-  const pkg = button({ label: "Package", icon: "package", variant: "quiet", className: "header-package", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
+  const pkg = button({ label: "Package", icon: "package", variant: "quiet", className: "header-package", title: "Package: open the mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", className: "header-commands", title: `Command palette (${keys.palette})`, onClick: () => {} });
   const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });
   // One place for everything configured (UI-109): the game and mod manager, the saves folder, WolvenKit, appearance and diagnostics.
@@ -535,8 +535,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     category,
     // The library chip sits after the crumbs, not inside them, so the names give way before it and it never runs over the verification
     // flag in a crowded header (DESK-06).
-    h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset), chipSlot,
-    verify,
+    h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset), verify, chipSlot,
     h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, layoutsButton, themeButton));
   // The crumbs stay readable (UI-187): the header's other items give way first, in a fixed order, whenever the window or the words change.
   const fit = new HeaderFit(element, [collection, preset], { slot: chipSlot, element: chip, words: LIBRARY_CHIP_WIDEST });
@@ -591,9 +590,10 @@ export function workspaceNoticeState(frame: Frame): WorkspaceNoticeState | null 
     return { message: lease.message, actions };
   }
   const outbox = frame.status.outbox, restoring = outbox?.recovering;
-  if (outbox?.unprotected) return { message: UNPROTECTED, actions: ["exportCopy", "protect"] };
+  if (outbox?.unprotected) return { message: outbox.unprotectedReason === "pending" ? BACKUP_PENDING : outbox.unprotectedReason === "storage-full" ? BACKUP_STORAGE_FULL : UNPROTECTED,
+    actions: ["protect", "exportCopy"] };
   if (restoring?.missing) return { message: MISSING_SAVE, actions: ["importSave", "discardWaiting"] };
-  if (restoring?.shown && restoring.long) return { message: RESTORING_LONG, actions: restoring.safe ? ["keepRestored", "retryRestore"] : ["exportCopy", "retryRestore"] };
+  if (restoring?.shown && restoring.long) return { message: RESTORING_LONG, actions: restoring.safe ? ["retryRestore", "keepRestored"] : ["retryRestore", "exportCopy"] };
   return null;
 }
 
@@ -817,7 +817,7 @@ export function withPreviewSetup(rt: Pick<StudioRuntime, "port" | "feedback" | "
 }
 
 /** The palette's commands: the platform's own, with each feature view's commands after the platform's Edit entries. */
-function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
+export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
   const port = rt.port;
   const act = (id: string, title: string, group: string, action: PresentationAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra,
@@ -852,6 +852,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
       run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),
+    file("collection.exportWindowCopy", "Export this window's copy", "Files", { kind: "collection.exportWindowCopy" },
+      { icon: "export", keywords: "backup recovery changes file without saving library" }),
     ...research([file("collection.plan", "Export compiler plan (saves first; not a mod)", "Research", { kind: "collection.plan" }, { icon: "export", keywords: "build plan" })]),
     file("recipe.import", "Import recipe as preset…", "Files", { kind: "recipe.import" }, { icon: "import" }),
     file("recipe.export", "Export preset recipe", "Files", { kind: "recipe.export" }, { icon: "export" }),

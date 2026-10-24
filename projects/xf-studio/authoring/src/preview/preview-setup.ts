@@ -3,7 +3,9 @@
  * from "nothing set up" to an interactive head. It follows the host's preparation and WolvenKit
  * setup ports, finds the game folder, starts preparation by itself on first contact (unless the
  * person cancelled a run), loads the head once the preview is ready, and maps every state and
- * failure to plain wording with one next step. The presentation reads its detached snapshot and
+ * failure to plain wording with one next step. Only the first load (and its Try again) is this service's: once a head is shown, a
+ * change of the shown V or its body is the scene runtime owner's (preview/browser/browser-scene-heads.ts), which keeps the V shown
+ * until the next one is ready. The presentation reads its detached snapshot and
  * dispatches its typed actions through `StudioPresentationPort.previewSetup`; it never talks to
  * the host services directly. Hosts supply the head loader, the links, their setup form and the
  * automatic-start preference (kept in the workspace).
@@ -358,16 +360,6 @@ export class PreviewSetupActions {
     // Build availability depends on WolvenKit too.
     if (phase !== this.lastWolvenKit && this.lastWolvenKit !== null) this.port.localSetup.requestRefresh();
     this.lastWolvenKit = phase;
-    this.notify();
-  }
-  /**
-   * The shown V changed body, so the head loads again with that body's core (browser-head-attachment.ts asks). A load already
-   * under way is left alone; the head attachment asks again if the body still differs once it is ready.
-   */
-  reloadHead(): void {
-    if (!this.started || this.head.phase === "loading") return;
-    this.head = { phase: "waiting", code: null, failures: 0 };
-    this.follow();
     this.notify();
   }
   /** The head loads as soon as the preview is ready; a failure is kept (not latched) until a retry. */

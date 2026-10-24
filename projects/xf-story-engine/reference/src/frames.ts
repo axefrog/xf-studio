@@ -288,7 +288,9 @@ export class Frames {
     }
   }
 
+  /** Drop a frame, as a save drops an ended one. The caller says it is gone: nothing is emitted. */
   remove(id: Id): void {
+    this.k.assertWritable();
     const f = this.frames.get(id);
     if (!f) return;
     for (const p of f.parents) this.kids.get(p.frame)?.delete(id);
@@ -474,6 +476,11 @@ export class Frames {
     return this.demandLog.some((e) => e.tier === tier && e.from <= t && (e.to === undefined || t < e.to));
   }
 
+  /** Whether demand reached `tier` at any time in `[from, to)`, from the recorded demand history (I-15). */
+  demandOverlaps(tier: Tier, from: GameTime, to: GameTime): boolean {
+    return this.demandLog.some((e) => e.tier === tier && e.from < to && (e.to === undefined || from < e.to));
+  }
+
   demandHistory(): Array<{ tier: Tier; from: GameTime; to?: GameTime }> {
     return this.demandLog.map((e) => ({ ...e }));
   }
@@ -515,6 +522,16 @@ export class Frames {
       total += this.pull(f.id, memo) * (this.demandRoots.has(f.actor) ? this.k.config.wActorRoot : 1);
     }
     return total;
+  }
+
+  /**
+   * The nodes demand reaches at `tier` or finer (V4-37): each node an eligible frame focuses on at that tier or finer, with its
+   * demand tier and its claim (spec 10.6), in Id order.
+   */
+  demanded(tier: Tier): Array<{ node: Id; tier: Tier; claim: number }> {
+    const nodes = new Set<Id>();
+    for (const f of this.frames.values()) if (this.eligible(f) && f.focus.tier >= tier) for (const n of f.focus.nodes) nodes.add(n);
+    return [...nodes].sort(cmpId).map((node) => ({ node, tier: this.demandTier(node) as Tier, claim: this.claim(node) }));
   }
 
   /** Whether a slot normally opens now: the node's demand tier reaches the slot's tier (spec 10.6). */

@@ -17,13 +17,20 @@ export const DEFAULT_VIEWPORT_HOSTS: readonly ViewportHostKind[] = [viewPanelId(
 /** Programmatic UV navigation (audit A-5): pan by atlas units, zoom by a factor about a UV point. */
 export type UVNavigation = { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: { u: number; v: number } };
 import { visibleViewportSize, type ViewportSize } from "../preview/viewport-size";
+import type { PreparationState } from "../preview/scene-residency";
 export type { ViewportSize };
+export type { PreparationState };
 /**
  * `loading` and `preparing` show progress (`progress` 0–1 when known), `unavailable` is neutral
  * (something is still needed; `message` says what), `error` is a failure (`error` says what).
  */
 export type ViewportPhase = "loading" | "preparing" | "unavailable" | "ready" | "error";
-export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: string; message?: string; progress?: number | null; captured: boolean };
+export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: string; message?: string; progress?: number | null; captured: boolean;
+  /**
+   * A scene runtime being built and prepared for this view (profiles phase 4a-v; scene-residency.ts), as typed progress: while the host is
+   * not ready yet it is what the pane is loading, while it is ready the V shown stays and this says how far the next one is.
+   */
+  preparation?: PreparationState };
 type PhaseState = { phase: ViewportPhase; error?: string; message?: string; progress?: number | null };
 export type ViewportAttachmentState = {
   head: ViewportHostState & { view?: CameraState };
@@ -58,6 +65,7 @@ export type ViewportAttachmentPort<Slot, Host extends ViewportHostId = ViewportH
 /** A layout-facing attachment boundary with no scene, worker or editor imports. */
 export class ViewportAttachment<Slot, Host extends ViewportHostId = ViewportHostKind> {
   private phases = new Map<Host, PhaseState>();
+  private preparations = new Map<Host, PreparationState>();
   private listeners = new Set<() => void>();
   private inputListeners = new Set<() => void>();
   private inputState: ViewportInputSnapshot;
@@ -98,6 +106,13 @@ export class ViewportAttachment<Slot, Host extends ViewportHostId = ViewportHost
   viewChanged() { this.publish(); }
   setReady(kind: Host) { this.phases.set(this.known(kind), { phase: "ready" }); this.publish(); }
   setError(kind: Host, error: string) { this.setPhase(kind, { phase: "error", error }); }
+  /** How far a scene runtime for this host is being built and prepared (null: none is). Independent of the phase. */
+  setPreparation(kind: Host, state: PreparationState | null) {
+    this.known(kind);
+    if (JSON.stringify(state ?? undefined) === JSON.stringify(this.preparations.get(kind))) return;
+    if (state) this.preparations.set(kind, { ...state }); else this.preparations.delete(kind);
+    this.publish();
+  }
   /** Not interactive yet: still loading or preparing (with progress), or waiting for something (neutral). */
   setPending(kind: Host, phase: "loading" | "preparing" | "unavailable", message: string, progress: number | null = null) {
     this.setPhase(kind, { phase, message, progress });
@@ -163,9 +178,11 @@ export class ViewportAttachment<Slot, Host extends ViewportHostId = ViewportHost
       affordance: hit.affordance, mirror: hit.mirror };
   }
   snapshot(): ViewportAttachmentState {
-    const state = (kind: Host): ViewportHostState => ({
-      ...(this.phases.get(kind) ?? { phase: "loading" as const }), ...this.port.measure(kind), captured: this.port.inputCapture(kind),
-    });
+    const state = (kind: Host): ViewportHostState => {
+      const preparation = this.preparations.get(kind);
+      return { ...(this.phases.get(kind) ?? { phase: "loading" as const }), ...this.port.measure(kind), captured: this.port.inputCapture(kind),
+        ...(preparation ? { preparation: { ...preparation } } : {}) };
+    };
     return {
       head: { ...state("head" as Host), view: structuredClone(this.port.headView()) },
       uv: { ...state("uv" as Host), view: structuredClone(this.port.uvView()),

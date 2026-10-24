@@ -77,7 +77,7 @@ test("reordering keeps each layer's complete mask and optical resources with its
   stack.setCanvases([]);
 });
 
-test("disposing the stack frees its own geometry, never the anchor's shared buffers (PREV-100)", () => {
+test("the stack's geometry, over the anchor's buffers, is freed whole when the anchor's geometry is (PREV-100, experiments/043)", () => {
   const geometry = new THREE.BufferGeometry();
   geometry.setIndex([0, 1, 2]);
   geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
@@ -93,16 +93,21 @@ test("disposing the stack frees its own geometry, never the anchor's shared buff
   const seen: { index: unknown; attributes: string[]; morphs: string[] }[] = [];
   let anchorDisposed = false;
   // What the renderer's dispose frees is what the geometry holds when it fires (three's WebGLGeometries).
-  stack.geometry.addEventListener("dispose", () => { seen.push({ index: stack.geometry.index, attributes: Object.keys(stack.geometry.attributes), morphs: Object.keys(stack.geometry.morphAttributes) }); });
+  stack.geometry.addEventListener("dispose", () => { seen.push({ index: stack.geometry.index, attributes: Object.keys(stack.geometry.attributes).sort(), morphs: Object.keys(stack.geometry.morphAttributes) }); });
   geometry.addEventListener("dispose", () => { anchorDisposed = true; });
   stack.dispose();
-  expect(seen).toEqual([{ index: null, attributes: ["xfsUnderlay"], morphs: [] }]);
+  // The anchor is never drawn (PREV-97), so the buffers of its attributes were uploaded through the stack's geometry: it waits for the anchor.
+  expect(seen).toEqual([]);
   expect(anchorDisposed).toBe(false);
   // The anchor keeps every buffer it had.
   expect(geometry.index!.count).toBe(3);
   expect(Object.keys(geometry.attributes).sort()).toEqual(["position", "skinIndex", "skinWeight"]);
   expect(geometry.morphAttributes.position).toHaveLength(1);
   expect(root.children).toEqual([anchor]);
+  // The anchor's geometry goes (with its core head): the stack's geometry goes whole, the shared index and attributes with it, once.
+  geometry.dispose();
+  geometry.dispose();
+  expect(seen).toEqual([{ index: geometry.index, attributes: ["position", "skinIndex", "skinWeight", "xfsUnderlay"], morphs: ["position"] }]);
 });
 
 test("the preview's surfaces follow the export: Matte at roughness 1, game-matched Colour-shifting at metalness 0.08", () => {

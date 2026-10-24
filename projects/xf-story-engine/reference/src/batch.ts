@@ -34,6 +34,8 @@ interface Mark {
 export class StagedBatch {
   /** The changes the batch's writes made, in order. They are dispatched on commit. */
   readonly changes: PendingChange[] = [];
+  /** Notifications the batch's writes made to layers outside the kernel's tables (a belief changed): delivered on commit, dropped with a discard. */
+  readonly after: Array<() => void> = [];
   state: 'open' | 'committed' | 'discarded' = 'open';
   private mark: Mark;
   /** The one allowance every read made through the batch draws on (spec 14.2a, 10.7). */
@@ -118,6 +120,9 @@ export class StagedBatch {
     this.k.batch = null;
     this.k.pending.push(...this.changes);
     this.k.bump();
+    // delivered with the batch no longer open, as if the writes had been made now
+    const after = this.after.splice(0);
+    for (const f of after) f();
   }
 
   /** Drop the writes: tables, revision and caches go back to what they were. */
@@ -138,5 +143,6 @@ export class StagedBatch {
     k.revision = this.mark.revision;
     k.invalidateCaches();
     this.changes.length = 0;
+    this.after.length = 0;
   }
 }

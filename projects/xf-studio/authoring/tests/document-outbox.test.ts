@@ -233,8 +233,9 @@ describe("the outbox's rules (A1–A7)", () => {
     expect(outbox.document(LOOK)!.value).toEqual({ n: 1 });
     await quiet(outbox);
     expect(value(r.store)).toMatchObject({ revision: 1, value: { n: 1 } });
-    // The acknowledgement's write failed too: still unprotected until a write of the key lands.
+    // The acknowledgement's cleanup write failed too, but there is no loss warning now the library has the work.
     expect(outbox.status().unprotected.length).toBe(1);
+    expect(outbox.status()).toMatchObject({ unprotectedWarning: false, unprotectedReason: null });
     storage.fail = false;
     expect(outbox.protect()).toBe(true);
     expect(outbox.status().unprotected).toEqual([]);
@@ -418,12 +419,12 @@ describe("per-document keys and their crash repair", () => {
   });
 });
 
-describe("the page's storage for the outbox", () => {
-  const browserStorage = () => {
+const browserStorage = () => {
     const items = new Map<string, string>();
     return { items, get length() { return items.size; }, key: (i: number) => [...items.keys()][i] ?? null, getItem: (key: string) => items.get(key) ?? null,
       setItem: (key: string, text: string) => { items.set(key, text); }, removeItem: (key: string) => { items.delete(key); } };
   };
+describe("the page's storage for the outbox", () => {
   test("localhost: one key per document under the workspace's identity; another workspace's keys are never read", () => {
     const local = browserStorage();
     local.setItem("xfs.outbox.browser-other.look-working/x", "{}");
@@ -691,16 +692,36 @@ describe("review findings, second round (chunk 1c-i)", () => {
     const storage = desktopOutboxStorage(browser, "desktop", "now", {}, async () => { await new Promise<void>(resolve => lands.push(resolve)); });
     const timers: (() => void)[] = [];
     let now = 0;
-    const r = rig();
+    const r = rig(), open = r.gate();
     const outbox = new DocumentOutbox(r.port, storage, { now: () => now, schedule: (_ms, run) => { timers.push(run); return { cancel() {} }; } });
     outbox.open();
     outbox.commit("look.edit", [{ ...LOOK, value: { n: 1 } }]);
     expect(outbox.status()).toMatchObject({ unprotected: [LOOK], unprotectedWarning: false });
     now += 2500;
     for (const run of timers.splice(0)) run();
-    expect(outbox.status().unprotectedWarning).toBe(true);
+    expect(outbox.status()).toMatchObject({ unprotectedWarning: true, unprotectedReason: "pending" });
+    // The library can make the work safe before the desktop backup lands. Keep its cleanup state, but clear the warning.
+    open(); await quiet(outbox);
+    expect(outbox.status().unprotected).toEqual([LOOK]);
+    expect(outbox.status()).toMatchObject({ unprotectedWarning: false, unprotectedReason: null });
     // The host copies land (the acknowledgement's rewrite of the key too): protected again.
     for (let i = 0; i < 10 && lands.length; i++) { for (const land of lands.splice(0)) land(); await tick(5); }
     expect(outbox.status().unprotected.filter(ref => documentKey(ref) === documentKey(LOOK))).toEqual([]);
+  });
+
+  test("storage-full and ordinary failures stay distinct, including a failure from the desktop host", async () => {
+    for (const desktop of [false, true]) for (const full of [false, true]) {
+      const r = rig(), open = r.gate();
+      const error = Object.assign(Error("write failed"), desktop ? { code: full ? "ENOSPC" : "EACCES" } : { name: full ? "QuotaExceededError" : "SecurityError" });
+      const storage = desktop ? desktopOutboxStorage(browserStorage(), "desktop", "now", {}, async () => { throw error; }) :
+        { load: () => new Map<string, string>(), write() { throw error; } };
+      const outbox = new DocumentOutbox(r.port, storage);
+      outbox.open(); outbox.commit("look.edit", [{ ...LOOK, value: { n: 1 } }]);
+      await tick();
+      expect(outbox.status()).toMatchObject({ unprotectedWarning: true, unprotectedReason: full ? "storage-full" : "failed" });
+      open(); await quiet(outbox);
+      expect(outbox.status()).toMatchObject({ unprotectedWarning: false, unprotectedReason: null });
+      outbox.stop();
+    }
   });
 });

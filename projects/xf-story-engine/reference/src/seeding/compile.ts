@@ -7,6 +7,8 @@ import { PredSyntaxError, walkPred } from './pred.ts';
 import { atoms, bound, fragmentSites, playOf, predSites, resolvePreds, type PredSite } from './doc.ts';
 import { lintSeed, type LintCtx } from './lint.ts';
 import { PackIndex, stripWords, structureHash } from './packs.ts';
+import { readCall } from './reads.ts';
+import type { L2Registry } from './registries.ts';
 import { LADDER_ID, expandProfile, type LadderParams } from './profile.ts';
 import type { CompiledSeed, Finding, Fragment, Pred, Seed, SeedInput, TextMeta } from './types.ts';
 
@@ -104,13 +106,18 @@ export function laterFindings(input: SeedInput, pack: PackIndex): Finding[] {
   return out;
 }
 
-const hasLaterAtoms = (sites: PredSite[]): Finding[] => {
+const hasLaterAtoms = (sites: PredSite[], reg: L2Registry): Finding[] => {
   const out: Finding[] = [];
   for (const s of sites) {
     for (const { atom, at } of atoms(s.pred)) {
       if ('clock' in atom) out.push(later('A "clock" predicate', `${s.at}${at}`));
-      else if ('city' in atom) out.push(later('A "city" read (S1 produces them)', `${s.at}${at}`));
-      else if ('social' in atom) out.push(later('A "social" read (S1 produces them)', `${s.at}${at}`));
+      else if ('city' in atom || 'social' in atom) {
+        // The simulation layer builds some of these reads. Those it builds are read through it; the others, and every one when it is not attached, wait.
+        const family = 'city' in atom ? 'city' : 'social';
+        const call = readCall(atom);
+        if ('error' in call) out.push({ code: 'L-01', level: 'error', engine: true, at: `${s.at}${at}`, message: call.error });
+        else if (!reg.sim?.builds(call.name)) out.push(later(`The ${family} read "${call.name}" (the simulation layer does not build it yet)`, `${s.at}${at}`));
+      }
     }
   }
   return out;
@@ -176,8 +183,8 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
       // The predicates a variant would run, and those of the fragments it plays, are checked as the chosen document's are.
       try {
         const compiledCand = resolvePreds(cand);
-        for (const x of hasLaterAtoms(predSites(compiledCand))) add(x);
-        for (const x of hasLaterAtoms(pack.closure(compiledCand).fragments.flatMap((fr) => fragmentSites(fr)))) add(x);
+        for (const x of hasLaterAtoms(predSites(compiledCand), ctx.reg)) add(x);
+        for (const x of hasLaterAtoms(pack.closure(compiledCand).fragments.flatMap((fr) => fragmentSites(fr)), ctx.reg)) add(x);
       } catch (e) {
         if (!(e instanceof PredSyntaxError)) throw e;
       }
@@ -196,10 +203,10 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
     }
     throw e;
   }
-  findings.push(...hasLaterAtoms(predSites(compiled)));
+  findings.push(...hasLaterAtoms(predSites(compiled), ctx.reg));
   // The fragments the document plays are part of it: their predicates are checked too.
   const closed = pack.closure(compiled);
-  findings.push(...hasLaterAtoms(closed.fragments.flatMap((fr) => fragmentSites(fr))));
+  findings.push(...hasLaterAtoms(closed.fragments.flatMap((fr) => fragmentSites(fr)), ctx.reg));
   if (findings.some((f) => f.level === 'error')) return refuse();
 
   // 4. Lint, at the template's maturity (S2 section 11.1).

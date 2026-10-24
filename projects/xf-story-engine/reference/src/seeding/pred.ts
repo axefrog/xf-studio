@@ -648,7 +648,7 @@ class Parser {
         this.eatSym(')');
         this.eatId('in');
         const is = this.stringSet();
-        return name === 'city' ? { city: v, is } : { social: v, is };
+        return name === 'city' ? { city: v as Record<string, Record<string, unknown>>, is } : { social: v as Record<string, Record<string, unknown>>, is };
       }
     }
     throw new PredSyntaxError(`unknown predicate "${name}"`, this.peek().pos);

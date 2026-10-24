@@ -64,7 +64,30 @@ export interface PredFn {
   eval(args: unknown[], ctx: { now: number }): Verdict;
 }
 
+/**
+ * What layer 2 asks of the simulation layer's registered reads (S2 2.16, 2.17, 4.1). Layer 2 holds none of that layer's code: the
+ * simulation layer implements this and is attached to the registry. A read it does not build is refused at compile as not supported yet.
+ */
+export interface SimReadPort {
+  /** Whether the simulation layer builds the read. */
+  builds(read: string): boolean;
+  /** The answer of a read at a time: one of the read's registered strings, or `maybe`. */
+  eval(read: string, args: unknown[], t: number): string;
+  /**
+   * The value at `from` (an entry with `t = from`), then every change in `(from, to]` in time order, the changes at one time in the order they
+   * were made (S1 9.1, S2-4). `eval` at a time gives only the last of the values a time passed through; a closing condition is evaluated at each.
+   * `ord` places a change among the changes of other reads made at the same time: the lower was made first. A condition on several reads is
+   * evaluated after each change in that order, with every read at the value it had then. Equal ord identifies aliases of one source
+   * transition, applied atomically before evaluation; independent changes have distinct, persistent ord. An unnumbered change follows numbered ones.
+   */
+  transitions(read: string, args: unknown[], from: number, to: number): Array<{ t: number; value: string; ord?: number }>;
+  /** The kernel values a read depends on, and whether it must be looked at again at every boundary (beliefs emit no Changes). */
+  deps(read: string): { interests: Array<{ kind?: string; slot: string }>; boundary: boolean };
+}
+
 export class L2Registry {
+  /** The simulation layer's reads, once it is attached (S1 9.1). Without it every `city` and `social` atom is a later capability. */
+  sim?: SimReadPort;
   readonly classes = new Map<ClassId, ContentClassDef>();
   readonly channels = new Map<ChannelId, ChannelDef>();
   private fns = new Map<string, PredFn>();

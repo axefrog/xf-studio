@@ -95,6 +95,8 @@ export interface LoadReport {
   message?: string;
   epoch: Id;
   missingPacks: string[];
+  /** Packs the save recorded at another version than the one now installed (S1 pins its data per lineage, S1 1.4). */
+  changedPacks?: string[];
   /** How many ops were replayed from the nearest snapshot. */
   replayed: number;
 }
@@ -399,8 +401,9 @@ export class Persistence {
     this.k.assertWritable();
     // A staged batch's operations are not persisted (spec 14.2a): not even from inside its own write callback.
     if (this.k.batch) throw new Error('a staged batch is open: it is committed or discarded before a save (spec 14.2a)');
-    // The seeding layer writes its records to the seed table first (spec 14.1).
+    // The seeding layer writes its records to the seed table first (spec 14.1), then any other layer that keeps records.
     this.k.layer2?.flush();
+    for (const h of this.k.saveHooks) h();
     if (this.chain.has(saveKey)) throw new Error(`save key already used: ${saveKey}`);
     const k = this.k;
     const cur = this.currentView();
@@ -501,6 +504,7 @@ export class Persistence {
 
     // Packs are reloaded, not stored.
     const missingPacks: string[] = [];
+    const changedPacks: string[] = [];
     this.installed.clear();
     for (const p of rec.meta.packs) {
       const pack = this.packs.get(p.id);
@@ -508,6 +512,7 @@ export class Persistence {
         missingPacks.push(`${p.id}@${p.version}`);
         continue;
       }
+      if (pack.version !== p.version) changedPacks.push(`${p.id}@${p.version}`);
       this.installPack(pack);
     }
 
@@ -515,6 +520,7 @@ export class Persistence {
     const have = new Set(k.registry.list());
     const missing = rec.meta.versions.filter((v) => !have.has(v));
     let report: LoadReport = { saveKey, readOnly: false, epoch: k.epoch, missingPacks, replayed };
+    if (changedPacks.length > 0) report.changedPacks = changedPacks;
     k.now = rec.meta.time;
     k.groups.restoreAt(rec.meta.time);
     // The frames come back as saved. What the clock did to them between the last tick and the save is settled
@@ -543,6 +549,8 @@ export class Persistence {
     this.baseKey = saveKey;
     // The seeding layer rebuilds its instances from the seed table the replay put back (S2 section 12.2).
     k.layer2?.onLoad();
+    for (const h of k.loadHooks) h(rec, report);
+    if (k.readOnly) report = { ...report, readOnly: true, message: k.readOnly.message };
     return report;
   }
 

@@ -1,6 +1,9 @@
 # S0. Kernel specification
 
-**Status:** v4.12, 23 October 2026.
+**Status:** v4.15, 24 October 2026.
+- v4.15: an event a persisted record references keeps its facts, not only its header (§14.1).
+- v4.14 adds `classifiesAs`, a nominal kind compatibility that queries never widen to (§2.2).
+- v4.13 names the settle step of a boundary (§9.4), which S1 §10.2 relies on.
 - v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (found while building v4 in the reference model).
 - v4.11 adds three clarifications from S1 v0.2 (V4-47 to V4-49).
 - v4.10 adds eight clarifications from writing [S1](simulation.md) (V4-39 to V4-46).
@@ -203,6 +206,7 @@ A `Derive` MAY provide a `Bound`. Without one, its query verdict is `maybe`. Fun
 interface KindDef {
   id: KindId;
   extends?: KindId[];                  // slots inherited; a redefined key overrides
+  classifiesAs?: KindId[];             // v4.14: nominal compatibility only; no slots inherited (below)
   slots: SlotDef[];                    // declaration order is the dependency order (§2.3)
   facets?: Array<'actor' | 'group' | 'place' | 'event' | 'summary'>;
   tags?: string[];
@@ -221,6 +225,8 @@ interface SlotDef {
 
 type Tier = 0 | 1 | 2 | 3 | 4 | 5;     // city, district, block, scene, individual, fine detail
 ```
+
+**Nominal compatibility (v4.14).** `classifiesAs` says a kind may stand where another is named, without inheriting its slots: S1's generated resident classifies as `core:person`. It is **nominal only**. `isKind`, `kindsOf` and every query stay structural (`extends` alone), so a query for `core:person` never returns a node that only classifies as one; widening it would change what open casting finds and what it costs. `isCompatibleKind(k, target)` (`extends` or `classifiesAs`, transitively) is used only where a layer names a kind to match: S3's pattern kinds, and S2's explicit fixed or preferred identities and overlays. Unknown targets and classification cycles fail validation.
 
 `mirrored` slots are read from the game for mirrored nodes. The same slot on a generated or minted node is `sampled`, `derived` (if it has a `derive`) or `assigned` (if its dimension is `vec` or `text`).
 
@@ -735,7 +741,8 @@ Simulation processes are S1's. The kernel defines when they run and what they ma
 - **Order at each boundary** `t = k × W_sim`:
   1. Apply the outputs of every process run whose span ends at `t`, by tier (coarse first), then by `id`.
   2. Apply the external operations stamped in the window that just ended, by timestamp, then `Id`. These are game readings, observations and seed operations.
-  3. Take the snapshot that processes starting at `t` read.
+  3. **Settle the inputs** (v4.13): run the frame work and the relevance dispatch that steps 1 and 2 queued until nothing is left, so policies have reacted to the boundary's inputs (V's new cell opens its frames) before anything reads demand.
+  4. Take the snapshot that processes starting at `t` read.
 
   Processes never see each other's outputs within a span (double buffering).
 - **Outstanding outputs are state.** A batch computed but not yet applied is part of the process's `ProcessState`, with its application boundary. It is persisted, restored on load under the new epoch, and applied at its boundary without re-running the process.
@@ -1030,6 +1037,7 @@ The trace is the complete account (I-8).
 - **Headers** of every retained node (§7.3).
 - **Pins**, including game readings that V observed or that persisted events depend on. Other game readings are not persisted: they are re-read.
 - **Edges** with persisted causes.
+- **The facts of referenced events** (v4.15). An event that persisted state references (an outstanding process output, a seed record, a layer record) keeps its minted fields, its own contributions, not only its header, so every consumer reads it identically after a load.
 - **Contributions** that packs can't reproduce: seeds, committed procedural decisions, runtime authored decisions. Pack contributions are reloaded, and the record keeps each pack's id and version.
 - **Memorable beliefs.**
 - **Canon events:** their headers and pinned fields.

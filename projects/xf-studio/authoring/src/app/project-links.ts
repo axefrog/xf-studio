@@ -15,6 +15,6 @@ export const PROJECT_LINKS: Readonly<Record<ProjectLink, string>> = Object.freez
  * Pages the localhost server serves itself, so a developer's Help opens the guide of the build that runs, not the published one. The
  * desktop app doesn't ship them: it opens the published page.
  */
-export const LOCAL_PROJECT_PAGES: Readonly<Partial<Record<ProjectLink, string>>> = Object.freeze({ "project-style-guide": "style-guide.html" });
+export const LOCAL_PROJECT_PAGES: Readonly<Partial<Record<ProjectLink, string>>> = Object.freeze({ "project-style-guide": "style-guide.html?from=studio" });
 export const isProjectLink = (link: unknown): link is ProjectLink =>
   typeof link === "string" && Object.hasOwn(PROJECT_LINKS, link);

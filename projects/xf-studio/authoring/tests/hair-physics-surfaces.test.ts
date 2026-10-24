@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { dangleOf } from "../src/character/character-detail-plan";
 import type { ResolvedComponent } from "../src/character/character-resolver";
 import { IDLE_MASCULINE, MotionActions, PHYSICS_MASCULINE, PHYSICS_NO_DANGLES, PHYSICS_NO_RIG, PHYSICS_UNSUPPORTED, PHYSICS_WAITING, type MotionPort } from "../src/animation/motion-actions";
+import { localMotionScene } from "../src/animation/scene-motion";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { createStudioViewGraph, previewMirror, workspaceViewGraph } from "../src/preview/preview-view-graph";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
@@ -32,27 +33,26 @@ describe("which dangle component a part's mesh reads", () => {
 describe("hair physics: one setting per scene", () => {
   const port = (dangles?: { parts: number; simulated: boolean; loaded?: boolean }, available = true): MotionPort => ({ available, blink: { available: false },
     setIdle() {}, setIdlePaused() {}, setIdleContributions() {}, setBlink() {}, animateBlink() {}, ...(dangles ? { dangles: () => dangles } : {}) });
-  const scene = () => { let on = false; return { physics: () => on, setPhysics: (enabled: boolean) => { on = enabled; } }; };
+  const scene = () => localMotionScene();
 
   test("is off by default and refuses to turn on, in plain words, when nothing on V has physics it can run", () => {
-    const initial = freshWorkspace().preview;
-    expect(new MotionActions(initial, port({ parts: 1, simulated: true }), scene()).snapshot().physics).toBe(false);
+    expect(new MotionActions(port({ parts: 1, simulated: true }), scene()).snapshot().physics).toBe(false);
     // No idle: said without claiming a failure; a masculine V's idle isn't part of this version; an idle whose parts haven't reported is a wait.
-    expect(new MotionActions(initial, port({ parts: 1, simulated: true }, false), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_NO_RIG);
-    expect(new MotionActions(initial, { ...port({ parts: 1, simulated: true }, false), error: IDLE_MASCULINE }, scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason)
+    expect(new MotionActions(port({ parts: 1, simulated: true }, false), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_NO_RIG);
+    expect(new MotionActions({ ...port({ parts: 1, simulated: true }, false), error: IDLE_MASCULINE }, scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason)
       .toBe(PHYSICS_MASCULINE);
     expect(PHYSICS_NO_RIG).not.toMatch(/couldn't|failed|error/i);
-    expect(new MotionActions(initial, port(), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_WAITING);
-    expect(new MotionActions(initial, port({ parts: 0, simulated: false }), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_NO_DANGLES);
+    expect(new MotionActions(port(), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_WAITING);
+    expect(new MotionActions(port({ parts: 0, simulated: false }), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_NO_DANGLES);
     // While the V's details are still on their way, it says so rather than that the hair has no physics.
-    expect(new MotionActions(initial, port({ parts: 0, simulated: false, loaded: false }), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_WAITING);
-    expect(new MotionActions(initial, port({ parts: 2, simulated: false }), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_UNSUPPORTED);
+    expect(new MotionActions(port({ parts: 0, simulated: false, loaded: false }), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_WAITING);
+    expect(new MotionActions(port({ parts: 2, simulated: false }), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: true }).reason).toBe(PHYSICS_UNSUPPORTED);
     // Turning it off always works.
-    expect(new MotionActions(initial, port({ parts: 0, simulated: false }), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: false }).available).toBe(true);
+    expect(new MotionActions(port({ parts: 0, simulated: false }), scene()).capability({ kind: "motion.setPhysics", view: "main", enabled: false }).available).toBe(true);
   });
 
   test("turning it on edits the scene setting", () => {
-    const s = scene(), motion = new MotionActions(freshWorkspace().preview, port({ parts: 1, simulated: true }), s);
+    const s = scene(), motion = new MotionActions(port({ parts: 1, simulated: true }), s);
     motion.dispatch({ kind: "motion.setPhysics", view: "main", enabled: true });
     expect(s.physics()).toBe(true);
     expect(motion.snapshot()).toMatchObject({ physics: true, physicsAvailable: true, physicsParts: 1 });

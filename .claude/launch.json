@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "xf-studio",
-      "runtimeExecutable": "bun",
-      "runtimeArgs": ["--cwd=projects/xf-studio/authoring", "run", "start"],
+      "runtimeExecutable": "pwsh",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "projects/xf-studio/authoring/tools/serve-unpackaged.ps1"],
       "port": 4317
     }
   ]

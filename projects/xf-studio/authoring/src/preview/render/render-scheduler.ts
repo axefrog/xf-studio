@@ -111,12 +111,15 @@ export function createRenderScheduler(options: RenderSchedulerOptions): RenderSc
   };
 }
 
-/** What can change the picture without going through the scene's own methods. */
+/**
+ * What can change the picture without going through the scene's own methods. The renderer device binds its canvas; each scene runtime
+ * binds its own controls and lighting (platform/scene/renderer-device.ts, scene-host.ts).
+ */
 export type RenderTriggerSources = {
   /** Orbit controls: `change` fires on every camera step, including each damped step after release. */
-  controls: { addEventListener(type: "change", listener: () => void): void; removeEventListener(type: "change", listener: () => void): void };
+  controls?: { addEventListener(type: "change", listener: () => void): void; removeEventListener(type: "change", listener: () => void): void };
   /** The viewport canvas: pointer and wheel input (hover highlights, handle drags) and a restored GL context. */
-  element: Pick<EventTarget, "addEventListener" | "removeEventListener">;
+  element?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
   /** Lighting preset device: preset, body and colour-grade changes (the LUT arrives asynchronously). */
   lighting?: { subscribe(listener: () => void): () => unknown };
 };
@@ -125,12 +128,12 @@ export const CANVAS_TRIGGERS = ["pointerdown", "pointermove", "pointerup", "poin
 /** Connect the event sources to `invalidate`; returns the disconnect. */
 export function bindRenderTriggers(invalidate: () => void, sources: RenderTriggerSources): () => void {
   const listener = () => invalidate();
-  sources.controls.addEventListener("change", listener);
-  for (const type of CANVAS_TRIGGERS) sources.element.addEventListener(type, listener, { passive: true });
+  sources.controls?.addEventListener("change", listener);
+  for (const type of CANVAS_TRIGGERS) sources.element?.addEventListener(type, listener, { passive: true });
   const unsubscribe = sources.lighting?.subscribe(listener);
   return () => {
-    sources.controls.removeEventListener("change", listener);
-    for (const type of CANVAS_TRIGGERS) sources.element.removeEventListener(type, listener);
+    sources.controls?.removeEventListener("change", listener);
+    for (const type of CANVAS_TRIGGERS) sources.element?.removeEventListener(type, listener);
     unsubscribe?.();
   };
 }

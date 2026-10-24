@@ -6,7 +6,7 @@
 
 import { canonicalKey } from './canon.ts';
 import type { Kernel } from './kernel.ts';
-import { type PredicateEnv, evalAll, evalPredicate, inSpatialRegion } from './predicate.ts';
+import { type PredicateEnv, evalAll, evalPredicate, inSpatialRegion, itemPrefilter } from './predicate.ts';
 import { type OpCtx, newOpCtx } from './resolve.ts';
 import type { CandidateQuery } from './schema-types.ts';
 import type { GameTime, Id, Query, QueryItem, QueryOutcome, QueryScope } from './types.ts';
@@ -97,9 +97,15 @@ export class Queries {
     let steps = 0;
     let exact = 0;
 
+    // The tests a query makes on `kind` and `time` reject most minted events without resolving them: they are the same tests, made on what the event was minted with.
+    const pre = this.k.schema.hasKind('core:event') && findKinds.has('core:event') && !this.k.store.generalTouches(['kind', 'time', 'from', 'length']) ? itemPrefilter(q.must) : undefined;
     const check = (id: Id): void => {
       if (checked.has(id)) return;
       checked.add(id);
+      if (pre) {
+        const f = this.k.events.mintedFacts(id);
+        if (f && !pre.keep(f.kind, f.time)) return;
+      }
       if (++exact > cfg.maxExactChecks) throw new LimitExceeded(`more than ${cfg.maxExactChecks} exact checks in a query`);
       ctx.allowance.spend(1);
       if (!evalAll(env, q.must, id)) return;
@@ -152,7 +158,7 @@ export class Queries {
     // Summaries within scope: item descriptors enumerated as candidates under the same allowance (spec 8.3 step 9).
     const itemCandidates: Id[] = [];
     if (this.k.schema.hasKind('core:event') && findKinds.has('core:event')) {
-      itemCandidates.push(...this.k.summaries.itemCandidates(ctx, scope, q.at, this.roots(scope)));
+      itemCandidates.push(...this.k.summaries.itemCandidates(ctx, scope, q.at, this.roots(scope), pre));
     }
     for (const id of itemCandidates) {
       if (findKinds.has(this.k.store.header(id)?.kind ?? '')) check(id);

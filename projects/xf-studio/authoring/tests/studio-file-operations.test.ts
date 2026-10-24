@@ -35,7 +35,8 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
     hasSavedV: () => true,
     savedV: () => ({ gameVersion: 2000 } as any),
     loadSavedV: (bytes, character) => { loadedBytes = bytes; loadedFor = character; return { suggestedEyeShape: 3 }; },
-    savedVReady: () => true,
+    // Ready per scene: only a V a 3D view shows (here `c-1`) can take a save.
+    savedVReady: character => character === "c-1",
     executeCollection: request => service.execute(request),
     recoverCollection: draft => service.dispatch({ kind: "collection.undoOpen", collection: studio.shown()!, ...(draft !== undefined ? { draft } : {}) }),
     buildReadiness,
@@ -140,6 +141,7 @@ test("saved-V acquisition returns typed result and cancellation never applies by
   // The V the request named when it was asked is the one the save goes to (profiles design §3.3); a request naming none is refused.
   expect(f.loadedFor()).toBe("c-1");
   expect(f.files.capability({ kind: "savedV.import", character: "" })).toMatchObject({ available: false, code: "missing_target" });
+  expect(f.files.capability({ kind: "savedV.import", character: "c-2" })).toMatchObject({ available: false, reason: "Wait for the 3D view to finish loading." });
   expect(f.files.capability({ kind: "recipe.import", collection: "" })).toMatchObject({ available: false, code: "missing_target" });
   expect(await f.files.execute({ kind: "savedV.import", character: "c-1" })).toMatchObject({ ok: false, code: "cancelled" });
   expect(f.files.snapshot().busy).toBeUndefined();

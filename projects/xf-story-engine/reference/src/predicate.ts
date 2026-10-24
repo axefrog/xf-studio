@@ -250,6 +250,49 @@ export function evalAll(env: PredicateEnv, ps: Predicate[] | undefined, node: Id
   return true;
 }
 
+/** What a query's tests say about the kind and time of a summary item or a minted event, before any of them is materialised or resolved. */
+export interface ItemPrefilter {
+  /** Whether something of this kind and time can pass the query's tests on those two things. */
+  keep(kind: Value | undefined, time: number): boolean;
+  /** Whether anything of this kind can. */
+  kindOk(kind: Value | undefined): boolean;
+  /** The closed range of times the tests allow, when they bound it. */
+  range?: [number, number];
+}
+
+/**
+ * What a query's `must` clauses say about the two things a summary item's descriptor already knows, its kind and its time: a test that
+ * can reject an item before it is materialised. It handles only the clauses that read the node's own `kind` and `time` with `eq`, `in`,
+ * `not-in`, `range` and the field bounds; every other clause is left to the exact check. Returns undefined when there is none.
+ */
+export function itemPrefilter(must: Predicate[] | undefined): ItemPrefilter | undefined {
+  const kinds: Array<(kind: Value | undefined) => boolean> = [];
+  let lo = Number.NEGATIVE_INFINITY;
+  let hi = Number.POSITIVE_INFINITY;
+  for (const p of must ?? []) {
+    if (p.path === 'kind' && (p.op === 'eq' || p.op === 'in' || p.op === 'not-in')) {
+      kinds.push((kind) => {
+        if (kind === undefined) return true;
+        if (p.op === 'eq') return valueKey(kind) === valueKey(p.arg as Value);
+        return p.op === 'in' ? inArg(kind, p.arg) : !inArg(kind, p.arg);
+      });
+    } else if (p.path === 'time') {
+      const a = p.arg;
+      if (p.op === 'range' && Array.isArray(a) && typeof a[0] === 'number' && typeof a[1] === 'number') {
+        lo = Math.max(lo, a[0]);
+        hi = Math.min(hi, a[1]);
+      } else if (p.op === 'field-at-least' && typeof a === 'number') lo = Math.max(lo, a);
+      else if (p.op === 'field-at-most' && typeof a === 'number') hi = Math.min(hi, a);
+    }
+  }
+  const bounded = lo > Number.NEGATIVE_INFINITY || hi < Number.POSITIVE_INFINITY;
+  if (kinds.length === 0 && !bounded) return undefined;
+  const kindOk = (kind: Value | undefined): boolean => kinds.every((f) => f(kind));
+  const out: ItemPrefilter = { kindOk, keep: (kind, time) => kindOk(kind) && time >= lo && time <= hi };
+  if (bounded) out.range = [lo, hi];
+  return out;
+}
+
 export function inSpatialRegion(pos: Value, region: SpatialRegion): boolean {
   if (!Array.isArray(pos)) return false;
   if ('radius' in region) {
@@ -302,7 +345,7 @@ function scopeContains(env: PredicateEnv, scope: NonNullable<Selector['scope']>,
  * slot path, and a change to one window of a simulated temporal slot is a change to that slot (SPEC-NOTES 57).
  */
 function baseSlotOf(slotKey: string): string {
-  return slotKey.replace(/@w-?\d+$/, '');
+  return slotKey.includes('@w') ? slotKey.replace(/@w-?\d+$/, '') : slotKey;
 }
 
 /**
@@ -311,14 +354,16 @@ function baseSlotOf(slotKey: string): string {
  * slot, scope, `where`.
  */
 export function selectorMatches(env: PredicateEnv, sel: Selector, node: Id, slotPath: SlotPath | null): boolean {
-  if (sel.kind !== undefined) {
-    const k = env.kindOf(node);
-    if (!k || !env.schema.isKind(k, sel.kind)) return false;
-  }
+  // the conditions are a conjunction, so the order is free: the cheap test of the slot goes first, because a resolution tests every rule that
+  // names no node and most of them name another slot
   if (slotPath !== null && sel.slot !== '*') {
     if (sel.slot.endsWith('[*]')) {
       if (!slotPath.startsWith(sel.slot.slice(0, -3) + '[')) return false;
     } else if (sel.slot !== slotPath && sel.slot !== baseSlotOf(slotPath)) return false;
+  }
+  if (sel.kind !== undefined) {
+    const k = env.kindOf(node);
+    if (!k || !env.schema.isKind(k, sel.kind)) return false;
   }
   if (sel.scope && !scopeContains(env, sel.scope, node)) return false;
   return evalAll(env, sel.where, node);

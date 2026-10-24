@@ -10,6 +10,7 @@ import { applyEffects } from './effects.ts';
 import { consumeEvent } from './consume.ts';
 import { evalPred, gameTick, planPlayFrom, roleVerdict, sincePlayFrom, stateSince } from './eval.ts';
 import * as ids from './ids.ts';
+import { readCall, resolveReadArgs } from './reads.ts';
 import type { Instance, Layer2, Trigger } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
 import type { Rejection } from './watch.ts';
@@ -39,8 +40,49 @@ export function windowStates(l2: Layer2, inst: Instance, t: GameTime): WindowSta
 }
 
 /**
+ * The states a condition passes through at one time (S2-4): the registered reads it names can change more than once at a time (a regime
+ * ends and another starts at the same second), and `eval` at that time gives only the last value. The changes of all the reads the condition
+ * names are put in the order they were made (the port's `ord`), and there is one state after each: every read at the value it had then, a
+ * read that did not change at this time left to `eval`. So a condition on two reads is never met by values that did not stand together.
+ */
+function statesAt(l2: Layer2, inst: Instance, pred: Pred, at: GameTime): Array<(read: string, args: unknown[]) => string | undefined> {
+  const port = l2.reg.sim;
+  if (!port) return [];
+  const initial = new Map<string, string>();
+  const changes: Array<{ key: string; value: string; ord: number | undefined; n: number }> = [];
+  for (const { atom } of atoms(pred)) {
+    if (!('city' in atom || 'social' in atom)) continue;
+    const call = readCall(atom);
+    if ('error' in call || !port.builds(call.name)) continue;
+    const args = resolveReadArgs(call, inst);
+    if (args === undefined) continue;
+    const key = `${call.name}|${JSON.stringify(args)}`;
+    if (initial.has(key)) continue;
+    const seq = port.transitions(call.name, args, at - 1, at);
+    initial.set(key, seq[0]?.value ?? port.eval(call.name, args, at - 1));
+    for (const x of seq.slice(1)) changes.push({ key, value: x.value, ord: x.ord, n: changes.length });
+  }
+  if (changes.length === 0) return [];
+  changes.sort((a, b) => (a.ord ?? Number.MAX_SAFE_INTEGER) - (b.ord ?? Number.MAX_SAFE_INTEGER) || a.n - b.n);
+  const standing = new Map(initial);
+  const out: ReturnType<typeof statesAt> = [];
+  for (let i = 0; i < changes.length;) {
+    const c = changes[i++]!;
+    standing.set(c.key, c.value);
+    // Equal ord identifies aliases of ONE source transition: apply every alias before testing a compound predicate.
+    while (c.ord !== undefined && i < changes.length && changes[i]!.ord === c.ord) {
+      const alias = changes[i++]!;
+      standing.set(alias.key, alias.value);
+    }
+    const state = new Map(standing);
+    out.push((read: string, args: unknown[]) => state.get(`${read}|${JSON.stringify(args)}`));
+  }
+  return out;
+}
+
+/**
  * Window `closes` predicates are evaluated at the time of each delivered change (S2 section 4.2), so a closing value
- * latches even if a later change has already reverted it.
+ * latches even if a later change has already reverted it, and at each value a registered read passed through at that time.
  */
 function latchFromChanges(l2: Layer2, inst: Instance, triggers: Trigger[]): void {
   const st = inst.st;
@@ -49,8 +91,9 @@ function latchFromChanges(l2: Layer2, inst: Instance, triggers: Trigger[]): void
     const c = tr.change as Change & { at?: GameTime };
     const at = c.c === 'reading' || c.c === 'pin' ? c.at ?? tr.time : tr.time;
     for (const w of st.document.windows) {
-      if (st.latches.includes(w.id) || w.closes === undefined) continue;
-      if (evalPred(l2, { inst, t: at }, w.closes) === 'yes') {
+      const closes = w.closes;
+      if (st.latches.includes(w.id) || closes === undefined) continue;
+      if (evalPred(l2, { inst, t: at }, closes) === 'yes' || statesAt(l2, inst, closes, at).some((readOf) => evalPred(l2, { inst, t: at, readOf }, closes) === 'yes')) {
         st.latches.push(w.id);
         l2.record(inst, 'beat', { window: w.id, latched: true, at });
       }
@@ -448,6 +491,11 @@ export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
   for (const s of sites) {
     for (const { atom } of atoms(s.pred)) {
       if ('believes' in atom) believes = true;
+      else if ('city' in atom || 'social' in atom) {
+        // a read that depends on beliefs, which emit no Changes, is looked at again at every boundary (S2 4.1)
+        const call = readCall(atom);
+        if (!('error' in call) && l2.reg.sim?.builds(call.name) && l2.reg.sim.deps(call.name).boundary) believes = true;
+      }
       else if ('hour' in atom) { hours.add(atom.hour[0]); hours.add(atom.hour[1]); }
       else if ('since' in atom && 'atLeast' in atom) {
         if (atom.atLeast.clock === 'play') {
@@ -536,6 +584,18 @@ export function addPredInterests(l2: Layer2, p: Pred, inst: Instance | undefined
         if (r.fact) factInterest(r.fact);
         else if (r.node) add({ slot: '*', scope: { nodes: [r.node] } });
         else if (r.role) roleInterest(r.role);
+      }
+    } else if ('city' in atom || 'social' in atom) {
+      // A read declares what it depends on (S1 9.1); a dependency that names no kind watches the nodes the read is made of.
+      const call = readCall(atom);
+      const port = l2.reg.sim;
+      if ('error' in call || !port?.builds(call.name)) continue;
+      const args = resolveReadArgs(call, inst);
+      const nodes = (args ?? []).filter((a): a is Id => typeof a === 'string' && /^[0-9a-f]{32}$/.test(a));
+      for (const dep of port.deps(call.name).interests) {
+        if (dep.kind === undefined && dep.slot === '*') {
+          if (nodes.length > 0) add({ slot: '*', scope: { nodes } });
+        } else add({ ...(dep.kind !== undefined ? { kind: dep.kind } : {}), slot: dep.slot });
       }
     }
   }

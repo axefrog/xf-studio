@@ -120,6 +120,30 @@ function fullScreen(material: THREE.Material) {
   return { scene, quad };
 }
 
+/**
+ * A stand-in for the plane Three draws a textured scene background with (WebGLBackground, three r186: its `BackgroundMaterial`, made at
+ * the first draw and kept private). Built as Three builds it, so compiling it ahead makes the program that plane draws with: otherwise its
+ * link is the first studio frame's own (2.3 s on a cold program cache, experiment 043 §11). The display keeps it while it lives, so the
+ * program it compiled stays until Three's own plane uses it.
+ */
+function backgroundStandIn() {
+  const background = THREE.ShaderLib.background;
+  const material = new THREE.ShaderMaterial({ name: "BackgroundMaterial", uniforms: THREE.UniformsUtils.clone(background.uniforms),
+    vertexShader: background.vertexShader, fragmentShader: background.fragmentShader, side: THREE.FrontSide, depthTest: false, depthWrite: false,
+    fog: false });
+  // As Three does: a `map` the renderer evaluates like a built-in material's.
+  Object.defineProperty(material, "map", { get(this: THREE.ShaderMaterial) { return this.uniforms.t2D!.value; } });
+  const geometry = new THREE.PlaneGeometry(2, 2);
+  geometry.deleteAttribute("normal");
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.frustumCulled = false;
+  return { mesh, show(texture: THREE.Texture, intensity: number) {
+    material.uniforms.t2D!.value = texture;
+    material.uniforms.backgroundIntensity!.value = intensity;
+    material.toneMapped = THREE.ColorManagement.getTransfer(texture.colorSpace) !== THREE.SRGBTransfer;
+  }, dispose() { material.dispose(); geometry.dispose(); } };
+}
+
 export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
   const linear = halfFloatRenderable(renderer.extensions);
   const samples = Math.max(0, Math.min(DISPLAY_SAMPLES, renderer.capabilities?.maxSamples ?? DISPLAY_SAMPLES));
@@ -146,6 +170,8 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
   const backdrop = new THREE.Scene();
   const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const size = new THREE.Vector2(), clearColour = new THREE.Color();
+  /** The background plane's stand-in, made the first time a studio display is compiled ahead (`compile`). */
+  let backgroundPlane: ReturnType<typeof backgroundStandIn> | null = null;
   function ensureTarget() {
     renderer.getDrawingBufferSize(size);
     const width = Math.max(1, Math.floor(size.x)), height = Math.max(1, Math.floor(size.y));
@@ -221,6 +247,49 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
      * the ones the frame draws with (Three keys a program's output encoding and tone mapping on the target).
      */
     sceneTarget(preset: LightingPreset): THREE.WebGLRenderTarget | null { return preset === "creator" || linear ? ensureTarget() : null; },
+    /**
+     * Compile the passes `render` draws for `preset` after the scene (the game display's grade to the canvas; the studio's coverage into the
+     * target and its tone pass to the canvas), each bound to the target it draws into, so their programs are the ones the frame uses.
+     * Three's `compileAsync`: the promises resolve once the driver has linked them. The direct path has no passes of its own.
+     */
+    compile(preset: LightingPreset, scene?: THREE.Scene): { pending: Promise<unknown>[]; materials: THREE.Material[] } {
+      const previous = renderer.getRenderTarget(), pending: Promise<unknown>[] = [], materials: THREE.Material[] = [];
+      try {
+        if (preset === "creator") {
+          renderer.setRenderTarget(previous);
+          pending.push(renderer.compileAsync(creatorPass.scene, quadCamera));
+          return { pending, materials: [creator] };
+        }
+        // The textured stage backdrop: Three's own background plane, drawn to the canvas (with the scene's lights on the direct path).
+        const background = scene?.background as THREE.Texture | null | undefined;
+        if (background?.isTexture) {
+          backgroundPlane ??= backgroundStandIn();
+          backgroundPlane.show(background, scene!.backgroundIntensity);
+          renderer.setRenderTarget(previous);
+          const holder = new THREE.Scene();
+          holder.add(backgroundPlane.mesh);
+          pending.push(renderer.compileAsync(backgroundPlane.mesh, quadCamera, linear ? holder : scene!));
+          holder.remove(backgroundPlane.mesh);
+          materials.push(backgroundPlane.mesh.material as THREE.Material);
+        }
+        if (!linear) return { pending, materials };
+        renderer.setRenderTarget(ensureTarget());
+        pending.push(renderer.compileAsync(coveragePass.scene, quadCamera));
+        renderer.setRenderTarget(previous);
+        pending.push(renderer.compileAsync(studioPass.scene, quadCamera));
+        return { pending, materials: [...materials, coverage, studio] };
+      } finally { renderer.setRenderTarget(previous); }
+    },
+    /**
+     * Let the frame-sized target go (a hidden scene runtime holds none: experiment 043 §2.1); the passes' programs stay. The next frame that
+     * draws, or `allocate`, makes it again (allocation only: a program doesn't depend on the target's size).
+     */
+    releaseTarget() {
+      target?.dispose(); target = null;
+      creator.uniforms.tScene!.value = studio.uniforms.tScene!.value = null;
+    },
+    /** Make the target `preset` draws into, at the drawing buffer's size and with its GPU storage, ahead of the frame that draws it. */
+    allocate(preset: LightingPreset) { if (preset === "creator" || linear) renderer.initRenderTarget(ensureTarget()); },
     /** Use a decoded game LUT, or the neutral LUT (null). */
     setLut(next: GradingLut | null) {
       const replacement = lutTexture(next ?? neutralGradingLut(32));
@@ -236,7 +305,7 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
     info: () => ({ path: linear ? "linear" as const : "direct" as const, creatorTarget: linear ? "half-float" as const : "srgb8" as const,
       samples, width: target?.width ?? 0, height: target?.height ?? 0 }),
     dispose() {
-      target?.dispose(); target = null; lut.dispose();
+      target?.dispose(); target = null; lut.dispose(); backgroundPlane?.dispose(); backgroundPlane = null;
       for (const pass of [creatorPass, studioPass, coveragePass]) { (pass.quad.material as THREE.Material).dispose(); pass.quad.geometry.dispose(); }
     },
   };

@@ -125,7 +125,8 @@ export class PreviewSpin {
   /** A live frame is shown (the strips are hidden), at this angle; one request at a time, no more often than the interval. */
   private liveShown = false;
   private liveAngle = NaN;
-  private liveBusy = false;
+  /** The frame request under way (one at a time), or null. */
+  private liveAsking: object | null = null;
   private liveAt = 0;
   private liveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -160,6 +161,8 @@ export class PreviewSpin {
   setLive(frames: LiveFrames | null) {
     if (frames === this.live) return;
     this.live = frames;
+    // A request to the frames replaced (or stopped) is nobody's now: the new frames are asked at once, never held up by it.
+    this.liveAsking = null;
     this.hideLive();
     this.paint();
   }
@@ -172,13 +175,14 @@ export class PreviewSpin {
   /** Ask for the live frame at the current angle (one at a time, no more often than the interval). */
   private pumpLive() {
     const frames = this.live;
-    if (!frames || this.liveBusy || this.liveTimer || Math.abs(this.angle - this.liveAngle) < 0.05) return;
+    if (!frames || this.liveAsking || this.liveTimer || Math.abs(this.angle - this.liveAngle) < 0.05) return;
     const wait = this.liveAt + LIVE_INTERVAL_MS - performance.now();
     if (wait > 0) { this.liveTimer = setTimeout(() => { this.liveTimer = null; this.pumpLive(); }, wait); return; }
     const angle = this.angle;
-    this.liveBusy = true; this.liveAt = performance.now();
+    const asking = this.liveAsking = {};
+    this.liveAt = performance.now();
     frames(angle).then(bitmap => {
-      this.liveBusy = false;
+      if (this.liveAsking === asking) this.liveAsking = null;
       if (!bitmap) return;
       if (frames !== this.live || !this.showing()) { bitmap.close(); return; }
       const at = performance.now();
@@ -189,7 +193,7 @@ export class PreviewSpin {
       this.liveAngle = angle;
       if (!this.liveShown) { this.liveShown = true; this.canvas.hidden = false; for (const image of this.strips) image.hidden = true; }
       this.pumpLive();
-    }, () => { this.liveBusy = false; });
+    }, () => { if (this.liveAsking === asking) this.liveAsking = null; });
   }
   /** Allow turning (off: the still only, and any turn in progress ends). */
   enable(on: boolean) {

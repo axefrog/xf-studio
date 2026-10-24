@@ -8,7 +8,7 @@
  * Only `wiring()` (how a session is assembled) changed when the service landed: the observations did not. Step IDs are opaque and
  * compared by first appearance; times are compared only for presence.
  */
-import { MAIN_VIEW, type ViewGraphChange } from "../../src/platform/api/view-graph";
+import { MAIN_VIEW, type ViewGraphChange, type ViewGraphData } from "../../src/platform/api/view-graph";
 import type { HistoryParticipant, HistorySnapshot, HistoryCommand } from "../../src/platform/api/history";
 import { STUDIO_COMPOSITION } from "../../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../../src/preview/creator-lighting";
@@ -168,13 +168,20 @@ export function redoValiditySession() {
 
 const calibrated = (exposure: number) => ({ state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure } } });
 
+/**
+ * The graph without its scenes' motion (profiles phase 4a-iii moved the motion into the scene node, experiment 043 §9): the golden was
+ * captured before, and the motion records nothing, so everything else must digest as it did.
+ */
+const withoutMotion = (data: ViewGraphData) =>
+  ({ ...data, scenes: data.scenes.map(({ motion: _motion, ...scene }) => scene) });
+
 export function viewSession() {
   const history = createHistoryService(), focus = history.focus;
   const { views, viewActions } = createViewServices(freshWorkspace().preview, undefined, STUDIO_MODULE_REGISTRATION, history);
   const events: unknown[] = [], seen: unknown[] = [];
   views.subscribe((change: ViewGraphChange) => events.push({ ...change, nodes: [...change.nodes].sort(), views: [...change.views].sort() }));
   const note = (what: string, result?: unknown) => {
-    seen.push({ what, result: result ?? null, history: views.history(), snapshot: viewActions.snapshot().history, data: digest(views.data()), lights: views.state(MAIN_VIEW, "lights").creatorLighting,
+    seen.push({ what, result: result ?? null, history: views.history(), snapshot: viewActions.snapshot().history, data: digest(withoutMotion(views.data())), lights: views.state(MAIN_VIEW, "lights").creatorLighting,
       undo: viewActions.capability({ kind: "view.undo" }), redo: viewActions.capability({ kind: "view.redo" }), events: events.splice(0) });
   };
   const run = (action: Parameters<typeof viewActions.dispatch>[0]) => { viewActions.dispatch(action); return true; };

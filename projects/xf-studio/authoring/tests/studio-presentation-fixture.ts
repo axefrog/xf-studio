@@ -38,7 +38,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   /** The window's workspace lease (profiles design §2.3); without it the window is the only one. */
   lease?: WorkspaceLease } = {}): {
   shell: StudioPresentationPort<string>; packageInput: () => PresetCollection | undefined;
-  downloads: string[]; locations: string[] } {
+  downloads: string[]; locations: string[]; outbox: DocumentOutbox } {
   const workspace = freshWorkspace(), history = createHistoryService(), document = new AuthoringDocument(workspace, undefined, { history });
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
@@ -102,5 +102,5 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
     pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: (_listener: () => void) => () => {} };
   return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
     previewReadiness, targets, focus: history.focus, ...(options.lease ? { workspace: options.lease } : {}) }),
-    packageInput: () => packageInput, downloads, locations };
+    packageInput: () => packageInput, downloads, locations, outbox };
 }

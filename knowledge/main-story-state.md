@@ -166,7 +166,7 @@ Observations [resource]:
 - The roof scene tests all four lover facts (`> 0` and `>= 1`) and writes all four chosen facts with "add 1". Whether more than one can be set depends on the scene's conditions, not traced.
 - The chosen facts are read by the `q202` convoy and border scenes, by `q203_penthouse`, `q204_00_setup` and `q307_02_coma`, and by the final boards. The lover facts are read by `q114`, `q302` and `q307` (so that Phantom Liberty and its aftermath know who V is with).
 - The Phantom Liberty chapters send a text from whoever V is with after the crash: the `contacts/judy/q301_rom_after_crash`, `contacts/river_ward/q301_rom_after_crash`, `contacts/kerry_eurodyne/q302_rom_after_crash` and `contacts/panam/q302_rom_after_crash` conversations, with the flags `q301_romance_judy_texted`, `q301_romance_river_texted` and `q302_romance_kerry_texted` [resource]. A phone conversation in the journal is therefore also a trace of a romance.
-- Nothing in these files stores "friend" as distinct from "lover" except `sq021_sobchak_friend` and `sq032_johnny_friend`; whether the other characters have friend flags is an open question.
+- **Friend and lover are separate facts** [source, quest corpus]. Friend flags exist for Judy (`sq030_friendship`, written with `sq030_romance` in her closing phase), Kerry (`sq028_kerry_friend`, written with `sq028_kerry_dislike` in `sq028_07_trashy_beach`), River (`sq021_sobchak_friend`) and Johnny (`sq032_johnny_friend`). None was found for Panam. The lover facts are `sq027_panam_lover` (`sq027_06_panzer`), `sq028_kerry_relationship` (`sq028_07_trashy_beach`), `sq029_river_lover` (`sq029_05_morning_after`) and `sq030_judy_lover` (the `sq030_hut` phase), each set to 1 at one named scene or phase. There is no affinity or approval fact anywhere in the quest data, and only one lone trust flag: romance is a few boolean outcomes, not a meter. Source: the Story Engine's relationships dossier ([d02 §2.4](../research/story-engine/craft/d02-relationships.md)), from queries of the quest corpus. Whether scripts hold a Panam friend flag is still open.
 
 ## 6. The point of no return
 
@@ -429,7 +429,7 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 
 ## Open questions
 
-1. Where are the side-quest writers of `sq027`, `sq028`, `sq029`, `sq030` and `sq031` facts, and which facts distinguish "friend" from "lover"? This needs the side-quest phases and scenes (area H).
+1. Where are the side-quest writers of `sq027`, `sq028`, `sq029`, `sq030` and `sq031` facts, and which facts distinguish "friend" from "lover"? This needs the side-quest phases and scenes (area H). *Partly answered:* the friend and lover facts for Judy, Kerry, River and Johnny are now listed above (d02). A Panam friend flag and the side-quest writers' scripts are still open.
 2. Which scene exit sockets pick the epilogue (`q201` to `q204`)? The scenes `q115_02b_ripperdoc_roof`, `q116_05a_ripperdoc_roof` and `q116_05_mikoshi` are the candidates.
 3. Are `q115_02_*_help` read anywhere? They are written but not tested in the files studied.
 4. What exact AND/OR do the roof-scene tests form for the Panam and Johnny options?

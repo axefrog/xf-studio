@@ -48,8 +48,10 @@ export const V4_EVENT_KINDS = ['offer', 'response', 'seed-outcome'];
 export interface CoreDefsOptions {
   /** Include the v4 additions (V4-2, V4-3, V4-22). On by default; the frozen v3 digest runs without them (SPEC-NOTES 58). */
   v4?: boolean;
-  /** More event kinds (S0 v4.8's registry does not exist yet). */
+  /** More event kinds (S0 v4.8's registry does not exist yet). Names the core already has are not repeated. */
   extraEventKinds?: readonly string[];
+  /** More participant roles (the simulation layer's: aggressor, responder, teller ...). Names the core already has are not repeated. */
+  extraParticipantRoles?: readonly string[];
 }
 
 export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
@@ -83,7 +85,7 @@ export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
     dim('core:time', { t: 'int', min: -(2 ** 50), max: 2 ** 50 }, 'order'),
     dim('core:duration', { t: 'int', min: 1, max: 2 ** 40 }, 'order'),
     dim('core:relation', { t: 'enum', values: ['parent', 'child', 'sibling', 'partner'] }),
-    dim('core:event-kind', { t: 'enum', values: [...CORE_EVENT_KINDS, ...(v4 ? V4_EVENT_KINDS : []), ...extraEventKinds] }),
+    dim('core:event-kind', { t: 'enum', values: [...new Set([...CORE_EVENT_KINDS, ...(v4 ? V4_EVENT_KINDS : []), ...extraEventKinds])] }),
     ...(v4
       ? [
           // v4 additions (V4-2, V4-3, V4-22).
@@ -97,7 +99,7 @@ export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
     dim('core:effect-id', { t: 'enum', values: CORE_EFFECTS }),
     dim('core:participant-role', {
       t: 'enum',
-      values: ['participant', 'actor', 'target', 'victim', 'customer', 'collector', 'vendor', 'guard', 'witness'],
+      values: [...new Set(['participant', 'actor', 'target', 'victim', 'customer', 'collector', 'vendor', 'guard', 'witness', ...(opts.extraParticipantRoles ?? [])])],
     }),
     dim('core:count-participants', { t: 'int', min: 0, max: 32 }, 'order'),
     // A ref to anything (used for assigned slots, whose values come from pins, so the query is never run).

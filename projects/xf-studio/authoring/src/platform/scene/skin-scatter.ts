@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { passParticipation, SCATTER_INPUT_DEFINE, SCATTER_INPUT_OUTPUTS, type PassParticipation } from "../api/scene";
+import { passParticipation, SCATTER_INPUT_DEFINE, SCATTER_S1_DEFINE, SCATTER_S2_DEFINE, type PassParticipation } from "../api/scene";
 import { createPassVariants, occluderCutoff, variantRole, type PassSpec } from "./pass-variants";
 import { assignScatterSlots, packScatterTable, SCATTER_MAX_ENTRIES, SCATTER_RED_GATE, SCATTER_ROW, SCATTER_SLOTS, scatterSlot, type ScatterProfile,
   type ScatterQuality } from "./skin-scatter-kernel";
@@ -8,9 +8,14 @@ import { assignScatterSlots, packScatterTable, SCATTER_MAX_ENTRIES, SCATTER_RED_
  * The game's screen-space skin scatter in the preview (research/materials/shader-skin.md §6.3 and §11), a renderer adapter the display
  * runs between the forward scene and its display pass:
  *
- * 1. **Input** (S0–S2, one three-target draw, pass-variants.ts): every visible mesh through its scatter-input variant. S0 = the direct
- *    diffuse irradiance at albedo 1 (RGB, half float) and the Subsurface flag as the pixel's view depth (A); S1 = √albedo after decals and
- *    the plate (RGB, 8 bit, blended by decals in that space as the G-buffer is) and the profile slot (A); S2 = the blended metalness (R).
+ * 1. **Input** (S0–S2, pass-variants.ts): every visible mesh through its scatter-input variant, once per target. S0 = the direct diffuse
+ *    irradiance at albedo 1 (RGB, half float) and the Subsurface flag as the pixel's view depth (A); S1 = √albedo after decals and the
+ *    plate (RGB, 8 bit, blended by decals in that space as the G-buffer is) and the profile slot (A); S2 = the blended metalness (R). Each
+ *    target is a draw of its own, with programs that write one output (platform/api/scene.ts `SCATTER_INPUT_WRITE`): ANGLE on Direct3D 11
+ *    builds a program that writes several again at its first draw, on the GPU process's main thread, and presents no frame for that long
+ *    (1–6 s per skin variant on real data; experiment 043 §12). The three draws share one depth buffer, cleared before each, so each
+ *    target holds what one three-target draw wrote there. S1 and S2 need no light, so their programs drop it (the plate keeps what its
+ *    alpha needs).
  * 2. **Horizontal blur** S0 → P0 and 3. **vertical blur and combine** P0 → P1 = Δ = P · (B − E) · albedo: the §6.3.1 loop with the game's
  *    kernel (skin-scatter-kernel.ts) as a uniform table and the game's rules: a tap counts only on a Subsurface pixel (no depth or normal
  *    test), whole-pixel taps (truncated, unfiltered), per-channel renormalisation, and only the centre's metalness (> 0.1) gates. The
@@ -29,39 +34,39 @@ import { assignScatterSlots, packScatterTable, SCATTER_MAX_ENTRIES, SCATTER_RED_
  */
 
 const OCCLUDER_DEFINE = "XFS_SCATTER_OCCLUDER";
-/** An occluder's write: nothing here (class 0, no irradiance), where the surface is at least `XFS_OCCLUDER_CUTOFF` covered. */
+/** An occluder's write, the same in every target: nothing here (class 0, no irradiance), where the surface is at least `XFS_OCCLUDER_CUTOFF` covered. */
 const OCCLUDER_WRITE = /* glsl */`
 #include <alphatest_fragment>
 #ifdef XFS_SCATTER_OCCLUDER
 	if ( diffuseColor.a < XFS_OCCLUDER_CUTOFF ) discard;
 	gl_FragColor = vec4( 0.0 );
-	xfsScatterOccluder1 = vec4( 0.0 );
-	xfsScatterOccluder2 = vec4( 0.0 );
 	return;
 #endif`;
-const OCCLUDER_OUTPUTS = /* glsl */`
-#ifdef XFS_SCATTER_OCCLUDER
-layout( location = 1 ) out highp vec4 xfsScatterOccluder1;
-layout( location = 2 ) out highp vec4 xfsScatterOccluder2;
-#endif`;
 
-/** The scatter's input pass over the variant swap: declared skin and decals write their own inputs; everything else occludes or is left out. */
-export const SCATTER_INPUT_PASS: PassSpec = {
-  name: "xfs-scatter-input-1",
+/** The scatter's input targets, in drawing order (S0 lit, S1 and S2 unlit). */
+export const SCATTER_TARGETS = ["s0", "s1", "s2"] as const;
+export type ScatterTarget = typeof SCATTER_TARGETS[number];
+const TARGET_DEFINES: Record<ScatterTarget, Record<string, string>> = { s0: {}, s1: { [SCATTER_S1_DEFINE]: "" }, s2: { [SCATTER_S2_DEFINE]: "" } };
+
+/**
+ * The scatter's input pass for one target over the variant swap: declared skin and decals write their own inputs; everything else occludes
+ * or is left out. An occluder writes the same into every target, so its three passes' variants share one program.
+ */
+export const scatterInputPass = (target: ScatterTarget): PassSpec => ({
+  name: "xfs-scatter-input-2",
   defines: (role, material): Record<string, string> => role === "occluder"
-    ? { [OCCLUDER_DEFINE]: "", XFS_OCCLUDER_CUTOFF: occluderCutoff(material).toFixed(4) } : { [SCATTER_INPUT_DEFINE]: "" },
+    ? { [OCCLUDER_DEFINE]: "", XFS_OCCLUDER_CUTOFF: occluderCutoff(material).toFixed(4) } : { [SCATTER_INPUT_DEFINE]: "", ...TARGET_DEFINES[target] },
   patch(shader, role) {
     if (role !== "occluder") return;
     if (!shader.fragmentShader.includes("#include <alphatest_fragment>")) throw Error("The scatter occluder expects the alpha test chunk.");
-    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\n${OCCLUDER_OUTPUTS}`)
-      .replace("#include <alphatest_fragment>", OCCLUDER_WRITE);
+    shader.fragmentShader = shader.fragmentShader.replace("#include <alphatest_fragment>", OCCLUDER_WRITE);
   },
   // A decal blends each target by its own output alpha and keeps the alpha below (class, slot): the game's RGB write mask.
   state: role => role === "decal"
     ? { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
       blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor }
     : { transparent: false, depthWrite: true, blending: THREE.NoBlending },
-};
+});
 
 const QUAD_VERTEX = /* glsl */`void main() { gl_Position = vec4( position.xy, 0.0, 1.0 ); }`;
 /**
@@ -136,8 +141,9 @@ export type SkinScatterEvidence = {
 };
 
 export function createSkinScatter(renderer: THREE.WebGLRenderer) {
-  const variants = createPassVariants(SCATTER_INPUT_PASS);
-  let input: THREE.WebGLRenderTarget | null = null, p0: THREE.WebGLRenderTarget | null = null, p1: THREE.WebGLRenderTarget | null = null;
+  // One variant swap per input target (S0, S1, S2), and the targets in the same order.
+  const passes = SCATTER_TARGETS.map(target => createPassVariants(scatterInputPass(target)));
+  let inputs: THREE.WebGLRenderTarget[] | null = null, p0: THREE.WebGLRenderTarget | null = null, p1: THREE.WebGLRenderTarget | null = null;
   let enabled = true, active = false, bare = false, quality: ScatterQuality = DEFAULT_SCATTER_QUALITY, scale = SCATTER_SCREEN_SCALE;
   let tableKey = "", overflow = 0, distinct: ScatterProfile[] = [], lastScissor: SkinScatterEvidence["scissor"] = null;
   const table = new Float32Array(SCATTER_SLOTS * SCATTER_ROW * 4);
@@ -159,19 +165,24 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
   function ensureTargets() {
     renderer.getDrawingBufferSize(size);
     const width = Math.max(1, Math.floor(size.x)), height = Math.max(1, Math.floor(size.y));
-    if (input && input.width === width && input.height === height) return;
+    if (inputs && inputs[0]!.width === width && inputs[0]!.height === height) return;
     disposeTargets();
     const options = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
       generateMipmaps: false, depthBuffer: false } as const;
-    input = new THREE.WebGLRenderTarget(width, height, { ...options, count: 3, depthBuffer: true });
-    // S1 and S2 are 8-bit, as the G-buffer's colour and surface targets are (√albedo quantises the same way).
-    input.textures[1]!.type = input.textures[2]!.type = THREE.UnsignedByteType;
-    input.textures.forEach((texture, i) => { texture.name = `xfs-scatter-s${i}`; });
+    // The input targets share one depth buffer. S1 and S2 are 8-bit, as the G-buffer's colour and surface targets are (√albedo quantises
+    // the same way).
+    const depth = new THREE.DepthTexture(width, height);
+    inputs = SCATTER_TARGETS.map(target => {
+      const made = new THREE.WebGLRenderTarget(width, height, { ...options, type: target === "s0" ? THREE.HalfFloatType : THREE.UnsignedByteType,
+        depthBuffer: true, depthTexture: depth });
+      made.texture.name = `xfs-scatter-${target}`;
+      return made;
+    });
     p0 = new THREE.WebGLRenderTarget(width, height, options);
     p1 = new THREE.WebGLRenderTarget(width, height, options);
     p0.texture.name = "xfs-scatter-p0"; p1.texture.name = "xfs-scatter-delta";
   }
-  function disposeTargets() { input?.dispose(); p0?.dispose(); p1?.dispose(); input = p0 = p1 = null; }
+  function disposeTargets() { for (const target of inputs ?? []) target.dispose(); p0?.dispose(); p1?.dispose(); inputs = p0 = p1 = null; }
 
   /** The drawn meshes' declarations (visible meshes, each material once). */
   function participants(scene: THREE.Scene) {
@@ -240,7 +251,7 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
       for (const { participation } of found) if (participation.wrapGate) participation.wrapGate.value = active ? 0 : 1;
       // No skin left in the scene at all (the V removed) or no half-float target: the targets leave GPU memory, so no V costs nothing.
       // A skin only hidden (the body switched off) keeps them, as its own GPU resources are kept, so showing it again is instant.
-      if (!active) { if (input && (!possible || !sceneHasSkin(scene))) { disposeTargets(); quad.geometry.dispose(); } return false; }
+      if (!active) { if (inputs && (!possible || !sceneHasSkin(scene))) { disposeTargets(); quad.geometry.dispose(); } return false; }
       const skinDeclarations = found.filter(entry => entry.participation.role === "skin" && entry.participation.profile);
       const assigned = assignScatterSlots(skinDeclarations.map(entry => entry.participation.profile!));
       skinDeclarations.forEach((entry, i) => { if (entry.participation.slot) entry.participation.slot.value = assigned.slotOf[i]!; });
@@ -261,7 +272,7 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
     render(scene: THREE.Scene, camera: THREE.Camera): THREE.Texture | null {
       if (!active || bare) return null;
       ensureTargets();
-      const targets = [input!, p0!, p1!], width = input!.width, height = input!.height;
+      const input = inputs!, targets = [...input, p0!, p1!], width = p0!.width, height = p0!.height;
       const rect = scissorRect(camera, width, height);
       lastScissor = rect;
       if (!rect) return null;
@@ -271,17 +282,21 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
       try {
         renderer.setClearColor(0x000000, 0);
         renderer.autoClear = false;
-        for (const target of targets) { target.scissorTest = false; renderer.setRenderTarget(target); renderer.clear(true, target === input, false); }
+        for (const target of targets) { target.scissorTest = false; renderer.setRenderTarget(target); renderer.clear(true, false, false); }
         for (const target of targets) { target.scissor.set(rect.x, rect.y, rect.width, rect.height); target.scissorTest = true; }
         scene.background = null;
-        renderer.setRenderTarget(input);
-        variants.draw(renderer, scene, camera);
+        // Each target drawn as the one three-target draw drew it: the same scene, the same depth test from a cleared depth buffer.
+        passes.forEach((variants, i) => {
+          renderer.setRenderTarget(input[i]!);
+          renderer.clear(false, true, false);
+          variants.draw(renderer, scene, camera);
+        });
         const projection = (camera as THREE.PerspectiveCamera).projectionMatrix.elements;
         (blur.uniforms.uFocal!.value as THREE.Vector2).set(projection[0]! * width / 2 * 1e-3 * scale, projection[5]! * height / 2 * 1e-3 * scale);
-        blur.uniforms.tS0!.value = input!.textures[0];
-        blur.uniforms.tS1!.value = input!.textures[1];
-        blur.uniforms.tS2!.value = input!.textures[2];
-        pass(p0!, input!.textures[0]!, false);
+        blur.uniforms.tS0!.value = input[0]!.texture;
+        blur.uniforms.tS1!.value = input[1]!.texture;
+        blur.uniforms.tS2!.value = input[2]!.texture;
+        pass(p0!, input[0]!.texture, false);
         pass(p1!, p0!.texture, true);
       } finally {
         scene.background = background;
@@ -306,23 +321,54 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
     setQuality(next: ScatterQuality) { quality = next; },
     get quality() { return quality; },
     /** Test access: the three input textures and the passes' outputs of the last frame. */
-    targets: () => input && p0 && p1 ? { s0: input.textures[0]!, s1: input.textures[1]!, s2: input.textures[2]!, p0: p0.texture, delta: p1.texture, input, p0Target: p0, p1Target: p1 } : null,
-    /** Developer evidence. `bytes`: the targets' storage (S0 8, S1 and S2 4 each, depth 4, P0 and P1 8 each per pixel). */
-    evidence: (): SkinScatterEvidence => ({ enabled, active, quality, width: input?.width ?? 0, height: input?.height ?? 0, scissor: lastScissor,
-      slots: distinct.map(profile => ({ blurSize: profile.blurSize, diffuse: [...profile.diffuse], falloff: [...profile.falloff] })), overflow,
-      variants: variants.counts(), bytes: (input?.width ?? 0) * (input?.height ?? 0) * 36 }),
+    targets: () => inputs && p0 && p1 ? { s0: inputs[0]!.texture, s1: inputs[1]!.texture, s2: inputs[2]!.texture, p0: p0.texture, delta: p1.texture,
+      inputs: [...inputs], p0Target: p0, p1Target: p1 } : null,
     /**
-     * What `material` draws as in the input pass when the scatter runs (its variant), or null when it takes no part or the scatter is off:
-     * a part's programs are compiled for it ahead of its first frame (lighting-setup-stage.ts `prepare`, PREV-189).
+     * Developer evidence. `bytes`: the targets' storage (S0 8, S1 and S2 4 each, their one depth buffer 4, P0 and P1 8 each per pixel).
+     * `variants`: the variants made, by role, over the three input passes (an occluder's three share one program).
      */
-    variantOf(material: THREE.Material): THREE.Material | null {
-      if (!enabled || bare) return null;
+    evidence: (): SkinScatterEvidence => ({ enabled, active, quality, width: p0?.width ?? 0, height: p0?.height ?? 0, scissor: lastScissor,
+      slots: distinct.map(profile => ({ blurSize: profile.blurSize, diffuse: [...profile.diffuse], falloff: [...profile.falloff] })), overflow,
+      variants: passes.reduce<Record<string, number>>((sum, variants) => {
+        for (const [role, count] of Object.entries(variants.counts())) sum[role] = (sum[role] ?? 0) + count;
+        return sum;
+      }, {}), bytes: (p0?.width ?? 0) * (p0?.height ?? 0) * 36 }),
+    /**
+     * What `material` draws as in the input passes when the scatter runs (its variant for S0, S1 and S2, in that order), or none when it
+     * takes no part or the scatter is off: a part's programs are compiled for them ahead of its first frame (lighting-setup-stage.ts
+     * `prepare`, PREV-189).
+     */
+    variantsOf(material: THREE.Material): THREE.Material[] {
+      if (!enabled || bare) return [];
       const role = variantRole(material);
-      return role ? variants.variantFor(material, role) : null;
+      return role ? passes.map(variants => variants.variantFor(material, role)) : [];
+    },
+    /**
+     * Compile the blur's program ahead (profiles phase 4a-v), bound to a target as its passes are: a scene's first scatter frame then links
+     * nothing of its own. Resolves once the driver has linked it; at once while the scatter is off.
+     */
+    compile(): Promise<void> {
+      if (!enabled || bare) return Promise.resolve();
+      const previous = renderer.getRenderTarget(), stand = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+      try { renderer.setRenderTarget(stand); return renderer.compileAsync(quadScene, quadCamera).then(() => undefined); }
+      finally { renderer.setRenderTarget(previous); stand.dispose(); }
+    },
+    /** The blur's material (its program, for a caller preparing ahead). */
+    get blurMaterial(): THREE.Material { return blur; },
+    /** Let the frame-sized targets go (a hidden scene runtime holds none: experiment 043 §2.1); the passes' programs stay. */
+    releaseTargets() { disposeTargets(); },
+    /**
+     * Make the targets at the drawing buffer's size, with their GPU storage, ahead of the frame that draws them; only when the scatter runs
+     * for `scene` (as `prepare` decides it, which this calls).
+     */
+    allocate(scene: THREE.Scene, possible: boolean) {
+      if (!this.prepare(scene, possible)) return;
+      ensureTargets();
+      for (const target of [...inputs!, p0!, p1!]) renderer.initRenderTarget(target);
     },
     /** Developer evidence: drop the input variants, so the next frame measures their compile (a V's first scatter frame). */
-    resetVariants() { variants.clear(); },
-    dispose() { disposeTargets(); variants.dispose(); blur.dispose(); quad.geometry.dispose(); },
+    resetVariants() { for (const variants of passes) variants.clear(); },
+    dispose() { disposeTargets(); for (const variants of passes) variants.dispose(); blur.dispose(); quad.geometry.dispose(); },
   };
 }
 export type SkinScatter = ReturnType<typeof createSkinScatter>;

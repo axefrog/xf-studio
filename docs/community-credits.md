@@ -81,6 +81,10 @@ By the WolvenKit team and contributors. [GitHub](https://github.com/WolvenKit/Wo
 
 ## Libraries, runtimes and general tools
 
+### ANGLE
+
+By Google and the ANGLE contributors. [Source](https://chromium.googlesource.com/angle/angle). ANGLE translates the Studio's WebGL to Direct3D 11 in Chrome on Windows. Its shader-compile trace events, with the HLSL of each build, showed which shader variants it builds at a program's first draw rather than at link time (for programs that write several outputs, and for float vertex inputs fed integers) and that those builds hold the screen still, which is why every Studio program writes one output and joint indices are floats.
+
 ### Apple ARKit face tracking
 
 By Apple. [Blend shape documentation](https://developer.apple.com/documentation/arkit/arfaceanchor/blendshapelocation). Its 52 named facial blend shapes, which MediaPipe and many face tools share, are the vocabulary our face-capture prototype maps onto V's face controls. Only the names and their descriptions were used.
@@ -104,6 +108,10 @@ By Nguyen Anh Quynh and contributors. [Website](https://www.capstone-engine.org)
 ### ChoiceScript random test and Rachel E. Towers
 
 Rachel E. Towers, ["How to Get the Most out of Automated Testing, Part 2"](https://choiceofgames.com/2018/01/how-to-get-the-most-out-of-automated-testing-part-2) (Choice of Games blog, 2018). It explains how ChoiceScript's random test plays many seeded runs and reports coverage, and what it cannot do: it cannot judge a loop and it cannot prove that a line is unreachable. It taught us what a large automated survey of a story can and cannot tell an author. The companion page, [Testing ChoiceScript games automatically](https://www.choiceofgames.com/make-your-own-games/testing-choicescript-games-automatically), shows how a line's hit count divided by the number of runs gives its rough chance of being reached, and how an exhaustive tool lists the lines it could not reach. That guided how we plan to read coverage figures when balancing.
+
+### Chromium
+
+By the Chromium authors. [Source](https://source.chromium.org/chromium). Chrome's tracing (the DevTools Protocol's `Tracing` domain and its `gpu` categories) showed where the GPU process spends a WebGL page's time, and its GPU program cache, kept with a browser profile, showed that most draw-time shader builds are a first-session cost.
 
 ### CSS Easing Functions
 
@@ -164,6 +172,10 @@ The [JSON Schema](https://json-schema.org/) specification (draft 2020-12). The X
 ### JSON for Modern C++
 
 By Niels Lohmann and contributors. [GitHub](https://github.com/nlohmann/json). The XF Runtime Bridge plugin parses and writes its protocol messages with it. It is compiled into the plugin (MIT), so its licence notice must ship with any distributed build.
+
+### KHR_parallel_shader_compile
+
+By the Khronos Group. [Extension specification](https://registry.khronos.org/webgl/extensions/KHR_parallel_shader_compile/). Its `COMPLETION_STATUS_KHR` query, which never waits for the driver, is how the Studio links a scene's programs ahead on the driver's threads and asks once a frame whether they are done.
 
 ### Khronos Data Format Specification
 

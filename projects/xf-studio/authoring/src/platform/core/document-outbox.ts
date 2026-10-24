@@ -104,7 +104,7 @@ export interface OutboxStorage {
    * Where a key is also stored in the background (the desktop host's file): `listener` hears when a key's background write is queued
    * (`pending`: not protected yet), when its latest one landed (`stored`) and when one failed (`failed`, and it is sent again).
    */
-  watch?(listener: (key: string, state: "pending" | "stored" | "failed") => void): void;
+  watch?(listener: (key: string, state: "pending" | "stored" | "failed", error?: unknown) => void): void;
   /**
    * The slower, durable copy's texts as they were read (the desktop host's), where it differs from what `load` merges: a stale entry it
    * still holds stays marked until that copy's key is written again and the write lands, never judged spent from the merged view.
@@ -137,8 +137,10 @@ export type OutboxStatus = {
   readonly conflicts: number;
   /** Documents whose latest change isn't protected on this computer yet (their key's write failed, or its background copy hasn't landed). */
   readonly unprotected: readonly DocumentRef[];
-  /** Whether to warn: a write failed, or a background copy has been waiting longer than `WARN_AFTER_MS`. */
+  /** Whether to warn: a change still waiting for the library has a failed write or a backup waiting longer than `WARN_AFTER_MS`. */
   readonly unprotectedWarning: boolean;
+  /** Why changes still waiting for the library warrant a warning; null once the library has them or before a brief wait is over. */
+  readonly unprotectedReason: "pending" | "failed" | "storage-full" | null;
   /** The last send failed (the host didn't answer); it is sent again shortly. */
   readonly failing: boolean;
   /** Stopped: the page released or lost its workspace, and nothing is written or sent again. */
@@ -232,7 +234,7 @@ export class DocumentOutbox {
   /** Each command in flight's current attempt: abandoning it (its deadline, Try again) sends the command again and ignores a late answer. */
   private readonly attempts = new Map<string, AbortController>();
   /** Keys whose latest write isn't stored yet: since when it has waited, and whether a write of it failed. */
-  private readonly unprotectedKeys = new Map<string, { since: number; failed: boolean }>();
+  private readonly unprotectedKeys = new Map<string, { since: number; failed: boolean; full: boolean }>();
   /**
    * Entries a resolution or a repair removed, with the keys that may still hold a stale copy of each: every key written carries their
    * IDs as markers until each of those keys is stored without the copy, so a crash at any point (during a recovery too) never brings
@@ -278,11 +280,11 @@ export class DocumentOutbox {
   private sizes = new Map<string, number>();
 
   constructor(private readonly transport: OutboxTransport, private readonly storage: OutboxStorage, private readonly options: OutboxOptions = {}) {
-    storage.watch?.((key, state) => {
+    storage.watch?.((key, state, error) => {
       if (this.stopped) return;
       // A key with a newer value waiting to be stored soon stays unprotected: what landed is older than what this page shows.
       if (state === "stored") { this.stored(key); if (!this.deferred.has(key) && this.unprotectedKeys.delete(key)) this.emit({ kind: "status" }); }
-      else this.unprotect(key, state === "failed");
+      else this.unprotect(key, state === "failed", error);
     });
   }
 
@@ -392,7 +394,7 @@ export class DocumentOutbox {
       return true;
     } catch (error) {
       this.options.report?.(error);
-      this.unprotect(key, true);
+      this.unprotect(key, true, error);
       return false;
     }
   }
@@ -409,10 +411,13 @@ export class DocumentOutbox {
     for (const [id, keys] of this.graves) if (keys.delete(key) && !keys.size) this.graves.delete(id);
   }
   /** `key` isn't protected (yet): a failure warns at once, a background copy still waiting after `WARN_AFTER_MS` too. */
-  private unprotect(key: string, failed: boolean) {
+  private unprotect(key: string, failed: boolean, error?: unknown) {
     const known = this.unprotectedKeys.get(key);
-    if (known && (known.failed || !failed)) return;
-    this.unprotectedKeys.set(key, { since: known?.since ?? this.now(), failed });
+    const cause = error as { name?: string; code?: string | number } | null;
+    const full = cause?.name === "QuotaExceededError" || cause?.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      cause?.code === 22 || cause?.code === 1014 || cause?.code === "ENOSPC" || cause?.code === "EDQUOT";
+    if (known && (known.failed || !failed) && (!full || known.full)) return;
+    this.unprotectedKeys.set(key, { since: known?.since ?? this.now(), failed: failed || !!known?.failed, full: full || !!known?.full });
     this.emit({ kind: "status" });
     if (!failed) (this.options.schedule ?? defaultSchedule)(WARN_AFTER_MS, () => { if (this.unprotectedKeys.has(key) && !this.stopped) this.emit({ kind: "status" }); });
   }
@@ -484,9 +489,13 @@ export class DocumentOutbox {
   status(): OutboxStatus {
     const recovering = this.recoveringKeys();
     const waiting = new Set(this.entries.filter(entry => entry.state === "queued" && entry.requires?.some(key => this.missing.has(key))).flatMap(entry => this.keysOf(entry)));
+    // Failed cleanup writes still matter to crash repair, so keep their keys. They no longer risk losing work once the library has it.
+    const pendingKeys = new Set(this.keysOf(...this.entries));
+    const warnings = [...this.unprotectedKeys].filter(([key, item]) => pendingKeys.has(key) && (item.failed || this.now() - item.since >= WARN_AFTER_MS));
+    const reason = warnings.some(([, item]) => item.full) ? "storage-full" : warnings.some(([, item]) => item.failed) ? "failed" : warnings.length ? "pending" : null;
     return { pending: this.entries.filter(entry => entry.state === "queued").length, conflicts: this.conflicts().length,
       unprotected: [...this.unprotectedKeys.keys()].map(key => this.held.get(key)?.ref ?? refOfKey(key)),
-      unprotectedWarning: [...this.unprotectedKeys.values()].some(item => item.failed || this.now() - item.since >= WARN_AFTER_MS),
+      unprotectedWarning: reason !== null, unprotectedReason: reason,
       failing: this.failing, stopped: this.stopped,
       recovering: recovering.map(key => this.held.get(key)?.ref ?? refOfKey(key)),
       recoveringShown: recovering.length > 0 && this.now() - this.openedAt >= RECOVERY_SHOW_MS,

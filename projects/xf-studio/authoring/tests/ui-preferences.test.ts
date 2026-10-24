@@ -133,7 +133,7 @@ test("preference actions publish detached state and workspace composition captur
       fieldSelection: state.fieldSelection, history: state.history }),
     uvView: () => state.uvView, savedV: () => state.savedV,
     collections: () => state.collections, quality: () => state.preview.textureSize,
-    preview: () => undefined, motion: () => undefined,
+    preview: () => undefined,
     uiPreferences: () => actions.snapshot() as typeof state.uiPreferences,
   });
   expect(composer.capture().uiPreferences).toEqual(actions.snapshot());

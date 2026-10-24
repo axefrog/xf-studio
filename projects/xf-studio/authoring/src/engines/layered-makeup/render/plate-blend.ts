@@ -3,7 +3,7 @@ import { forwardDecal, gbufferColour, type Rgb } from "../../../materials/render
 import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "../finish-export";
 import { FRESNEL_TINT_TERM } from "./fresnel-tint";
 import { patchSkinLight, skinLightMapsChunk, skinLightUniforms } from "../../../materials/render/skin-material";
-import { declarePass, type SkinLight } from "../../../platform/api/scene";
+import { declarePass, scatterUnlitWrite, type SkinLight } from "../../../platform/api/scene";
 
 /**
  * The Studio's authored makeup plate, drawn the way the game draws the exported plate (renderer adapter).
@@ -252,9 +252,7 @@ const RESIDUAL = /* glsl */`
 const PLATE_SCATTER_OUTPUT = /* glsl */`
 #include <dithering_fragment>
 #ifdef XFS_SCATTER_INPUT
-	gl_FragColor = vec4( max( ( xfsScatterE - ( 1.0 - diffuseColor.a ) * xfsScatterEUnder ) / max( diffuseColor.a, 1e-3 ), vec3( 0.0 ) ), diffuseColor.a );
-	xfsScatterOut1 = vec4( clamp( xfsSqrtDecal, 0.0, 1.0 ), xfsCoverage );
-	xfsScatterOut2 = vec4( clamp( xfsPs.y * xfsInv, 0.0, 1.0 ), 0.0, 0.0, xfsCoverage );
+	xfsScatterWrite( vec4( max( ( xfsScatterE - ( 1.0 - diffuseColor.a ) * xfsScatterEUnder ) / max( diffuseColor.a, 1e-3 ), vec3( 0.0 ) ), diffuseColor.a ), vec4( clamp( xfsSqrtDecal, 0.0, 1.0 ), xfsCoverage ), vec4( clamp( xfsPs.y * xfsInv, 0.0, 1.0 ), 0.0, 0.0, xfsCoverage ) );
 #endif`;
 
 /**
@@ -277,8 +275,14 @@ export function patchPlateLightShader(shader: { vertexShader: string; fragmentSh
   fragment = replace(fragment, "#include <roughnessmap_fragment>", ROUGHNESS);
   fragment = replace(fragment, "#include <metalnessmap_fragment>", METALNESS);
   fragment = replace(fragment, "#include <normal_fragment_maps>", NORMAL);
-  fragment = replace(fragment, "#include <lights_physical_fragment>",
-    BLEND.replace("MAPS", options.skinLight ? skinLightMapsChunk(chunks, "makeup plate") : "#include <lights_fragment_maps>"));
+  // Lit as skin, its S1 and S2 scatter variants write before the light (after the colour-shifting tint, which needs none), so they carry
+  // none: the residual's discard after it never fires on a fragment the coverage's let through (its alpha is at least the coverage, and
+  // the coverage at least 0.001).
+  const early = options.skinLight
+    ? scatterUnlitWrite("vec4( clamp( xfsSqrtDecal, 0.0, 1.0 ), xfsCoverage )", "vec4( clamp( xfsPs.y * xfsInv, 0.0, 1.0 ), 0.0, 0.0, xfsCoverage )") : "";
+  fragment = replace(fragment, "#include <lights_physical_fragment>", replace(BLEND, "vec3 xfsRoot =", `${early}
+vec3 xfsRoot =`)
+    .replace("MAPS", options.skinLight ? skinLightMapsChunk(chunks, "makeup plate") : "#include <lights_fragment_maps>"));
   fragment = replace(fragment, "#include <opaque_fragment>", RESIDUAL);
   if (options.skinLight) fragment = replace(fragment, "#include <dithering_fragment>", PLATE_SCATTER_OUTPUT);
   shader.fragmentShader = fragment;

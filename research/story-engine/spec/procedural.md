@@ -1,6 +1,6 @@
 # S3. Procedural engine specification
 
-**Status:** v0.3, 23 October 2026. v0.3 adds a chronological buffer before the sifter, after GPT-6 Astra's review of S1 (E-07). v0.2: v0.2 answers GPT-6 Astra's review of v0.1. It narrows the core (no online player-model estimator, completed event patterns only, no loose-end growth, no automatic overflow withdrawal) and tightens identity, deadlines, reloads and saving.
+**Status:** v0.4, 24 October 2026. v0.4 says a pattern's kinds match by nominal compatibility (S0 v4.14 §2.2), so a resident counts as a person in a pattern without widening any query. v0.3, v0.3 adds a chronological buffer before the sifter, after GPT-6 Astra's review of S1 (E-07). v0.2: v0.2 answers GPT-6 Astra's review of v0.1. It narrows the core (no online player-model estimator, completed event patterns only, no loose-end growth, no automatic overflow withdrawal) and tightens identity, deadlines, reloads and saving.
 - **Reviews.** Round 1, GPT-6 Astra, on v0.1: 18 findings and four cuts, all adopted (§15).
 - **The core.** This version specifies the **core**: the layer-3 parts that the first implementation builds, narrowed to [S2's core](seeding.md#03-the-core-what-the-first-implementation-builds) (§0.2). Everything else in [P5](../p5-procedural-engine.md) is a **later capability** (§0.3). The first implementation rejects it plainly rather than half-doing it.
 - **The additions to S2 and S0.** Layer 3 needed a few additions. S2 v1.1 and v1.2 and S0 v4.7 and v4.8 have taken them. §13 lists them.

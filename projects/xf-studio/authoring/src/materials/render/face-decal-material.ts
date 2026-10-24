@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { DecalKind } from "../render-templates";
 import { patchSkinLight, skinLightUniforms, type SkinParameters } from "./skin-material";
-import { declarePass } from "../../platform/api/scene";
+import { declarePass, scatterUnlitWrite } from "../../platform/api/scene";
 
 /**
  * The face-detail decal family for the browser renderer: one material for the post-G-buffer decal templates the game
@@ -264,9 +264,7 @@ diffuseColor = vec4( xfsColour, xfsDrawn );
 const DECAL_SCATTER_OUTPUT = /* glsl */`
 #include <dithering_fragment>
 #ifdef XFS_SCATTER_INPUT
-	gl_FragColor = vec4( xfsScatterE, xfsDrawn );
-	xfsScatterOut1 = vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA );
-	xfsScatterOut2 = vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA );
+	xfsScatterWrite( vec4( xfsScatterE, xfsDrawn ), vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA ), vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA ) );
 #endif`;
 
 /** Patch a `MeshStandardMaterial` program for the decal family; throws when this Three.js build lacks an expected chunk. */
@@ -297,7 +295,13 @@ vXfsUnderMetalness = xfsUnderMetalness;`);
   fragment = replace(fragment, "#include <roughnessmap_fragment>", "float roughnessFactor = xfsRoughnessValue;");
   fragment = replace(fragment, "#include <metalnessmap_fragment>", "float metalnessFactor = xfsMetalnessValue;");
   fragment = replace(fragment, "#include <normal_fragment_maps>", "normal = normalize( tbn * xfsTangentNormal );");
-  if (options.skinLight) fragment = replace(fragment, "#include <dithering_fragment>", DECAL_SCATTER_OUTPUT);
+  if (options.skinLight) {
+    fragment = replace(fragment, "#include <dithering_fragment>", DECAL_SCATTER_OUTPUT);
+    // S1 and S2 need no light (the decal's own colour, metalness and alphas), and nothing is discarded after it.
+    fragment = replace(fragment, "#include <lights_physical_fragment>", `${scatterUnlitWrite("vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA )",
+      "vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA )")}
+#include <lights_physical_fragment>`);
+  }
   shader.fragmentShader = fragment;
   return shader;
 }

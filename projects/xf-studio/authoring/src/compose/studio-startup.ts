@@ -18,7 +18,8 @@ import { NO_3D_PREVIEW_IN_ALPHA } from "../app/alpha-availability";
 import type { PreviewPreparationActions } from "../preview/preview-preparation";
 import { PreviewSetupActions } from "../preview/preview-setup";
 import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from "../setup/wolvenkit-setup";
-import { LOCAL_PROJECT_PAGES, PROJECT_LINKS, type ProjectLink } from "../app/project-links";
+import { openProjectLinkInNewTab } from "../app/browser/project-links-device";
+import type { ProjectLink } from "../app/project-links";
 import { createBrowserLocalSetup } from "../setup/browser/browser-local-setup-device";
 import { createBrowserInstallDetection } from "../installation/browser/browser-install-detection-device";
 import { createBrowserSaveExplorerDevice, savesLocationSignal } from "../saves/browser/browser-save-explorer-device";
@@ -28,8 +29,9 @@ import { PoseStageHub } from "../animation/pose-stage";
 import { createBrowserModInstall } from "../installation/browser/browser-mod-install-device";
 import { builtModsOf, type BuiltMod } from "../installation/mod-install-actions";
 import { createBrowserPreviewDevice } from "../legacy/eye-makeup/browser/browser-preview-device";
-import { attachBrowserHead, type AttachedHead } from "../preview/browser/browser-head-attachment";
-import { sceneLayeredSurfaces } from "../preview/browser/scene-surfaces";
+import { createBrowserSceneHeads } from "../preview/browser/browser-scene-heads";
+import type { AttachedHead } from "../preview/browser/browser-head-attachment";
+import { createSceneEditors } from "../preview/browser/scene-editors";
 import { CharacterWarmStart } from "../character/browser/character-warm-start";
 import { CreatorCatalogue } from "../character/creator-catalogue";
 import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
@@ -43,12 +45,9 @@ import type { LocalSetupActions } from "../setup/local-setup-actions";
 import type { DesktopAppActions } from "../setup/desktop-app";
 import { emptyPresentationStatus, PresentationStatusSource, type AdapterMessage } from "../app/presentation-status";
 import type { Layer } from "../engines/layered-makeup/recipe";
-import type { SavedAppearanceActions } from "../character/saved-appearance-actions";
 import type { StudioPresentationPort } from "../app/studio-presentation";
 import { mountStudio } from "../studio-ui/app";
 import { createTrustedAuthoringCore } from "../app/trusted-authoring-core";
-import type { MotionActions } from "../animation/motion-actions";
-import type { PreviewActions } from "../preview/preview-actions";
 import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./studio-registry";
@@ -74,6 +73,7 @@ import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
 import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
+import { viewPanel } from "../app/profiles/profile-session-state";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
 import { lookRef, type LookRef } from "../library/collection-documents";
@@ -225,24 +225,25 @@ async function start(host: StudioHost, root: HTMLElement) {
   // Whether the person chose Not now on the 3D preview card; a workspace preference too, so it stays declined.
   let declined = workspace.previewSetup?.declined === true;
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
-  let savedAppearance: SavedAppearanceActions | undefined;
-  let previewActions: PreviewActions | undefined;
-  let motionActions: MotionActions | undefined;
-  /** The loaded head and its connections, released together. */
-  let head: AttachedHead | undefined;
   /** Stops waiting for the page to be quiet before the installed expressions are read ahead (facial-prefetch.ts). */
   let stopPrefetch: (() => void) | undefined;
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
-  let scene: Awaited<ReturnType<ReturnType<typeof createBrowserViewportDevice>["loadHead"]>> | undefined;
   let uvEditor: ReturnType<ReturnType<typeof createBrowserViewportDevice>["mountUV"]> | undefined;
 
+  /**
+   * The head shown now: the scene runtime owner's (`heads`, made below), read by what is wired before it. Several of those read it at once
+   * when they are made (the live face starts following, the UV editor draws its first frame), before the owner exists: none is shown then.
+   */
+  let shownHead: () => AttachedHead | undefined = () => undefined;
+  /** The view drawn now: the scene runtime owner's once it exists; the window draws the main view first (phase 2's tabs choose others). */
+  let drawnView: () => string = () => MAIN_VIEW;
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
   const region = STUDIO_COMPOSITION.region;
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const statusSource = new PresentationStatusSource(() => {
-    const eye = scene?.eyeAppearance().optics;
+    const head = shownHead(), eye = head?.scene.eyeAppearance().optics;
     return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), outbox: outboxView(documents.outbox.status()),
       glitter: measurements.snapshot(), assets: { ...status.assets,
       characterDetails: head?.characterDetails.snapshot(),
@@ -275,8 +276,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (lease) core.app.attach({ access: lease });
   // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
   const views = core.views;
-  // The scene the drawn view shows (phase 1 draws one view: the main one) and the look it shows, which the collection service changes.
-  const drawn = () => views.node(MAIN_VIEW, "scene").id;
+  // The scene the drawn view shows and the look it shows, which the collection service changes.
+  const drawn = () => views.node(drawnView(), "scene").id;
   const shownScene = { look: () => sessionState.scene(drawn()).look, setLook: (ref: LookRef | undefined) => sessionState.setLook(drawn(), ref),
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
@@ -305,7 +306,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       savedV: () => workspace.savedV,
       collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
-      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => workspace.views,
+      preview: () => shownHead()?.preview.snapshot(), sample: () => shownHead()?.motion.sample(), views: () => workspace.views,
       uiPreferences: () => { const { layout: _live, ...rest } = preferences.snapshot(); return { ...rest, ...(legacyLayout ? { layout: legacyLayout } : {}) }; },
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
@@ -364,42 +365,64 @@ async function start(host: StudioHost, root: HTMLElement) {
   setBuilds = () => presets.builtMods();
   core.app.attach({ facial, presets, transitions });
   facial.follow(() => combineFacePoses(STUDIO_FACE_POSES.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
-    () => motionActions?.snapshot());
+    () => shownHead()?.motion.snapshot());
   // Changes ease by the expression's transition setting; an edit inside an open form control (a slider drag) follows at once.
   facial.animate({ setting: () => transitions.get("expression"), continuous: () => !!core.app.featureControlSnapshot() });
   transitions.subscribe(persist);
   core.app.subscribe(() => facial.changed());
   facial.start();
   previewDevice.coordinator.quality.subscribe(persist);
-  // The editors' own selections and gestures name the look the drawn view shows (the input layer's resolution, profiles design §3.6).
-  const named = <A extends { kind: string }>(action: A) => targets.complete(action, core.app.descriptor(action.kind)) as unknown as StudioAction;
-  const fieldHooks = {
-    selectedField: () => core.presentation.selectedField()?.id,
-    selectField: (id: string) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "field.select", layerId: layer.id, fieldId: id })); },
-    select: (index: number) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "point.select", layerId: layer.id, index })); },
-  };
-  // Every composed layered surface is registered; the drawn scene connects the one its look editor edits (profiles design §7): the preview
-  // device fills its layers and the on-head editor edits it, naming the look the scene shows. The root names no feature.
-  const surfaces = sceneLayeredSurfaces(STUDIO_LAYERED_SURFACES, { feature: core.document.feature, preview: previewDevice, editor: {
-    layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
-    selected: () => core.presentation.selected, ...fieldHooks,
-    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id, targets.named().look); },
-    apply: proposal => core.app.applyGesture("surface", proposal),
-    cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
-    message: text => adapterMessage("surface", text),
-  } });
+  // The editors (scene-editors.ts): every composed layered surface is registered, and each view's on-head editor edits the look that view's
+  // scene shows, naming it through the view's panel (the input layer's resolution, profiles design §3.6). The root names no feature.
+  const panelOf = (view: string) => sessionState.instance(viewPanel(view));
+  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature: core.document.feature, preview: previewDevice, ref: () => lookEditor.ref() }, core,
+    naming: { look: view => targets.named(panelOf(view)).look,
+      complete: (action, view) => targets.complete(action, core.app.descriptor(action.kind as StudioAction["kind"]), { instance: panelOf(view) }) as StudioAction },
+    drawn: () => drawnView(), viewport: viewportDevice, attach: services => core.app.attach(services), message: adapterMessage });
   uvEditor = viewportDevice.mountUV(byId<HTMLCanvasElement>("device-uv-canvas"), undefined, {
-    recipe: () => core.geometry.recipe(), layer: () => core.geometry.layer(),
-    selected: () => core.presentation.selected, ...fieldHooks,
-    canvases: () => previewDevice.canvases,
-    albedo: () => scene?.albedo.image as HTMLImageElement | undefined,
-    surfaceEdge: () => core.app.surfaceEdge(core.presentation.layer()?.id),
-    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id, targets.named().look); },
-    apply: proposal => core.app.applyGesture("uv", proposal),
-    cancel: () => core.app.endGesture("uv", true), finish: () => core.app.endGesture("uv"),
+    ...editors.uvHooks(), canvases: () => previewDevice.canvases,
+    albedo: () => shownHead()?.scene.albedo.image as HTMLImageElement | undefined,
     persist: () => { persist(); viewportDevice.attachment.viewChanged(); },
-    message: text => adapterMessage("uv", text),
   }, workspace.uvView);
+  // The drawn scene's heads (profiles phase 4a-iv): the head of the V it shows, built hidden and shown once ready, with one more kept warm.
+  // A change of the scene's V or of the V's body supersedes any earlier one; the V's context outlives the heads. What follows the shown
+  // head (the live face, the poses stage, prefetching) is connected here as each one is shown.
+  const heads = createBrowserSceneHeads({
+    head: { workspace, graph: views, viewport: viewportDevice, preferences, warmStart,
+      // The layered surfaces each head connects (the one the look editor edits).
+      layered: editors.wiring,
+      // The stage backdrop follows the resolved UI theme through the renderer's typed input.
+      colourScheme: matchMedia("(prefers-color-scheme: dark)"),
+      quality: previewDevice.coordinator.quality,
+      attach: attached => core.app.attach(attached), persist, changed: () => statusSource.changed() },
+    scenes: { view: () => MAIN_VIEW, of: view => views.has(view) ? views.node(view, "scene").id : undefined,
+      subject: id => { const subject = sessionState.scene(id).subject; return subject?.kind === "character" ? subject.id : undefined; },
+      ensureSubject: id => sceneCharacter(sessionState, id, services), subscribe: listener => sessionState.subscribe(listener) },
+    characters: services.characters,
+    // The shown V's body decides the core head (the masculine V's is prepared on first use, and stops when a newer change supersedes it).
+    prepareCore: (body, pending, signal) => host.previewPreparation.ensureBody(body, pending, signal),
+    pending: (message, progress) => viewportDevice.headPending("preparing", message, progress),
+    preparation: state => viewportDevice.headPreparation(state),
+    notice: text => adapterMessage("preview", text),
+    onContext: listener => viewportDevice.onContext(listener),
+    editors,
+    shown: head => {
+      stopPrefetch?.(); stopPrefetch = undefined;
+      facial.attachScene(head?.scene.face);
+      poseStage.attach(head ? { view: drawnView(), motion: head.motion, details: head.characterDetails, context: head.characterContext } : null);
+      if (!head) return;
+      stopPrefetch = prefetchWhenQuiet(() => facial.prefetch(), headQuiet({ details: head.characterDetails, scene: head.scene }));
+      status = { ...status, assets: { ...status.assets, loaded: true } };
+      viewportDevice.headReady();
+      session.setPreviewReady(); session.flush(); drawUV();
+      statusSource.changed();
+      host.onPreviewReady?.();
+    },
+  });
+  shownHead = () => heads.shown();
+  drawnView = () => heads.shownView();
+  // Camera, preview and motion actions go to the runtime holding the view they name (view-routes.ts).
+  core.app.attach({ runtimes: heads.runtimes });
   // 3D preview setup: follows the host's preparation and WolvenKit setup, then loads the head.
   const previewSetup = new PreviewSetupActions({
     preparation: host.previewPreparation, wolvenKit: host.wolvenKitSetup, detection: installDetection, localSetup,
@@ -407,7 +430,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     openHostSetup: host.openSetup, setupPlace: host.setupPlace,
     autostart: { get: () => autostart, set: on => { if (autostart !== on) { autostart = on; persist(); } } },
     declined: { get: () => declined, set: on => { if (declined !== on) { declined = on; persist(); } } },
-    loadHead: () => attachHead(),
+    loadHead: () => loadHead(),
   });
   bootstrap = createTrustedStudioBootstrap({
     core, preferences, localSetup, installDetection, modInstall, previewSetup, viewport: viewportDevice.attachment,
@@ -428,18 +451,18 @@ async function start(host: StudioHost, root: HTMLElement) {
       } },
     onRecipeImported: persist,
     savedAppearance: {
-      has: () => savedAppearance?.hasSavedV() ?? false,
-      read: () => savedAppearance?.snapshot().savedV,
-      // A save file becomes where the V comes from (`character.setSource`, which `savedV.load` stays an alias of until phase 1 ends);
-      // the shown V's scene applies it.
-      // The V the request named when it was asked (profiles design §3.3).
+      has: () => heads.shown()?.savedAppearance.hasSavedV() ?? false,
+      read: () => heads.shown()?.savedAppearance.snapshot().savedV,
+      // A save file becomes where the V comes from (`character.setSource`, which `savedV.load` stays an alias of until phase 1 ends),
+      // for the V the request named when it was asked (profiles design §3.3); the head showing that V applies it.
       load: (bytes, character) => {
         if (bytes.byteLength > 128 * 1024 * 1024) throw Error("Save is larger than the supported limit.");
         const result = core.app.dispatch({ kind: "character.setSource", character, source: { kind: "save", value: readSavedV(bytes) } });
         if (!result.ok) throw Error(result.message);
-        return savedAppearance!.snapshot();
+        return heads.showing(character)!.savedAppearance.snapshot();
       },
-      ready: () => !!scene,
+      // Ready per scene: a head shows the V the request names.
+      ready: character => !!heads.showing(character),
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
@@ -455,34 +478,49 @@ async function start(host: StudioHost, root: HTMLElement) {
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
   host.onMounted?.({ openGameSetup: () => void previewSetup.dispatch({ kind: "previewSetup.openSetup" }) });
-  if (verification) Object.assign(window, { xfStudioPresentation: port,
-    // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
-    xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
-      frames: scene.frameTiming(), plateBlend: (surfaces.edited && scene.feature(surfaces.edited)?.evidence?.()) ?? null,
-      features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence(), mouth: scene.mouthEvidence() }) : null,
+  if (verification) {
+    /** The scene runtime shown now (developer evidence reads only that one). */
+    const viewer = () => heads.shown()?.scene;
+    Object.assign(window, { xfStudioPresentation: port,
+    // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing, and which runtimes are
+    // resident (profiles phase 4a-iv).
+    xfStudioSceneEvidence: () => { const scene = viewer(); return scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
+      frames: scene.frameTiming(), plateBlend: (editors.edited && scene.feature(editors.edited)?.evidence?.()) ?? null,
+      features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence(), mouth: scene.mouthEvidence(),
+      // The lighting drawn now (a setup asked for that isn't prepared yet is staged, and the one before stays drawn until it takes over).
+      lighting: { preset: scene.lighting.status().preset, staged: scene.lighting.staged !== null },
+      residency: heads.snapshot() }) : null; },
     // Developer captures: hold the mouth interior's light at a fixed parting and floor (the earlier stand-in: 0.010, 0.3), null to follow the face.
-    xfStudioPinMouthInterior: (pin: { parting: number; floor: number } | null) => { scene?.pinMouthInterior(pin); },
-    xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null,
+    xfStudioPinMouthInterior: (pin: { parting: number; floor: number } | null) => { viewer()?.pinMouthInterior(pin); },
+    xfStudioLayeredSamples: () => viewer()?.layeredSamples() ?? null,
     // Developer captures: put the playing or paused idle at a motion time (the dangles re-simulate to it deterministically).
-    xfStudioSeekIdle: (seconds: number) => { scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; },
+    xfStudioSeekIdle: (seconds: number) => { const scene = viewer(); scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; },
+    // Developer captures (tools/preparation-look.ts): show a preparation state in the head pane as the runtime owner would, in its quiet
+    // status line, or with `pane` in its loading state (null: back to the shown head). The next real preparation replaces it.
+    xfStudioShowPreparation: (state: Parameters<typeof viewportDevice.headPreparation>[0], options: { pane?: boolean } = {}) => {
+      viewportDevice.headPreparation(state);
+      if (state && options.pane) viewportDevice.headPending("preparing", "", state.fraction);
+      else if (heads.shown()) viewportDevice.headReady();
+    },
     // Creator rig evidence for calibration captures (tools/creator-light-look.ts): its lights, one alone, and the frame cost.
     xfStudioCreatorRig: {
-      lights: () => scene?.lighting.rig.lights.map(light => ({ name: light.id, castShadow: light.shadows })) ?? [],
-      solo: (name: string | null) => { scene?.lighting.solo(name); scene?.requestRender(); },
-      trialYaw: (degrees: number | null) => { scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
-      trialCasters: (names: string[] | null) => { scene?.lighting.trialCasters(names); scene?.requestRender(); },
-      casters: () => scene?.lighting.rig.lights.filter(light => light.shadows).map(light => light.id) ?? [],
-      frameMs: (frames: number) => scene ? scene.lighting.frameCost(scene.camera, frames) : null,
-      shadowMapSize: () => scene?.lighting.rig.shadowMapSize ?? null,
+      lights: () => viewer()?.lighting.rig.lights.map(light => ({ name: light.id, castShadow: light.shadows })) ?? [],
+      solo: (name: string | null) => { const scene = viewer(); scene?.lighting.solo(name); scene?.requestRender(); },
+      trialYaw: (degrees: number | null) => { const scene = viewer(); scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
+      trialCasters: (names: string[] | null) => { const scene = viewer(); scene?.lighting.trialCasters(names); scene?.requestRender(); },
+      casters: () => viewer()?.lighting.rig.lights.filter(light => light.shadows).map(light => light.id) ?? [],
+      frameMs: (frames: number) => { const scene = viewer(); return scene ? scene.lighting.frameCost(scene.camera, frames) : null; },
+      shadowMapSize: () => viewer()?.lighting.rig.shadowMapSize ?? null,
       // The skin scatter (platform/scene/skin-scatter.ts): switch it off for the wrap stand-in and on again (A/B evidence), and its state.
-      scatter: (mode: boolean | "bare") => { scene?.lighting.setScatter(mode); scene?.requestRender(); },
-      scatterEvidence: () => scene ? scene.lighting.scatter.evidence() : null,
+      scatter: (mode: boolean | "bare") => { const scene = viewer(); scene?.lighting.setScatter(mode); scene?.requestRender(); },
+      scatterEvidence: () => viewer()?.lighting.scatter.evidence() ?? null,
       // Character contact shadows (platform/scene/contact-shadow.ts): off and on again for A/B captures, and what the last frame marched toward.
-      contact: (on: boolean) => { scene?.lighting.setContactShadows(on); scene?.requestRender(); },
-      contactEvidence: () => scene ? scene.lighting.contact.evidence() : null,
-      scatterScale: (scale: number | null) => { scene?.lighting.setScatterScale(scale); scene?.requestRender(); },
+      contact: (on: boolean) => { const scene = viewer(); scene?.lighting.setContactShadows(on); scene?.requestRender(); },
+      contactEvidence: () => viewer()?.lighting.contact.evidence() ?? null,
+      scatterScale: (scale: number | null) => { const scene = viewer(); scene?.lighting.setScatterScale(scale); scene?.requestRender(); },
       // The scatter's own passes (input, both blurs), `passes` times back to back after one frame, the GPU finished at both ends.
       scatterPassMs: (passes: number) => {
+        const scene = viewer();
         if (!scene) return null;
         const gl = scene.renderer.getContext(), { scene: world } = scene, scatter = scene.lighting.scatter;
         scene.lighting.render(scene.camera); gl.finish();
@@ -493,6 +531,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       },
       // One frame right after the scatter's input variants are dropped: their compile cost, as a V's first scatter frame pays it.
       scatterColdFrameMs: () => {
+        const scene = viewer();
         if (!scene) return null;
         const gl = scene.renderer.getContext();
         scene.lighting.render(scene.camera); gl.finish();
@@ -502,6 +541,7 @@ async function start(host: StudioHost, root: HTMLElement) {
         return performance.now() - start;
       },
     } });
+  }
   void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
@@ -532,66 +572,17 @@ async function start(host: StudioHost, root: HTMLElement) {
     void previewSetup.start();
   }
 
-  /** The workspace a head attaches with: the restored one, then (after a V changed body) the workspace as it was then. */
-  let headWorkspace = workspace;
-  /** Load the 3D head and connect every head-dependent service once the preview is ready. */
-  async function attachHead() {
+  /** The preview is ready: show the drawn scene's head (the setup service's first load, and its Try again). */
+  async function loadHead() {
     core.app.setPreviewUnavailable("");
-    // A retry starts from nothing: an earlier head and its connections are released first (PREV-20).
-    releaseHead(head);
-    const priorAssets = status.assets;
-    let attached: AttachedHead | undefined;
-    try {
-      // The V the drawn view's scene shows (made when it has none), through its owner: its document says its body and its save.
-      const character = await sceneCharacter(sessionState, drawn(), services);
-      const shown = character ? services.characters.document(character) : null;
-      if (!character || !shown) throw Error("The V couldn't be shown: this window can't make one. Reload the window to continue.");
-      const save = shown.source.kind === "save" ? services.characters.decoded(shown.source.decoded) ?? undefined : undefined;
-      attached = await attachBrowserHead({
-        workspace: headWorkspace, graph: views, viewport: viewportDevice, preferences,
-        // The shown V's body decides the core head (the masculine V's is prepared on first use); a V that changes body loads it again.
-        prepareCore: body => host.previewPreparation.ensureBody(body, (message, progress) => viewportDevice.headPending("preparing", message, progress)),
-        reload: () => { headWorkspace = session.snapshot(); previewSetup.reloadHead(); },
-        character: { body: shown.body, ...(save ? { save } : {}), context: ports => services.characters.context(character, ports),
-          release: context => services.characters.detach(character, context) },
-        notice: text => adapterMessage("preview", text), warmStart,
-        // The drawn scene's layered surfaces: every composed one is registered, and the scene wires those its look editor edits.
-        layered: surfaces.wiring,
-        // The stage backdrop follows the resolved UI theme through the renderer's typed input.
-        colourScheme: matchMedia("(prefers-color-scheme: dark)"),
-        quality: previewDevice.coordinator.quality,
-        attach: services => core.app.attach(services),
-        persist, changed: () => statusSource.changed(),
-      });
-      head = attached;
-      ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
-      facial.attachScene(scene.face);
-      stopPrefetch = prefetchWhenQuiet(() => facial.prefetch(), headQuiet({ details: attached.characterDetails, scene }));
-      poseStage.attach({ view: MAIN_VIEW, motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
-      status = { ...status, assets: { ...status.assets, loaded: true } };
-      viewportDevice.headReady();
-      session.setPreviewReady(); session.flush(); drawUV();
-      statusSource.changed();
-      host.onPreviewReady?.();
-    } catch (error) {
-      // The setup service maps the failure to plain words; nothing of this attempt stays connected.
-      releaseHead(attached);
-      status = { ...status, assets: priorAssets };
+    try { await heads.load(); }
+    catch (error) {
+      // The setup service maps the failure to plain words; nothing of this attempt stays connected (the heads owner released it).
       statusSource.changed();
       pageFailure("preview", "head_load_failed", "The 3D head couldn't be loaded.", error);
       session.flush();
       throw error;
     }
-  }
-
-  /** Release the loaded head (or a part-attached one) and forget its services. */
-  function releaseHead(attached: AttachedHead | undefined) {
-    if (head === attached) head = undefined;
-    stopPrefetch?.(); stopPrefetch = undefined;
-    facial.attachScene(undefined);
-    poseStage.attach(null);
-    attached?.dispose();
-    scene = undefined; savedAppearance = undefined; previewActions = undefined; motionActions = undefined;
   }
 }
 
@@ -599,13 +590,6 @@ async function start(host: StudioHost, root: HTMLElement) {
 function legacyAutostart(storage: Pick<Storage, "getItem">, verification: boolean) {
   if (verification) return true;
   try { return storage.getItem("xfs.preview.autostart") !== "off"; } catch { return true; }
-}
-
-/** Localhost opens XF Studio's own public pages in a new tab (its own copy of a page it serves, such as the interface guide). */
-function openProjectLinkInNewTab(link: ProjectLink) {
-  const opened = window.open(LOCAL_PROJECT_PAGES[link] ?? PROJECT_LINKS[link], "_blank");
-  if (!opened) throw Error("Your browser blocked the new tab. Allow pop-ups for XF Studio, then try again.");
-  opened.opener = null;
 }
 
 /**

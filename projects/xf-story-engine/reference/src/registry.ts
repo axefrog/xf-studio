@@ -14,7 +14,7 @@ type Params = Record<string, unknown>;
 
 export type Prior = (dim: DimensionDef, F: Value[], params: Params) => number[];
 /** A derive receives the query time `t` (S0 v4, V4-1); one that ignores it behaves exactly as before. */
-export type Derive = (inputs: Value[], params: Params, t: GameTime) => Value;
+export type Derive = (inputs: Array<Value | undefined>, params: Params, t: GameTime) => Value | undefined;
 export type Preimage = (output: Region, otherInputs: Value[], params: Params) => Region;
 export type Conditioned = (inputs: Value[], F: Value[], params: Params) => number[];
 export type FieldMap = (fieldValue: number, F: Value[], params: Params) => number[];
@@ -101,13 +101,17 @@ export function coreRegistry(): Registry {
   });
 
   // Derivations.
-  r.register('derive', 'identity', 1, (inputs) => inputs[0]!);
-  r.register('derive', 'concat', 1, (inputs, params) => inputs.map(String).filter((x) => x !== '').join((params.sep ?? ' ') as string));
-  r.register('derive', 'floor-div', 1, (inputs, params) => Math.floor((inputs[0] as number) / pos(params.divisor, 'divisor')));
-  r.register('derive', 'sum', 1, (inputs) => inputs.reduce<number>((a, x) => a + (x as number), 0));
-  r.register('derive', 'first-char', 1, (inputs) => String(inputs[0]).slice(0, 1));
+  // The core derives are strict: an input that is `undefined` (unavailable, V4-40) gives no value, so a derived slot over an
+  // unavailable input is unavailable, as before.
+  const strict = <R extends Value>(f: (inputs: Value[], params: Params) => R) => (inputs: Array<Value | undefined>, params: Params): R | undefined =>
+    inputs.some((x) => x === undefined) ? undefined : f(inputs as Value[], params);
+  r.register('derive', 'identity', 1, strict((inputs) => inputs[0]!));
+  r.register('derive', 'concat', 1, strict((inputs, params) => inputs.map(String).filter((x) => x !== '').join((params.sep ?? ' ') as string)));
+  r.register('derive', 'floor-div', 1, strict((inputs, params) => Math.floor((inputs[0] as number) / pos(params.divisor, 'divisor'))));
+  r.register('derive', 'sum', 1, strict((inputs) => inputs.reduce<number>((a, x) => a + (x as number), 0)));
+  r.register('derive', 'first-char', 1, strict((inputs) => String(inputs[0]).slice(0, 1)));
   // v4.4 (V4-22): a person is an adult at 18 and over.
-  r.register('derive', 'age-class', 1, (inputs, params) => ((inputs[0] as number) >= ((params.adultAt as number | undefined) ?? 18) ? 'adult' : 'minor'));
+  r.register('derive', 'age-class', 1, strict((inputs, params) => ((inputs[0] as number) >= ((params.adultAt as number | undefined) ?? 18) ? 'adult' : 'minor')));
 
   // Preimages for unary views: the output region mapped back to a region of the input.
   r.register('preimage', 'identity', 1, (output) => output);

@@ -9,6 +9,8 @@ tree when either line is crossed:
     python tools/memory_guard.py --limit 2 --floor 20 -- bun tools/native-limits.ts
 
 --limit   GB of private memory the command's processes may use together (default 8).
+--disk-floor  GB of free disk space on drive C and the working folder's drive below which
+          the guard trips (default 20): catches a job writing far more than it should.
 --floor   GB of free memory (the lower of available RAM and available commit) below which
           the guard trips (default 4): a tripwire near the
           machine's maximum, not a reservation. Use memory freely above it.
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import shutil
 import subprocess
 import sys
 import time
@@ -110,13 +113,44 @@ kernel32.CreateJobObjectW.restype = wintypes.HANDLE
 kernel32.OpenProcess.restype = wintypes.HANDLE
 
 
-def free_physical() -> int:
-    status = MEMORYSTATUSEX()
-    status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-    kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
-    # The lower of available RAM and available commit: commit (RAM plus page file) is the
-    # limit that makes allocations fail, and it can run out while RAM still looks free.
-    return min(status.ullAvailPhys, status.ullAvailPageFile)
+class PERFORMANCE_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("cb", wintypes.DWORD),
+        ("CommitTotal", ctypes.c_size_t),
+        ("CommitLimit", ctypes.c_size_t),
+        ("CommitPeak", ctypes.c_size_t),
+        ("PhysicalTotal", ctypes.c_size_t),
+        ("PhysicalAvailable", ctypes.c_size_t),
+        ("SystemCache", ctypes.c_size_t),
+        ("KernelTotal", ctypes.c_size_t),
+        ("KernelPaged", ctypes.c_size_t),
+        ("KernelNonpaged", ctypes.c_size_t),
+        ("PageSize", ctypes.c_size_t),
+        ("HandleCount", wintypes.DWORD),
+        ("ProcessCount", wintypes.DWORD),
+        ("ThreadCount", wintypes.DWORD),
+    ]
+
+
+def available_headroom() -> int:
+    """The machine's memory headroom: the lower of available RAM and available commit.
+
+    Commit (RAM plus page file) is the limit that makes allocations fail, and it can run out
+    while RAM still looks free. Both come from GetPerformanceInfo, which reports the whole
+    system, unlike GlobalMemoryStatusEx's commit figure, which is per calling process."""
+    info = PERFORMANCE_INFORMATION()
+    info.cb = ctypes.sizeof(info)
+    if not psapi.GetPerformanceInfo(ctypes.byref(info), info.cb):
+        # Fallback: GlobalMemoryStatusEx's commit figure is per calling process, but never
+        # above the system's, so the minimum stays conservative. Fail closed if both fail.
+        status = MEMORYSTATUSEX()
+        status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+        if not kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return 0
+        return min(status.ullAvailPhys, status.ullAvailPageFile)
+    page = info.PageSize
+    commit_free = (info.CommitLimit - info.CommitTotal) * page
+    return min(info.PhysicalAvailable * page, commit_free)
 
 
 def create_job(hard_limit: int) -> wintypes.HANDLE:
@@ -177,10 +211,27 @@ def record(line: str) -> None:
         pass
 
 
+def lowest_disk_free() -> int:
+    """Free bytes on drive C and on the working folder's volume, whichever is lower.
+
+    The working folder itself is queried, not its drive letter, so a junction or mounted folder
+    reports the volume it really lives on. A failed query counts as no free space (fail closed),
+    like the memory check.
+    """
+    free = []
+    for d in ("C:\\", str(Path.cwd())):
+        try:
+            free.append(shutil.disk_usage(d).free)
+        except OSError:
+            free.append(0)
+    return min(free)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--limit", type=float, default=8.0, help="GB the command's processes may use together")
     parser.add_argument("--floor", type=float, default=4.0, help="GB of free memory (min of available RAM and available commit) below which the guard trips")
+    parser.add_argument("--disk-floor", type=float, default=20.0, help="GB of free space on drive C (and on the working folder's drive) below which the guard trips")
     parser.add_argument("--interval", type=float, default=0.5, help="seconds between checks")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -188,9 +239,15 @@ def main() -> int:
     if not command:
         parser.error("give the command after --")
     limit, floor = int(args.limit * GB), int(args.floor * GB)
+    disk_floor = int(args.disk_floor * GB)
 
-    if free_physical() < floor:
-        print(f"MEMORY GUARD: not starting; only {free_physical() / GB:.1f} GB free, below the {args.floor:g} GB "
+    disk_free = lowest_disk_free()
+    if disk_free < disk_floor:
+        print(f"MEMORY GUARD: not starting; only {disk_free / GB:.1f} GB free on disk, below the {args.disk_floor:g} GB "
+              "disk floor. Clean up your scratch, worktrees and build outputs first.", file=sys.stderr)
+        return KILLED_EXIT
+    if available_headroom() < floor:
+        print(f"MEMORY GUARD: not starting; only {available_headroom() / GB:.1f} GB free, below the {args.floor:g} GB "
               "floor. Wait for other work to finish.", file=sys.stderr)
         return KILLED_EXIT
 
@@ -208,12 +265,15 @@ def main() -> int:
         while proc.poll() is None:
             used = sum(private_bytes(pid) for pid in job_pids(job))
             peak = max(peak, used)
-            free = free_physical()
+            free = available_headroom()
             if used > limit:
                 reason = f"its processes used {used / GB:.1f} GB (limit {args.limit:g} GB)"
             elif free < floor:
                 reason = (f"the machine's free memory fell to {free / GB:.1f} GB (floor {args.floor:g} GB) "
                           f"while it held {used / GB:.1f} GB")
+            elif (disk := lowest_disk_free()) < disk_floor:
+                reason = (f"free disk space fell to {disk / GB:.1f} GB (disk floor {args.disk_floor:g} GB); "
+                          "the job may be writing far more than it should (captures, build outputs, extractions)")
             if reason:
                 kernel32.TerminateJobObject(job, KILLED_EXIT)
                 proc.wait()

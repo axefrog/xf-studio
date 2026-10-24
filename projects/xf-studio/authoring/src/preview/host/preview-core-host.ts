@@ -106,7 +106,11 @@ export class PreviewCoreHost {
       canPrepare: true, canCancel: false };
   }
 
-  /** Start preparing in the background; returns the snapshot. Refused (unchanged snapshot) unless `canPrepare`. */
+  /**
+   * Start preparing in the background; returns the snapshot. Refused (unchanged snapshot) unless `canPrepare`. One job at a time: a page
+   * asking for the body already being prepared joins it (its snapshot says so). Once started, a job runs to completion unless Cancel stops
+   * it: its result is cached and reused, and a page that no longer wants it only stops waiting (experiment 043 decision D1).
+   */
   prepare(body: CoreBody = "female"): PreviewCoreState {
     const state = this.snapshot(body);
     if (!state.canPrepare) return state;

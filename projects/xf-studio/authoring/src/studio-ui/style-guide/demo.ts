@@ -11,8 +11,10 @@ import { openMenu, openValuePopover } from "../menu";
 import { mountLibrary } from "./library-demo";
 import { HEADER_STAGES, HeaderFit } from "../header-fit";
 import { LIBRARY_CHIP_WIDEST } from "../notice-text";
+import { bindGuideBackLink } from "./back-link";
 
 const root = document.documentElement;
+bindGuideBackLink(document.querySelector<HTMLAnchorElement>(".guide-back")!);
 const live = document.getElementById("guide-live")!;
 const announce = (text: string) => { live.textContent = ""; requestAnimationFrame(() => { live.textContent = text; }); };
 

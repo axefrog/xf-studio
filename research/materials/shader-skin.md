@@ -460,17 +460,17 @@ All targets are single-sample, at the drawing-buffer size, and are created on th
 | **S0** | RGBA16F | RGB = `E`: Burley at the pixel's roughness, every direct light with its shadow, no wrap, no image-based light, times (1 − metalness), as the forward diffuse is before the albedo. A = the pixel's **view depth** on a Subsurface pixel and 0 elsewhere: the class-1 flag and the blur's depth in one channel |
 | **S1** | RGBA8 | RGB = `√albedo`, blended by decals in that space, as GBuffer0 is. A = profile slot as (slot + 1)/8 |
 | **S2** | RGBA8 | R = the blended metalness (the gate) |
-| Depth | renderbuffer | the input pass's depth test only |
+| Depth | depth texture | the input passes' depth test only, one buffer shared by S0–S2 and cleared before each |
 | **P0**, **P1** | RGBA16F | P0 = the horizontal pass (RGB, and the depth again in A); P1 = `Δ` |
 
-S0–S2 are one three-target draw (`WebGLRenderTarget` `count: 3`; Three.js 0.186 takes each attachment's own type, so S1 and S2 are 8-bit). A decal blends every target with colour factors `SrcAlpha/OneMinusSrcAlpha` and alpha factors `Zero/One`, so each target takes that output's own alpha as its weight and the class, depth and slot underneath never change: the game's RGB write mask.
+S0–S2 are three targets, each drawn by a pass of its own over the same swap (S0, then S1, then S2), whose programs write one output each. A three-target draw (`count: 3`) gave the same pixels, but ANGLE on Direct3D 11 builds a program that writes several outputs again at its first draw, on the GPU process's main thread, with no frame presented meanwhile: 0.15–0.6 s per skin variant under the studio setup and 1–6 s under the creator rig on real data ([experiment 043 §12](../../experiments/043-scene-runtimes/README.md#12-chunk-4a-v-c-no-frame-gap-from-multi-target-programs-built)). Each material writes the three values through `xfsScatterWrite( s0, s1, s2 )` (`SCATTER_INPUT_WRITE`, `platform/api/scene.ts`), which keeps only the pass's own, so the S1 and S2 programs carry no light (the plate keeps what its alpha needs). Each pass clears the shared depth and draws the scene as the one draw did, so each target holds the same pixels (G1's parity capture: 17 of 20 frames identical, 3 within one step on one pixel). A decal blends every target with colour factors `SrcAlpha/OneMinusSrcAlpha` and alpha factors `Zero/One`, so each target takes its value's own alpha as its weight and the class, depth and slot underneath never change: the game's RGB write mask.
 
 Memory: 36 bytes per drawing-buffer pixel (S0 8, S1 4, S2 4, depth 4, P0 8, P1 8), as estimated. Measured by the scatter's own evidence: 23.1 MB at 990 × 648, 73.8 MB at 1920 × 1068, 143.8 MB at 2600 × 1536 (pixel ratio 2). 3200 × 2000 would take 230 MB. None of this counts toward the preview-quality contract's 1 GiB generated-texture budget, which excludes framebuffers.
 
 ### 11.3 Passes
 
 1. **Forward scene** (unchanged), with the wrap gated off. `platform/scene/skin-scatter.ts` `prepare` decides before the forward pass: the scatter runs when it is switched on, the target is half float and some drawn mesh declares itself skin.
-2. **Input** into S0–S2 (`platform/scene/pass-variants.ts`, the input-variant swap). Every visible mesh draws once more through a *variant* of its own material: the forward material seen through a prototype, so maps, uniforms, side and polygon offset are read live, with the pass's define, blend state and program key of its own. A material declares its role through the scene port (`declarePass`, `platform/api/scene.ts`), and the variant's program is its own forward shader with `XFS_SCATTER_INPUT` defined:
+2. **Input** into S0–S2 (`platform/scene/pass-variants.ts`, the input-variant swap), one pass per target. Every visible mesh draws once more per target through a *variant* of its own material: the forward material seen through a prototype, so maps, uniforms, side and polygon offset are read live, with the pass's define, blend state and program key of its own. A material declares its role through the scene port (`declarePass`, `platform/api/scene.ts`), and the variant's program is its own forward shader with `XFS_SCATTER_INPUT` defined (and `XFS_SCATTER_S1` or `XFS_SCATTER_S2` for those passes; an occluder writes the same into all three, so its three variants share one program):
    - **Skin** (`skin-material.ts`, role `skin`): `E` accumulated in the skin light, the depth, `√albedo`, the slot and the metalness; opaque. The teeth's interior occlusion scales `E` too (`mouth-occlusion.ts`).
    - **Face decals lit as skin** (`face-decal-material.ts`, role `decal`): S1 = √ of the decal's own colour (not the forward solve's) at the colour alpha, so the hardware blend *is* the game's square-root blend; S2 = the decal's metalness at the surface alpha; S0 = `E` of the forward's lit blend at the forward's drawn alpha, so S0 mixes exactly as the forward light does.
    - **Brows** (`brow-material.ts`, role `decal`): S1 only (√colour at the coverage). They are lit as a standard surface, so they write no irradiance, and the skin's `E` and metalness stay under them.
@@ -537,7 +537,7 @@ Measured on 27 September 2026 (RTX 4070, ANGLE D3D11, headless Chrome). Each fig
 | Rank | Step | State |
 |---|---|---|
 | 1 | Kernel builder and table as a pure module | **Done** (`tests/skin-scatter-kernel.test.ts`) |
-| 2 | Input-variant swap and the S0–S2 target, with resize, release and dispose | **Done** |
+| 2 | Input-variant swap and the S0–S2 targets (a pass each since profiles 4a-v-c), with resize, release and dispose | **Done** |
 | 3 | Blur, combine and display integration for both presets; wrap off while active; fallback kept | **Done** |
 | 4 | Decal, brow and plate input variants | **Done** |
 | 5 | Scissor, quality, slot diagnostics, GPU timing | **Done** (§11.5) |

@@ -79,8 +79,8 @@ export type Pred =
   | { cap: string }
   | { setting: string; is: string[] }
   | { believes: { who: RoleKey; of: RoleKey | Id | 'v'; path: SlotPath; is?: Region; atLeast?: number } }
-  | { city: unknown; is: string[] }
-  | { social: unknown; is: string[] }
+  | { city: Record<string, Record<string, unknown>>; is: string[] }
+  | { social: Record<string, Record<string, unknown>>; is: string[] }
   | { fn: FnRef; args: unknown[]; reads: FactRead[] }
   | 'yes'
   | 'no';

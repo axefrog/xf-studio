@@ -98,6 +98,7 @@ body.guide { overflow: auto; height: auto; }
 .handle-legend { width: 100%; max-width: 480px; display: block; }
 .toast-demo { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 420px; }
 .demo-viewport { height: 170px; }
+.demo-viewport.demo-status { position: relative; width: 300px; height: 110px; }
 .demo-uv { height: 170px; margin-top: var(--sp-4); }
 .demo-hints { height: auto; min-height: 58px; }
 .demo-hints .viewport-bottom { position: static; padding: var(--sp-4); }
@@ -179,7 +180,7 @@ ${input.css}
 </head>
 <body class="guide">
 <header class="guide-top"><span class="brand-mark" aria-hidden="true">XF</span><h1>Studio interface guide</h1><span class="meta">Authoritative reference · generated ${input.generated}</span>
-  <a class="guide-back" href="./" title="XF Studio, where Help › Interface guide opens this page">${i("chevronLeft")}<span>Back to XF Studio</span></a>
+  <a class="guide-back" href="./" title="Go to the XF Studio site">${i("chevronLeft")}<span>XF Studio site</span></a>
   <div class="guide-controls" role="group" aria-label="Guide display">
     <div class="segmented" role="group" aria-label="Theme"><button type="button" class="segment" data-theme-choice="system" aria-pressed="true">${i("monitor")}<span>System</span></button><button type="button" class="segment" data-theme-choice="light" aria-pressed="false">${i("sun")}<span>Light</span></button><button type="button" class="segment" data-theme-choice="dark" aria-pressed="false">${i("moon")}<span>Dark</span></button></div>
     <label class="toggle"><input type="checkbox" role="switch" class="switch" id="compare-themes"><span class="switch-track" aria-hidden="true"></span><span class="toggle-label">Light and dark side by side</span></label>

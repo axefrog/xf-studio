@@ -111,6 +111,138 @@ test("a map's first upload comes from its decoded bitmap; the texture keeps its 
   expect(seen.at(-1)).toBe(element);
 });
 
+test("a large map's first upload goes in bands of rows: its storage first, then a band per step, the mipmaps with the last; any caller continues it (4a-v-b)", async () => {
+  const THREE = await import("three");
+  const { hasUploadSource, offerUploadSource, uploadStep, uploadUnfinished } = await import("../src/character/render/character-detail-loader");
+  let closed = 0;
+  const bitmap = { width: 4096, height: 4096, close() { closed++; } } as unknown as ImageBitmap;
+  const texture = new THREE.Texture({ width: 4096, height: 4096 });
+  texture.onUpdate = () => { throw Error("Three's own upload ran"); };
+  offerUploadSource(texture, bitmap);
+  const calls: string[] = [];
+  const renderer = {
+    initTexture: (map: InstanceType<typeof THREE.Texture>) => { calls.push(`storage:${map.image === bitmap}:${map.source.dataReady}`); },
+    copyTextureToTexture: (source: InstanceType<typeof THREE.Texture>, target: InstanceType<typeof THREE.Texture>, region: InstanceType<typeof THREE.Box2>) => {
+      calls.push(`band:${region.min.y}-${region.max.y}:${source.image === bitmap}:${target === texture}:${target.generateMipmaps}`);
+    },
+  } as unknown as InstanceType<typeof THREE.WebGLRenderer>;
+  // The storage (no texels, Three's `onUpdate` not run, so the bitmap stays), then bands: unfinished until the last.
+  expect(uploadStep(texture, renderer)).toBe(false);
+  expect(uploadUnfinished(texture)).toBe(true);
+  let steps = 1;
+  while (!uploadStep(texture, renderer)) steps++;
+  expect(steps).toBe(8);
+  expect(calls[0]).toBe("storage:true:false");
+  expect(calls.slice(1, 3)).toEqual(["band:0-512:true:true:false", "band:512-1024:true:true:false"]);
+  expect(calls.at(-1)).toBe("band:3584-4096:true:true:true");
+  expect([texture.image.width, texture.source.dataReady, texture.generateMipmaps, uploadUnfinished(texture), hasUploadSource(texture), closed])
+    .toEqual([4096, true, true, false, false, 1]);
+  // A small map goes whole, as before.
+  const small = new THREE.Texture({ width: 4, height: 4 }), seen: unknown[] = [];
+  offerUploadSource(small, { width: 4, height: 4, close() {} } as unknown as ImageBitmap);
+  expect(uploadStep(small, { initTexture: (map: InstanceType<typeof THREE.Texture>) => { seen.push(map.image); } } as unknown as InstanceType<typeof THREE.WebGLRenderer>)).toBe(true);
+  expect(seen).toHaveLength(1);
+});
+
+/** A renderer stand-in for banded uploads, with Three's texture versions (`properties`) and its texture-size limit, recording its calls. */
+async function bandingRenderer(options: { maxTextureSize?: number } = {}) {
+  const THREE = await import("three");
+  const calls: string[] = [];
+  let properties = new WeakMap<object, { __version?: number }>();
+  const entry = (object: object) => properties.get(object) ?? properties.set(object, {}).get(object)!;
+  const renderer = {
+    capabilities: { maxTextureSize: options.maxTextureSize ?? 16384 },
+    properties: { get: entry },
+    initTexture: (map: InstanceType<typeof THREE.Texture>) => {
+      calls.push(`storage:${(map.image as { width: number }).width}:${map.source.dataReady}`);
+      entry(map).__version = map.version;
+    },
+    copyTextureToTexture: (source: InstanceType<typeof THREE.Texture>, _target: unknown, region: InstanceType<typeof THREE.Box2>) => {
+      if (!(source.image as ImageBitmap).width) throw Error("copied from a closed bitmap");
+      calls.push(`band:${region.min.y}-${region.max.y}:${region.max.x}`);
+    },
+  } as unknown as InstanceType<typeof THREE.WebGLRenderer>;
+  /** A restored context: Three's properties start again, so nothing is uploaded. */
+  return { renderer, calls, restore() { properties = new WeakMap(); } };
+}
+/** A decoded bitmap stand-in that reads 0 by 0 once closed, as a real one does. */
+const bitmapOf = (size: number) => {
+  const bitmap = { width: size, height: size, closed: 0, close() { bitmap.closed++; bitmap.width = bitmap.height = 0; } };
+  return bitmap;
+};
+
+test("a banded upload a lost context interrupted starts again after the restore, from its bitmap, and is never marked done early (4a-v-b review 3)", async () => {
+  const THREE = await import("three");
+  const { offerUploadSource, uploadStep, uploadUnfinished } = await import("../src/character/render/character-detail-loader");
+  const { beginContextGeneration, endContextGeneration } = await import("../src/platform/scene/context-generation");
+  const { renderer, calls, restore } = await bandingRenderer();
+  const bitmap = bitmapOf(4096);
+  const texture = new THREE.Texture({ width: 4096, height: 4096 });
+  offerUploadSource(texture, bitmap as unknown as ImageBitmap);
+  // Its storage and two bands, then the context is lost and restored.
+  for (let i = 0; i < 3; i++) expect(uploadStep(texture, renderer)).toBe(false);
+  endContextGeneration(renderer);
+  expect(uploadUnfinished(texture)).toBe(false);
+  restore(); beginContextGeneration(renderer);
+  // It starts again: storage, then every band from the top, from the bitmap (still open), and done only after the last.
+  calls.length = 0;
+  let steps = 1;
+  while (!uploadStep(texture, renderer)) steps++;
+  expect(steps).toBe(9);
+  expect(calls[0]).toBe("storage:4096:false");
+  expect(calls[1]).toBe("band:0-512:4096");
+  expect(calls.at(-1)).toBe("band:3584-4096:4096");
+  expect(bitmap.closed).toBe(1);
+});
+
+test("a banded upload whose texture Three uploaded whole meanwhile (its bitmap closed) finishes without a copy from the closed bitmap (4a-v-b review 3)", async () => {
+  const THREE = await import("three");
+  const { offerUploadSource, uploadStep } = await import("../src/character/render/character-detail-loader");
+  const { beginContextGeneration, endContextGeneration } = await import("../src/platform/scene/context-generation");
+  const { renderer, calls, restore } = await bandingRenderer();
+  const bitmap = bitmapOf(2048);
+  const texture = new THREE.Texture({ width: 2048, height: 2048 });
+  offerUploadSource(texture, bitmap as unknown as ImageBitmap);
+  expect(uploadStep(texture, renderer)).toBe(false);
+  expect(uploadStep(texture, renderer)).toBe(false);
+  // Restored, and drawn before the upload went on: Three uploaded it whole from its image, and its `onUpdate` closed the bitmap.
+  endContextGeneration(renderer); restore(); beginContextGeneration(renderer);
+  renderer.initTexture(texture); texture.onUpdate?.(texture);
+  expect(bitmap.closed).toBe(1);
+  calls.length = 0;
+  // No band is copied from the closed bitmap: the map is uploaded (an ordinary upload, which Three skips for a current texture).
+  expect(uploadStep(texture, renderer)).toBe(true);
+  expect(calls.filter(call => call.startsWith("band"))).toEqual([]);
+});
+
+test("a banded upload whose texture changed meanwhile starts again; one larger than the renderer's textures goes whole, never in bands (4a-v-b review 6)", async () => {
+  const THREE = await import("three");
+  const { offerUploadSource, uploadStep, uploadUnfinished } = await import("../src/character/render/character-detail-loader");
+  {
+    const { renderer, calls } = await bandingRenderer();
+    const texture = new THREE.Texture({ width: 2048, height: 2048 });
+    offerUploadSource(texture, bitmapOf(2048) as unknown as ImageBitmap);
+    expect(uploadStep(texture, renderer)).toBe(false);
+    expect(uploadStep(texture, renderer)).toBe(false);
+    // A new version: its storage is Three's to make again, so the banded upload starts over and isn't done after its old last band.
+    texture.needsUpdate = true;
+    calls.length = 0;
+    let steps = 1;
+    while (!uploadStep(texture, renderer)) steps++;
+    expect(steps).toBe(5);
+    expect(calls).toEqual(["storage:2048:false", "band:0-512:2048", "band:512-1024:2048", "band:1024-1536:2048", "band:1536-2048:2048"]);
+  }
+  {
+    // 8192² on a renderer whose textures are at most 4096²: Three makes it smaller, so it goes through Three's own upload, whole.
+    const { renderer, calls } = await bandingRenderer({ maxTextureSize: 4096 });
+    const texture = new THREE.Texture({ width: 8192, height: 8192 });
+    offerUploadSource(texture, bitmapOf(8192) as unknown as ImageBitmap);
+    expect(uploadStep(texture, renderer)).toBe(true);
+    expect(uploadUnfinished(texture)).toBe(false);
+    expect(calls).toEqual(["storage:8192:true"]);
+  }
+});
+
 test("a map released before it was ever uploaded lets its bitmap go", async () => {
   const THREE = await import("three");
   const { hasUploadSource, offerUploadSource } = await import("../src/character/render/character-detail-loader");

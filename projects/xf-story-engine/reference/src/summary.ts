@@ -8,7 +8,7 @@
 import { ln } from './fdlibm-log.ts';
 import { H, i as hi, id as hid, mintedId, rand, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
-import { inSpatialRegion, isUnder } from './predicate.ts';
+import { type ItemPrefilter, inSpatialRegion, isUnder } from './predicate.ts';
 import { type OpCtx, newOpCtx } from './resolve.ts';
 import type { GameTime, Id, NodeHeader, PinReason, QueryScope, SlotPath, Value } from './types.ts';
 import { Budget, LimitExceeded, Worklist, failIfFailed } from './work.ts';
@@ -38,10 +38,15 @@ export interface ItemDescriptor {
 
 const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** The time of an item: a keyed draw inside its summary's span (spec 9.3). */
+export const itemTime = (summary: Id, index: number, from: number, length: number): GameTime => from + Math.floor(rand(hs('item-t'), hid(summary), hi(index)) * length);
+
 export class Summaries {
   private canon = new Map<Id, Set<number>>();
   private descCache = new Map<string, { d: ItemDescriptor | null; cost: number; height: number }>();
   private descRevision = -1;
+  /** The kind, start and length of each summary, which are committed at minting and do not change: a cache that a query's time bound prunes by. */
+  private spans = new Map<Id, { span: { kind: Value | undefined; from: number; length: number } | null; local: number; at?: GameTime }>();
   private descNow = Number.NaN;
   private warmList = new Worklist<{ summary: Id; next: number }>();
 
@@ -56,6 +61,8 @@ export class Summaries {
   mintSummary(spec: SummarySpec): Id {
     const k = this.k;
     const nid = k.mint(spec.creator, spec.cause, spec.name, 'core:summary');
+    // a pin that was there before this mint may restate a field: then the span is resolved when it is first read, not taken from the spec
+    const untouched = k.store.localState(nid) === 0;
     const pin = (slot: SlotPath, value: Value): void => {
       k.pin({ node: nid, slot, value, reason: 'committed', cause: spec.cause, silent: true });
     };
@@ -64,6 +71,8 @@ export class Summaries {
     pin('length', spec.length);
     pin('scope', spec.scope);
     if (spec.count !== undefined) pin('count', spec.count);
+    if (untouched) this.spans.set(nid, { span: { kind: spec.kind, from: spec.from, length: spec.length }, local: this.k.store.localState(nid) });
+    else this.spans.delete(nid);
     return nid;
   }
 
@@ -71,6 +80,26 @@ export class Summaries {
 
   canonOf(summary: Id): number[] {
     return [...(this.canon.get(summary) ?? [])].sort((a, b) => a - b);
+  }
+
+  /** The kind, start and length of a summary, from the cache or resolved once. */
+  spanOf(ctx: OpCtx, summary: Id, t: GameTime): { kind: Value | undefined; from: number; length: number } | null {
+    const have = this.spans.get(summary);
+    const local = this.k.store.localState(summary);
+    // The span taken at minting holds at any time (nothing local touched the summary then, and a change since moves the stamp). One
+    // resolved while something local names the summary holds only at the time it was resolved: a contribution's validity is a window
+    // that opens and closes without moving the stamp (SIM-06).
+    if (have !== undefined && have.local === local && (have.at === undefined || have.at === t)) return have.span;
+    const read = (slot: string): Value | undefined => {
+      const r = this.k.resolver.resolveWithin(ctx, summary, slot, t);
+      failIfFailed(r.status, `${slot} of ${summary}`);
+      return r.value;
+    };
+    const from = read('from');
+    const length = read('length');
+    const span = typeof from === 'number' && typeof length === 'number' ? { kind: read('kind'), from, length } : null;
+    this.spans.set(summary, local === 0 ? { span, local } : { span, local, at: t });
+    return span;
   }
 
   summaries(): Id[] {
@@ -175,7 +204,7 @@ export class Summaries {
       finish(null);
       return undefined;
     }
-    const time = from + Math.floor(rand(hs('item-t'), hid(summary), hi(index)) * length);
+    const time = itemTime(summary, index, from, length);
     const d: ItemDescriptor = { id: this.itemId(summary, index), index, time };
     // Strictly under the scope: the scope itself is excluded before the cut to the lowest Ids (SPEC-NOTES 31).
     const candidates = this.k.schema.hasKind('core:place')
@@ -196,6 +225,9 @@ export class Summaries {
         }
       });
       d.place = candidates[best]!;
+    } else if (this.k.config.itemScopePlace) {
+      // A scope with no place strictly under it is itself the place of its items (V4-39).
+      d.place = scope;
     }
     finish(d);
     return d;
@@ -222,12 +254,19 @@ export class Summaries {
    * The items of every summary overlapping the scope, as materialised item Ids whose place falls inside
    * the scope. The query then checks each exactly. Charged to the query's allowance.
    */
-  itemCandidates(ctx: OpCtx, scope: QueryScope, t: GameTime, roots: Id[]): Id[] {
+  itemCandidates(ctx: OpCtx, scope: QueryScope, t: GameTime, roots: Id[], pre?: ItemPrefilter): Id[] {
     if ('nodes' in scope) return [];
     const env = this.k.resolver.makeEnv(ctx, t);
     const out: Id[] = [];
     for (const S of this.summaries()) {
       ctx.allowance.spend(1);
+      // A summary whose kind cannot pass the query's tests, or whose span lies outside the times they allow, has no item to offer: it is
+      // skipped before anything of it is resolved.
+      const span = pre ? this.spanOf(ctx, S, t) : null;
+      if (pre && span) {
+        if (!pre.kindOk(span.kind)) continue;
+        if (pre.range && (span.from + span.length <= pre.range[0] || span.from > pre.range[1])) continue;
+      }
       const spr = this.k.resolver.resolveWithin(ctx, S, 'scope', t);
       failIfFailed(spr.status, `scope of ${S}`);
       const sp = spr.value;
@@ -241,6 +280,9 @@ export class Summaries {
       if (typeof count !== 'number') continue;
       for (let i = 0; i < count; i++) {
         ctx.allowance.spend(1);
+        // An item that cannot pass the query's tests on its kind and time is neither placed nor materialised for the query to reject it;
+        // an item that already exists (a canon item, one in focus) is left to the exact check.
+        if (pre && span && !this.k.store.header(this.itemId(S, i)) && !pre.keep(span.kind, itemTime(S, i, span.from, span.length))) continue;
         const d = this.descriptor(ctx, S, i, t);
         if (!d || d.place === undefined) continue;
         const inside = 'region' in scope
@@ -300,6 +342,7 @@ export class Summaries {
   clear(): void {
     this.canon.clear();
     this.descCache.clear();
+    this.spans.clear();
     this.warmList.clear();
   }
 }

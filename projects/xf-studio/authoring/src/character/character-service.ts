@@ -191,7 +191,11 @@ export class CharacterService implements CharactersPort {
   // -------------------------------------------------------------------------------------------------------------
   // Contexts
 
-  /** The character's one context, made the first time a scene shows it (`ports`: that scene's). */
+  /**
+   * The character's one context, made the first time a scene shows it. It outlives the scene runtimes that show it (profiles phase 4a-iv):
+   * `ports` are taken only when it is made, so they reach whichever runtime shows the character at the time of each call
+   * (preview/browser/browser-scene-heads.ts binds them late).
+   */
   context(id: CharacterId, ports: CharacterScenePorts): CharacterContextActions {
     const entry = this.live(id);
     if (!("id" in entry)) throw Error(entry.reason);
@@ -223,15 +227,6 @@ export class CharacterService implements CharactersPort {
     if (!await this.deps.outbox.settle([docRef(id)])) return false;
     this.drop(entry);
     return true;
-  }
-  /**
-   * The scene showing the character let it go at once (its head is made again, for another body): its context goes now. Nothing is lost:
-   * every change a context makes is in the outbox the same turn, and the character's history stays (`character:<id>`), so the next
-   * context (`context`) shows the document as it is and moves through the same steps.
-   */
-  detach(id: CharacterId, context: CharacterContextActions): void {
-    const entry = this.entries.get(id);
-    if (entry?.context === context) this.drop(entry);
   }
   private drop(entry: Entry) {
     entry.unsubscribe?.();

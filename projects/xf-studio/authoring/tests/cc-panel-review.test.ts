@@ -551,7 +551,7 @@ describe("CORE-74: the retired tried style is kept until the context stores choi
     initial.preview.piercingStyle = "01"; initial.preview.piercingDefinition = "gold";
     let stored: ReturnType<CharacterContextActions["stored"]> | null = null;
     const composer = new WorkspaceComposer(initial, { editor: () => ({}) as never, uvView: () => initial.uvView, savedV: () => undefined,
-      collections: () => initial.collections, quality: () => initial.preview.textureSize, preview: () => undefined, motion: () => undefined,
+      collections: () => initial.collections, quality: () => initial.preview.textureSize, preview: () => undefined,
       character: () => stored });
     composer.setPreviewReady();
     expect(composer.capture().preview).toMatchObject({ piercingStyle: "01", piercingDefinition: "gold" });

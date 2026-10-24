@@ -7,6 +7,7 @@ import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../.
 import { h } from "../dom";
 import { setUpdateLine } from "../update-check";
 import { EYE_MAKEUP_MOD } from "../../legacy/eye-makeup/mod-branding";
+import { BACKUP_PENDING, BACKUP_STORAGE_FULL, UNPROTECTED } from "../notice-text";
 
 type Mount = () => HTMLElement;
 const tabs: TabItem[] = [["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]]
@@ -318,9 +319,11 @@ const MOUNTS: Record<string, Mount> = {
       return notice.element;
     };
     const narrow = h("div", { style: "max-width:380px" },
-      make("Your latest changes couldn't be backed up on this computer. If XF Studio closes before your library has them, they could be lost.", ["exportCopy", "protect"]));
+      make(UNPROTECTED, ["protect", "exportCopy"]));
     return stack({ gap: "normal" },
       make("Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export this window's copy to keep them.", ["retryRelease", "exportCopy"]),
+      make(BACKUP_PENDING, ["protect", "exportCopy"]),
+      make(BACKUP_STORAGE_FULL, ["protect", "exportCopy"]),
       make("Some restored changes need a game save that's no longer on this computer. Import it again, or discard them.", ["importSave", "discardWaiting"]),
       make("Taking over from the other window…", []), narrow);
   },
@@ -332,7 +335,7 @@ const MOUNTS: Record<string, Mount> = {
       { id: "day", name: "Day looks for the badlands convoy", meta: ["2 presets", "version 1", recordTime(at.getTime() - 86_400_000)],
         action: button({ label: "Open", small: true, onClick: () => {} }) }]);
     const drafts = new RecordList({ label: "Recent drafts" });
-    drafts.update([{ id: "d1", name: "Makeup collection", meta: ["Draft", "changed since version 2", "3 presets"],
+    drafts.update([{ id: "d1", name: "Makeup collection", meta: ["Draft", "no version yet", "3 presets"],
       action: button({ label: "Reopen", icon: "undo", small: true, onClick: () => {} }) }]);
     return stack({ gap: "normal" }, saved.element, drafts.element);
   },

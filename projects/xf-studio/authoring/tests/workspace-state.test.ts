@@ -162,7 +162,7 @@ test("the character context is stored in the preview state only once something w
   const capture = (character: () => WorkspaceState["preview"]["character"] | null | undefined) => {
     const composer = new WorkspaceComposer(state, { editor: () => ({ recipe: state.recipe, active: 0, selected: 0, history: state.history,
       fieldSelection: {} }) as never, uvView: () => state.uvView, savedV: () => undefined, collections: () => undefined, quality: () => state.preview.textureSize,
-      preview: () => undefined, motion: () => undefined, character });
+      preview: () => undefined, character });
     composer.setPreviewReady();
     return composer.capture();
   };
@@ -180,6 +180,6 @@ test("the character context is stored in the preview state only once something w
   // Before the preview is ready, the workspace's own context is kept as it was read.
   const unready = new WorkspaceComposer({ ...state, preview: { ...state.preview, character: stored } }, { editor: () => ({ recipe: state.recipe, active: 0, selected: 0,
     history: state.history, fieldSelection: {} }) as never, uvView: () => state.uvView, savedV: () => undefined, collections: () => undefined,
-    quality: () => state.preview.textureSize, preview: () => undefined, motion: () => undefined, character: () => undefined });
+    quality: () => state.preview.textureSize, preview: () => undefined, character: () => undefined });
   expect(unready.capture().preview.character).toEqual(stored);
 });

@@ -54,7 +54,7 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
   }
   const browser = localOutboxStorage(local, `${workspace}~${launch}`);
   const writers = new Map<string, { latest: string | null; pending: boolean; running: Promise<void> | null; failed: boolean }>();
-  let listener: ((key: string, state: "pending" | "stored" | "failed") => void) | null = null;
+  let listener: ((key: string, state: "pending" | "stored" | "failed", error?: unknown) => void) | null = null;
   const queue = (key: string, sent: string | null) => {
     let writer = writers.get(key);
     if (!writer) writers.set(key, writer = { latest: sent, pending: false, running: null, failed: false });
@@ -70,9 +70,10 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
       while (writer.pending) {
         writer.pending = false;
         const text = writer.latest;
-        try { await post(key, text); writer.failed = false; } catch { writer.failed = true; }
-        if (writer.failed) listener?.(key, "failed");
-        else if (!writer.pending) listener?.(key, "stored");
+        try {
+          await post(key, text); writer.failed = false;
+          if (!writer.pending) listener?.(key, "stored");
+        } catch (error) { writer.failed = true; listener?.(key, "failed", error); }
       }
       writer.running = null;
     })();

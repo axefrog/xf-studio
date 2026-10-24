@@ -11,6 +11,7 @@ import { rootId } from '../id.ts';
 import type { Schema } from '../schema.ts';
 import { atoms, bound, effectSites, fragmentSites, playOf, predSites, type EffectSite } from './doc.ts';
 import type { PackIndex } from './packs.ts';
+import { readCall } from './reads.ts';
 import { barredRoles } from './floors.ts';
 import { L2Registry, type PortReport } from './registries.ts';
 import { compare, kAll, kAny, kNot, walkPred } from './pred.ts';
@@ -204,6 +205,11 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
         roleOrId(atom.believes.of, where);
       } else if ('fn' in atom) {
         if (!ctx.reg.pred(atom.fn.name, atom.fn.version)) out.error('L-01', `The predicate function "${atom.fn.name}@${atom.fn.version}" is not registered.`, where, { engine: true });
+      } else if ('city' in atom || 'social' in atom) {
+        const call = readCall(atom);
+        if ('error' in call) out.error('L-01', call.error, where, { engine: true });
+        // the believer of a divergence is a character of the seed: the read is of what that character believes
+        else if (call.name === 'divergence' && typeof call.args[0] === 'string') undeclaredRole(call.args[0], where);
       }
     }
   }
@@ -562,6 +568,13 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
         const idn = r ? bound(r.identity).value : undefined;
         const rootNamed = (x: unknown): boolean => typeof x === 'string' && (ROOT_NAMES.has(x.replace(/^root:/, '')) || (ctx.worldSeed !== undefined && [...ROOT_NAMES].some((n) => x === rootId(ctx.worldSeed!, n))));
         if (ROOT_NAMES.has(who) || rootNamed(idn)) out.error('L-56', `The "believes" test names ${who}, a root actor. Only the belief of a character in the world can be tested; the director's model of V is out of reach.`, `${s.at}${at}`, { engine: true });
+      }
+      if ('social' in atom) {
+        // a divergence of a root actor would be the director's own model of V
+        const call = readCall(atom);
+        if (!('error' in call) && call.name === 'divergence' && typeof call.args[0] === 'string' && ROOT_NAMES.has(call.args[0].replace(/^root:/, ''))) {
+          out.error('L-56', `The "divergence" read names ${call.args[0]}, a root actor. Only the belief of a character in the world can be read; the director's model of V is out of reach.`, `${s.at}${at}`, { engine: true });
+        }
       }
       if ('fn' in atom) {
         const f = ctx.reg.pred(atom.fn.name, atom.fn.version);

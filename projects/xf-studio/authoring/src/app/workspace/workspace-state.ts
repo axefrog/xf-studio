@@ -15,6 +15,8 @@ import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewText
 import {parseGlitterChoices, type GlitterChoices} from "../../engines/layered-makeup/glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "../ui-preferences";
 import { isCreatorName } from "../../character/creator-names";
+import { storedPoseOf, validIdleClip } from "../../animation/scene-motion";
+import { DEFAULT_IDLE } from "../../animation/idle-catalogue";
 import { migrationMarkOf, workspaceProfilesOf, type MigrationMark, type WorkspaceProfiles } from "../profiles/profile-session";
 import { storedCharacterOf, type StoredCharacter } from "../../character/character-context-actions";
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
@@ -24,7 +26,8 @@ import { parseSetupLibrary, rigKindOf, type SetupLibrary } from "../../preview/l
 import type { ViewGraphData } from "../../platform/api/view-graph";
 import { parseTransitions, type StoredTransitions } from "../../platform/core/transition-settings";
 import { parseViewGraph } from "../../platform/core/view-graph";
-import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, isDefaultViewGraph, STUDIO_VIEW_GRAPH_RULES, validCameraPose } from "../../preview/preview-view-graph";
+import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, recoverScenes, STUDIO_VIEW_GRAPH_RULES, validCameraPose, viewSettingsReset,
+  VIEW_SETTINGS_RESET } from "../../preview/preview-view-graph";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -94,16 +97,16 @@ export type PreviewState = {
    * bytes. When present it decides the lighting, and the legacy fields are its approximation for builds before setups.
    */
   lightingSetups?: SetupLibrary;
+  /**
+   * The legacy motion fields: `blink` and `blinkPlaying` above, the idle's on/off, phase, pause and contributions, `idleClip` and `pose`.
+   * The motion lives in the view graph's scene nodes (animation/scene-motion.ts). These are read once, into the main view's scene when its
+   * node holds no motion (a workspace saved before the move), and written back exactly as read, so a build before the move opens the
+   * motion as it was at the upgrade.
+   */
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
-  /**
-   * Which of the game's preview idles plays while the idle is on (idle-catalogue.ts); absent: the default, the creator's close-up. Stored
-   * only when another is chosen, so a workspace that never chooses keeps its bytes.
-   */
+  /** Which of the game's preview idles played (idle-catalogue.ts); absent: the default, the creator's close-up. */
   idleClip?: string;
-  /**
-   * The photo-mode pose V holds (pose-library-design.md decision Q9: view state, like the camera; never in looks, Undo or exports): its
-   * TweakDB record and label. Present only while a pose is the body source.
-   */
+  /** The photo-mode pose V held (pose-library-design.md decision Q9): its TweakDB record and label. */
   pose?: { id: string; label: string };
   /**
    * How a held expression's changes animate (platform/core/transition-settings.ts, `transition.set`): per source, on or off, the
@@ -237,10 +240,10 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     if (typeof p.skinScatter === "boolean") state.preview.skinScatter = p.skinScatter;
     if (typeof p.faceShadows === "boolean") state.preview.faceShadows = p.faceShadows;
     if (inRange(p.hairLook, HAIR_LOOK_RANGE.min, HAIR_LOOK_RANGE.max)) state.preview.hairLook = p.hairLook;
-    if (typeof p.idleClip === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(p.idleClip) && p.idleClip !== "closeup") state.preview.idleClip = p.idleClip;
-    const pose = p.pose as { id?: unknown; label?: unknown } | undefined;
-    if (pose && typeof pose === "object" && typeof pose.id === "string" && pose.id.length <= 512 && /^[A-Za-z0-9_.\-$#]+$/.test(pose.id) &&
-      typeof pose.label === "string" && pose.label.length <= 200 && !/[\u0000-\u001f]/.test(pose.label)) state.preview.pose = { id: pose.id, label: pose.label };
+    // The legacy motion fields (read once into the main scene's node while it holds none: animation/scene-motion.ts), by the node's rules.
+    if (validIdleClip(p.idleClip) && p.idleClip !== DEFAULT_IDLE) state.preview.idleClip = p.idleClip;
+    const pose = storedPoseOf(p.pose);
+    if (pose) state.preview.pose = pose;
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;
@@ -269,13 +272,20 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     else state.preview.idlePaused = false;
     if (validCameraPose(p.camera)) state.preview.camera = structuredClone(p.camera);
   }
-  // A damaged graph, or the default one written anyway, falls back to the default graph over `preview`.
-  const views = v.views !== undefined ? parseViewGraph(v.views, STUDIO_VIEW_GRAPH_RULES) : undefined;
-  if (views && !isDefaultViewGraph(views)) state.views = views;
   // The profiles migration's mark and sessions (profiles design §8): kept when they read, else left for the migration to make again.
+  // A scene's damaged optional setting is recovered alone, never costing the graph, and the restore says which settings were reset
+  // (`recoverScenes`): the session's scenes are what the Studio shows.
+  const report = (settings: readonly string[]) => warnings?.push(viewSettingsReset(settings));
   const mark = migrationMarkOf(v.migration), profiles = workspaceProfilesOf(v.profiles);
   if (mark) state.migration = mark;
-  if (profiles) state.profiles = profiles;
+  if (profiles) state.profiles = { ...profiles, sessions: Object.fromEntries(Object.entries(profiles.sessions).map(([id, session]) =>
+    [id, { ...session, views: recoverScenes(session.views as unknown as ViewGraphData, report) as unknown as typeof session.views }])) };
+  // The legacy graph (frozen since phase 1: written back as read): a damaged one is left out, and the default graph over `preview` stands in.
+  // It is what the Studio shows only until the migration has made a session, so only then does a reset setting in it get a note.
+  const shown = !Object.keys(state.profiles?.sessions ?? {}).length;
+  const views = v.views && typeof v.views === "object"
+    ? parseViewGraph(recoverScenes(v.views as ViewGraphData, shown ? report : undefined), STUDIO_VIEW_GRAPH_RULES) : undefined;
+  if (views) state.views = views;
   if (v.previewSetup && typeof v.previewSetup === "object" && typeof v.previewSetup.autostart === "boolean")
     state.previewSetup = { autostart: v.previewSetup.autostart, ...(v.previewSetup.declined === true ? { declined: true as const } : {}) };
   if (v.library) {
@@ -463,7 +473,10 @@ export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: b
   return { state, writable: !error, error };
 }
 
+/** The restore's one notice: the drafts and presets dropped (counted when several), then each 3D view's reset settings, once each. */
 function restoreWarning(warnings: RestoreWarnings) {
-  return warnings.length === 1 ? warnings[0] :
-    `${warnings.length} damaged recovery drafts or removed presets could not be restored and were dropped; your current draft was restored.`;
+  const views = [...new Set(warnings.filter(line => line.startsWith(VIEW_SETTINGS_RESET)))], drafts = warnings.filter(line => !line.startsWith(VIEW_SETTINGS_RESET));
+  const dropped = drafts.length === 1 ? drafts[0] : drafts.length ?
+    `${drafts.length} damaged recovery drafts or removed presets could not be restored and were dropped; your current draft was restored.` : undefined;
+  return [...(dropped ? [dropped] : []), ...views].join(" ");
 }

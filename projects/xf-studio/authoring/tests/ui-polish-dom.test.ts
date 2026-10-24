@@ -675,8 +675,8 @@ describe("The workspace notice (style guide t-recovering, t-unprotected): it nev
       file: (action: { kind: string }) => { sent.push(action.kind); }, feedback: { toast() {} } };
     const notice = workspaceNotice(rt as never);
     const root = notice.element as unknown as LightElement;
-    const frame = (recovering: { shown: boolean; long: boolean; safe: boolean; missing: number }, extra: { unprotected?: number; gesture?: boolean } = {}) =>
-      ({ status: { outbox: { unprotected: extra.unprotected ?? 0, pending: 1, conflicts: 0, failing: false, recovering } },
+    const frame = (recovering: { shown: boolean; long: boolean; safe: boolean; missing: number }, extra: { unprotected?: number; reason?: "pending" | "failed" | "storage-full"; gesture?: boolean } = {}) =>
+      ({ status: { outbox: { unprotected: extra.unprotected ?? 0, unprotectedReason: extra.reason, pending: 1, conflicts: 0, failing: false, recovering } },
         preview: { gesture: extra.gesture ? { source: "uv" } : null, control: null } }) as never;
     const visible = () => buttons(root).filter(button => !button.hidden).map(button => text(button));
     const shown = (name: string) => buttons(root).find(button => !button.hidden && text(button) === name)!;
@@ -696,14 +696,14 @@ describe("The workspace notice (style guide t-recovering, t-unprotected): it nev
     expect(root.hidden).toBe(false);
     expect(restoringLine(frame({ shown: true, long: true, safe: true, missing: 0 }))).toBe("");
     expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Restoring changes from your last session is taking a while.");
-    expect(visible()).toEqual(["Use restored", "Try again"]);
+    expect(visible()).toEqual(["Try again", "Use restored"]);
     expect(shown("Use restored").getAttribute("title")).toBe("Keep working on the restored version");
     // One rule at every width: every button is labelled, none an icon alone (B6, I2).
     for (const button of buttons(root)) { expect(button.querySelector("svg")).toBeNull(); expect(button.classList.contains("icon-only")).toBe(false); }
     shown("Use restored").click();
     shown("Try again").click();
     notice.update(frame({ shown: true, long: true, safe: false, missing: 0 }));
-    expect(visible()).toEqual(["Export this window's copy", "Try again"]);
+    expect(visible()).toEqual(["Try again", "Export this window's copy"]);
     await settle();
     expect(sent).toEqual(["documents.keepRestored", "documents.retryRecovery"]);
   });
@@ -737,10 +737,26 @@ describe("The workspace notice (style guide t-recovering, t-unprotected): it nev
     expect(root.hidden).toBe(false);
     // It says what could happen, never "protected" (UI review item 11).
     expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Your latest changes couldn't be backed up on this computer. If XF Studio closes before your library has them, they could be lost.");
-    expect(visible()).toEqual(["Export this window's copy", "Try again"]);
+    expect(visible()).toEqual(["Try again", "Export this window's copy"]);
     // Open, it stays through the next gesture (closing it then would move the dock too).
     notice.update(frame(idle, { unprotected: 1, gesture: true }));
     expect(root.hidden).toBe(false);
+    notice.update(frame(idle));
+    expect(root.hidden).toBe(true);
+  });
+
+  test("a delayed backup is still being written, a known full store names the next step, and recovery buttons keep their order", async () => {
+    const { notice, root, frame, visible } = await harness();
+    const idle = { shown: false, long: false, safe: false, missing: 0 };
+    notice.update(frame(idle, { unprotected: 1, reason: "pending" }));
+    expect(text(root.querySelector(".workspace-notice-text")!)).toContain("still being backed up");
+    notice.update(frame(idle, { unprotected: 1, reason: "storage-full" }));
+    expect(text(root.querySelector(".workspace-notice-text")!)).toContain("Storage on this computer is full");
+    expect(text(root.querySelector(".workspace-notice-text")!)).toContain("Free up some space, then try again");
+    expect(visible()).toEqual(["Try again", "Export this window's copy"]);
+    const copy = buttons(root).find(button => text(button) === "Export this window's copy")!;
+    expect(copy.getAttribute("title")).toStartWith("Write the collection");
+    expect(copy.getAttribute("title")).toEndWith("Nothing goes to your library.");
     notice.update(frame(idle));
     expect(root.hidden).toBe(true);
   });

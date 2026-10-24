@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
+    "ts-parser": "npm:typescript@5.9.3",
     "typescript": "7.0.2"
   }
 }

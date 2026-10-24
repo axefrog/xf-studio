@@ -4,7 +4,7 @@
  * Never points at the active working draft or library.
  */
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { lstat, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
@@ -15,6 +15,35 @@ const REMOVAL = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 
 
 const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const root = resolve(import.meta.dir, "..");
+
+const FOLDER_OWNER = ".xfs-ui-owner";
+function browserFolder(kind: "chrome" | "data"): string {
+  const folder = mkdtempSync(join(tmpdir(), `xfs-ui-${kind}-`));
+  writeFileSync(join(folder, FOLDER_OWNER), String(process.pid));
+  return folder;
+}
+
+/** A killed run misses its exit hooks. Sweep only our old folders whose recorded owner has exited; unknown ownership stays. */
+export async function removeStaleBrowserFolders(directory = tmpdir(), now = Date.now(), keep?: string): Promise<void> {
+  let folders;
+  try { folders = await readdir(directory, { withFileTypes: true }); } catch { return; }
+  for (const folder of folders) {
+    if (!folder.isDirectory() || folder.isSymbolicLink() || !/^xfs-ui-(chrome|data)-[a-zA-Z0-9]+$/.test(folder.name)) continue;
+    const path = resolve(directory, folder.name);
+    if (keep && path === resolve(keep)) continue;
+    try {
+      const stat = await lstat(path);
+      if (!stat.isDirectory() || stat.isSymbolicLink() || now - stat.mtimeMs <= 24 * 60 * 60_000) continue;
+      const ownerFile = join(path, FOLDER_OWNER), ownerStat = await lstat(ownerFile);
+      if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) continue;
+      const owner = readFileSync(ownerFile, "utf8").trim();
+      if (!/^[1-9]\d*$/.test(owner) || !Number.isSafeInteger(Number(owner))) continue;
+      try { process.kill(Number(owner), 0); continue; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") continue; }
+      await rm(path, REMOVAL);
+    } catch { /* Still held by a process, or already removed by another run. */ }
+  }
+}
 
 export type Session = {
   send<T = any>(method: string, params?: Record<string, unknown>): Promise<T>;
@@ -44,7 +73,7 @@ export type Session = {
  * it from a copy of the real settings, read once, so looks that need the game (the 3D head, hair, brows) still load.
  */
 export async function startServer(port: number, options: { settings?: "copy" | "empty" } = {}) {
-  const data = mkdtempSync(join(tmpdir(), "xfs-ui-data-"));
+  const data = browserFolder("data");
   // The server is killed by the script, not by us, so the folder goes when the script ends (whatever the way it ends).
   process.once("exit", () => { try { rmSync(data, REMOVAL); } catch { /* still held; nothing more to do at exit */ } });
   const real = join(localSettingsDirectory(), "settings.json");
@@ -107,11 +136,15 @@ async function stopChrome(chrome: Subprocess, profile: string, keep = false): Pr
 async function startChrome(options: { width?: number; height?: number; debugPort?: number; args?: readonly string[]; profile?: string }) {
   const failures: string[] = [];
   for (let attempt = 1; attempt <= PAGE_TARGET_LIMITS.attempts; attempt++) {
-    const profile = options.profile ? (mkdirSync(options.profile, { recursive: true }), options.profile) : mkdtempSync(join(tmpdir(), "xfs-ui-chrome-"));
+    const profile = options.profile ? (mkdirSync(options.profile, { recursive: true }), options.profile) : browserFolder("chrome");
+    // Chrome's scoped_dir* scratch belongs to this profile too, so removing the profile also removes it after a crash or killed run.
+    const temp = join(resolve(profile), "temp");
+    mkdirSync(temp, { recursive: true });
     if (options.profile) rmSync(join(profile, "DevToolsActivePort"), { force: true });
     const chrome: Subprocess = Bun.spawn([CHROME, "--headless=new", `--remote-debugging-port=${options.debugPort ?? 0}`, `--user-data-dir=${profile}`,
       `--window-size=${options.width ?? 1600},${options.height ?? 1000}`, "--no-first-run", "--no-default-browser-check",
-      "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars", ...(options.args ?? []), "about:blank"], { stdout: "ignore", stderr: "ignore" });
+      "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars", ...(options.args ?? []), "about:blank"],
+      { env: { ...process.env, TEMP: temp, TMP: temp }, stdout: "ignore", stderr: "ignore" });
     try {
       const page = await waitForPageTarget(async () => {
         const port = options.debugPort ?? activePort(profile);
@@ -134,6 +167,7 @@ async function startChrome(options: { width?: number; height?: number; debugPort
  */
 export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark";
   motion?: "reduce" | "no-preference"; args?: readonly string[]; init?: string; profile?: string } = {}) {
+  await removeStaleBrowserFolders(tmpdir(), Date.now(), options.profile);
   const { chrome, profile, page } = await startChrome(options);
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { socket.onopen = ok; socket.onerror = fail; });

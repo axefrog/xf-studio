@@ -57,9 +57,9 @@ function supersedeList(parts: readonly SupersededPart[]): readonly SupersededPar
 /**
  * Create every composed renderer, in list order, each with the next free run of draw-order slots it asked for. A renderer that fails
  * to create releases what it had made through its port and the renderers made before it, and the error reaches the host (whose load
- * then fails and releases everything, as any failed load does).
+ * then fails and releases everything, as any failed load does). `signal` is checked before each renderer: an abort releases those made.
  */
-export function createFeatureRenderers(context: FeatureRendererContext, factories: readonly FeatureRendererFactory[]) {
+export function createFeatureRenderers(context: FeatureRendererContext, factories: readonly FeatureRendererFactory[], signal?: AbortSignal) {
   const entries: Entry[] = [];
   const { head } = context;
   const report = context.report ?? ((feature, method, error) => console.error(`The ${feature} renderer's ${method} failed.`, error));
@@ -204,7 +204,7 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
       return entry;
   }
   try {
-    for (const factory of factories) add(factory);
+    for (const factory of factories) { signal?.throwIfAborted(); add(factory); }
   } catch (error) { dispose(); throw error; }
   return {
     /** Optional contributions have a token; withdrawal restores resolved parts synchronously. */
@@ -227,6 +227,21 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
       for (const entry of entries) {
         for (const item of entry.attached) { syncFollowers(item); syncBones(item); }
         guarded(entry, "beforeDraw", renderer => renderer.beforeDraw?.());
+      }
+    },
+    /**
+     * Before the scene is shown (profiles phase 4a-v): each renderer makes its own passes ready ahead and its GPU state current
+     * (`FeatureRenderer.prepare`), one after another; one that fails is reported and the others still prepare (its first frame does the rest).
+     */
+    async prepare(signal?: AbortSignal) {
+      for (const entry of [...entries]) {
+        if (signal?.aborted) return;
+        for (const item of entry.attached) { syncFollowers(item); syncBones(item); }
+        try { await entry.renderer?.prepare?.(signal); entry.failing.delete("prepare"); }
+        catch (error) {
+          if (signal?.aborted) return;
+          if (!entry.failing.has("prepare")) { entry.failing.add("prepare"); report(entry.feature, "prepare", error); }
+        }
       }
     },
     setNormals(enabled: boolean) { for (const entry of entries) guarded(entry, "setNormals", renderer => renderer.setNormals?.(enabled)); },

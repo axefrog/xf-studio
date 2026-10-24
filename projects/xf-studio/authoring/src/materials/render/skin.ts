@@ -35,6 +35,21 @@ export function skinSets(g: THREE.BufferGeometry) {
     sets.push({ j: `joints_${n}`, w: `weights_${n}` });
   return sets;
 }
+/**
+ * A geometry's joint indices as floats (profiles phase 4a-v-c, experiment 043 §12). Three declares every joint index `vec4` and feeds a
+ * glTF's integer JOINTS data as it is; ANGLE on Direct3D 11 then builds each program's vertex shader again for that input at the program's
+ * first draw, on the GPU process's main thread (25–70 ms each, with no frame presented meanwhile). Indices are small integers, exact as
+ * floats, so skinning is unchanged. Float data is left as it is.
+ */
+export function floatJointIndices(geometry: THREE.BufferGeometry): void {
+  for (const { j } of skinSets(geometry)) {
+    const attribute = geometry.getAttribute(j);
+    if (!attribute || attribute.array instanceof Float32Array) continue;
+    const size = attribute.itemSize, values = new Float32Array(attribute.count * size);
+    for (let i = 0; i < attribute.count; i++) for (let k = 0; k < size; k++) values[i * size + k] = attribute.getComponent(i, k);
+    geometry.setAttribute(j, new THREE.Float32BufferAttribute(values, size));
+  }
+}
 /** The skinning a material's compile adds (`extendSkin`), read when its program is built. */
 type SkinExtension = { declarations: string; sum: string; offset: number; sets: number;
   baseCompile?: THREE.Material["onBeforeCompile"]; baseKey?: THREE.Material["customProgramCacheKey"] };
@@ -151,7 +166,8 @@ export function extendSkin(
  */
 export function fullSkinDepthMaterial(mesh: THREE.SkinnedMesh, options: { strandAlpha?: boolean } = {}): THREE.MeshDepthMaterial {
   const cached = mesh.userData.xfsFullSkinDepth as THREE.MeshDepthMaterial | undefined;
-  if (cached) return cached;
+  // A cloned mesh carries a JSON copy of its user data (Object3D.copy), never the material itself.
+  if (cached?.isMaterial) return cached;
   const sets = skinSets(mesh.geometry);
   let sum = "mat4 fullSkin = mat4(0.0);\n";
   for (const { j, w } of sets) for (const c of ["x", "y", "z", "w"]) sum += `fullSkin += getBoneMatrix(${j}.${c}) * ${w}.${c};\n`;
@@ -170,4 +186,17 @@ export function fullSkinDepthMaterial(mesh: THREE.SkinnedMesh, options: { strand
   material.customProgramCacheKey = () => `full-skin-depth-${sets.length}-${options.strandAlpha ? "strand" : "solid"}`;
   mesh.userData.xfsFullSkinDepth = material;
   return material;
+}
+/**
+ * Free the full-skin depth material `fullSkinDepthMaterial` made for `mesh` (the mesh owns it: one per mesh). Whoever releases the mesh
+ * calls this with its geometry and skeleton; the program Three built for it is released with the material, so a renderer that outlives
+ * the mesh keeps nothing of it (experiments/043-scene-runtimes). Safe to call on any mesh, and more than once.
+ */
+export function releaseFullSkinDepth(mesh: THREE.Object3D): void {
+  const material = mesh.userData.xfsFullSkinDepth as THREE.MeshDepthMaterial | undefined;
+  if (!material) return;
+  if (mesh.customDepthMaterial === material) mesh.customDepthMaterial = undefined;
+  delete mesh.userData.xfsFullSkinDepth;
+  // A cloned mesh's user data is a JSON copy (Object3D.copy), never a material of its own.
+  if (material.isMaterial) material.dispose();
 }

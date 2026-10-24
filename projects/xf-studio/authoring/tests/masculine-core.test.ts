@@ -164,6 +164,101 @@ test("before a masculine head loads, the page has his core prepared (with progre
   expect(await offline.ensureBody("male").catch(caught => caught.code)).toBe("body_unavailable");
 });
 
+test("a superseded page only stops waiting: the host's masculine preparation, shared by every page that asks, runs to its end (D1)", async () => {
+  // A real host through its endpoint; the export waits on a gate, so the preparation runs until the test lets it finish.
+  const { game, cli, cacheRoot } = setup();
+  let release!: () => void;
+  const gate = new Promise<void>(done => { release = done; });
+  let exports = 0;
+  const host = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }),
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), async () => { exports++; await gate; }, { contains: () => new Set() }) });
+  const handler = createPreviewCoreHandler(host), url = "http://127.0.0.1:4317/api/preview-core";
+  const posted: string[] = [];
+  const transport = async (action: string, body?: string, options: { signal?: AbortSignal } = {}) => {
+    options.signal?.throwIfAborted();
+    if (action === "refresh") return { ok: true, data: await (await handler(new Request(`${url}?body=${body ?? "female"}`))).json() };
+    posted.push(action);
+    const response = await handler(new Request(url, { method: "POST", headers: { Origin: "http://127.0.0.1:4317", "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...(body ? { body } : {}) }) }));
+    return { ok: response.ok, data: await response.json() };
+  };
+  // Polling every 60 s: only an abort ends a wait.
+  const slow = { set: (run: () => void, ms: number) => setTimeout(run, ms * 60_000), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
+  const windowA = new PreviewPreparationActions(transport as never, 1, slow), windowB = new PreviewPreparationActions(transport as never, 1, slow);
+  const a = new AbortController(), b = new AbortController();
+  const waitingA = windowA.ensureBody("male", () => {}, a.signal).catch(caught => caught);
+  await Bun.sleep(5);
+  expect(host.snapshot("male").phase).toBe("preparing");
+  // Window B finds his head being prepared and waits for the same job: one job, asked for once.
+  const waitingB = windowB.ensureBody("male", () => {}, b.signal).catch(caught => caught);
+  await Bun.sleep(5);
+  expect(posted).toEqual(["prepare"]);
+  // Both pages are superseded: each stops waiting at once, and the host's job goes on with nobody waiting.
+  const started = performance.now();
+  a.abort();
+  b.abort();
+  expect(await waitingA).toMatchObject({ name: "AbortError" });
+  expect(await waitingB).toMatchObject({ name: "AbortError" });
+  expect(performance.now() - started).toBeLessThan(1000);
+  await Bun.sleep(5);
+  expect(host.snapshot("male").phase).toBe("preparing");
+  // The job finishes on its own terms, never cancelled: these synthetic game files lack his head, so it ends blocked (with real files it
+  // ends ready, cached for the next request).
+  release();
+  await host.settled();
+  expect(exports).toBe(1);
+  expect(host.snapshot("male")).toMatchObject({ phase: "blocked", code: "preview_source_missing" });
+  expect(posted).toEqual(["prepare"]);
+});
+
+test("disposing the service ends every call still waiting and stops its polling", async () => {
+  const calls: string[] = [];
+  const actions = new PreviewPreparationActions(async action => {
+    calls.push(action);
+    return { ok: true, data: state({ body: "male", phase: "preparing", canPrepare: false, canCancel: true }) };
+  }, 1, { set: (run: () => void, ms: number) => setTimeout(run, ms * 20), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) });
+  // Two heads wait for his core, neither with a signal of its own.
+  const first = actions.ensureBody("male").catch(caught => caught), second = actions.ensureBody("male").catch(caught => caught);
+  await Bun.sleep(5);
+  const asked = calls.length;
+  expect(asked).toBe(2);
+  const started = performance.now();
+  actions.dispose();
+  expect(await first).toMatchObject({ name: "AbortError" });
+  expect(await second).toMatchObject({ name: "AbortError" });
+  expect(performance.now() - started).toBeLessThan(200);
+  // Nothing polls any more, and a call after disposal asks nothing.
+  await Bun.sleep(60);
+  expect(calls).toHaveLength(asked);
+  expect(await actions.ensureBody("male").catch(caught => caught.name)).toBe("AbortError");
+  expect(calls).toHaveLength(asked);
+});
+
+test("an abort cuts off a request in flight: a held Refresh or Prepare never keeps a superseded page waiting", async () => {
+  for (const held of ["refresh", "prepare"]) {
+    const calls: string[] = [];
+    const actions = new PreviewPreparationActions(async (action, body, options = {}) => {
+      calls.push(`${action}:${body ?? "-"}`);
+      if (action === held) return await new Promise((_resolve, reject) => options.signal?.addEventListener("abort", () => reject(options.signal!.reason), { once: true }));
+      return { ok: true, data: state({ body: "male" }) };
+    }, 1, instant);
+    const controller = new AbortController(), started = performance.now();
+    const waiting = actions.ensureBody("male", () => {}, controller.signal).catch(caught => caught);
+    await Bun.sleep(5);
+    controller.abort();
+    expect(await waiting).toMatchObject({ name: "AbortError" });
+    expect(performance.now() - started).toBeLessThan(200);
+    await Bun.sleep(0);
+    // A Prepare cut off may still have reached the host: its job runs on there, and nothing more is asked.
+    expect(calls).toEqual(held === "refresh" ? ["refresh:male"] : ["refresh:male", "prepare:male"]);
+  }
+  // Aborted before it starts: nothing is asked.
+  const none: string[] = [];
+  const idle = new PreviewPreparationActions(async action => { none.push(action); return { ok: true, data: state({}) }; }, 1, instant);
+  expect(await idle.ensureBody("male", () => {}, AbortSignal.abort()).catch(caught => caught.name)).toBe("AbortError");
+  expect(none).toEqual([]);
+});
+
 test("a head follows only its own body's V: another body's details and facial shape wait for that body's head", async () => {
   const { followCharacter } = await import("../src/character/character-follow");
   const asked: string[] = [], faces: unknown[] = [];
@@ -186,15 +281,14 @@ test("a head follows only its own body's V: another body's details and facial sh
 test("a masculine head holds still with its own plain reason: no idle and no idle choice until his clips are prepared", async () => {
   const { MotionActions, IDLE_MASCULINE, IDLE_UNAVAILABLE } = await import("../src/animation/motion-actions");
   const { BUILT_IN_CATALOGUE } = await import("../src/animation/idle-catalogue");
-  const { freshWorkspace } = await import("./fixtures/eye-region");
   const noop = () => {};
   const port = (error: string) => ({ available: false, error, blink: { available: false }, idles: BUILT_IN_CATALOGUE.idles, setIdle: noop, setIdlePaused: noop,
     setIdleContributions: noop, setBlink: noop, animateBlink: noop, selectIdle: async () => {} });
-  const masculine = new MotionActions(freshWorkspace().preview, port(IDLE_MASCULINE));
+  const masculine = new MotionActions(port(IDLE_MASCULINE));
   expect(masculine.snapshot().error).toBe(IDLE_MASCULINE);
   expect(masculine.capability({ kind: "motion.setIdle", view: "main", enabled: true })).toMatchObject({ available: false, reason: IDLE_MASCULINE });
   expect(masculine.capability({ kind: "motion.setIdleClip", view: "main", clip: BUILT_IN_CATALOGUE.idles[0]!.id })).toMatchObject({ available: false, reason: IDLE_MASCULINE });
   // Any other failure keeps the general wording.
-  expect(new MotionActions(freshWorkspace().preview, port("decode failed")).snapshot().error).toBe(IDLE_UNAVAILABLE);
+  expect(new MotionActions(port("decode failed")).snapshot().error).toBe(IDLE_UNAVAILABLE);
   expect(USER_FACING_JARGON.test(IDLE_MASCULINE)).toBe(false);
 });

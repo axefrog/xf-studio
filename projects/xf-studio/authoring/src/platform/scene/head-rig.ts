@@ -34,8 +34,11 @@ export type RigMotionAssets = { idle?: IdleAnimation; idleError: string;
   blink?: GameBlink; blinkError: string;
   /** The game's preview idles prepared on this computer (idle-catalogue.ts); the built-in close-up entry when no catalogue was prepared. */
   idles?: IdleCatalogue;
-  /** Load and play one of them (its body clip and baked face) on the idle's rigs; rejects with a plain reason when its files aren't there. */
-  selectIdle?(id: string): Promise<void>;
+  /**
+   * Load and play one of them (its body clip and baked face) on the idle's rigs; rejects with a plain reason when its files aren't there.
+   * Once `signal` has aborted, nothing is played and it rejects with the signal's reason (a superseded load never replaces the clips).
+   */
+  selectIdle?(id: string, signal?: AbortSignal): Promise<void>;
   /**
    * Play a photo-mode pose's body clip on the idle's rigs (pose-clip.ts), keeping the idle's face clip; null plays the chosen idle's own
    * clips again. It changes clips only: turning the rig on is the motion rules' (preview-motion.ts `poseChanged`).
@@ -45,9 +48,10 @@ export type RigMotionAssets = { idle?: IdleAnimation; idleError: string;
 export type CoreEye = { readonly mesh: THREE.Mesh; readonly material: THREE.Material; replace(next: THREE.SkinnedMesh): void };
 /**
  * Loads the rig's motion onto the scene's bones for a core head's body. The default reads the game idle from the host and the blink asset;
- * probes inject their own.
+ * probes inject their own. `signal` stops it between steps (the scene runtime's build was aborted): it rejects with the signal's reason, and
+ * what it registered with the eye (`replace`) is released with the rig.
  */
-export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody) => Promise<RigMotionAssets>;
+export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody, signal?: AbortSignal) => Promise<RigMotionAssets>;
 
 /**
  * The loader's motion with the rig's composed motion beside it, as the same live object: the catalogue (`idles`, a getter whose eyes
@@ -64,7 +68,7 @@ export function withRigMotion<M extends RigMotionAssets, R>(motion: M, rig: R): 
  * host; where the face can't be read it holds still (`faceError`, the host's reason). The idle is the feminine V's, so a masculine head
  * holds still (`IDLE_MASCULINE`); the blink checks its own joints against the head (game-blink.ts).
  */
-export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") => {
+export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", signal) => {
   let idle: IdleAnimation | undefined, idleError = "", faceError = "";
   let source: IdleSource | undefined;
   // The first idle's clips, as loaded with the rig (so returning to it from a pose loads nothing).
@@ -74,6 +78,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
   try {
     if (body !== "female") throw Error(IDLE_MASCULINE);
     source = await loadIdleSource();
+    signal?.throwIfAborted();
     const first = source.first;
     // The body never waits for the face (PREV-174): the face joins the playing idle once the host has read it. A developer preparation
     // has no face rest for the gaze pivots, so its face (a local file) loads with the body as before.
@@ -95,7 +100,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
         return bone;
       });
       const geometry = eyes.geometry.clone(), positions = geometry.getAttribute("position");
-      const indices = new Uint16Array(positions.count*4), weights = new Float32Array(positions.count*4);
+      const indices = new Float32Array(positions.count*4), weights = new Float32Array(positions.count*4);
       const point = new THREE.Vector3();
       for (let i=0;i<positions.count;i++) {
         point.fromBufferAttribute(positions,i).applyMatrix4(eyes.matrixWorld);
@@ -108,7 +113,8 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
         const sides = [0,1,2].map(j => indices[triangles.getX(i+j)*4]);
         if (sides[0]!==sides[1] || sides[0]!==sides[2]) throw Error("Eye geometry crosses gaze attachment groups");
       }
-      geometry.setAttribute("skinIndex",new THREE.Uint16BufferAttribute(indices,4));
+      // Float joint indices, as every skinned geometry has them (skin.ts `floatJointIndices`).
+      geometry.setAttribute("skinIndex",new THREE.Float32BufferAttribute(indices,4));
       geometry.setAttribute("skinWeight",new THREE.Float32BufferAttribute(weights,4));
       const skinned = new THREE.SkinnedMesh(geometry,eye.material);
       // Keep the eye component's own facial morph targets (eye shape) on the rigidly attached copy.
@@ -129,8 +135,11 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
     firstBody = clip;
     if (!idle.bindings.length) throw Error("Idle rig has no matching bones");
   } catch (error) {
+    // An abort is the build's, not the idle's: it stops the load rather than becoming the idle's reason.
+    if (signal?.aborted) throw signal.reason;
     idle = undefined; idleError = (error as Error).message; faceError = ""; lateFace = null;
   }
+  signal?.throwIfAborted();
   // The game's own blink (game-blink.ts), bound by name to every rig bone present now (the eyeball joints above included);
   // each V's details join it with the idle. Without the local asset the blink controls stay off with plain guidance.
   let blink: GameBlink | undefined, blinkError = "";
@@ -142,6 +151,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
   } catch (error) {
     blink = undefined; blinkError = (error as Error).message || GAME_BLINK_MISSING;
   }
+  signal?.throwIfAborted();
   // The latest catalogue (the eyes section joins it once the faces are known).
   const catalogue = (): IdleCatalogue => source?.catalogue ?? BUILT_IN_CATALOGUE;
   // Another idle: its body clip loaded once, then played on the same rigs (the clips share the rigs' joint names).
@@ -159,10 +169,12 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
   let idleId = source?.first.id ?? DEFAULT_IDLE;
   /** An idle's face: its own, else the close-up's face loop (the default idle's), where one was prepared. */
   const faceFor = async (entry: IdleEntry) => (await source!.face(entry)) ?? (entry.id === source!.first.id ? null : await source!.face(source!.first));
-  const selectIdle = async (id: string) => {
+  const selectIdle = async (id: string, signal?: AbortSignal) => {
     const entry = catalogue().idles.find(item => item.id === id);
     if (!idle || !entry || !source) throw Error("That idle isn't one of the game's idles on this computer.");
     const [bodyClip, face] = await Promise.all([bodyOf(entry), idle.facial ? faceFor(entry) : Promise.resolve(null)]);
+    // Checked after the load and before the clips change: a load superseded meanwhile plays nothing.
+    signal?.throwIfAborted();
     idle.setClips(bodyClip, face?.clip, face?.loopFrom);
     idleId = id;
   };
@@ -195,6 +207,8 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   /** Releases for what the rig owns, run with the host's (newest first). */
   releases: (() => void)[];
   loadMotion?: MotionLoader;
+  /** Stops the motion's load (the scene runtime's build was aborted); what the rig made is in `releases`. */
+  signal?: AbortSignal;
 }) {
   const { gltf, meshes, head } = core;
   let eyes = core.eyes;
@@ -220,6 +234,7 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
     normalScale: new THREE.Vector2(0.35, -0.35),
   });
   head.material = skin;
+  options.releases.push(() => skin.dispose());
   extendSkin(head, skin);
   // The core eye is the fallback: the base game's eye texture through the same eyeball material as a resolved eye
   // (eye-material.ts: colour sampled V-flipped, as the game's program does). The shown V's own eyes come with the
@@ -235,7 +250,9 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   eyes.material = eyeMat;
   if (eyes instanceof THREE.SkinnedMesh) extendSkin(eyes, eyeMat);
   const motion = await (options.loadMotion ?? loadGameMotion)(scene, { get mesh() { return eyes; }, material: eyeMat,
-    replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; } }, core.body);
+    // The rig's skinned copy of the eye (gaze joints) has its own geometry and skeleton, freed with the rig; the core's own go with the core.
+    replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; options.releases.push(() => { next.geometry.dispose(); next.skeleton.dispose(); }); } },
+    core.body, options.signal);
   const { idle, blink } = motion;
   const finalEyes = eyes;
   // The held expression's face driver (face-driver.ts): bound to the head's bones now, at their neutral pose, like the blink; its rig

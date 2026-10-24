@@ -12,7 +12,7 @@ import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import type { StudioAction } from "../src/app/studio-application";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { STUDIO_LAYERED_SURFACES } from "../src/compose/renderers";
-import { sceneLayeredSurfaces } from "../src/preview/browser/scene-surfaces";
+import { createSceneEditors, type SceneEditorPorts } from "../src/preview/browser/scene-editors";
 
 const SRC = new URL("../src/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 
@@ -125,16 +125,16 @@ describe("the composition root names no live feature (§7, liveSurface)", () => 
   test("the root registers every layered surface and wires none by the live feature's name; a scene wires what its look editor edits", () => {
     const root = readFileSync(join(SRC, "compose/studio-startup.ts"), "utf8").split("\n").filter(line => !/^\s*(\*|\/\/)/.test(line)).join("\n");
     expect(root).not.toMatch(/\.live\b|LIVE_FEATURE|LIVE_REGION|liveSurface|EYE_MAKEUP|features\/eye-makeup/);
-    expect(root).toMatch(/sceneLayeredSurfaces\(STUDIO_LAYERED_SURFACES,/);
+    expect(root).toMatch(/createSceneEditors\(\{ surfaces: STUDIO_LAYERED_SURFACES,/);
   });
 
-  test("a scene wires the registered surface of the feature its look editor edits, with the editor's devices; others get no layer source", () => {
-    const preview = { connectScene: () => ({}), disconnectScene: () => {}, presentInitialLayers: () => {} } as unknown as Parameters<typeof sceneLayeredSurfaces>[1]["preview"];
-    const editor = {} as Parameters<typeof sceneLayeredSurfaces>[1]["editor"];
-    const shown = sceneLayeredSurfaces(STUDIO_LAYERED_SURFACES, { feature: STUDIO_COMPOSITION.documents.live, preview, editor });
-    expect(shown.wiring.map(wiring => [wiring.feature, wiring.preview === preview, wiring.editor === editor]))
+  test("a scene wires the registered surface of the feature its look editor edits, with the editor's device, as the on-head editor's; others get no layer source", () => {
+    const preview = { connectScene: () => ({}), disconnectScene: () => {}, presentInitialLayers: () => {} } as unknown as SceneEditorPorts["look"]["preview"];
+    const editors = (feature: string) => createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature, preview } } as SceneEditorPorts);
+    const shown = editors(STUDIO_COMPOSITION.documents.live);
+    expect(shown.wiring.map(wiring => [wiring.feature, wiring.preview === preview, wiring.edited]))
       .toEqual([[STUDIO_COMPOSITION.documents.live, true, true]]);
     expect(shown.edited).toBe(STUDIO_LAYERED_SURFACES.get(STUDIO_COMPOSITION.documents.live));
-    expect(sceneLayeredSurfaces(STUDIO_LAYERED_SURFACES, { feature: "no-such-feature", preview, editor })).toEqual({ wiring: [] });
+    expect(editors("no-such-feature")).toMatchObject({ wiring: [], edited: undefined });
   });
 });

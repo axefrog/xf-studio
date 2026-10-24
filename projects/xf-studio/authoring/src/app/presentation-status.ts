@@ -44,6 +44,7 @@ export type PresentationStatus = {
 export type OutboxView = {
   /** Documents whose latest change isn't protected on this computer, once that warrants the warning (a failed write, or a long wait); else 0. */
   readonly unprotected: number;
+  readonly unprotectedReason?: OutboxStatus["unprotectedReason"];
   /** Changes not yet in the library. */
   readonly pending: number;
   readonly conflicts: number;
@@ -56,7 +57,8 @@ export type OutboxView = {
   readonly recovering: { readonly shown: boolean; readonly long: boolean; readonly safe: boolean; readonly missing: number };
 };
 export const outboxView = (status: OutboxStatus): OutboxView =>
-  ({ unprotected: status.unprotectedWarning ? status.unprotected.length : 0, pending: status.pending, conflicts: status.conflicts, failing: status.failing,
+  ({ unprotected: status.unprotectedWarning ? status.unprotected.length : 0, unprotectedReason: status.unprotectedReason,
+    pending: status.pending, conflicts: status.conflicts, failing: status.failing,
     recovering: { shown: status.recoveringShown, long: status.recoveringLong, safe: status.recoveringSafe, missing: status.missing.length } });
 
 export function emptyPresentationStatus(verification = false): PresentationStatus {

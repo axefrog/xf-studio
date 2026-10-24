@@ -48,12 +48,15 @@ export class PreviewSuperseded extends Error {
 export type ChoicePreviewPort = {
   /** Each position's source (host `previewSources`); `derive` asks for one ready choice's source to be derived now. Throws `PreviewHostError` on a refusal. */
   sources(request: CharacterRequest, option: string, kind: PreviewKind, positions: readonly number[], derive: number | null, signal: AbortSignal): Promise<PreviewSourceReply[]>;
-  /** Load the subject head for a body in the worker, answering its identity (part of every key). */
-  subject(body: "female" | "male"): Promise<string>;
+  /**
+   * Load the subject head for a body in the worker, answering its identity (part of every key). `signal` here and below: the requester's
+   * lifetime, which refuses a question still waiting to be asked once it ends (a device may answer one already under way).
+   */
+  subject(body: "female" | "male", signal?: AbortSignal): Promise<string>;
   /** The stored image's URL for a key, or null when there is none yet. */
-  stored(key: string): Promise<string | null>;
+  stored(key: string, signal?: AbortSignal): Promise<string | null>;
   /** Draw a source (in the worker; its turntable strip with `frames`), store it under its key and answer a URL to show it now, with the drawing's timings. */
-  render(source: ChoicePreviewSource, key: string, frames?: number): Promise<{ url: string; timings?: unknown }>;
+  render(source: ChoicePreviewSource, key: string, frames?: number, signal?: AbortSignal): Promise<{ url: string; timings?: unknown }>;
   /** A URL this service no longer shows (a row started again): an object URL behind it can be revoked. */
   release?(url: string): void;
   /** The service is gone: revoke what is held and stop the worker. */
@@ -64,8 +67,8 @@ export type ChoicePreviewPort = {
    * and drop it (`stop`).
    */
   live?: {
-    start(source: ChoicePreviewSource): Promise<void>;
-    frame(turn: number, measure: boolean): Promise<{ bitmap: ImageBitmap; ms?: number; gpuMs?: number }>;
+    start(source: ChoicePreviewSource, signal?: AbortSignal): Promise<void>;
+    frame(turn: number, measure: boolean, signal?: AbortSignal): Promise<{ bitmap: ImageBitmap; ms?: number; gpuMs?: number }>;
     stop(): void;
   };
 };

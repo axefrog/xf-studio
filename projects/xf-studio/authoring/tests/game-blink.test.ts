@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { activeEyeShape, GAME_BLINK_SCHEMA, GameBlink, parseGameBlink, type GameBlinkDescription } from "../src/animation/render/game-blink";
 import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
-import { freshWorkspace } from "./fixtures/eye-region";
+import { localMotionScene } from "../src/animation/scene-motion";
 
 /**
  * A miniature facial rig shaped like the game's: the upper lid row hangs under a lid root at the eye centre and the lash
@@ -216,18 +216,17 @@ test("blink commands say plainly why they are off: not prepared, or the idle is 
   const port = (blink: MotionPort["blink"], enabled = false): MotionPort => ({ available: true, blink,
     idle: { enabled, time: 0, paused: false, bodyEnabled: true, faceEnabled: true, seek: noop },
     setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop });
-  const missing = new MotionActions(freshWorkspace().preview, port({ available: false, error: "The game's blink hasn't been prepared on this computer yet." }));
+  const missing = new MotionActions(port({ available: false, error: "The game's blink hasn't been prepared on this computer yet." }));
   expect(missing.capability({ kind: "motion.setBlink", view: "main", value: .5 })).toMatchObject({ available: false, code: "asset_unavailable",
     reason: "The game's blink hasn't been prepared on this computer yet." });
   expect(missing.capability({ kind: "motion.playBlink", view: "main", playing: true }).available).toBe(false);
   expect(missing.snapshot()).toMatchObject({ blinkAvailable: false });
-  const idle = new MotionActions(freshWorkspace().preview, port({ available: true }, true));
+  const idle = new MotionActions(port({ available: true }, true));
   expect(idle.capability({ kind: "motion.setBlink", view: "main", value: .5 })).toMatchObject({ available: false, reason: "Blink is off while the game idle plays: the idle blinks on its own." });
-  const ready = new MotionActions(freshWorkspace().preview, port({ available: true }));
+  const ready = new MotionActions(port({ available: true }));
   expect(ready.capability({ kind: "motion.setBlink", view: "main", value: .5 }).available).toBe(true);
   // A saved closure is not replayed onto a scene without the blink.
-  const saved = { ...freshWorkspace().preview, blink: .7, blinkPlaying: true };
-  const restoring = new MotionActions(saved, port({ available: false }));
+  const restoring = new MotionActions(port({ available: false }), localMotionScene({ blink: .7, blinkPlaying: true }));
   restoring.restore();
   expect(restoring.snapshot()).toMatchObject({ blink: 0, blinkPlaying: false });
 });
@@ -239,7 +238,7 @@ test("the Motion controls follow the idle's face arriving after the scene starte
   const port: MotionPort = { available: true, blink: { available: true }, get face() { return face; }, onFaceChange: listener => { changed = listener; return noop; },
     idle: { enabled: true, time: 0, paused: false, bodyEnabled: true, faceEnabled: true, seek: noop },
     setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
-  const motion = new MotionActions(freshWorkspace().preview, port);
+  const motion = new MotionActions(port);
   let paints = 0;
   motion.subscribe(() => { paints++; });
   expect(motion.snapshot()).toMatchObject({ faceAvailable: false, faceError: "Reading V's face from your game files… It moves once it's ready." });
