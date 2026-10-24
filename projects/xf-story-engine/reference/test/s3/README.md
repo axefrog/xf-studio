@@ -82,8 +82,16 @@ summary header still requires missing owned facts and provenance to recover. Six
 incremental/snapshot records, sweeps, query order and fresh B loads, with transitive dependencies, unrelated history,
 complete C record comparisons and fresh C loads. A partial-tree fixture also checks authoritative live records and
 idempotence. Both original query-first/sweep reproductions fail at the missing-participant semantic assertion without
-the fix. Three new source-loader probes reverse each header short-circuit independently. All 50 S3/review mutation
-probes pass their rejection checks.
+the fix. Three source-loader probes reverse each header short-circuit independently. S3G-01 adds all 16 combinations
+of snapshot mode, optional A reload, sweep and current/future contribution ends, each with both release/end orders
+and retained-consumer controls. B must record the contribution end, exclusive-end resolution must agree after
+recovery and fresh replay, and whole C records must match. S3G-02 withdraws the descriptor's five original pins,
+sweeps both descriptor and item, saves B and re-references either root order, with incremental/snapshot records and
+with/without a B load. Shared header-first replay restores participant facts and provenance; unrelated history stays
+absent. All 18 new test bodies reproduced the prior defects. All 53 S3/review mutation probes pass their rejection
+checks; the new probes reverse saved contribution merging, sweep protection and descriptor-header selection.
+The S1 generated partition/reload comparison remains unchanged and checks that saved updates do not leak into the
+retention-selected live-state view.
 
 Host entry: attach `new Layer3(l2, { registry: sim.w.kinds, patterns })`, then drive unpaused seconds through
 `layer3.advancePlay(portClock, senseFrame, beforeSecond)`. That boundary runs earlier kernel/S2 work, the director,

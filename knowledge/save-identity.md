@@ -78,7 +78,7 @@ memorable beliefs and transitive header creator/cause links. Referenced summary 
 under their opening process's materialisation owner (`scene.acts` in the fixture); their time and place still change
 with the summary descriptor. Both direct seed references and pending output batches agree with uninterrupted execution
 after fresh replacement loads. A retained event's own location edge persists for spatial discovery without rooting
-unreferenced events. These [offline] checks implement S0 v4.15 §14.1; the old bare-header expectation is superseded.
+unreferenced events. These [offline] checks implement S0 v4.16 §14.1; the old bare-header expectation is superseded.
 
 **Retention release is separate from edge validity [offline].** The reference model's
 [event-persistence regressions](../projects/xf-story-engine/reference/test/process-evidence.test.ts) release an event at 10,
@@ -86,7 +86,7 @@ reference it again at 20, and compare uninterrupted execution with fresh increme
 queries and the entire later save record agree. Release is carried by the retained-reference records and their marked
 closure; it never invents an edge end. Saved history keeps actual validity without becoming a retention root, including
 after sweeping. Re-reference completes missing headers, owned facts, materialisation provenance and transitive event
-dependencies from the selected saved closure through the common retention traversal, even when a summary query has
+dependencies from the selected save through the same header-first replay as load, even when a summary query has
 already recreated the event header. Live records remain authoritative; recovery fills only absent records and follows
 only reached references. The S3F-01 matrix checks query-before-reference and reference-before-query, with/without a sweep,
 in both incremental and snapshot modes against fresh B loads; all eight materialisation-owned facts and the minted
@@ -97,7 +97,7 @@ authoritative, even when reopening reuses the previous start timestamp: equal st
 tests preserve both `{ from: 20, to: 30 }` after a previous end at 10 and `{ from: 0, to: 30 }` after a previous end at 0,
 as well as an interval left open. They also cover an end beyond save time, sweeping before saving, an end before the first
 save, and retention monotonicity/root insertion order for ordinary and materialised events. These are reference-model
-guarantees ([SPEC-NOTES 192–194](../projects/xf-story-engine/reference/SPEC-NOTES.md)), not game-save evidence.
+guarantees ([SPEC-NOTES 191–192](../projects/xf-story-engine/reference/SPEC-NOTES.md)), not game-save evidence.
 
 | Event | State inside the save (fields, facts, entity state) | An external store | Grade |
 |---|---|---|---|
@@ -163,16 +163,33 @@ guarantees ([SPEC-NOTES 192–194](../projects/xf-story-engine/reference/SPEC-NO
 ## Reference-model persistence checks
 
 The Story Engine's deterministic reference model tests the logical ledger independently of the game's save-key carrier
-**[offline]**. Under S0 v4.15 §14.1, a referenced summary item preserves an explicit descriptor/materialisation ownership
-record alongside its own participant/effect constants. Both retention and event views read that record; an expired overlay
-cannot impersonate the materialising process by being the first contribution. Time and place remain live summary dependencies.
-A saved edge also needs an explicit end after its last reference is released: dropping it from today's view or sweeping its
-event cannot delete the earlier `EdgeAdded` from an append-only chain. Preserve the original termination, including through
-later saves and sweeps, so replacement replay cannot reopen the edge. Evidence: the expired-overlay incremental/snapshot
-and edge-release save-chain regressions in
-[`process-evidence.test.ts`](../projects/xf-story-engine/reference/test/process-evidence.test.ts), verified 24 October 2026;
-implementation choices and record forms are in
-[`SPEC-NOTES.md`, finding 192](../projects/xf-story-engine/reference/SPEC-NOTES.md). These are oracle results, not new game-runtime evidence.
+**[offline]**. S0 v4.16 §14.1 establishes two rules:
+
+1. **The save chain is append-only truth.** Every change to a previously saved record is written, whether or not the
+   record still has a consumer. Retention selects new material and what live memory may be swept; it never suppresses
+   contribution or edge ends or pin withdrawals. Sweeping keeps an unrecorded contribution end until the next save;
+   once recorded, its orphaned live storage may go. Release itself never changes validity or clamps a reopened interval.
+2. **Recovery is replay.** Only a reached reference recovers saved records, through the same silent path as load:
+   headers first (including a swept descriptor), then contributions, provenance and edges. Existing live records remain
+   authoritative. Recreating an item's header through a summary query does not suppress its missing saved facts.
+   Saved history is never a root; unrelated history stays absent and a released recovered closure is sweepable again.
+
+A referenced summary item preserves explicit descriptor/materialisation ownership alongside its participant/effect
+constants. Retention and event views share that record; contribution order or an expired overlay cannot impersonate
+the opening process. Time/kind/place remain live descriptor dependencies.
+
+Evidence: [`process-evidence.test.ts`](../projects/xf-story-engine/reference/test/process-evidence.test.ts), verified
+24 October 2026. S3G-01 checks all 16 combinations of snapshot mode, A reload, sweeping and current/future ends, each
+with both release/end orders and retained-consumer controls. B records `ContributionEnded`, and uninterrupted recovery
+and fresh B replay resolve identically and write identical C records. S3G-02 withdraws the descriptor's five pins,
+sweeps it and its item, then recovers either root order through incremental records and snapshots, with/without a B
+load. Participant facts, provenance, withdrawals, retained closure and later records agree. Earlier S3C–F regressions,
+retention monotonicity, root order, non-rooting history and authoritative live records remain covered. The source-loader
+probes reject reversals of the writer, sweep protection and descriptor-header selection at semantic assertions.
+The frozen v3/v4 digests remain `f924d2c9d1159bca85bbfa4cf18dba6c` / `42d5a84e16dde21cc0bca7fe50c01d72`;
+these scripts exercise neither newly fixed release/end nor swept-descriptor case, so their records do not change.
+Implementation and superseded rules: [`SPEC-NOTES.md`, findings 191–192](../projects/xf-story-engine/reference/SPEC-NOTES.md).
+These are oracle results, not new game-runtime evidence.
 
 ## Session card
 

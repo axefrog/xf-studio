@@ -294,13 +294,12 @@ export class Retention {
     if (!h) return;
     store.dropNode(id);
     if (h.origin.by === 'minted') {
-      for (const c of store.contributionsOrigin(id)) store.removeContribution(c.id);
+      for (const c of store.contributionsOrigin(id))
+        if (!this.k.persistence.hasPendingContribution(c)) store.removeContribution(c.id);
       for (const e of store.edgesFrom(id)) if (e.cause === id) {
         // Keep updates to saved history until the next save, without ending an open interval.
         // A saved header still identifies this as an owned edge, so it cannot become a root (S3C/D).
-        const saved = this.k.persistence.releasedEdge(e);
-        if (saved) e.valid = saved.valid;
-        else store.removeEdge(e.id);
+        if (!this.k.persistence.hasSavedEdge(e.id)) store.removeEdge(e.id);
       }
       this.k.events.forgetMaterialisation(id);
       this.removeTree(id);

@@ -1262,121 +1262,63 @@ skeleton verbs, tags, envelope classes and soft levels. A refused variant rolls 
 unselected excluded alternative does not veto a safe selected document. `telling` and `sowable` have closed core field
 sets; `atStage`, `from`, `subject` and unknown additions receive explicit "not supported yet" findings.
 
-**191. Persisted references need event facts (S0 v4.15 §14.1).** SF3-38 has an outstanding S1 mirror batch
-that cites a raw non-canon event before a pool entry exists. Saving only its retained header loses the raw facts before
-the batch applies. The kernel preserves own simulation constants of events reached from every retained reference category:
-SeedRecord nodes, outstanding output operations, pins, frames, edges, canon fields and memorable beliefs. Both creator
-and cause links propagate event dependencies transitively, independently of root order. A retained event's own location
-edge also persists so spatial queries work immediately after replacement; it does not make an unreferenced event a root.
-Summary-item participant/effect constants keep their explicitly declared materialisation owner (such as `scene.acts`), while time/kind/place
-remain live summary dependencies. Ownership comes from the event subsystem's materialisation record, never from contribution order;
-retention and event views consult that same record (192). Facts use ordinary `ContributionAdded` records. Resolved
-overlays are never substituted for minted facts; other simulation contributions remain regenerable. This lives at
-retention/persistence, shared by every layer, not in S3's evidence boundary. `process-evidence.test.ts` checks a pending
-batch, replacement replay, application and transitive raw facts against uninterrupted execution. S3B-01/02 cover each
-additional category and both SeedRecord and pending-output summary materialisations; all twelve S3B regressions fail
-at their named semantic assertions with their fixes reversed. The transcript now compares its named persisted fields
-exactly and includes a fresh-load leg. SF3-38's strict state comparison is unchanged.
+**191. The save chain is append-only truth (S0 v4.16 §14.1).** A save records every change to a
+record already held by an earlier save, whether or not that record is still retained. Retention selects
+only new material to add and what a sweep may drop from live memory; it never hides a saved contribution
+or edge ending, or a pin withdrawal. The save writer merges live updates to previously saved records
+independently of the retained closure. `currentView()` continues to describe retention-selected live
+material, so state comparisons remain independent of when earlier saves occurred. Missing live records
+leave their saved history intact. Release never ends or reopens an interval, and a reopened interval keeps its own actual end, even when its start
+matches the previous interval or its end lies beyond save time.
 
-The saved records themselves enter the frozen kernel digests, so the v3-mode golden intentionally changes from
-`d534e0dcef3f85d27cefa552217152ec` to `f924d2c9d1159bca85bbfa4cf18dba6c`, and v4 from
-`da48cabc405ed361ce6ad5f3b895a822` to `42d5a84e16dde21cc0bca7fe50c01d72`. Entries remain 1,067/1,069;
-the v3-mode run ends at revision 2,058 with 135 pins and 121 contributions. An in-memory reversal of root/edge
-discovery restores both previous hashes exactly; this is a persistence-contract change, not a draw-key change.
+Sweeping preserves pending changes to saved contributions until a save records them; once recorded,
+orphaned contributions can leave memory and later replay from the chain. Saved edge history remains
+available without becoming a retention root. No synthetic release-time end, validity clamp, separate
+release operation, or `releasedEdge()` path remains. This principle supersedes the piecemeal writer and
+sweep rules previously in 192–194.
 
-The project README and fixture index record validation. The review regressions also have a source-loader mutation
-runner that rejects setup errors and requires the intended semantic assertion for each reversed fix. Changes remain
-uncommitted for the coordinator's independent review and integration.
+For new event records, retained references still require the event's own simulation constants, never
+resolved overlays: seeds, outstanding process output, pins, frames, edges, canon fields and memorable
+beliefs all propagate dependencies through creator/cause links and owned fields. A retained event's own
+location edge preserves spatial queries without independently rooting that event. Other simulation
+contributions and reproducible pack content remain regenerable. Explicit summary-item ownership is an
+`EventMaterialised` record (optional snapshot `materialisations`), shared by retention and event views;
+participant/effect facts belong to the declared opening process, while time/kind/place remain live
+summary dependencies. Ownership is immutable and independent of contribution order.
 
-**192. Materialisation ownership and released edge history must replay explicitly (S3C-01/02).** Opening a summary item
-declares `{ event, provenance: { descriptor, materialisation } }` in `Events`; restoration declares it directly, and
-`scene.acts` declares it through a `materialise-item` operation before its field contributions apply. Ownership is immutable
-for that materialisation, independent of overlays, and shared by retention and event views. Referenced declarations save as
-`EventMaterialised` operations and optional snapshot `materialisations`; a header saved before opening can therefore gain its
-provenance later. Replacement clears and replays the records, staged discard restores them, and sweeping forgets their live
-storage. No constant replaces a summary's live time/kind/place dependency.
+**192. Recovery is replay (S0 v4.16 §14.1).** Only a reached reference triggers recovery. The selected
+save view supplies records for that reference's owned tree and origin closure, including its summary
+descriptor. Load and recovery call one silent replay path: all selected headers first, then
+contributions, provenance and edges, with pins and withdrawals restored together. Recovery installs
+only absent records; authoritative live headers, contribution ends, edge intervals, pins and provenance
+win. A summary query recreating a header does not bypass replay of missing facts. Normal retention
+traversal then follows recovered Id-valued facts, including transitive event dependencies. Seed
+registration completes that traversal before returning. Replay emits no changes or relevance and only
+bumps the revision when recovery adds data. Saved lookup indexes are lazy and never enumerated as
+roots; unrelated history stays absent, and releasing a new reference makes its recovered closure
+sweepable again. This replaces the bespoke recovery rules previously in 194, including S3F-01.
 
-A previously saved event-location edge remains in the append-only chain after its last reference ends. Omitting it from
-`currentView()` cannot remove it from replay. The save writer preserves its actual interval and records actual ends with
-`EdgeEnded`; release never supplies an end time (193). Sweeping keeps updates to saved edges until they can be recorded;
-unsaved owned edges can still be removed. Saved headers identify owned location edges after their live headers are swept,
-so even open saved history cannot become an independent retention root. Released links stay absent from the live
-persistable view. Their append-only history and their retention references are separate state.
+`test/process-evidence.test.ts` covers the earlier S3C-02, S3D-01/02, S3E-01/02 and S3F-01 regressions,
+retention monotonicity, traversal/insertion order, authoritative partial live records, idempotence,
+non-rooting history and end-before-first-save. S3G-01 adds all 16 combinations of incremental/snapshot
+mode, optional A reload, sweep and current/future contribution ends; each checks both release/end
+orders and retained-consumer controls, B's `ContributionEnded`, resolution at the exclusive end and
+whole C-record equality against a fresh B load. S3G-02 withdraws the descriptor's five original pins,
+sweeps both descriptor and item before B, and recovers in both root orders with incremental records
+and snapshots, with and without a fresh B load. It checks headers, participant facts, provenance,
+withdrawals, closure equality, later records and unrelated history. All 18 new test bodies reproduced
+the reported semantic failures against the previous source. The source-loader mutation runner also
+reverses the new writer, sweep and descriptor selection fixes; stale edge probes now target the shared
+writer rather than the removed helper. The S1 generated partition/reload assertion remains unchanged;
+an initial full run caught history leaking into the live-state view, and saved-update merging now
+belongs exclusively to the writer. Validation: 88 event-persistence tests, `bun run check`, all 53
+mutation probes and the guarded full suite pass: 1,269 tests across 78 files in 95.44 seconds, peak
+1.1 GB under the 4 GB limit. The project README and fixture index record the coverage.
 
-`process-evidence.test.ts` reproduces the expired overlay before `scene.acts` restoration, through a prior header save and
-fresh incremental/snapshot loads. It checks participants, effects, explicit provenance and live descriptor edits. The located
-event reproductions save A, end the edge at 10, release its seed, optionally sweep at 20, save B and load into a fresh kernel;
-both require the original end at 10 and an empty spatial query. Additional release-only checks save B then C, with and without
-an intervening sweep, and require unchanged validity and no invented `EdgeEnded`. The three original reproductions fail at their named semantic assertions before the fixes; all four
-new mutation probes (retention ownership, view ownership, release diffing and sweep history) also require semantic failures.
-The v3 and v4 frozen digests remain `f924d2c9d1159bca85bbfa4cf18dba6c` and `42d5a84e16dde21cc0bca7fe50c01d72`;
-neither script materialises summary participant/effect facts or releases a saved event-location edge, so their saved records
-are unchanged. The S1 frozen transcript is also unchanged.
-
-Validation: all 70 event-persistence tests (including 193–194 and S3F-01) and the real scene-materialisation fixtures pass, as does
-`bun run check`. All 50 S3/review mutation probes reach their intended assertions. The guarded full suite passes
-1,251 tests across 78 files in 91.82 seconds, peaking at 1.1 GB under the 4 GB limit. S1's record comparisons include the new
-materialisation section; partition/reload assertions and SF3-38's strict state comparison remain intact.
-
-**193. Retention release is not edge validity (S3D-01/02).** Release and re-reference are transitions of the existing
-retained-reference records, such as `SeedState`, and their marked closure, in both live execution and replay. They do not
-end or reopen an edge. The append-only edge history preserves its actual interval even while it is omitted from
-`currentView()`. Re-referencing therefore exposes the same still-open edge, without an extra `EdgeAdded`, regardless of an
-intervening load. No extra release operation or snapshot section is needed. Spatial traversal continues to use actual
-validity; a release by itself cannot truncate a historical query. Sweeping may forget an unretained event's live header,
-as before, while preserving the saved edge update for replay; saved history never supplies a retention root by itself.
-
-`releasedEdge()` is shared by saving and sweeping. The live edge's interval is authoritative; saved validity is used only
-when the live edge is absent. Equal `valid.from` timestamps do not identify an interval: `reopenEdge` may reopen at the
-previous start. The new interval keeps its own end (or remains open), including an explicit future end; neither the old
-interval's end nor save/sweep time clamps it. This replaces both the previous release-time synthetic end in 192 and the
-equal-start clamp, which made live and replayed edges disagree.
-
-`process-evidence.test.ts` compares uninterrupted execution and a fresh B load after release at 10 and re-reference at 20:
-the spatial queries and the entire C record agree, with both incremental records and snapshots, and fresh C loads agree
-too. Reopened-interval fixtures save the end at 10, reopen at 20, end at 30 (also 50, past save time), release, optionally
-sweep, and require the event at 25 after a fresh B load. Separate incremental/snapshot fixtures preserve an end before the
-first save. The original S3C-02 end-at-10 reproductions remain intact. Ordinary and materialised event references also
-check that adding a redundant consumer never shrinks the marked closure and removing it restores the original closure.
-The two new defect reversals fail at their spatial-query semantic assertions, and the sweep reversal does too; the
-mutation runner rejects setup/import failures. Frozen digest expectations and scripts are unchanged: v3 remains
-`f924d2c9d1159bca85bbfa4cf18dba6c` and v4 `42d5a84e16dde21cc0bca7fe50c01d72`. Neither script releases a saved event-location
-edge, so no record in either digest transcript changes. Validation is recorded in 192. No game session is needed.
-
-**194. Re-reference completes saved closure through retention (S3E-01/02, S3F-01).** Every reached reference completes
-its missing header, saved owned field tree, contributions, owned location links and explicit materialisation provenance
-from the selected saved view, even when its live header already exists. A summary query can silently recreate only that
-header; its existence does not prove that the saved fields or provenance are present. The normal retention traversal
-then follows the restored Id fields and origin chains, including other swept events and their facts. Seed registration completes this
-same traversal before returning, so its consumer can immediately read the event. Restoration emits no event or relevance
-change and never replaces a live record. Saved lookup indexes are lazy, discarded on save/load, and never enumerated as
-roots; releasing the consumer makes the restored closure sweepable again. History alone still retains nothing.
-
-The S3E-01 fixtures release and sweep before B, re-reference at 20, compare full event facts and spatial reads, and then
-release and sweep again through D. Complete C/D records agree with uninterrupted execution, with incremental records or
-snapshots and with both B and C loads. Additional ordinary/materialised fixtures exercise seed, frame, pin, edge and
-origin references through that common traversal, checking materialisation provenance, retention monotonicity and root
-insertion order. S3E-02 ends an interval at its start (0), saves A, reopens at 0, optionally ends at 30, releases and saves B.
-All combinations of loading A, sweeping before B and snapshot mode preserve the live interval and its query results.
-The original S3C-02, S3D-01/02 and end-before-first-save fixtures remain intact.
-
-The S3F-01 matrix materialises a summary item under `scene.acts`, retains it, saves A, releases, optionally sweeps, saves
-B, then queries and re-references in either order. All 16 combinations of snapshot mode, initial sweep, query order and
-fresh B load preserve the minted participant, eight materialisation-owned contributions and explicit provenance.
-The participant's origin reaches another swept event: its facts must recover too. Full event views and C records agree
-with uninterrupted execution and fresh C loads. Unrelated saved events remain absent after sweeping and save-view reads;
-releasing the new consumer makes the recovered closure sweepable again. A separate partial-tree test preserves the
-live header and a contribution ended since A, restores a missing owned header/contribution, and checks recovery is
-idempotent without a revision bump when nothing is missing. Recovery changes only absent records and bumps the revision
-only when data was restored; it emits no changes.
-
-All 20 initial S3E boundary cases failed at their named semantic assertions against the pre-fix source. Both S3F-01
-query-first/sweep reproductions (incremental and snapshot) failed at the missing-participant semantic assertion before
-the fix; reference-first and no-sweep controls passed. Three new mutation probes independently reverse the retention
-short-circuit or persistence guard and require those semantic failures. The expanded event-persistence file has 70 passing
-tests, including ten cross-reference/materialisation checks and nine S3F-01 tests. All 50 source-loader mutation probes
-require their intended semantic failures; setup/import errors are rejected. `bun run check`
-passes. Frozen digest scripts and expectations are unchanged: v3 `f924d2c9d1159bca85bbfa4cf18dba6c`, v4
-`42d5a84e16dde21cc0bca7fe50c01d72`. Neither script re-references swept history, completes partially rematerialised summary
-fields or releases an equal-start reopened edge.
-No game session is needed.
+Both frozen digests are unchanged: v3 `f924d2c9d1159bca85bbfa4cf18dba6c`, v4
+`42d5a84e16dde21cc0bca7fe50c01d72`. Neither frozen script changes a previously saved contribution after
+its last consumer is released, nor recovers an item before its swept descriptor, so this restructure
+changes no record in either frozen transcript. The historical v4.15 addition of referenced-event facts
+changed the earlier hashes `d534e0dcef3f85d27cefa552217152ec` / `da48cabc405ed361ce6ad5f3b895a822`
+to these current goldens (1,067/1,069 entries); that earlier contract change is not part of this fix.
+No game session is needed. Changes remain uncommitted for the coordinator's review and integration.

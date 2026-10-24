@@ -22,6 +22,97 @@ function checkRetentionMonotonicity(k: Kernel, event: Id): void {
   expect([...k.retention.marked()].sort(), 'removing a redundant consumer restores the original closure').toEqual(before);
 }
 
+for (const snapshot of [false, true]) for (const loadA of [false, true]) for (const sweep of [false, true])
+  for (const end of [10, 30])
+  test(`S3G-01${snapshot ? '-snapshot' : ''}${loadA ? '-load-A' : ''}${sweep ? '-sweep' : ''}${end > 10 ? '-future-end' : ''}: saved contribution updates survive release`, () => {
+    const label = `S3G-01${snapshot ? '-snapshot' : ''}${loadA ? '-load-A' : ''}${sweep ? '-sweep' : ''}${end > 10 ? '-future-end' : ''}`;
+    // Sixteen reviewed variants, each with both release/end orders and a retained-consumer control.
+    const run = (release: 'before' | 'after' | 'control') => {
+      const name = 'released-contribution-update';
+      let k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 });
+      const creator = k.root('producer', 'core:person'), seed = H(s('consumer')),
+        event = k.events.mintEvent({ creator, cause: creator, name: 'event', kind: 'arrival', time: 0 }),
+        contribution = k.store.contributionsNaming(event).find((c) => c.target.slot === 'time')!.id;
+      k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+      k.persistence.save('A');
+      if (loadA) k = replacement(k, name, 'A');
+      k.now = 10;
+      if (release === 'before') k.retention.endSeed(seed);
+      k.endContribution(contribution, end);
+      if (release === 'after') k.retention.endSeed(seed);
+      if (sweep) { k.retention.scheduleSweep(); k.settle(); }
+      if (release !== 'control') {
+        expect(k.retention.isRetained(event), 'pending history cannot root the event').toBe(false);
+        if (sweep) expect(k.store.header(event)).toBeUndefined();
+      }
+      const b = k.persistence.save('B');
+      expect(Boolean(b.snapshot)).toBe(snapshot);
+      expect(b.ops, `${label} semantic: B records the saved contribution end after release and sweep`)
+        .toContainEqual({ op: 'ContributionEnded', contribution, to: end });
+      if (sweep && release !== 'control') expect(k.store.contribution(contribution), 'recorded orphaned updates can leave memory').toBeUndefined();
+      const fresh = replacement(k, name, 'B');
+      for (const target of [k, fresh]) {
+        target.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+        expect(target.store.contribution(contribution)?.valid, `${label} semantic: recovery preserves the actual end`).toEqual({ to: end });
+        expect(target.value(event, 'time', end - 1)).toBe(0);
+        expect(target.resolve(event, 'time', end).status, `${label} semantic: ended time is unavailable after replay`).toBe('unavailable');
+        checkRetentionMonotonicity(target, event);
+      }
+      expect(k.persistence.save('C'), `${label} semantic: later records agree with a fresh B load`).toEqual(fresh.persistence.save('C'));
+      return b.ops.filter((op) => op.op === 'ContributionEnded');
+    };
+    expect(run('before')).toEqual(run('control'));
+    expect(run('after')).toEqual(run('control'));
+  });
+
+for (const snapshot of [false, true])
+test(`S3G-02${snapshot ? '-snapshot' : ''}: replay restores a swept descriptor before item provenance in either root order`, () => {
+  const run = (reverse: boolean, loadB: boolean) => {
+    const name = 'swept-summary-descriptor';
+    let k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 });
+    const creator = k.root('producer', 'core:person'), scope = k.root('scope', 'core:place'),
+      person = k.mint(creator, creator, 'participant', 'core:person'),
+      unrelated = k.events.mintEvent({ creator, cause: creator, name: 'unrelated', kind: 'arrival', time: 0 }),
+      summary = k.summaries.mintSummary({ creator, cause: creator, name: 'summary', kind: 'arrival', from: 0, length: 600, scope, count: 1 }),
+      item = k.summaries.materialise(summary, 0), seed = H(s('consumer')),
+      provenance = { descriptor: summary, materialisation: 'scene.acts' };
+    k.events.restoreEvent({ creator: summary, cause: summary, name: 'item:0', time: k.value(item, 'time') as number,
+      kind: 'arrival', participants: [{ who: person, role: 'actor' }] }, provenance);
+    k.retention.setSeed({ id: seed, state: {}, nodes: [item, unrelated] });
+    k.persistence.save('A');
+    for (const pin of k.store.pinsOfNode(summary)) k.withdrawPin(pin.id, creator);
+    k.retention.endSeed(seed);
+    k.retention.scheduleSweep(); k.settle();
+    expect(k.store.header(item)).toBeUndefined();
+    expect(k.store.header(summary)).toBeUndefined();
+    const b = k.persistence.save('B');
+    expect(Boolean(b.snapshot)).toBe(snapshot);
+    expect(b.ops.filter((op) => op.op === 'PinWithdrawn')).toHaveLength(5);
+    if (loadB) k = replacement(k, name, 'B');
+    const changes = structuredClone(k.pending);
+    expect(() => k.retention.setSeed({ id: seed, state: {}, nodes: reverse ? [item, summary] : [summary, item] }),
+      'S3G-02 semantic: header replay precedes provenance validation in either root order').not.toThrow();
+    expect(k.events.materialisationOf(item), 'S3G-02 semantic: item provenance recovers').toEqual(provenance);
+    expect(k.store.header(summary)?.kind).toBe('core:summary');
+    expect(k.value(item, 'participants#count')).toBe(1);
+    expect(k.value(k.address(item, 'participants[0]'), 'who')).toBe(person);
+    expect(k.pending, 'recovery emits no changes').toEqual(changes);
+    checkRetentionMonotonicity(k, item);
+    const marked = [...k.retention.marked()].sort();
+    k.retention.scheduleSweep(); k.settle(); k.persistence.currentView();
+    expect(k.store.header(unrelated), 'unrelated saved history remains absent').toBeUndefined();
+    // Compare later records with identical seed data after exercising both traversal orders.
+    k.retention.setSeed({ id: seed, state: {}, nodes: [item, summary].sort() });
+    const c = k.persistence.save('C');
+    k.retention.endSeed(seed); k.retention.scheduleSweep(); k.settle();
+    expect(k.store.header(item)).toBeUndefined();
+    expect(k.store.header(summary)).toBeUndefined();
+    return { marked, c };
+  };
+  const expected = run(true, true);
+  for (const reverse of [false, true]) for (const loadB of [false, true]) expect(run(reverse, loadB)).toEqual(expected);
+});
+
 for (const snapshot of [false, true])
 test(`S3C-01${snapshot ? '-snapshot' : ''}: an expired overlay cannot impersonate a summary materialisation owner after a fresh load`, () => {
   const name = 'expired-materialisation-overlay';

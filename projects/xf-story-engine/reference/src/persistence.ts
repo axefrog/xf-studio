@@ -272,7 +272,34 @@ export class Persistence {
     return this.base.headers.get(id);
   }
 
-  /** Restore only a reached reference's missing saved data, silently; live records remain authoritative. */
+  hasSavedEdge(id: Id): boolean { return this.base.edges.has(id); }
+
+  /** A sweep must leave an unrecorded end available to the next save. This is not a retention root. */
+  hasPendingContribution(c: Contribution): boolean {
+    const saved = this.base.contributions.get(c.id);
+    return saved !== undefined && !same(saved, c);
+  }
+
+  /** Shared silent replay for loads and reached saved references. Existing live records win. */
+  private replay(view: PersistedView): boolean {
+    const k = this.k, store = k.store;
+    let changed = false;
+    // All headers precede facts and provenance: an item's descriptor may have been swept too.
+    for (const h of view.headers.values()) if (!store.header(h.id)) changed = store.addHeader(clone(h)) || changed;
+    for (const c of view.contributions.values()) if (!store.contribution(c.id)) changed = store.addContribution(clone(c)) || changed;
+    for (const m of view.materialisations.values()) if (!k.events.materialisationOf(m.event)) {
+      k.events.setMaterialisation(m.event, clone(m.provenance));
+      changed = true;
+    }
+    for (const e of view.edges.values()) if (!store.edges.has(e.id)) changed = store.addEdge(clone(e)) || changed;
+    for (const { pin, withdrawn } of view.pins.values()) if (!store.pin(pin.id) && store.addPin(clone(pin))) {
+      if (withdrawn) store.withdrawn.set(pin.id, { pin: pin.id, by: withdrawn.by, at: withdrawn.at });
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Select only reached saved records, then use the same header-first replay as a load. */
   restoreReferencedHeader(id: Id): NodeHeader | undefined {
     const store = this.k.store;
     const h = store.header(id) ?? this.base.headers.get(id);
@@ -284,33 +311,28 @@ export class Persistence {
       for (const header of this.base.headers.values()) saved.addHeader(header);
       for (const c of this.base.contributions.values()) saved.addContribution(c);
       for (const e of this.base.edges.values()) saved.addEdge(e);
+      for (const { pin } of this.base.pins.values()) saved.addPin(pin);
       this.recovery = { base: this.base, store: saved };
     }
-    const saved = this.recovery.store, fields = [id];
-    let changed = false;
+    const saved = this.recovery.store, fields = [id], view = new PersistedView(), seen = new Set<Id>();
     for (let n = 0; n < fields.length; n++) {
       const field = fields[n];
-      if (!store.header(field)) changed = store.addHeader(clone(saved.header(field)!)) || changed;
+      if (seen.has(field)) continue;
+      seen.add(field);
+      const header = store.header(field) ?? saved.header(field);
+      if (!header) continue;
+      view.headers.set(field, header);
+      if (header.origin.by === 'value' || header.origin.by === 'member') fields.push(header.origin.owner);
+      else if (header.origin.by === 'minted') fields.push(header.origin.creator, header.origin.cause);
       fields.push(...saved.ownedOf(field));
-      for (const c of saved.contributionsNaming(field))
-        if (!store.contribution(c.id)) changed = store.addContribution(clone(c)) || changed;
+      for (const c of saved.contributionsNaming(field)) view.contributions.set(c.id, c);
+      for (const p of saved.pinsOfNode(field)) view.pins.set(p.id, this.base.pins.get(p.id)!);
+      for (const e of saved.edgesFrom(field)) if (this.k.retention.isOwnEventLocation(e, header)) view.edges.set(e.id, e);
+      const materialisation = this.base.materialisations.get(field);
+      if (materialisation) view.materialisations.set(field, materialisation);
     }
-    for (const e of saved.edgesFrom(id))
-      if (this.k.retention.isOwnEventLocation(e, h) && !store.edges.has(e.id)) changed = store.addEdge(clone(e)) || changed;
-    const materialisation = this.base.materialisations.get(id);
-    if (materialisation && !this.k.events.materialisationOf(id)) {
-      this.k.events.setMaterialisation(id, clone(materialisation.provenance));
-      changed = true;
-    }
-    if (changed) this.k.bump();
+    if (this.replay(view)) this.k.bump();
     return store.header(id);
-  }
-
-  /** A live interval is authoritative, even when a reopening reuses the saved start timestamp. */
-  releasedEdge(edge: Edge, base: PersistedView = this.base): Edge | undefined {
-    const saved = base.edges.get(edge.id);
-    if (!saved) return undefined;
-    return clone(edge);
   }
 
   // ---- packs (spec 14.1: reloaded, not stored) ----
@@ -344,10 +366,8 @@ export class Persistence {
       const h = k.store.header(id);
       if (h) v.headers.set(id, clone(h));
     }
-    // Edges that are retention roots.
-    // Other saved edges and pins stay in the view so their end or withdrawal is recorded even when no longer roots.
+    // Retention selects material for this live view. The writer also merges changes to saved records.
     // A retained event's own location edge is needed by spatial queries, but must not root an otherwise unretained event.
-    // Released own links are absent from this live view. Their saved history keeps its actual validity.
     for (const e of k.store.allEdges()) {
       const own = k.retention.isOwnEventLocation(e, k.store.header(e.from) ?? base.headers.get(e.from));
       if (k.retention.isRootEdge(e) || (own ? marked.has(e.from) : base.edges.has(e.id))) v.edges.set(e.id, clone(e));
@@ -465,6 +485,23 @@ export class Persistence {
 
   // ---- save ----
 
+  /** Retention admits new material; every change to an already saved record is unconditional. */
+  private includeSavedUpdates(cur: PersistedView): void {
+    const store = this.k.store;
+    const merge = <T>(saved: Map<Id, T>, into: Map<Id, T>, live: (id: Id) => T | undefined): void => {
+      for (const [id, was] of saved) {
+        const now = live(id);
+        if (now !== undefined && !same(was, now)) into.set(id, clone(now));
+      }
+    };
+    merge(this.base.edges, cur.edges, (id) => store.edges.get(id));
+    merge(this.base.contributions, cur.contributions, (id) => store.contribution(id));
+    merge(this.base.pins, cur.pins, (id) => {
+      const pin = store.pin(id), w = store.withdrawn.get(id);
+      return pin && (w ? { pin, withdrawn: { by: w.by, at: w.at } } : { pin });
+    });
+  }
+
   /** Write a save record for the current state, as a child of the save last written or loaded (spec 14.2). */
   save(saveKey: string): SaveRecord {
     this.k.assertWritable();
@@ -476,12 +513,7 @@ export class Persistence {
     if (this.chain.has(saveKey)) throw new Error(`save key already used: ${saveKey}`);
     const k = this.k;
     const cur = this.currentView();
-    // Absence from the live view cannot delete a prior EdgeAdded. Release changes retention references,
-    // never validity: keep actual edge updates even after the final consumer or header goes (S3C/D).
-    for (const e of this.base.edges.values()) if (!cur.edges.has(e.id)) {
-      const edge = this.releasedEdge(k.store.edges.get(e.id) ?? e)!;
-      cur.edges.set(e.id, edge);
-    }
+    this.includeSavedUpdates(cur);
     const ops = Persistence.diff(this.base, cur);
     const parent = this.baseKey ? this.chain.get(this.baseKey)! : undefined;
     const total = (parent?.meta.total ?? 0) + ops.length;
@@ -498,6 +530,11 @@ export class Persistence {
     this.base = next;
     this.recovery = undefined;
     this.baseKey = saveKey;
+    // A sweep kept these orphaned contributions only until their update was recorded. Later references replay them.
+    for (const op of ops) if (op.op === 'ContributionEnded') {
+      const c = k.store.contribution(op.contribution), scope = c?.target.scope;
+      if (scope && 'nodes' in scope && scope.nodes.every((id) => !k.store.header(id))) k.store.removeContribution(op.contribution);
+    }
     return rec;
   }
 
@@ -560,16 +597,9 @@ export class Persistence {
     k.readOnly = null;
 
     // 2. Replay silently (I-13): records go straight into the stores, with no changes and no relevance.
-    for (const h of view.headers.values()) k.store.addHeader(clone(h));
-    for (const { pin, withdrawn } of view.pins.values()) {
-      k.store.addPin(clone(pin));
-      if (withdrawn) k.store.withdrawn.set(pin.id, { pin: pin.id, by: withdrawn.by, at: withdrawn.at });
-    }
-    for (const e of view.edges.values()) k.store.addEdge(clone(e));
-    for (const c of view.contributions.values()) k.store.addContribution(clone(c));
+    this.replay(view);
     for (const b of view.beliefs.values()) k.beliefs.restore(clone(b));
     for (const c of view.canon.values()) k.events.setCanonRecord(clone(c));
-    for (const m of view.materialisations.values()) k.events.setMaterialisation(m.event, clone(m.provenance));
     for (const s of view.summaries.values()) k.summaries.setRecord(clone(s));
     k.settings.restore(view.settings);
     for (const f of view.frames.values()) k.frames.insert(clone(f));

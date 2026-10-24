@@ -5,10 +5,14 @@ export interface Probe {
   also?: Array<{ source: string; from: string; to: string }>;
 }
 const probe = (name: string, test: string, source: string, from: string, to: string): Probe => ({ name, test, source, from, to });
-const clampReleasedEdge = (sameStart: boolean): string => `let to = edge.valid.to;
-    if (${sameStart ? 'saved.valid.from === edge.valid.from && ' : ''}saved.valid.to !== undefined)
-      to = to === undefined ? saved.valid.to : Math.min(to, saved.valid.to);
-    return { ...clone(edge), valid: to === undefined ? { from: edge.valid.from } : { from: edge.valid.from, to } };`;
+const saveEdge = 'merge(this.base.edges, cur.edges, (id) => store.edges.get(id));';
+const clampSavedEdge = (sameStart: boolean): string => `merge(this.base.edges, cur.edges, (id) => {
+      const e = store.edges.get(id); if (!e) return e;
+      const edge = clone(e), saved = this.base.edges.get(id);
+      if (saved && ${sameStart ? 'saved.valid.from === edge.valid.from && ' : ''}saved.valid.to !== undefined)
+        edge.valid = { from: edge.valid.from, to: Math.min(edge.valid.to ?? Infinity, saved.valid.to) };
+      return edge;
+    });`;
 const restrictedRoots = { source: 'src/retention.ts', from: 'const eventRoots = new Set(stack);',
   to: `const eventRoots = new Set([...this.seeds.values()].flatMap(s => s.nodes));
     for (const st of this.k.evolution.states.values())
@@ -74,18 +78,20 @@ export const probes: Probe[] = [
     const provenance = origin ? { descriptor: h.origin.creator, materialisation: origin } : undefined;`),
     file: 'test/process-evidence.test.ts' },
   { ...probe('S3C-02', 'S3C-02', 'src/persistence.ts',
-    'for (const e of this.base.edges.values()) if (!cur.edges.has(e.id)) {',
-    'for (const e of this.base.edges.values()) if (false) {'),
+    saveEdge, '/* omit saved edge updates */'),
     file: 'test/process-evidence.test.ts' },
   { ...probe('S3C-02-sweep', 'S3C-02-sweep', 'src/retention.ts',
-    'if (saved) e.valid', 'if (false) e.valid'), file: 'test/process-evidence.test.ts' },
+    'if (!this.k.persistence.hasSavedEdge(e.id))', 'if (true)'), file: 'test/process-evidence.test.ts' },
   { ...probe('S3D-01', 'S3D-01', 'src/persistence.ts',
-    'const edge = this.releasedEdge(k.store.edges.get(e.id) ?? e)!;',
-    `const edge = this.releasedEdge(k.store.edges.get(e.id) ?? e)!;
-      edge.valid = { from: edge.valid.from, to: Math.min(edge.valid.to ?? k.now, e.valid.to ?? k.now, k.now) };`),
+    saveEdge,
+    `merge(this.base.edges, cur.edges, (id) => {
+      const e = store.edges.get(id);
+      return e && this.k.retention.isOwnEventLocation(e) && !this.k.retention.marked().has(e.from)
+        ? { ...clone(e), valid: { from: e.valid.from, to: this.k.now } } : e;
+    });`),
     file: 'test/process-evidence.test.ts' },
   ...['S3D-02', 'S3D-02-sweep'].map((name) => ({ ...probe(name, name, 'src/persistence.ts',
-    'return clone(edge);', clampReleasedEdge(false)),
+    saveEdge, clampSavedEdge(false)),
     file: 'test/process-evidence.test.ts' })),
   ...['S3E-01', 'S3E-01-snapshot', 'S3E-01-two-loads'].map((name) => ({ ...probe(name, name, 'src/retention.ts',
     'const h = this.k.persistence.restoreReferencedHeader(id);', 'const h = store.header(id);'),
@@ -101,5 +107,13 @@ export const probes: Probe[] = [
     'if (!h || !this.base.headers.has(id)) return h;',
     'if (!h || store.header(id)) return h;'), file: 'test/process-evidence.test.ts' },
   ...['S3E-02', 'S3E-02-sweep', 'S3E-02-load-A', 'S3E-02-open'].map((name) => ({ ...probe(name, name, 'src/persistence.ts',
-    'return clone(edge);', clampReleasedEdge(true)), file: 'test/process-evidence.test.ts' })),
+    saveEdge, clampSavedEdge(true)), file: 'test/process-evidence.test.ts' })),
+  { ...probe('S3G-01', 'S3G-01', 'src/persistence.ts',
+    'merge(this.base.contributions, cur.contributions, (id) => store.contribution(id));',
+    '/* omit saved contribution updates */'), file: 'test/process-evidence.test.ts' },
+  { ...probe('S3G-01-sweep', 'S3G-01-sweep', 'src/retention.ts',
+    'if (!this.k.persistence.hasPendingContribution(c))', 'if (true)'), file: 'test/process-evidence.test.ts' },
+  { ...probe('S3G-02', 'S3G-02', 'src/persistence.ts',
+    "else if (header.origin.by === 'minted') fields.push(header.origin.creator, header.origin.cause);",
+    '/* omit reached descriptor headers */'), file: 'test/process-evidence.test.ts' },
 ];

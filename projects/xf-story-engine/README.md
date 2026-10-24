@@ -76,7 +76,7 @@ events, silent restatement, nominal kind compatibility), the cores of S1 v0.5 an
   and the arc lock survive replacement loads. Later capabilities receive plain "not supported yet" findings.
   [The fixture index](reference/test/s3/README.md) records coverage and limits, including R1, the literal SF3-37
   script, and Kabuki with S1/S2 attached and fresh-process crashes at each tested window boundary.
-  Findings 175–194 in SPEC-NOTES identify contract additions and fixture contradictions for the coordinator.
+  Findings 175–192 in SPEC-NOTES identify contract additions and fixture contradictions for the coordinator.
 
 The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits use the pinned TypeScript dev dependency's compiler AST API.
 
@@ -107,11 +107,15 @@ behaviour in memory and requires failure at the named semantic assertion. Setup 
 
 S3 and its kernel regressions cover nominal-query boundaries, the S3-01–07 review fixes, explicit summary-materialisation
 ownership and released event-location history through fresh loads. Release preserves actual edge validity; re-reference
-completes missing saved headers, owned facts and provenance through retention, including when a summary query has
-already recreated an event's header, and produces identical later records with or without two loads.
+replays missing saved records through the same header-first path as load, including swept summary descriptors and
+partially recreated item headers, and produces identical later records with or without two loads. The writer records
+all changes to earlier saved contributions, edges and pins independently of retention; sweeping protects pending
+contribution ends until recorded. The ordinary live-state view stays independent of save frequency.
 Reopened intervals keep their own unclamped ends even when their starts match a previous interval, with/without loading
-A or sweeping before B. All 50 source-loader mutation probes reach their intended semantic assertions; `bun run check` passes. The guarded
-full suite passes **1,251 tests across 78 files in 91.82 seconds**, peaking at **1.1 GB** under the 4 GB limit.
+A or sweeping before B. S3G-01 covers all 16 release/end variants, both operation orders and retained-consumer controls.
+S3G-02 covers swept descriptor/item recovery in both root orders, incremental/snapshot records and fresh B loads.
+All 53 source-loader mutation probes reach their intended semantic assertions; `bun run check` passes. The guarded
+full suite passes **1,269 tests across 78 files in 95.44 seconds**, peaking at **1.1 GB** under the 4 GB limit.
 Kernel digests stay at v3 `f924d2c9d1159bca85bbfa4cf18dba6c` and v4
 `42d5a84e16dde21cc0bca7fe50c01d72`; the S1 frozen transcript is unchanged. The S3 transcript checks independently encoded identities and draws, plus explicit
 persisted records. Hand-over facts, pending closure consumption and output-batch event facts survive replacement loads;
