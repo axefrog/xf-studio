@@ -180,7 +180,7 @@ ${input.css}
 </head>
 <body class="guide">
 <header class="guide-top"><span class="brand-mark" aria-hidden="true">XF</span><h1>Studio interface guide</h1><span class="meta">Authoritative reference · generated ${input.generated}</span>
-  <a class="guide-back" href="./" title="XF Studio, where Help › Interface guide opens this page">${i("chevronLeft")}<span>Back to XF Studio</span></a>
+  <a class="guide-back" href="./" title="Go to the XF Studio site">${i("chevronLeft")}<span>XF Studio site</span></a>
   <div class="guide-controls" role="group" aria-label="Guide display">
     <div class="segmented" role="group" aria-label="Theme"><button type="button" class="segment" data-theme-choice="system" aria-pressed="true">${i("monitor")}<span>System</span></button><button type="button" class="segment" data-theme-choice="light" aria-pressed="false">${i("sun")}<span>Light</span></button><button type="button" class="segment" data-theme-choice="dark" aria-pressed="false">${i("moon")}<span>Dark</span></button></div>
     <label class="toggle"><input type="checkbox" role="switch" class="switch" id="compare-themes"><span class="switch-track" aria-hidden="true"></span><span class="toggle-label">Light and dark side by side</span></label>

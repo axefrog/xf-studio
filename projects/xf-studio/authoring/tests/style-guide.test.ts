@@ -51,6 +51,8 @@ test("the style guide is self-contained", () => {
   expect(guide.match(/<\/script/gi)?.length).toBe(1);
 });
 
-test("the guide links back to XF Studio (Help › Interface guide opens it)", () => {
+test("the guide names the site link and closes a tab opened by the localhost Studio", () => {
   expect(has('<a class="guide-back" href="./"')).toBe(true);
+  expect(has("XF Studio site</span></a>")).toBe(true);
+  expect(has("Close this guide and return to XF Studio")).toBe(true);
 });

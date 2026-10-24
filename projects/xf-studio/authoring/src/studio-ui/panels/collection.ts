@@ -245,7 +245,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   };
   let savedSignature = "";
   // What the files are, in the Files heading's help tip; with research tools (UI-85) it adds what a compiler plan is.
-  const filesHelp = "Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first.";
+  const filesHelp = "Collection and recipe files keep your work editable, as a separate copy or to share. Exporting a collection saves a version in your library first.";
   const researchHelp = "Research: a compiler plan is input for the offline compiler, not a mod; exporting one saves a version first. A layer mask is a picture of the selected layer's shape.";
   const filesSection = section({ title: "Files", help: filesHelp }, h("div", { class: "button-grid" }, fileButtons.importCollection, fileButtons.exportCollection,
     fileButtons.exportPlan, fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask));

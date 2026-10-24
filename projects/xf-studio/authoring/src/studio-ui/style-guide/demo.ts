@@ -13,6 +13,14 @@ import { HEADER_STAGES, HeaderFit } from "../header-fit";
 import { LIBRARY_CHIP_WIDEST } from "../notice-text";
 
 const root = document.documentElement;
+// The localhost Studio marks the guide tab it opens, then clears its opener. Closing this script-opened tab returns to that same
+// workspace, including a verification workspace; following ./ would open a second Studio and lose ?verify=1.
+if (["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) && new URLSearchParams(location.search).get("from") === "studio") {
+  const back = document.querySelector<HTMLAnchorElement>(".guide-back")!;
+  back.querySelector("span")!.textContent = "Back to XF Studio";
+  back.title = "Close this guide and return to XF Studio";
+  back.addEventListener("click", event => { event.preventDefault(); window.close(); });
+}
 const live = document.getElementById("guide-live")!;
 const announce = (text: string) => { live.textContent = ""; requestAnimationFrame(() => { live.textContent = text; }); };
 

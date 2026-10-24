@@ -5,6 +5,15 @@ import { join } from "node:path";
 import { DesktopOutboxStore, desktopOutboxRequest } from "../outbox-store";
 import { tempDir } from "../../tests/temp-dir";
 
+test("known disk-full failures reach the page without exposing filesystem details", async () => {
+  const store = new DesktopOutboxStore(tempDir("xfs-outbox-full-"));
+  store.save = () => { throw Object.assign(Error("private path must not leave the host"), { code: "ENOSPC" }); };
+  const response = await desktopOutboxRequest(new Request("http://127.0.0.1/api/desktop/workspace/outbox", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "character/c-1234abcd", text: "{}" }),
+  }), store, false);
+  expect(await response.json()).toEqual({ error: "The outbox key wasn't stored.", code: "ENOSPC" });
+});
+
 test("keys are stored one file each, read back by key, removed with null, and a refused write changes nothing", async () => {
   const root = tempDir("xfs-outbox-");
   try {

@@ -29,7 +29,7 @@ export const WORKSPACE_NOTICE_ACTIONS: Record<WorkspaceNoticeAction, { label: st
   retryRelease: { label: "Try again", title: "Save your latest changes again, then hand the workspace over" },
   // The recovery export: this window's own copy, with the changes the library doesn't have yet. It needs nothing from the library, so it
   // works in the states that offer it (a handover that couldn't save, a stuck restore, a failed backup), where saving first would fail.
-  exportCopy: { label: "Export this window's copy", title: "Save the collection as this window shows it to a file, with the changes your library doesn't have yet. Nothing is saved to your library." },
+  exportCopy: { label: "Export this window's copy", title: "Write the collection as this window shows it to a file, with the changes your library doesn't have yet. Nothing goes to your library." },
   protect: { label: "Try again", title: "Back up your latest changes on this computer again" },
   keepRestored: { label: "Use restored", title: "Keep working on the restored version" },
   retryRestore: { label: "Try again", title: "Send the restored changes again now" },

@@ -1,7 +1,24 @@
 // The headless Chrome launcher's wait for its page target (tools/cdp.ts): a slow start on a busy machine is waited for with a bounded
 // backoff, a Chrome that exits is reported at once, and a start that never exposes a page ends with a clear message. No Chrome runs here.
 import { describe, expect, test } from "bun:test";
-import { type PageTarget, waitForPageTarget } from "../tools/cdp";
+import { type PageTarget, removeStaleBrowserFolders, waitForPageTarget } from "../tools/cdp";
+import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tempDir } from "./temp-dir";
+
+test("stale cleanup removes only our old throwaway folders, keeping fresh, explicit profiles and unrelated temp", async () => {
+  const root = tempDir("xfs-cdp-cleanup-");
+  const now = Date.now(), old = new Date(now - 25 * 3600_000);
+  for (const name of ["xfs-ui-chrome-old", "xfs-ui-data-old", "xfs-ui-chrome-kept", "xfs-ui-chrome-young", "scoped_dir123", "other-old"]) {
+    const path = join(root, name);
+    mkdirSync(path); writeFileSync(join(path, "child"), "scratch");
+    if (!name.endsWith("young")) utimesSync(path, old, old);
+  }
+  writeFileSync(join(root, "xfs-ui-data-file"), "not a folder");
+  await removeStaleBrowserFolders(root, now, join(root, "xfs-ui-chrome-kept"));
+  for (const name of ["xfs-ui-chrome-old", "xfs-ui-data-old"]) expect(existsSync(join(root, name))).toBe(false);
+  for (const name of ["xfs-ui-chrome-kept", "xfs-ui-chrome-young", "scoped_dir123", "other-old", "xfs-ui-data-file"]) expect(existsSync(join(root, name))).toBe(true);
+});
 
 const page: PageTarget = { type: "page", webSocketDebuggerUrl: "ws://127.0.0.1:1/devtools/page/1" };
 const limits = { deadlineMs: 2_000, firstDelayMs: 1, maxDelayMs: 8 };

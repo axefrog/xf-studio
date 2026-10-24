@@ -5,7 +5,7 @@
  */
 import { ReleaseUnsaved } from "../workspace/workspace-lease";
 
-export const DESKTOP_SAVE_FAILED = "Your latest changes could not be saved. Keep this window open and export your collection from the Library panel.";
+export const DESKTOP_SAVE_FAILED = "Your latest changes could not be saved. Keep this window open and choose Export this window's copy.";
 
 export function desktopWorkspaceWriter(post: (text: string) => Promise<void>, onResult: (failed: boolean) => void = () => {}) {
   let pending: string | null = null, latest: string | null = null, inFlight: Promise<void> | null = null, failed = false;

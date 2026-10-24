@@ -343,7 +343,7 @@ function documentsCapability(outbox: DocumentOutbox | undefined, action: Documen
   const status = outbox?.status();
   switch (action?.kind) {
     case "documents.protect":
-      return status?.unprotected.length ? { available: true } : { available: false, code: "invalid_value", reason: "Every change is recorded on this computer." };
+      return status?.unprotected.length ? { available: true } : { available: false, code: "invalid_value", reason: "Every change is backed up on this computer." };
     case "documents.retryRecovery":
       return status?.recovering.length || status?.missing.length ? { available: true } : { available: false, code: "invalid_value", reason: "Nothing from your last session is waiting." };
     case "documents.keepRestored":

@@ -344,7 +344,7 @@ test("help topics are data: valid key tokens, known tours, searchable; links are
   for (const item of HELP_LINKS) expect(isProjectLink(item.link)).toBe(true);
   // Help › More help names the interface guide plainly; localhost opens its own copy, the desktop app the published one (UI review polish).
   expect(HELP_LINKS.find(item => item.link === "project-style-guide")?.label).toBe("Interface guide");
-  expect(LOCAL_PROJECT_PAGES["project-style-guide"]).toBe("style-guide.html");
+  expect(LOCAL_PROJECT_PAGES["project-style-guide"]).toBe("style-guide.html?from=studio");
   expect(PROJECT_LINKS["project-style-guide"]).toBe("https://axefrog.github.io/xf-studio/style-guide.html");
   // Markdown-lite: bold, bullets and key tokens become structure, never markup.
   expect(parseHelp("Hi **there** [[key:shell.undo]]\n\n- one\n- two <b>")).toEqual([
