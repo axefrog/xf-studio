@@ -14,7 +14,7 @@ export function polish5Verification(transport: CollectionTransport) {
         if (!armed || action !== "build") return transport.package(action, collection, signal);
         return new Promise((_, reject) => {
           const stop = () => { stopping = true; };
-          finish = () => { armed = false; finish = undefined; reject(new CollectionServiceError("package_build_cancelled", "Build stopped. Nothing was promoted. Your collection is unchanged.")); };
+          finish = () => { armed = false; finish = undefined; reject(new CollectionServiceError("package_build_cancelled", "Build stopped. Your mod files weren't changed.")); };
           if (!signal) throw Error("Build specimen needs its cancellation signal.");
           if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
         });

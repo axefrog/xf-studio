@@ -198,6 +198,7 @@ export class StudioFileOperations {
       return answer.accepted ? { ok: true, code: "stopping", message: "Stopping Build…" }
         : { ok: false, code: "unavailable", message: answer.reason! };
     }
+    if (action.kind === "package.check" || action.kind === "package.build") this.clearPackageOutcome();
     const owner = Symbol(action.kind);
     this.busy = { kind: action.kind, owner, id: ++this.sequence, startedAt: Date.now() }; this.notify();
     try {
@@ -271,7 +272,6 @@ export class StudioFileOperations {
             // Keep the service's exact size validation and error code.
             request = { kind: "import", text: file.size > 16_000_000 ? "" : await file.text(), bytes: file.size };
           } else request = collectionRequest(action.kind);
-          if (request.kind === "package") this.package = undefined;
           const result = await this.sources.executeCollection(request);
           if (!result.ok) { outcome = result; break; }
           if (result.result.kind === "export")
@@ -294,7 +294,7 @@ export class StudioFileOperations {
   }
   /** Existing save/open/refresh requests share the same result/download state port. */
   async executeCollection(request: CollectionRequest): Promise<CollectionOutcome> {
-    if (request.kind === "package") { this.package = undefined; this.notify(); }
+    if (request.kind === "package") { this.clearPackageOutcome(); this.notify(); }
     const result = await this.sources.executeCollection(request);
     if (result.ok && result.result.kind === "export")
       this.port.download(new Blob([result.result.json], { type: "application/json" }), result.result.name);
@@ -307,6 +307,10 @@ export class StudioFileOperations {
       message: result.ok ? this.collection?.view().progress?.message ?? "Collection operation completed." : result.message, at: Date.now() };
     this.notify();
     return result;
+  }
+  private clearPackageOutcome(): void {
+    this.package = undefined;
+    if (this.last?.kind === "package.check" || this.last?.kind === "package.build") this.last = undefined;
   }
   private finish(owner: symbol, kind: StudioFileAction["kind"], outcome: StudioFileOutcome): StudioFileOutcome {
     if (this.busy?.owner === owner) {

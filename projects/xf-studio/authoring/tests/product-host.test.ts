@@ -288,7 +288,7 @@ test("an unknown or evicted Build ID never claims stopped and cannot start work 
   const service = new PackageHostService(), h = host(), id = crypto.randomUUID();
   const answer = service.stopBuild(id);
   expect(answer).toMatchObject({ phase: "finished", outcome: { ok: false, code: "package_build_unknown" } });
-  expect(JSON.stringify(answer)).not.toContain("Nothing was promoted");
+  expect(JSON.stringify(answer)).not.toContain("Build stopped.");
   expect(await service.run(h.adapter, "build", fixture, new AbortController().signal, undefined, id))
     .toMatchObject({ ok: false, code: "package_build_unknown" });
   expect(h.runs).toHaveLength(0);

@@ -131,7 +131,7 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   const updates = options.updateActions ?? new UpdateCheckActions(options.updates ?? null);
   const files: Record<string, unknown> & { activity: { kind: string; cancellable: boolean }[] } = { activity: [], ...options.files ?? { package: BUILD } };
   const port = {
-    files: { capability: (action?: { kind: string }) => ({ available: action?.kind !== "package.stop" || files.activity.some(entry => entry.kind === "package.build" && entry.cancellable) }), snapshot: () => files },
+    files: { capability: (action?: { kind: string }) => ({ available: action?.kind !== "package.stop" || files.activity.some(entry => entry.kind === "package.build" && entry.cancellable), reason: "Waiting for the host to finish stopping or completing the Build." }), snapshot: () => files },
     library: { capability: () => ({ available: true }), summary: () => ({ busy: files.collectionBusy ?? false, progress: files.progress, products: [], draft: { presets: [{ id: "look1", name: "Night market" }] } }) },
     authoring: { capability: () => ({ available: true }), requestCapability: () => ({ available: true }),
       previewState: () => (options.prepared ? { character: { prepared: options.prepared } } : {}) },
@@ -174,13 +174,15 @@ async function settingsHarness(options: HarnessOptions = {}) {
   return { ...h, appearance: () => ({ theme, hints, research }) };
 }
 
-test("Build Stop becomes unavailable Stopping… while busy, then the host's result decides what the panel says", async () => {
+test("Build Stop keeps its label and becomes unavailable while stopping, then the host's result decides what the panel says", async () => {
   const files: Record<string, unknown> = { activity: [{ kind: "package.build", cancellable: false }], collectionBusy: true,
     progress: { phase: "working", code: "package", message: "Stopping…" } };
   const h = await packageHarness({ files });
-  const stop = buttonNamed(h.root, "Stopping…")!;
+  const stop = buttonNamed(h.root, "Stop")!;
   expect(stop).toBeTruthy();
   expect(stop.getAttribute("aria-disabled")).toBe("true");
+  expect(stop.getAttribute("data-reason")).toBe("Waiting for the host to finish stopping or completing the Build.");
+  expect(text(h.root).split("Stopping…")).toHaveLength(2);
   expect(text(h.root)).not.toContain("Build stopped.");
   Object.assign(files, { activity: [], collectionBusy: false, package: BUILD });
   // The harness reads the supplied snapshot; repaint with a completed host result in a fresh panel.
@@ -189,6 +191,14 @@ test("Build Stop becomes unavailable Stopping… while busy, then the host's res
   expect(buttonNamed(completed.root, "Add to Mod Organizer 2…")).toBeTruthy();
   expect(text(completed.root)).not.toContain("Build stopped.");
   completed.panel.spec.element.remove();
+});
+
+test("a confirmed stopped Build uses the reviewed information copy", async () => {
+  const h = await packageHarness({ files: { last: { kind: "package.build", ok: false,
+    code: "package_build_cancelled", message: "host answer", at: 0 } } });
+  expect(text(h.root)).toContain("Build stopped. Your mod files weren't changed.");
+  expect(buttonNamed(h.root, "Report this problem")).toBeUndefined();
+  h.panel.spec.element.remove();
 });
 
 describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => {

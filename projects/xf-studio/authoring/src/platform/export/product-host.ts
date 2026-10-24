@@ -348,7 +348,7 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
   const stop = () => deadline.abort();
   signal.addEventListener("abort", stop, { once: true });
   if (signal.aborted) deadline.abort();
-  const stopped = () => signal.aborted ? failure("package_build_cancelled", "Build stopped. Nothing was promoted. Your collection is unchanged.")
+  const stopped = () => signal.aborted ? failure("package_build_cancelled", "Build stopped. Your mod files weren't changed.")
     : failure("package_build_timeout", "Package Build exceeded its time limit and was stopped. Your draft is unchanged; nothing was installed.");
   const prepared: Record<string, PreparedPrerequisite> = {};
   let setup: ReturnType<PackageHostAdapter["buildSetup"]> | undefined;

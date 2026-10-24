@@ -67,7 +67,7 @@ test("Stop asks for cancellation and the host cancellation answer leaves no resu
   const ready = new Promise<void>(resolve => { began = resolve; });
   f.transport.package = (_action, _input, signal) => new Promise((_, reject) => {
     sent = signal!; began();
-    signal!.addEventListener("abort", () => reject(new CollectionServiceError("package_build_cancelled", "Build stopped. Nothing was promoted. Your collection is unchanged.")), { once: true });
+    signal!.addEventListener("abort", () => reject(new CollectionServiceError("package_build_cancelled", "Build stopped. Your mod files weren't changed.")), { once: true });
   });
   expect(f.files.capability({ kind: "package.stop" }).available).toBe(false);
   const build = f.files.execute({ kind: "package.build" });
@@ -76,7 +76,7 @@ test("Stop asks for cancellation and the host cancellation answer leaves no resu
   expect(f.files.capability({ kind: "package.stop" }).available).toBe(true);
   expect(await f.files.execute({ kind: "package.stop" })).toMatchObject({ ok: true, code: "stopping" });
   expect(sent.aborted).toBe(true);
-  expect(await build).toMatchObject({ ok: false, code: "package_build_cancelled", message: expect.stringContaining("Nothing was promoted") });
+  expect(await build).toMatchObject({ ok: false, code: "package_build_cancelled", message: "Build stopped. Your mod files weren't changed." });
   expect(f.files.snapshot()).toMatchObject({ last: { kind: "package.build", code: "package_build_cancelled" }, activity: [] });
   expect(f.files.snapshot().package).toBeUndefined();
   expect(f.files.capability({ kind: "package.stop" }).available).toBe(false);
@@ -307,3 +307,28 @@ test("workspace file reveal is capability driven and reports host failure", asyn
   f.device.revealWorkspace = async () => { throw Error("The folder couldn’t be opened."); };
   expect(await f.files.execute({ kind: "workspace.showInFolder" })).toMatchObject({ ok: false, message: "The folder couldn’t be opened." });
 });
+
+for (const entry of ["action", "collection"] as const) for (const action of ["check", "build"] as const) {
+  test(`a new ${action} clears the stopped outcome before notifying (${entry} entry)`, async () => {
+    const f = await fixture();
+    f.transport.package = async () => { throw new CollectionServiceError("package_build_cancelled", "Build stopped. Your mod files weren't changed."); };
+    await f.files.execute({ kind: "package.build" });
+    expect(f.files.snapshot().last?.code).toBe("package_build_cancelled");
+    let finish!: () => void, began!: () => void;
+    const ready = new Promise<void>(resolve => { began = resolve; });
+    f.transport.package = async (_action, input) => { began(); await new Promise<void>(resolve => { finish = resolve; });
+      const check = eyeCheck(input as { id: string }, { presets: [] });
+      return action === "check" ? check : eyeBuild(check); };
+    const observed: string[] = [];
+    const unsubscribe = f.files.subscribe(() => { const snapshot = f.files.snapshot();
+      if (snapshot.busy || snapshot.collectionBusy) observed.push(snapshot.last?.code ?? "clear"); });
+    const pending = entry === "action" ? f.files.execute({ kind: action === "check" ? "package.check" : "package.build" })
+      : f.files.executeCollection({ kind: "package", action });
+    await ready;
+    expect(f.files.snapshot().last).toBeUndefined();
+    expect(f.files.snapshot().package).toBeUndefined();
+    expect(observed.length).toBeGreaterThan(0);
+    expect(observed.every(code => code === "clear")).toBe(true);
+    finish(); await pending; unsubscribe();
+  });
+}

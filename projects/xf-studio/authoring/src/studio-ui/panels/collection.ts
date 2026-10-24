@@ -210,7 +210,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const buildRunning = files.activity.some(entry => entry.kind === "package.build");
       if (!buildRunning && stop.contains(document.activeElement)) (builtCurrent ? rebuild : build).focus();
       stop.hidden = !buildRunning;
-      setButtonLabel(stop, buildRunning && !stopCapability.available ? "Stopping…" : "Stop");
+      setButtonLabel(stop, "Stop");
       applyCapability(stop, stopCapability);
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? library.progress!.message : "");
@@ -247,7 +247,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
  * the failure's reference when it wasn't an ordinary refusal. The code and time stay in Details for the report.
  */
 function failureCard(rt: StudioRuntime, failed: ReadonlyDeep<{ kind: string; code: string; message: string; at: number }>) {
-  if (failed.code === "package_build_cancelled") return note("Build stopped. Nothing was promoted. Your collection is unchanged.", "info");
+  if (failed.code === "package_build_cancelled") return note("Build stopped. Your mod files weren't changed.", "info");
   const build = failed.kind === "package.build";
   const expected = rt.port.diagnostics.expected(failed.code);
   const report = button({ label: "Report this problem", icon: "warning", small: true, onClick: () => { openReportDialog(rt, null); } });

@@ -27,11 +27,16 @@ try {
   guide = await launch(`${origin}/style-guide.html`, { width: 1200, height: 900, debugPort: port + 1001, scheme: "light" });
   await app.waitFor("!!window.xfStudioPolish5 && !!window.xfStudioPresentation.library.summary().draft && !window.xfStudioPresentation.library.summary().busy", 120_000);
   await guide.waitFor("!!document.getElementById('c-progress')");
+  // Exercise running after a previous stop, including the first width.
+  await app.evaluate("window.xfStudioPolish5.running()");
+  await app.waitFor("window.xfStudioPresentation.files.activity().some(e => e.kind === 'package.build')");
+  await app.evaluate("window.xfStudioPolish5.stopped()");
+  await app.waitFor("window.xfStudioPresentation.files.snapshot().last?.code === 'package_build_cancelled'");
   for (const width of [300, 620]) {
     await app.evaluate(`window.xfStudioShell.dock.moveTo('package', {kind:'float',x:24,y:24,w:${width},h:680}, 'Capture Build Stop')`);
     for (const state of ["running", "stopping", "stopped"] as const) {
       await app.evaluate(`window.xfStudioPolish5.${state}()`);
-      await app.waitFor(state === "running" ? "window.xfStudioPresentation.files.activity().some(e => e.kind === 'package.build' && e.cancellable)"
+      await app.waitFor(state === "running" ? "window.xfStudioPresentation.files.activity().some(e => e.kind === 'package.build' && e.cancellable) && !window.xfStudioPresentation.files.snapshot().last"
         : state === "stopping" ? "window.xfStudioPresentation.library.summary().busy && window.xfStudioPresentation.library.summary().progress?.message === 'Stopping…'"
         : "window.xfStudioPresentation.files.snapshot().last?.code === 'package_build_cancelled'");
       await app.wait(400);
