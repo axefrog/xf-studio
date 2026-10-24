@@ -1272,7 +1272,7 @@ leave their saved history intact. Release never ends or reopens an interval, and
 matches the previous interval or its end lies beyond save time.
 
 Sweeping preserves pending changes to saved contributions until a save records them; once recorded,
-orphaned contributions can leave memory and later replay from the chain. Saved edge history remains
+orphaned contributions can leave memory only when exact recovery is possible (193). Saved edge history remains
 available without becoming a retention root. No synthetic release-time end, validity clamp, separate
 release operation, or `releasedEdge()` path remains. This principle supersedes the piecemeal writer and
 sweep rules previously in 192–194.
@@ -1286,12 +1286,15 @@ contributions and reproducible pack content remain regenerable. Explicit summary
 participant/effect facts belong to the declared opening process, while time/kind/place remain live
 summary dependencies. Ownership is immutable and independent of contribution order.
 
-**192. Recovery is replay (S0 v4.16 §14.1).** Only a reached reference triggers recovery. The selected
+**192. Recovery is replay (S0 v4.16 §14.1).** A reached reference, regeneration or re-mint triggers recovery. The selected
 save view supplies records for that reference's owned tree and origin closure, including its summary
 descriptor. Load and recovery call one silent replay path: all selected headers first, then
 contributions, provenance and edges, with pins and withdrawals restored together. Recovery installs
 only absent records; authoritative live headers, contribution ends, edge intervals, pins and provenance
-win. A summary query recreating a header does not bypass replay of missing facts. Normal retention
+win. Every header re-creation, including a summary query, replays saved records before new defaults
+can be synthesised. An already live header need not have been saved for its named saved contributions
+to recover. Load selects its recovery baseline before settling and game reconciliation, so those
+paths cannot recover facts from the discarded branch. Normal retention
 traversal then follows recovered Id-valued facts, including transitive event dependencies. Seed
 registration completes that traversal before returning. Replay emits no changes or relevance and only
 bumps the revision when recovery adds data. Saved lookup indexes are lazy and never enumerated as
@@ -1322,3 +1325,40 @@ changes no record in either frozen transcript. The historical v4.15 addition of 
 changed the earlier hashes `d534e0dcef3f85d27cefa552217152ec` / `da48cabc405ed361ce6ad5f3b895a822`
 to these current goldens (1,067/1,069 entries); that earlier contract change is not part of this fix.
 No game session is needed. Changes remain uncommitted for the coordinator's review and integration.
+
+**193. A sweep drops only what recovery restores exactly (S0 v4.16 §14.1).** Sweeping is a memory
+optimisation and may not change a result. Contribution disposal has one predicate, shared by the sweep
+and post-save cleanup: the complete record must match the selected save exactly, name explicit targets,
+and have saved headers for every target, with none of those targets still live. Pending ends,
+contributions whose target headers were never saved, and general rules stay live. In particular an
+authored rule's applicability is independent of its origin header's lifetime; sweeping that origin
+cannot delete a rule needed by a retained target. These retained records do not become retention roots.
+Unsaved contributions are conservatively kept: the kernel cannot prove that a layer will regenerate
+their entire record exactly. Re-creation completes saved replay first, including ends and provenance;
+an original event specification never reopens an ended saved contribution.
+
+`test/sweep-replay.test.ts` covers S3H-01's 16 variants (both event APIs, incremental/snapshot saves,
+optional A reload and current/future ends), each with no-sweep and reference-first controls; S3H-02's
+four variants, with twelve controls, explicit known-live-header recovery and later record equality;
+and S3H-03's two variants, with named, unsaved and no-sweep controls and repeated fresh loads. Additional
+fixtures check silent header re-mints and selection of the loaded branch before reconciliation.
+The bounded property test runs eight deterministic seeds in both snapshot modes, 48 operations each
+(768 total), with random sweeps, releases, re-references, contribution/edge ends, both regenerations,
+time advances, saves and fresh loads. After every operation it compares retained closure, owned facts,
+intervals, authored rules and resolved values; every random save also compares whole records. It includes
+an authored fact on a never-saved header. Physical residency is intentionally excluded: replay may hold
+unreferenced saved history that live execution has already swept. Coverage assertions require all eight
+operation kinds, over 100 random saves and over 50 random fresh loads. The earlier S3C–G regressions,
+monotonicity, root order and non-rooting history remain in `test/process-evidence.test.ts`; query-first
+checks now also require saved materialisation ownership to recover during regeneration. Mutation probes
+target the partial-live-record fixture where regeneration's additional recovery makes the old
+query-first short-circuit probes redundant, and reverse all three S3H fixes independently.
+
+Validation: 25 sweep/replay tests (including the property), 88 earlier event-persistence tests, 15 retention
+tests, all 10 digest tests, all 56 source-loader mutation probes and `bun run check` pass. The unsaved-event
+retention fixture now expects unsaved contributions to remain live, as the third principle requires.
+Both frozen digests are unchanged. The guarded full suite was attempted twice with `--limit 4`; the
+machine-wide 4 GB floor stopped it while the job held 0.9 GB and 0.3 GB. The coordinator confirmed a kernel
+memory leak and requested no further retries before reboot; full-suite validation remains the coordinator's
+post-reboot check. No game session is needed. All changes are saved and uncommitted; no test logs were written
+in this worktree.

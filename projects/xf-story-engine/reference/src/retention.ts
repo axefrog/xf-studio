@@ -287,15 +287,13 @@ export class Retention {
     return this.sweepList.length;
   }
 
-  /** Discard one node's in-memory state. A minted node, which nothing can regenerate, goes entirely with the records it owns. */
+  /** Discard caches and regenerable headers; facts leave memory only when recovery can restore them exactly. */
   sweepNode(id: Id): void {
     const store = this.k.store;
     const h = store.header(id);
     if (!h) return;
     store.dropNode(id);
     if (h.origin.by === 'minted') {
-      for (const c of store.contributionsOrigin(id))
-        if (!this.k.persistence.hasPendingContribution(c)) store.removeContribution(c.id);
       for (const e of store.edgesFrom(id)) if (e.cause === id) {
         // Keep updates to saved history until the next save, without ending an open interval.
         // A saved header still identifies this as an owned edge, so it cannot become a root (S3C/D).
@@ -303,6 +301,10 @@ export class Retention {
       }
       this.k.events.forgetMaterialisation(id);
       this.removeTree(id);
+      // Origin lifetime does not determine applicability: general authored rules and facts on live
+      // targets stay. Unsaved targets and pending updates cannot be recovered exactly either.
+      for (const c of store.contributionsOrigin(id))
+        if (this.k.persistence.canSweepContribution(c)) store.removeContribution(c.id);
       // Removing a node's records changes what resolves, so cached results go (no change is emitted).
       this.k.bump();
     } else if ((h.origin.by === 'value' || h.origin.by === 'member') && !store.header(h.origin.owner)) {

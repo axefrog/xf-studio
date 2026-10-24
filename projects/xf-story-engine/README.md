@@ -76,7 +76,7 @@ events, silent restatement, nominal kind compatibility), the cores of S1 v0.5 an
   and the arc lock survive replacement loads. Later capabilities receive plain "not supported yet" findings.
   [The fixture index](reference/test/s3/README.md) records coverage and limits, including R1, the literal SF3-37
   script, and Kabuki with S1/S2 attached and fresh-process crashes at each tested window boundary.
-  Findings 175–192 in SPEC-NOTES identify contract additions and fixture contradictions for the coordinator.
+  Findings 175–193 in SPEC-NOTES identify contract additions and fixture contradictions for the coordinator.
 
 The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits use the pinned TypeScript dev dependency's compiler AST API.
 
@@ -114,8 +114,16 @@ contribution ends until recorded. The ordinary live-state view stays independent
 Reopened intervals keep their own unclamped ends even when their starts match a previous interval, with/without loading
 A or sweeping before B. S3G-01 covers all 16 release/end variants, both operation orders and retained-consumer controls.
 S3G-02 covers swept descriptor/item recovery in both root orders, incremental/snapshot records and fresh B loads.
-All 53 source-loader mutation probes reach their intended semantic assertions; `bun run check` passes. The guarded
-full suite passes **1,269 tests across 78 files in 95.44 seconds**, peaking at **1.1 GB** under the 4 GB limit.
+S3H-01 covers all 16 re-mint/restore variants with saved terminations; S3H-02 covers four never-saved-header cleanup
+variants and recovery against known live headers; S3H-03 covers both general-authored-rule variants. Each has controls.
+Sweep and post-save cleanup drop only exact recoverable contributions, independently of the origin's lifetime.
+Header re-creation replays saved facts before defaults, and load selects its recovery baseline before reconciliation.
+The bounded sweep/replay property test compares retained semantic state after every one of 768 generated operations,
+with random saves and fresh loads in both snapshot modes. All 56 source-loader mutation probes reach their intended
+semantic assertions; `bun run check` passes. The preceding guarded full-suite baseline was **1,269 tests across 78 files
+in 95.44 seconds**, peaking at **1.1 GB** under the 4 GB limit. The expanded run hit the machine-wide floor twice
+(0.9 GB and 0.3 GB in the test job); the coordinator confirmed a kernel memory leak, requested no further retries,
+and will run the full suite after reboot. Focused S3H, earlier event-persistence, retention and digest tests pass.
 Kernel digests stay at v3 `f924d2c9d1159bca85bbfa4cf18dba6c` and v4
 `42d5a84e16dde21cc0bca7fe50c01d72`; the S1 frozen transcript is unchanged. The S3 transcript checks independently encoded identities and draws, plus explicit
 persisted records. Hand-over facts, pending closure consumption and output-batch event facts survive replacement loads;

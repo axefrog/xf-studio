@@ -163,16 +163,24 @@ guarantees ([SPEC-NOTES 191–192](../projects/xf-story-engine/reference/SPEC-NO
 ## Reference-model persistence checks
 
 The Story Engine's deterministic reference model tests the logical ledger independently of the game's save-key carrier
-**[offline]**. S0 v4.16 §14.1 establishes two rules:
+**[offline]**. S0 v4.16 §14.1 establishes three rules:
 
 1. **The save chain is append-only truth.** Every change to a previously saved record is written, whether or not the
    record still has a consumer. Retention selects new material and what live memory may be swept; it never suppresses
    contribution or edge ends or pin withdrawals. Sweeping keeps an unrecorded contribution end until the next save;
-   once recorded, its orphaned live storage may go. Release itself never changes validity or clamps a reopened interval.
-2. **Recovery is replay.** Only a reached reference recovers saved records, through the same silent path as load:
+   once recorded, its orphaned live storage may go only if exact recovery is possible. Release itself never changes
+   validity or clamps a reopened interval.
+2. **Recovery is replay.** References, regeneration and re-mints recover saved records through the same silent path as load:
    headers first (including a swept descriptor), then contributions, provenance and edges. Existing live records remain
-   authoritative. Recreating an item's header through a summary query does not suppress its missing saved facts.
+   authoritative. Recreating an item's header through a summary query replays its saved facts and ownership first.
+   A known live header can recover its named saved contributions even when the header was never saved. A replacement
+   load selects its recovery baseline before settling and reconciliation, so discarded-branch facts cannot leak back.
    Saved history is never a root; unrelated history stays absent and a released recovered closure is sweepable again.
+3. **A sweep drops only what recovery restores exactly.** Sweep and post-save cleanup share a conservative contribution
+   disposal check: an exact saved record, explicit targets, saved headers for every target, and no still-live target.
+   Pending updates, unsaved facts, authored general rules and facts on never-saved headers stay live without becoming
+   roots. An origin's lifetime cannot delete an authored rule still applying to a retained target. Every path that
+   brings a node back replays saved records before synthesising defaults, so an event re-mint preserves a saved end.
 
 A referenced summary item preserves explicit descriptor/materialisation ownership alongside its participant/effect
 constants. Retention and event views share that record; contribution order or an expired overlay cannot impersonate
@@ -186,9 +194,16 @@ sweeps it and its item, then recovers either root order through incremental reco
 load. Participant facts, provenance, withdrawals, retained closure and later records agree. Earlier S3C–F regressions,
 retention monotonicity, root order, non-rooting history and authoritative live records remain covered. The source-loader
 probes reject reversals of the writer, sweep protection and descriptor-header selection at semantic assertions.
+[`sweep-replay.test.ts`](../projects/xf-story-engine/reference/test/sweep-replay.test.ts), verified 24 October 2026,
+covers S3H-01's 16 re-mint/restore variants, S3H-02's four never-saved-header cleanup variants and S3H-03's two authored-rule
+variants, each with controls, plus silent header recovery and selected-branch reconciliation. Its bounded property
+test compares live and randomly reloaded execution after every one of 768 generated operations across eight seeds and
+both snapshot modes: sweeps, releases, references, contribution/edge ends, regenerations and time advances, with random
+saves and fresh loads. It compares retained semantic state and complete saved records, rather than physical residency;
+replay may hold unreferenced history already swept from live memory. This is deterministic offline evidence.
 The frozen v3/v4 digests remain `f924d2c9d1159bca85bbfa4cf18dba6c` / `42d5a84e16dde21cc0bca7fe50c01d72`;
-these scripts exercise neither newly fixed release/end nor swept-descriptor case, so their records do not change.
-Implementation and superseded rules: [`SPEC-NOTES.md`, findings 191–192](../projects/xf-story-engine/reference/SPEC-NOTES.md).
+these scripts exercise none of the newly fixed divergence sequences, so their records do not change.
+Implementation and superseded rules: [`SPEC-NOTES.md`, findings 191–193](../projects/xf-story-engine/reference/SPEC-NOTES.md).
 These are oracle results, not new game-runtime evidence.
 
 ## Session card

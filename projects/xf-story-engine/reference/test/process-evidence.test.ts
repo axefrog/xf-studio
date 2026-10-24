@@ -423,8 +423,8 @@ for (const snapshot of [false, true]) for (const sweepBeforeB of [false, true]) 
         query();
         expect(k.store.header(item)).toBeDefined();
         if (sweepBeforeB && !loadB) {
-          expect(k.store.header(person), 'the summary query only recreates the item header').toBeUndefined();
-          expect(k.events.materialisationOf(item)).toBeUndefined();
+          expect(k.store.header(person), 'Id-valued facts are traversed when a consumer references the item').toBeUndefined();
+          expect(k.events.materialisationOf(item), 'S3F-01 semantic: query regeneration also replays saved ownership first').toEqual(provenance);
         }
       }
       const pending = structuredClone(k.pending);

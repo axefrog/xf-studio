@@ -26,7 +26,7 @@ import { Store } from './store.ts';
 import { Summaries } from './summary.ts';
 import type {
   FnRef,
-  Change, Contribution, Edge, Form, GameTime, Id, KindId, Layer, Pin, PinReason, Query, QueryOutcome, Region,
+  Change, Contribution, Edge, Form, GameTime, Id, KindId, Layer, NodeHeader, Pin, PinReason, Query, QueryOutcome, Region,
   ResolveResult, Selector, SlotPath, Value,
 } from './types.ts';
 import { PIN_PRECEDENCE, type PendingChange } from './types.ts';
@@ -273,6 +273,16 @@ export class Kernel {
 
   // ---- identity ----
 
+  /** Every re-creation completes saved replay before a caller can synthesise defaults. */
+  private recoverOrAddHeader(header: NodeHeader): boolean {
+    if (this.store.header(header.id)) return false;
+    if (this.persistence.restoreReferencedHeader(header.id)) return false;
+    const added = this.store.addHeader(header);
+    // The header may never have been saved, while authored contributions naming it were.
+    this.persistence.restoreReferencedHeader(header.id);
+    return added;
+  }
+
   expandId(idStr: string): Id {
     if (idStr.startsWith('root:')) return rootId(this.worldSeed, idStr.slice(5));
     return idStr;
@@ -281,14 +291,14 @@ export class Kernel {
   /** A root node (spec 1.1): `city`, `director`, `v`. Silent. */
   root(name: string, kind: KindId): Id {
     const nid = rootId(this.worldSeed, name);
-    this.store.addHeader({ id: nid, kind, origin: { by: 'root', name } });
+    this.recoverOrAddHeader({ id: nid, kind, origin: { by: 'root', name } });
     return nid;
   }
 
   /** A node the game owns (spec 1.1). Silent. */
   mirrored(gameKey: string, kind: KindId): Id {
     const nid = mirroredId(gameKey);
-    this.store.addHeader({ id: nid, kind, origin: { by: 'mirrored', gameKey } });
+    this.recoverOrAddHeader({ id: nid, kind, origin: { by: 'mirrored', gameKey } });
     return nid;
   }
 
@@ -296,7 +306,7 @@ export class Kernel {
   mint(creator: Id, cause: Id, name: string, kind: KindId): Id {
     this.assertWritable();
     const nid = H(hs('mint'), hid(creator), hid(cause), hs(name));
-    if (this.store.addHeader({ id: nid, kind, origin: { by: 'minted', creator, cause, name } })) {
+    if (this.recoverOrAddHeader({ id: nid, kind, origin: { by: 'minted', creator, cause, name } })) {
       this.bump();
       this.emit({ c: 'minted', node: nid, kind });
     }
@@ -306,7 +316,7 @@ export class Kernel {
   /** Mint without emitting a change (cache population, spec 9.3). Does not bump the revision. */
   mintSilent(creator: Id, cause: Id, name: string, kind: KindId): Id {
     const nid = H(hs('mint'), hid(creator), hid(cause), hs(name));
-    this.store.addHeader({ id: nid, kind, origin: { by: 'minted', creator, cause, name } });
+    this.recoverOrAddHeader({ id: nid, kind, origin: { by: 'minted', creator, cause, name } });
     return nid;
   }
 
@@ -323,12 +333,12 @@ export class Kernel {
     if (info.index === undefined) {
       if (!info.isNode) throw new Error(`"${path}" of ${h.kind} holds a value, not a node`);
       const nid = ownedId(owner, info.def.key);
-      this.store.addHeader({ id: nid, kind: (info.vt as { kind: KindId }).kind, origin: { by: 'value', owner, slot: info.def.key } });
+      this.recoverOrAddHeader({ id: nid, kind: (info.vt as { kind: KindId }).kind, origin: { by: 'value', owner, slot: info.def.key } });
       return nid;
     }
     const nid = memberId(owner, info.def.key, info.index);
     if (info.isNode) {
-      this.store.addHeader({
+      this.recoverOrAddHeader({
         id: nid, kind: (info.vt as { kind: KindId }).kind,
         origin: { by: 'member', owner, slot: info.def.key, index: info.index },
       });

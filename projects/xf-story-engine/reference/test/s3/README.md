@@ -88,8 +88,16 @@ and retained-consumer controls. B must record the contribution end, exclusive-en
 recovery and fresh replay, and whole C records must match. S3G-02 withdraws the descriptor's five original pins,
 sweeps both descriptor and item, saves B and re-references either root order, with incremental/snapshot records and
 with/without a B load. Shared header-first replay restores participant facts and provenance; unrelated history stays
-absent. All 18 new test bodies reproduced the prior defects. All 53 S3/review mutation probes pass their rejection
-checks; the new probes reverse saved contribution merging, sweep protection and descriptor-header selection.
+absent. All 18 S3G test bodies reproduced the prior defects. `sweep-replay.test.ts` covers S3H-01's 16 variants,
+S3H-02's four variants and S3H-03's two variants, with no-sweep, reference-first, saved/unsaved-header and
+general/named-rule controls. Re-mints recover saved ends before defaults, known live headers can recover saved
+contributions without a saved header, and authored general rules survive their origin's sweep. Silent header
+recovery and selected-branch reconciliation have separate fixtures. The bounded property test checks live versus
+randomly reloaded state after 768 generated operations in both snapshot modes, including contribution/edge ends
+and an authored contribution whose target header was never saved. Every random save compares complete records.
+All 56 S3/review mutation probes pass their rejection checks; the S3H probes reverse regeneration recovery, cleanup,
+known-live-header recovery and general-rule preservation. Redundant query-first probes now target partial live
+records, because query regeneration itself performs recovery.
 The S1 generated partition/reload comparison remains unchanged and checks that saved updates do not leak into the
 retention-selected live-state view.
 

@@ -178,7 +178,7 @@ export class Events {
     k.assertWritable();
     const nid = H(hs('mint'), hid(spec.creator), hid(spec.cause), hs(spec.name));
     // Reusing a header is silent: the occurrence was announced when it first happened.
-    const have = k.store.header(nid) !== undefined;
+    const have = k.persistence.restoreReferencedHeader(nid) !== undefined;
     if (!have) k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
     if (provenance) this.setMaterialisation(nid, provenance);
     if (have && k.store.contributionsNaming(nid).some((c) => c.source.layer === 'simulation' && c.source.origin === (provenance?.materialisation ?? nid))) return nid;

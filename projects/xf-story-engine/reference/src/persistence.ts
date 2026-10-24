@@ -274,10 +274,12 @@ export class Persistence {
 
   hasSavedEdge(id: Id): boolean { return this.base.edges.has(id); }
 
-  /** A sweep must leave an unrecorded end available to the next save. This is not a retention root. */
-  hasPendingContribution(c: Contribution): boolean {
+  /** Drop only exact saved facts whose absent targets recovery can restore. Never a retention root. */
+  canSweepContribution(c: Contribution): boolean {
     const saved = this.base.contributions.get(c.id);
-    return saved !== undefined && !same(saved, c);
+    const scope = c.target.scope;
+    return saved !== undefined && same(saved, c) && scope !== undefined && 'nodes' in scope &&
+      scope.nodes.length > 0 && scope.nodes.every((id) => this.base.headers.has(id) && !this.k.store.header(id));
   }
 
   /** Shared silent replay for loads and reached saved references. Existing live records win. */
@@ -305,7 +307,7 @@ export class Persistence {
     const h = store.header(id) ?? this.base.headers.get(id);
     // A summary query can recreate the header alone. Complete every reached saved reference,
     // while leaving live headers, contributions, intervals and provenance authoritative.
-    if (!h || !this.base.headers.has(id)) return h;
+    if (!h) return h;
     if (this.recovery?.base !== this.base) {
       const saved = new Store();
       for (const header of this.base.headers.values()) saved.addHeader(header);
@@ -530,10 +532,10 @@ export class Persistence {
     this.base = next;
     this.recovery = undefined;
     this.baseKey = saveKey;
-    // A sweep kept these orphaned contributions only until their update was recorded. Later references replay them.
+    // Only discard exact recoverable records. An authored fact may outlive its never-saved target header.
     for (const op of ops) if (op.op === 'ContributionEnded') {
-      const c = k.store.contribution(op.contribution), scope = c?.target.scope;
-      if (scope && 'nodes' in scope && scope.nodes.every((id) => !k.store.header(id))) k.store.removeContribution(op.contribution);
+      const c = k.store.contribution(op.contribution);
+      if (c && this.canSweepContribution(c)) k.store.removeContribution(c.id);
     }
     return rec;
   }
@@ -597,6 +599,11 @@ export class Persistence {
     k.readOnly = null;
 
     // 2. Replay silently (I-13): records go straight into the stores, with no changes and no relevance.
+    // Any re-creation during settling/reconciliation must recover from the selected save, never
+    // from the branch that load just discarded.
+    this.base = view.clone();
+    this.recovery = undefined;
+    this.baseKey = saveKey;
     this.replay(view);
     for (const b of view.beliefs.values()) k.beliefs.restore(clone(b));
     for (const c of view.canon.values()) k.events.setCanonRecord(clone(c));
@@ -652,9 +659,6 @@ export class Persistence {
 
     // 4. Start a new epoch and resume.
     report.epoch = k.newEpoch();
-    this.base = view.clone();
-    this.recovery = undefined;
-    this.baseKey = saveKey;
     // The seeding layer rebuilds its instances from the seed table the replay put back (S2 section 12.2).
     k.layer2?.onLoad();
     for (const h of k.loadHooks) h(rec, report);
