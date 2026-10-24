@@ -247,6 +247,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
   const STUB = `
     local calls = {}
     local clicked = {}
+    local buttonY = {}
     local frameTime = 10
     local y = 0
     local any = setmetatable({}, { __index = function() return 1 end })
@@ -257,8 +258,9 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
       GetFontSize = function() return 14 end,
       GetTime = function() return frameTime end,
       GetCursorPosY = function() return y end,
+      SetCursorPosY = function(pos) y = pos end,
       CalcTextSize = function(s) return #s * 7, 14 end,
-      Button = function(label) calls[#calls + 1] = "button:" .. label; y = y + 20; return clicked[label] == true end,
+      Button = function(label) calls[#calls + 1] = "button:" .. label; buttonY[label] = y; y = y + 20; return clicked[label] == true end,
       SameLine = function() calls[#calls + 1] = "sameline" end,
       Text = function(t) calls[#calls + 1] = "text:" .. tostring(t); y = y + 16 end,
       TextColored = function(r, g, b, a, t) calls[#calls + 1] = "text:" .. tostring(t); y = y + 16 end,
@@ -281,10 +283,10 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
       for k, v in pairs(extra or {}) do s[k] = v end
       return s
     end
-    local function draw(s) calls = {}; y = 0; frameTime = frameTime + 0.1; panel.draw(s, queue, nil); return calls end
+    local function draw(s) calls = {}; buttonY = {}; y = 0; frameTime = frameTime + 0.1; panel.draw(s, queue, nil); return calls end
   `;
 
-  test("the window draws: four long answers wrap onto rows, the Keys line shows the key and Change..., and a click just after the layout moved is ignored", () => {
+  test("the window draws: four long answers wrap onto rows, the Keys line shows the key and Change..., and shorter content keeps the rows in place", () => {
     const out = run(`${STUB}
       local s = state({ pendingAsk = { id = 7, text = "Which one?", choices = { "Diamond and label", "Diamond only, no label", "Nothing at all here", "Something else entirely" } } })
       local c = draw(s)
@@ -301,18 +303,54 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
         if call == "text:Keys" then keys = true end
         if string.find(call, "Change...", 1, true) then change = true end
       end
-      -- the question goes away: the slot changes height, and a click on Mark this moment in the next frame is ignored
+      local tallHeight = s.layoutHeight
+      local tallY = buttonY
+      local function rowsStayed()
+        for _, label in ipairs({ "Pause changes", "Mark this moment", "Stop the bridge", "Send##xf_comment_send", "Change...##xf_killkey_change" }) do
+          if tallY[label] == nil or buttonY[label] ~= tallY[label] then return false end
+        end
+        return s.layoutHeight == tallHeight
+      end
+      -- UI-221: answering keeps the tallest slot while open, so these controls do not move or need a new click guard.
+      frameTime = frameTime + 1
       s.pendingAsk = nil
       s.answeredAsk = { id = 7, text = "Which one?", label = "Nothing at all here" }
       clicked["Mark this moment"] = true
       draw(s)
-      local ignored = #queued == 0
-      frameTime = frameTime + 1
+      local answeredStayed = rowsStayed()
+      local accepted = #queued == 1 and queued[1] == "mark"
+      clicked = {}
+      s.answeredAsk = nil
       draw(s)
-      return table.concat({ answers, same, tostring(keys), tostring(change), tostring(ignored), tostring(queued[1]) }, ",")`);
+      local emptyStayed = rowsStayed()
+      -- init.lua calls opened on the next overlay opening: only then may the reserved space shrink.
+      panel.opened(s)
+      draw(s)
+      local reopenedShorter = buttonY["Mark this moment"] < tallY["Mark this moment"] and s.layoutHeight < tallHeight
+      return table.concat({ answers, same, tostring(keys), tostring(change), tostring(answeredStayed), tostring(emptyStayed), tostring(accepted), tostring(reopenedShorter) }, ",")`);
     // 4 answers of 17 to 23 characters at 7 px each against a 392 px row (0.8.7: the window's buttons name no key): the first two
     // share a row, the third and the fourth another.
-    expect(out).toBe("4,2,true,true,true,mark");
+    expect(out).toBe("4,2,true,true,true,true,true,true");
+  });
+
+  test("a taller question moves the rows and ignores clicks for 400 ms, then accepts them", () => {
+    const out = run(`${STUB}
+      local s = state()
+      draw(s)
+      local oldY = buttonY["Mark this moment"]
+      -- A question arriving in an already drawn empty window really does grow its slot.
+      s.pendingAsk = { id = 7, text = "Which one?", choices = { "Diamond and label", "Diamond only, no label", "Nothing at all here", "Something else entirely" } }
+      clicked["Mark this moment"] = true
+      draw(s)
+      local moved = buttonY["Mark this moment"] > oldY
+      local ignored = #queued == 0
+      frameTime = frameTime + 0.2
+      draw(s) -- 300 ms since the move, still inside the guard
+      local stillIgnored = #queued == 0
+      frameTime = frameTime + 0.2
+      draw(s) -- 600 ms since the move, outside the guard
+      return table.concat({ tostring(moved), tostring(ignored), tostring(stillIgnored), tostring(#queued), tostring(queued[1]) }, ",")`);
+    expect(out).toBe("true,true,true,1,mark");
   });
 
   test("the window draws stopped, capturing a key, and with a refused key, without errors", () => {
