@@ -41,7 +41,7 @@ function busyRun(name: string) {
     { t: 3700, op: 'event', kind: 'game.heat.3', participants: [] },
     { t: 4000, op: 'event', kind: 'enf.fee.word', place: 'c1', participants: [{ who: 'g', role: 'enforcer' }, { who: 'vendor', role: 'target' }], witnesses: 8 },
   ]);
-  sim.advance(150);
+  sim.advance(process.env.S1_FULL === "1" ? 150 : 16);
   return { sim, observed };
 }
 

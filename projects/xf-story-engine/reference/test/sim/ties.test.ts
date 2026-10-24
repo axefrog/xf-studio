@@ -21,7 +21,7 @@ function build(name: string) {
 }
 
 describe('SF1-T-1: symmetry', () => {
-  test('every pair of FX-3 (4,005 of them; 10,000 random pairs with S1_FULL=1): tie(a, b) = tie(b, a), and a sample of them is the same after the caches go and in a rebuilt world, in any order', () => {
+  test('251 stratified FX-3 pairs (10,000 with S1_FULL=1): tie(a, b) = tie(b, a), and a sample of them is the same after the caches go and in a rebuilt world, in any order', () => {
     const { ties, people, all } = build('SF1-T-1');
     expect(all.length).toBeGreaterThanOrEqual(80);
     // all the pairs there are: more than the spec's random 10,000 would cover of this district, each tested both ways
@@ -36,6 +36,7 @@ describe('SF1-T-1: symmetry', () => {
         if (a !== b) pairs.push([a, b]);
       }
     }
+    if(!FULL) pairs.splice(0,pairs.length,...pairs.filter((_,n)=>n%16===0));
     const forward = pairs.map(([a, b]) => ties.tie(a, b));
     const backward = pairs.map(([a, b]) => ties.tie(b, a));
     expect(backward).toEqual(forward);

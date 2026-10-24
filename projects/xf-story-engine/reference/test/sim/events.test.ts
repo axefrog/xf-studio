@@ -141,7 +141,10 @@ describe('SF1-S-5: one admission owner', () => {
       return { regime, m4Times: sim.stateOf<EventsState>('city.events')!.admit.m4Times };
     };
     let tried = 0;
-    for (let n = 0; n < 80; n++) {
+    // These two seeds exercise the size-4 branch at window 600. Searching for them is
+    // useful in the weekly profile, but contributes no extra assertion to the default run.
+    const seeds = process.env.S1_FULL === '1' ? Array.from({length:80},(_,n)=>n) : [21,33];
+    for (const n of seeds) {
       const open = arrive(String(n), false);
       if (open.regime.size !== 4) continue;
       tried++;
@@ -152,6 +155,7 @@ describe('SF1-S-5: one admission owner', () => {
       if (tried >= 2) break;
     }
     expect(tried).toBeGreaterThan(0);
+    if(process.env.S1_FULL !== "1") expect(tried).toBe(2);
   }, 120_000);
 });
 

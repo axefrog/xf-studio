@@ -2,10 +2,13 @@ import { probes } from './s3/review-mutations.ts';
 
 const historical = probes.filter(p => /^S3[C-I]-/.test(p.name));
 if (historical.length !== 28) throw new Error(`historical probe count changed: ${historical.length}`);
+const discovery = probes.filter(p => /^SE-229-/.test(p.name));
+if(discovery.length!==3) throw new Error("discovery probe count changed");
+const candidates = [...historical, ...discovery];
 const names = process.argv[2]?.split(',');
-const selected = historical.filter(p => !names || names.includes(p.name));
-if (names?.some(name => !historical.some(p => p.name === name))) throw new Error('unknown historical probe');
-const env = { ...process.env };
+const selected = candidates.filter(p => !names || names.includes(p.name));
+if (names?.some(name => !candidates.some(p => p.name === name))) throw new Error('unknown historical probe');
+const env: Record<string,string|undefined> = { ...process.env, S1_FULL: "0" };
 delete env.SWEEP_SEEDS;
 delete env.SWEEP_STEPS;
 delete env.SWEEP_FIRST_SEED;

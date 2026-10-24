@@ -295,7 +295,7 @@ export class Resolver {
     const env: PredicateEnv = {
       schema: this.schema,
       t,
-      read: (n, p) => (own && readsOwn(n, p) ? { value: own.value, status: 'ok' } : this.resolveWithin(ctx, n, p, t)),
+      read: (n, p) => { this.k.persistence.recoverIfSaved(n); return own && readsOwn(n, p) ? { value: own.value, status: 'ok' } : this.resolveWithin(ctx, n, p, t); },
       kindOf: (n) => { this.k.persistence.recoverIfSaved(n); return store.header(n)?.kind; },
       ownerOf: (n) => this.ownerOf(n),
       child: (n, seg) => this.childOf(ctx, n, seg, t),

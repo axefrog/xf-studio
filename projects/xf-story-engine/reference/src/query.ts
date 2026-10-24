@@ -80,12 +80,7 @@ export class Queries {
   }
 
   private children(env: PredicateEnv, node: Id): Id[] {
-    const out = new Set<Id>();
-    for (const e of this.k.store.edgesTo(node)) {
-      if (e.type === 'core:located-in' && e.valid.from <= env.t && (e.valid.to === undefined || env.t < e.valid.to)) out.add(e.from);
-    }
-    for (const o of this.k.store.ownedOf(node)) out.add(o);
-    return [...out].sort(cmpId);
+    return [...this.k.persistence.discoveryChildren(node, env.t)].sort(cmpId);
   }
 
   private execute(ctx: OpCtx, q: Query): QueryItem[] {
@@ -144,8 +139,9 @@ export class Queries {
     } else if ('region' in scope) {
       // Region scopes scan every known node of the kind and test its position.
       for (const kind of findKinds) {
-        for (const id of this.k.store.idsOfKind(kind)) {
+        for (const id of this.k.persistence.discoveryIdsOfKind(kind)) {
           ctx.allowance.spend(1);
+          this.k.persistence.recoverIfSaved(id);
           const info = this.k.schema.slotInfo(kind, 'position');
           if (!info) continue;
           const pos = env.read(id, 'position');
@@ -179,6 +175,7 @@ export class Queries {
       const entry = frontier.shift()!;
       if (++steps > cfg.maxFrontierSteps) throw new LimitExceeded(`more than ${cfg.maxFrontierSteps} frontier steps in a query`);
       ctx.allowance.spend(1);
+      this.k.persistence.recoverIfSaved(entry.id);
       if (isCandidate(entry.id)) check(entry.id);
       if (descend) for (const c of this.children(env, entry.id)) push(c);
     }

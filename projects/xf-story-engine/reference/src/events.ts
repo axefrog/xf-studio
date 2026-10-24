@@ -7,6 +7,8 @@
 
 import { H, id as hid, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
+import { newOpCtx, type OpCtx } from './resolve.ts';
+import { failIfFailed } from './work.ts';
 import type { Effect, GameTime, Id, PinReason, SlotPath, Value } from './types.ts';
 
 export interface EventSpec {
@@ -427,11 +429,15 @@ export class Events {
   }
 
   /** Known events whose `time` resolves to exactly `t` (used by `knows`, SPEC-NOTES 21). */
-  eventsAtTime(t: GameTime): Id[] {
+  eventsAtTime(t: GameTime, ctx: OpCtx = newOpCtx(this.k.config.allowance)): Id[] {
     const out: Id[] = [];
     for (const kindId of this.k.schema.kindsOf('core:event')) {
-      for (const id of this.k.store.idsOfKind(kindId)) {
-        if (this.k.value(id, 'time', t) === t) out.push(id);
+      for (const id of this.k.persistence.discoveryIdsOfKind(kindId)) {
+        ctx.allowance.spend(1);
+        this.k.persistence.recoverIfSaved(id);
+        const time = this.k.resolver.resolveWithin(ctx, id, 'time', t);
+        failIfFailed(time.status, `time of ${id}`);
+        if (time.value === t) out.push(id);
       }
     }
     return out.sort();

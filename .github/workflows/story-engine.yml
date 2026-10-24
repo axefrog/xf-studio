@@ -5,8 +5,8 @@
 # (research/story-engine/spec/kernel.md). Its suite includes the frozen determinism digest, so a
 # change that alters any resolved value fails here.
 #
-# The default suite runs the long fixtures at a smaller scale (a few minutes at most). The spec's own figures
-# (a Kabuki week, 100 game days, 20 seeds of 30 days, 10,000 casts) run with S1_FULL=1, in the second job: on a
+# The default suite runs the long fixtures at a smaller scale (under two minutes locally). The spec's own figures
+# (a Kabuki week, 100 game days, 20 seeds of 30 days, 10,000 casts and the 2,048-seed sweep/replay hunt) run with S1_FULL=1, in the second job: on a
 # manual run and once a week, never on a push or a pull request.
 name: Story Engine
 
@@ -63,7 +63,7 @@ jobs:
     # the spec's figures: manual runs and the weekly schedule only
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 120
     concurrency:
       group: story-engine-full-${{ github.ref }}
       cancel-in-progress: false

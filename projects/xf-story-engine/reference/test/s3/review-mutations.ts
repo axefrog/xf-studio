@@ -149,4 +149,15 @@ export const probes: Probe[] = [
   { ...probe('S3I-02-completeness', 'S3I completeness', 'src/events.ts',
     'if (complete) {', "if (have && k.store.contributionsNaming(nid).some((c) => c.source.layer === 'simulation' && c.source.origin === nid)) return nid;\n    if (complete) {"),
     file: 'test/sweep-operations.test.ts' },
+  {...probe('SE-229-place', 'SE-229-place', 'src/query.ts',
+    'return [...this.k.persistence.discoveryChildren(node, env.t)].sort(cmpId);',
+    `return [...new Set([...this.k.store.edgesTo(node).filter(e=>e.type==='core:located-in' && e.valid.from<=env.t && (e.valid.to===undefined || env.t<e.valid.to)).map(e=>e.from),...this.k.store.ownedOf(node)])].sort(cmpId);`),file:'test/discovery.test.ts'},
+  {...probe('SE-229-time', 'SE-229-time', 'src/events.ts',
+    'this.k.persistence.discoveryIdsOfKind(kindId)', 'this.k.store.idsOfKind(kindId)'),file:'test/discovery.test.ts'},
+  {...probe('SE-229-witness', 'SE-229-witness', 'src/beliefs.ts',
+    'k.events.eventsAtTime(t, ctx)',
+    `k.schema.kindsOf('core:event').flatMap(kind=>k.store.idsOfKind(kind)).filter(id=>k.value(id,'time',t)===t)`),file:'test/discovery.test.ts'},
+  {...probe('SE-231-kindOf', 'SE-231-facade', 'src/resolve.ts',
+    'kindOf: (n) => { this.k.persistence.recoverIfSaved(n);', 'kindOf: (n) => {'),file:'test/recovery-api.test.ts'},
+
 ];

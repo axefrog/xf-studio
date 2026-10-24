@@ -21,6 +21,7 @@ import { differing, recordOf } from './records.ts';
 setDefaultTimeout(120_000);
 
 const W = 600;
+const FULL = process.env.S1_FULL === "1";
 const SRC = join(import.meta.dir, '../../src/sim');
 const files = readdirSync(SRC).filter((f) => f.endsWith('.ts')).map((f) => ({ path: f, text: readFileSync(join(SRC, f), 'utf8') }));
 const adult = { alive: 'yes', 'age-class': 'adult' } as const;
@@ -37,8 +38,8 @@ describe('the invariants of the simulation layer', () => {
     expect(found).toEqual([]);
     const a = mk();
     const b = mk();
-    a.advance(40);
-    b.advance(40);
+    a.advance(FULL ? 40 : 12);
+    b.advance(FULL ? 40 : 12);
     expect(differing(recordOf(a), recordOf(b))).toEqual([]);
   });
 
@@ -55,7 +56,7 @@ describe('the invariants of the simulation layer', () => {
       });
       if (flip) for (const c of Object.values(index.cells)) c.presence = reversed(c.presence);
       const sim = Sim.create({ worldSeed: seedOf('S1-I-1o'), index, data });
-      sim.advance(100);
+      sim.advance(FULL ? 100 : 40);
       return { sim, rec: recordOf(sim) };
     };
     const a = run(false);
@@ -90,7 +91,7 @@ describe('the invariants of the simulation layer', () => {
       const sim = mk();
       new ReplayPort(sim).submit([{ t: 0, op: 'reading', node: 'v', slot: 'cell', value: cell }]);
       if (extra) sim.k.frames.demandRoots.add(sim.people.residentAt(sim.w.districts[0]!.cellIds[2]!, 1));
-      sim.advance(40);
+      sim.advance(FULL ? 40 : 12);
       return recordOf(sim, { processes: ['scene.acts'], logProcs: ['scene.acts'] });
     };
     expect(differing(run('c1', false), run('c3', true)).filter((x) => !['frames', 'seeds', 'headers'].includes(x))).toEqual([]);
@@ -115,14 +116,14 @@ describe('the invariants of the simulation layer', () => {
   test('S1-I-7 One writer: no two processes write one slot, mint one node family or write one edge type', () => {
     const sim = mk();
     const observed = observeWrites(sim);
-    sim.advance(40);
+    sim.advance(FULL ? 40 : 12);
     expect(auditWriters(PROCESS_WRITES, observed)).toEqual([]);
   });
 
   test('S1-I-8 V is never aimed at, never modelled: no output names V as harmed and no belief about V models V\'s feelings, desire or drives', () => {
     const sim = mk();
     new ReplayPort(sim).submit(genScript(0x18, 60));
-    sim.advance(60);
+    sim.advance(FULL ? 60 : 16);
     const harm = new Set<string>(sim.data.gate.harmEffects);
     for (const o of occurrences(sim)) void o;
     for (const e of sim.k.store.idsOfKind('core:event')) {
@@ -154,7 +155,7 @@ describe('the invariants of the simulation layer', () => {
 
   test('S1-I-10 Counts agree: a summary\'s count equals its items, opening an item adds nothing, every occurrence has one descriptor', () => {
     const sim = mk(busy(25), 'S1-I-10', ['city.events']);
-    sim.advance(50);
+    sim.advance(FULL ? 50 : 16);
     for (const e of eventsState(sim).ring) {
       if (e.count === undefined) continue;
       expect(sim.k.value(e.id, 'count')).toBe(e.count);
@@ -166,7 +167,7 @@ describe('the invariants of the simulation layer', () => {
 
   test('S1-I-11 Causes precede effects: a child is born in a later window and later in time than its parent; chains are capped', () => {
     const sim = mk(busy(25), 'S1-I-11', ['city.events']);
-    sim.advance(120);
+    sim.advance(FULL ? 120 : 32);
     const all = occurrences(sim);
     const byId = new Map(all.map((o) => [o.id, o]));
     let links = 0;
@@ -183,7 +184,7 @@ describe('the invariants of the simulation layer', () => {
 
   test('S1-I-12 Bounded state: the calendar, the ring, the ledger, a person\'s ties and memorable beliefs, a scene\'s people and items', () => {
     const sim = mk();
-    sim.advance(60);
+    sim.advance(FULL ? 60 : 16);
     expect(Object.values(eventsState(sim).calendar).every((l) => l.length <= sim.data.events.calendarCap)).toBe(true);
     expect(eventsState(sim).ring.every((e) => sim.windowNow() - 1 - e.w < sim.data.events.heatHorizon)).toBe(true);
     // a person holds at most 20 materialised ties
@@ -272,7 +273,7 @@ describe('the invariants of the simulation layer', () => {
     const sim = mk();
     const observed = observeWrites(sim);
     new ReplayPort(sim).submit(genScript(0x17, 60));
-    sim.advance(60);
+    sim.advance(FULL ? 60 : 16);
     const mirroredSlots = new Set(['affiliation', 'alive', 'quest-linked', 'crowd', 'position', 'district', 'cell', 'wanted', 'tracked', 'jstate']);
     for (const keys of Object.values(observed)) for (const key of keys) {
       const m = /^pin:xf:(person|v-state|journal)\.(.+)$/.exec(key);
@@ -292,7 +293,7 @@ describe('the invariants of the simulation layer', () => {
 
   test('S1-I-19 Regeneration: a forgotten resident, household, item or cast resolves identically', () => {
     const sim = mk(busy(25), 'S1-I-19', ['city.events']);
-    sim.advance(50);
+    sim.advance(FULL ? 50 : 16);
     const d = sim.w.districts[0]!;
     const sample = d.cellIds.flatMap((c) => sim.people.residentsOfBlock(c)).slice(0, 20);
     const before = sample.map((r) => JSON.stringify(sim.people.view(r)));
@@ -306,7 +307,7 @@ describe('the invariants of the simulation layer', () => {
   test('S1-I-20 Derived is never pinned: every pin a process writes is on an assigned slot', () => {
     const sim = mk();
     const observed = observeWrites(sim);
-    sim.advance(60);
+    sim.advance(FULL ? 60 : 16);
     for (const keys of Object.values(observed)) for (const key of keys) {
       const m = /^pin:([^.]+)\.(.+)$/.exec(key);
       if (!m) continue;
@@ -340,7 +341,7 @@ describe('the invariants of the simulation layer', () => {
 
   test('S1-I-23 Policy state is plain data: every process state, digest and the S1 record encode canonically', () => {
     const sim = mk();
-    sim.advance(40);
+    sim.advance(FULL ? 40 : 12);
     for (const id of sim.defs.keys()) {
       expect(() => canonicalKey(sim.stateOf(id))).not.toThrow();
       expect(() => canonicalKey(sim.digestOf(id) ?? null)).not.toThrow();
@@ -396,7 +397,7 @@ describe('the invariants of the simulation layer', () => {
 
   test('S1-I-27 Transitions: every registered read publishes its value at the start of the range, then each change in time order', () => {
     const sim = mk(busy(30), 'S1-I-27');
-    sim.advance(60);
+    sim.advance(FULL ? 60 : 16);
     const cell = sim.w.districts[0]!.cellIds[0]!;
     for (const [name, args] of [['band', [cell]], ['regime', ['fx_d1']], ['priceLevel', ['fx_d1']], ['normGap', ['fee', 'fx_d1']]] as Array<[string, unknown[]]>) {
       const from = sim.k.now - 4 * W;

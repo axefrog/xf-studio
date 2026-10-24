@@ -1395,7 +1395,7 @@ The record/header restoration methods are typed return-value adapters over that 
 and procedural read facades use it too. Pure identity functions and raw physical storage, replay,
 notification and collector hooks do not acquire semantic references. Their explicit inventory below
 makes that distinction reviewable: a collector must not resurrect the records it is collecting.
-The AST inventory test enumerates 415 public operations, resolves nested record types and checks reference methods, including
+The original S3J AST inventory enumerated 415 public operations; entry 196 extends it to separate facade callables and exported expressions. It resolves nested record types and checks reference methods, including
 future methods, against the gate/delegation boundary and this list. Raw Store and PersistedView APIs
 are listed individually; adding one also requires an inventory update.
 The sibling checks include computed edge identities and withdrawal reads, and reject recovery placed
@@ -1418,7 +1418,7 @@ The default property has eight seeds in both snapshot modes, 48 random operation
 eight stratified lifecycle templates: 912 generated operations across 16 three-way scenarios. Every
 retention-root category participates. Raw retained headers, facts, edge intervals/data, withdrawals,
 provenance and pending semantic changes are compared before any lazy reads. Resolution, `readEvent()`
-and all spatial results run on a disposable projection with an empty recovery baseline; serialization
+run on a disposable projection with an empty recovery baseline (the history-prefilled spatial observer was superseded by entry 196); serialization
 checks that observation leaves every source table, worklist, queue and revision untouched. Expired
 unpersisted overlays remain available to challenge event-view provenance, while deliberately ephemeral
 overlays are excluded from factual and resolved-value equality. Random targets independently include
@@ -1915,3 +1915,142 @@ Schema, hashing and identity arithmetic never inspect live state.
 | `World.standingOfCarrier` | layer-owned data or gated kernel delegation |
 | `writeKeys` | raw: physical audit classification; never repairs the audited store |
 | `writeSeedFact` | recoverIfSaved |
+
+
+**196. Semantic discovery and callable recovery boundaries (SE-229 to SE-231).**
+
+S0 v4.16 section 14.1 requires discovery to agree before and after a sweep, even when the caller
+knows only the place, time or witness rather than the saved event id. `Persistence.discoveryChildren`
+and `Persistence.discoveryIdsOfKind` enumerate the union of live and selected-save candidate indexes.
+The saved indexes are shared with the existing recovery selector, invalidated on save/load, and never
+contribute retention roots. Candidate enumeration preserves authoritative live edge intervals and
+snapshots live kind membership before recovery can add dependent candidates. Each query frontier or
+region candidate is charged before common-gate recovery; temporal and witness reads share one operation
+allowance with their nested resolutions. Exhaustion fails instead of yielding an incomplete discovery.
+
+`test/discovery.test.ts` checks the exact O/S/P/E reproduction as three independent reads in incremental
+and snapshot modes against unswept and fresh-load controls. Reads start with E physically absent,
+recover it without a producer recipe, leave it unretained, and allow it to sweep again. Further checks
+cover live edge ends, operation budgets, indirect recovery of another candidate, region discovery and
+unrelated saved events remaining absent. Source-loader counterfactuals for each of place/time/witness
+fail at their named semantic assertions in both save modes.
+
+The property observer no longer installs saved headers, contributions, pins, materialisations or edges
+in its disposable projection. It compares raw retained closure first, then observes values in that
+projection with an empty recovery baseline. Public spatial queries, `Events.eventsAtTime` and
+`Beliefs.witnessed` instead run as generated operations on each execution, without preparatory recovery.
+Every lifecycle includes save/release/sweep/discovery, rotating the three read orders and sweeping before
+each read. Random discovery checks saved event identities, excluding deliberately never-saved producer
+recipes; the lifecycle comparisons use complete public results. A saved-ended-contribution re-submission
+sequence is stratified too: reducing the random tail to 16 originally missed S3I-01-contribute, and this
+sequence restores the full 31/31 mutation bar without relying on longer random luck.
+
+The default property uses eight seeds in both snapshot modes, 20 random operation kinds, 16 random
+steps per scenario and eight lifecycle templates: **550 operations, 166 saves and 136 counted loads**.
+It rejects **28/28 historical S3C-I probes plus 3/3 SE-229 discovery counterfactuals**, with zero missed or
+invalid probes. All **64/64 dedicated source-loader probes** fail at their intended semantic assertion,
+including SE-231's facade `kindOf` removal. No setup, import or timeout failure counts as evidence.
+
+The recovery inventory enumerates **482 operations**. It treats object facade callables, returned functions and exported arrows/function
+expressions as independent operations. AST walks exclude nested callable bodies when checking their
+factory, resolve simple store/argument aliases in lexical scope, and require the lookup's actual input
+to be covered by an earlier gate. Counterfactuals reject wrong-argument recovery, factory-only recovery,
+aliased table reads and ungated exported expressions. The real `Resolver.makeEnv.kindOf` is audited in
+isolation and tested after factory creation followed by a sweep, before any other facade can repair it.
+The read facade gates its own argument before inspecting an operation's own-value override.
+
+Default-suite performance was measured under the 4 GB memory guard on the same worktree:
+
+| Check | Before | Current bounded profile |
+|---|---|---|
+| Full default suite | 1,340 pass / 81 files, **271.62 s**, 1.1 GB peak | Final checkpoint below |
+| Sweep/replay property | 26.28 s within baseline suite | 5.81 s standalone, 0.3 GB peak |
+| Two size-4 regime witnesses | 4.62 s seed search | 0.29 s using deterministic seeds 21 and 33 |
+| Tie symmetry | 4,005 pairs, 1.79 s | 251 stratified pairs, 0.36 s |
+
+No assertion thresholds were relaxed. The frozen 1,000-operation digests and their coverage assertions
+remain in the default suite. Repeated digest/transcript mutation/repeat runs, the week-scale E1/E2
+fixtures and statistical multi-world metamorphic runs are `S1_FULL=1` checks. Smaller simulation
+horizons, population samples and random tails keep their semantic assertions and explicit non-vacuity
+checks; the full profile restores the original or larger scale. S3's default crash matrix keeps first,
+last and all-boundary reload runs; the full profile also tests every individual boundary. Parsing the
+immutable inventory source once avoids repeating the same AST setup for each counterfactual.
+
+`S1_FULL=1` also runs 2,048 distinct sweep/replay seeds in each snapshot mode (16 random steps plus the
+same lifecycle grammar). The existing weekly/manual CI job sets that flag; its timeout is now 120
+minutes to accommodate the added hunt. `SWEEP_SEEDS`, `SWEEP_FIRST_SEED` and `SWEEP_STEPS` override
+local hunt bounds; `SWEEP_PROGRESS=1` reports progress without writing logs. The property mutation
+runner always selects the bounded default profile, regardless of the caller's full-profile flag.
+
+Both frozen digests are unchanged: v3 `746601727380a3fdff647f873c91c971`, v4
+`8fce55b19462a1e02f03ca5336bd8c16`. No golden or frozen transcript was edited. These fixes affect
+discovery of swept saved history, which those fixed scripts do not exercise. The earlier authorized
+S3J migration remains documented in entry 195; there is no digest migration in this checkpoint.
+
+Additional audited operations (including exported function expressions and facade callables):
+
+- `arbTie`: layer-owned data or gated kernel delegation.
+- `beatDeliveryId`: layer-owned data or gated kernel delegation.
+- `beatSince`: layer-owned data or gated kernel delegation.
+- `beatSincePlay`: layer-owned data or gated kernel delegation.
+- `castEdgeId`: layer-owned data or gated kernel delegation.
+- `castEnforcement`: layer-owned data or gated kernel delegation.
+- `closeDeliveryId`: layer-owned data or gated kernel delegation.
+- `complies`: layer-owned data or gated kernel delegation.
+- `effectEventId`: layer-owned data or gated kernel delegation.
+- `fragmentOf`: layer-owned data or gated kernel delegation.
+- `globalId`: layer-owned data or gated kernel delegation.
+- `goalFrameId`: layer-owned data or gated kernel delegation.
+- `instanceId`: layer-owned data or gated kernel delegation.
+- `Kernel.isId`: raw: pure type guard.
+- `kernelView.aesthetic`: layer-owned data or gated kernel delegation.
+- `kernelView.event`: layer-owned data or gated kernel delegation.
+- `kernelView.eventKind`: layer-owned data or gated kernel delegation.
+- `kernelView.eventKinds`: layer-owned data or gated kernel delegation.
+- `kernelView.holds`: layer-owned data or gated kernel delegation.
+- `kernelView.isKind`: layer-owned data or gated kernel delegation.
+- `kernelView.isSpine`: layer-owned data or gated kernel delegation.
+- `kernelView.kind`: recoverIfSaved.
+- `Layer2.fitWeights.returned`: layer-owned data or gated kernel delegation.
+- `layerOfInstance`: layer-owned data or gated kernel delegation.
+- `memberId`: layer-owned data or gated kernel delegation.
+- `mintedId`: layer-owned data or gated kernel delegation.
+- `newsDeliveryId`: layer-owned data or gated kernel delegation.
+- `normsProcess.init`: layer-owned data or gated kernel delegation.
+- `normsProcess.run`: via restoreReferencedHeader.
+- `offerId`: layer-owned data or gated kernel delegation.
+- `originOf`: layer-owned data or gated kernel delegation.
+- `outcomeEventId`: layer-owned data or gated kernel delegation.
+- `ownedId`: layer-owned data or gated kernel delegation.
+- `packRootId`: layer-owned data or gated kernel delegation.
+- `Persistence.discoveryChildren`: raw: candidate index only; consumer charges and recovers reached ids.
+- `Persistence.discoveryIdsOfKind`: raw: candidate index only; consumer charges and recovers reached ids.
+- `readsOf`: layer-owned data or gated kernel delegation.
+- `regardEdgeId`: layer-owned data or gated kernel delegation.
+- `replyDeliveryId`: layer-owned data or gated kernel delegation.
+- `residentType`: layer-owned data or gated kernel delegation.
+- `Resolver.makeEnv.charge`: layer-owned data or gated kernel delegation.
+- `Resolver.makeEnv.child`: layer-owned data or gated kernel delegation.
+- `Resolver.makeEnv.edgesFrom`: recoverIfSaved.
+- `Resolver.makeEnv.edgesTo`: recoverIfSaved.
+- `Resolver.makeEnv.expandId`: layer-owned data or gated kernel delegation.
+- `Resolver.makeEnv.kindOf`: recoverIfSaved.
+- `Resolver.makeEnv.ownerOf`: layer-owned data or gated kernel delegation.
+- `Resolver.makeEnv.read`: recoverIfSaved.
+- `responseEventId`: layer-owned data or gated kernel delegation.
+- `roleFrameId`: layer-owned data or gated kernel delegation.
+- `rootId`: layer-owned data or gated kernel delegation.
+- `seedFactNode`: layer-owned data or gated kernel delegation.
+- `seedFactPinId`: layer-owned data or gated kernel delegation.
+- `simulatedDistricts`: layer-owned data or gated kernel delegation.
+- `sowTemplate.afterExpand`: layer-owned data or gated kernel delegation.
+- `sowTemplate.draw`: layer-owned data or gated kernel delegation.
+- `sowTemplate.evalPred`: layer-owned data or gated kernel delegation.
+- `standInNode`: layer-owned data or gated kernel delegation.
+- `stateSince`: layer-owned data or gated kernel delegation.
+- `stateSincePlay`: layer-owned data or gated kernel delegation.
+- `subKey`: layer-owned data or gated kernel delegation.
+- `tieEdgeId`: layer-owned data or gated kernel delegation.
+- `watchFrameId`: layer-owned data or gated kernel delegation.
+
+- `Events.eventsAtTime`: recoverIfSaved per budgeted candidate.

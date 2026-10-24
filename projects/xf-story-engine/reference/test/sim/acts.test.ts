@@ -233,7 +233,7 @@ describe('SF1-A-5: coarse against detail', () => {
     const make = (vCell: string) => {
       const sim = Sim.create({ worldSeed: seedOf('SF1-A-5'), index: fx3Slice(), data: fxData((d) => { for (const k of Object.keys(d.shape.rate)) d.shape.rate[k] = d.shape.rate[k]!.map((x) => x * 40) as [number, number, number, number]; }), only: ['city.events', 'order.stocks', 'order.norms', 'group.decide', 'scene.acts'] });
       new ReplayPort(sim).submit([{ t: 0, op: 'reading', node: 'v', slot: 'cell', value: vCell }]);
-      sim.advance(FULL ? 60 : 36);
+      sim.advance(FULL ? 60 : 8);
       return sim;
     };
     const a = make('c1');
