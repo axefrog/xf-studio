@@ -46,10 +46,11 @@ export class ViewportInputHints {
   private pointer: { x: number; y: number } | undefined;
   private dwell: ReturnType<typeof setTimeout> | undefined;
   private tipReady = false;
+  private readonly unsubscribe: () => void;
   constructor(private source: ViewportInputSource, private scope: ViewportScope, private slot: HTMLElement, private host: HTMLElement) {
     this.strip = h("div", { class: "input-hints", "data-scope": scope });
     this.tip = h("div", { class: "target-tip", role: "tooltip", hidden: true });
-    source.subscribeInput(() => this.render());
+    this.unsubscribe = source.subscribeInput(() => this.render());
     // Presentation-only pointer tracking: where to place the tooltip and when it has dwelt long enough.
     slot.addEventListener("pointermove", event => {
       this.pointer = { x: event.clientX, y: event.clientY };
@@ -60,6 +61,8 @@ export class ViewportInputHints {
     slot.addEventListener("pointerleave", reset);
     slot.addEventListener("pointerdown", () => { clearTimeout(this.dwell); this.tipReady = false; this.render(); });
   }
+  /** The pane went (a 3D view closed): stop following the input. */
+  dispose() { clearTimeout(this.dwell); this.unsubscribe(); }
   context(): ViewportInputContext {
     const input = this.source.input(), own = input[this.scope];
     return { scope: this.scope, target: own.target, gesture: own.gesture, modifiers: input.modifiers, blocked: this.blocked, editing: this.editing };

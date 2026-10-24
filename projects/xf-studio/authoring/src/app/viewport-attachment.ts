@@ -3,7 +3,7 @@ import type { UVSelectionVisibility, UVView } from "../legacy/eye-makeup/uv-view
 import type { StudioApplication } from "./studio-application";
 import type { StudioContextHit } from "./studio-context-targets";
 import { NO_MODIFIERS, type EditorInputState, type HeldModifiers, type UVViewCommand, type ViewportScope } from "./input-bindings";
-import { MAIN_VIEW, viewPanelId } from "../platform/api/view-graph";
+import { MAIN_VIEW, viewPanelId, type ViewId } from "../platform/api/view-graph";
 
 export type { UVViewCommand };
 /**
@@ -32,8 +32,14 @@ export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: s
    */
   preparation?: PreparationState };
 type PhaseState = { phase: ViewportPhase; error?: string; message?: string; progress?: number | null };
+/**
+ * Which 3D view the head host draws (experiment 044 P2-iii-b): `drawn` is the view the window draws (the shown tab's most recently focused
+ * one), `onCanvas` the view whose picture the canvas holds now. They differ while the drawn view's head is made ready and the view drawn
+ * before keeps its picture; both are absent while nothing is drawn. The presentation puts the canvas in `onCanvas`'s pane (else `drawn`'s).
+ */
+export type DrawnViews = { readonly drawn?: ViewId; readonly onCanvas?: ViewId };
 export type ViewportAttachmentState = {
-  head: ViewportHostState & { view?: CameraState };
+  head: ViewportHostState & { view?: CameraState } & DrawnViews;
   uv: ViewportHostState & { view?: UVView; selection?: UVSelectionVisibility };
 };
 export type ViewportHit = { hit: StudioContextHit; mirror?: boolean;
@@ -66,6 +72,7 @@ export type ViewportAttachmentPort<Slot, Host extends ViewportHostId = ViewportH
 export class ViewportAttachment<Slot, Host extends ViewportHostId = ViewportHostKind> {
   private phases = new Map<Host, PhaseState>();
   private preparations = new Map<Host, PreparationState>();
+  private drawnViews: DrawnViews = {};
   private listeners = new Set<() => void>();
   private inputListeners = new Set<() => void>();
   private inputState: ViewportInputSnapshot;
@@ -111,6 +118,13 @@ export class ViewportAttachment<Slot, Host extends ViewportHostId = ViewportHost
     this.known(kind);
     if (JSON.stringify(state ?? undefined) === JSON.stringify(this.preparations.get(kind))) return;
     if (state) this.preparations.set(kind, { ...state }); else this.preparations.delete(kind);
+    this.publish();
+  }
+  /** Which view the head host draws, and whose picture its canvas holds (`DrawnViews`). */
+  setDrawn(views: DrawnViews) {
+    const next = { ...(views.drawn !== undefined ? { drawn: views.drawn } : {}), ...(views.onCanvas !== undefined ? { onCanvas: views.onCanvas } : {}) };
+    if (next.drawn === this.drawnViews.drawn && next.onCanvas === this.drawnViews.onCanvas) return;
+    this.drawnViews = next;
     this.publish();
   }
   /** Not interactive yet: still loading or preparing (with progress), or waiting for something (neutral). */
@@ -184,7 +198,7 @@ export class ViewportAttachment<Slot, Host extends ViewportHostId = ViewportHost
         ...(preparation ? { preparation: { ...preparation } } : {}) };
     };
     return {
-      head: { ...state("head" as Host), view: structuredClone(this.port.headView()) },
+      head: { ...state("head" as Host), view: structuredClone(this.port.headView()), ...this.drawnViews },
       uv: { ...state("uv" as Host), view: structuredClone(this.port.uvView()),
         ...(this.port.uvSelection?.() ? { selection: structuredClone(this.port.uvSelection()) } : {}) },
     };

@@ -8,7 +8,8 @@ import type { Frame, StudioRuntime } from "../runtime";
 import type { ViewToolEntry } from "../../app/studio-application";
 import type { ViewContext } from "../views/panels";
 import { viewportMenu } from "../target-menus";
-import type { PanelController } from "./collection";
+import type { ViewId } from "../../platform/api/view-graph";
+import { viewPaneState, type ViewPaneController, type ViewPaneState } from "./view-panels";
 import { PANEL_META } from "../panel-meta";
 import { DETAIL_NOTICE_TEXT } from "./preview";
 import { wolvenKitStepButton } from "../wolvenkit-step";
@@ -88,7 +89,47 @@ function viewToolbar(rt: StudioRuntime) {
   } };
 }
 
-export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController {
+/**
+ * A 3D view's pane while the window draws another view (U7, style guide c-setup): its title, what it shows (its V and look) and Show here.
+ * Show here, a press anywhere in the pane, and Enter or Space on the pane each call `show` (drawing it is the person's focus, `focus.view`);
+ * moving keyboard focus into the pane draws it too, through the shell's focus report. Hidden while the pane draws its view.
+ */
+export function notDrawnState(pane: HTMLElement, show: () => void) {
+  const title = h("p", { class: "viewport-idle-title" }), shows = h("p", { class: "viewport-idle-shows" });
+  const here = button({ label: "Show here", small: true, onClick: show });
+  const element = h("div", { class: "viewport-state", "data-tone": "idle", hidden: true },
+    h("span", { class: "viewport-state-icon" }, icon("head")), h("div", { class: "viewport-idle-text" }, title, shows), here);
+  let active = false;
+  // A press anywhere in the pane (Show here answers its own).
+  element.addEventListener("click", event => { if (active && !here.contains(event.target as Node)) show(); });
+  pane.addEventListener("keydown", event => {
+    if (!active || event.target !== pane || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    show();
+  });
+  return { element, button: here,
+    /** Show it (with the view's title and what it shows) or hide it. Returns the pane's accessible name while shown. */
+    update(state: { shown: false } | { shown: true; title: string; shows: string }): string | undefined {
+      active = state.shown;
+      element.hidden = !state.shown;
+      if (!state.shown) return undefined;
+      setText(title, state.title); title.title = state.title;
+      setText(shows, state.shows); shows.title = state.shows;
+      return `${state.title}, not shown. Press Enter to show it here.`;
+    } };
+}
+/** What a view shows, in the not-drawn state's words ("V · Valerie · Smoky"; "No look" when its scene shows none). */
+export function viewShowsLine(shows: { readonly v?: string; readonly look?: string }): string {
+  return [shows.v, shows.look ?? "No look"].filter(Boolean).join(" · ");
+}
+
+/**
+ * A 3D view's pane (experiment 044 P2-iii-b): `head` for the main view, `view.<id>` for another. While it holds the canvas it shows the
+ * picture with its overlays, or the head's loading, setup or error state; while its view is drawn and another view keeps the picture, its own
+ * preparation progress; otherwise the not-drawn state. Its view is the graph's view shown in panel `id`. The canvas is put in its slot by
+ * the view panes' owner (view-panels.ts).
+ */
+export function headPanel(rt: StudioRuntime, view: ViewContext, id = "head"): ViewPaneController {
   const port = rt.port;
   const slot = h("div", { class: "viewport-slot" });
   // What the head pane shows until the head is interactive: progress, a neutral "still needed" note or a
@@ -111,6 +152,9 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
   const toolbar = viewToolbar(rt);
   const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `3D view. ${keyDescription("head")}` });
   const hints = new ViewportInputHints(port.viewport, "head", slot, element);
+  /** The view this pane shows (the graph names its panel), read at each paint. */
+  let paneView: ViewId | undefined;
+  const idle = notDrawnState(element, () => { if (paneView !== undefined) port.focus.view(paneView); });
   // Quiet, overlaid status for the V's skin, face details, eyes, brows, lashes, hair, piercings and body: progress while they prepare, one plain line
   // when something can't be shown, with its one next step when it waits for WolvenKit (NATIVE-47). While the V shown stays and the next one
   // is made ready (profiles phase 4a-v), it says which stage that is, with a thin bar for how far. Absolutely placed, so it never moves the
@@ -123,14 +167,14 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
   const detailStatus = h("div", { class: "viewport-detail-status", hidden: true }, detailText, detailStep.element, nextBar.element);
   /** When the preparation shown now began (its key), so a preparation shorter than the delay never flashes a line. */
   let preparingKey = "", preparingSince = 0, lineTimer: ReturnType<typeof setTimeout> | undefined, lastFrame: Frame | undefined;
-  element.append(slot, loading, detailStatus,
-    h("div", { class: "viewport-top" }, context, toolbar.element),
-    h("div", { class: "viewport-bottom" }, hints.strip, badge.element), hints.tip);
-  port.viewport.attach("head", slot);
-  rt.anchors.register("head.view", element);
-  contextMenuGate("head", slot, event => viewportMenu(rt, "head", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
+  const top = h("div", { class: "viewport-top" }, context, toolbar.element), bottom = h("div", { class: "viewport-bottom" }, hints.strip, badge.element);
+  element.append(slot, loading, idle.element, detailStatus, top, bottom, hints.tip);
+  /** What the pane shows now (view-panels.ts): the picture, its own progress, or not drawn. */
+  let paneState: ViewPaneState = "not-drawn", releaseAnchor: (() => void) | undefined;
+  const holds = () => paneState === "canvas";
+  contextMenuGate("head", slot, event => { if (holds()) viewportMenu(rt, "head", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element); });
   element.addEventListener("keydown", event => {
-    if (event.target !== element || isTextInput(event.target)) return;
+    if (event.target !== element || isTextInput(event.target) || !holds()) return;
     const binding = keyBinding("head", event);
     if (binding?.id === "head.menu") { event.preventDefault(); viewportMenu(rt, "head", element, undefined, element); }
     else if (binding?.id === "head.front") { event.preventDefault(); rt.dispatch({ kind: "camera.front" }); }
@@ -169,7 +213,8 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
     const details = frame.status.assets.characterDetails;
     const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
     // The next V being made ready while this one stays shown comes first, once it has run long enough to be worth a line.
-    const next = state.phase === "ready" ? state.preparation : undefined;
+    // A view drawn elsewhere being made ready shows its progress in its own pane (`paintPreparing`), not here.
+    const next = state.phase === "ready" && (state.drawn === undefined || state.drawn === paneView) ? state.preparation : undefined;
     if ((next?.key ?? "") !== preparingKey) { preparingKey = next?.key ?? ""; preparingSince = performance.now(); }
     const waited = performance.now() - preparingSince;
     clearTimeout(lineTimer);
@@ -191,11 +236,41 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
     nextBar.set(preparing ? preparing.fraction : null);
     detailStep.update(frame, !preparing && !!line && details?.need === "wolvenkit");
   }
+  /** The drawn view's own progress while another view keeps the picture: the same words and bar as the first load. */
+  function paintPreparing(state: Frame["viewport"]["head"]) {
+    const preparation = state.preparation && state.preparation.change !== "shown" ? state.preparation : undefined;
+    loading.dataset.phase = "preparing";
+    if (loading.dataset.tone !== "progress") loading.dataset.tone = "progress";
+    if (shownPhase !== "progress") { shownPhase = "progress"; stateIcon.replaceChildren(); }
+    stateIcon.hidden = true; stateBar.hidden = false;
+    stateProgress.set(preparation ? preparation.fraction : null);
+    setText(stateText, preparation ? preparationLine(preparation, "pane") : "Getting this view ready…");
+    stateNote.hidden = true; next.hidden = true; nextAction = undefined;
+  }
   return {
-    spec: { id: "head", ...PANEL_META["head"], element,
-      visibility: visible => { if (visible) requestAnimationFrame(() => port.viewport.resize("head")); } },
+    slot,
+    spec: { id, ...PANEL_META["head"], element,
+      visibility: visible => { if (visible && holds()) requestAnimationFrame(() => port.viewport.resize("head")); } },
+    dispose() { releaseAnchor?.(); releaseAnchor = undefined; clearTimeout(lineTimer); hints.dispose(); },
     update(frame) {
-      const state = frame.viewport.head;
+      paneView = frame.views?.views.find(entry => entry.panel === id)?.id;
+      const state = frame.viewport.head, title = frame.viewTitles.find(entry => entry.panel === id)?.title ?? "3D view";
+      const was = paneState;
+      paneState = viewPaneState(paneView, state);
+      element.dataset.drawn = String(paneState !== "not-drawn");
+      // The guidance anchor is the pane with the picture.
+      if (holds() && was !== "canvas") { releaseAnchor?.(); releaseAnchor = rt.anchors.register("head.view", element); }
+      else if (!holds() && was === "canvas") { releaseAnchor?.(); releaseAnchor = undefined; }
+      // Not drawn: the view's title, what it shows and Show here; never the picture or its overlays.
+      const idleName = idle.update(paneState === "not-drawn" ? { shown: true, title, shows: paneView === undefined ? "" : viewShowsLine(port.views.shows(paneView)) } : { shown: false });
+      setAttr(element, "aria-label", idleName ?? `${title}. ${keyDescription("head")}`);
+      top.hidden = bottom.hidden = !holds();
+      if (!holds()) {
+        hints.tip.hidden = true; detailStatus.hidden = true; clearTimeout(lineTimer);
+        loading.hidden = paneState === "not-drawn";
+        if (paneState === "preparing") paintPreparing(state);
+        return;
+      }
       loading.hidden = state.phase === "ready";
       if (state.phase !== "ready") paintState(state, frame.previewSetup.head.next);
       // Hints hide themselves while the head isn't interactive (their own state), so they never cover this.

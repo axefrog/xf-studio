@@ -1191,6 +1191,16 @@ span.category { border-color: transparent; background: transparent; padding-left
 .viewport-state[data-tone="error"] .viewport-state-icon { color: var(--stage-danger); }
 .viewport-state .progress-fill { background: var(--stage-signal); }
 .viewport-state p { margin: 0; max-width: 40ch; }
+/* A 3D view the window isn't drawing now (U7, c-setup): a calm resting state over the stage, never the picture. Pressing anywhere in the pane
+   draws it, so the whole pane is the target; hover only tints the stage (F2). One column at most 40ch wide and able to shrink, so a long
+   title or V and look end in an ellipsis instead of widening the pane. */
+.viewport-panel[data-drawn="false"] { cursor: pointer; }
+.viewport-state[data-tone="idle"] { grid-template-columns: minmax(0, 40ch); justify-content: center; }
+.viewport-panel[data-drawn="false"]:hover > .viewport-state[data-tone="idle"] { background: linear-gradient(var(--stage-hover), var(--stage-hover)), var(--stage); }
+.viewport-idle-text { display: grid; gap: var(--sp-2); width: 100%; min-width: 0; }
+.viewport-idle-text p { max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewport-idle-title { color: var(--stage-strong); font-weight: 600; }
+.viewport-idle-shows { font-size: var(--fs-sm); }
 .ready-badge { display: inline-flex; align-items: center; gap: var(--sp-3); font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; padding: 5px 8px; white-space: nowrap; }
 .viewport-panel .ready-badge { background: var(--stage-chip); }
 .ready-badge::before { content: ""; width: 7px; height: 7px; background: currentColor; }

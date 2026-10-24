@@ -1,4 +1,5 @@
 import { viewCatalogue } from "./views/contribution";
+import { tabViews, viewPanelEntries, ViewPanels } from "./panels/view-panels";
 import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
@@ -25,9 +26,9 @@ import { closeMenus, openMenu, type Capability, type MenuItem } from "./menu";
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
 import { previewSetupCard } from "./preview-setup-card";
-import { panelAnchor } from "./guidance/anchors";
+import { isAnchorId, panelAnchor } from "./guidance/anchors";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
-import type { ViewComposition, ViewContext } from "./views/panels";
+import type { ViewComposition, ViewContext, ViewPaneFactory } from "./views/panels";
 import { featureCommands, featureViewContext, moduleViewContext } from "./views/feature-context";
 import type { FeatureViewContext, ModuleViewContext } from "./views/feature-view";
 import { Frame, modulePanelChanges, StudioRuntime, type Port } from "./runtime";
@@ -98,8 +99,23 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       },
     },
   };
-  // Every panel comes from a view contribution (the shell's and each feature's), in catalogue order.
-  const panels: PanelController[] = catalogue.panels.map(({ id, owner }) => {
+  /**
+   * The live catalogue (experiment 044 P2-iii-b): the composition's panels with the 3D view's entry (`head`) replaced by one entry per view
+   * of the shown tab (`head` for the main view, `view.<id>` otherwise, in graph order), then the optional experiments' panels. The dock's
+   * restore and factory home read it, so a view's panel is placed where its arrangement keeps it, or beside the other 3D views.
+   */
+  const headEntry = views.catalogue.panels.find(panel => panel.id === "head");
+  let viewEntries: typeof catalogue.panels = [], extraEntries: typeof catalogue.panels = [];
+  const rebuildCatalogue = () => {
+    catalogue.panels.splice(0, catalogue.panels.length, ...views.catalogue.panels.flatMap(panel => panel.id === "head" ? viewEntries : [panel]), ...extraEntries);
+    catalogue.ids.splice(0, catalogue.ids.length, ...catalogue.panels.map(panel => panel.id));
+    for (const id of Object.keys(catalogue.meta)) if (!catalogue.ids.includes(id)) delete catalogue.meta[id];
+    for (const panel of catalogue.panels) catalogue.meta[panel.id] ??= { title: panel.title, icon: panel.icon, description: panel.description };
+  };
+  const isViewPane = (id: PanelId) => id === "head" || viewEntries.some(entry => entry.id === id);
+  // Every panel comes from a view contribution (the shell's and each feature's), in catalogue order; the 3D views' panes come from the
+  // view panes' owner below.
+  const panels: PanelController[] = catalogue.panels.filter(({ id }) => !isViewPane(id)).map(({ id, owner }) => {
     if (owner === "shell") {
       const factory = views.shell[id];
       if (!factory) throw Error(`Panel ${id} has no factory.`);
@@ -113,7 +129,27 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
   const help = byId.get("help") as PanelController & { focusSearch?(): void };
-  for (const panel of panels) rt.anchors.register(panelAnchor(panel.spec.id), panel.spec.element);
+  // A view's panel ID (`view.<id>`) need not be an anchor's form; only the panels a tour can name are anchors.
+  const anchorPanel = (panel: PanelController) => isAnchorId(panelAnchor(panel.spec.id)) ? rt.anchors.register(panelAnchor(panel.spec.id), panel.spec.element) : () => {};
+  for (const panel of panels) anchorPanel(panel);
+  /**
+   * A pane per 3D view of the shown tab (panels/view-panels.ts): made and withdrawn as the tab's views change, the canvas in the pane that
+   * holds the picture. The dock is made below, so the panes' owner reaches it late.
+   */
+  let dockRef: DockView | undefined;
+  const paneAnchors = new Map<PanelController, () => void>();
+  const viewPanes = new ViewPanels({
+    views: () => { const graph = port.views.snapshot(); return graph ? tabViews(graph.views, port.focus.targets().tab) : []; },
+    drawn: () => port.viewport.snapshot().head,
+    make: panel => (views.shell.head as ViewPaneFactory)(rt, context, panel),
+    catalogue: shown => { viewEntries = headEntry ? viewPanelEntries(headEntry, shown) : []; rebuildCatalogue(); },
+    dock: { addPanels: specs => dockRef?.addPanels(specs), removePanels: (ids, options) => dockRef?.removePanels(ids, options) },
+    spec: pane => specOf(pane),
+    attach: slot => port.viewport.attach("head", slot),
+    added: pane => { panels.push(pane); byId.set(pane.spec.id, pane); paneAnchors.set(pane, anchorPanel(pane)); },
+    removed: pane => { panels.splice(panels.indexOf(pane), 1); byId.delete(pane.spec.id); paneAnchors.get(pane)?.(); paneAnchors.delete(pane); },
+  });
+  if (headEntry) viewPanes.start();
   const parkedAtStart = parkedPanels();
   const restored = restoreDockPreference(port.preferences.snapshot().layout,
     { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, parkedAtStart);
@@ -147,6 +183,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     afterLayout: () => requestAnimationFrame(() => { port.viewport.resize(); placeSetupCard(); }),
   });
   rt.dock = dock;
+  dockRef = dock;
   /**
    * Withdraw every view tool this presentation doesn't offer (UI-102): a hidden module's, and research tools while they are hidden; and
    * the research-only view settings with them (the Rendering options, UI-163: drawn at their defaults). Each keeps its state, and no
@@ -253,10 +290,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
    * (release-readiness-audit.md item 10), so it never covers an inspector; it floats over the window only while the pane is hidden or
    * squeezed below the card's reading size. Placed only while the card shows (its size is read then); moving it keeps focus.
    */
-  const headPane = byId.get("head")?.spec.element;
+  let markedPane: HTMLElement | undefined;
   const dockSetupCard = (open: boolean) => {
+    // The 3D view's pane is the one holding the picture (the drawn view's while nothing is shown yet).
+    const headId = viewPanes.canvasPanel(), headPane = headId === undefined ? undefined : byId.get(headId)?.spec.element;
+    if (markedPane && markedPane !== headPane) markedPane.classList.remove("setup-card-open");
+    markedPane = headPane;
     if (open) {
-      const pane = headPane && dock.isVisible("head") ? headPane.getBoundingClientRect() : undefined;
+      const pane = headPane && headId !== undefined && dock.isVisible(headId) ? headPane.getBoundingClientRect() : undefined;
       // A pane not laid out yet (0 × 0, the first paint) counts as roomy; the card scrolls inside a pane down to 280 × 220.
       const roomy = !!pane && ((pane.width === 0 && pane.height === 0) || (pane.width >= 280 && pane.height >= 220));
       const host = roomy ? headPane! : root;
@@ -280,13 +321,13 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     const optional = views.optional?.() ?? [], key = optional.map(item => item.contribution.owner).join(",");
     if (key === optionalKey) return;
     const owners = new Set(optional.map(item => item.contribution.owner));
-    const gone = panels.filter(panel => { const entry = catalogue.panels.find(item => item.id === panel.spec.id); return entry && !views.catalogue.ids.includes(entry.id) && !owners.has(entry.owner); });
+    const gone = panels.filter(panel => { const entry = catalogue.panels.find(item => item.id === panel.spec.id);
+      return entry && !isViewPane(entry.id) && !views.catalogue.ids.includes(entry.id) && !owners.has(entry.owner); });
     for (const panel of gone) { panel.spec.visibility?.(false); panel.dispose?.(); byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1); }
     if (gone.length) dock.removePanels(gone.map(panel => panel.spec.id));
     const extra = viewCatalogue(optional.map(item => item.contribution));
-    catalogue.panels.splice(0, catalogue.panels.length, ...views.catalogue.panels, ...extra.panels);
-    catalogue.ids.splice(0, catalogue.ids.length, ...views.catalogue.ids, ...extra.ids);
-    for (const id of Object.keys(catalogue.meta)) if (!catalogue.ids.includes(id)) delete catalogue.meta[id];
+    extraEntries = extra.panels;
+    rebuildCatalogue();
     Object.assign(catalogue.meta, extra.meta);
     modules.splice(0, modules.length, ...port.views.modules());
     for (const { contribution, binding } of optional) {
@@ -301,6 +342,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const paint = () => {
     queued = false;
     syncOptional();
+    // The shown tab's 3D views each have their pane, and the canvas is in the one holding the picture.
+    if (headEntry) viewPanes.sync();
     // A module shown or hidden through the port (a typed `modules.set`) places its panels as the Modules menu does (CORE-115).
     if (rt.shownModules().join(",") !== placedModules) placeModules();
     // The research preference may have changed: its tools are withdrawn or offered again before anything reads the tools.
@@ -320,7 +363,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       lastNotice = notice.id;
       // A V that couldn't be prepared is said by the 3D view's own line while the 3D view is open: no toast repeats it over the
       // panels (G3, release-readiness-audit.md C-18); the Activity log keeps it with its reference for a report.
-      const inView = notice.area === "character" && dock.isOpen("head") && frame.viewport.head.phase === "ready"
+      const shownPane = viewPanes.canvasPanel();
+      const inView = notice.area === "character" && shownPane !== undefined && dock.isOpen(shownPane) && frame.viewport.head.phase === "ready"
         && frame.status.assets.characterDetails?.phase === "failed";
       if (inView) feedback.record("error", notice.source, notice.message, notice.ref ?? undefined);
       else feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref });
@@ -735,6 +779,8 @@ function moduleAdds(rt: StudioRuntime, module: StudioModule) {
  */
 function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   const dock = rt.dock, shown = rt.shownModules();
+  // A 3D view's panel is named by its view ("3D view 1", "Side view"), so several of them read apart (experiment 044 P2-iii-b).
+  const titles = new Map(rt.port.views.titles().map(entry => [entry.panel, entry.title]));
   const row = (id: string): MenuItem => {
     const meta = rt.views.meta[id], state = dock.panelState(id);
     const module = rt.modules.list.find(item => rt.modules.panels(item).includes(id));
@@ -742,7 +788,7 @@ function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
     // window. Only a state the tick can't show gets a line: collapsed. A parked panel sits under its hidden module's unticked switch,
     // and its tooltip says that choosing it shows the module too.
     const tip = [meta?.description, state === "parked" ? `Choosing it shows ${module?.label ?? "its module"} too.` : ""].filter(Boolean).join(" ");
-    return { kind: "action", label: meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
+    return { kind: "action", label: titles.get(id) ?? meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
       ...(tip ? { tip } : {}), ...(state === "collapsed" ? { hint: "Collapsed" } : {}),
       // A parked panel is one choice away (UI-144): choosing it shows its module again, which puts its panels back where they were,
       // then brings this one forward.

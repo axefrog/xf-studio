@@ -75,3 +75,21 @@ test("UV view commands are available only for a ready view and publish persisted
   expect(commands).toEqual(["single", "other"]);
   expect(notifications).toBe(2);
 });
+
+test("the drawn view and the view whose picture the canvas holds are in the head's snapshot, published only when they change (P2-iii-b)", () => {
+  const attachment = new ViewportAttachment<string>({
+    moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
+    cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined,
+    uvCommand: () => false, hitAt: () => undefined, queryContext: () => { throw Error("No hit expected"); },
+  });
+  let changes = 0; attachment.subscribe(() => changes++);
+  expect(attachment.snapshot().head).not.toHaveProperty("drawn");
+  attachment.setDrawn({ drawn: "v2", onCanvas: "main" });
+  attachment.setDrawn({ drawn: "v2", onCanvas: "main" });
+  expect(attachment.snapshot().head).toMatchObject({ drawn: "v2", onCanvas: "main" });
+  attachment.setDrawn({ drawn: "v2", onCanvas: "v2" });
+  attachment.setDrawn({});
+  expect(attachment.snapshot().head).not.toHaveProperty("drawn");
+  expect(attachment.snapshot().head).not.toHaveProperty("onCanvas");
+  expect(changes).toBe(3);
+});

@@ -122,10 +122,23 @@ export class DockView {
    * Withdraw panels at run time (a module was hidden): each leaves the dock in every size class with its place remembered
    * (parked), and its element leaves the page until it is added again.
    */
-  removePanels(ids: readonly PanelId[]) {
+  removePanels(ids: readonly PanelId[], options: { forget?: boolean } = {}) {
     const known = ids.filter(id => this.panels.has(id));
     if (!known.length) return;
-    this.state = { wide: keepDockExpanded(parkPanels(this.state.wide, known)), compact: keepDockExpanded(parkPanels(this.state.compact, known)) };
+    // `forget`: the panel's subject is gone (a closed 3D view, view-graph-design.md §3.5): it leaves no parked place or last place behind.
+    const leave = (tree: DockTree) => {
+      const next = parkPanels(tree, known);
+      if (!options.forget) return next;
+      const drop = (places: Record<PanelId, unknown> | undefined) => {
+        if (!places) return undefined;
+        const kept = Object.fromEntries(Object.entries(places).filter(([id]) => !known.includes(id)));
+        return Object.keys(kept).length ? kept : undefined;
+      };
+      const parked = drop(next.parked), lastPlace = drop(next.lastPlace);
+      const { parked: _p, lastPlace: _l, ...rest } = next;
+      return { ...rest, ...(parked ? { parked } : {}), ...(lastPlace ? { lastPlace } : {}) } as DockTree;
+    };
+    this.state = { wide: keepDockExpanded(leave(this.state.wide)), compact: keepDockExpanded(leave(this.state.compact)) };
     this.render();
     for (const id of known) { this.panels.get(id)!.element.remove(); this.panels.delete(id); }
     this.options.save(this.dockState);

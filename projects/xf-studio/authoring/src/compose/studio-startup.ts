@@ -427,6 +427,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     document: { shows: view => { const shows = lookOf(view), edited = lookEditor.ref(); return shows && edited ? sameLook(shows, edited) : !shows && !edited; },
       follow: view => { lookEditor.show(lookOf(view)); } },
     shown: head => {
+      syncDrawn();
       stopPrefetch?.(); stopPrefetch = undefined;
       facial.attachScene(head?.scene.face);
       poseStage.attach(head ? { view: drawnView() ?? head.preview.view(), motion: head.motion, details: head.characterDetails, context: head.characterContext } : null);
@@ -441,6 +442,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
   shownHead = () => heads.shown();
   drawnView = () => heads.shownView();
+  /** The presentation's read of which view is drawn and whose picture the canvas holds (each 3D view's pane follows it, P2-iii-b). */
+  function syncDrawn() { viewportDevice.attachment.setDrawn({ drawn: heads.shownView(), onCanvas: heads.shown()?.preview.view() }); }
+  syncDrawn();
   // Camera, preview and motion actions go to the runtime holding the view they name (view-routes.ts).
   core.app.attach({ runtimes: heads.runtimes });
   // 3D preview setup: follows the host's preparation and WolvenKit setup, then loads the head.
@@ -497,8 +501,11 @@ async function start(host: StudioHost, root: HTMLElement) {
   // the heads owner draws it, switching the document first when it shows another look (D3). Otherwise the drawn scene's look may change.
   sessionState.subscribe(() => {
     const target = drawnViewOf(sessionState);
-    if (target !== heads.shownView()) void heads.show(target).catch(() => { /* Superseded, or noticed by the owner. */ });
-    else lookEditor.show(shownScene.look());
+    if (target !== heads.shownView()) {
+      const shown = heads.show(target);
+      syncDrawn();
+      void shown.then(syncDrawn, () => { syncDrawn(); /* Superseded, or noticed by the owner. */ });
+    } else lookEditor.show(shownScene.look());
   });
   // The only object handed to the presentation.
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };
@@ -512,6 +519,10 @@ async function start(host: StudioHost, root: HTMLElement) {
     // the module's `defaults.ts`, so supplied layouts are arranged in the Studio and replace the contributed ones as data.
     xfStudioTabAsDefault: (meta: { id: string; name: string; description: string }, tab = sessionState.tabId()) =>
       printDefault(layoutTabs.contributionOf(tab, meta)),
+    // Verification only (experiment 044 P2-iii-b's captures, until New view has a control): another view in the drawn view's tab, sharing
+    // its scene (the same V and look) with a camera of its own.
+    xfStudioAddView: (title?: string) => { const from = drawnViewOf(sessionState);
+      return from === undefined ? undefined : sessionState.addView(from, { scene: true, lights: true, display: true }, title ? { title } : {}); },
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing, and which runtimes are
     // resident (profiles phase 4a-iv).
     xfStudioSceneEvidence: () => { const scene = viewer(); return scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
