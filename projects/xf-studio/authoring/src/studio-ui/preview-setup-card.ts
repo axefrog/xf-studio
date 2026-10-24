@@ -66,6 +66,8 @@ export function previewSetupCard(rt: StudioRuntime) {
     rt.changed();
   }
   function focusHeadStep() {
+    // The frame can come after the card has left the page (its window closed, or a test's page torn down): nothing to focus then.
+    if (!element.isConnected || typeof document === "undefined") return;
     const next = document.querySelector<HTMLElement>(".viewport-state:not([hidden]) .btn:not([hidden])");
     next?.focus();
   }
