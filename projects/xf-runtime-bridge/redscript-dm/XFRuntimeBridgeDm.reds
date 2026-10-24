@@ -1328,6 +1328,12 @@ public cb func SetNotificationData(notificationData: ref<GenericNotificationView
   this.m_animProxy = this.PlayLibraryAnimation(owned.animation, playbackOptions);
   this.m_animProxy.RegisterToCallback(inkanimEventType.OnFinish, this, n"OnNotificationShown");
   super.SetNotificationData(notificationData); // action is null: no journal-opening input action
+  // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+  if XFRecordingTap.On("ui") {
+    let widget = this.GetRootWidget();
+    XFRecordingTap.Emit("ui", "toast.created", "\"style\":\"message\",\"text\":" + XFJson.Str(owned.SMSText) + ",\"consumer\":\"MessengerNotification\"," + XFRecordingTap.Widget(widget));
+  }
+  // END XFB_AUTONOMOUS_TEST_HOOKS
 }
 
 @addMethod(NewHudPhoneGameController)

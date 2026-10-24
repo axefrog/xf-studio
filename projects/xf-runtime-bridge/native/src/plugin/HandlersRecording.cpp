@@ -6,6 +6,7 @@
 
 namespace xfb::plugin
 {
+ nlohmann::json DmGuardPresent();
 namespace
 {
 recording::Service& Recorder() { static recording::Service s; return s; }
@@ -43,6 +44,12 @@ bool RecordingIngress(const std::string& channel, const std::string& payload)
 void RegisterRecording(Dispatcher& d)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    d.SetPreconditionReader([](const nlohmann::json& when) {
+        if (!Get().config.allowTestHooks) throw MethodError("test_hooks_off", "Action conditions need allow_test_hooks");
+        auto state = ScriptCall("XFRecording", "GuardState", {}, {}, "action-guard");
+        if (when.contains("spawned")) state["spawned"] = DmGuardPresent();
+        return state;
+    });
     Recorder().SetDirectory(Get().session.runtimeDir / "recordings");
     Get().bridge->SetStopObserver([] { Recorder().RequestStop("bridge_stopped"); });
     recording::RegisterMethods(d, Recorder(), Get().config.allowTestHooks, World, Connection,

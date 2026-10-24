@@ -3,6 +3,15 @@ module XFRuntimeBridge
 // Autonomous -writes only. Called on the game thread behind ScriptCall's live guard.
 // No NPC poll: its hub refresh changes state. These reads resolve each selected puppet afresh.
 public abstract class XFRecording {
+  // A fresh, read-only observation in the same game-thread task as the action.
+  public static func GuardState(cid: String) -> String {
+    let player = XFPlayer.Player();
+    let phase = XFBridgeActions.Phase();
+    let attached = IsDefined(player) && player.IsAttached();
+    let vehicle = attached ? XFJson.Flag(VehicleComponent.IsMountedToVehicle(GetGameInstance(), player)) : "null";
+    let combat = attached ? XFJson.Flag(player.IsInCombat()) : "null";
+    return "{\"ok\":true,\"phase\":" + XFJson.Str(phase) + ",\"photo_mode\":" + XFJson.Flag(Equals(phase, "photo_mode")) + ",\"vehicle\":" + vehicle + ",\"combat\":" + combat + "}";
+  }
   public static func Sample(cid: String, channel: String, whos: String) -> String {
     if !XFBridge_Live() { return XFJson.Fail("game_loading", "Recorder live gate closed"); }
     if Equals(channel, "subtitles") || Equals(channel, "voice") { return XFRecordingTap.Status(channel); }
@@ -27,7 +36,9 @@ public abstract class XFRecording {
     let id = player.GetEntityID();
     let vitals = XFSenses.Vitals(game, player);
     let heat = XFSenses.Heat(game);
-    return "{\"ok\":true,\"valid\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"velocity\":" + XFScene.Arr(velocity) + ",\"vitals\":" + vitals + ",\"heat\":" + heat + ",\"psm\":{\"locomotion\":" + IntToString(XFPlayer.Psm(player, defs.Locomotion)) + ",\"high_level\":" + IntToString(XFPlayer.Psm(player, defs.HighLevel)) + ",\"combat\":" + IntToString(XFPlayer.Psm(player, defs.Combat)) + "}}";
+    let vehicle = XFSenses.Vehicle(game, player);
+    let busy = XFPlayer.Busy(player);
+    return "{\"ok\":true,\"valid\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"velocity\":" + XFScene.Arr(velocity) + ",\"vitals\":" + vitals + ",\"heat\":" + heat + ",\"vehicle\":" + vehicle + ",\"busy\":" + XFJson.Str(busy) + ",\"psm\":{\"locomotion\":" + IntToString(XFPlayer.Psm(player, defs.Locomotion)) + ",\"high_level\":" + IntToString(XFPlayer.Psm(player, defs.HighLevel)) + ",\"combat\":" + IntToString(XFPlayer.Psm(player, defs.Combat)) + "}}";
   }
 }
 
@@ -133,6 +144,9 @@ public abstract class XFRecordingTap {
 }
 @if(!ModuleExists("Codeware"))
 public abstract class XFRecordingTap {
+  public static func On(channel: String) -> Bool { return false; }
+  public static func Emit(channel: String, event: String, body: String) -> Void {}
+  public static func Widget(widget: wref<inkWidget>) -> String { return "\"widget_defined\":false"; }
   public static func Status(channel: String) -> String { return "{\"valid\":false,\"reason\":\"codeware_missing\"}"; }
 }
 

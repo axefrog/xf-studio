@@ -169,6 +169,11 @@ public:
     using EventSink = std::function<void(const std::string& aKind, const std::string& aLevel, const std::string& aText, const nlohmann::json& aData)>;
     void SetEventSink(EventSink aSink);
 
+    // Test candidate: a read-only snapshot taken on the executing game frame. No cached state.
+    using PreconditionReader = std::function<nlohmann::json(const nlohmann::json&)>;
+    void SetPreconditionReader(PreconditionReader aReader);
+    void RequirePrecondition(const nlohmann::json& aWhen) const;
+
     nlohmann::json Describe() const;
     uint64_t RequestCount() const;
     // 0.8.2: milliseconds since the last authenticated request (any method, either pipe), or -1 before the first.
@@ -190,6 +195,7 @@ private:
     std::atomic<bool> m_writesPaused{false};
     std::atomic<bool> m_handover{false};
     EventSink m_eventSink;
+    PreconditionReader m_preconditionReader;
     std::atomic<uint64_t> m_requests{0};
     std::atomic<int64_t> m_lastRequestMs{-1}; // steady clock, milliseconds since its epoch
     std::atomic<uint64_t> m_cidCounter{0};

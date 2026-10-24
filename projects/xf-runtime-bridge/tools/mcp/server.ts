@@ -108,7 +108,7 @@ export function toCallResult(outcome: CommandOutcome, inlineImages = true): Call
 }
 
 /** Commands that never talk to the bridge: allowed while a scripted session holds the pipe. */
-const PIPE_FREE = new Set(["capture.screenshot", "capture.recrop"]);
+const PIPE_FREE = new Set(["capture.screenshot", "capture.recrop", "capture.armed", "capture.disarm"]);
 
 export function createMcpServer(api: CommandApi, options: McpServerOptions = {}): Server {
   const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });

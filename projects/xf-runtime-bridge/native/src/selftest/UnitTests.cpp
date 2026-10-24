@@ -3982,6 +3982,36 @@ void Bridge081Tests()
                   code == "writes_paused" && values == 0 && selected == 0, code + " selected=" + std::to_string(selected));
             dispatcher.SetWritesPaused(false);
         }
+        // Round 3b: the condition is observed after the game gate, on the executing frame.
+        std::atomic<bool> combat{false};
+        dispatcher.SetPreconditionReader([&](const json&) {
+            return json{{"phase", "gameplay"}, {"combat", combat.load()}, {"vehicle", false}, {"spawned", {{"7", true}}}};
+        });
+        const auto guarded = [&](const std::string& method, const json& when) {
+            return json::parse(dispatcher.Handle(json{{"v", 1}, {"id", 1}, {"token", session.token}, {"method", method},
+                {"params", {{"when", when}}}}.dump(), 1).line);
+        };
+        auto beforeSingle = single.load();
+        arm(1, [&] { combat = true; });
+        const auto stale = guarded("unit.write", {{"combat", false}});
+        Check("timeline: changed after queueing refuses before action with observed state",
+            !stale["ok"].get<bool>() && stale["error"]["code"] == "precondition_failed" && single == beforeSingle &&
+            json::parse(stale["error"]["message"].get<std::string>())["observed"]["combat"] == true, stale.dump());
+        combat = false;
+        arm(-1, {});
+        Check("timeline: all plain-data conditions compare on one frame",
+            guarded("unit.write", {{"phase", "gameplay"}, {"vehicle", false}, {"combat", false}, {"spawned", json::array({7})}})["ok"] == true);
+        beforeSingle = single.load();
+        Check("timeline: a missing spawn prevents action", guarded("unit.write", {{"spawned", json::array({8})}})["error"]["code"] == "precondition_failed" && single == beforeSingle);
+        Check("timeline: unknown condition refuses before action", guarded("unit.write", {{"eval", "code"}})["error"]["code"] == "bad_params" && single == beforeSingle);
+        const auto beforeFirst = first.load(), beforeSecond = second.load(), beforeRestore = restored.load();
+        arm(2, [&] { combat = true; });
+        Check("timeline: multi-step actions recheck each changing frame and allow restoration",
+            guarded("unit.multi", {{"combat", false}})["error"]["code"] == "precondition_failed" && first == beforeFirst + 1 && second == beforeSecond && restored == beforeRestore + 1);
+        arm(-1, {});
+        Check("timeline: guard does not leak into the next request", send("unit.write") == "ok");
+        dispatcher.SetPreconditionReader({});
+        Check("timeline: an unavailable reader refuses closed", guarded("unit.write", {{"combat", false}})["error"]["code"] == "precondition_unavailable");
         stop.store(true);
         pump.join();
         xfb::SetGameGate({});

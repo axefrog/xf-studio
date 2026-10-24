@@ -37,6 +37,7 @@ import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroo
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
 import { COMMANDS_080_NPC } from "./catalogue080npc.ts";
+import { TIMELINE_COMMANDS, addWhen } from "./catalogueTimeline.ts";
 import { TESTING_COMMANDS } from "./catalogueTesting.ts";
 import { INPUT_CHOICE_COMMANDS } from "./catalogueInputChoices.ts";
 import { COMMANDS_080_DM } from "./catalogue080dm.ts";
@@ -737,7 +738,7 @@ async function runOptionsRead(input: Record<string, unknown>, context: CommandCo
 
 // --- the catalogue -------------------------------------------------------------------------------
 
-export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
+export const CATALOGUE: readonly CommandDef[] = addWhen(applyCatalogue080([
   // Bridge
   {
     name: "bridge.ping",
@@ -818,6 +819,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     permission: "read",
     input: obj({
       ...regionInput,
+      clear_overlay: bool("Hide bridge overlays for the burst (default true). False preserves consumer evidence."),
       frames: int("How many frames, 2 to 120. Default 10.", 2, 120),
       interval_ms: int("Target time between frames in milliseconds (0 = as fast as possible). Default 100.", 0, 10000),
       route: oneOf("How to grab the window (see capture_screenshot).", ["auto", "printwindow", "screen"]),
@@ -846,6 +848,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
             });
           },
           frames * (intervalMs + 60) + 2000,
+          input.clear_overlay !== false,
         );
         const record = shot.value;
         return {
@@ -1774,9 +1777,10 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   ...COMMANDS_080_DM,
   ...INPUT_CHOICE_COMMANDS,
   ...TESTING_COMMANDS,
+  ...TIMELINE_COMMANDS,
   // The senses for the Story Engine (read-only): quest facts in a batch, V's district, V's status.
   ...SENSES_COMMANDS,
-]);
+]));
 
 export function findCommand(name: string): CommandDef | undefined {
   return CATALOGUE.find((command) => command.name === name || toolName(command) === name);

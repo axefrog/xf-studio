@@ -10,6 +10,8 @@ export type PlainError = { code: string; message: string; detail?: string; cause
 
 /** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
+  precondition_failed: "The game state changed before this step could act. The detail contains the required and observed state; read catch-up and prepare the next action.",
+  precondition_unavailable: "This route cannot compare conditions on the executing game frame. Use the autonomous test candidate's native action route.",
   recording_busy: "The recorder is still active or draining. Stop it and finish saving its records before starting another run.",
   recording_changed: "That recording is no longer current. Use the run identifier returned by its start; never join samples from different runs.",
   test_build_required: "This action needs the separate autonomous test candidate. Stage that candidate in the dedicated test profile.",

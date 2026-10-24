@@ -333,6 +333,16 @@ json DmHolds()
     return Service().Holds();
 }
 
+json DmGuardPresent()
+{
+    json present = json::object();
+    // Spawned resolves each entity through the live game reader; registry membership alone is insufficient.
+    const auto snapshot = Service().Spawned(json::object(), OpsFor("action-guard"));
+    for (const auto& item : snapshot["spawned"])
+        present[std::to_string(item["handle"].get<int32_t>())] = item.value("present", false);
+    return present;
+}
+
 void StopDm()
 {
     if (MicroSlot())

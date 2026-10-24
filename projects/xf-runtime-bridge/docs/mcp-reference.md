@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 144 tools, 87 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 148 tools, 87 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -22,10 +22,10 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (8)
 - [XF Finish Showroom](#xf-finish-showroom) (5)
 - [NPC direction](#npc-direction) (16)
-- [Capture and the agent's view](#capture-and-the-agents-view) (6)
+- [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
-- [Other tools](#other-tools) (5)
+- [Other tools](#other-tools) (6)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -34,7 +34,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 48 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 52 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -292,55 +292,74 @@ Open and leave photo mode, frame V, set the camera, lights, expression, pose and
 
 ### `photo_open`
 
-**Open photo mode.** Opens photo mode by pressing the player's own photo mode key in the game window (read from the game's key bindings, N by default): the only key the XF tools ever send, and only to the game window. It checks first that V is in the world and the game allows photo mode, and by default sends only while the game window is already in front: otherwise it refuses (not_foreground) without touching any window, since bringing the game forward catches whatever the player is typing elsewhere. focus: bring_to_front brings it forward first (the old behaviour). Then it waits until photo mode is open. The game has no in-engine way to open the full photo mode that is known to be safe (see the knowledge base), so the key stays the route.
+**Open photo mode.** Opens photo mode by pressing the player's own photo mode key in the game window (read from the game's key bindings, N by default): the only key the XF tools ever send, and only to the game window. It checks first that V is in the world and the game allows photo mode, and by default sends only while the game window is already in front: otherwise it refuses (not_foreground) without touching any window, since bringing the game forward catches whatever the player is typing elsewhere. focus: bring_to_front brings it forward first (the old behaviour). Then it waits until photo mode is open. The game has no in-engine way to open the full photo mode that is known to be safe (see the knowledge base), so the key stays the route. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.open`, run by the tools (it may call the bridge several times)
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** photo.exit.
-- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), `photo_not_allowed`, `key_unsupported`, `no_window`, `photo_open_timeout`, `interrupted`
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), `photo_not_allowed`, `key_unsupported`, `no_window`, `photo_open_timeout`, `interrupted`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `route` | string | `sendinput`, `postmessage` | sendinput (default: a key press, the game window must be in front) or postmessage (research: posted to the game window only, never changes focus; whether the game reacts is untested). |
 | `focus` | string | `require`, `bring_to_front` | sendinput only: require (default: send only while the game window is already in front, else refuse and touch nothing) or bring_to_front (bring the game window forward first; anything the player is typing elsewhere goes to the game). |
 | `timeout_ms` | integer | 500 to 30000 | How long to wait for photo mode after the key, in milliseconds (default 5000). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_enter`
 
-**Open photo mode (restricted route).** Use photo_open instead. The game offers no way to open the full photo mode from inside, so without a route this answers that the photo mode key is needed (photo_open presses it). route quest opens a restricted photo mode (first-person camera only, no V tab) and is kept for research only.
+**Open photo mode (restricted route).** Use photo_open instead. The game offers no way to open the full photo mode from inside, so without a route this answers that the photo mode key is needed (photo_open presses it). route quest opens a restricted photo mode (first-person camera only, no V tab) and is kept for research only. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.enter`, the bridge method `photo.enter`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** photo.exit.
-- **Refusals:** [`photo_key_needed`](#refusal-photo-key-needed), [`not_in_gameplay`](#refusal-not-in-gameplay), [`unsupported`](#refusal-unsupported), [`rtti_missing`](#refusal-rtti-missing), [`rtti_signature`](#refusal-rtti-signature), [`unavailable`](#refusal-unavailable)
+- **Refusals:** [`photo_key_needed`](#refusal-photo-key-needed), [`not_in_gameplay`](#refusal-not-in-gameplay), [`unsupported`](#refusal-unsupported), [`rtti_missing`](#refusal-rtti-missing), [`rtti_signature`](#refusal-rtti-signature), [`unavailable`](#refusal-unavailable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `route` | string | `auto`, `quest` | How to open photo mode: auto (the default; answers that the player must press the photo mode key until a proper route exists) or quest (research only: a restricted photo mode). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_exit`
 
-**Leave photo mode.** Leaves photo mode, discarding its settings as the game always does.
+**Leave photo mode.** Leaves photo mode, discarding its settings as the game always does. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.exit`, the bridge method `photo.exit`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** photo.open (photo-mode settings start fresh).
-- **Refusals:** [`unavailable`](#refusal-unavailable)
+- **Refusals:** [`unavailable`](#refusal-unavailable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
-No parameters.
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_camera_set`
 
-**Frame the photo-mode shot.** Sets the photo-mode camera: a named preset (face: V's face filling most of the frame, facing the camera. (not yet calibrated); eyes: A tight close-up of V's eyes, facing the camera. (not yet calibrated); head-and-shoulders: V's head and shoulders, facing the camera. (not yet calibrated); face-left: The face close-up with V turned 30 degrees to one side (a light sweep uses a series of these). (not yet calibrated); face-right: The face close-up with V turned 30 degrees to the other side. (not yet calibrated); open-defaults: Every camera and V-placement setting back to what photo mode opened with.) and/or explicit values: field of view, roll, focus distance, aperture, depth of field, autofocus, film grain, chromatic aberration, the effects page's exposure, contrast, vignette and highlights, photo mode's own camera preset, and V's placement in front of the camera (subject: yaw, left_right, near_far, up_down). Values are checked against the ranges photo mode itself offers. reset puts everything back to how photo mode opened.
+**Frame the photo-mode shot.** Sets the photo-mode camera: a named preset (face: V's face filling most of the frame, facing the camera. (not yet calibrated); eyes: A tight close-up of V's eyes, facing the camera. (not yet calibrated); head-and-shoulders: V's head and shoulders, facing the camera. (not yet calibrated); face-left: The face close-up with V turned 30 degrees to one side (a light sweep uses a series of these). (not yet calibrated); face-right: The face close-up with V turned 30 degrees to the other side. (not yet calibrated); open-defaults: Every camera and V-placement setting back to what photo mode opened with.) and/or explicit values: field of view, roll, focus distance, aperture, depth of field, autofocus, film grain, chromatic aberration, the effects page's exposure, contrast, vignette and highlights, photo mode's own camera preset, and V's placement in front of the camera (subject: yaw, left_right, near_far, up_down). Values are checked against the ranges photo mode itself offers. reset puts everything back to how photo mode opened. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.camera.set`, the bridge method `photo.camera.set`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo parameters restore each previous value; reset (or the open-defaults preset) restores how photo mode opened.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -366,16 +385,22 @@ No parameters.
 | `subject.near_far` | number | -1000 to 1000 | V's distance offset. |
 | `subject.up_down` | number | -1000 to 1000 | V's height offset. |
 | `reset` | boolean | `true`, `false` | Put every camera and placement setting back to how photo mode opened. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_camera_place`
 
-**Place the photo-mode camera (research).** Research (0.5.2): moves photo mode's own camera to a place and aims it, instead of moving V in front of it (photo mode's menu only moves V: up_down, near_far and left_right). Target: look_at (a world point), target v (V's eyes) or piece (a showroom head's eyes, for framing the finish showroom). Where: position (a world point), or distance_m from the target (default 1.5) at azimuth_deg (from the way the target faces, counter-clockwise seen from above: 0 in front, 90 its left) and elevation_deg. The camera's entity is moved with the teleportation facility, then the active camera is read a few frames later: held says whether photo mode kept it there (session 6's question; if not, photo mode places its camera itself and nothing is left to undo). Within 30 m of V, in photo mode only.
+**Place the photo-mode camera (research).** Research (0.5.2): moves photo mode's own camera to a place and aims it, instead of moving V in front of it (photo mode's menu only moves V: up_down, near_far and left_right). Target: look_at (a world point), target v (V's eyes) or piece (a showroom head's eyes, for framing the finish showroom). Where: position (a world point), or distance_m from the target (default 1.5) at azimuth_deg (from the way the target faces, counter-clockwise seen from above: 0 in front, 90 its left) and elevation_deg. The camera's entity is moved with the teleportation facility, then the active camera is read a few frames later: held says whether photo mode kept it there (session 6's question; if not, photo mode places its camera itself and nothing is left to undo). Within 30 m of V, in photo mode only. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.camera.place`, run by the tools (it may call the bridge several times)
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo puts the camera back where it was, looking the same way; closing photo mode resets the camera anyway.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`too_far`](#refusal-too-far)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`too_far`](#refusal-too-far), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -386,16 +411,22 @@ No parameters.
 | `distance_m` | number | 0.2 to 10 | Metres from the target, 0.2 to 10. Default 1.5. |
 | `azimuth_deg` | number | -180 to 180 | Degrees around the target from the way it faces, counter-clockwise seen from above (0 in front). Default 0. |
 | `elevation_deg` | number | -60 to 60 | Degrees above the target's level (negative: below). Default 0. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_camera_preset`
 
-**Rewrite a photo-mode camera preset (research).** Research, for placing photo mode's camera where the bridge wants it: rewrites one of photo mode's camera presets (1-9; the XF test profile's own are 6-9) in the running game through TweakXL (values: dist, pitchDeg, yawDeg, rollDeg, distUpDown, distLeftRight, fov), selects it (through Customization first, so photo mode applies it again) and reads the camera back four frames later: camera_moved_m and camera_after say whether photo mode read the new values. Nothing is saved; the undo writes the earlier values back and selects the earlier preset. Needs TweakXL (detected, never installed).
+**Rewrite a photo-mode camera preset (research).** Research, for placing photo mode's camera where the bridge wants it: rewrites one of photo mode's camera presets (1-9; the XF test profile's own are 6-9) in the running game through TweakXL (values: dist, pitchDeg, yawDeg, rollDeg, distUpDown, distLeftRight, fov), selects it (through Customization first, so photo mode applies it again) and reads the camera back four frames later: camera_moved_m and camera_after say whether photo mode read the new values. Nothing is saved; the undo writes the earlier values back and selects the earlier preset. Needs TweakXL (detected, never installed). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.camera.preset`, the bridge method `photo.camera.preset`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo writes the earlier values back and selects the earlier preset; restarting the game drops the changes too.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), `tweakxl_missing`
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), `tweakxl_missing`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -410,16 +441,22 @@ No parameters.
 | `values.fov` | number | 1 to 120 | Field of view, degrees, 1 to 120. |
 | `select` | boolean | `true`, `false` | Select the preset afterwards (default true). |
 | `camera_preset` | integer | 0 to 9 | Select this preset instead (the undo; 0 is Customization). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_light_set`
 
-**Adjust a photo-mode light.** Selects photo-mode light 1, 2 or 3, switches it on or off, sets its shadow, brightness, range, cone angles and colour (hue 0-360, saturation, luminosity), and can place it (place). Lights start off each time photo mode opens, and photo mode puts a light where the camera is when it switches on. place: {camera: true} switches it off and on so it moves to where the camera is now (after framing); {azimuth, elevation, distance} puts it about V's head and aims it at V (research: the result says whether photo mode kept it there); {world: [x, y, z]} is the undo's form. type (spot or ambient) is skipped with a note where the game's menu has no type row (game 2.31).
+**Adjust a photo-mode light.** Selects photo-mode light 1, 2 or 3, switches it on or off, sets its shadow, brightness, range, cone angles and colour (hue 0-360, saturation, luminosity), and can place it (place). Lights start off each time photo mode opens, and photo mode puts a light where the camera is when it switches on. place: {camera: true} switches it off and on so it moves to where the camera is now (after framing); {azimuth, elevation, distance} puts it about V's head and aims it at V (research: the result says whether photo mode kept it there); {world: [x, y, z]} is the undo's form. type (spot or ambient) is skipped with a note where the game's menu has no type row (game 2.31). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.light.set`, the bridge method `photo.light.set`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo parameters restore that light's previous values (including on/off), its earlier position and the menu's previous light selection.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -441,46 +478,64 @@ No parameters.
 | `place.elevation` | number | -80 to 80 | Degrees above V's head level. Default 15. |
 | `place.distance` | number | 0.2 to 10 | Metres from V's head. Default 1.2. |
 | `place.world` | array of number | exactly 3 items; each -100000 to 100000 | A world position [x, y, z] in metres (the undo's form). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_hud_hide`
 
-**Hide the photo-mode interface.** Fades the photo-mode menus out for a clean screenshot (hidden: true, the default) or back in (hidden: false), and hides or shows the mouse cursor with them (cursor: false leaves the cursor alone). Wait about half a second before capturing.
+**Hide the photo-mode interface.** Fades the photo-mode menus out for a clean screenshot (hidden: true, the default) or back in (hidden: false), and hides or shows the mouse cursor with them (cursor: false leaves the cursor alone). Wait about half a second before capturing. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.hud.hide`, the bridge method `photo.hud.hide`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** photo.hud.hide with hidden: false; leaving photo mode (or the kill switch) always shows the menu and cursor again.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `hidden` | boolean | `true`, `false` | true hides, false shows. Default true. |
 | `cursor` | boolean | `true`, `false` | Also hide or show the mouse cursor. Default true. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_expression_set`
 
-**Set V's photo-mode expression.** Sets V's facial expression in photo mode exactly as the photo-mode expression list does: by label (the expression's name as the list shows it, for example Static: Sleeping; case and punctuation don't matter) or by faceId, the menu's value for it. The menu's value is the expression's position in the list, which differs from the face table index the face animation uses when an expression pack is installed (session 4: Static: Sleeping was menu value 56, table index 60); photo_state with options lists both for every expression. A value not in the list is refused.
+**Set V's photo-mode expression.** Sets V's facial expression in photo mode exactly as the photo-mode expression list does: by label (the expression's name as the list shows it, for example Static: Sleeping; case and punctuation don't matter) or by faceId, the menu's value for it. The menu's value is the expression's position in the list, which differs from the face table index the face animation uses when an expression pack is installed (session 4: Static: Sleeping was menu value 56, table index 60); photo_state with options lists both for every expression. A value not in the list is refused. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.expression.set`, run by the tools (it may call the bridge several times)
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo parameters restore the previous expression.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`no_effect`](#refusal-no-effect), [`unverified_index`](#refusal-unverified-index), [`face_table_unreadable`](#refusal-face-table-unreadable)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`no_effect`](#refusal-no-effect), [`unverified_index`](#refusal-unverified-index), [`face_table_unreadable`](#refusal-face-table-unreadable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `faceId` | integer | 0 to 100000 | The expression's menu value (its data in photo_state options; not the table index). |
 | `label` | string | 1 to 128 characters | The expression's name as the list shows it, instead of faceId. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_expression_index`
 
-**Apply a photo-mode face index (research).** Research tool for the expression editor: applies a photo-mode face table index (photo_state options' table_index, not the menu value) to V directly, the way photo mode feeds its face animation, without going through the expression list. It acts on V's photo-mode stand-in, where session 4 found the face rig; target head (the head item) is refused, since it has no face rig and the index changed nothing there. Whether the face changed shows only in a screenshot. By default only a table index of the expression list is accepted, and only one photo_state found by the expression's name (table_index_verified); one known only by list position (table_index_by position, which session 4 showed isn't the table index with an expression pack) is refused (unverified_index) unless force: true. unlisted: true allows any index (sparse-index checks). The answer's index_by says how the index was checked. Photo mode only, in the XF test profile.
+**Apply a photo-mode face index (research).** Research tool for the expression editor: applies a photo-mode face table index (photo_state options' table_index, not the menu value) to V directly, the way photo mode feeds its face animation, without going through the expression list. It acts on V's photo-mode stand-in, where session 4 found the face rig; target head (the head item) is refused, since it has no face rig and the index changed nothing there. Whether the face changed shows only in a screenshot. By default only a table index of the expression list is accepted, and only one photo_state found by the expression's name (table_index_verified); one known only by list position (table_index_by position, which session 4 showed isn't the table index with an expression pack) is refused (unverified_index) unless force: true. unlisted: true allows any index (sparse-index checks). The answer's index_by says how the index was checked. Photo mode only, in the XF test profile. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.expression.index`, the bridge method `photo.expression.index`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo selects the expression the photo-mode menu shows again (photo_expression_set); leaving photo mode also resets it.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`no_effect`](#refusal-no-effect), [`unverified_index`](#refusal-unverified-index), [`face_table_unreadable`](#refusal-face-table-unreadable)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`no_effect`](#refusal-no-effect), [`unverified_index`](#refusal-unverified-index), [`face_table_unreadable`](#refusal-face-table-unreadable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -488,16 +543,22 @@ No parameters.
 | `target` | string | `puppet`, `head` | puppet (V's photo-mode stand-in, the default and the only one with a face rig). head is refused (no_effect): the head item has no face rig. |
 | `unlisted` | boolean | `true`, `false` | Allow an index the photo-mode expression list doesn't offer. Default false. |
 | `force` | boolean | `true`, `false` | Allow an index the list offers only by list position (unverified). Default false. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_pose_set`
 
-**Select a photo-mode pose.** Selects V's photo-mode pose through the menu, as the player does: by pose record (record, for example xfs_live_carrier or PhotoModePoses.idle_stand_01), by the labels the menu shows (pose, optionally with category), or by option data from photo_state (category_value with pose_value). Photo mode only.
+**Select a photo-mode pose.** Selects V's photo-mode pose through the menu, as the player does: by pose record (record, for example xfs_live_carrier or PhotoModePoses.idle_stand_01), by the labels the menu shows (pose, optionally with category), or by option data from photo_state (category_value with pose_value). Photo mode only. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.pose.set`, the bridge method `photo.pose.set`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo selects the earlier category and pose again; leaving photo mode also resets the pose.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`carrier_not_loaded`](#refusal-carrier-not-loaded)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`carrier_not_loaded`](#refusal-carrier-not-loaded), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -506,6 +567,12 @@ No parameters.
 | `category` | string | at most 128 characters | The category's label as the menu shows it (with pose). |
 | `category_value` | integer | 0 to 1000000 | The category's option data (photo_state), with pose_value. |
 | `pose_value` | integer | 0 to 1000000 | The pose's option data (photo_state), with category_value. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `pose_live_read`
 
@@ -525,13 +592,13 @@ No parameters.
 
 ### `pose_live_apply`
 
-**Pose V live through the carrier (research).** Research tool for live posing: writes joint rotations (unit quaternions [x, y, z, w], by joint name or index) and optionally the Hips translation into the XF live carrier clip in the game's memory, so the photo-mode pose changes without a reload if the engine reads those keys every frame (the experiment's question). Only in the XF test profile's -writes build (allow_live_pose), in photo mode with the carrier selected (photo_pose_set record xfs_live_carrier), and only after the same layout checks as pose_live_read. restore: true puts the carrier's own keys back.
+**Pose V live through the carrier (research).** Research tool for live posing: writes joint rotations (unit quaternions [x, y, z, w], by joint name or index) and optionally the Hips translation into the XF live carrier clip in the game's memory, so the photo-mode pose changes without a reload if the engine reads those keys every frame (the experiment's question). Only in the XF test profile's -writes build (allow_live_pose), in photo mode with the carrier selected (photo_pose_set record xfs_live_carrier), and only after the same layout checks as pose_live_read. restore: true puts the carrier's own keys back. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `pose.live.apply`, the bridge method `pose.live.apply`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** pose_live_apply with restore: true (the result's undo); the kill switch also puts the carrier's keys back, and leaving photo mode unloads the carrier.
-- **Refusals:** [`live_pose_disabled`](#refusal-live-pose-disabled), [`live_pose_unavailable`](#refusal-live-pose-unavailable), [`carrier_not_loaded`](#refusal-carrier-not-loaded), [`carrier_not_selected`](#refusal-carrier-not-selected), [`clip_not_found`](#refusal-clip-not-found), [`layout_unrecognised`](#refusal-layout-unrecognised)
+- **Refusals:** [`live_pose_disabled`](#refusal-live-pose-disabled), [`live_pose_unavailable`](#refusal-live-pose-unavailable), [`carrier_not_loaded`](#refusal-carrier-not-loaded), [`carrier_not_selected`](#refusal-carrier-not-selected), [`clip_not_found`](#refusal-clip-not-found), [`layout_unrecognised`](#refusal-layout-unrecognised), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -540,6 +607,12 @@ No parameters.
 | `joints[].rotation` (required) | array of number | exactly 4 items; each -1.01 to 1.01 | A unit quaternion [x, y, z, w] in the joint's local space. |
 | `hips` | array of number | exactly 3 items; each -3 to 3 | The Hips joint's translation [x, y, z] in metres. |
 | `restore` | boolean | `true`, `false` | Put the carrier's own keys back instead. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `face_rig_read`
 
@@ -574,13 +647,13 @@ No parameters.
 
 ### `photo_frame`
 
-**Frame V automatically.** Frames V in photo mode without hand-tuned values: turns V to face the camera (plus yaw_offset degrees for a light sweep), puts the target (eyes: Both eyes and brows, filling the eyes region (the window's centre band).; face: The face from chin to hairline, filling the face region.; head-and-shoulders: Head and shoulders.; full-body: V from head to feet, standing.) at the centre of the window (or at position) and sets the field of view so span_m metres fill the window height. Each frame starts from its lens's known pose (face and eyes: a portrait lens from about 2 m, so repeated frames never drift) and stays within the lens's limits, or is refused. Any refusal or failure part-way puts back everything it changed whose earlier value the game reported (the field of view, V's placement, and the camera preset, roll and look-at it set), names anything it couldn't, and carries the undo in its detail. It measures where V is through the game's camera (or, if that isn't available, from window captures, more roughly) and corrects in a few steps; converged also needs V to face the requested direction within 3 degrees (residual.facing_deg). The result records the lens, the camera's distance, the chosen values and an undo.
+**Frame V automatically.** Frames V in photo mode without hand-tuned values: turns V to face the camera (plus yaw_offset degrees for a light sweep), puts the target (eyes: Both eyes and brows, filling the eyes region (the window's centre band).; face: The face from chin to hairline, filling the face region.; head-and-shoulders: Head and shoulders.; full-body: V from head to feet, standing.) at the centre of the window (or at position) and sets the field of view so span_m metres fill the window height. Each frame starts from its lens's known pose (face and eyes: a portrait lens from about 2 m, so repeated frames never drift) and stays within the lens's limits, or is refused. Any refusal or failure part-way puts back everything it changed whose earlier value the game reported (the field of view, V's placement, and the camera preset, roll and look-at it set), names anything it couldn't, and carries the undo in its detail. It measures where V is through the game's camera (or, if that isn't available, from window captures, more roughly) and corrects in a few steps; converged also needs V to face the requested direction within 3 degrees (residual.facing_deg). The result records the lens, the camera's distance, the chosen values and an undo. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.frame`, run by the tools (it may call the bridge several times)
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo puts the field of view, V's rotation and placement (and look-at, roll and camera preset) back as they were.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), `framing_bound`, `no_projection`, `no_response`, `no_capture`, `not_found`, [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), `framing_bound`, `no_projection`, `no_response`, `no_capture`, `not_found`, [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -604,16 +677,22 @@ No parameters.
 | `method` | string | `auto`, `project`, `capture` | auto (default: the game's camera, else window captures), project (the game's camera only) or capture (window captures only). |
 | `max_steps` | integer | 1 to 12 | Most correction steps (default 6). |
 | `tolerance` | number | 0.001 to 0.2 | Allowed centring error as a fraction of the window height (default 0.01). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `photo_scene_set`
 
-**Set photo mode's scene rows.** Photo mode's own scene rows, through its menu like every other setting: npcs (the surrounding NPCs row), weather (its weather row) and game_speed (0 to 1). npcs and weather each take {value} (the option's value from photo_state with options) or {label} (its on-screen text, matched loosely). Photo mode only; gone when photo mode closes. The answer carries the undo (the rows' earlier values).
+**Set photo mode's scene rows.** Photo mode's own scene rows, through its menu like every other setting: npcs (the surrounding NPCs row), weather (its weather row) and game_speed (0 to 1). npcs and weather each take {value} (the option's value from photo_state with options) or {label} (its on-screen text, matched loosely). Photo mode only; gone when photo mode closes. The answer carries the undo (the rows' earlier values). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `photo.scene.set`, the bridge method `photo.scene.set`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo sets the rows back; closing photo mode drops them too.
-- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -624,6 +703,12 @@ No parameters.
 | `weather.value` | number | -1000 to 1000 | The option's value (photo_state's data). |
 | `weather.label` | string | 1 to 64 characters | The option's label. |
 | `game_speed` | number | 0 to 1 | The game-speed row, 0 to 1. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ## Appearance screen (character creator)
 
@@ -776,19 +861,25 @@ Explicit autonomous -writes candidate only. XF hub actions, queued photo exit an
 
 ### `test_input_arm`
 
-**Arm an input test fixture.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Bind one run to the current world and exact gameplay, photo_mode or menu context, for at most 120 seconds. A stop or context change disarms it.
+**Arm an input test fixture.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Bind one run to the current world and exact gameplay, photo_mode or menu context, for at most 120 seconds. A stop or context change disarms it. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `test.input.arm`, the bridge method `test.input.arm`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The test owns only its submitted controls. Completion, expiry or bridge.kill releases them and cancels pending work.
-- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `run_id` (required) | string | at most 80 characters | Armed fixture ID (test_input_arm), at most 80 characters. |
 | `context` (required) | string | `gameplay`, `photo_mode`, `menu` | Expected fixture context |
 | `duration_ms` | integer | 100 to 120000 | Run lifetime |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `test_input_state`
 
@@ -823,13 +914,13 @@ No parameters.
 
 ### `test_photo_exit_attempt`
 
-**Queue the native photo exit event.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Coverage native_exit_event. Queues Codeware's TryExitPhotomodeEvent once to exercise the existing modal hold. Requires the current shown controller; receipt distinguishes held from confirmation token. This is not an injected Esc key.
+**Queue the native photo exit event.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Coverage native_exit_event. Queues Codeware's TryExitPhotomodeEvent once to exercise the existing modal hold. Requires the current shown controller; receipt distinguishes held from confirmation token. This is not an injected Esc key. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `test.photo.exit_attempt`, the bridge method `test.photo.exit_attempt`
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** Cancel a confirmation through its normal game controls, or reopen photo mode after an exit. bridge.kill cancels a pending attempt.
-- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -837,6 +928,12 @@ No parameters.
 | `controller_generation` (required) | integer | 1 to 2147483647 | Current controller generation |
 | `route` | string | `event`, `callback` | event queues the native event (default); callback is the comparison control with consumer_callback coverage |
 | `timeout_ms` | integer | 100 to 5000 | Receipt deadline in milliseconds; no automatic retry. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `test_ui_activate`
 
@@ -857,13 +954,13 @@ No parameters.
 
 ### `test_input_pulse`
 
-**Commission a bounded engine input pulse.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Also requires XFB_ENGINE_INPUT_TESTS and explicit act permission. confirm press/release or move_y axis/zero, 10–150 ms, owned controls only. Currently fails input_unavailable: concrete receiver lifetime, dispatch virtual implementation and release ABI remain unvalidated. No native call or external fallback is made.
+**Commission a bounded engine input pulse.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Also requires XFB_ENGINE_INPUT_TESTS and explicit act permission. confirm press/release or move_y axis/zero, 10–150 ms, owned controls only. Currently fails input_unavailable: concrete receiver lifetime, dispatch virtual implementation and release ABI remain unvalidated. No native call or external fallback is made. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `test.input.pulse`, the bridge method `test.input.pulse`
 - **Permission:** Act for V (`act-player`)
 - **Changes the game:** Yes
 - **Undo:** The test owns only its submitted controls. Completion, expiry or bridge.kill releases them and cancels pending work.
-- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -872,6 +969,12 @@ No parameters.
 | `duration_ms` (required) | integer | 10 to 150 | Pulse duration |
 | `value` | number | -0.2 to 0.2 | Axis value |
 | `timeout_ms` | integer | 100 to 5000 | Receipt deadline in milliseconds; no automatic retry. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `player_choice_state`
 
@@ -887,13 +990,13 @@ No parameters.
 
 ### `player_choice_select`
 
-**Select a native quest or vendor line.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Also requires XFB_ENGINE_INPUT_TESTS and explicit act permission. The bounded owner waits for highlight read-back and a fresh successful native attempt correlated with the observed hub; correlation is not native scene identity. Currently refuses input_unavailable: receiver lifetime, release and physical overlap remain unvalidated, and retail offers have no certified eligibility/dedicated-action protocol. No engine call, blackboard write, quest-fact patch or fabricated interaction event is made.
+**Select a native quest or vendor line.** Autonomous -writes candidate only: XFB_AUTONOMOUS_TEST_HOOKS and allow_test_hooks. Also requires XFB_ENGINE_INPUT_TESTS and explicit act permission. The bounded owner waits for highlight read-back and a fresh successful native attempt correlated with the observed hub; correlation is not native scene identity. Currently refuses input_unavailable: receiver lifetime, release and physical overlap remain unvalidated, and retail offers have no certified eligibility/dedicated-action protocol. No engine call, blackboard write, quest-fact patch or fabricated interaction event is made. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `player.choice.select`, the bridge method `player.choice.select`
 - **Permission:** Act for V (`act-player`)
 - **Changes the game:** Yes
 - **Undo:** A committed answer cannot be undone. Select-only changes the highlight; bridge.kill stops pending steps.
-- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable)
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`test_build_required`](#refusal-test-build-required), [`test_run_required`](#refusal-test-run-required), [`stale_context`](#refusal-stale-context), [`choice_changed`](#refusal-choice-changed), [`choice_unsupported`](#refusal-choice-unsupported), [`input_unavailable`](#refusal-input-unavailable), [`input_busy`](#refusal-input-busy), [`activation_expired`](#refusal-activation-expired), [`ui_target_unavailable`](#refusal-ui-target-unavailable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -903,6 +1006,12 @@ No parameters.
 | `index` (required) | integer | 0 to 15 | Zero-based line |
 | `commit` | boolean | `true`, `false` | Commit |
 | `timeout_ms` | integer | 100 to 5000 | Receipt deadline in milliseconds; no automatic retry. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ## Player
 
@@ -922,13 +1031,13 @@ No parameters.
 
 ### `player_teleport`
 
-**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). WARNING before moving: the existing human-navmesh check cannot classify roads or traffic lanes; choose a destination clear of traffic. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
+**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). WARNING before moving: the existing human-navmesh check cannot classify roads or traffic lanes; choose a destination clear of traffic. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `player.teleport`, the bridge method `player.teleport`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo teleports V back to where she stood, facing the same way; loading the save undoes it too.
-- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far)
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -941,16 +1050,22 @@ No parameters.
 | `turn` | number | -360 to 360 | Turn by this many degrees (left positive). |
 | `ground` | string | `snap`, `exact` | snap (default: walkable ground within 2 m) or exact (no snap; the world must still be loaded there). |
 | `far` | boolean | `true`, `false` | Allow more than 50 m (the destination must be loaded). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `player_look`
 
-**Turn V's view.** Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (along the shortest arc, eased in and out, in short steps of the game's own look-at, so it takes duration_s; the player's mouse or stick ends it, took_over camera_drift). Answers the angles reached, whether they are within 2 degrees, took_s and whether player_stop stopped it. Normal play only. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
+**Turn V's view.** Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (along the shortest arc, eased in and out, in short steps of the game's own look-at, so it takes duration_s; the player's mouse or stick ends it, took_over camera_drift). Answers the angles reached, whether they are within 2 degrees, took_s and whether player_stop stopped it. Normal play only. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `player.look`, the bridge method `player.look`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo turns the view back to the earlier angles.
-- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`unavailable`](#refusal-unavailable)
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`unavailable`](#refusal-unavailable), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -960,6 +1075,12 @@ No parameters.
 | `at` | array of number | exactly 3 items | Look at this world point [x, y, z] instead. |
 | `mode` | string | `instant`, `smooth` | instant (default) or smooth. |
 | `duration_s` | number | 0.05 to 5 | A smooth look's time, 0.05 to 5 s. Default 1. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `player_look_stop`
 
@@ -998,19 +1119,25 @@ No parameters.
 
 ### `player_action`
 
-**Do a system-driven action.** One of the actions the game's systems can do without input: crouch and stand (the game's own forced crouch, as a sniper nest uses it; only the bridge's own is lifted), weapon.draw, weapon.arms (0.7: the arm cyberware's weapon, such as Mantis Blades, drawn), weapon.holster and weapon.slot (1-3) through the equipment system's own requests, menu.open (inventory, map, journal, perks, crafting, or the wardrobe screen) and menu.close. Jumping, sprinting and dodging need an input channel (research). It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
+**Do a system-driven action.** One of the actions the game's systems can do without input: crouch and stand (the game's own forced crouch, as a sniper nest uses it; only the bridge's own is lifted), weapon.draw, weapon.arms (0.7: the arm cyberware's weapon, such as Mantis Blades, drawn), weapon.holster and weapon.slot (1-3) through the equipment system's own requests, menu.open (inventory, map, journal, perks, crafting, or the wardrobe screen) and menu.close. Jumping, sprinting and dodging need an input channel (research). It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `player.action`, the bridge method `player.action`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo does the opposite (stand, weapon.holster, menu.close); player_stop and the kill switch lift a crouch too.
-- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`rate_limited`](#refusal-rate-limited)
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`rate_limited`](#refusal-rate-limited), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `name` (required) | string | `crouch`, `stand`, `weapon.draw`, `weapon.arms`, `weapon.holster`, `weapon.slot`, `menu.open`, `menu.close` | The action. |
 | `slot` | integer | 1 to 3 | With weapon.slot: the weapon slot 1-3. |
 | `menu` | string | `inventory`, `map`, `journal`, `perks`, `crafting`, `wardrobe` | With menu.open: which menu. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `player_status`
 
@@ -1150,13 +1277,13 @@ The DM toolkit: bring props, vehicles and lights in, change doors and vehicles, 
 
 ### `world_spawn`
 
-**Bring in a prop or a vehicle.** Brings a prop or a vehicle into the world near V: a prop from an entity template (the depot path of a .ent file) or a record, a vehicle from its record (such as Vehicle.v_standard2_archer_hella_player), placed offset metres from V along her facing (default two metres ahead) or at a world point within 60 m, snapped to the ground below unless ground is false, facing yaw, or V with face_v. It is never saved: world_despawn, the kill switch, a pause, a handover or loading a save removes it, and game_save refuses while one exists. At most 24 spawned things (props, vehicles and lights together). Answers its handle (use spawn:&lt;n> as a target in other commands) and its entity id at once; the thing appears a moment later. Needs Codeware and the -writes package's toolkit scripts.
+**Bring in a prop or a vehicle.** Brings a prop or a vehicle into the world near V: a prop from an entity template (the depot path of a .ent file) or a record, a vehicle from its record (such as Vehicle.v_standard2_archer_hella_player), placed offset metres from V along her facing (default two metres ahead) or at a world point within 60 m, snapped to the ground below unless ground is false, facing yaw, or V with face_v. It is never saved: world_despawn, the kill switch, a pause, a handover or loading a save removes it, and game_save refuses while one exists. At most 24 spawned things (props, vehicles and lights together). Answers its handle (use spawn:&lt;n> as a target in other commands) and its entity id at once; the thing appears a moment later. Needs Codeware and the -writes package's toolkit scripts. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `world.spawn`, the bridge method `world.spawn`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo is world_despawn of its handle; the kill switch, a pause, a handover and loading a save remove everything the bridge spawned.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `limit`, [`too_far`](#refusal-too-far), [`codeware_missing`](#refusal-codeware-missing), [`not_ready`](#refusal-not-ready), `record_missing`, `template_missing`, [`spawn_refused`](#refusal-spawn-refused), [`script_layer_missing`](#refusal-script-layer-missing)
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `limit`, [`too_far`](#refusal-too-far), [`codeware_missing`](#refusal-codeware-missing), [`not_ready`](#refusal-not-ready), `record_missing`, `template_missing`, [`spawn_refused`](#refusal-spawn-refused), [`script_layer_missing`](#refusal-script-layer-missing), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1173,6 +1300,12 @@ The DM toolkit: bring props, vehicles and lights in, change doors and vehicles, 
 | `face_v` | boolean | `true`, `false` | Face V. |
 | `label` | string | 1 to 48 characters | A name for it in answers and events. |
 | `ground` | boolean | `true`, `false` | Snap to the ground below the place (default true); false puts it exactly where asked. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `world_despawn`
 
@@ -1202,13 +1335,13 @@ No parameters.
 
 ### `world_door`
 
-**Open, close, lock or seal a door.** Opens, closes, locks, unlocks, seals or unseals the door V is looking at (target look_at), a door by its entity id, or one the bridge spawned: open true unlocks and unseals it first (as the game's own quest actions do), and an open door can't be locked or sealed in the same call. The first state each door had is remembered: the kill switch, a pause and a handover put every door back, and game_save refuses while one is changed.
+**Open, close, lock or seal a door.** Opens, closes, locks, unlocks, seals or unseals the door V is looking at (target look_at), a door by its entity id, or one the bridge spawned: open true unlocks and unseals it first (as the game's own quest actions do), and an open door can't be locked or sealed in the same call. The first state each door had is remembered: the kill switch, a pause and a handover put every door back, and game_save refuses while one is changed. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `world.door`, the bridge method `world.door`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo puts the door back as it was; the kill switch, a pause and a handover put every changed door back.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_a_door`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_a_door`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1216,16 +1349,22 @@ No parameters.
 | `open` | boolean | `true`, `false` | Open (true) or close (false) it. |
 | `locked` | boolean | `true`, `false` | Lock (true) or unlock (false) it. |
 | `sealed` | boolean | `true`, `false` | Seal (true) or unseal (false) it. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `vehicle_set`
 
-**Change a vehicle's lights, engine or doors.** Switches a vehicle's lights or engine, or opens, closes, locks or unlocks one of its doors (or all of them). The vehicle is mounted (the one V sits in), look_at (the one she looks at), a spawned one (spawn:&lt;n>) or an entity id. The game offers no read of the headlights, so the lights' undo switches them the other way. The first engine and door states are remembered: the kill switch, a pause and a handover put them back.
+**Change a vehicle's lights, engine or doors.** Switches a vehicle's lights or engine, or opens, closes, locks or unlocks one of its doors (or all of them). The vehicle is mounted (the one V sits in), look_at (the one she looks at), a spawned one (spawn:&lt;n>) or an entity id. The game offers no read of the headlights, so the lights' undo switches them the other way. The first engine and door states are remembered: the kill switch, a pause and a handover put them back. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `vehicle.set`, the bridge method `vehicle.set`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo puts back the engine and the doors it could read and switches the lights the other way; the kill switch, a pause and a handover put the vehicle back.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_a_vehicle`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_a_vehicle`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1234,16 +1373,22 @@ No parameters.
 | `engine` | boolean | `true`, `false` | Switch the engine on or off. |
 | `door` | string | `all`, `seat_front_left`, `seat_front_right`, `seat_back_left`, `seat_back_right`, `trunk`, `hood` | Which door: all, seat_front_left, seat_front_right, seat_back_left, seat_back_right, trunk or hood. |
 | `door_state` | string | `open`, `closed`, `locked`, `unlocked` | What to do to it: open, closed, locked or unlocked. Needs door. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `audio_play`
 
-**Play a sound event.** Plays one of the game's sound events (by its event name, such as ui_phone_sms) on V (the default), in the world with no place (on global), on what V looks at, or on something the bridge spawned. loop keeps it playing until audio_stop (and the kill switch, a pause, a handover or a load stop it); other sounds are tracked for seconds (default 10). At most 16 tracked sounds. Answers the sound's id.
+**Play a sound event.** Plays one of the game's sound events (by its event name, such as ui_phone_sms) on V (the default), in the world with no place (on global), on what V looks at, or on something the bridge spawned. loop keeps it playing until audio_stop (and the kill switch, a pause, a handover or a load stop it); other sounds are tracked for seconds (default 10). At most 16 tracked sounds. Answers the sound's id. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `audio.play`, the bridge method `audio.play`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo stops the sound; a sound already played can't be unheard.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `limit`, [`not_ready`](#refusal-not-ready)
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `limit`, [`not_ready`](#refusal-not-ready), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1252,6 +1397,12 @@ No parameters.
 | `emitter` | string | matches `^[A-Za-z0-9_]{1,64}$` | An emitter name on that entity (optional). |
 | `loop` | boolean | `true`, `false` | Keep it playing until audio_stop. |
 | `seconds` | number | 0.5 to 3600 | How long a one-shot is tracked, 0.5 to 3600. Default 10. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `audio_stop`
 
@@ -1270,59 +1421,77 @@ No parameters.
 
 ### `audio_radio`
 
-**Set a vehicle's radio.** Turns a vehicle's radio on or off and tunes it to one of the game's fourteen stations (0 to 13, or by name: aggro_industrial, electro_industrial, hip_hop, aggro_techno, downtempo, attitude_rock, pop, latino, metal, minimal_techno, jazz, growl, dark_star, impulse_fm). Only a vehicle's radio takes an exact station; a radio device in the world only steps to its next station, which this does not drive. The first station and state are remembered and put back by the kill switch, a pause and a handover.
+**Set a vehicle's radio.** Turns a vehicle's radio on or off and tunes it to one of the game's fourteen stations (0 to 13, or by name: aggro_industrial, electro_industrial, hip_hop, aggro_techno, downtempo, attitude_rock, pop, latino, metal, minimal_techno, jazz, growl, dark_star, impulse_fm). Only a vehicle's radio takes an exact station; a radio device in the world only steps to its next station, which this does not drive. The first station and state are remembered and put back by the kill switch, a pause and a handover. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `audio.radio`, the bridge method `audio.radio`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo puts the earlier station and state back (the station only when the game's name for it matches one of the fourteen).
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `no_radio`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `no_radio`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `target` (required) | string | at most 40 characters; matches `^(mounted\|look_at\|(?:dynamic\|static): '[0-9]{1,20}'\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The vehicle: mounted, look_at, spawn:&lt;n> or an entity id. |
 | `station` | integer or string | 0 to 13; or `aggro_industrial`, `electro_industrial`, `hip_hop`, `aggro_techno`, `downtempo`, `attitude_rock`, `pop`, `latino`, `metal`, `minimal_techno`, `jazz`, `growl`, `dark_star`, `impulse_fm` | A station number 0 to 13 or its name. |
 | `on` | boolean | `true`, `false` | Turn the radio on (true) or off (false). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `audio_voice`
 
-**Have an NPC say a line of its own voice.** Plays a line from an NPC's own voiceset by its context (such as greeting): the NPC V looks at (look_at), one the bridge spawned or an entity id. The game picks the line, the voice and the lip movement; a context the voice lacks plays nothing. Only someone with a voice of their own takes it.
+**Have an NPC say a line of its own voice.** Plays a line from an NPC's own voiceset by its context (such as greeting): the NPC V looks at (look_at), one the bridge spawned or an entity id. The game picks the line, the voice and the lip movement; a context the voice lacks plays nothing. Only someone with a voice of their own takes it. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `audio.voice`, the bridge method `audio.voice`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** A spoken line can't be taken back.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_an_npc`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_an_npc`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `target` (required) | string | at most 40 characters; matches `^(look_at\|(?:dynamic\|static): '[0-9]{1,20}'\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The NPC: look_at, spawn:&lt;n> or an entity id. |
 | `context` (required) | string | matches `^[A-Za-z0-9_]{1,96}$` | The voiceset context: letters, digits and _. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `phone_text`
 
-**Show a message toast.** Shows a message toast on the HUD's phone from a name, with the text in it (up to 500 characters; the toast shows for about seven seconds and carries the whole text). It is not a message in the phone's inbox and nothing is saved: the player can't open or answer it. The messages shown are listed by phone_state.
+**Show a message toast.** Shows a message toast on the HUD's phone from a name, with the text in it (up to 500 characters; the toast shows for about seven seconds and carries the whole text). It is not a message in the phone's inbox and nothing is saved: the player can't open or answer it. The messages shown are listed by phone_state. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `phone.text`, the bridge method `phone.text`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** A toast can't be taken back; it fades by itself.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `hud_missing`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `hud_missing`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `contact` (required) | string | 1 to 48 characters | The sender's name as the toast shows it. |
 | `text` (required) | string | 1 to 500 characters | The message. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `phone_call`
 
-**Ring V with a call.** Rings V's phone with a real incoming call from a contact the player has (ids from phone_state {contacts: true}; the game's own ring, name and picture). When the player answers it, the bridge starts the call and shows the lines one after another as subtitles in the call's style, then ends the call; a rejected call, a missed one and a hang-up are events (dm.phone). mode audio (the default) shows the contact's picture; video asks for the holocall frame, which the game fills only with a camera feed it stages for its own calls. A caller the journal doesn't hold is refused: the phone's code would run on a missing contact. Refused while the phone is blocked (combat, a story scene). One call at a time.
+**Ring V with a call.** Rings V's phone with a real incoming call from a contact the player has (ids from phone_state {contacts: true}; the game's own ring, name and picture). When the player answers it, the bridge starts the call and shows the lines one after another as subtitles in the call's style, then ends the call; a rejected call, a missed one and a hang-up are events (dm.phone). mode audio (the default) shows the contact's picture; video asks for the holocall frame, which the game fills only with a camera feed it stages for its own calls. A caller the journal doesn't hold is refused: the phone's code would run on a missing contact. Refused while the phone is blocked (combat, a story scene). One call at a time. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `phone.call`, the bridge method `phone.call`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo is phone_end, which ends the ring or the call; an unanswered call ends by itself.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), [`busy`](#refusal-busy), `contact_unknown`, `phone_blocked`, [`not_ready`](#refusal-not-ready)
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), [`busy`](#refusal-busy), `contact_unknown`, `phone_blocked`, [`not_ready`](#refusal-not-ready), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1334,17 +1503,31 @@ No parameters.
 | `ring_s` | number | 3 to 120 | How long it rings before it is missed, 3 to 120. Default 20. |
 | `mode` | string | `audio`, `video` | audio (the default) or video. |
 | `rejectable` | boolean | `true`, `false` | Whether the player can reject it (default true). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `phone_end`
 
-**End the call.** Ends the call that is ringing or running (the ring stops, the lines go, the phone is free). Nothing happens when there is none.
+**End the call.** Ends the call that is ringing or running (the ring stops, the lines go, the phone is free). Nothing happens when there is none. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `phone.end`, the bridge method `phone.end`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** A call can't be resumed; start another with phone_call.
+- **Refusals:** [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
-No parameters.
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `phone_state`
 
@@ -1361,13 +1544,13 @@ No parameters.
 
 ### `quest_set`
 
-**Put an XF quest in the tracker.** Puts a quest of the bridge's own in the HUD's quest tracker (the area under the minimap): a title and up to 8 objectives, each active, done, failed or hidden, optionally with an area on the map (radius_m metres round a point) and complete_on_enter, which arms a watcher that marks the objective done when V walks in. It is not in the journal and not in a save: the tracker shows one quest at a time, the one set or changed last. notify new or update raises the game's own quest toast with the title. At most 4 quests at once. A save is not refused (nothing is kept), but a load, the kill switch, a pause and a handover take it down.
+**Put an XF quest in the tracker.** Puts a quest of the bridge's own in the HUD's quest tracker (the area under the minimap): a title and up to 8 objectives, each active, done, failed or hidden, optionally with an area on the map (radius_m metres round a point) and complete_on_enter, which arms a watcher that marks the objective done when V walks in. It is not in the journal and not in a save: the tracker shows one quest at a time, the one set or changed last. notify new or update raises the game's own quest toast with the title. At most 4 quests at once. A save is not refused (nothing is kept), but a load, the kill switch, a pause and a handover take it down. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `quest.set`, the bridge method `quest.set`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo puts the earlier quest back (or clears a new one).
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `too_many`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `too_many`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1385,16 +1568,22 @@ No parameters.
 | `objectives[].area.complete_on_enter` | boolean | `true`, `false` | Mark the objective done when V enters the radius. |
 | `show` | boolean | `true`, `false` | Show it in the tracker (default true). |
 | `notify` | string | `none`, `new`, `update` | Raise the game's quest toast: new, update, or none (the default). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `quest_objective`
 
-**Change an XF quest's objective.** Sets one objective of an XF quest to active, done, failed or hidden and/or changes its words, and redraws the tracker (a finished objective is drawn once with its tick or cross). notify (default true) raises the game's quest toast: update for a change, done when the last non-optional objective is done, failed for a failed one. The answer says whether the whole quest is complete.
+**Change an XF quest's objective.** Sets one objective of an XF quest to active, done, failed or hidden and/or changes its words, and redraws the tracker (a finished objective is drawn once with its tick or cross). notify (default true) raises the game's quest toast: update for a change, done when the last non-optional objective is done, failed for a failed one. The answer says whether the whole quest is complete. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `quest.objective`, the bridge method `quest.objective`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo puts the objective's earlier state and words back.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `not_found`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `not_found`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1403,6 +1592,12 @@ No parameters.
 | `state` | string | `active`, `done`, `failed`, `hidden` | active, done, failed or hidden. |
 | `text` | string | 1 to 120 characters | New words for the objective. |
 | `notify` | boolean | `true`, `false` | Raise the quest toast (default true). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `quest_clear`
 
@@ -1432,13 +1627,13 @@ No parameters.
 
 ### `notify_show`
 
-**Show a message the game's way.** Shows words on one of the game's own message surfaces: warning (the banner at the top), onscreen (the game's cinematic on-screen message, at its HUD-defined position), quest_new, quest_update, quest_done or quest_failed (the quest toasts; text is the line they show, title replaces the heading), or subtitle (a line in the dialogue subtitle area with speaker's name, shown for seconds). Plain text; nothing is saved. Banners and toasts need the HUD up (a menu or a loading screen refuses hud_missing).
+**Show a message the game's way.** Shows words on one of the game's own message surfaces: warning (the banner at the top), onscreen (the game's cinematic on-screen message, at its HUD-defined position), quest_new, quest_update, quest_done or quest_failed (the quest toasts; text is the line they show, title replaces the heading), or subtitle (a line in the dialogue subtitle area with speaker's name, shown for seconds). Plain text; nothing is saved. Banners and toasts need the HUD up (a menu or a loading screen refuses hud_missing). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `notify.show`, the bridge method `notify.show`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo takes a banner, an on-screen message or the subtitle lines down; a quest toast fades by itself.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `hud_missing`, [`codeware_missing`](#refusal-codeware-missing)
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `hud_missing`, [`codeware_missing`](#refusal-codeware-missing), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1447,29 +1642,42 @@ No parameters.
 | `title` | string | at most 80 characters | A heading for a quest toast (default the game's own). |
 | `speaker` | string | 1 to 48 characters | The name a subtitle shows (required for a subtitle). |
 | `seconds` | number | 0.5 to 30 | How long it shows, 0.5 to 30. Default 5 (4 for a subtitle). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `notify_hide`
 
-**Take messages down.** Takes down the banner, the on-screen message and the bridge's subtitle lines (or only those of the given style).
+**Take messages down.** Takes down the banner, the on-screen message and the bridge's subtitle lines (or only those of the given style). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `notify.hide`, the bridge method `notify.hide`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** Show it again with notify_show.
+- **Refusals:** [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `style` | string | `warning`, `onscreen`, `subtitle`, `quest_new`, `quest_update`, `quest_done`, `quest_failed` | Only this style: warning, onscreen or subtitle (default all). |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `light_spawn`
 
-**Bring in a light.** Brings in a light: an entity whose template holds a light component, set to the colour, intensity (in the component's own units), radius and, for a spot, the cone (inner and outer, full angles in degrees), placed like a prop. With no template it uses the XF light carrier, which is not built yet (carrier_missing); name a template that holds a light component (for example a lamp's), or bring a lamp in with world_spawn and steer it with light_set. pattern sets the engine's flicker or one the tick drives (pulse, strobe, broken, candle; at most 4 at once). Never saved; counts among the 24 spawned things, at most 8 lights.
+**Bring in a light.** Brings in a light: an entity whose template holds a light component, set to the colour, intensity (in the component's own units), radius and, for a spot, the cone (inner and outer, full angles in degrees), placed like a prop. With no template it uses the XF light carrier, which is not built yet (carrier_missing); name a template that holds a light component (for example a lamp's), or bring a lamp in with world_spawn and steer it with light_set. pattern sets the engine's flicker or one the tick drives (pulse, strobe, broken, candle; at most 4 at once). Never saved; counts among the 24 spawned things, at most 8 lights. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `light.spawn`, the bridge method `light.spawn`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo is light_remove of its handle; the kill switch, a pause, a handover and loading a save remove every light.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `limit`, [`too_far`](#refusal-too-far), [`codeware_missing`](#refusal-codeware-missing), `carrier_missing`, `template_missing`, [`spawn_refused`](#refusal-spawn-refused), [`not_ready`](#refusal-not-ready)
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `limit`, [`too_far`](#refusal-too-far), [`codeware_missing`](#refusal-codeware-missing), `carrier_missing`, `template_missing`, [`spawn_refused`](#refusal-spawn-refused), [`not_ready`](#refusal-not-ready), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1488,16 +1696,22 @@ No parameters.
 | `outer` | number | 1 to 179 | A spot's outer cone angle, 1 to 179 (at least inner). |
 | `pattern` | string or object | `steady`, `flicker`, `pulse`, `strobe`, `broken`, `candle`; or the fields below | How the light behaves over time: a name, or {kind, period, low, strength, seed}. |
 | `label` | string | 1 to 48 characters | A name for it in answers and events. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `light_set`
 
-**Change a light.** Changes the colour, intensity, radius, cone, on/off state or pattern of a light (the handle from light_spawn or world_spawn: any thing the bridge spawned whose entity holds a light component takes it). fade_s fades the change in (0 to 10 s). The answer carries the earlier values and an undo that puts them and the earlier pattern back.
+**Change a light.** Changes the colour, intensity, radius, cone, on/off state or pattern of a light (the handle from light_spawn or world_spawn: any thing the bridge spawned whose entity holds a light component takes it). fade_s fades the change in (0 to 10 s). The answer carries the earlier values and an undo that puts them and the earlier pattern back. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `light.set`, the bridge method `light.set`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo puts the earlier values and pattern back.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `no_light_component`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `no_light_component`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1510,6 +1724,12 @@ No parameters.
 | `on` | boolean | `true`, `false` | Switch it on or off. |
 | `pattern` | string or object | `steady`, `flicker`, `pulse`, `strobe`, `broken`, `candle`; or the fields below | How the light behaves over time: a name, or {kind, period, low, strength, seed}. |
 | `fade_s` | number | 0 to 10 | Fade the change in over this many seconds, 0 to 10. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `light_remove`
 
@@ -1528,13 +1748,13 @@ No parameters.
 
 ### `watch_arm`
 
-**Arm an in-game watcher.** Arms a watcher that runs inside the game and, when its condition holds, logs an event (dm.watch) and runs up to 8 micro-actions (bridge commands, each with its own delay_s) without the agent: enter or leave (V inside or outside radius_m of a point or an entity), gaze (V looks at an entity for seconds, by a cone or by the game's look-at), weapon, combat or vehicle (the edge on or off), interact (V uses something; caption part, target), choice (V picks a dialogue choice; caption part, index), timer (seconds after arming) or clock (the game's time of day passes a mark). repeat keeps it armed with a cooldown; it ends at expires_s (default 600, at most 3600), when it fires (unless repeat), by watch_disarm, the kill switch, a pause, a handover and a load. At most 16 at once. A micro-action goes through the bridge's own gates like any request; saving, loading, the kill switch, handing over and the creator's buttons are never allowed, and a watcher armed by an action carries no actions of its own. The pick of a dialogue choice is inferred from the game's choice list going away [unverified].
+**Arm an in-game watcher.** Arms a watcher that runs inside the game and, when its condition holds, logs an event (dm.watch) and runs up to 8 micro-actions (bridge commands, each with its own delay_s) without the agent: enter or leave (V inside or outside radius_m of a point or an entity), gaze (V looks at an entity for seconds, by a cone or by the game's look-at), weapon, combat or vehicle (the edge on or off), interact (V uses something; caption part, target), choice (V picks a dialogue choice; caption part, index), timer (seconds after arming) or clock (the game's time of day passes a mark). repeat keeps it armed with a cooldown; it ends at expires_s (default 600, at most 3600), when it fires (unless repeat), by watch_disarm, the kill switch, a pause, a handover and a load. At most 16 at once. A micro-action goes through the bridge's own gates like any request; saving, loading, the kill switch, handing over and the creator's buttons are never allowed, and a watcher armed by an action carries no actions of its own. The pick of a dialogue choice is inferred from the game's choice list going away [unverified]. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `watch.arm`, the bridge method `watch.arm`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo is watch_disarm; a watcher also ends when it fires (unless repeat), expires, by the kill switch and when a save loads.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `too_many`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `too_many`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1560,21 +1780,33 @@ No parameters.
 | `actions[].method` (required) | string | at most 64 characters; matches `^[a-z]+(\.[a-z]+)+$` | A bridge method such as notify.show or audio.play. |
 | `actions[].params` | any | any | Its parameters, an object (under 4 KiB). |
 | `actions[].delay_s` | number | 0 to 30 | Wait this long first, 0 to 30. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `watch_disarm`
 
-**Disarm watchers.** Disarms a watcher (its id) or every one with all, and drops the micro-actions of it still waiting.
+**Disarm watchers.** Disarms a watcher (its id) or every one with all, and drops the micro-actions of it still waiting. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `watch.disarm`, the bridge method `watch.disarm`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
 - **Undo:** Arm it again with watch_arm.
-- **Refusals:** `not_found`
+- **Refusals:** `not_found`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `id` | string | matches `^[A-Za-z0-9_.-]{1,48}$` | The watcher's id. |
 | `all` | boolean | `true`, `false` | Disarm every watcher. |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `watch_list`
 
@@ -2376,6 +2608,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 | `max_height` | integer | 16 to 16384 | Largest height of the returned picture, in pixels. |
 | `scale` | number | 0.01 to 1 | Shrink the returned picture by this factor (0.01 to 1) instead of a size limit. |
 | `name` | string | at most 80 characters; matches `^[A-Za-z0-9._-]{1,80}$` | Short label for the files (letters, digits, '.', '_', '-'). |
+| `clear_overlay` | boolean | `true`, `false` | Hide bridge overlays for the burst (default true). False preserves consumer evidence. |
 | `frames` | integer | 2 to 120 | How many frames, 2 to 120. Default 10. |
 | `interval_ms` | integer | 0 to 10000 | Target time between frames in milliseconds (0 = as fast as possible). Default 100. |
 | `route` | string | `auto`, `printwindow`, `screen` | How to grab the window (see capture_screenshot). |
@@ -2461,6 +2694,60 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 | `region` | string | `full`, `center-16x9`, `head-and-shoulders`, `face`, `eyes`, `full-body`, `cc-eyes` | For cells taken now: the area to keep (as capture_screenshot). |
 | `max_width` | integer | 320 to 8000 | The sheet's width at most, 320 to 8000 px. Default 2400. |
 | `name` | string | at most 60 characters; matches `^[A-Za-z0-9._-]{1,60}$` | Short label for the files (letters, digits, '.', '_', '-'). |
+
+### `capture_arm`
+
+**Arm a source-event capture.** Autonomous test recorder required. One tools-process-owned arm, polled through the same command connection. Fires screenshot/burst/recrop on future exact recorder data.event or session kind (line.widget_created, toast.created, npc.arrived, dm.quest with match). Match uses scalar equality on event data. Delay is measured from source time, with latency bounds recorded; busy commands/polling can make a capture late. Default keeps overlays for consumer evidence. Count &lt;=8 and expiry &lt;=120s; loss cancels, close/kill/handover cancels. Use a persistent MCP/session runner; a one-shot CLI closes and cancels its arm. Recrop processes an existing image and cannot observe a new event.
+
+- **Command:** `capture.arm`, run by the tools (it may call the bridge several times)
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run` (required) | integer | 1 to 9007199254740991 | Recorder run |
+| `event` (required) | string | 1 to 64 characters | Exact event name |
+| `channel` | string | `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui` | Optional recorder channel |
+| `match` | object | the fields below | At most eight exact event-data fields to match |
+| `match.who` | string | at most 512 characters | Exact who |
+| `match.actor` | string | at most 512 characters | Exact actor |
+| `match.style` | string | at most 512 characters | Exact style |
+| `match.quest` | string | at most 512 characters | Exact quest |
+| `match.objective` | string | at most 512 characters | Exact objective |
+| `match.state` | string | at most 512 characters | Exact state |
+| `match.line_id` | string | at most 512 characters | Exact line_id |
+| `match.widget_id` | string | at most 512 characters | Exact widget_id |
+| `match.speaker` | string | at most 512 characters | Exact speaker |
+| `match.text` | string | at most 512 characters | Exact text |
+| `match.source` | string | at most 512 characters | Exact source |
+| `capture` (required) | string | `screenshot`, `burst`, `recrop` | Capture command |
+| `args` | object or object or object | the fields below | Arguments for selected screenshot, burst or recrop; exact command schema checked before arming |
+| `delay_ms` | integer | 0 to 2000 | Source-timed delay, default 50 |
+| `count` | integer | 1 to 8 | Maximum captures, default 1 |
+| `expires_s` | integer | 1 to 120 | Arm lifetime, default 30 seconds |
+
+### `capture_armed`
+
+**Read armed capture receipts.** Current process-owned arm and last 32 receipts, including source event, capture paths and event-to-capture latency bounds. No new capture.
+
+- **Command:** `capture.armed`, run by the tools (it may call the bridge several times)
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+
+No parameters.
+
+### `capture_disarm`
+
+**Cancel the armed capture.** Cancel this tools process's pending capture and preserve its bounded receipts.
+
+- **Command:** `capture.disarm`, run by the tools (it may call the bridge several times)
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+
+No parameters.
 
 ## Saves
 
@@ -2637,15 +2924,58 @@ Tools not yet sorted into an area above.
 
 ### `game_continue`
 
-**Press past the press-any-key screen.** Not available yet: refuses (no_safe_route). The bridge would press past the game's press-any-key screen after a load only through a route inside the game (the loading screen's own controller); the only route it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key; game_load says when the screen waits.
+**Press past the press-any-key screen.** Not available yet: refuses (no_safe_route). The bridge would press past the game's press-any-key screen after a load only through a route inside the game (the loading screen's own controller); the only route it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key; game_load says when the screen waits. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `game.continue`, run by the tools (it may call the bridge several times)
 - **Permission:** Save and load the game (`write-save`)
 - **Changes the game:** Yes
 - **Undo:** None.
-- **Refusals:** `no_safe_route`
+- **Refusals:** `no_safe_route`, [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
-No parameters.
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
+
+### `game_catchup`
+
+**Catch up with the moving session.** Autonomous test recorder required. Read this at the start of each turn: source path/health/combat/heat/vehicle/busy changes, F/U/subtitle/voice callbacks, session events and alerts since a cursor, plus the existing current digest. First call supplies run; subsequent calls replay cursor verbatim. Compact by default (last 24 events per channel with omitted counts); detail returns all retained records. Loss/invalid sources are explicit; contact alerts require explicit receipts, no physical collision sensor is commissioned. No second history store.
+
+- **Command:** `game.catchup`, run by the tools (it may call the bridge several times)
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`recording_changed`](#refusal-recording-changed)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run` | integer | 1 to 9007199254740991 | Recorder run for first read |
+| `cursor` | object | the fields below | The complete returned cursor, unchanged |
+| `cursor.schema` (required) | string | `xfb/timeline-cursor-1` | Cursor schema |
+| `cursor.sid` (required) | string | at most 80 characters | Bridge session |
+| `cursor.run` (required) | integer | 1 to 9007199254740991 | Recorder run |
+| `cursor.world` (required) | integer | 0 to 9007199254740991 | World generation |
+| `cursor.record` (required) | integer | 0 to 9007199254740991 | Recorder sequence |
+| `cursor.event` (required) | integer | 0 to 9007199254740991 | Session event sequence |
+| `cursor.last_v` | object | the fields below | Small previous-sample baseline for alerts across turns |
+| `cursor.last_v.position` | array of number | exactly 3 items | Previous sampled position |
+| `cursor.last_v.vitals` | object | the fields below | Previous vitals |
+| `cursor.last_v.vitals.health` | number | any | Previous health |
+| `cursor.last_v.vitals.in_combat` | boolean | `true`, `false` | Previous combat flag |
+| `cursor.last_v.heat` | string | at most 2048 characters | Previous heat as canonical JSON |
+| `cursor.last_v.vehicle` | object | the fields below | Previous vehicle identity |
+| `cursor.last_v.vehicle.mounted` | boolean | `true`, `false` | Mounted |
+| `cursor.last_v.vehicle.id` | string | at most 80 characters | Entity identity |
+| `cursor.last_v.busy` | string | at most 80 characters | Previous busy reason |
+| `cursor.file_chunk` | integer | 1 to 2048 | Native writer chunk cursor |
+| `cursor.file_offset` | integer | 0 to 1048576 | Native writer byte cursor |
+| `detail` | boolean | `true`, `false` | Include all retained source records and events |
+| `now` | boolean | `true`, `false` | Include current digest, default true; false avoids another game-thread read |
+| `replay_files` | boolean | `true`, `false` | Recover older history from the native private chunks, default true; bounded 8 MiB/1024 rows per call, more requests the next page |
 
 ## Refusal codes
 
@@ -2722,6 +3052,8 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-outfit-managed-elsewhere"></a>`outfit_managed_elsewhere` | V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back. |
 | <a id="refusal-photo-key-needed"></a>`photo_key_needed` | The game offers no way to open the full photo mode from inside. Use photo_open, which presses the photo mode key in the game window, or ask the player to press it; game_wait with phase photo_mode notices when it opens. |
 | <a id="refusal-player-busy"></a>`player_busy` | V is busy (jumping, sliding, falling or landing, swimming, in a workspot, a takedown or grapple, carrying a body, in a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play; player_state's busy_state says which. |
+| <a id="refusal-precondition-failed"></a>`precondition_failed` | The game state changed before this step could act. The detail contains the required and observed state; read catch-up and prepare the next action. |
+| <a id="refusal-precondition-unavailable"></a>`precondition_unavailable` | This route cannot compare conditions on the executing game frame. Use the autonomous test candidate's native action route. |
 | <a id="refusal-quest-scene"></a>`quest_scene` | A story scene is playing, and the story may hold the weather itself, so the bridge didn't change it. Nothing was changed. Try again once the scene is over. |
 | <a id="refusal-rate-limited"></a>`rate_limited` | The game bridge was sent too many requests in a short time, and it was still refusing after the tools waited a few seconds. Nothing was changed by the refused request. Wait a moment and try again. |
 | <a id="refusal-recording-busy"></a>`recording_busy` | The recorder is still active or draining. Stop it and finish saving its records before starting another run. |

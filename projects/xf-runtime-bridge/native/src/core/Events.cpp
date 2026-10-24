@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "core/Dispatcher.hpp"
+#include "core/Recording.hpp"
 #include "core/Messages.hpp"
 #include "core/Params.hpp"
 #include "core/Win32.hpp"
@@ -26,6 +27,7 @@ uint64_t EventLog::Push(const std::string& aKind, const std::string& aLevel, con
         event.data = text.size() <= kMaxData ? std::move(aData) : json{{"cut", true}, {"bytes", text.size()}};
     }
     event.at = win32::UtcNowIso8601();
+    event.sourceS = recording::Now();
     std::scoped_lock _(m_mutex);
     event.tMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_start).count();
     event.seq = m_next++;
@@ -60,7 +62,7 @@ json EventLog::Read(uint64_t aSince, size_t aLimit, const std::vector<std::strin
             continue;
         }
         json item{{"seq", event.seq}, {"at", event.at}, {"t_ms", event.tMs}, {"kind", event.kind}, {"level", event.level},
-                  {"source", event.source}, {"text", event.text}};
+                  {"source", event.source}, {"text", event.text}, {"source_s", event.sourceS}};
         if (!event.data.is_null())
         {
             item["data"] = event.data;

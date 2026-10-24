@@ -58,7 +58,11 @@ export const point3 = (description: string): JsonSchema => ({ type: "array", des
  * it away, ending the player's chance to answer); the panel is hidden, so it isn't in the picture either way. Without a
  * bridge (or a bridge too old for ui.hud) the capture just runs.
  */
-export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>, hideMs = 5000): Promise<{ value: T; overlay: Json }> {
+export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>, hideMs = 5000, enabled = true): Promise<{ value: T; overlay: Json }> {
+  if (!enabled) {
+    stopIfCancelled(context, "the capture");
+    return { value: await run(), overlay: { cleared: false, why: "consumer evidence requested" } };
+  }
   if (!context.api.session()) {
     stopIfCancelled(context, "the capture");
     return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };

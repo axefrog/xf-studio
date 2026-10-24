@@ -16,6 +16,7 @@ import { NO_BRIDGE, connectError, plainBridgeError, type PlainError } from "./er
 import { validate } from "./schema.ts";
 import { sendKeyToWindow, type KeySender } from "../input/photo-key.ts";
 import { describeWindow, mainWindowOf } from "../capture/win32.ts";
+import { EventCaptures } from "../testing/event-captures.ts";
 import { withHandoverLock, type HandoverBusyError } from "../handover-lock.ts";
 
 export type CommandOutcome =
@@ -23,7 +24,7 @@ export type CommandOutcome =
   | { ok: false; command: string; cid: string; error: PlainError };
 
 /** Per-call options: a correlation id, the calling frontend (for logs), where captures go, and a signal that ends a long local wait (game.wait). */
-export type RunOptions = { cid?: string; source?: string; captureRoot?: string; signal?: AbortSignal };
+export type RunOptions = { cid?: string; source?: string; captureRoot?: string; signal?: AbortSignal; deadlineMs?: number };
 
 export type ImageRef = { path: string; width: number; height: number; mimeType: "image/png"; role: "view" | "full" };
 
@@ -141,11 +142,16 @@ export const SUPERSEDING_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill",
 const SUPERSEDED_BY: Readonly<Record<string, string>> = { "bridge.kill": "bridge_kill", "session.handover": "session_handover" };
 
 export class CommandApi {
+  readonly eventCaptures = new EventCaptures(this);
   readonly runtimeDir: string;
   readonly captureRoot: string;
   readonly auditDir: string;
   private readonly transportFactory: TransportFactory;
   private readonly idleCloseMs: number;
+  private recordingActive = false;
+  private recordingLease?: ReturnType<typeof setTimeout>;
+  private recordingHeartbeat?: ReturnType<typeof setTimeout>;
+  private recordingEpoch?: AbortController;
   private connection: { transport: BridgeTransport; sid: string } | null = null;
   private connecting: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -236,8 +242,12 @@ export class CommandApi {
    */
   run(name: string, input: unknown = {}, options: RunOptions = {}): Promise<CommandOutcome> {
     name = findCommand(name)?.name ?? name;
+    // Process-only state: disarm must overtake a queued capture or a long game wait.
+    if (name === "capture.disarm" || name === "capture.armed") return this.runNow(name, input ?? {}, options);
+    if (name === "test.record.stop") this.holdRecordingConnection(false);
     // Emergency controls go now, beside whatever is running (RB-121); kill and handover first cancel everything sent
     // before them (queued commands never start; a running one sees its signal abort and stops at its next step).
+    if (SUPERSEDING_COMMANDS.has(name)) this.eventCaptures.cancel(name);
     if (EMERGENCY_COMMANDS.has(name)) {
       if (SUPERSEDING_COMMANDS.has(name)) {
         this.epoch.abort(SUPERSEDED_BY[name]);
@@ -318,6 +328,8 @@ export class CommandApi {
 
   private async runNow(name: string, input: unknown, options: RunOptions, control = false): Promise<CommandOutcome> {
     const cid = options.cid ?? nextCid(options.source ?? "api");
+    if (options.signal?.aborted || (options.deadlineMs !== undefined && performance.now() >= options.deadlineMs))
+      return { ok: false, command: name, cid, error: { code: "interrupted", message: "Action cancelled or expired before execution; nothing started." } };
     const command = findCommand(name);
     if (!command) {
       return { ok: false, command: name, cid, error: { code: "unknown_command", message: `There is no command called "${name}".` } };
@@ -326,16 +338,28 @@ export class CommandApi {
     if (problems.length) {
       return { ok: false, command: name, cid, error: { code: "bad_input", message: problems.join(" ") } };
     }
-    const params = input as Record<string, unknown>;
-    if (command.permission !== "read") this.audit({ event: "request", command: name, permission: command.permission, cid, input: params, undo: command.undo });
+    const params = { ...input as Record<string, unknown> };
+    const when = params.when;
+    if (when && !Object.keys(when).length) return { ok: false, command: name, cid, error: { code: "bad_input", message: "when must contain at least one condition" } };
+    delete params.when;
+    if (name === "capture.arm") {
+      const capture = findCommand(`capture.${params.capture}`);
+      const args = params.args ?? {};
+      const errors = capture ? validate(capture.input, args) : ["Unknown capture command"];
+      const match = params.match as Record<string, unknown> | undefined;
+      if (match && (Object.keys(match).length > 8 || Object.values(match).some(value => value !== null && !["string", "number", "boolean"].includes(typeof value)))) errors.push("match requires at most eight scalar fields");
+      if (errors.length) return { ok: false, command: name, cid, error: { code: "bad_input", message: errors.join(" ") } };
+    }
+    if (command.permission !== "read") this.audit({ event: "request", command: name, permission: command.permission, cid, input: { ...params, ...(when ? { when } : {}) }, undo: command.undo });
     try {
       let result: CommandResult;
       if (command.local) {
         // An emergency command's own bridge calls (session.handover's steps) go on the control pipe too.
-        const api = control ? this.controlView() : this;
+        const base = control ? this.controlView() : this;
+        const api = when ? this.whenView(base, when) : base;
         result = await command.local(params, { api, cid, captureRoot: resolve(options.captureRoot ?? this.captureRoot), signal: options.signal });
       } else {
-        const bridgeParams = command.bridge!.params ? command.bridge!.params(params) : params;
+        const bridgeParams = { ...(command.bridge!.params ? command.bridge!.params(params) : params), ...(when ? { when } : {}) };
         let response: BridgeAnswer;
         if (control) {
           // RB-121: the control pipe is read at once, beside a request the main pipe still serves.
@@ -374,6 +398,21 @@ export class CommandApi {
    * This API with its bridge calls sent on the control pipe (RB-121), for an emergency command's local handler
    * (session.handover's steps). Everything else is the API itself.
    */
+  private whenView(base: CommandApi, when: unknown): CommandApi {
+    return new Proxy(base, { get(target, prop) {
+      if (prop === "keySender") return () => async () => { throw Object.assign(new Error("External keys cannot compare-and-act on a game frame"), { code: "precondition_unavailable" }); };
+      if (prop === "callBridge") return (method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal) => {
+        const write = CATALOGUE.some(c => (c.bridge?.method ?? c.name) === method && c.permission.startsWith("write-")) || method === "player.action";
+        const knownRead = CATALOGUE.some(c => (c.bridge?.method ?? c.name) === method && ["read", "notify", "control"].includes(c.permission)) || method === "game.status";
+        if (signal && !write && !knownRead) throw Object.assign(new Error(`No execution-frame guard contract for ${method}`), { code: "precondition_unavailable" });
+        // Cleanup helpers omit the forward signal and must still be allowed to put things back.
+        return target.callBridge(method, write && signal ? { ...params, when } : params, cid, timeoutMs, signal);
+      };
+      const value = Reflect.get(target, prop, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    } });
+  }
+
   private controlView(): CommandApi {
     // 0.8.3 (the review): the step's AbortSignal goes along, so a cancelled resume sends nothing.
     const control = (method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal) =>
@@ -504,6 +543,11 @@ export class CommandApi {
       this.inFlight--;
     }
     if (!response.ok && (response.error?.code === "disconnected" || response.error?.code === "client_timeout") && this.connection === connection) this.disconnect();
+    if (response.ok) {
+      if (method === "test.record.start") this.holdRecordingConnection(true, Number(params.duration_s ?? 60));
+      if (method === "test.record.stop" || method === "game.load" ||
+          (method === "test.record.read" && (response.result as { active?: boolean })?.active === false)) this.holdRecordingConnection(false);
+    }
     if (this.connection && this.inFlight === 0) this.touch();
     if (response.ok) return { ok: true, result: response.result };
     return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message, method) };
@@ -526,6 +570,7 @@ export class CommandApi {
 
   private touch() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
+    if (this.recordingActive) { this.idleTimer = null; return; }
     this.idleTimer = setTimeout(() => this.disconnect(), this.idleCloseMs);
     // Don't keep a CLI process alive just for the idle timer.
     (this.idleTimer as { unref?: () => void }).unref?.();
@@ -536,10 +581,40 @@ export class CommandApi {
    * session.wait) holds it only during each poll and another process's XF tools can call between polls.
    */
   release() {
-    if (this.inFlight === 0) this.disconnect();
+    if (this.inFlight === 0 && !this.recordingActive) this.disconnect();
+  }
+
+  private holdRecordingConnection(active: boolean, durationS = 60) {
+    if (this.recordingLease) clearTimeout(this.recordingLease);
+    if (this.recordingHeartbeat) clearTimeout(this.recordingHeartbeat);
+    this.recordingEpoch?.abort();
+    this.recordingEpoch = undefined;
+    this.recordingLease = undefined;
+    this.recordingActive = active;
+    if (active) {
+      // Native ownership stops at disconnect. Keep the same connection across thinking/long waits,
+      // bounded by the source duration even when the coordinator never reads again.
+      this.recordingEpoch = new AbortController();
+      this.recordingLease = setTimeout(() => { this.holdRecordingConnection(false); this.touch(); }, (Math.min(1800, durationS) + 1) * 1000);
+      this.recordingLease.unref?.();
+      this.keepRecordingAlive(this.recordingEpoch);
+    }
+  }
+
+  private keepRecordingAlive(lease: AbortController) {
+    this.recordingHeartbeat = setTimeout(async () => {
+      if (!this.recordingActive || this.recordingEpoch !== lease) return;
+      // At most one queued heartbeat, below the native minimum idle timeout (5 s).
+      const answer = await this.run("bridge.ping", {}, { source: "recorder-owner", signal: lease.signal });
+      if (this.recordingEpoch !== lease) return;
+      if (!answer.ok) { this.holdRecordingConnection(false); this.eventCaptures.cancel("owner_connection_lost"); return; }
+      if (this.recordingActive) this.keepRecordingAlive(lease);
+    }, 2000);
+    this.recordingHeartbeat.unref?.();
   }
 
   disconnect() {
+    this.holdRecordingConnection(false);
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
     this.connection?.transport.close();
@@ -547,6 +622,7 @@ export class CommandApi {
   }
 
   close() {
+    this.eventCaptures.cancel("tools_closed");
     this.disconnect();
   }
 

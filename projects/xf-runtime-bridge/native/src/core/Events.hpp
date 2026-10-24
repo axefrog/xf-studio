@@ -48,6 +48,7 @@ private:
     {
         uint64_t seq;
         std::string at; // UTC, ISO 8601
+        double sourceS; // QPC seconds, shared with recorder
         int64_t tMs;    // milliseconds since the log started (steady clock)
         std::string kind, level, source, text;
         nlohmann::json data;

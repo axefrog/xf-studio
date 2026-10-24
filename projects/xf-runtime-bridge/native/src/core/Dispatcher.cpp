@@ -211,6 +211,34 @@ GameGate gGate;
 // RB-122 (0.8.1): how many RestoreScopes are open on this thread. Steps queued inside one put something back (a relock, a
 // withdrawal, the selection after a failure), so Dispatcher::RunWrite doesn't refuse them on a closed write gate.
 thread_local int tRestoreDepth = 0;
+thread_local json tWhen;
+// Own a copy on each dispatch thread; concurrent control/micro-action requests cannot borrow it.
+struct WhenScope {
+    json previous;
+    explicit WhenScope(const json& when) : previous(tWhen) { tWhen = when; }
+    ~WhenScope() { tWhen = std::move(previous); }
+};
+
+void ValidateWhen(const json& when)
+{
+    if (!when.is_object() || when.empty() || when.size() > 5)
+        throw MethodError("bad_params", "when must be a nonempty object of phase, vehicle, combat, photo_mode or spawned");
+    for (const auto& [key, value] : when.items()) {
+        if (key == "phase") {
+            const std::set<std::string> phases{"gameplay", "photo_mode", "main_menu", "menu", "paused", "character_menu"};
+            if (!value.is_string() || !phases.count(value.get<std::string>()))
+                throw MethodError("bad_params", "when.phase is not a supported phase");
+        } else if (key == "vehicle" || key == "combat" || key == "photo_mode") {
+            if (!value.is_boolean()) throw MethodError("bad_params", "when flags must be booleans");
+        } else if (key == "spawned") {
+            if (!value.is_array() || value.empty() || value.size() > 16)
+                throw MethodError("bad_params", "when.spawned must contain 1 to 16 returned spawn handles");
+            for (const auto& handle : value)
+                if (!handle.is_number_integer() || handle.get<int64_t>() < 1 || handle.get<int64_t>() > INT32_MAX)
+                    throw MethodError("bad_params", "when.spawned needs positive spawn handles");
+        } else throw MethodError("bad_params", "Unknown when condition: " + key);
+    }
+}
 
 // The control pipe's methods (0.8.1, RB-121): the emergency controls and the steps a handover takes.
 const std::set<std::string>& ControlMethods()
@@ -274,7 +302,11 @@ json Dispatcher::RunWrite(std::chrono::milliseconds aTimeout, const std::functio
     // A step that puts something back is never refused; any other changing step passes the write gate on the game thread.
     // 0.8.2: a put-back step that finds the queue closed by the kill switch goes on the cleanup lane instead (RunTask).
     const bool restoring = RestoreScope::Active();
-    return RunTask(m_queue, aTimeout, aTask, aLabel, true, restoring ? nullptr : this, restoring);
+    const auto when = restoring ? json() : tWhen;
+    return RunTask(m_queue, aTimeout, [this, aTask, when] {
+        RequirePrecondition(when);
+        return aTask();
+    }, aLabel, true, restoring ? nullptr : this, restoring);
 }
 
 namespace
@@ -352,6 +384,25 @@ json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const 
     throw MethodError("failed", error.empty() ? "game-thread step failed" : error);
 }
 } // namespace
+
+void Dispatcher::SetPreconditionReader(PreconditionReader aReader) { m_preconditionReader = std::move(aReader); }
+
+void Dispatcher::RequirePrecondition(const json& aWhen) const
+{
+    if (aWhen.is_null()) return;
+    if (!m_preconditionReader) throw MethodError("precondition_unavailable", "Execution-frame conditions need the autonomous test candidate");
+    const auto observed = m_preconditionReader(aWhen);
+    bool match = true;
+    for (const auto& [key, expected] : aWhen.items()) {
+        if (key == "spawned") {
+            for (const auto& handle : expected) {
+                const auto id = std::to_string(handle.get<int32_t>());
+                match = match && observed.contains("spawned") && observed["spawned"].value(id, false);
+            }
+        } else match = match && observed.contains(key) && observed[key] == expected;
+    }
+    if (!match) throw MethodError("precondition_failed", SerializeJson(json{{"when", aWhen}, {"observed", observed}}));
+}
 
 bool IsValidCid(const std::string& aCid)
 {
@@ -770,6 +821,16 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     std::string code = "ok";
     try
     {
+        json when;
+        if (context.params.contains("when")) {
+            when = context.params["when"];
+            ValidateWhen(when);
+            if (!IsWrite(spec.access)) throw MethodError("bad_params", "when is only accepted on actions");
+            if (methodName.rfind("behave.", 0) == 0)
+                throw MethodError("precondition_unavailable", "Long-lived behaviours do not carry execution-frame conditions; use a guarded player/photo action");
+            context.params.erase("when");
+        }
+        WhenScope whenScope(when);
         if (spec.runOn == RunOn::BridgeThread)
         {
             response = {{"v", kProtocolVersion}, {"id", id}, {"cid", cid}, {"ok", true}, {"result", spec.fn(context)}};
@@ -785,7 +846,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
             // `this` outlives the task: Run returns only once it has run, has started (past this check) or will never run.
             const Dispatcher* writeGate = IsWrite(spec.access) ? this : nullptr;
             const auto result = m_queue.Run(
-                [fn, context, methodName, writeGate]() -> json {
+                [this, fn, context, methodName, writeGate, when]() -> json {
                     try
                     {
                         // Checked here, on the game thread just before the call, not when the request was queued (RB-76).
@@ -794,6 +855,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
                         {
                             writeGate->RequireWritesOpen();
                         }
+                        RequirePrecondition(when);
                         return json{{"ok", true}, {"result", fn(context)}};
                     }
                     catch (const MethodError& e)
