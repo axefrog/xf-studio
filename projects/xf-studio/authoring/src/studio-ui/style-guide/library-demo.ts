@@ -2,7 +2,7 @@
 import { badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
-  sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem, type TreeNodeData } from "../components";
+  sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, notDrawnState, type LightListItem, type TabItem, type TreeNodeData } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../character/swatch-contrast";
 import { h } from "../dom";
 import { setUpdateLine } from "../update-check";
@@ -311,6 +311,17 @@ const MOUNTS: Record<string, Mount> = {
     collection.update({ message: "You changed the collection “Night market set” here too (the order of its presets). Which version should it keep?", keepBoth: false,
       subject: "the collection “Night market set”" });
     return stack({ gap: "normal" }, preset.element, collection.element);
+  },
+  "lib-not-drawn": () => {
+    const pane = (title: string, shows: string, width: number) => {
+      const element = h("div", { class: "viewport-panel", "data-drawn": "false", tabindex: "0", style: `position:relative;width:${width}px;height:200px` });
+      const rest = notDrawnState(element, () => {});
+      const name = rest.update({ shown: true, title, shows });
+      if (name) element.setAttribute("aria-label", name);
+      element.append(rest.element);
+      return element;
+    };
+    return h("div", { class: "row wrap gap-s" }, pane("Side view", "Default feminine V · Preset 1", 300), pane("3D view 2", "Valerie · Smoky evening look for the night market", 200));
   },
   "lib-workspace-notice": () => {
     const make = (message: string, actions: readonly WorkspaceNoticeAction[]) => {

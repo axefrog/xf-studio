@@ -207,7 +207,7 @@ export type StudioPresentationPort<Slot> = {
     titles(): readonly { readonly view: ViewId; readonly panel: string; readonly title: string; readonly subject: string }[];
     /**
      * What a view shows, as names a person reads (its V, "Valerie", and its look, "Smoky"), resolved through the view's own panel (a
-     * view the window isn't drawing names its own V and look, experiment 044 U7). Absent names: it shows none, or nothing resolves it.
+     * view this page isn't drawing names its own V and look, experiment 044 U7). Absent names: it shows none, or nothing resolves it.
      */
     shows(view: ViewId): { readonly v?: string; readonly look?: string };
     /** Turn a view's tool on or off (`view.setTool` through the registry). */
