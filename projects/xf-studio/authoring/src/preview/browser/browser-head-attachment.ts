@@ -73,7 +73,7 @@ export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
   /** The workspace's view graph (it outlives any one head): the head restores the view it is made for and follows the view it draws. */
   graph?: ViewGraph;
-  /** The view the head is made for, resolved after construction waits so a surviving view of its scene can take over. */
+  /** The destination view, resolved after construction and preparation waits so a surviving view of its scene can take over. */
   view?: ViewId | (() => ViewId);
   viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
   /** Every layered-makeup surface to connect, in composition order; at most one is the on-head editor's. */
@@ -229,6 +229,16 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     signal.throwIfAborted();
 
     const context = ports.character.context;
+    /** Preparation follows the runtime owner's current destination, without showing it or restoring a camera or motion. */
+    const bindPreparationView = (signal: AbortSignal) => {
+      signal.throwIfAborted();
+      const view = typeof ports.view === "function" ? ports.view() : ports.view;
+      signal.throwIfAborted();
+      if (view !== undefined) { preview.draw(view); preview.draw(null); }
+      const state = preview.snapshot();
+      context.setBodyShown(state.body !== false);
+      context.setUncensored(state.uncensored === true);
+    };
     /** What `show` connected, released by `hide`. */
     const shownReleases: (() => void)[] = [];
     let shown = false, disposed = false, connected = false;
@@ -264,42 +274,44 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
       showSave,
       async prepare(prepareSignal, progress) {
         if (disposed) throw Error("The head was released.");
-        prepareSignal.throwIfAborted();
-        // The V's own details on a head of its body (the feminine head standing in for an unavailable masculine one shows none), with its
-        // own makeup hidden as the view hides it, as show would place them.
-        // The view's Body switch and uncensored setting decide what the V's request draws (as `show` follows them). They are the view's,
-        // the same for every head of the scene, so setting them now asks for no other V than the shown head already shows, and the body
-        // isn't loaded only to be dropped at show.
-        const view = preview.snapshot();
-        context.setBodyShown(view.body !== false);
-        context.setUncensored(view.uncensored === true);
-        const request = context.detailRequest();
-        if (request.bodyGender === scene.body) {
-          scene.setHiddenOptions(context.hiddenOptions());
-          progress({ stage: "details", fraction: 0, waiting: "host" });
-          await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }));
-        }
-        progress({ stage: "details", fraction: 1 });
-        // The authored makeup as it is now, so the plate's composite, its masks and maps and their programs are prepared with the scene.
-        // The surface holds this snapshot until show connects it, which brings only what changed since.
-        prepareSignal.throwIfAborted();
-        for (const wiring of ports.layered) wiring.preview.fillScene(wiring.surface(scene)!);
-        // Every lighting setup another view of this scene shows (the view it draws is the scene's own now).
-        const setups: LightingSource[] = [];
-        if (ports.graph) {
-          const graph = ports.graph, drawn = preview.view(), own = graph.node(drawn, "scene").id;
-          for (const view of graph.viewIds()) if (view !== drawn && graph.node(view, "scene").id === own) {
-            const lights = previewFields(graph, view).lights;
-            setups.push(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
+        for (;;) {
+          bindPreparationView(prepareSignal);
+          // The V's own details on a head of its body (the feminine head standing in for an unavailable masculine one shows none), with its
+          // own makeup hidden as the view hides it, as show would place them.
+          // The destination's Body switch and uncensored setting decide what the V's request draws, as `show` follows them.
+          const request = context.detailRequest();
+          if (request.bodyGender === scene.body) {
+            scene.setHiddenOptions(context.hiddenOptions());
+            progress({ stage: "details", fraction: 0, waiting: "host" });
+            await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }));
+            bindPreparationView(prepareSignal);
+            // Another destination can hide the body or change its cover while the details load. Settle that request before warming it.
+            if (JSON.stringify(request) !== JSON.stringify(context.detailRequest())) continue;
           }
+          progress({ stage: "details", fraction: 1 });
+          // The authored makeup as it is now, so the plate's composite, its masks and maps and their programs are prepared with the scene.
+          // The surface holds this snapshot until show connects it, which brings only what changed since.
+          prepareSignal.throwIfAborted();
+          for (const wiring of ports.layered) wiring.preview.fillScene(wiring.surface(scene)!);
+          // Every lighting setup another view of this scene shows (the view it draws is the scene's own now).
+          const setups: LightingSource[] = [];
+          if (ports.graph) {
+            const graph = ports.graph, drawn = preview.view(), own = graph.node(drawn, "scene").id;
+            for (const view of graph.viewIds()) if (view !== drawn && graph.node(view, "scene").id === own) {
+              const lights = previewFields(graph, view).lights;
+              setups.push(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
+            }
+          }
+          // The on-head editor, which show mounts: its guides compiled with the scene (their first frame links nothing), and its parts (the
+          // surface map and occlusion trees) made ahead between frames, so mounting it makes none of them.
+          const edited = ports.layered.find(wiring => wiring.edited), viewport = ports.viewport;
+          const guides = edited && viewport.surfaceGuides ? () => viewport.surfaceGuides!(scene) : undefined;
+          const work = edited && viewport.surfaceSteps ? () => viewport.surfaceSteps!(scene, edited.surface(scene)!.surface) : undefined;
+          await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
+            ...(work ? { work } : {}) });
+          bindPreparationView(prepareSignal);
+          if (JSON.stringify(request) === JSON.stringify(context.detailRequest())) return;
         }
-        // The on-head editor, which show mounts: its guides compiled with the scene (their first frame links nothing), and its parts (the
-        // surface map and occlusion trees) made ahead between frames, so mounting it makes none of them.
-        const edited = ports.layered.find(wiring => wiring.edited), viewport = ports.viewport;
-        const guides = edited && viewport.surfaceGuides ? () => viewport.surfaceGuides!(scene) : undefined;
-        const work = edited && viewport.surfaceSteps ? () => viewport.surfaceSteps!(scene, edited.surface(scene)!.surface) : undefined;
-        await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
-          ...(work ? { work } : {}) });
       },
       prepared: () => (scene.prepared?.() ?? true) && ports.layered.every(wiring => wiring.preview.holdsCurrent(wiring.surface(scene)!)),
       async prepareShown(prepareSignal, progress) {

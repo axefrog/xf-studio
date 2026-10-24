@@ -130,8 +130,8 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   const residency = new SceneResidency<SceneHeadWant, AttachedHead>({
     build: async (want, signal, progress) => {
       progress({ stage: want.body === "male" ? "core" : "build" });
-      // Same-scene requests share construction. Resolve its view after the waits: the original view may have closed meanwhile.
-      const head = await buildBrowserHead({ ...ports.head, view: () => drawnScene() === want.scene ? drawn()! : want.view,
+      // Same-scene requests share construction and preparation. Resolve their destination after every wait.
+      const head = await buildBrowserHead({ ...ports.head, view: () => destination(want),
         character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
         prepareCore: (body, buildSignal) => ports.prepareCore(body, (message, fraction) => {
           progress({ stage: "core", fraction: fraction ?? 0, waiting: "host", ...(message ? { detail: message } : {}) });
@@ -149,7 +149,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     // A masculine V's core head is prepared by the host first (once; the host caches it).
     stages: want => want.body === "male" ? STAGES_MALE : STAGES,
     show: (head, want) => {
-      const view = drawnScene() === want.scene ? drawn()! : want.view;
+      const view = destination(want);
       head.show(view);
       mountEditor(head, view);
       // The V's context stays attached while heads swap: creator changes are never refused for a reload (the old `not_ready`).
@@ -227,6 +227,15 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   }
   /** The drawn view's scene (undefined: none is drawn). */
   function drawnScene(): string | undefined { const view = drawn(); return view === undefined ? undefined : ports.scenes.of(view); }
+  /** The latest destination of a shared request. No surviving view means its owner cancels the work through its signal. */
+  function destination(want: SceneHeadWant): string {
+    if (drawnScene() === want.scene) return drawn()!;
+    if (ports.scenes.of(want.view) === want.scene) return want.view;
+    const surviving = ports.head.graph?.viewIds().find(view => ports.scenes.of(view) === want.scene);
+    if (surviving !== undefined) return surviving;
+    residency.close(want.scene);
+    throw new DOMException("The scene's views were closed.", "AbortError");
+  }
   /** What the drawn scene wants now (undefined while nothing is drawn, or until U6 chooses its V). */
   function current(): SceneHeadWant | undefined {
     const view = drawn(), scene = drawnScene();

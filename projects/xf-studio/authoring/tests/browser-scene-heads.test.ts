@@ -4,7 +4,8 @@
  * superseded masculine core is no longer waited for (D1), and a late build is disposed, never shown. The V's context outlives the heads:
  * it stays attached across a swap (no `not_ready` while a head loads), and a warm head is shown again at once.
  */
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { CharacterDetailActions } from "../src/character/character-detail-actions";
 import { createBrowserSceneHeads, type SceneHeadsPorts } from "../src/preview/browser/browser-scene-heads";
 import type { CharacterScenePorts } from "../src/character/character-service";
 import { CharacterContextActions } from "../src/character/character-context-actions";
@@ -474,9 +475,15 @@ test("P2-iii: nothing drawn keeps the head warm (drawn again with no build); a h
   o.heads.dispose();
 });
 
-test("P2-iii: closing a view during construction lets its surviving sibling use the shared build", async () => {
+test.each(["construction", "details", "details with body hidden", "programs"] as const)("P2 final review: closing a view during %s prepares and shows its surviving sibling", async stage => {
   const views: Record<string, { scene: string; subject: string }> = {};
   const o = owner({ v1: "female", v2: "female" }, [], null, views);
+  const warning = spyOn(console, "warn").mockImplementation(() => {});
+  let details: ReturnType<typeof spyOn<CharacterDetailActions, "setCharacter">> | undefined;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let prepareCalls = 0, detailCalls = 0;
+  const detailBodies: boolean[] = [];
   try {
     const graph = o.h.ports.graph!;
     const first = graph.addView("main", {}, { label: "First" });
@@ -484,27 +491,97 @@ test("P2-iii: closing a view during construction lets its surviving sibling use 
     views[first] = views[sibling] = { scene: "s2", subject: "v2" };
     await o.heads.load();
     const previous = o.heads.shown()!;
-    o.gate.open.female = false;
+    o.gate.open.female = stage !== "construction";
+    details = spyOn(CharacterDetailActions.prototype, "setCharacter").mockImplementation(async request => {
+      detailCalls++;
+      detailBodies.push(request.body !== false);
+      if (stage.startsWith("details")) await held;
+    });
+    const build = o.h.ports.viewport.buildHead;
+    o.h.ports.viewport.buildHead = async (...args) => {
+      const scene = await build(...args);
+      scene.prepare = async () => {
+        prepareCalls++; if (stage === "programs") await held;
+        return { programs: 0, uploads: 0, frames: 0, parallel: false, warmedUp: true };
+      };
+      return scene;
+    };
     // Capture both outcomes immediately: the original requester must not roll the newer one back.
     const original = o.heads.show(first).then(() => "shown", error => error);
     await settle();
     expect(o.h.builds).toBe(2);
     expect(o.heads.shown()).toBe(previous);
+    if (stage.startsWith("details")) expect(detailCalls).toBe(1);
+    if (stage === "programs") expect(prepareCalls).toBe(1);
+    if (stage === "details with body hidden") graph.edit(sibling, "display", { state: { body: false } });
     graph.closeView(first); delete views[first];
     const surviving = o.heads.show(sibling).then(() => "shown", error => error);
     expect(o.heads.snapshot().building).toMatchObject({ key: "s2|v2|female" });
     o.gate.release("female");
+    release();
     expect(await surviving).toBe("shown");
     expect(await original).toBe("shown");
     expect(o.h.builds).toBe(2);
     expect(o.heads.shownView()).toBe(sibling);
     expect(o.heads.shown()!.preview.view()).toBe(sibling);
+    expect(prepareCalls).toBeGreaterThan(0);
+    if (stage === "details with body hidden") expect(detailBodies.slice(0, 2)).toEqual([true, false]);
     expect(o.heads.shown()).not.toBe(previous);
     expect(o.heads.snapshot().residents).toMatchObject([
       { key: "s1|v1|female", state: "warm" }, { key: "s2|v2|female", state: "shown" },
     ]);
     expect(o.notices).toEqual([]);
-  } finally { o.heads.dispose(); }
+    expect(warning.mock.calls).toEqual([]);
+  } finally { release(); details?.mockRestore(); warning.mockRestore(); o.heads.dispose(); }
+  expect(o.h.host.canvases).toBe(0);
+});
+
+test.each(["details", "programs"] as const)("P2 final review: closing every destination during %s aborts preparation without a warning or draw", async stage => {
+  const views: Record<string, { scene: string; subject: string }> = {};
+  const o = owner({ v1: "female", v2: "female" }, [], null, views);
+  const warning = spyOn(console, "warn").mockImplementation(() => {});
+  let details: ReturnType<typeof spyOn<CharacterDetailActions, "setCharacter">> | undefined;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let signal!: AbortSignal, detailCalls = 0, prepareCalls = 0;
+  try {
+    const graph = o.h.ports.graph!;
+    const first = graph.addView("main", {}, { label: "First" });
+    const sibling = graph.addView(first, { scene: true }, { label: "Sibling" });
+    views[first] = views[sibling] = { scene: "s2", subject: "v2" };
+    await o.heads.load();
+    const previous = o.heads.shown()!, draws = o.h.drawn.length;
+    details = spyOn(CharacterDetailActions.prototype, "setCharacter").mockImplementation(async () => {
+      detailCalls++;
+      if (stage === "details") await held;
+    });
+    const build = o.h.ports.viewport.buildHead;
+    o.h.ports.viewport.buildHead = async (...args) => {
+      signal = args[1]!;
+      const scene = await build(...args);
+      scene.prepare = async () => {
+        prepareCalls++; if (stage === "programs") await held;
+        return { programs: 0, uploads: 0, frames: 0, parallel: false, warmedUp: true };
+      };
+      return scene;
+    };
+    const pending = o.heads.show(first).then(() => "shown", error => error);
+    await settle();
+    expect(detailCalls).toBe(1);
+    expect(prepareCalls).toBe(stage === "programs" ? 1 : 0);
+    graph.closeView(first); delete views[first];
+    graph.closeView(sibling); delete views[sibling];
+    // Resolve the wait before a scene notification: the continuation must itself detect the missing destination and abort its signal.
+    release();
+    expect(await pending).toMatchObject({ name: "AbortError" });
+    expect(signal.aborted).toBe(true);
+    expect(o.h.drawn).toHaveLength(draws);
+    expect(o.heads.shown()).toBe(previous);
+    expect(o.heads.snapshot()).toMatchObject({ building: null, residents: [{ key: "s1|v1|female", state: "shown" }] });
+    expect(o.h.host.canvases).toBe(1);
+    expect(o.notices).toEqual([]);
+    expect(warning.mock.calls).toEqual([]);
+  } finally { release(); details?.mockRestore(); warning.mockRestore(); o.heads.dispose(); }
   expect(o.h.host.canvases).toBe(0);
 });
 
