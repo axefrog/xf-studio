@@ -403,7 +403,7 @@ public abstract class XFInkPins {
   }
 
   public static func MarkHeight() -> Float {
-    return 96.0;
+    return 144.0;
   }
 
   // The diamond with "XF" at the top centre, the label under it; every part placed by a margin from the canvas's top-left.
@@ -417,7 +417,7 @@ public abstract class XFInkPins {
     halo.SetSize(new Vector2(44.0, 44.0));
     halo.SetRenderTransformPivot(new Vector2(0.5, 0.5));
     halo.SetRotation(45.0);
-    halo.SetMargin(new inkMargin(w * 0.5 - 22.0, 2.0, 0.0, 0.0));
+    halo.SetMargin(new inkMargin(w * 0.5 - 22.0, 26.0, 0.0, 0.0));
     halo.SetTintColor(new HDRColor(0.0, 0.0, 0.0, 1.0));
     halo.SetOpacity(0.55);
     halo.Reparent(mark);
@@ -425,7 +425,7 @@ public abstract class XFInkPins {
     plate.SetName(n"plate");
     plate.SetAnchor(inkEAnchor.TopLeft);
     plate.SetSize(new Vector2(w, 34.0));
-    plate.SetMargin(new inkMargin(0.0, 54.0, 0.0, 0.0));
+    plate.SetMargin(new inkMargin(0.0, 78.0, 0.0, 0.0));
     plate.SetTintColor(new HDRColor(0.0, 0.0, 0.0, 1.0));
     plate.SetOpacity(0.5);
     plate.Reparent(mark);
@@ -435,7 +435,7 @@ public abstract class XFInkPins {
     frame.SetSize(new Vector2(34.0, 34.0));
     frame.SetRenderTransformPivot(new Vector2(0.5, 0.5));
     frame.SetRotation(45.0);
-    frame.SetMargin(new inkMargin(w * 0.5 - 17.0, 7.0, 0.0, 0.0));
+    frame.SetMargin(new inkMargin(w * 0.5 - 17.0, 31.0, 0.0, 0.0));
     XFInkStyle.Bind(frame, n"MainColors.Blue");
     frame.Reparent(mark);
     let inner = new inkRectangle();
@@ -444,7 +444,7 @@ public abstract class XFInkPins {
     inner.SetSize(new Vector2(27.0, 27.0));
     inner.SetRenderTransformPivot(new Vector2(0.5, 0.5));
     inner.SetRotation(45.0);
-    inner.SetMargin(new inkMargin(w * 0.5 - 13.5, 10.5, 0.0, 0.0));
+    inner.SetMargin(new inkMargin(w * 0.5 - 13.5, 34.5, 0.0, 0.0));
     inner.SetTintColor(new HDRColor(0.035, 0.035, 0.06, 1.0));
     inner.Reparent(mark);
     let tag = XFInkStyle.Text(n"mark", 18, n"Bold", n"MainColors.Blue", true);
@@ -452,16 +452,73 @@ public abstract class XFInkPins {
     tag.SetAnchor(inkEAnchor.TopLeft);
     tag.SetFitToContent(false);
     tag.SetSize(new Vector2(w, 24.0));
-    tag.SetMargin(new inkMargin(0.0, 12.0, 0.0, 0.0));
+    tag.SetMargin(new inkMargin(0.0, 36.0, 0.0, 0.0));
     tag.SetHorizontalAlignment(textHorizontalAlignment.Center);
     tag.Reparent(mark);
     let name = XFInkStyle.Text(n"label", 24, n"Semi-Bold", n"MainColors.Blue", true);
     name.SetAnchor(inkEAnchor.TopLeft);
     name.SetFitToContent(false);
     name.SetSize(new Vector2(w, 34.0));
-    name.SetMargin(new inkMargin(0.0, 54.0, 0.0, 0.0));
+    name.SetMargin(new inkMargin(0.0, 78.0, 0.0, 0.0));
     name.SetHorizontalAlignment(textHorizontalAlignment.Center);
     name.Reparent(mark);
+    XFInkPins.BuildEdge(mark);
+  }
+
+  // UI-221 fix 8: a small outward chevron, built from the mark's own blue strokes and dark halo. Its canvas is rotated
+  // as one piece, with reserved room above and below the diamond/label so no direction clips or covers their text.
+  private static func BuildEdge(mark: ref<inkCanvas>) -> Void {
+    let edge = new inkCanvas();
+    edge.SetName(n"edge");
+    edge.SetAnchor(inkEAnchor.TopLeft);
+    edge.SetSize(new Vector2(20.0, 20.0));
+    edge.SetRenderTransformPivot(new Vector2(0.5, 0.5));
+    edge.SetInteractive(false);
+    let i = 0;
+    while i < 4 {
+      let halo = i < 2;
+      let upper = i % 2 == 0;
+      let stroke = new inkRectangle();
+      let thick = halo ? 6.0 : 3.0;
+      stroke.SetAnchor(inkEAnchor.TopLeft);
+      stroke.SetSize(new Vector2(12.0, thick));
+      stroke.SetRenderTransformPivot(new Vector2(0.5, 0.5));
+      stroke.SetMargin(new inkMargin(3.0, (upper ? 6.0 : 14.0) - thick * 0.5, 0.0, 0.0));
+      stroke.SetRotation(upper ? 45.0 : -45.0);
+      if halo {
+        stroke.SetTintColor(new HDRColor(0.0, 0.0, 0.0, 1.0));
+        stroke.SetOpacity(0.55);
+      } else {
+        XFInkStyle.Bind(stroke, n"MainColors.Blue");
+      }
+      stroke.Reparent(edge);
+      i += 1;
+    }
+    edge.SetVisible(false);
+    edge.Reparent(mark);
+  }
+
+  public static func MarkEdge(mark: ref<inkCanvas>, atEdge: Bool, way: Vector2) -> Void {
+    let edge = mark.GetWidgetByPathName(n"edge") as inkCanvas;
+    if !IsDefined(edge) {
+      return;
+    }
+    edge.SetVisible(atEdge);
+    if !atEdge {
+      return;
+    }
+    let x = XFInkPins.MarkWidth() * 0.5 - 10.0;
+    let y = 38.0;
+    let angle = 0.0;
+    if AbsF(way.X) >= AbsF(way.Y) {
+      x += way.X >= 0.0 ? 40.0 : -40.0;
+      angle = way.X >= 0.0 ? 0.0 : 180.0;
+    } else {
+      y = way.Y >= 0.0 ? 120.0 : 0.0;
+      angle = way.Y >= 0.0 ? 90.0 : -90.0;
+    }
+    edge.SetMargin(new inkMargin(x, y, 0.0, 0.0));
+    edge.SetRotation(angle);
   }
 
   public static func MarkLabel(mark: ref<inkCanvas>, label: String) -> Void {

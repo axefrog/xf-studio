@@ -146,6 +146,14 @@ function panel.noteLayout(state, height)
   settling = state.layoutChangedAt ~= nil and now - state.layoutChangedAt < SETTLE_S
 end
 
+-- UI-221 fix 5: a new opening may shrink the question slot; content changes while open may only grow it.
+function panel.opened(state)
+  state.questionSlotHeight = nil
+  state.layoutHeight = nil
+  state.layoutChangedAt = nil
+  settling = false
+end
+
 -- A button that ignores a click while the layout settles.
 local function button(label)
   local pressed = ImGui.Button(label)
@@ -654,7 +662,14 @@ function panel.body(state, queue, theme, which)
     if live then
       drawQuestion(state, queue, theme, which)
     end
-    panel.noteLayout(state, ImGui.GetCursorPosY() - slotTop)
+    local slotHeight = ImGui.GetCursorPosY() - slotTop
+    state.questionSlotHeight = math.max(state.questionSlotHeight or 0, slotHeight)
+    if slotHeight < state.questionSlotHeight then
+      -- Submit the reserved area for auto-sizing, then exclude Dummy's own trailing item gap from the next row.
+      ImGui.Dummy(1, state.questionSlotHeight - slotHeight)
+      ImGui.SetCursorPosY(slotTop + state.questionSlotHeight)
+    end
+    panel.noteLayout(state, state.questionSlotHeight)
 
     if bridge and bridge.enabled then
       if bridge.killed then

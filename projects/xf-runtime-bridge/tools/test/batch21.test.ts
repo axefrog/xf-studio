@@ -252,7 +252,7 @@ describe("0.8.7 the photo-menu panel (P5 clicks, P8/P9 modal, P11 safe zones), r
     expect(ink).toContain("let cr = k == 1 || k == 3 ? right : !right;");
   });
 
-  test("P11 (the mirror, at session 14's 21:9 geometry): bottom_left goes above the hint strip, a panel on the menu goes left of it, top_right stays", () => {
+  test("P11 (the mirror, at session 14's 21:9 geometry): short slides clear the hints and menu; longer ones take a corner (UI-221 fix 4)", () => {
     const visible: Rect = { x: 0, y: 0, w: 5184, h: 2160 };
     const hints: Rect = { x: 2, y: 1459, w: 5184, h: 700 };
     const menu: Rect = { x: 3499, y: 616, w: 1600, h: 1034 };
@@ -261,13 +261,15 @@ describe("0.8.7 the photo-menu panel (P5 clicks, P8/P9 modal, P11 safe zones), r
     expect(bottomLeft.y + bottomLeft.h).toBeLessThanOrEqual(hints.y - 24);
     expect(bottomLeft.x).toBe(40);
     const onMenu = avoidZones({ x: 3600, y: 800, w: 700, h: 230 }, zones, visible, 24);
-    expect(onMenu.x + onMenu.w).toBeLessThanOrEqual(menu.x - 24);
+    // Left of this menu is now beyond one panel width; directly above it is a short slide.
+    expect(onMenu.y + onMenu.h).toBeLessThanOrEqual(menu.y - 24);
+    expect(onMenu.x).toBe(3600);
     const topRight = avoidZones({ x: 4444, y: 40, w: 700, h: 230 }, zones, visible, 24, "top_right");
     expect(topRight).toEqual({ x: 4444, y: 40, w: 700, h: 230, how: "kept" });
-    // Pushed up out of the hints and then into the menu: the second pass moves it left too.
+    // The hints and menu together need a longer slide: the first free corner is top_right.
     const corner = avoidZones({ x: 4400, y: 1700, w: 700, h: 230 }, zones, visible, 24);
-    expect(corner.y + corner.h).toBeLessThanOrEqual(hints.y - 24);
-    expect(corner.x + corner.w).toBeLessThanOrEqual(menu.x - 24);
+    expect(corner.how).toBe("corner:top_right");
+    expect([corner.x, corner.y]).toEqual([visible.w - 24 - 700, 24]);
   });
 });
 

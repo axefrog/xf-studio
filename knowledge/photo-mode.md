@@ -431,6 +431,8 @@ The photo-mode menu's design canvas is 3840 × 2160 at 16:9: PMUI places everyth
 
 **What this answers.** The method is settled: do not assume; measure the root's laid-out width with a probe widget and its screen rectangle with `GetScreenPosition`, then anchor to the root's edges. Which of the three behaviours the photo-mode menu root has at 3840 × 1600 (pinned like the HUD, widened, or centred) is **not** answered by any source and needs the game, as do 32:9 and photo mode's own aspect-ratio frames, which PMUI and APM both react to (`OnChangeAspectRatioRate`, `OnSetBlackBars`).
 
+**XF panel placement, source only (UI-221 fix 4).** The photo-menu panel measures the game's menu, category title/icon, tab buttons and hints in its own layer units. A slide now stays within one panel width of its starting position on either axis, across successive obstacles; a longer move tries the first free corner, with the same bound there. This keeps the bottom-right panel from drifting into the scene. [source] `projects/xf-runtime-bridge/redscript/XFRuntimeBridgeInk.reds` (`Avoid`, `Nudge`) and `XFRuntimeBridgePhotoPanel.reds`; [offline] `tools/overlay/ink-place.ts` with batches 21 and 22. These are layout rules for XF's panel, not a new finding about the game's coordinate system. Session-18 row P18 still needs the runtime captures.
+
 ### 15.4 Coexistence of several UI mods (question 4)
 
 | Concern | What the sources show | Grade |

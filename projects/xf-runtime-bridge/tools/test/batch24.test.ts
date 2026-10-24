@@ -84,3 +84,28 @@ describe("0.8.11 review fixes: the CET layer and the copy", () => {
     expect(natives).not.toContain("The save didn't go through: ");
   });
 });
+
+describe("UI-221 fix 8: the edge pin's outward chevron", () => {
+  const pins = read("redscript", "XFRuntimeBridgePins.reds");
+  const ink = read("redscript", "XFRuntimeBridgeInk.reds");
+  test("every placement updates the chevron from the same edge test and camera direction as the clamp, including hiding it again", () => {
+    expect(ink).toContain("edgeWay = new Vector2(dx, dy);");
+    expect(ink).toContain("XFInkPins.MarkEdge(mark, edge, edgeWay);");
+    expect(pins).toContain("edge.SetVisible(atEdge);\n    if !atEdge {\n      return;\n    }");
+    expect(pins).toContain("if AbsF(way.X) >= AbsF(way.Y) {");
+    expect(pins).toContain("angle = way.X >= 0.0 ? 0.0 : 180.0;");
+    expect(pins).toContain("angle = way.Y >= 0.0 ? 90.0 : -90.0;");
+    expect(pins).toContain("edge.SetRotation(angle);");
+  });
+  test("the chevron uses blue strokes and a dark halo, with room inside the mark for the top and bottom directions", () => {
+    const build = pins.slice(pins.indexOf("private static func BuildEdge("), pins.indexOf("public static func MarkEdge("));
+    expect(build).toContain("XFInkStyle.Bind(stroke, n\"MainColors.Blue\");");
+    expect(build).toContain("stroke.SetOpacity(0.55);");
+    expect(build).toContain("edge.SetVisible(false);");
+    expect(pins).toContain("return 144.0;");
+    expect(pins).toContain("y = way.Y >= 0.0 ? 120.0 : 0.0;");
+    // 48 extra units in the canvas, 24 above the old content: preserve the diamond/label's placement at every scale.
+    expect(ink).toContain("(XFInkPins.MarkHeight() - 24.0) * size");
+    for (const size of [0.55, 0.75, 1]) expect(-64 - (144 - 24) * size + 24 * size).toBeCloseTo(-64 - 96 * size);
+  });
+});

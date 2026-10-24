@@ -26,13 +26,43 @@ describe("0.8.9 A5: the photo-menu panel keeps out of the menu, the top bar and 
   const zones = [menu, menuMore, title, topBar, hints, exit, shot];
   const panel = { w: 561, h: 197 };
 
-  test("bottom_right slides left of the menu and stays on the bottom row (0.8.8 pushed it up over the title's icon)", () => {
+  test("UI-221 fix 4: bottom_right takes the first free corner when the menu needs a slide longer than one panel width", () => {
     const asked: Rect = { x: 5184 - 860 - panel.w, y: 2160 - 480 - panel.h, ...panel };
     const kept = avoidZones(asked, zones, visible, 24, "bottom_right");
-    expect(kept.how).toBe("nudged");
+    expect(kept.how).toBe("corner:bottom_left");
     for (const z of zones) expect(hit(kept, z, 24)).toBe(false);
-    expect(kept.y).toBe(asked.y);
-    expect(kept.x + kept.w).toBeLessThanOrEqual(menuMore.x - 24);
+    expect([kept.x, kept.y]).toEqual([24, visible.h - 24 - panel.h]);
+  });
+
+  test("UI-221 fix 4: the slide limit includes exactly one panel width and scales with the panel in an offset viewport", () => {
+    for (const scale of [0.5, 1, 2]) {
+      const v = { x: 100, y: 70, w: 2000 * scale, h: 1000 * scale };
+      const gap = 24 * scale;
+      const asked = { x: v.x + v.w - gap - 200 * scale, y: v.y + v.h - gap - 100 * scale, w: 200 * scale, h: 100 * scale };
+      const z = { x: asked.x + gap, y: v.y, w: 300 * scale, h: v.h };
+      const within = avoidZones(asked, [z], v, gap, "bottom_right");
+      expect(within.how).toBe("nudged");
+      expect(within.x).toBe(asked.x - asked.w);
+      expect(within.y).toBe(asked.y);
+      const beyond = avoidZones(asked, [{ ...z, x: z.x - scale }], v, gap, "bottom_right");
+      expect(beyond.how).toBe("corner:bottom_left");
+      expect(beyond.x).toBe(v.x + gap);
+    }
+  });
+
+  test("UI-221 fix 4: several short nudges cannot accumulate a long slide, including at fallback corners", () => {
+    const v = { x: 0, y: 0, w: 2000, h: 1000 };
+    const asked = { x: 1776, y: 876, w: 200, h: 100 };
+    const blocks = [
+      { x: 1850, y: 0, w: 150, h: 1000 },
+      { x: 1650, y: 0, w: 200, h: 1000 },
+      { x: 0, y: 0, w: 300, h: 1000 },
+    ];
+    const kept = avoidZones(asked, blocks, v, 24, "bottom_right");
+    // Both right corners need > 200 px left, both left corners > 200 px right. The middle is free, but no corner owns it.
+    expect(kept.how).toBe("overlapping");
+    expect(Math.abs(kept.x - asked.x)).toBeLessThanOrEqual(asked.w);
+    expect(Math.abs(kept.y - asked.y)).toBeLessThanOrEqual(asked.w);
   });
 
   test("bottom_left and top_left stay where asked; a panel on the title row never covers the icon", () => {
@@ -65,6 +95,7 @@ describe("0.8.9 A5: the photo-menu panel keeps out of the menu, the top bar and 
     const ink = read("redscript", "XFRuntimeBridgeInk.reds");
     expect(ink).toContain("public static func Avoid(p: Vector4, zones: array<Vector4>, v: Vector4, gap: Float, anchor: String, out how: String) -> Vector4 {");
     expect(ink).toContain('how = "corner:" + (cb ? "bottom" : "top") + (cr ? "_right" : "_left");');
+    expect(ink).toContain("AbsF(c.X - r.X) <= r.Z && AbsF(c.Y - r.Y) <= r.Z");
   });
 });
 

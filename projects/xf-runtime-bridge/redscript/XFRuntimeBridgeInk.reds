@@ -491,6 +491,8 @@ public abstract class XFInkStyle {
     return new Vector4(ClampF(r.X, v.X + gap, MaxF(v.X + gap, v.X + v.Z - gap - r.Z)), ClampF(r.Y, v.Y + gap, MaxF(v.Y + gap, v.Y + v.W - gap - r.W)), r.Z, r.W);
   }
 
+  // UI-221 fix 4: stay within one panel width of the starting place, including when trying a corner. A longer slide
+  // leaves the panel floating in the scene; Avoid then takes the first free corner. Pin marks use SlideAlong instead.
   // One zone at a time (up to four): the nearer side of the anchor's own axis first, then the other axis.
   public static func Nudge(r: Vector4, zones: array<Vector4>, v: Vector4, gap: Float, sideways: Bool) -> Vector4 {
     let out = XFInkStyle.Inside(r, v, gap);
@@ -532,7 +534,7 @@ public abstract class XFInkStyle {
       let t = 0;
       while t < 4 && !moved {
         let c = XFInkStyle.Inside(tries[t], v, gap);
-        if !XFInkStyle.Hit(c, z, gap) {
+        if AbsF(c.X - r.X) <= r.Z && AbsF(c.Y - r.Y) <= r.Z && !XFInkStyle.Hit(c, z, gap) {
           out = c;
           moved = true;
         }
@@ -1539,6 +1541,7 @@ public class XFInkOverlay extends ScriptableSystem {
     // 0.8.7 (session 14's U2: off the screen only the game's own edge marker stayed): a pin off the screen, or behind the
     // camera (its projection mirrored), keeps its mark at the screen's edge in the pin's direction from the centre.
     let edge = s.W <= 0.0 || AbsF(s.X) > 1.0 || AbsF(s.Y) > 1.0;
+    let edgeWay = new Vector2(0.0, 0.0);
     if edge {
       let dx = s.X;
       let dy = s.Y;
@@ -1570,16 +1573,19 @@ public class XFInkOverlay extends ScriptableSystem {
         let bz = point.Z - projector.position.Z;
         far = SqrtF(bx * bx + by * by + bz * bz);
       }
+      edgeWay = new Vector2(dx, dy);
       s = new Vector4(dx / reach * 0.9, dy / reach * 0.86, s.Z, far);
     }
     let mark = this.PinMark(slot);
     XFInkPins.MarkLabel(mark, entry.label);
+    XFInkPins.MarkEdge(mark, edge, edgeWay);
     let units = this.m_units > 0.0 ? this.m_units : 1.0;
     let at = this.ScreenPoint(s);
     let size = ClampF(8.0 / MaxF(s.W, 1.0), 0.55, 1.0) * units;
-    // The mark's bottom centre 64 design units above the point (above the game's own marker, about 60 units tall there).
+    // The canvas reserves 24 units above and below the original mark for its edge chevron. Subtracting the top reserve
+    // keeps the diamond and label at their original on-screen place at every distance scale (64 units above the point).
     let left = at.X - XFInkPins.MarkWidth() * 0.5 * size;
-    let top = at.Y - 64.0 * units - XFInkPins.MarkHeight() * size;
+    let top = at.Y - 64.0 * units - (XFInkPins.MarkHeight() - 24.0) * size;
     if edge {
       // At the edge the mark itself stays whole on the visible screen.
       let v = this.m_visible.Z > 100.0 ? this.m_visible : new Vector4(0.0, 0.0, this.m_width, this.m_height);

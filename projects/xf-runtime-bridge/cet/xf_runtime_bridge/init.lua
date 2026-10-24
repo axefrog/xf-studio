@@ -465,6 +465,7 @@ end)
 -- and the XF overlay host's rule of yielding to CET).
 registerForEvent("onOverlayOpen", function()
   state.overlayOpen = true
+  if panel then panel.opened(state) end
   callNative("XFBridge_CetOverlay", true)
   log("debug", "-", "overlay opened")
 end)

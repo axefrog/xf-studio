@@ -487,7 +487,8 @@ public class XFPhotoMenuPanel {
       this.m_view.canvas.SetScale(new Vector2(scale, scale));
       this.m_view.SizePlate();
       let placed = this.m_view.Place(frame, scale, this.m_visible, units, false);
-      // 0.8.7: out of photo mode's own menu, top bar and hint strips.
+      // Out of photo mode's menu, top bar and hint strips. UI-221 fix 4: Avoid limits a slide to one panel width,
+      // then tries the first free corner, so bottom_right cannot drift across the scene.
       this.MeasureZones();
       let how: String;
       let kept = XFInkStyle.Avoid(placed, this.m_zones, this.m_visible, 24.0 * units, frame.anchor, how);

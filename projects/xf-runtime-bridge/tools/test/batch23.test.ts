@@ -17,7 +17,7 @@ const hit = (r: Rect, z: Rect, gap: number) => r.x < z.x + z.w + gap && r.x + r.
 describe("0.8.10 D1: the pin mark at a side edge keeps clear of the minimap, the quest tracker, the status bars and the ink panel", () => {
   // Session 16's screen: 3840 x 1600, the HUD layer 5184 x 2160 units (the edge marks landed at px [3549, 225] and [93, 234]).
   const visible: Rect = { x: 0, y: 0, w: 5184, h: 2160 };
-  const mark = { w: 360, h: 96 };
+  const mark = { w: 360, h: 144 }; // UI-221 fix 8: 24 units of chevron room above and below the original mark.
   const blocks = hudBlocks(visible);
 
   test("the right edge: asked high (a pin up and behind), it slides down below the tracker and above the weapon block", () => {
