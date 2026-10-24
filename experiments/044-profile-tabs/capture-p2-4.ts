@@ -295,8 +295,8 @@ async function tabMenu(page: Session) {
   await sized(page, "menu-with-reopen", "U2 the full tab menu: Rename…, Reset to default ▸, Save as default…, Update “My eye layout”, Close tab, Reopen closed tab ▸", MENUS, open(eye), { paired: "lib-menu-secondary" });
 
   // A long-named own default: its Reset row must not cut the name, and the row's tooltip (native title) carries the full name (item 6).
-  const longName = "My very long eye makeup layout for the night market photo shoot";
-  await act(page, { kind: "tabs.saveAsDefault", tab: (await tabsOf(page)).tabs.find(tab => tab.id !== eye)!.id, name: longName }); await page.wait(500);
+  const longName = "My very long eye makeup layout for the night market shoot"; // within the 60-character tab-name limit
+  texts["menu-long-default-saved"] = await act(page, { kind: "tabs.saveAsDefault", tab: (await tabsOf(page)).tabs.find(tab => tab.id !== eye)!.id, name: longName }); await page.wait(500);
   await sized(page, "menu-reset-long-row", "U2 Reset to default ▸ with a long own-default name (item 6): the row shows the name in full or ends with an ellipsis, and its tooltip carries the whole name (tooltips are native, so the title text is in run.json)", MENUS,
     async () => { await open(eye)(); await openSub(page, "Reset to default");
       texts["menu-reset-long-titles"] = await page.evaluate(`[...document.querySelectorAll(".menu-layer .menu-item")].filter(e => e.textContent.includes("My very long")).map(e => ({ title: e.title, text: e.textContent.trim(), clientWidth: e.clientWidth, scrollWidth: e.scrollWidth, label: (() => { const l = e.querySelector(".menu-label"); return l ? { clientWidth: l.clientWidth, scrollWidth: l.scrollWidth } : null; })() }))`); },
@@ -332,8 +332,12 @@ async function newMenuStates(page: Session) {
   // Own defaults: Yours group, with a trailing Delete on each; two with one name are told apart by their saved time.
   const base = (await tabsOf(page)).tabs[0]!.id;
   await newTab(page, "save-explorer/default"); await newTab(page, "poses/default");
+  const saved: string[] = []; let minute = -1;
   for (const [tab, name] of [[await tabNamed(page, "Save Explorer"), "My explorer"], [await tabNamed(page, "Poses"), "My poses"], [await tabNamed(page, "Poses"), "My poses"]] as const) {
-    await act(page, { kind: "tabs.saveAsDefault", tab, name }); await page.wait(1100);
+    // Saved times show to the minute, so the second "My poses" waits for the minute to roll over: the two rows are then told apart by their time.
+    if (name === "My poses" && saved.includes(name)) await page.waitFor(`new Date().getMinutes() !== ${minute}`, 70_000);
+    texts[`new-save-${saved.length}`] = await act(page, { kind: "tabs.saveAsDefault", tab, name }); saved.push(name);
+    minute = await page.evaluate(`new Date().getMinutes()`) as number; await page.wait(1100);
   }
   void base;
   // The fixtures: two more Vs and ten looks, so Eye makeup now has several candidates (an ellipsis row that opens the substitution step).
