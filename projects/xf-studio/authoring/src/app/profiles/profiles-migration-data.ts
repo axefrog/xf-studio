@@ -22,7 +22,7 @@ import { lookScope } from "../../platform/core/history-service";
 import { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment } from "../../platform/api/layout-fragment";
 import { workspaceViewGraph } from "../../preview/preview-view-graph";
 import type { SavedV } from "../../saves/save-reader";
-import type { DockLayout, JsonValue } from "../ui-preferences";
+import type { DockLayout, JsonValue, UIPreferences } from "../ui-preferences";
 import type { DocumentModel } from "../workspace/collection-workspace";
 import { serializeWorkspace, type WorkspaceState } from "../workspace/workspace-state";
 import { type LayoutTab, type PanelInstance, PROFILE_SESSION_SCHEMA, type ProfileSessionData, PROFILES_MIGRATION, type SessionScene, type SessionView,
@@ -300,6 +300,12 @@ function layoutsOf(state: WorkspaceState): MigrationLayout[] {
 const base36 = (random: () => number, length = 8) => Array.from({ length }, () => Math.floor(random() * 36).toString(36)).join("");
 /** The name tab 1 gets when the person never saved a layout. */
 export const FIRST_TAB_NAME = "Layout 1";
+/** The contributed baseline and the dock adapter that restores legacy enabled modules during the one-time conversion. */
+export type InitialProfileLayout = {
+  readonly origin: string;
+  readonly dock: DockLayout;
+  legacyDock?(dock: DockLayout, preferences: UIPreferences): DockLayout;
+};
 
 /**
  * The session the workspace builds from the library's result (§8 step 3): tab 1 holds the live arrangement, its panels turned into
@@ -307,7 +313,7 @@ export const FIRST_TAB_NAME = "Layout 1";
  * draft's selected look.
  */
 export function buildProfileSession(state: WorkspaceState, snapshot: Pick<MigrationSnapshot, "selected" | "layouts">, result: MigrationResult,
-  random: () => number = Math.random, initial?: { origin: string; dock: DockLayout }): ProfileSessionData {
+  random: () => number = Math.random, initial?: InitialProfileLayout): ProfileSessionData {
   const active = snapshot.layouts.findIndex(layout => layout.active);
   const lookId = snapshot.selected ? result.idMap.looks[snapshot.selected] : undefined;
   return sessionOfWorkspace(state, { tab: active >= 0 ? snapshot.layouts[active]!.name : FIRST_TAB_NAME,
@@ -320,9 +326,10 @@ export function buildProfileSession(state: WorkspaceState, snapshot: Pick<Migrat
  * context (§3.7) is the look's history, so Undo reaches it as it did before the session existed.
  */
 export function sessionOfWorkspace(state: WorkspaceState, input: { tab: string; origin?: string; character?: string; look?: { collection: string; look: string } },
-  random: () => number = Math.random, initial?: { origin: string; dock: DockLayout }): ProfileSessionData {
+  random: () => number = Math.random, initial?: InitialProfileLayout): ProfileSessionData {
   const tab = `t-${base36(random)}`;
-  const live = state.uiPreferences.layout ?? initial?.dock ?? null;
+  const base = state.uiPreferences.layout ?? initial?.dock ?? null;
+  const live = base && initial?.legacyDock ? initial.legacyDock(base, state.uiPreferences) : base;
   const instances = new Map<string, PanelInstance>();
   for (const panel of dockPanels(live)) {
     const view = viewOfPanel(panel);

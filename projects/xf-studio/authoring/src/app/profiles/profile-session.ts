@@ -41,7 +41,7 @@ export type PanelBinding =
   | { readonly policy: "pinned"; readonly target: { readonly view: string } | { readonly scene: string } | { readonly subject: SubjectRef } | { readonly look: LookRef } };
 /** A panel in a tab: its own ID (`<type>--<base36>`), its type (a panel contribution's ID, or `view`) and what it is bound to. */
 export type PanelInstance = { readonly id: string; readonly type: string; readonly binding?: PanelBinding; readonly state?: unknown };
-/** A layout tab: its arrangement (null: the feature default's), whose panel IDs are its instances' IDs. */
+/** A layout tab: its arrangement (null: empty in phase 2), whose panel IDs are its instances' IDs. Phase 1's null factory dock is upgraded before opening. */
 export type LayoutTab = { readonly id: TabId; readonly name: string; readonly origin?: string; readonly dock: DockLayout | null;
   readonly panels: readonly PanelInstance[] };
 /** A scene node in a session: which subject and look it shows, and `gen`, raised whenever either changes. */

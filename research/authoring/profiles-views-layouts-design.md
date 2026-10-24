@@ -677,6 +677,10 @@ A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal o
 
 There is no post-migration layout recovery pass or take-over receipt. Neither `v0.1.0-alpha.1` nor `v0.1.0-alpha.2` contained the saved-layout library (its module, since removed); it arrived on 21 October, so only development builds from 22–24 October could save layouts after `profiles-1`, and the one real workspace checked has no `uiPreferences.layouts`. The original one-time import above is unchanged. Legacy `uiPreferences.layouts` is still parsed and left stored; it is never silently deleted or imported a second time.
 
+**Upgrade from phase 1.** A completed `profiles-1` mark does not mean the first tab has phase-2 layout semantics. The phase-1 writer (`3d0dabfc`) stored one tab without `focus.tab`, and a null dock meant the factory arrangement. Before opening that session, preserve its existing live dock; if it has none, use `uiPreferences.layout`, then Eye makeup's contributed default with its origin recorded. Reuse existing panel instances and add enabled modules' panels without replacing the arrangement. Keep the session's graph, scene targets and focus, and leave the legacy preferences unchanged. This is a first-tab conversion, not another import of the saved-layout library.
+
+Phase 2 always records the shown tab in `focus.tab`. A session already saved by the buggy phase-2 upgrade has that field, and its null dock with no origin cannot be distinguished from a tab emptied deliberately. Leave it unchanged; **Reset to default** recovers it. No released build contained phase 2, so these already-converted sessions are confined to the development installation. [CORE-240](code-health.md#resolved-upgrade-defect) records the regression and its offline coverage.
+
 | Kept | May be dropped |
 |---|---|
 | The V's whole state; looks, drafts, recovery drafts, look histories; the view graph, lighting setups, camera, motion, pose; saved layouts as own defaults; the live arrangement as tab 1 with parked places; UI preferences | Inactive layouts' working states; `autoSize` and `seen`; module visibility; the Character panel's session Undo and the Save Explorer's open save (never stored) |
@@ -697,7 +701,7 @@ No schema migration: every record is a `documents` row, and `user_version` stays
 - **Session build.**
   - Tab 1 is named after the active saved layout, and its origin is that layout's own default.
   - Panel IDs, parked places and `lastPlace` keys, groups and anchors are all rewritten to instance IDs.
-  - A tab's `dock` may be null, meaning the default arrangement.
+  - Phase 1 allowed a null `dock` to mean the factory arrangement; the phase-2 conversion above makes that arrangement explicit. In phase 2, null means empty.
   - Own defaults are `layout-default` documents holding a graph fragment with slots `v1` and `look1`.
 - **Start trigger.** `PROFILES_MIGRATION_ENABLED` is on since the phase 1d-ii switch-over: every start migrates (or resumes) before the Studio builds its session.
 

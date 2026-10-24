@@ -33,10 +33,11 @@ import type { WorkspaceState } from "../workspace/workspace-state";
 import { ProfileService } from "./profile-service";
 import { ProfileSessions } from "./profile-sessions";
 import type { ProfileSessionData } from "./profile-session";
-import { FIRST_TAB_NAME, sessionOfWorkspace } from "./profiles-migration-data";
+import { FIRST_TAB_NAME, sessionOfWorkspace, type InitialProfileLayout } from "./profiles-migration-data";
 import { LayoutDefaults, type ContributedLayoutDefault } from "./layout-defaults";
 import type { FragmentKnowledge, SceneCandidate, SubstitutionContext } from "./layout-fragment";
 import { TabDefaults } from "./tab-defaults";
+import { upgradePhaseOneSession } from "./profile-session-upgrade";
 
 export type ProfileServices = {
   readonly profiles: ProfileService;
@@ -70,17 +71,19 @@ export function createProfileServices(deps: { documents: DocumentStorePort; outb
  * views (the composition's rules and recovery), recording through the session; `stored` is the graph as the session stores it.
  */
 export function openProfileSession(workspace: WorkspaceState, services: Pick<ProfileServices, "profiles" | "collections">,
-  deps: { history: HistoryService; graph(data: ViewGraphData, owner: ViewGraphOwner): ViewGraph; stored?(graph: ViewGraph): ViewGraphData },
+  deps: { history: HistoryService; graph(data: ViewGraphData, owner: ViewGraphOwner): ViewGraph; stored?(graph: ViewGraph): ViewGraphData;
+    initial?: InitialProfileLayout },
   random: () => number = hostRandom().next): { state: ProfileSessions; stored: boolean } {
   const open = (profile: string, data: ProfileSessionData) =>
     new ProfileSessions({ profile, data, history: deps.history, graph: deps.graph, ...(deps.stored ? { stored: deps.stored } : {}), random });
   const sessions = workspace.profiles?.sessions ?? {}, first = Object.keys(sessions)[0];
-  if (workspace.migration?.state === "done" && first) return { state: open(first, sessions[first]!), stored: true };
+  if (workspace.migration?.state === "done" && first)
+    return { state: open(first, upgradePhaseOneSession(sessions[first]!, workspace.uiPreferences, random, deps.initial)), stored: true };
   const profile = services.profiles.list()[0];
   const character = profile?.subjects.find(subject => subject.kind === "character")?.id;
   const collection = profile?.collections.map(id => services.collections.collection(id)).find(view => view?.looks.length);
   const look: LookRef | undefined = collection ? { collection: collection.id, look: collection.looks[0]! } : undefined;
-  const session = sessionOfWorkspace(workspace, { tab: FIRST_TAB_NAME, ...(character ? { character } : {}), ...(look ? { look } : {}) }, random);
+  const session = sessionOfWorkspace(workspace, { tab: FIRST_TAB_NAME, ...(character ? { character } : {}), ...(look ? { look } : {}) }, random, deps.initial);
   return { state: open(profile?.id ?? "", session), stored: false };
 }
 

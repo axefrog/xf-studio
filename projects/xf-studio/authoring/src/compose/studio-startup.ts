@@ -217,7 +217,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // service records the editing context into it (profiles design §3.3, §3.7). The session owns the view graph and its View and lighting
   // history: its operations and the graph's edits are one history (§4.1).
   const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, { history: historyService,
-    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph });
+    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph, initial: STUDIO_INITIAL_LAYOUT });
   if (lease && !sessionStored && !lease.writable()) watchProfilesMigration({ storage,
     key: workspaceKeys(verification).workspace, model: STUDIO_COMPOSITION.documents,
     readOnly: () => !lease.writable(), reload: () => location.reload(), signal: experimentLife.signal, readStored: host.readWorkspace });

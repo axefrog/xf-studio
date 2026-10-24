@@ -21,7 +21,7 @@ import { parseWorkspace, type WorkspaceState } from "../workspace/workspace-stat
 import { parseViewGraph } from "../../platform/core/view-graph";
 import { STUDIO_VIEW_GRAPH_RULES } from "../../preview/preview-view-graph";
 import { type MigrationMark, PROFILES_MIGRATION, type WorkspaceProfiles } from "./profile-session";
-import { buildProfileSession, type MigrationAnswer, type MigrationRequest, type MigrationSnapshot, migrationSnapshot, snapshotDigest, workspaceProfiles } from "./profiles-migration-data";
+import { buildProfileSession, type InitialProfileLayout, type MigrationAnswer, type MigrationRequest, type MigrationSnapshot, migrationSnapshot, snapshotDigest, workspaceProfiles } from "./profiles-migration-data";
 
 /** The workspace-side protocol points (the crash harness's kill points). */
 export const WORKSPACE_POINTS = ["w-token", "w-sent", "w-response", "w-done"] as const;
@@ -30,7 +30,7 @@ export type ProfilesMigrationOutcome = "done" | "already" | "stopped";
 
 export type ProfilesMigrationDeps = {
   /** The first tab's contributed arrangement, used only when there is no legacy arrangement to preserve. */
-  readonly initial?: { origin: string; dock: import("../ui-preferences").DockLayout };
+  readonly initial?: InitialProfileLayout;
   /** The workspace's identity (its lease key). */
   readonly workspace: string;
   readonly model: DocumentModel;
