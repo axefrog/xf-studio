@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.13, 24 October 2026.
+**Status:** v4.14, 24 October 2026.
+- v4.14 adds `classifiesAs`, a nominal kind compatibility that queries never widen to (§2.2).
 - v4.13 names the settle step of a boundary (§9.4), which S1 §10.2 relies on.
 - v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (found while building v4 in the reference model).
 - v4.11 adds three clarifications from S1 v0.2 (V4-47 to V4-49).
@@ -204,6 +205,7 @@ A `Derive` MAY provide a `Bound`. Without one, its query verdict is `maybe`. Fun
 interface KindDef {
   id: KindId;
   extends?: KindId[];                  // slots inherited; a redefined key overrides
+  classifiesAs?: KindId[];             // v4.14: nominal compatibility only; no slots inherited (below)
   slots: SlotDef[];                    // declaration order is the dependency order (§2.3)
   facets?: Array<'actor' | 'group' | 'place' | 'event' | 'summary'>;
   tags?: string[];
@@ -222,6 +224,8 @@ interface SlotDef {
 
 type Tier = 0 | 1 | 2 | 3 | 4 | 5;     // city, district, block, scene, individual, fine detail
 ```
+
+**Nominal compatibility (v4.14).** `classifiesAs` says a kind may stand where another is named, without inheriting its slots: S1's generated resident classifies as `core:person`. It is **nominal only**. `isKind`, `kindsOf` and every query stay structural (`extends` alone), so a query for `core:person` never returns a node that only classifies as one; widening it would change what open casting finds and what it costs. `isCompatibleKind(k, target)` (`extends` or `classifiesAs`, transitively) is used only where a layer names a kind to match: S3's pattern kinds, and S2's explicit fixed or preferred identities and overlays. Unknown targets and classification cycles fail validation.
 
 `mirrored` slots are read from the game for mirrored nodes. The same slot on a generated or minted node is `sampled`, `derived` (if it has a `derive`) or `assigned` (if its dimension is `vec` or `text`).
 
