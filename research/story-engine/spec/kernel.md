@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.14, 24 October 2026.
+**Status:** v4.15, 24 October 2026.
+- v4.15: an event a persisted record references keeps its facts, not only its header (§14.1).
 - v4.14 adds `classifiesAs`, a nominal kind compatibility that queries never widen to (§2.2).
 - v4.13 names the settle step of a boundary (§9.4), which S1 §10.2 relies on.
 - v4.12 corrects §20's claim about the determinism digest, and gives the `frame` change its focus (found while building v4 in the reference model).
@@ -1036,6 +1037,7 @@ The trace is the complete account (I-8).
 - **Headers** of every retained node (§7.3).
 - **Pins**, including game readings that V observed or that persisted events depend on. Other game readings are not persisted: they are re-read.
 - **Edges** with persisted causes.
+- **The facts of referenced events** (v4.15). An event that persisted state references (an outstanding process output, a seed record, a layer record) keeps its minted fields, its own contributions, not only its header, so every consumer reads it identically after a load.
 - **Contributions** that packs can't reproduce: seeds, committed procedural decisions, runtime authored decisions. Pack contributions are reloaded, and the record keeps each pack's id and version.
 - **Memorable beliefs.**
 - **Canon events:** their headers and pinned fields.
