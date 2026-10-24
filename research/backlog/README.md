@@ -41,7 +41,6 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **Consistency leftovers:** UI-142's build steps ([readiness](../../docs/release-readiness.md)). *29 Sep*
 
 ### Polish lane (before 1.0)
-- **Polish batch 4 visual gates** (`claude/polish-4`): profiles/workspace implementation complete; coordinator captures (`tools/polish4-look.ts`), independent design PASS and code review remain before integration. Covers the older-workspace state, tab menu width and timestamps, unnamed view numbering, restore copy/progress, Waiting Cancel, desktop workspace reveal and the pure-engine guard.
 - **In-game styling spec for the bridge surfaces** (the XF Runtime Bridge window, the XF box and the CET line). A coat of slickness, with CharLi's CET plugin as the reference: dense ImGui theming, type hierarchy through font scale, styled value bars, child panels and subtle pulses. It never comes ahead of function. The UI track writes the spec in the style guide for the in-game theme generator (`projects/xf-runtime-bridge/tools/overlay/theme.ts`), and XF · Runtime bridge builds it. CharLi is credited if we borrow ideas. The XF box's text size stays, since it matches other CET windows. *22 Oct*
 - **Polish batch 3 leftovers** (polish-3 merged 24 Oct, `54b109bb`):
   - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there. They need a real V, so the coordinator takes them.
