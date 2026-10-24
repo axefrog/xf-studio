@@ -311,7 +311,7 @@ public abstract class XFNpcV {
     if NotEquals(found.status, worldNavigationRequestStatus.OK) {
       return "{\"ok\":true,\"walkable\":false,\"streamed\":true}";
     }
-    return "{\"ok\":true,\"walkable\":true,\"streamed\":true,\"point\":" + XFScene.Arr(found.point) + "}";
+    return "{\"ok\":true,\"walkable\":true,\"streamed\":true,\"point\":" + XFScene.Arr(found.point) + ",\"traffic_check\":" + XFNavigation.Classify(found.point, 10.0) + "}";
   }
 
   // V16: whether static geometry blocks the line between two points (scene.read's occlusion ray, XFScene.Ray).
@@ -894,7 +894,7 @@ public abstract class XFNpc {
     entry.immortal = immortal;
     registry.Add(entry);
     XFBridgeLog.Info(cid, "npc spawned " + who + " record=" + record + " at " + XFScene.Arr(found.point) + " attitude=" + IntToString(attitude) + " immortal=" + (immortal ? "true" : "false") + " (non-persistent, tag xfs_npc)");
-    return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(found.point) + "}";
+    return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(found.point) + ",\"traffic_check\":" + XFNavigation.Classify(found.point, 10.0) + "}";
   }
 
   // An actor's first moment in the world: its attitude towards V (friendly by default, as AMM's Director sets its actors;
@@ -973,7 +973,7 @@ public abstract class XFNpc {
       XFNpc.ClearFacing(entry, puppet, cid, kind);
     }
     if Equals(kind, "stop") {
-      return "{\"ok\":true,\"sent\":true,\"before\":" + before + "}";
+      return "{\"ok\":true,\"sent\":true,\"before\":" + before + (Equals(kind, "place") ? ",\"traffic_check\":" + XFNavigation.Classify(new Vector4(x, y, z, 1.0), 10.0) : "") + "}";
     }
     XFBridgeActions.EnsureSaveLock(cid);
     // 0.8.9: a walk ends the reaction's own look-at first (it twisted the walker's body towards V).
@@ -1052,7 +1052,7 @@ public abstract class XFNpc {
       }
     }
     XFBridgeLog.Info(cid, "npc " + who + " command " + kind + " sent");
-    return "{\"ok\":true,\"sent\":true,\"before\":" + before + "}";
+    return "{\"ok\":true,\"sent\":true,\"before\":" + before + (Equals(kind, "place") ? ",\"traffic_check\":" + XFNavigation.Classify(new Vector4(x, y, z, 1.0), 10.0) : "") + "}";
   }
 
   public static func LineId(line: Int32) -> CRUID {

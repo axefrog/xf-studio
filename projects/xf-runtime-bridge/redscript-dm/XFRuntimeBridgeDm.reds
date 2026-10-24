@@ -465,7 +465,7 @@ public abstract class XFDmSpawn {
     entry.id = id;
     registry.Add(entry);
     XFBridgeLog.Info(cid, "dm spawned " + kind + " " + IntToString(handle) + " at " + XFScene.Arr(point) + " (non-persistent, tag xfs_dm)");
-    return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(point) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"grounded\":" + XFJson.Flag(grounded) + "}";
+    return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(point) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"grounded\":" + XFJson.Flag(grounded) + ",\"traffic_check\":" + XFNavigation.Classify(point, 10.0) + "}";
   }
 
   // A light: an entity template that holds a light component (the XF carrier in the -writes package once built, or a template
@@ -1733,6 +1733,7 @@ public abstract class XFDmSense {
     }
     let out = "{\"ok\":true,\"v\":{\"position\":" + XFScene.Arr(player.GetWorldPosition()) + ",\"yaw\":" + XFJson.Num(player.GetWorldYaw());
     out += ",\"busy\":" + XFJson.Str(XFPlayer.Busy(player)) + ",\"vitals\":" + XFSenses.Vitals(game, player) + ",\"vehicle\":" + XFSenses.Vehicle(game, player);
+    out += ",\"weapon_state\":" + XFPlayer.WeaponState(player);
     out += ",\"look_at\":" + XFScene.LookedAt(player) + "}";
     out += ",\"world\":{\"clock\":" + XFWorldState.Clock();
     if sky {

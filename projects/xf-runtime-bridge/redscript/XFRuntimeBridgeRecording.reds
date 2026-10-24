@@ -17,6 +17,9 @@ public abstract class XFRecording {
     if Equals(channel, "subtitles") || Equals(channel, "voice") { return XFRecordingTap.Status(channel); }
     if Equals(channel, "face") { return XFRecordingFace.Status(); }
     if Equals(channel, "ui") { return XFRecordingUi.Sample(); }
+    if Equals(channel, "contacts") {
+      return "{\"ok\":true,\"valid\":true,\"event\":\"contact.coverage\",\"covered_paths\":[\"PlayerPuppet.OnCarHitPlayer.entry\",\"AbstractLandEvents.OnEnter\",\"WallCollisionHelpers.GetWallCollision\"],\"commissioned\":false,\"continuous\":false,\"no_contact_proof\":false,\"controller_other_identity\":false}";
+    }
     if Equals(channel, "camera") {
       let camera = XFPlayer.CameraJson();
       return "{\"ok\":true,\"valid\":" + XFJson.Flag(NotEquals(camera, "null")) + ",\"camera\":" + camera + "}";
@@ -38,7 +41,7 @@ public abstract class XFRecording {
     let heat = XFSenses.Heat(game);
     let vehicle = XFSenses.Vehicle(game, player);
     let busy = XFPlayer.Busy(player);
-    return "{\"ok\":true,\"valid\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"velocity\":" + XFScene.Arr(velocity) + ",\"vitals\":" + vitals + ",\"heat\":" + heat + ",\"vehicle\":" + vehicle + ",\"busy\":" + XFJson.Str(busy) + ",\"psm\":{\"locomotion\":" + IntToString(XFPlayer.Psm(player, defs.Locomotion)) + ",\"high_level\":" + IntToString(XFPlayer.Psm(player, defs.HighLevel)) + ",\"combat\":" + IntToString(XFPlayer.Psm(player, defs.Combat)) + "}}";
+    return "{\"ok\":true,\"valid\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"velocity\":" + XFScene.Arr(velocity) + ",\"vitals\":" + vitals + ",\"heat\":" + heat + ",\"vehicle\":" + vehicle + ",\"busy\":" + XFJson.Str(busy) + ",\"weapon_state\":" + XFPlayer.WeaponState(player) + ",\"psm\":{\"locomotion\":" + IntToString(XFPlayer.Psm(player, defs.Locomotion)) + ",\"high_level\":" + IntToString(XFPlayer.Psm(player, defs.HighLevel)) + ",\"combat\":" + IntToString(XFPlayer.Psm(player, defs.Combat)) + "}}";
   }
 }
 
@@ -500,4 +503,55 @@ public abstract class XFRecordingUi {
 @if(!ModuleExists("Codeware"))
 public abstract class XFRecordingFace {
   public static func Status() -> String { return "{\"valid\":false,\"reason\":\"codeware_missing\"}"; }
+}
+
+
+// Autonomous package only; no native detour and no retained PSM interface.
+// R6 §4 / player.script:5776: receipt precedes knockdown and five-second cooldown returns.
+@wrapMethod(PlayerPuppet)
+protected cb func OnCarHitPlayer(evt: ref<OnCarHitPlayer>) -> Bool {
+  if XFBridge_Live() && XFBridge_RecordEnabled("contacts") && IsDefined(evt) {
+    let car = GameInstance.FindEntityByID(GetGameInstance(), evt.carId) as VehicleObject;
+    let speed = IsDefined(car) ? XFJson.Num(Vector4.Length(car.GetLinearVelocity())) : "null";
+    XFBridge_Record("contacts", "{\"event\":\"contact.car_hit_player\",\"path\":\"PlayerPuppet.OnCarHitPlayer.entry\",\"other_entity\":" + XFJson.Str(EntityID.ToDebugString(evt.carId))
+      + ",\"speed_mps\":" + speed + ",\"speed_kind\":\"other_entity_world_speed\",\"position\":" + XFScene.Arr(this.GetWorldPosition())
+      + ",\"hit_direction\":" + XFScene.Arr(evt.hitDirection) + ",\"separation_impulse\":" + XFScene.Arr(evt.seperationImpulse)
+      + ",\"vehicle_hit_observed\":true,\"damage_or_reaction\":\"unknown\"}");
+  }
+  return wrappedMethod(evt);
+}
+
+public abstract class XFContactReports {
+  public static func Enabled() -> Bool { return XFBridge_Live() && XFBridge_RecordEnabled("contacts"); }
+  public static func Read(scriptInterface: ref<StateGameScriptInterface>, path: String) -> Void {
+    if !XFContactReports.Enabled() || !IsDefined(scriptInterface) { return; }
+    let player = XFPlayer.Player();
+    if !IsDefined(player) || scriptInterface.ownerEntityID != player.GetEntityID() { return; }
+    let report = scriptInterface.GetCollisionReport();
+    if ArraySize(report) == 0 { return; }
+    let hits = "";
+    let i = 0;
+    while i < Min(ArraySize(report), 8) {
+      hits += (i > 0 ? "," : "") + "{\"position\":" + XFScene.Arr(report[i].worldPos) + ",\"normal\":" + XFScene.Arr(report[i].worldNormal) + "}";
+      i += 1;
+    }
+    XFBridge_Record("contacts", "{\"event\":\"contact.controller_report\",\"path\":" + XFJson.Str(path)
+      + ",\"position\":" + XFScene.Arr(player.GetWorldPosition()) + ",\"other_entity\":null,\"speed_mps\":null,\"vehicle_contact_observed\":null,\"supporting_ground_may_be_included\":true"
+      + ",\"count\":" + IntToString(ArraySize(report)) + ",\"truncated\":" + XFJson.Flag(ArraySize(report) > 8) + ",\"hits\":[" + hits + "]}");
+  }
+}
+
+// Located vanilla report consumers, not continuous coverage or a hook of the native getter.
+// locomotionTransitions.script:4666–4682 and :4995–5013, game 2.31.
+@wrapMethod(AbstractLandEvents)
+public func OnEnter(stateContext: ref<StateContext>, scriptInterface: ref<StateGameScriptInterface>) -> Void {
+  XFContactReports.Read(scriptInterface, "AbstractLandEvents.OnEnter");
+  wrappedMethod(stateContext, scriptInterface);
+}
+
+@wrapMethod(WallCollisionHelpers)
+public final static func GetWallCollision(const scriptInterface: ref<StateGameScriptInterface>, playerPosition: Vector4, up: Vector4, capsuleRadius: Float, out wallCollision: ControllerHit) -> Bool {
+  let hit = wrappedMethod(scriptInterface, playerPosition, up, capsuleRadius, wallCollision);
+  if hit { XFContactReports.Read(scriptInterface, "WallCollisionHelpers.GetWallCollision"); }
+  return hit;
 }

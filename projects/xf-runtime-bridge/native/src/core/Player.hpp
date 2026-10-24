@@ -33,6 +33,7 @@ struct TeleportRequest
     std::optional<double> turn;
     bool exact = false;
     bool farOk = false;
+    bool allowRoad = false; // also accepts uncommissioned lane containment explicitly
 };
 TeleportRequest ParseTeleport(const json& aParams);
 // The destination and facing from V's position and yaw (degrees; she faces (-sin, cos)).

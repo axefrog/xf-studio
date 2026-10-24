@@ -11,12 +11,12 @@ function fixture(mode = "normal") {
   let now = 0, active = true, stopped = false, cursor = 0;
   const row = (seq: number) => ({ schema: "xfb/source-record-1", run: 7, session: "fixture", world_generation: 1,
     seq, source_s: seq * 0.1, age_s: 0, valid: true, channel: "v", data: { position: [seq, 0, 0] } });
-  const calls: string[] = [];
+  const calls: string[] = [], starts: Json[] = [];
   const api: TestApi = { run: async (name, input) => {
     calls.push(name);
     if (mode === "disconnect" && stopped && name === "test.record.read") return { ok: false, command: name, cid: "x", error: { code: "disconnected", message: "kill closed the pipe" } };
     let result: Json;
-    if (name === "test.record.start") result = { run: 7, session: "fixture", world_generation: 1, source_now_s: 0, output: "native-private-copy" };
+    if (name === "test.record.start") { starts.push(input as Json); result = { run: 7, session: "fixture", world_generation: 1, source_now_s: 0, output: "native-private-copy" }; }
     else if (name === "test.record.stop") { stopped = true; active = false; result = {}; }
     else {
       const since = Number((input as Json)?.since ?? 0);
@@ -30,7 +30,7 @@ function fixture(mode = "normal") {
     }
     return { ok: true, command: name, cid: "x", result };
   } };
-  return { api, calls, controller, clock: { now: () => now, sleep: async (ms: number) => { now += ms; } } };
+  return { api, calls, starts, controller, clock: { now: () => now, sleep: async (ms: number) => { now += ms; } } };
 }
 
 test("stream private chunks, hash and finalize after bounded drain", async () => {
@@ -41,6 +41,7 @@ test("stream private chunks, hash and finalize after bounded drain", async () =>
   expect(readFileSync(join(directory, "chunk-1.jsonl"), "utf8").trim().split("\n")).toHaveLength(8);
   expect(JSON.parse(readFileSync(join(directory, "manifest.json"), "utf8")).complete).toBe(true);
   expect(f.calls).toContain("test.record.stop");
+  expect(f.starts[0]!.channels).toContain("contacts");
 });
 for (const mode of ["loss", "invalid", "slow", "wrong_session", "disconnect"]) test(`${mode} cannot claim a complete recording`, async () => {
   const f = fixture(mode);

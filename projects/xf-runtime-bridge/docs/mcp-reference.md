@@ -811,7 +811,7 @@ Explicit autonomous -writes candidate only. Bounded source sampling and private 
 
 ### `test_record_start`
 
-**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
+**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
 
 - **Command:** `test.record.start`, the bridge method `test.record.start`
 - **Permission:** Look (`read`)
@@ -821,7 +821,7 @@ Explicit autonomous -writes candidate only. Bounded source sampling and private 
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `channels` | array of string | 1 to 7 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui` | Source channels to sample |
+| `channels` | array of string | 1 to 8 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts` | Source channels to sample |
 | `actors` | array of string | at most 16 items; each matches `^[ap][0-9]{1,15}$` | Selected returned actor or pick handles |
 | `rate_hz` | integer | exactly 10 | Source target (10 only) |
 | `duration_s` | integer | 1 to 1800 | Maximum recording lifetime |
@@ -1031,13 +1031,13 @@ No parameters.
 
 ### `player_teleport`
 
-**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). WARNING before moving: the existing human-navmesh check cannot classify roads or traffic lanes; choose a destination clear of traffic. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). Road/pavement/crosswalk containment is INCONCLUSIVE: displacement refuses road_safety_unknown unless allow_road:true explicitly accepts that risk. A turn in place remains allowed. Probe returns no fabricated pavement suggestion. Navmesh glides also refuse displacement until lane containment is commissioned. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which). Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `player.teleport`, the bridge method `player.teleport`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo teleports V back to where she stood, facing the same way; loading the save undoes it too.
-- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable), `road_safety_unknown`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1050,6 +1050,7 @@ No parameters.
 | `turn` | number | -360 to 360 | Turn by this many degrees (left positive). |
 | `ground` | string | `snap`, `exact` | snap (default: walkable ground within 2 m) or exact (no snap; the world must still be loaded there). |
 | `far` | boolean | `true`, `false` | Allow more than 50 m (the destination must be loaded). |
+| `allow_road` | boolean | `true`, `false` | Explicitly accept road risk, including INCONCLUSIVE lane containment. Default refuses displacement while classification is unavailable. |
 | `when` | object | the fields below | Conditions compared on each executing game frame |
 | `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
 | `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
@@ -1202,13 +1203,13 @@ Routines that run inside the game at frame rate: a turntable, a smooth look, a g
 
 ### `behave_glide_path`
 
-**Glide V along a walkable path.** A behaviour: V moves along the game's own walkable path (navmesh) to a point (to) or an offset from her (forward, right), at speed_m_s, by a teleport every tick, with her own movement held off meanwhile. V is checked every tick: it stops when she arrives, when the player's own input moves her (user_took_over: movement, jump, crouch, sprint, dodge or camera), when she is no longer free to move (combat, a vehicle, a scene, a fall or landing, swimming, a workspot, a takedown, a carried body), at max_s (at most 30 s) or on behave_stop, and gives her movement back. No walk animation plays (animated: false). At most 50 m of path. Normal play only.
+**Glide V along a walkable path.** Unavailable in 0.8.15: refuses road_safety_unknown before acquiring a movement hold. Human navmesh cannot certify road/pavement/crosswalk containment for the per-tick teleport path. No implicit road-risk override; world.probe reports INCONCLUSIVE lane safety.
 
 - **Command:** `behave.glide.path`, the bridge method `behave.glide.path`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
-- **Undo:** behave_stop ends it; its stop event carries a player_teleport undo back to the start.
-- **Refusals:** [`behaviour_limit`](#refusal-behaviour-limit), [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`user_took_over`](#refusal-user-took-over), [`no_path`](#refusal-no-path), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`bridge_effects_active`](#refusal-bridge-effects-active)
+- **Undo:** Nothing acquired on refusal.
+- **Refusals:** [`behaviour_limit`](#refusal-behaviour-limit), [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`user_took_over`](#refusal-user-took-over), [`no_path`](#refusal-no-path), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`bridge_effects_active`](#refusal-bridge-effects-active), `road_safety_unknown`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1277,7 +1278,7 @@ The DM toolkit: bring props, vehicles and lights in, change doors and vehicles, 
 
 ### `world_spawn`
 
-**Bring in a prop or a vehicle.** Brings a prop or a vehicle into the world near V: a prop from an entity template (the depot path of a .ent file) or a record, a vehicle from its record (such as Vehicle.v_standard2_archer_hella_player), placed offset metres from V along her facing (default two metres ahead) or at a world point within 60 m, snapped to the ground below unless ground is false, facing yaw, or V with face_v. It is never saved: world_despawn, the kill switch, a pause, a handover or loading a save removes it, and game_save refuses while one exists. At most 24 spawned things (props, vehicles and lights together). Answers its handle (use spawn:&lt;n> as a target in other commands) and its entity id at once; the thing appears a moment later. Needs Codeware and the -writes package's toolkit scripts. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+**Bring in a prop or a vehicle.** Brings a prop or a vehicle into the world near V: a prop from an entity template (the depot path of a .ent file) or a record, a vehicle from its record (such as Vehicle.v_standard2_archer_hella_player), placed offset metres from V along her facing (default two metres ahead) or at a world point within 60 m, snapped to the ground below unless ground is false, facing yaw, or V with face_v. It is never saved: world_despawn, the kill switch, a pause, a handover or loading a save removes it, and game_save refuses while one exists. At most 24 spawned things (props, vehicles and lights together). Answers its handle (use spawn:&lt;n> as a target in other commands) and its entity id at once; the thing appears a moment later. Traffic classification at the final placement is INCONCLUSIVE; nearest pavement is unavailable and this is not safe placement proof. Needs Codeware and the -writes package's toolkit scripts. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `world.spawn`, the bridge method `world.spawn`
 - **Permission:** Direct the scene (`write-dm`)
@@ -1920,7 +1921,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 
 ### `world_probe`
 
-**Probe the world at points.** Observe only: at each point (points, up to 16, or a ring around V with around_v), whether the walkable ground around it is loaded (streamed), the nearest walkable point within radius_m, the ground below (a static-geometry ray down_m down) and the ceiling above, and the distance from V. For choosing a place before a teleport, a glide or a showroom; nothing is moved or loaded.
+**Probe the world at points.** Observe only: at each point (points, up to 16, or a ring around V with around_v), whether the walkable ground around it is loaded (streamed), the nearest walkable point within radius_m, the ground below (a static-geometry ray down_m down) and the ceiling above, and the distance from V. Also returns traffic_check (lane classification and nearest pavement currently INCONCLUSIVE, radius_m is the requested search radius) and the real V-to-point road_boundary_intersection query. Boundary false cannot prove off-road; it excludes disabled/GPS-only lanes and is not lane containment. For choosing a place before placement; nothing is moved or loaded.
 
 - **Command:** `world.probe`, the bridge method `world.probe`
 - **Permission:** Look (`read`)
@@ -2271,7 +2272,7 @@ No parameters.
 
 ### `npc_spawn`
 
-**Bring in an XF actor.** Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Needs Codeware and the -writes package's actor records.
+**Bring in an XF actor.** Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Returns traffic_check at the final snapped point: lane containment and nearest pavement are INCONCLUSIVE. Needs Codeware and the -writes package's actor records.
 
 - **Command:** `npc.spawn`, the bridge method `npc.spawn`
 - **Permission:** Direct NPCs (`write-npc`)
@@ -2358,7 +2359,7 @@ No parameters.
 
 ### `npc_place`
 
-**Place an actor.** Puts one of the bridge's actors at a world point within 30 m of V, facing yaw degrees if given, at once (for staging a shot, not for drama). The answer's undo puts it back where it stood.
+**Place an actor.** Puts one of the bridge's actors at a world point within 30 m of V, facing yaw degrees if given, at once (for staging a shot, not for drama). Traffic classification at the final snapped point is INCONCLUSIVE; nearest pavement is unavailable. The answer's undo puts it back where it stood.
 
 - **Command:** `npc.place`, the bridge method `npc.place`
 - **Permission:** Direct NPCs (`write-npc`)
@@ -2708,7 +2709,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 |---|---|---|---|
 | `run` (required) | integer | 1 to 9007199254740991 | Recorder run |
 | `event` (required) | string | 1 to 64 characters | Exact event name |
-| `channel` | string | `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui` | Optional recorder channel |
+| `channel` | string | `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts` | Optional recorder channel |
 | `match` | object | the fields below | At most eight exact event-data fields to match |
 | `match.who` | string | at most 512 characters | Exact who |
 | `match.actor` | string | at most 512 characters | Exact actor |
@@ -2943,7 +2944,7 @@ Tools not yet sorted into an area above.
 
 ### `game_catchup`
 
-**Catch up with the moving session.** Autonomous test recorder required. Read this at the start of each turn: source path/health/combat/heat/vehicle/busy changes, F/U/subtitle/voice callbacks, session events and alerts since a cursor, plus the existing current digest. First call supplies run; subsequent calls replay cursor verbatim. Compact by default (last 24 events per channel with omitted counts); detail returns all retained records. Loss/invalid sources are explicit; contact alerts require explicit receipts, no physical collision sensor is commissioned. No second history store.
+**Catch up with the moving session.** Autonomous test recorder required. Read this at the start of each turn: source path/health/combat/heat/vehicle/busy changes, F/U/subtitle/voice callbacks, session events and alerts since a cursor, plus the existing current digest. First call supplies run; subsequent calls replay cursor verbatim. Compact by default (last 24 events per channel with omitted counts); detail returns all retained records. Loss/invalid sources are explicit; contact alerts require explicit receipts, partial car-hit entry and controller report paths are instrumented but uncommissioned, never full no-contact proof. No second history store.
 
 - **Command:** `game.catchup`, run by the tools (it may call the bridge several times)
 - **Permission:** Look (`read`)
@@ -2973,6 +2974,8 @@ Tools not yet sorted into an area above.
 | `cursor.last_v.busy` | string | at most 80 characters | Previous busy reason |
 | `cursor.file_chunk` | integer | 1 to 2048 | Native writer chunk cursor |
 | `cursor.file_offset` | integer | 0 to 1048576 | Native writer byte cursor |
+| `cursor.contact_observed` | boolean | `true`, `false` | Run contact latch; preserve returned value |
+| `cursor.vehicle_hit_observed` | boolean | `true`, `false` | Run vehicle-hit latch; preserve returned value |
 | `detail` | boolean | `true`, `false` | Include all retained source records and events |
 | `now` | boolean | `true`, `false` | Include current digest, default true; false avoids another game-thread read |
 | `replay_files` | boolean | `true`, `false` | Recover older history from the native private chunks, default true; bounded 8 MiB/1024 rows per call, more requests the next page |
@@ -3098,4 +3101,4 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 
 Codes the tools above name that have no shared wording yet; the answer's own message (from the tools) or its `detail` (from the game) explains each in context:
 
-`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.
+`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `road_safety_unknown`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.

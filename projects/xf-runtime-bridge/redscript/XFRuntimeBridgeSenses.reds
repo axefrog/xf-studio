@@ -442,7 +442,7 @@ public abstract class XFSenses {
     }
     let out = "{\"ok\":true,\"phase\":" + XFJson.Str(XFBridgeActions.Phase());
     if XFScene.Has(parts, "vitals") {
-      out += ",\"vitals\":" + XFSenses.Vitals(game, player);
+      out += ",\"vitals\":" + XFSenses.Vitals(game, player) + ",\"weapon_state\":" + XFPlayer.WeaponState(player);
     }
     if XFScene.Has(parts, "progress") {
       out += ",\"progress\":" + XFSenses.Progress(game, player);

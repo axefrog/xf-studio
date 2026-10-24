@@ -18,6 +18,8 @@ Game-script citations are paths inside the decompiled bundle; installed-mod cita
 | Crouch, weapons, consumables, menus | Status effect, equipment requests, item actions, UI events | [source] |
 | Input from inside the game without focus | CDPR's functional-test system (`FakeInput*`), a virtual XInput pad, or the decoded input buffer | existence [source]; behaviour [hypothesis] |
 
+**Bridge 0.8.15 [source/offline]:** R6's traffic lane flags are not navmesh masks. Final snapped V displacement now refuses `road_safety_unknown` unless `allow_road:true` explicitly accepts unknown road risk; turns stay exact, while teleport glides refuse displacement. Probe/actor placements label lane containment and nearest pavement INCONCLUSIVE. Shared PSM readback maps the script writers (Ready 5, Safe 6, Reload 2, Shoot 8; UpperBody Aiming 6), never the stale weapon enum; equipment actions remain queued requests. See [R6 implementation and limits](navigation-and-safety.md#bridge-0815-round-1-implementation-offline-24-october-2026), [session card](../research/runtime/runtime-bridge-test-card.md#safety-and-navigation-0815). These compile offline; no new runtime result is claimed.
+
 ## 2. Moving V
 
 - **Teleport.** `TeleportationFacility` has `Teleport(object, position: Vector4, orientation: EulerAngles)` and `TeleportToNode(object, NodeRef)`, nothing else [source] `orphans.script:31933-31938`. Fast travel calls `GetFPPCameraComponent().ResetPitch()` and then `TeleportToNode` [source] `core/systems/fastTravelSystem.script:321-341`. Appearance Menu Mod teleports V with `EulerAngles.new(0, 0, yaw)` and pins her by teleporting her onto her own position [source] AMM `Modules/tools.lua:1782-1786`, `Modules/util.lua:516-523`.

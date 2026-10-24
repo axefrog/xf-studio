@@ -272,6 +272,8 @@ behave::Ops BehaviourOps()
 // behave.<kind>: the input's own keys are the behaviour's parameters; max_s and every_ticks are the runner's.
 json BehaveStart(const std::string& aKind, const MethodContext& aContext)
 {
+    // No movement hold or per-tick placement before lane containment can certify a glide.
+    if (aKind == "glide_path") throw MethodError("road_safety_unknown", "Teleport glides are unavailable until lane containment is commissioned; world.probe reports INCONCLUSIVE traffic safety.");
     auto& dispatcher = TheDispatcher();
     Get().restore.MarkWrite();
     return Get().behaviours.Start(behave::StartParams(aKind, aContext.params), [&dispatcher](Access aAccess) { dispatcher.RequireWriteClass(aAccess); });
@@ -306,9 +308,10 @@ json PlayerTeleport(const MethodContext& aContext)
             float x = static_cast<float>(to[0]), y = static_cast<float>(to[1]), z = static_cast<float>(to[2]);
             float wanted = static_cast<float>(yaw.value_or(0.0));
             bool hasYaw = yaw.has_value();
-            int32_t ground = request.exact ? 1 : 0;
+            int32_t ground = (request.exact || (!request.position && !request.offset)) ? 1 : 0;
             bool farOk = request.farOk;
-            return ScriptCall("XFPlayer", "Teleport", {"Float", "Float", "Float", "Float", "Bool", "Int32", "Bool"}, {&x, &y, &z, &wanted, &hasYaw, &ground, &farOk}, cid);
+            bool allowRoad = request.allowRoad;
+            return ScriptCall("XFPlayer", "Teleport", {"Float", "Float", "Float", "Float", "Bool", "Int32", "Bool", "Bool"}, {&x, &y, &z, &wanted, &hasYaw, &ground, &farOk, &allowRoad}, cid);
         },
         "player.teleport");
     if (!writes::WaitTicks(Get().queue, 2, GameTimeout()))
@@ -321,8 +324,8 @@ json PlayerTeleport(const MethodContext& aContext)
     const double off = std::hypot(now[0] - target[0], now[1] - target[1], now[2] - target[2]);
     return json{{"before", done.value("before", json())}, {"target", done.at("target")}, {"yaw", done.value("yaw", yawBefore)},
                 {"snapped", done.value("snapped", false)}, {"now", after.at("position")}, {"off_m", std::round(off * 1000.0) / 1000.0},
-                {"held", false}, {"settled", off < 0.3}, {"traffic_check", "unavailable"},
-                {"warnings", json::array({"The destination may be a road or traffic lane; human navmesh does not classify traffic safety."})},
+                {"held", false}, {"settled", off < 0.3}, {"traffic_check", done.value("traffic_check", json())}, {"allow_road", request.allowRoad},
+                {"warnings", json::array({"Traffic classification is INCONCLUSIVE; no safe-placement or no-contact proof."})},
                 {"undo", player::TeleportUndo(from, yawBefore, now)},
                 {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
 }
@@ -358,7 +361,8 @@ json PlayerLook(const MethodContext& aContext)
                 bool hasYaw = true;
                 int32_t ground = 1;
                 bool farOk = false;
-                return ScriptCall("XFPlayer", "Teleport", {"Float", "Float", "Float", "Float", "Bool", "Int32", "Bool"}, {&x, &y, &z, &wanted, &hasYaw, &ground, &farOk}, cid);
+                bool allowRoad = false;
+                return ScriptCall("XFPlayer", "Teleport", {"Float", "Float", "Float", "Float", "Bool", "Int32", "Bool", "Bool"}, {&x, &y, &z, &wanted, &hasYaw, &ground, &farOk, &allowRoad}, cid);
             },
             "player.look.yaw");
         writes::WaitTicks(Get().queue, 1, GameTimeout());

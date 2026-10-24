@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { clock as defaultClock, read, type Clock, type Json, type TestApi } from "./windows.ts";
 
 export type RecordingOptions = {
-  directory: string; channels?: ("v" | "actors" | "camera" | "subtitles" | "voice" | "face" | "ui")[]; actors?: string[];
+  directory: string; channels?: ("v" | "actors" | "camera" | "subtitles" | "voice" | "face" | "ui" | "contacts")[]; actors?: string[];
   duration_s?: number; byte_cap?: number; signal?: AbortSignal; clock?: Clock;
 };
 
@@ -58,7 +58,7 @@ export async function recordSources(api: TestApi, options: RecordingOptions): Pr
   };
   try {
     const before = clock.now();
-    start = await read(api, "test.record.start", { channels: options.channels ?? ["v", "actors", "camera"],
+    start = await read(api, "test.record.start", { channels: options.channels ?? ["v", "actors", "camera", "contacts"],
       actors: options.actors ?? [], rate_hz: 10, duration_s: options.duration_s ?? 60, byte_cap: cap }, options.signal);
     if (!Number.isSafeInteger(start.run) || !start.run || typeof start.session !== "string") throw new Error("Invalid recording start");
     const after = clock.now();

@@ -13,6 +13,8 @@ Every row says what the script shows, not what the engine does behind a native c
 
 This page answers requirement S1 of the [runtime requirements](../research/story-engine/runtime-requirements.md) for the bridge chat (area F of [P2](../research/story-engine/p2-game-substrate.md#f-events-the-game-emits)): *which script-visible hooks could feed a world event stream, and which should go in first?*
 
+**Bridge 0.8.15 contact receipts [source/offline]:** autonomous recording wraps V's script-bodied `OnCarHitPlayer` on entry, before knockdown/cooldown returns, and reads bounded controller reports in valid landing/wall callbacks. Original behavior is preserved. The default `contacts` channel and `game.catchup` expose time, position, car identity/speed where available, and explicit unknown controller identity/continuous coverage. It is independent of damage attribution and makes no negative no-contact proof. Supporting ground may appear. [R6 implementation/limits](navigation-and-safety.md#bridge-0815-round-1-implementation-offline-24-october-2026), [commissioning rows](../research/runtime/runtime-bridge-test-card.md#safety-and-navigation-0815).
+
 ## 1. The short answers
 
 | Family | Best hook for a feed | Carries | Rate | Grade | Bridge today |

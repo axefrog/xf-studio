@@ -120,6 +120,9 @@ public abstract class XFWorldState {
     let point = new Vector4(x, y, z, 1.0);
     let streamed = navigation.IsNavmeshStreamedInLocation(point, radius);
     let out = "{\"ok\":true,\"point\":" + XFScene.Arr(point) + ",\"navmesh_streamed\":" + XFJson.Flag(streamed);
+    out += ",\"traffic_check\":" + XFNavigation.Classify(point, radius);
+    let v = XFPlayer.Player();
+    if IsDefined(v) { out += ",\"road_boundary_intersection\":" + XFNavigation.Boundary(v.GetWorldPosition(), point); }
     if streamed {
       let found = navigation.FindPointInSphereOnlyHumanNavmesh(point, radius, NavGenAgentSize.Human, true);
       if Equals(found.status, worldNavigationRequestStatus.OK) {

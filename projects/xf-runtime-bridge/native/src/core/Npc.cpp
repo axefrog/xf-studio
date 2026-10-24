@@ -1099,6 +1099,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     {
         out["note"] = step["note"];
     }
+    if (step.contains("traffic_check")) out["traffic_check"] = step["traffic_check"];
     out["undo"] = Undo("npc.release", {{"who", who}, {"how", "despawn"}});
     out["undo_note"] = "the actor is never saved: releasing it, the kill switch or loading a save removes it; npc.spawned follows when it appears";
     return out;
@@ -1344,6 +1345,7 @@ json Service::Place(const json& aParams, const Ops& aOps)
         npc.known = true;
     }
     json out{{"who", who}, {"at", json::array({spot[0], spot[1], spot[2]})}, {"asked_at", json::array({(*at)[0], (*at)[1], (*at)[2]})}};
+    if (step.contains("traffic_check")) out["traffic_check"] = step["traffic_check"];
     if (step.contains("before") && step["before"].contains("position"))
     {
         json back{{"who", who}, {"at", step["before"]["position"]}};

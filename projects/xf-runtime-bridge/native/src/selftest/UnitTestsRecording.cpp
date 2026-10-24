@@ -45,7 +45,7 @@ int RecordingUnitTests()
     Service s; int reads = 0, guarded = 0;
     Ops ops; ops.guard = [&] { ++guarded; }; ops.sample = [&](const std::string&, const std::vector<std::string>&) {
         ++reads; return json{{"valid", true}, {"position", {1, 2, 3}}}; };
-    const auto start = s.Start({{"actors", {"a1"}}}, 100, 1, 2, "test-session");
+    const auto start = s.Start({{"actors", {"a1"}}, {"channels", {"v", "actors", "camera"}}}, 100, 1, 2, "test-session");
     Check(start["requested_hz"] == 10, "source target 10 Hz");
     Refuses([&] { s.Start(json::object(), 100, 1, 2, "test-session"); }, "recording_busy");
     for (int i = 0; i < 20; ++i) s.Tick(100 + i * 0.05, 1, 2, true, i, ops);
@@ -118,6 +118,14 @@ int RecordingUnitTests()
     Check(fu.Ingress("face", R"({"event":"face.bridge_resend","attitude_prepared":true})", 900.91, 8, 4, 11), "F submission ingress uses same bounded recorder");
     fu.RequestStop("cancelled");
     Check(!fu.Wants("face") && !fu.Wants("ui"), "F/U ingress stops immediately");
+    Service contacts;
+    const auto contactStart = contacts.Start(json::object(), 1000, 8, 4, "contacts");
+    Check(contacts.Wants("contacts"), "contacts enabled in default source selection");
+    Check(contacts.Ingress("contacts", R"({"event":"contact.car_hit_player","other_entity":"42","position":[1,2,3]})", 1000.01, 8, 4, 12), "contact callback accepted without sampler tick");
+    auto contactPage = contacts.Read({{"run", 1}}, 1000.1);
+    Check(contactPage["records"][0]["source_s"] == 1000.01 && contactPage["records"][0]["data"]["other_entity"] == "42", "contact identity and source time preserved");
+    contacts.RequestStop("cancelled");
+    Check(!contacts.Ingress("contacts", R"({"event":"contact.controller_report"})", 1000.2, 8, 4, 13), "contact callback stops at cancellation");
     // File writer is the single off-thread drain, independent of a killed/disconnected pipe.
     const std::string sid = "fixture";
     const auto dir = std::filesystem::temp_directory_path() / ("xfb-record-" + std::to_string(Now()));

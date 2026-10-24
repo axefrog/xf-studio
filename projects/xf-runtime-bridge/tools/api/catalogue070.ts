@@ -221,7 +221,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "world.probe",
     title: "Probe the world at points",
     description:
-      "Observe only: at each point (points, up to 16, or a ring around V with around_v), whether the walkable ground around it is loaded (streamed), the nearest walkable point within radius_m, the ground below (a static-geometry ray down_m down) and the ceiling above, and the distance from V. For choosing a place before a teleport, a glide or a showroom; nothing is moved or loaded.",
+      "Observe only: at each point (points, up to 16, or a ring around V with around_v), whether the walkable ground around it is loaded (streamed), the nearest walkable point within radius_m, the ground below (a static-geometry ray down_m down) and the ceiling above, and the distance from V. Also returns traffic_check (lane classification and nearest pavement currently INCONCLUSIVE, radius_m is the requested search radius) and the real V-to-point road_boundary_intersection query. Boundary false cannot prove off-road; it excludes disabled/GPS-only lanes and is not lane containment. For choosing a place before placement; nothing is moved or loaded.",
     permission: "read",
     input: obj({
       points: { type: "array", description: "World points to probe.", items: point3("A world point [x, y, z]."), minItems: 1, maxItems: 16 },

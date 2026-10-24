@@ -39,7 +39,7 @@ void StopCount::Require(uint64_t aSeen, const std::string& aWhat) const
 
 TeleportRequest ParseTeleport(const json& aParams)
 {
-    params::RequireOnly(aParams, {"position", "offset", "yaw", "turn", "ground", "far"});
+    params::RequireOnly(aParams, {"position", "offset", "yaw", "turn", "ground", "far", "allow_road"});
     TeleportRequest request;
     request.position = params::CheckPoint(aParams, "position");
     if (const auto it = aParams.find("offset"); it != aParams.end() && !it->is_null())
@@ -74,6 +74,7 @@ TeleportRequest ParseTeleport(const json& aParams)
         }
         request.exact = *ground == "exact";
     }
+    request.allowRoad = params::CheckBoolean(aParams, "allow_road").value_or(false);
     request.farOk = params::CheckBoolean(aParams, "far").value_or(false);
     return request;
 }

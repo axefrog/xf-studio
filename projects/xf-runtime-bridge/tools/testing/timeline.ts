@@ -5,6 +5,7 @@ import { replayRecording, type FileCursor } from "./recording-replay.ts";
 export type TimelineCursor = FileCursor & {
   schema: "xfb/timeline-cursor-1"; sid: string; run: number; world: number; record: number; event: number;
   last_v?: Json;
+  contact_observed?: boolean; vehicle_hit_observed?: boolean;
 };
 export type TimelineOptions = { run?: number; cursor?: TimelineCursor; detail?: boolean; signal?: AbortSignal; digest?: boolean; archive?: boolean };
 const seq = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
@@ -70,6 +71,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     if (!eventMore || !advanced) break;
   }
   const counts: Json = {}, channels: Json = {}, path: number[][] = [];
+  let contactObserved = false, vehicleHitObserved = false;
   let travelled = 0;
   let last = cursor.last_v, healthMin: number | null = null, healthMax: number | null = null;
   const changes: Json = { combat: 0, heat: 0, vehicle: 0, busy: 0 };
@@ -77,6 +79,11 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     counts[row.channel] = (counts[row.channel] ?? 0) + 1;
     if (!row.valid) { gaps.push("invalid_source"); continue; }
     const v = row.data;
+    if (row.channel === "contacts" && v?.event?.startsWith("contact.") && v.event !== "contact.coverage") {
+      contactObserved = true;
+      vehicleHitObserved ||= v.vehicle_hit_observed === true;
+      alerts.push({ kind: "contact", seq: row.seq, source_s: row.source_s, ...v });
+    }
     if (row.channel !== "v") {
       const list: Json[] = channels[row.channel] ??= [];
       // Heartbeats and repeated UI snapshots are coalesced; distinct callbacks remain counted.
@@ -108,7 +115,12 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     last = v;
   }
   // Explicit contact receipts only; a velocity change is not proof of a collision.
-  for (const event of events) if (["contact", "collision"].includes(event.kind) || ["contact", "collision"].includes(event.data?.what)) alerts.push({ kind: event.data?.what ?? event.kind, event });
+  for (const event of events) if (["contact", "collision"].includes(event.kind) || ["contact", "collision"].includes(event.data?.what)) {
+    contactObserved = true; alerts.push({ kind: event.data?.what ?? event.kind, event });
+  }
+  cursor.contact_observed = saved?.contact_observed === true || contactObserved;
+  cursor.vehicle_hit_observed = saved?.vehicle_hit_observed === true || vehicleHitObserved;
+  const coveredPaths = status.channels?.includes("contacts") ? ["PlayerPuppet.OnCarHitPlayer.entry", "AbstractLandEvents.OnEnter", "WallCollisionHelpers.GetWallCollision"] : [];
   cursor.last_v = last ? { position: last.position, vitals: { health: last.vitals?.health, in_combat: last.vitals?.in_combat },
     heat: typeof last.heat === "string" ? last.heat : JSON.stringify(last.heat),
     vehicle: { mounted: last.vehicle?.mounted, id: last.vehicle?.id }, busy: last.busy } : undefined;
@@ -122,7 +134,11 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       distance_m: travelled, path_points: path.length,
       health_min: healthMin, health_max: healthMax, changes, latest: last }, channels, counts,
     events: compact(events), alerts: compact(alerts), omitted: { ...omitted, events: options.detail ? 0 : Math.max(0, events.length - 24), alerts: options.detail ? 0 : Math.max(0, alerts.length - 24) },
-    contact_coverage: "Explicit session receipts only; no commissioned physical-contact/collision sensor",
+    contact_summary: { message: contactObserved ? "contact observed" : `no contact observed (covered paths: ${coveredPaths.join(", ") || "explicit session receipts only"})`,
+      observed_since_cursor: contactObserved, observed_in_run: cursor.contact_observed, vehicle_hit_observed_in_run: cursor.vehicle_hit_observed,
+      covered_paths: coveredPaths, commissioned: false, continuous: false, no_contact_proof: false,
+      vehicle_contact_without_hit: "INCONCLUSIVE", controller_other_identity: "unavailable", history_complete: !gaps.length && !recordMore && !eventMore },
+    contact_coverage: "Partial uncommissioned car-hit-entry and landing/wall controller reports when contacts selected; supporting ground included; never full no-contact proof",
     calibration, ...(options.detail ? { records } : {}),
     ...(options.digest === false ? {} : { now: await read(api, "game.digest", { events: 0, sky: false }, options.signal) }) };
 }

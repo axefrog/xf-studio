@@ -29,6 +29,25 @@ public abstract class XFPlayer {
     return IsDefined(board) ? board.GetInt(id) : -1;
   }
 
+  // Script producers, NOT the stale gamePSMWeaponStates enum (R6 §8).
+  // 2.31 weaponTransitions.script:756–769 Ready=5, :1789–1819 Reload=2,
+  // :1930–1935 Shoot=8; :888–892 Safe=6; upperBodyTransitions.script:1326 Aiming=6.
+  public static func WeaponState(player: ref<PlayerPuppet>) -> String {
+    let defs = GetAllBlackboardDefs().PlayerStateMachine;
+    let weapon = XFPlayer.Psm(player, defs.Weapon);
+    let upper = XFPlayer.Psm(player, defs.UpperBody);
+    let name = "unknown";
+    switch weapon {
+      case 5: name = "Ready"; break;
+      case 6: name = "Safe"; break;
+      case 2: name = "Reload"; break;
+      case 8: name = "Shoot"; break;
+    }
+    return "{\"raw\":" + IntToString(weapon) + ",\"script_name\":" + XFJson.Str(name)
+      + ",\"upper_body_raw\":" + IntToString(upper) + ",\"aiming\":" + XFJson.Flag(upper == 6)
+      + ",\"source\":\"2.31 PSM script writers; R6 section 8\",\"can_fire\":null}";
+  }
+
   // Why the bridge won't move V now: "" when it may, or a refusal code (design §4.1). BusyState names the state behind a
   // player_busy (RB-79: a fall or landing, swimming, a workspot, a takedown or grapple, carrying a body, any locomotion but
   // standing or crouching, a menu or photo mode, death); a teleport in the middle of one of them may leave the player state
@@ -155,6 +174,7 @@ public abstract class XFPlayer {
     }
     let defs = GetAllBlackboardDefs().PlayerStateMachine;
     let out = "{\"ok\":true,\"phase\":" + XFJson.Str(XFBridgeActions.Phase()) + ",\"position\":" + XFScene.Arr(player.GetWorldPosition()) + ",\"yaw\":" + XFJson.Num(player.GetWorldYaw());
+    out += ",\"weapon_state\":" + XFPlayer.WeaponState(player);
     out += ",\"forward\":" + XFScene.Arr(player.GetWorldForward()) + ",\"camera\":" + XFPlayer.CameraJson();
     out += ",\"psm\":{\"locomotion\":" + IntToString(XFPlayer.Psm(player, defs.Locomotion)) + ",\"locomotion_name\":" + XFJson.Str(EnumValueToString("gamePSMLocomotionStates", Cast<Int64>(XFPlayer.Psm(player, defs.Locomotion))));
     out += ",\"high_level\":" + IntToString(XFPlayer.Psm(player, defs.HighLevel)) + ",\"high_level_name\":" + XFJson.Str(EnumValueToString("gamePSMHighLevel", Cast<Int64>(XFPlayer.Psm(player, defs.HighLevel))));
@@ -202,7 +222,7 @@ public abstract class XFPlayer {
   // (refused without it), 1 = exact (no snap: the caller's risk). Either way a destination more than 0.5 m away must have
   // the world streamed in around it (RB-80: exact used to skip that, so exact plus far had no check at all); a turn in
   // place (player.look's instant yaw) stays where V already stands. far lifts the 50 m cap.
-  public static func Teleport(cid: String, x: Float, y: Float, z: Float, yaw: Float, hasYaw: Bool, ground: Int32, far: Bool) -> String {
+  public static func Teleport(cid: String, x: Float, y: Float, z: Float, yaw: Float, hasYaw: Bool, ground: Int32, far: Bool, allowRoad: Bool) -> String {
     let player = XFPlayer.Player();
     let busy = XFPlayer.Busy(player);
     if StrLen(busy) > 0 {
@@ -212,7 +232,6 @@ public abstract class XFPlayer {
     if IsDefined(registry) && registry.HasPlayerEffect(TDBID.Create("GameplayRestriction.NoMovement")) {
       return XFJson.Fail("bridge_effects_active", "the bridge still holds something that a save would keep (GameplayRestriction.NoMovement); player_stop before teleporting");
     }
-    XFBridgeLog.Warn(cid, "teleport traffic pre-check unavailable: human navmesh does not classify roads or traffic lanes; no movement hold is applied");
     let game = GetGameInstance();
     let before = player.GetWorldPosition();
     let beforeYaw = player.GetWorldYaw();
@@ -232,12 +251,15 @@ public abstract class XFPlayer {
       }
       target = found.point;
     }
+    // Check the final snapped point, in the execution frame, before any save lock or movement.
+    if Vector4.Distance(before, target) > 0.001 && !allowRoad { return XFNavigation.Refuse(target); }
+    let traffic = XFNavigation.Classify(target, 10.0);
     let angles: EulerAngles;
     angles.Yaw = hasYaw ? yaw : beforeYaw;
     XFBridgeActions.EnsureSaveLock(cid);
     GameInstance.GetTeleportationFacility(game).Teleport(player, target, angles);
     XFBridgeLog.Info(cid, "player teleported from " + XFScene.Arr(before) + " to " + XFScene.Arr(target) + "; undo: teleport back");
-    return "{\"ok\":true,\"before\":{\"position\":" + XFScene.Arr(before) + ",\"yaw\":" + XFJson.Num(beforeYaw) + "},\"target\":" + XFScene.Arr(target) + ",\"yaw\":" + XFJson.Num(angles.Yaw) + ",\"snapped\":" + XFJson.Flag(ground == 0) + "}";
+    return "{\"ok\":true,\"before\":{\"position\":" + XFScene.Arr(before) + ",\"yaw\":" + XFJson.Num(beforeYaw) + "},\"target\":" + XFScene.Arr(target) + ",\"yaw\":" + XFJson.Num(angles.Yaw) + ",\"snapped\":" + XFJson.Flag(ground == 0) + ",\"traffic_check\":" + traffic + "}";
   }
 
   // A glide's step (behave.glide.path): V to the next point on her path, facing along it. No log line per tick. Before
@@ -253,6 +275,8 @@ public abstract class XFPlayer {
     if StrLen(refusal) > 0 {
       return refusal;
     }
+    // A navmesh glide has no proven lane containment either. No implicit override for per-tick placement.
+    if Vector4.Distance(player.GetWorldPosition(), new Vector4(x, y, z, 1.0)) > 0.001 { return XFNavigation.Refuse(new Vector4(x, y, z, 1.0)); }
     let angles: EulerAngles;
     angles.Yaw = yaw;
     GameInstance.GetTeleportationFacility(GetGameInstance()).Teleport(player, new Vector4(x, y, z, 1.0), angles);
@@ -432,7 +456,7 @@ public abstract class XFPlayer {
       }
       XFBridgeActions.EnsureSaveLock(cid);
       EquipmentSystem.GetInstance(player).QueueRequest(request);
-      return "{\"ok\":true,\"action\":" + XFJson.Str(name) + "}";
+      return "{\"ok\":true,\"action\":" + XFJson.Str(name) + ",\"weapon_state\":" + XFPlayer.WeaponState(player) + ",\"readback\":\"immediate_after_queue_not_settled\"}";
     }
     if Equals(name, "menu.close") {
       GameInstance.GetUISystem(game).QueueEvent(new ForceCloseHubMenuEvent());
