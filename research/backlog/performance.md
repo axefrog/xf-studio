@@ -66,6 +66,23 @@ A restart is measured by `tools/measure-warm-restart.ts <folder> [port] [runs]` 
 
 ## Known costs and candidate work (27 September 2026)
 
+### Profiles phase 2: tab-switch budgets (G4)
+
+Results are **pending G4** on real game-derived head data. The [isolated headless harness](../../experiments/044-profile-tabs/README.md#15-p2-vii-as-built) runs a primed browser cache, then a fresh Chrome profile; a shell-only smoke never satisfies these gates. These are browser-preview budgets, not game-rendering evidence.
+
+| Row | Setup | Budget | Result |
+|---|---|---|---|
+| T-a | Two tabs sharing one scene | Click to first presented frame ≤100 ms | Pending G4 |
+| T-b | Two scenes of one V, destination warm/prepared | ≤100 ms; zero links and program creations in first shown frame | Pending G4 |
+| T-c | Two Vs with different bodies, destination warm | ≤100 ms; zero first-frame links | Pending G4 |
+| T-d | Two warm scenes with different authored looks | ≤100 ms; zero raster requests and first-frame links | Pending G4 |
+| T-e | Third scene beyond the shown + one-warm budget | In-place progress ≤150 ms; no blank pane; no task ≥50 ms; eventual takeover | Pending G4 |
+| T-f | A, B, C, A within 300 ms, cold intermediates | Only A presented; no superseded draw or late result | Pending G4 |
+| T-g | Dock load, rebind and paint | No task ≥50 ms from click through 1 s afterward | Pending G4 |
+| T-h | Close the last tab referencing a scene | Runtime absent; live GL counts at baseline; collected heap/OS memory returns within recorded sampling tolerances | Pending G4 |
+
+T-h reports the exact before/after values alongside conservative noise tolerances (JS heap +16 MiB, Chrome private bytes +64 MiB, dedicated/shared GPU bytes +16 MiB each). Missing counters fail the measurement; tolerances are harness measurement policy, not evidence that a retained runtime is acceptable.
+
 | Cost | Measured | Candidate |
 |---|---|---|
 | WolvenKit geometry export on a cold V | ~17–27 s | **Done**: native mesh decoding ([native reader](native-archive-reader.md) phase 4); the default V's 18 meshes and morph targets decode in 1.75 s, and a cold preparation took 19.9–20.0 s against 56–63 s with WolvenKit's geometry export the same day |

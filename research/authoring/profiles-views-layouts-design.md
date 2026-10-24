@@ -391,6 +391,8 @@ Key bindings and palette commands resolve targets in the input layer, then dispa
 
 ## 4. Layouts
 
+**Built in phase 2.** P2-i–P2-vi implement the session owner and shared history, contributed and own defaults, explicit substitution, tab-owned arrangements, per-view editing and panes, tab-derived feature focus and the captured Choose routes. The old module/layout controls are retired and their serialized preferences round-trip unchanged. Duplicate is data-only until phase 6; recorded panel/binding operations and several controllers per type remain phase 3. [Experiment 044 §8–§15](../../experiments/044-profile-tabs/README.md#15-p2-vii-as-built) records the implementation and G4 harness. **Real-data G4 results remain pending the coordinator's run.**
+
 ### 4.1 One owner for tabs, graph and focus
 
 `ProfileSessions` changes tabs, the graph and focus only through operations. Each operation is one commit and, except for focus, one `view:<profileId>` step, so Undo can never put views into a missing tab.
@@ -544,6 +546,8 @@ The owner groups are a module's label, **Shared**, **Output** or **Tools**.
 | Panels (`shell.panels`, new) | Tools | its tab | none |
 
 ## 6. Presentation
+
+**Built in phase 2.** U1–U9 are implemented: the layout tab strip and keys; tab commands; grouped New tab defaults; substitution and naming popovers; the three captured empty-state Choose routes; not-drawn view panes; and the tab-scoped Panels menu/header. The component library and generated style guide define these patterns ([044 §3](../../experiments/044-profile-tabs/README.md#3-ui-spec-list)). P2-i–P2-vi are accepted; the real-data G4 measurement remains the coordinator’s gate. The panel picker, binding selector, profile flyout and Duplicate UI below still belong to later phases.
 
 The UI component track builds these. This section gives behaviour, states and accessibility only; aesthetics are the track's. Everything passes the [visual QA checklist](ui-visual-qa-checklist.md) and the UI review.
 
