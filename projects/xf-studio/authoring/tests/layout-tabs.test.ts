@@ -16,6 +16,7 @@ import { restoreDockPreference } from "../src/studio-ui/dock/persist";
 import { viewCatalogue } from "../src/studio-ui/views/contribution";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
 import { recordTime } from "../src/studio-ui/components/record-list";
+import { Feedback } from "../src/studio-ui/feedback";
 
 const V1 = { kind: "character", id: "c-one" }, V2 = { kind: "character", id: "c-two" };
 const LOOK = { collection: "11111111-1111-4111-8111-111111111111", look: "22222222-2222-4222-8222-222222222222" };
@@ -34,7 +35,7 @@ afterEach(() => {
   if (previousWindow === undefined) delete (globalThis as Record<string, unknown>).window; else (globalThis as Record<string, unknown>).window = previousWindow;
 });
 
-async function harness() {
+async function harness(feedback?: Pick<Feedback, "announce" | "toast">) {
   const outbox = new DocumentOutbox(storeDocuments(), memoryOutboxStorage()); outbox.open();
   const defaults = new LayoutDefaults({ documents: { list: async () => [] }, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(31) });
   await defaults.load();
@@ -52,7 +53,7 @@ async function harness() {
   const dockButton = document.createElement("button"); dock.append(dockButton);
   const view = layoutTabs({ tabs: port, capability: action => readOnly && action.kind !== "tabs.show" ? { available: false, reason: "This workspace is open in another window." } : actions.capability(action),
     dispatch: action => { dispatched.push(action); actions.dispatch(action); return { ok: true }; }, dock, changed() {}, moduleIcon: () => "eye",
-    feedback: { announce: text => announcements.push(text), toast: (tone, _source, message, actions) => { toasts.push({ tone, message, actions }); return () => {}; } } });
+    feedback: feedback ?? { announce: text => announcements.push(text), toast: (tone, _source, message, actions) => { toasts.push({ tone, message, actions }); return () => {}; } } });
   lightDocument.body.append(el(view.element), el(dock));
   const changed = () => listeners.forEach(listener => listener());
   const row = (label: string) => lightDocument.body.querySelectorAll(".menu-item").find(item => item.querySelector(".menu-label")?.textContent?.startsWith(label))!;
@@ -328,4 +329,23 @@ test("Review B 15: menu, key and palette closes give an info toast whose Undo re
   h.view.commands().find(command => command.id === "tab.close")!.run();
   expect(h.toasts.at(-1)).toMatchObject({ tone: "info", message: "Closed “Second tab”." });
   h.toasts.at(-1)!.actions![0]!.run(); expect(h.session.tabId()).toBe(second);
+});
+
+test("Review C: same-named close notices each Undo their own fragment, including repeated closes of one tab", async () => {
+  const feedback = new Feedback(), h = await harness(feedback), first = h.session.tabId();
+  h.actions.dispatch({ kind: "tabs.new", default: EYE });
+  const second = h.session.tabId();
+  expect(h.session.tab(first)!.name).toBe(h.session.tab(second)!.name);
+  h.action("Close tab"); h.action("Close tab");
+  const notices = () => [...feedback.toasts.children].filter(toast => !toast.classList.contains("leaving"));
+  expect(notices()).toHaveLength(2);
+  // Undo the later notice first, then close that tab again while the earlier notice remains.
+  el(notices()[1] as HTMLElement).querySelector(".toast-actions")!.querySelector("button")!.click();
+  expect(h.session.tabList().map(tab => tab.id)).toEqual([first]);
+  h.action("Close tab");
+  expect(notices()).toHaveLength(2);
+  el(notices()[1] as HTMLElement).querySelector(".toast-actions")!.querySelector("button")!.click();
+  expect(h.session.tabList().map(tab => tab.id)).toEqual([first]);
+  el(notices()[0] as HTMLElement).querySelector(".toast-actions")!.querySelector("button")!.click();
+  expect(new Set(h.session.tabList().map(tab => tab.id))).toEqual(new Set([first, second]));
 });

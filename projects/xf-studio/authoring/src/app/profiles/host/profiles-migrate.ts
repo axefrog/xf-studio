@@ -17,7 +17,7 @@
  *    decoded save, as `character.create` makes it.
  * 3. **The profile** (M5): one already holding this V and collection; else none makes "My profile", one is used, several make "From
  *    this browser". The V and the new collections join it.
- * 4. **Own defaults** (M6) from the saved layouts, deduplicated by name and arrangement.
+ * 4. **Own defaults** (M6) from the saved layouts, with permanent receipts keyed by the original legacy entries.
  * 5. **The record**, with the ID map.
  */
 import { basename } from "node:path";
@@ -35,7 +35,7 @@ import { MIGRATION_TOKEN, PROFILES_MIGRATION } from "../profile-session";
 import { canonicalJson } from "../../../platform/api";
 import { contentKey, lookContent, LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, LAYOUT_FRAGMENT_SCHEMA, MIGRATION_DOCUMENT, MIGRATION_RESULT_SCHEMA,
   MIGRATION_SNAPSHOT_SCHEMA, type MigrationAnswer, type MigrationDraft, type MigrationLook, migrationRecordId, type MigrationRequest, type MigrationResult,
-  type MigrationSnapshot, valueKey } from "../profiles-migration-data";
+  type MigrationSnapshot, valueKey, LEGACY_LAYOUT_DOCUMENT, legacyLayoutSource, legacyLayoutReceipt } from "../profiles-migration-data";
 
 /** The protocol points inside the transaction (after each step) and after its commit, before the answer: the crash harness's kill points. */
 export const MIGRATION_POINTS = ["m-collections", "m-subjects", "m-profile", "m-defaults", "m-record"] as const;
@@ -105,7 +105,11 @@ export function checkMigrationRequest(value: unknown): MigrationRequest {
   const layouts = snapshot.layouts.map(layout => {
     if (!object(layout) || !nameOf(layout.name) || !object(layout.fragment) || layout.fragment.schema !== LAYOUT_FRAGMENT_SCHEMA || !object(layout.fragment.tab))
       refuse("A saved layout in the workspace is damaged.");
-    return { name: nameOf(layout.name)!, fragment: layout.fragment, ...(layout.active === true ? { active: true as const } : {}) };
+    if (layout.source !== undefined && (typeof layout.source !== "string" || !/^[0-9a-f]{64}$/.test(layout.source))
+      || layout.createdAt !== undefined && (typeof layout.createdAt !== "number" || !Number.isFinite(layout.createdAt)))
+      refuse("A saved layout in the workspace is damaged.");
+    return { name: nameOf(layout.name)!, fragment: layout.fragment, ...(layout.active === true ? { active: true as const } : {}),
+      ...(layout.source !== undefined ? { source: layout.source } : {}), ...(layout.createdAt !== undefined ? { createdAt: layout.createdAt } : {}) };
   });
   const current = object(snapshot.current) && typeof snapshot.current.id === "string" && Number.isSafeInteger(snapshot.current.revision)
     ? { id: snapshot.current.id, revision: snapshot.current.revision } : undefined;
@@ -316,16 +320,14 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
         put(PROFILE_DOCUMENT, profile.row.id, { ...profile.row.value, subjects, collections: [...held.collections, ...added] });
       point("m-profile");
 
-      // 4. Own defaults (M6), by name and arrangement.
-      const existing = list(LAYOUT_DEFAULT_DOCUMENT);
+      // 4. Take over each legacy entry once, even when its default is later edited, deleted or purged.
       const defaults = snap.layouts.map(layout => {
-        const dock = valueKey(layout.fragment.tab.dock);
-        const found = existing.find(doc => doc.value.name === layout.name && valueKey(doc.value.fragment?.tab?.dock) === dock);
-        if (found) return found.id;
-        const id = `d-${at.toString(36)}${Math.floor(random() * 2 ** 40).toString(36).padStart(8, "0")}`;
-        const value = { schema: LAYOUT_DEFAULT_SCHEMA, id, name: layout.name, owner: "user", fragment: layout.fragment, createdAt: at };
+        const source = legacyLayoutSource(layout), consumed = get(LEGACY_LAYOUT_DOCUMENT, source);
+        if (consumed) return consumed.value.default as string;
+        const id = `d-${source.slice(0, 40)}`;
+        const value = { schema: LAYOUT_DEFAULT_SCHEMA, id, name: layout.name, owner: "user", fragment: layout.fragment, createdAt: layout.createdAt ?? 0 };
         put(LAYOUT_DEFAULT_DOCUMENT, id, value);
-        existing.push({ id, revision: 1, value });
+        put(LEGACY_LAYOUT_DOCUMENT, source, legacyLayoutReceipt(id));
         made.push("default-created");
         return id;
       });

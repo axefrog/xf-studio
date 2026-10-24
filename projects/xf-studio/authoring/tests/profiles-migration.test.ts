@@ -516,7 +516,7 @@ test("Review A finding 1: layouts saved after profiles-1 import once without cha
   const initial = rows(path, LAYOUT_DEFAULT_DOCUMENT);
   workspace.edit(state => {
     const saved = state.uiPreferences.layouts!.layouts;
-    // Updating a migrated layout must keep both arrangements; two same-named arrangements must both be recovered.
+    // An already consumed legacy entry stays consumed; two new same-named entries must both be recovered.
     saved[0] = { ...saved[0]!, dock: saved[1]!.dock };
     saved.push({ id: "l3", name: "After migration", dock: LIVE_DOCK });
     saved.push({ id: "l4", name: "After migration", dock: saved[1]!.dock });
@@ -529,10 +529,10 @@ test("Review A finding 1: layouts saved after profiles-1 import once without cha
   const defaults = new LayoutDefaults({ documents, outbox }); await defaults.load();
   defaults.importLegacy(layoutsOf(state));
   const recovered = defaults.list();
-  expect(recovered).toHaveLength(initial.length + 3);
+  expect(recovered).toHaveLength(initial.length + 2);
   for (const old of initial) expect(recovered.find(value => value.id === old.id)?.fragment).toEqual(old.value.fragment);
   const pairs = recovered.filter(value => value.fragment.tab).map(value => [value.name, JSON.stringify(value.fragment.tab.dock)]);
-  for (const layout of layoutsOf(state)) expect(pairs).toContainEqual([layout.name, JSON.stringify(layout.fragment.tab.dock)]);
+  for (const layout of layoutsOf(state).slice(1)) expect(pairs).toContainEqual([layout.name, JSON.stringify(layout.fragment.tab.dock)]);
   const pending = structuredClone(outbox.pendingEntries());
   defaults.importLegacy(layoutsOf(state));
   expect(outbox.pendingEntries()).toEqual(pending);
@@ -558,6 +558,51 @@ test("Review A finding 1: layouts saved after profiles-1 import once without cha
   expect(resumed.pendingEntries()).toEqual(afterDelete);
   expect(again.get(edited.id)).toBeUndefined();
   resumed.stop(); host.close();
+});
+
+test.each(["rename", "update", "rename-delete", "update-delete"] as const)("Review C: original migration provenance survives %s before first recovery", async edit => {
+  const { path } = library(), host = new HarnessHost(path), workspace = new HarnessWorkspace(realWorkspace(), `provenance-${edit}`);
+  await migrateUntilDone(workspace, host);
+  const state = workspace.state(), documents = storeDocuments(path), storage = memoryOutboxStorage();
+  const outbox = new DocumentOutbox(documents, storage); outbox.open();
+  const defaults = new LayoutDefaults({ documents, outbox }); await defaults.load();
+  const original = defaults.list()[0]!;
+  if (edit.startsWith("rename")) expect(defaults.dispatch({ kind: "rename", id: original.id, name: "My renamed default" }).ok).toBe(true);
+  else expect(defaults.dispatch({ kind: "update", id: original.id, fragment: defaults.list()[1]!.fragment }).ok).toBe(true);
+  if (edit.endsWith("delete")) expect(defaults.dispatch({ kind: "delete", id: original.id }).ok).toBe(true);
+  await outbox.flush(); outbox.stop();
+  const restarted = new DocumentOutbox(documents, memoryOutboxStorage()); restarted.open();
+  try {
+    const again = new LayoutDefaults({ documents, outbox: restarted }); await again.load();
+    const before = again.list();
+    again.importLegacy(layoutsOf(state)); await restarted.flush();
+    expect(again.list()).toHaveLength(before.length);
+    for (const value of before) expect(again.get(value.id)).toMatchObject({ id: value.id, name: value.name, fragment: value.fragment });
+    expect(restarted.status().conflicts).toBe(0);
+  } finally { restarted.stop(); host.close(); }
+});
+
+test("Review C: a purged deleted default never resurrects its consumed legacy layout", async () => {
+  const documents = storeDocuments(), state = realWorkspace();
+  const open = async () => {
+    const outbox = new DocumentOutbox(documents, memoryOutboxStorage()); outbox.open();
+    const defaults = new LayoutDefaults({ documents, outbox, now: () => 100 }); await defaults.load();
+    return { outbox, defaults };
+  };
+  const first = await open(); first.defaults.importLegacy(layoutsOf(state)); await first.outbox.flush();
+  const deleted = first.defaults.list()[0]!;
+  expect(first.defaults.dispatch({ kind: "delete", id: deleted.id }).ok).toBe(true);
+  await first.outbox.flush(); first.outbox.stop();
+  // The injected deletion time is 100 ms after epoch, well past the real cleanup's 30-day cutoff.
+  expect(documents.store.cleanup().tombstones).toBe(1);
+  expect(documents.store.get(LAYOUT_DEFAULT_DOCUMENT, deleted.id)).toBeNull();
+  const second = await open();
+  try {
+    const before = second.defaults.list();
+    second.defaults.importLegacy(layoutsOf(state)); await second.outbox.flush();
+    expect(second.defaults.list()).toEqual(before);
+    expect(documents.store.get(LAYOUT_DEFAULT_DOCUMENT, deleted.id)).toBeNull();
+  } finally { second.outbox.stop(); }
 });
 
 test("Review A design 1: a fresh workspace migrates the default arrangement in both sizes, preserving legacy bytes", async () => {

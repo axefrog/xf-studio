@@ -35,7 +35,7 @@ export function layoutTabs(deps: TabsDeps) {
     if (closing) {
       const closed = tabs.snapshot().closed.at(-1);
       feedback.toast("info", "Layout tabs", `Closed “${closing.name}”.`, closed ? [{ label: "Undo",
-        run: () => { run({ kind: "tabs.reopen", closed: closed.id ?? closed.tab.id }); } }] : []);
+        run: () => { run({ kind: "tabs.reopen", closed: closed.id ?? closed.tab.id }); } }] : [], { key: closed?.id ?? closing.id });
     }
     return true;
   };

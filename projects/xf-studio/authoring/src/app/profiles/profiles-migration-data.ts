@@ -34,6 +34,9 @@ export const MIGRATION_SNAPSHOT_SCHEMA = "xfs/profiles-migration-snapshot-1";
 export const MIGRATION_RESULT_SCHEMA = "xfs/profiles-migration-1";
 export const LAYOUT_DEFAULT_DOCUMENT = "layout-default";
 export const LAYOUT_DEFAULT_SCHEMA = "xfs/layout-default-1";
+/** Permanent source receipts, separate from defaults and their expiring deletion tombstones. */
+export const LEGACY_LAYOUT_DOCUMENT = "legacy-layout";
+export const LEGACY_LAYOUT_SCHEMA = "xfs/legacy-layout-1";
 export { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment };
 /** The subject and look slots a migrated fragment has (one V, one look, as today's single-V Studio shows). */
 export const FRAGMENT_SUBJECT = "v1", FRAGMENT_LOOK = "look1";
@@ -46,7 +49,11 @@ export type MigrationDraft = { readonly id: string; readonly name: string; reado
 /** The V: its character document as `character.create` writes it (without an ID), and the decoded save the workspace holds. */
 export type MigrationCharacter = { readonly document: Omit<CharacterDocument, "id">; readonly saved?: { readonly id: string; readonly value: SavedV } };
 /** A saved layout as an own default; `active`: the layout the live arrangement belongs to (tab 1's origin). */
-export type MigrationLayout = { readonly name: string; readonly fragment: LayoutFragment; readonly active?: true };
+export type MigrationLayout = { readonly name: string; readonly fragment: LayoutFragment; readonly active?: true;
+  /** Hash of the old library ID, or of the original saved entry when it has no ID. Absent in older migration requests. */
+  readonly source?: string;
+  /** The legacy creation time, or zero when it wasn't recorded (never this window's recovery time). */
+  readonly createdAt?: number };
 export type MigrationSnapshot = {
   readonly schema: typeof MIGRATION_SNAPSHOT_SCHEMA;
   /** The workspace's identity (the lease's key): names the loose look's collection. */
@@ -104,6 +111,9 @@ export const contentKey = (parts: PartRegistry, looks: readonly { readonly name:
 export const snapshotDigest = (snapshot: MigrationSnapshot) => sha256Hex(canonicalJson(snapshot));
 /** Hash of a canonical JSON value (dock arrangements, character states). */
 export const valueKey = (value: unknown) => sha256Hex(canonicalJson(value));
+/** Older requests without source metadata still have a repeatable identity from their saved fragment. */
+export const legacyLayoutSource = (layout: MigrationLayout) => layout.source ?? valueKey({ name: layout.name, fragment: layout.fragment });
+export const legacyLayoutReceipt = (id: string) => ({ schema: LEGACY_LAYOUT_SCHEMA, default: id });
 
 /** A UUID derived from `text` (the loose look's collection and look, so a re-upgrade compares against the same family). */
 export function derivedUuid(text: string): string {
@@ -291,6 +301,7 @@ export function layoutsOf(state: WorkspaceState): MigrationLayout[] {
   if (!library) return [];
   const graph = workspaceViewGraph(state.preview, state.views);
   return library.layouts.map(layout => ({ name: layout.name, fragment: layoutFragment(layout.name, layout.dock, graph),
+    source: valueKey(typeof layout.id === "string" && layout.id ? { id: layout.id } : layout), createdAt: layout.createdAt ?? 0,
     ...(layout.id === library.active ? { active: true as const } : {}) }));
 }
 

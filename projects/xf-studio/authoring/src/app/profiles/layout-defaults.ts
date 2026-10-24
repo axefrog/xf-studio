@@ -24,7 +24,7 @@ import type { DocumentOutbox, OutboxEntry } from "../../platform/core/document-o
 import { notifyAll } from "../../platform/core/listeners";
 import { hostRandom } from "../../platform/core/random";
 import { buildIssues, fragmentIssues, type FragmentKnowledge } from "./layout-fragment";
-import { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, valueKey, type MigrationLayout } from "./profiles-migration-data";
+import { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, LEGACY_LAYOUT_DOCUMENT, legacyLayoutSource, legacyLayoutReceipt, type MigrationLayout } from "./profiles-migration-data";
 import { nameIssue } from "./profile-sessions";
 
 export { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA };
@@ -48,9 +48,7 @@ export type ContributedLayoutDefault = {
 export type OwnDefaultDocument = { readonly schema: typeof LAYOUT_DEFAULT_SCHEMA; readonly id: string; readonly name: string; readonly owner: "user";
   readonly fragment: LayoutFragment; readonly createdAt: number;
   /** When the fragment was last saved (create or Update); a document written before it has only `createdAt`. */
-  readonly savedAt?: number;
-  /** Content identities already recovered from the retired Layouts UI, kept across rename, Update and deletion. */
-  readonly legacyLayouts?: readonly string[] };
+  readonly savedAt?: number };
 /** A default as listed: a module's or the person's, with the reason it can't be used here, if any. Detached. */
 export type LayoutDefaultView = {
   readonly id: string;
@@ -99,6 +97,7 @@ export type LayoutDefaultsDeps = {
 export class LayoutDefaults {
   /** Every own default this window knows of (deleted ones too: restore names them). */
   private readonly ids = new Set<string>();
+  private readonly consumed = new Set<string>();
   private readonly listeners = new Set<() => void>();
   private views: readonly LayoutDefaultView[] | null = null;
   private readonly contributed: readonly ContributedLayoutDefault[];
@@ -108,6 +107,7 @@ export class LayoutDefaults {
     deps.outbox.subscribe(event => {
       if (event.kind === "status") return;
       const refs = event.kind === "external" || event.kind === "resolved" || event.kind === "recorded" ? event.refs : event.entry.writes;
+      for (const item of refs) if (item.kind === LEGACY_LAYOUT_DOCUMENT) this.consumed.add(item.id);
       if (!refs.some(item => item.kind === LAYOUT_DEFAULT_DOCUMENT)) return;
       for (const item of refs) if (item.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(item.id);
       this.changed();
@@ -117,7 +117,10 @@ export class LayoutDefaults {
 
   /** Read every own default from the library (deleted ones too), and those this window's outbox still holds from its last session. */
   async load(signal?: AbortSignal): Promise<void> {
-    for (const entry of this.deps.outbox.pendingEntries()) for (const write of entry.writes) if (write.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(write.id);
+    for (const entry of this.deps.outbox.pendingEntries()) for (const write of entry.writes) {
+      if (write.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(write.id);
+      if (write.kind === LEGACY_LAYOUT_DOCUMENT) this.consumed.add(write.id);
+    }
     await this.refresh(signal, true);
   }
   /**
@@ -131,6 +134,10 @@ export class LayoutDefaults {
       this.deps.outbox.hold(ref(document.id), { revision: document.revision, value: document.value });
       this.ids.add(document.id);
       found = true;
+    }
+    for (const document of await this.deps.documents.list(LEGACY_LAYOUT_DOCUMENT, signal)) {
+      this.deps.outbox.hold({ kind: LEGACY_LAYOUT_DOCUMENT, id: document.id }, { revision: document.revision, value: document.value });
+      this.consumed.add(document.id);
     }
     if (found || always) this.changed();
   }
@@ -188,35 +195,19 @@ export class LayoutDefaults {
 
   // ----- Commands -----
   /**
-   * Recover layouts saved by the old Layouts UI after profiles-1. One durable outbox write keeps the source identities with their
-   * defaults, so a retry, rename, Update or deletion never imports them again. Existing defaults (including tombstones) are reused by
-   * name and arrangement, as profiles-1 did. Different arrangements stay separate. No session or legacy preference is changed.
+   * Recover each old library entry once. Its permanent receipt and default are one durable outbox command. Receipts survive edits,
+   * deletion and tombstone cleanup; deterministic values let concurrent imports converge. No session or legacy preference changes.
    */
   importLegacy(layouts: readonly MigrationLayout[]): void {
-    const held = [...this.ids].flatMap(id => { const document = this.held(id); return document ? [{ id, value: document.value }] : []; });
-    const valueOf = (value: unknown) => ownDefaultOf(isTombstone(value) ? value.value : value);
-    const sourceOf = (name: string, fragment: LayoutFragment) => valueKey({ name, dock: fragment.tab.dock });
-    const writes = new Map<string, unknown>();
-    const now = (this.deps.now ?? Date.now)();
     for (const layout of layouts) {
-      const source = sourceOf(layout.name, layout.fragment);
-      if (held.some(item => {
-        const value = valueOf(item.value);
-        return value?.legacyLayouts?.includes(source);
-      })) continue;
-      const existing = held.find(item => { const value = valueOf(item.value); return value?.fragment.tab?.dock && sourceOf(value.name, value.fragment) === source; });
-      const id = existing?.id ?? `d-${source.slice(0, 40)}`;
-      const previous = existing && valueOf(existing.value);
-      const value = { ...(previous ?? { schema: LAYOUT_DEFAULT_SCHEMA, id, name: layout.name, owner: "user", fragment: structuredClone(layout.fragment), createdAt: now }),
-        legacyLayouts: [...(previous?.legacyLayouts ?? []), source] };
-      const stored = existing && isTombstone(existing.value) ? { ...existing.value, value } : value;
-      writes.set(id, stored);
-      if (existing) existing.value = stored; else held.push({ id, value: stored });
+      const source = legacyLayoutSource(layout);
+      if (this.consumed.has(source)) continue;
+      const id = `d-${source.slice(0, 40)}`;
+      // Each source is independent: overlapping imports from two workspaces still meet the store's equal-value rule.
+      this.deps.outbox.commit("layout-default.importLegacy", [{ ...ref(id), value: { schema: LAYOUT_DEFAULT_SCHEMA, id, name: layout.name, owner: "user",
+        fragment: structuredClone(layout.fragment), createdAt: layout.createdAt ?? 0 } },
+        { kind: LEGACY_LAYOUT_DOCUMENT, id: source, value: legacyLayoutReceipt(id) }]);
     }
-    if (!writes.size) return;
-    this.deps.outbox.commit("layout-default.importLegacy", [...writes].map(([id, value]) => ({ ...ref(id), value })));
-    for (const id of writes.keys()) this.ids.add(id);
-    this.changed();
   }
   capability(command: DefaultsCommand): Capability {
     if (command.kind === "create") return this.nameCheck(command.name) ?? this.fragmentCheck(command.fragment) ?? { available: true };

@@ -637,7 +637,7 @@ A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal o
       - Prefer a profile that already holds this V and collection.
       - Otherwise: with none, create "My profile"; with exactly one, use it; with several, create "From this browser".
       - Add the members. Without the first rule, each re-upgrade with several profiles would make another "From this browser".
-   4. **Own defaults** from saved layouts, deduplicated by name and dock hash.
+   4. **Own defaults** from saved layouts, taken over once per legacy entry's stable ID (or original saved-data hash when no ID exists). A permanent source receipt is stored separately from its default in the same transaction, so rename, Update, deletion and tombstone cleanup cannot import that entry again; recovered IDs and creation times are deterministic, using the legacy creation time or zero when absent.
    5. **Record** the result, including the ID map, under the token.
 3. **Session.** The workspace builds tab 1 and the graph from the result:
    - tab 1 holds the live arrangement, with panel IDs rewritten to instance IDs;

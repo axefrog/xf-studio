@@ -15,6 +15,8 @@ export type FeedbackDiagnostics = { notice(failure: { source: string; message: s
   /** Whether a failure code is an ordinary refusal (nothing to undo, busy, out of range): shown as a notice that fades, never an error. */
   expected?(code: string | undefined): boolean };
 export type ToastOptions = { sticky?: boolean;
+  /** Identity of an actionable notice; same text can offer independent actions. */
+  key?: string;
   /** The failure's code, when the notice is for a failed action or request (an expected refusal gets no reference). */
   code?: string;
   /** A reference already logged (a background failure); the notice shows it without logging again. */
@@ -49,7 +51,7 @@ export class Feedback {
    */
   toast(tone: Tone, source: string, message: string, actions: FeedbackAction[] = [], options: ToastOptions = {}) {
     // The same notice already on screen isn't shown (or logged) again: a repeated refusal during a drag says it once (UI-15).
-    const key = `${tone}\u0000${source}\u0000${message}`;
+    const key = `${tone}\u0000${source}\u0000${options.key ?? message}`;
     const shown = [...this.toasts.children].find(child => (child as HTMLElement).dataset?.key === key && !child.classList.contains("leaving"));
     if (shown && !options.ref) return () => { shown.classList.add("leaving"); setTimeout(() => shown.remove(), 160); };
     if (tone === "error" && options.ref === undefined && options.code !== undefined && this.diagnostics?.expected?.(options.code)) tone = "warning";
