@@ -72,7 +72,12 @@ assertion to fail. S3D-01 compares re-reference at 20 after release at 10 with/w
 C records agree through fresh incremental and snapshot loads. S3D-02 preserves the reopened interval `{ from: 20, to: 30 }`
 after the previous end at 10, with/without a sweep, also checking an end beyond save time. Release never invents an end;
 separate tests preserve an end before the first save and check retention monotonicity. Three more source-loader probes
-reverse these fixes and require spatial-query semantic failures. All 39 S3/review mutation probes pass their rejection checks.
+reverse these fixes and require spatial-query semantic failures. S3E-01 adds sweep-before-B and the two-load
+release/re-reference/release sequence: live headers, owned facts, transitive event dependencies, spatial reads and complete
+C/D records agree with incremental and snapshot replay. Seed/frame/pin/edge/origin reference fixtures cover ordinary and
+materialised events, monotonicity and root insertion order. S3E-02 reopens at the previous start, with/without loading A,
+with/without sweeping before B, and with an open interval or an end at 30. All 20 initial S3E boundary cases fail at their
+named semantic assertions without the fixes. All 47 S3/review mutation probes pass their rejection checks.
 
 Host entry: attach `new Layer3(l2, { registry: sim.w.kinds, patterns })`, then drive unpaused seconds through
 `layer3.advancePlay(portClock, senseFrame, beforeSecond)`. That boundary runs earlier kernel/S2 work, the director,

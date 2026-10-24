@@ -15,6 +15,7 @@ import type { ContextFrame } from './frames.ts';
 import type { Kernel } from './kernel.ts';
 import type { SeedRecord } from './retention.ts';
 import type { SettingsEntry } from './settings.ts';
+import { Store } from './store.ts';
 import type { SummaryRecord } from './summary.ts';
 import type { Contribution, Edge, Form, GameTime, Id, NodeHeader, Pin, Tier, Value } from './types.ts';
 
@@ -254,6 +255,8 @@ export class Persistence {
   readonly chain = new Map<string, SaveRecord>();
   /** What the chain at the current lineage position holds. */
   private base = new PersistedView();
+  /** Lookup indexes only, rebuilt lazily when the selected saved view changes. Never retention roots. */
+  private recovery: { base: PersistedView; store: Store } | undefined;
   private baseKey: string | null = null;
   readonly packs = new Map<string, Pack>();
   private installed = new Map<string, string>();
@@ -269,14 +272,39 @@ export class Persistence {
     return this.base.headers.get(id);
   }
 
-  /** Release preserves actual validity; a saved end belongs only to the interval it ended. */
+  /** Restore only a reached reference's missing saved data, silently; live records remain authoritative. */
+  restoreReferencedHeader(id: Id): NodeHeader | undefined {
+    const store = this.k.store;
+    const h = store.header(id) ?? this.base.headers.get(id);
+    if (!h || store.header(id)) return h;
+    if (this.recovery?.base !== this.base) {
+      const saved = new Store();
+      for (const header of this.base.headers.values()) saved.addHeader(header);
+      for (const c of this.base.contributions.values()) saved.addContribution(c);
+      for (const e of this.base.edges.values()) saved.addEdge(e);
+      this.recovery = { base: this.base, store: saved };
+    }
+    const saved = this.recovery.store, fields = [id];
+    for (let n = 0; n < fields.length; n++) {
+      const field = fields[n];
+      store.addHeader(clone(saved.header(field)!));
+      fields.push(...saved.ownedOf(field));
+      for (const c of saved.contributionsNaming(field)) store.addContribution(clone(c));
+    }
+    for (const e of saved.edgesFrom(id))
+      if (this.k.retention.isOwnEventLocation(e, h) && !store.edges.has(e.id)) store.addEdge(clone(e));
+    const materialisation = this.base.materialisations.get(id);
+    if (materialisation && !this.k.events.materialisationOf(id))
+      this.k.events.setMaterialisation(id, clone(materialisation.provenance));
+    this.k.bump();
+    return store.header(id);
+  }
+
+  /** A live interval is authoritative, even when a reopening reuses the saved start timestamp. */
   releasedEdge(edge: Edge, base: PersistedView = this.base): Edge | undefined {
     const saved = base.edges.get(edge.id);
     if (!saved) return undefined;
-    let to = edge.valid.to;
-    if (saved.valid.from === edge.valid.from && saved.valid.to !== undefined)
-      to = to === undefined ? saved.valid.to : Math.min(to, saved.valid.to);
-    return { ...clone(edge), valid: to === undefined ? { from: edge.valid.from } : { from: edge.valid.from, to } };
+    return clone(edge);
   }
 
   // ---- packs (spec 14.1: reloaded, not stored) ----
@@ -462,6 +490,7 @@ export class Persistence {
     }
     this.chain.set(saveKey, rec);
     this.base = next;
+    this.recovery = undefined;
     this.baseKey = saveKey;
     return rec;
   }
@@ -588,6 +617,7 @@ export class Persistence {
     // 4. Start a new epoch and resume.
     report.epoch = k.newEpoch();
     this.base = view.clone();
+    this.recovery = undefined;
     this.baseKey = saveKey;
     // The seeding layer rebuilds its instances from the seed table the replay put back (S2 section 12.2).
     k.layer2?.onLoad();

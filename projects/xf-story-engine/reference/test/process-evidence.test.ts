@@ -184,6 +184,142 @@ for (const snapshot of [false, true]) for (const sweep of [false, true]) for (co
     expect(b.ops).toContainEqual({ op: 'EdgeAdded', edge: k.store.edges.get(edge)! });
   });
 
+for (const snapshot of [false, true]) for (const loadC of [false, true])
+  test(`S3E-01${snapshot ? '-snapshot' : ''}${loadC ? '-two-loads' : ''}: swept event facts return with a new reference and leave on release`, () => {
+    const label = `S3E-01${snapshot ? '-snapshot' : ''}${loadC ? '-two-loads' : ''}`;
+    const run = (loadB: boolean) => {
+      const name = 'swept-event-reference';
+      let k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 });
+      const creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
+        person = k.mint(creator, creator, 'participant', 'core:person'),
+        earlier = k.events.mintEvent({ creator, cause: creator, name: 'earlier', kind: 'arrival', time: 0,
+          participants: [{ who: person, role: 'actor' }] }),
+        event = k.events.mintEvent({ creator: earlier, cause: earlier, name: 'located', kind: 'arrival', time: 0,
+          place, participants: [{ who: person, role: 'actor' }], effects: [{ on: person, effect: 'harm' }], causes: [earlier] }),
+        seed = H(s('release-root')), nextSeed = H(s('next-root')), edge = k.store.edgesFrom(event)[0].id;
+      const facts = [readEvent(k, event), readEvent(k, earlier)];
+      const query = () => {
+        const result = k.query({ find: 'core:event', scope: { under: place }, at: 20, must: [], limit: 'all' });
+        expect(result.status).toBe('ok');
+        return result.status === 'ok' ? result.items.map((i) => i.id) : [];
+      };
+      const sweep = () => { k.retention.scheduleSweep(); k.settle(); };
+      k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+      k.persistence.save('A');
+      k.now = 10; k.retention.endSeed(seed); sweep();
+      expect(k.store.header(event)).toBeUndefined();
+      expect(k.store.header(earlier)).toBeUndefined();
+      const b = k.persistence.save('B');
+      expect(Boolean(b.snapshot)).toBe(snapshot);
+      if (loadB) k = replacement(k, name, 'B');
+      expect(k.retention.isRetained(event), 'saved history alone cannot retain the event').toBe(false);
+      k.now = 20;
+      const pending = structuredClone(k.pending);
+      k.retention.setSeed({ id: nextSeed, state: {}, nodes: [event] });
+      expect(k.store.header(event), `${label} semantic: a new reference restores the swept event header`).toBeDefined();
+      expect([readEvent(k, event), readEvent(k, earlier)],
+        `${label} semantic: a new reference restores owned facts and transitive event dependencies`).toEqual(facts);
+      expect(k.pending, `${label} semantic: saved closure restoration is silent`).toEqual(pending);
+      expect(query(), `${label} semantic: the restored event is spatially discoverable`).toEqual([event]);
+      expect(k.store.edges.get(edge)?.valid).toEqual({ from: 0 });
+      checkRetentionMonotonicity(k, event);
+      sweep();
+      expect([readEvent(k, event), readEvent(k, earlier)]).toEqual(facts);
+      const c = k.persistence.save('C');
+      const freshC = replacement(k, name, 'C');
+      expect([readEvent(freshC, event), readEvent(freshC, earlier)], `${label} semantic: fresh C has the same facts`).toEqual(facts);
+      if (loadC) k = freshC;
+      k.now = 30; k.retention.endSeed(nextSeed); sweep();
+      expect(k.retention.isRetained(event)).toBe(false);
+      expect(k.store.header(event), `${label} semantic: restored history is sweepable after release`).toBeUndefined();
+      const d = k.persistence.save('D');
+      k = replacement(k, name, 'D');
+      expect(k.retention.isRetained(event), `${label} semantic: two releases stay released on replay`).toBe(false);
+      sweep();
+      expect(k.store.header(event)).toBeUndefined();
+      return { c, d };
+    };
+    expect(run(false), `${label} semantic: C and D records agree across the intervening loads`).toEqual(run(true));
+  });
+
+for (const materialised of [false, true]) for (const reference of ['seed', 'frame', 'pin', 'edge', 'origin'] as const)
+  test(`S3E-01-${reference}${materialised ? '-materialised' : ''}: reference traversal restores saved closure regardless of root category`, () => {
+    const run = (reverse: boolean) => {
+      const k = coreKernel('swept-reference-categories'), creator = k.root('producer', 'core:person'),
+        place = k.root('place', 'core:place'), person = k.mint(creator, creator, 'participant', 'core:person');
+      let event: Id;
+      if (materialised) {
+        const scope = k.root('scope', 'core:place');
+        k.addEdge({ type: 'core:located-in', from: place, to: scope, cause: creator });
+        const summary = k.summaries.mintSummary({ creator, cause: creator, name: 'summary', kind: 'arrival',
+          from: 0, length: 600, scope, count: 1 });
+        event = k.summaries.materialise(summary, 0);
+        k.events.restoreEvent({ creator: summary, cause: summary, name: 'item:0', kind: 'arrival',
+          time: k.value(event, 'time') as number, participants: [{ who: person, role: 'actor' }],
+          effects: [{ on: person, effect: 'harm' }] }, { descriptor: summary, materialisation: 'scene.acts' });
+      } else event = k.events.mintEvent({ creator, cause: creator, name: 'event', kind: 'arrival', time: 0,
+        participants: [{ who: person, role: 'actor' }], effects: [{ on: person, effect: 'harm' }] });
+      const facts = readEvent(k, event), seed = H(s('initial-consumer'));
+      k.retention.setSeed({ id: seed, state: {}, nodes: [event] }); k.persistence.save('A');
+      k.retention.endSeed(seed); k.retention.scheduleSweep(); k.settle(); k.persistence.save('B');
+      expect(k.store.header(event)).toBeUndefined();
+      const addReference = () => {
+        if (reference === 'seed') k.retention.setSeed({ id: H(s('new-consumer')), state: {}, nodes: [event] });
+        else if (reference === 'frame') {
+          k.frames.demandRoots.add(creator);
+          k.frames.open({ actor: creator, origin: creator, cause: creator, level: 'goal', weight: 1, focus: { nodes: [event], tier: 1 } });
+        } else if (reference === 'pin') k.pin({ node: creator, slot: 'age', value: 20, reason: 'observed', cause: creator, evidence: event });
+        else if (reference === 'edge') k.addEdge({ type: 'core:located-in', from: creator, to: place, cause: event });
+        else {
+          const child = k.mint(creator, event, 'child', 'core:person');
+          k.retention.setSeed({ id: H(s('child-consumer')), state: {}, nodes: [child] });
+        }
+      };
+      const addOverlap = () => k.retention.setSeed({ id: H(s('overlapping-consumer')), state: {}, nodes: [person] });
+      if (reverse) { addOverlap(); addReference(); } else { addReference(); addOverlap(); }
+      const marked = [...k.retention.marked()].sort();
+      expect(readEvent(k, event), `S3E-01-${reference}${materialised ? '-materialised' : ''} semantic: common reference traversal restores complete event facts`).toEqual(facts);
+      expect(k.retention.isRetained(person)).toBe(true);
+      checkRetentionMonotonicity(k, event);
+      return { marked, facts: readEvent(k, event) };
+    };
+    expect(run(false), 'root insertion order cannot change restored facts or the retained closure').toEqual(run(true));
+  });
+
+for (const snapshot of [false, true]) for (const loadA of [false, true]) for (const sweep of [false, true])
+  for (const end of [undefined, 30])
+  test(`S3E-02${snapshot ? '-snapshot' : ''}${loadA ? '-load-A' : ''}${sweep ? '-sweep' : ''}${end === undefined ? '-open' : ''}: equal-start reopening keeps its live interval`, () => {
+    const label = `S3E-02${snapshot ? '-snapshot' : ''}${loadA ? '-load-A' : ''}${sweep ? '-sweep' : ''}${end === undefined ? '-open' : ''}`,
+      name = 'equal-start-reopening';
+    let k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 });
+    const creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
+      event = k.events.mintEvent({ creator, cause: creator, name: 'located', kind: 'arrival', time: 0, place }),
+      seed = H(s('release-root')), edge = k.store.edgesFrom(event)[0].id;
+    k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+    k.endEdge(edge, 0); k.persistence.save('A');
+    if (loadA) k = replacement(k, name, 'A');
+    k.reopenEdge(edge, 0);
+    k.now = 30;
+    if (end !== undefined) k.endEdge(edge, end);
+    k.retention.endSeed(seed);
+    const valid = end === undefined ? { from: 0 } : { from: 0, to: end };
+    expect(k.store.edges.get(edge)?.valid).toEqual(valid);
+    if (sweep) { k.retention.scheduleSweep(); k.settle(); }
+    expect(k.store.edges.get(edge)?.valid, `${label} semantic: sweeping cannot inherit the previous interval's end`).toEqual(valid);
+    const b = k.persistence.save('B');
+    expect(Boolean(b.snapshot)).toBe(snapshot);
+    k = replacement(k, name, 'B');
+    expect(k.store.edges.get(edge)?.valid, `${label} semantic: replay preserves the authoritative live interval`).toEqual(valid);
+    const query = (at: number) => {
+      const result = k.query({ find: 'core:event', scope: { under: place }, at, must: [], limit: 'all' });
+      expect(result.status).toBe('ok');
+      return result.status === 'ok' ? result.items.map((i) => i.id) : [];
+    };
+    expect(query(25), `${label} semantic: the reopened event remains visible before its end`).toEqual([event]);
+    expect(query(30)).toEqual(end === undefined ? [event] : []);
+    expect(b.ops).toContainEqual(end === undefined ? { op: 'EdgeAdded', edge: k.store.edges.get(edge)! } : { op: 'EdgeEnded', edge, to: end });
+  });
+
 for (const snapshot of [false, true])
   test(`S3D-first-save${snapshot ? '-snapshot' : ''}: an edge ended before its first save retains its interval`, () => {
     const name = 'ended-before-first-save';

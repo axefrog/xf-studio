@@ -1313,9 +1313,9 @@ The v3 and v4 frozen digests remain `f924d2c9d1159bca85bbfa4cf18dba6c` and `42d5
 neither script materialises summary participant/effect facts or releases a saved event-location edge, so their saved records
 are unchanged. The S1 frozen transcript is also unchanged.
 
-Validation: all 31 event-persistence tests (including 193) and the real scene-materialisation fixtures pass, as does
-`bun run check`. All 39 S3/review mutation probes reach their intended assertions. The guarded full suite passes
-1,212 tests across 78 files in 127.88 seconds, peaking at 1.2 GB under the 4 GB limit. S1's record comparisons include the new
+Validation: all 61 event-persistence tests (including 193–194) and the real scene-materialisation fixtures pass, as does
+`bun run check`. All 47 S3/review mutation probes reach their intended assertions. The guarded full suite passes
+1,242 tests across 78 files in 158.31 seconds, peaking at 1.1 GB under the 4 GB limit. S1's record comparisons include the new
 materialisation section; partition/reload assertions and SF3-38's strict state comparison remain intact.
 
 **193. Retention release is not edge validity (S3D-01/02).** Release and re-reference are transitions of the existing
@@ -1326,10 +1326,11 @@ intervening load. No extra release operation or snapshot section is needed. Spat
 validity; a release by itself cannot truncate a historical query. Sweeping may forget an unretained event's live header,
 as before, while preserving the saved edge update for replay; saved history never supplies a retention root by itself.
 
-`releasedEdge()` is shared by saving and sweeping. It preserves an already-saved end only when `valid.from` still identifies
-the same interval. When `reopenEdge` changes `valid.from`, the new interval keeps its own end, including an explicit future
-end; neither the old interval's end nor save/sweep time clamps it. This replaces the previous release-time synthetic end
-in 192, which made the live and replayed edge disagree and could create an interval with `to < from`.
+`releasedEdge()` is shared by saving and sweeping. The live edge's interval is authoritative; saved validity is used only
+when the live edge is absent. Equal `valid.from` timestamps do not identify an interval: `reopenEdge` may reopen at the
+previous start. The new interval keeps its own end (or remains open), including an explicit future end; neither the old
+interval's end nor save/sweep time clamps it. This replaces both the previous release-time synthetic end in 192 and the
+equal-start clamp, which made live and replayed edges disagree.
 
 `process-evidence.test.ts` compares uninterrupted execution and a fresh B load after release at 10 and re-reference at 20:
 the spatial queries and the entire C record agree, with both incremental records and snapshots, and fresh C loads agree
@@ -1341,3 +1342,26 @@ The two new defect reversals fail at their spatial-query semantic assertions, an
 mutation runner rejects setup/import failures. Frozen digest expectations and scripts are unchanged: v3 remains
 `f924d2c9d1159bca85bbfa4cf18dba6c` and v4 `42d5a84e16dde21cc0bca7fe50c01d72`. Neither script releases a saved event-location
 edge, so no record in either digest transcript changes. Validation is recorded in 192. No game session is needed.
+
+**194. Re-reference restores swept saved closure through retention (S3E-01/02).** A newly reached reference whose live
+header has been swept restores that header and its saved owned field tree, missing contributions, owned location links
+and explicit materialisation provenance from the selected saved view. The normal retention traversal then follows the
+restored Id fields and origin chains, including other swept events and their facts. Seed registration completes this
+same traversal before returning, so its consumer can immediately read the event. Restoration emits no event or relevance
+change and never replaces a live record. Saved lookup indexes are lazy, discarded on save/load, and never enumerated as
+roots; releasing the consumer makes the restored closure sweepable again. History alone still retains nothing.
+
+The S3E-01 fixtures release and sweep before B, re-reference at 20, compare full event facts and spatial reads, and then
+release and sweep again through D. Complete C/D records agree with uninterrupted execution, with incremental records or
+snapshots and with both B and C loads. Additional ordinary/materialised fixtures exercise seed, frame, pin, edge and
+origin references through that common traversal, checking materialisation provenance, retention monotonicity and root
+insertion order. S3E-02 ends an interval at its start (0), saves A, reopens at 0, optionally ends at 30, releases and saves B.
+All combinations of loading A, sweeping before B and snapshot mode preserve the live interval and its query results.
+The original S3C-02, S3D-01/02 and end-before-first-save fixtures remain intact.
+
+All 20 initial S3E boundary cases failed at their named semantic assertions against the pre-fix source. The expanded
+event-persistence file has 61 passing tests, including ten further cross-reference/materialisation checks. All 47
+source-loader mutation probes require their intended semantic failures; setup/import errors are rejected. `bun run check`
+passes. Frozen digest scripts and expectations are unchanged: v3 `f924d2c9d1159bca85bbfa4cf18dba6c`, v4
+`42d5a84e16dde21cc0bca7fe50c01d72`. Neither script re-references swept history or releases an equal-start reopened edge.
+No game session is needed.

@@ -85,10 +85,14 @@ unreferenced events. These [offline] checks implement S0 v4.15 §14.1; the old b
 reference it again at 20, and compare uninterrupted execution with fresh incremental and snapshot loads: the spatial
 queries and the entire later save record agree. Release is carried by the retained-reference records and their marked
 closure; it never invents an edge end. Saved history keeps actual validity without becoming a retention root, including
-after sweeping. An already-saved end constrains only the same interval: reopening at 20 and ending at 30 must preserve
-`{ from: 20, to: 30 }`, even if the previous interval ended at 10. The tests also cover an end beyond save time, sweeping
-before saving, an end before the first save, and retention monotonicity for ordinary and materialised events. These are
-reference-model guarantees ([SPEC-NOTES 192–193](../projects/xf-story-engine/reference/SPEC-NOTES.md)), not game-save evidence.
+after sweeping. Re-reference restores the swept header, owned facts and transitive event dependencies from the selected
+saved closure through the common retention traversal; releasing again makes that live closure sweepable. Both B and C
+loads in a release/re-reference/release sequence preserve later records and readable facts. The live edge interval is
+authoritative, even when reopening reuses the previous start timestamp: equal starts do not identify an interval. The
+tests preserve both `{ from: 20, to: 30 }` after a previous end at 10 and `{ from: 0, to: 30 }` after a previous end at 0,
+as well as an interval left open. They also cover an end beyond save time, sweeping before saving, an end before the first
+save, and retention monotonicity/root insertion order for ordinary and materialised events. These are reference-model
+guarantees ([SPEC-NOTES 192–194](../projects/xf-story-engine/reference/SPEC-NOTES.md)), not game-save evidence.
 
 | Event | State inside the save (fields, facts, entity state) | An external store | Grade |
 |---|---|---|---|

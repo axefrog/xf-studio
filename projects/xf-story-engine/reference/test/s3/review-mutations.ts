@@ -5,6 +5,10 @@ export interface Probe {
   also?: Array<{ source: string; from: string; to: string }>;
 }
 const probe = (name: string, test: string, source: string, from: string, to: string): Probe => ({ name, test, source, from, to });
+const clampReleasedEdge = (sameStart: boolean): string => `let to = edge.valid.to;
+    if (${sameStart ? 'saved.valid.from === edge.valid.from && ' : ''}saved.valid.to !== undefined)
+      to = to === undefined ? saved.valid.to : Math.min(to, saved.valid.to);
+    return { ...clone(edge), valid: to === undefined ? { from: edge.valid.from } : { from: edge.valid.from, to } };`;
 const restrictedRoots = { source: 'src/retention.ts', from: 'const eventRoots = new Set(stack);',
   to: `const eventRoots = new Set([...this.seeds.values()].flatMap(s => s.nodes));
     for (const st of this.k.evolution.states.values())
@@ -81,6 +85,13 @@ export const probes: Probe[] = [
       edge.valid = { from: edge.valid.from, to: Math.min(edge.valid.to ?? k.now, e.valid.to ?? k.now, k.now) };`),
     file: 'test/process-evidence.test.ts' },
   ...['S3D-02', 'S3D-02-sweep'].map((name) => ({ ...probe(name, name, 'src/persistence.ts',
-    'saved.valid.from === edge.valid.from && saved.valid.to !== undefined', 'saved.valid.to !== undefined'),
+    'return clone(edge);', clampReleasedEdge(false)),
     file: 'test/process-evidence.test.ts' })),
+  ...['S3E-01', 'S3E-01-snapshot', 'S3E-01-two-loads'].map((name) => ({ ...probe(name, name, 'src/retention.ts',
+    'store.header(id) ?? this.k.persistence.restoreReferencedHeader(id)', 'store.header(id)'),
+    file: 'test/process-evidence.test.ts' })),
+  { ...probe('S3E-01-immediate', 'S3E-01', 'src/retention.ts',
+    'this.marked();', '/* omit immediate seed dependency restoration */'), file: 'test/process-evidence.test.ts' },
+  ...['S3E-02', 'S3E-02-sweep', 'S3E-02-load-A', 'S3E-02-open'].map((name) => ({ ...probe(name, name, 'src/persistence.ts',
+    'return clone(edge);', clampReleasedEdge(true)), file: 'test/process-evidence.test.ts' })),
 ];
