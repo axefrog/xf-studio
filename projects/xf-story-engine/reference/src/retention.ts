@@ -93,7 +93,7 @@ export class Retention {
   // ---- roots ----
 
   /** A minted event's spatial link is part of its facts, rather than an independent retention root. */
-  isOwnEventLocation(e: Edge, h: NodeHeader | undefined = this.k.store.header(e.from)): boolean {
+  isOwnEventLocation(e: Edge, h: NodeHeader | undefined = this.k.store.header(e.from) ?? this.k.persistence.savedHeader(e.from)): boolean {
     return e.cause === e.from && e.type === 'core:located-in' && h !== undefined && this.k.schema.hasFacet(h.kind, 'event');
   }
 
@@ -294,10 +294,10 @@ export class Retention {
     if (h.origin.by === 'minted') {
       for (const c of store.contributionsOrigin(id)) store.removeContribution(c.id);
       for (const e of store.edgesFrom(id)) if (e.cause === id) {
-        // The append-only chain still owns a saved edge. Keep its actual end, or close it at release,
-        // so forgetting the event cannot erase the next save's EdgeEnded (S3C-02).
-        const to = this.k.persistence.releasedEdgeEnd(e);
-        if (to !== undefined) e.valid = { from: e.valid.from, to };
+        // Keep updates to saved history until the next save, without ending an open interval.
+        // A saved header still identifies this as an owned edge, so it cannot become a root (S3C/D).
+        const saved = this.k.persistence.releasedEdge(e);
+        if (saved) e.valid = saved.valid;
         else store.removeEdge(e.id);
       }
       this.k.events.forgetMaterialisation(id);

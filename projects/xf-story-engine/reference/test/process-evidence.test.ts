@@ -3,12 +3,23 @@ import { coreKernel } from './helpers.ts';
 import { H, s } from '../src/id.ts';
 import { readEvent } from '../src/procedural/views.ts';
 import type { Kernel } from '../src/kernel.ts';
+import type { Id } from '../src/types.ts';
 
 function replacement(k: Kernel, name: string, key: string): Kernel {
-  const fresh = coreKernel(name);
+  const fresh = coreKernel(name, undefined, k.config);
   for (const [id, record] of k.persistence.chain) fresh.persistence.chain.set(id, structuredClone(record));
   fresh.newEpoch(); fresh.persistence.load(key);
   return fresh;
+}
+
+function checkRetentionMonotonicity(k: Kernel, event: Id): void {
+  const before = [...k.retention.marked()].sort(), seed = H(s('additional-event-consumer'));
+  k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+  const after = k.retention.marked();
+  expect(before.filter((id) => !after.has(id)), 'adding a consumer cannot shrink the retained closure').toEqual([]);
+  expect(after.has(event)).toBe(true);
+  k.retention.endSeed(seed);
+  expect([...k.retention.marked()].sort(), 'removing a redundant consumer restores the original closure').toEqual(before);
 }
 
 for (const snapshot of [false, true])
@@ -86,7 +97,7 @@ for (const sweep of [false, true])
   });
 
 for (const sweep of [false, true])
-  test(`S3C-02-release${sweep ? '-sweep' : ''}: release alone closes saved history and later saves cannot extend it`, () => {
+  test(`S3C-02-release${sweep ? '-sweep' : ''}: release and later sweeps never invent an edge end`, () => {
     const name = 'implicit-event-release-' + sweep, k = coreKernel(name),
       creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
       event = k.events.mintEvent({ creator, cause: creator, name: 'located', kind: 'arrival', time: 0, place }),
@@ -95,15 +106,108 @@ for (const sweep of [false, true])
     k.persistence.save('A');
     k.now = 10;
     k.retention.endSeed(seed);
-    k.persistence.save('B');
+    const b = k.persistence.save('B');
     k.now = 20;
     if (sweep) { k.retention.scheduleSweep(); k.settle(); }
-    k.persistence.save('C');
+    const c = k.persistence.save('C');
     const fresh = replacement(k, name, 'C');
-    expect(fresh.store.edges.get(edge)?.valid.to, 'release termination cannot drift with later saves or sweeps').toBe(10);
+    expect(fresh.store.edges.get(edge)?.valid, 'release cannot terminate an interval').toEqual({ from: 0 });
+    expect([...b.ops, ...c.ops].some((op) => op.op === 'EdgeEnded'), 'only an actual end can write EdgeEnded').toBe(false);
+    expect(k.retention.marked().has(event), 'saved open history cannot root a released event after sweeping').toBe(false);
+    expect(fresh.retention.marked().has(event), 'replay cannot root a released event either').toBe(false);
     const query = fresh.query({ find: 'core:event', scope: { under: place }, at: 10, must: [], limit: 'all' });
     expect(query.status).toBe('ok');
-    expect(query.status === 'ok' ? query.items : []).toEqual([]);
+    expect(query.status === 'ok' ? query.items.map((i) => i.id) : []).toEqual([event]);
+  });
+
+for (const snapshot of [false, true])
+  test(`S3D-01${snapshot ? '-snapshot' : ''}: re-referencing a released location preserves queries and later records`, () => {
+    const run = (load: boolean) => {
+      const name = 're-reference-event-location';
+      let k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 });
+      const creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
+        event = k.events.mintEvent({ creator, cause: creator, name: 'located', kind: 'arrival', time: 0, place }),
+        seed = H(s('release-root')), nextSeed = H(s('next-root')), edge = k.store.edgesFrom(event)[0].id;
+      const query = (at: number) => {
+        const result = k.query({ find: 'core:event', scope: { under: place }, at, must: [], limit: 'all' });
+        expect(result.status).toBe('ok');
+        return result.status === 'ok' ? result.items.map((i) => i.id) : [];
+      };
+      k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+      k.persistence.save('A');
+      k.now = 10;
+      k.retention.endSeed(seed);
+      const b = k.persistence.save('B');
+      expect(Boolean(b.snapshot)).toBe(snapshot);
+      if (load) k = replacement(k, name, 'B');
+      checkRetentionMonotonicity(k, event);
+      k.now = 20;
+      k.retention.setSeed({ id: nextSeed, state: {}, nodes: [event] });
+      const label = `S3D-01${snapshot ? '-snapshot' : ''}`;
+      expect(query(20), `${label} semantic: a later consumer sees the original open location`).toEqual([event]);
+      expect(k.store.edges.get(edge)?.valid, `${label} semantic: release never invents an end`).toEqual({ from: 0 });
+      const c = k.persistence.save('C');
+      const before = [query(0), query(10), query(20)];
+      k = replacement(k, name, 'C');
+      expect([query(0), query(10), query(20)], `${label} semantic: C replays the same spatial history`).toEqual(before);
+      return c;
+    };
+    expect(run(true), 'S3D-01 semantic: C records are independent of the intervening load').toEqual(run(false));
+  });
+
+for (const snapshot of [false, true]) for (const sweep of [false, true]) for (const end of [30, 50])
+  test(`S3D-02${snapshot ? '-snapshot' : ''}${sweep ? '-sweep' : ''}${end > 30 ? '-future-end' : ''}: a released reopened edge keeps its own interval`, () => {
+    const name = 'released-reopened-location';
+    let k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 });
+    const creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
+      event = k.events.mintEvent({ creator, cause: creator, name: 'located', kind: 'arrival', time: 0, place }),
+      seed = H(s('release-root')), edge = k.store.edgesFrom(event)[0].id;
+    const query = (at = 25) => {
+      const result = k.query({ find: 'core:event', scope: { under: place }, at, must: [], limit: 'all' });
+      expect(result.status).toBe('ok');
+      return result.status === 'ok' ? result.items.map((i) => i.id) : [];
+    };
+    k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+    k.now = 10; k.endEdge(edge); k.persistence.save('A');
+    k.now = 20; k.reopenEdge(edge);
+    k.now = 30; k.endEdge(edge, end); k.retention.endSeed(seed);
+    expect(query()).toEqual([event]);
+    if (sweep) { k.now = 40; k.retention.scheduleSweep(); k.settle(); }
+    const b = k.persistence.save('B');
+    expect(Boolean(b.snapshot)).toBe(snapshot);
+    k = replacement(k, name, 'B');
+    const label = `S3D-02${snapshot ? '-snapshot' : ''}${sweep ? '-sweep' : ''}${end > 30 ? '-future-end' : ''}`;
+    expect(query(), `${label} semantic: a fresh replay finds the event in the reopened interval`).toEqual([event]);
+    expect(k.store.edges.get(edge)?.valid, `${label} semantic: the previous interval cannot clamp this one`).toEqual({ from: 20, to: end });
+    expect(query(end - 1), `${label} semantic: save time cannot clamp a future end`).toEqual([event]);
+    expect(query(end), `${label} semantic: the actual end remains exclusive`).toEqual([]);
+    expect(b.ops).toContainEqual({ op: 'EdgeAdded', edge: k.store.edges.get(edge)! });
+  });
+
+for (const snapshot of [false, true])
+  test(`S3D-first-save${snapshot ? '-snapshot' : ''}: an edge ended before its first save retains its interval`, () => {
+    const name = 'ended-before-first-save';
+    let k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 });
+    const creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
+      event = k.events.mintEvent({ creator, cause: creator, name: 'located', kind: 'arrival', time: 0, place }),
+      seed = H(s('early-end-root')), edge = k.store.edgesFrom(event)[0].id;
+    k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+    k.now = 10; k.endEdge(edge);
+    k.now = 20; k.persistence.save('A');
+    k = replacement(k, name, 'A');
+    expect(k.store.edges.get(edge)?.valid).toEqual({ from: 0, to: 10 });
+    const query = (at: number) => {
+      const result = k.query({ find: 'core:event', scope: { under: place }, at, must: [], limit: 'all' });
+      expect(result.status).toBe('ok');
+      return result.status === 'ok' ? result.items.map((i) => i.id) : [];
+    };
+    expect(query(5)).toEqual([event]);
+    expect(query(10)).toEqual([]);
+    k.retention.endSeed(seed); k.retention.scheduleSweep(); k.settle();
+    k.persistence.save('B'); k = replacement(k, name, 'B');
+    expect(k.store.edges.get(edge)?.valid, 'later release cannot extend the first saved end').toEqual({ from: 0, to: 10 });
+    expect(query(5)).toEqual([event]);
+    expect(query(10)).toEqual([]);
   });
 
 test('S3B-01-location: a referenced event keeps its spatial link only while a consumer needs it', () => {
@@ -167,6 +271,7 @@ for (const reference of ['canon-causes', 'canon-participants', 'canon-served', '
       expect([dependency, earlier].map((id) => readEvent(k, id)),
         `S3B-01-${reference} semantic: event facts survive replacement`).toEqual(facts);
       expect(k.store.header(person), 'referenced participant stays addressable').toBeDefined();
+      checkRetentionMonotonicity(k, dependency);
       k.retention.scheduleSweep(); k.settle();
       expect([dependency, earlier].map((id) => readEvent(k, id))).toEqual(facts);
       return facts;
@@ -202,6 +307,7 @@ for (const reference of ['batch', 'seed'] as const)
       if (load) { k = replacement(k, name, 'materialisation'); if (reference === 'batch') attach(k); }
       expect(readEvent(k, item), 'materialisation is readable immediately after replacement').toEqual(before);
       expect(k.store.header(person)).toBeDefined();
+      checkRetentionMonotonicity(k, item);
       if (reference === 'batch') {
         k.settle({ to: 600 });
         const derived = [...k.store.headers.values()].find((h) => h.origin.by === 'minted' && h.origin.name === 'derived');

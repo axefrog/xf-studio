@@ -264,10 +264,19 @@ export class Persistence {
     return this.baseKey;
   }
 
-  /** A sweep may forget live storage, but must preserve the end of an edge already in the chain. */
-  releasedEdgeEnd(edge: Edge, base: PersistedView = this.base): GameTime | undefined {
+  /** Saved headers identify owned event edges even after a sweep has removed their live headers. */
+  savedHeader(id: Id): NodeHeader | undefined {
+    return this.base.headers.get(id);
+  }
+
+  /** Release preserves actual validity; a saved end belongs only to the interval it ended. */
+  releasedEdge(edge: Edge, base: PersistedView = this.base): Edge | undefined {
     const saved = base.edges.get(edge.id);
-    return saved && Math.min(edge.valid.to ?? this.k.now, saved.valid.to ?? this.k.now, this.k.now);
+    if (!saved) return undefined;
+    let to = edge.valid.to;
+    if (saved.valid.from === edge.valid.from && saved.valid.to !== undefined)
+      to = to === undefined ? saved.valid.to : Math.min(to, saved.valid.to);
+    return { ...clone(edge), valid: to === undefined ? { from: edge.valid.from } : { from: edge.valid.from, to } };
   }
 
   // ---- packs (spec 14.1: reloaded, not stored) ----
@@ -304,7 +313,7 @@ export class Persistence {
     // Edges that are retention roots.
     // Other saved edges and pins stay in the view so their end or withdrawal is recorded even when no longer roots.
     // A retained event's own location edge is needed by spatial queries, but must not root an otherwise unretained event.
-    // Released own links are absent from this live view. The save writer separately closes their saved history.
+    // Released own links are absent from this live view. Their saved history keeps its actual validity.
     for (const e of k.store.allEdges()) {
       const own = k.retention.isOwnEventLocation(e, k.store.header(e.from) ?? base.headers.get(e.from));
       if (k.retention.isRootEdge(e) || (own ? marked.has(e.from) : base.edges.has(e.id))) v.edges.set(e.id, clone(e));
@@ -433,11 +442,10 @@ export class Persistence {
     if (this.chain.has(saveKey)) throw new Error(`save key already used: ${saveKey}`);
     const k = this.k;
     const cur = this.currentView();
-    // Absence from the live view cannot delete a prior EdgeAdded. Record termination even after
-    // the final consumer releases the event or a sweep removes its header (S3C-02).
+    // Absence from the live view cannot delete a prior EdgeAdded. Release changes retention references,
+    // never validity: keep actual edge updates even after the final consumer or header goes (S3C/D).
     for (const e of this.base.edges.values()) if (!cur.edges.has(e.id)) {
-      const edge = clone(k.store.edges.get(e.id) ?? e);
-      edge.valid = { from: edge.valid.from, to: this.releasedEdgeEnd(edge)! };
+      const edge = this.releasedEdge(k.store.edges.get(e.id) ?? e)!;
       cur.edges.set(e.id, edge);
     }
     const ops = Persistence.diff(this.base, cur);

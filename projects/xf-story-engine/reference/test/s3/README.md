@@ -64,11 +64,15 @@ Run `bun run test/s3/check-review-mutations.ts` to reverse each reviewed behavio
 semantic assertion to fail. The kernel's pending-output regression is `test/process-evidence.test.ts`; SF3-38 retains
 its strict uninterrupted/reloaded state comparison.
 
-S3C-01/02 add explicit summary-materialisation provenance and saved edge termination regressions in
+S3C-01/02 add explicit summary-materialisation provenance and actual saved edge termination regressions in
 `process-evidence.test.ts`: expired overlays through fresh incremental and snapshot loads; save A → edge end/release →
 optional later sweep → save B → fresh load; and release-only history across further saves. Four source-loader probes
 reverse the ownership lookup in retention and views, the edge diff and sweep preservation, and require the named semantic
-assertion to fail. All 36 S3/review mutation probes pass their rejection checks.
+assertion to fail. S3D-01 compares re-reference at 20 after release at 10 with/without a B load: spatial queries and whole
+C records agree through fresh incremental and snapshot loads. S3D-02 preserves the reopened interval `{ from: 20, to: 30 }`
+after the previous end at 10, with/without a sweep, also checking an end beyond save time. Release never invents an end;
+separate tests preserve an end before the first save and check retention monotonicity. Three more source-loader probes
+reverse these fixes and require spatial-query semantic failures. All 39 S3/review mutation probes pass their rejection checks.
 
 Host entry: attach `new Layer3(l2, { registry: sim.w.kinds, patterns })`, then drive unpaused seconds through
 `layer3.advancePlay(portClock, senseFrame, beforeSecond)`. That boundary runs earlier kernel/S2 work, the director,

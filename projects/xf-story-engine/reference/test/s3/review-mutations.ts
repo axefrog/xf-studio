@@ -74,5 +74,13 @@ export const probes: Probe[] = [
     'for (const e of this.base.edges.values()) if (false) {'),
     file: 'test/process-evidence.test.ts' },
   { ...probe('S3C-02-sweep', 'S3C-02-sweep', 'src/retention.ts',
-    'if (to !== undefined) e.valid', 'if (false) e.valid'), file: 'test/process-evidence.test.ts' },
+    'if (saved) e.valid', 'if (false) e.valid'), file: 'test/process-evidence.test.ts' },
+  { ...probe('S3D-01', 'S3D-01', 'src/persistence.ts',
+    'const edge = this.releasedEdge(k.store.edges.get(e.id) ?? e)!;',
+    `const edge = this.releasedEdge(k.store.edges.get(e.id) ?? e)!;
+      edge.valid = { from: edge.valid.from, to: Math.min(edge.valid.to ?? k.now, e.valid.to ?? k.now, k.now) };`),
+    file: 'test/process-evidence.test.ts' },
+  ...['S3D-02', 'S3D-02-sweep'].map((name) => ({ ...probe(name, name, 'src/persistence.ts',
+    'saved.valid.from === edge.valid.from && saved.valid.to !== undefined', 'saved.valid.to !== undefined'),
+    file: 'test/process-evidence.test.ts' })),
 ];

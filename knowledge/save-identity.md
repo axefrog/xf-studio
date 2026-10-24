@@ -80,6 +80,16 @@ with the summary descriptor. Both direct seed references and pending output batc
 after fresh replacement loads. A retained event's own location edge persists for spatial discovery without rooting
 unreferenced events. These [offline] checks implement S0 v4.15 §14.1; the old bare-header expectation is superseded.
 
+**Retention release is separate from edge validity [offline].** The reference model's
+[event-persistence regressions](../projects/xf-story-engine/reference/test/process-evidence.test.ts) release an event at 10,
+reference it again at 20, and compare uninterrupted execution with fresh incremental and snapshot loads: the spatial
+queries and the entire later save record agree. Release is carried by the retained-reference records and their marked
+closure; it never invents an edge end. Saved history keeps actual validity without becoming a retention root, including
+after sweeping. An already-saved end constrains only the same interval: reopening at 20 and ending at 30 must preserve
+`{ from: 20, to: 30 }`, even if the previous interval ended at 10. The tests also cover an end beyond save time, sweeping
+before saving, an end before the first save, and retention monotonicity for ordinary and materialised events. These are
+reference-model guarantees ([SPEC-NOTES 192–193](../projects/xf-story-engine/reference/SPEC-NOTES.md)), not game-save evidence.
+
 | Event | State inside the save (fields, facts, entity state) | An external store | Grade |
 |---|---|---|---|
 | **New game** | A fresh facts table and default fields: GameSession mints a key because the fact reads 0; the AI NPC mod treats a detach with no restore after it as a new game | Untouched: Codeware services and CET files carry on, so a store without a key mixes playthroughs | [source] [community]; the facts reset itself is [hypothesis], session card 6 |
