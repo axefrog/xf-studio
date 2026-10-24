@@ -86,7 +86,7 @@ export function observe(k: Kernel, place: Id) {
 
 export function runSweepReplayProperty() {
   const count = Number(process.env.SWEEP_SEEDS ?? (process.env.S1_FULL === "1" ? 2048 : 8)), first = Number(process.env.SWEEP_FIRST_SEED ?? 1),
-    steps = Number(process.env.SWEEP_STEPS ?? 16);
+    steps = Number(process.env.SWEEP_STEPS ?? (process.env.S1_FULL === "1" ? 48 : 16));
   if (![count, first, steps].every((v) => Number.isSafeInteger(v) && v > 0)) throw new Error('positive integer sweep bounds required');
   const coverage = { operations: new Set<number>(), seeds: 0, steps: 0, saves: 0, loads: 0 };
   for (const snapshot of [false, true]) for (let seed = first; seed < first + count; seed++) {

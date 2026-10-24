@@ -278,9 +278,8 @@ export class Persistence {
    * Saved history never becomes a retention root. Live records override saved intervals.
    */
   *discoveryIdsOfKind(kind: string): Iterable<Id> {
-    const live = new Set(this.k.store.idsOfKind(kind));
-    yield* live;
-    for (const id of this.savedStore().idsOfKind(kind)) if (!live.has(id)) yield id;
+    const candidates = new Set([...this.k.store.idsOfKind(kind), ...this.savedStore().idsOfKind(kind)]);
+    yield* [...candidates].sort();
   }
 
   *discoveryChildren(node: Id, t: GameTime): Iterable<Id> {

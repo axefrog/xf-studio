@@ -52,6 +52,36 @@ test('saved candidate enumeration is stable when recovering one event also resto
   expect(k.events.eventsAtTime(0)).toEqual([parent,child].sort());
 });
 
+for (const snapshot of [false, true])
+test(`mixed resident and saved candidates keep id order and bounded failure (${snapshot ? 'snapshot' : 'incremental'})`, () => {
+  const make = () => {
+    const k = coreKernel('discovery-order', undefined, { snapshotEvery: snapshot ? 1 : 10000, maxApplicableContributions: 1 });
+    const creator = k.root('O', 'core:person');
+    const [low, high] = ['a', 'b'].map(name => k.events.mintEvent({ creator, cause: creator, name, time: 0, kind: 'arrival' })).sort();
+    k.contribute({ source: { layer: 'authored', origin: creator }, target: { slot: 'time', scope: { nodes: [high] } },
+      mode: 'constrain', form: { f: 'const', value: 0 } });
+    const seed = H(s('consumer'));
+    k.retention.setSeed({ id: seed, state: {}, nodes: [low, high] });
+    k.settle(); k.persistence.save('A');
+    k.retention.setSeed({ id: seed, state: {}, nodes: [high] });
+    return { k, low, high, seed };
+  };
+  const { k: control, low, high, seed } = make(), swept = make().k;
+  const fresh = coreKernel('discovery-order', undefined, control.config);
+  for (const [id, record] of control.persistence.chain) fresh.persistence.chain.set(id, structuredClone(record));
+  fresh.persistence.load('A');
+  fresh.retention.setSeed({ id: seed, state: {}, nodes: [high] });
+  swept.retention.scheduleSweep(); swept.settle();
+  expect(swept.store.header(low)).toBeUndefined();
+  expect(swept.store.header(high)).toBeDefined();
+  for (const k of [control, swept, fresh]) {
+    expect([...k.persistence.discoveryIdsOfKind('core:event')]).toEqual([low, high]);
+    const ctx = newOpCtx(4);
+    expect(() => k.events.eventsAtTime(0, ctx)).toThrow('work limit exceeded: the shared allowance of 4 units');
+    expect(ctx.allowance.used).toBe(5);
+  }
+});
+
 test('spatial discovery recovers only reached saved candidates, including region candidates',()=>{
   const k=coreKernel('discovery-scope'), creator=k.root('O','core:person'), place=k.root('P','core:place'), remote=k.root('Q','core:place');
   const event=k.events.mintEvent({creator,cause:creator,name:'E',kind:'arrival',time:0,place});

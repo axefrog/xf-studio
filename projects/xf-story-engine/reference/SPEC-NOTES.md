@@ -1924,7 +1924,10 @@ knows only the place, time or witness rather than the saved event id. `Persisten
 and `Persistence.discoveryIdsOfKind` enumerate the union of live and selected-save candidate indexes.
 The saved indexes are shared with the existing recovery selector, invalidated on save/load, and never
 contribute retention roots. Candidate enumeration preserves authoritative live edge intervals and
-snapshots live kind membership before recovery can add dependent candidates. Each query frontier or
+snapshots and deduplicates both live and saved kind membership, then enumerates their union in id order
+before recovery can add dependent candidates. Resident versus saved-only membership cannot change
+candidate order or which shared-allowance/applicable-contribution limit fails first (merge review R1).
+Each query frontier or
 region candidate is charged before common-gate recovery; temporal and witness reads share one operation
 allowance with their nested resolutions. Exhaustion fails instead of yielding an incomplete discovery.
 
@@ -1934,6 +1937,15 @@ recover it without a producer recipe, leave it unretained, and allow it to sweep
 cover live edge ends, operation budgets, indirect recovery of another candidate, region discovery and
 unrelated saved events remaining absent. Source-loader counterfactuals for each of place/time/witness
 fail at their named semantic assertions in both save modes.
+
+The R1 regression saves two events L < H, retains only H and sweeps one execution. H has a second
+applicable time contribution with `maxApplicableContributions: 1`. Unswept, swept and replacement-load
+executions enumerate [L, H] and `eventsAtTime(0, newOpCtx(4))` fails at the same shared allowance,
+rather than letting H's contribution cap win solely because H remains resident. Both incremental and
+snapshot saves are covered; the regression fails against the previous resident-first enumeration.
+The R1 follow-up's targeted discovery, simulation-property and sweep/replay tests passed (46 pass,
+2 statistical skips), as did `bun run check`. The guarded default suite passed 1,343 tests with
+8 skips and no failures in 109.58 seconds (4 GB limit, 1.2 GB peak); both frozen digests below are unchanged.
 
 The property observer no longer installs saved headers, contributions, pins, materialisations or edges
 in its disposable projection. It compares raw retained closure first, then observes values in that
@@ -1976,7 +1988,10 @@ checks; the full profile restores the original or larger scale. S3's default cra
 last and all-boundary reload runs; the full profile also tests every individual boundary. Parsing the
 immutable inventory source once avoids repeating the same AST setup for each counterfactual.
 
-`S1_FULL=1` also runs 2,048 distinct sweep/replay seeds in each snapshot mode (16 random steps plus the
+The deterministic metamorphic checks (display-name renaming preserves records; `cityScale` preserves
+resident views) run in the default suite independently of the full-profile statistical comparisons.
+
+`S1_FULL=1` also runs 2,048 distinct sweep/replay seeds in each snapshot mode (48 random steps plus the
 same lifecycle grammar). The existing weekly/manual CI job sets that flag; its timeout is now 120
 minutes to accommodate the added hunt. `SWEEP_SEEDS`, `SWEEP_FIRST_SEED` and `SWEEP_STEPS` override
 local hunt bounds; `SWEEP_PROGRESS=1` reports progress without writing logs. The property mutation
