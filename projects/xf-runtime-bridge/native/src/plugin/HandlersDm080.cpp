@@ -223,7 +223,7 @@ dm::Ops OpsFor(const std::string& aCid)
     };
     ops.callEnd = [aCid](const std::string& aContact) {
         RED4ext::CString contact(aContact.c_str());
-        ScriptCall("XFDmPhone", "End", {"String"}, {&contact}, aCid);
+        return ScriptCall("XFDmPhone", "End", {"String"}, {&contact}, aCid).value("ended", false);
     };
     ops.tracker = [aCid](const std::vector<dm::Quest>& aQuests) {
         // The quest's title, then one line per objective: state, a tab, "o" for optional or "-", a tab, the words.

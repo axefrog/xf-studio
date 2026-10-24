@@ -224,10 +224,32 @@ describe("0.8.12 dm offline: the catalogue, its tables against the plugin's, the
     expect(phone).toContain("questPhoneTalkingState.Rejected");
   });
 
+  test("call-end queue acceptance cannot acknowledge aggregate cleanup (source contract)", () => {
+    const end = script.slice(script.indexOf("public static func End(cid: String, contact:"), script.indexOf("// Our message view data"));
+    expect(end).toContain('"ended\\":false');
+    const release = script.slice(script.indexOf("public static func ReleaseAll(cid:"));
+    expect(release).toContain('if !IsDefined(registry) { return XFJson.Fail("not_ready"');
+    expect(release).toContain('StrContains(ended, "\\"ended\\":false")');
+    expect(release.indexOf("XFDmHud.NotifyHide")).toBeLessThan(release.indexOf('if StrContains(ended,'));
+  });
+
+  test("radio idempotence is checked at event consumption, with vanilla events passed through (source contract)", () => {
+    const consume = script.slice(script.indexOf("@wrapMethod(VehicleComponent)"), script.indexOf("public abstract class XFDmWorld"));
+    expect(consume).toContain("if !evt.xfsDmSetOn { return wrappedMethod(evt); }");
+    expect(consume.indexOf("XFBridge_Live()")).toBeLessThan(consume.indexOf("this.m_radioState"));
+    expect(consume).toContain("if Equals(evt.toggle, this.m_radioState) { return false; }");
+    expect(consume.trim().endsWith("return wrappedMethod(evt);\n}")).toBe(true);
+    const queue = script.slice(script.indexOf("public static func Radio("), script.indexOf("public static func AudioTarget("));
+    expect(queue).not.toContain("&& !Equals(on == 1, wasOn)");
+    expect(queue).toContain("if on >= 0 {");
+    expect(queue).toContain("evt.xfsDmSetOn = true");
+    expect(queue).toContain("off.xfsDmSetOn = true");
+  });
+
   test("review 12/13/14: tracker completions honour ownership, radio-on is idempotent, completed registry entries are erased", () => {
     expect(script).toContain("OnTrackedMappinSpawned(newItem: ref<inkWidget>, userData: ref<IScriptable>)");
     expect(script).toContain("this.m_trackedMappinSpawnRequest.Cancel()");
-    expect(script).toContain("if on >= 0 && !Equals(on == 1, wasOn)");
+    expect(script).toContain("if Equals(evt.toggle, this.m_radioState) { return false; }");
     expect(script).toContain("registry.ForgetEntry(entry.id)");
     expect(script).toContain("registry.ForgetLine(n)");
     expect(script).toContain("ArrayErase(this.m_entries, i)");

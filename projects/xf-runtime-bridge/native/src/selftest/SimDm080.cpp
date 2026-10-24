@@ -561,6 +561,7 @@ dm::Ops MakeOps(SimDm::State* aState)
         s->callContact = aContact;
         s->callFact = 0;
         ++s->callEnds;
+        return true;
     };
     ops.tracker = [s](const std::vector<dm::Quest>& aQuests) {
         std::scoped_lock _(s->mutex);

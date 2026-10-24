@@ -47,6 +47,17 @@ inline constexpr size_t kMaxQuests = 4;
 inline constexpr size_t kMaxObjectives = 8;
 inline constexpr size_t kMaxCallLines = 16;
 inline constexpr size_t kMaxTexts = 8;
+inline constexpr size_t kMaxSubtitleLines = 64; // includes pending and failed hides; never evict owned lines
+
+// Four attempts per cleanup request, with 1/2/4-second backoff. Exhaustion retains ownership.
+// An explicit cleanup request starts a new budget; a load discards the old world.
+struct CleanupRetry
+{
+    unsigned attempts = 0;
+    double nextAt = 0.0;
+    bool Due(double aNow) const { return attempts < 4 && aNow >= nextAt; }
+    void Attempt(double aNow) { nextAt = aNow + static_cast<double>(1u << attempts); ++attempts; }
+};
 inline constexpr double kMaxSpawnDistance = 60.0;  // metres from V
 inline constexpr double kMaxWatchSeconds = 3600.0;
 inline constexpr size_t kMaxActionParamsBytes = 4096;
@@ -449,6 +460,7 @@ struct TimedLine
     int32_t type = 1; // scnDialogLineType: 1 Regular, 2 Holocall, 9 OwnerlessRegular
     double start = 0.0, end = 0.0;
     bool shown = false;
+    CleanupRetry hideRetry;
 };
 
 // ---- the session ---------------------------------------------------------------------------------------------------------
@@ -464,7 +476,8 @@ struct SessionOps
     // answered, and its end (also a ring withdrawn). aMode is audio or video.
     std::function<void(const std::string& aContact, const std::string& aMode, bool aRejectable)> callRing;
     std::function<void(const std::string& aContact, const std::string& aMode)> callStart;
-    std::function<void(const std::string& aContact)> callEnd;
+    // False means queued, not yet acknowledged; ownership must be retained.
+    std::function<bool(const std::string& aContact)> callEnd;
     // The quest tracker: the quest to show (title and lines: text, state, optional), or none.
     std::function<void(const std::vector<Quest>& aQuests)> tracker;
     std::function<void(int32_t aHandle, double aIntensity)> lightIntensity;
@@ -479,6 +492,8 @@ struct PhoneCall
     std::string mode = "audio";
     std::vector<CallLine> lines;
     std::string state = "none"; // ringing, answered, declined, missed, ended, cancelled, hung_up, failed
+    std::string endState; // terminal state after an acknowledged end; state is "ending" meanwhile
+    CleanupRetry endRetry;
     double ringUntil = 0.0, endsAt = 0.0, startedAt = 0.0;
     bool sawRing = false, sawTalk = false;
 };
@@ -499,6 +514,7 @@ public:
     void Tick(double aNow);
     // Whether the tick has anything to do (demand: armed watchers, a call, lines, animated lights).
     bool Busy() const;
+    bool CleanupPending() const;
 
     // Watchers.
     json Arm(const WatchSpec& aSpec, double aNow);
@@ -549,6 +565,8 @@ private:
     void StartCallLines(double aNow);
     void ArmQuestAreas(const Quest& aQuest, double aNow);
     void TickCall(const Sample& aSample, double aNow);
+    std::string FinishCall(const std::string& aState, bool aExplicit = false);
+    bool HideLine(TimedLine& aLine, bool aExplicit);
 
     SessionOps m_ops;
     WatcherEngine m_watchers;

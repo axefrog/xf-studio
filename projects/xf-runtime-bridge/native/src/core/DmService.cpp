@@ -130,13 +130,15 @@ double Service::Now() const
 
 void Service::NoteOps(const Ops& aOps)
 {
-    std::scoped_lock _(m_mutex);
-    if (!m_tickOpsBuilt)
+    OpsFor factory;
     {
-        // The tick's steps (a fixed correlation id) rather than the first request's.
-        m_tickOps = m_opsFor ? m_opsFor("dm-tick") : aOps;
-        m_tickOpsBuilt = true;
+        std::scoped_lock _(m_mutex);
+        if (m_tickOpsBuilt) { return; }
+        factory = m_opsFor;
     }
+    auto ops = factory ? factory("dm-tick") : aOps;
+    std::scoped_lock _(m_mutex);
+    if (!m_tickOpsBuilt) { m_tickOps = std::move(ops); m_tickOpsBuilt = true; }
 }
 
 SessionOps Service::MakeSessionOps(const Ops& aOps)
@@ -191,17 +193,9 @@ SessionOps Service::MakeSessionOps(const Ops& aOps)
 
 Session& Service::SessionFor(const Ops& aOps)
 {
+    NoteOps(aOps);
     std::scoped_lock _(m_mutex);
-    if (!m_session)
-    {
-        // The session keeps the host's tick-time steps (a fixed correlation id), not the first request's.
-        if (!m_tickOpsBuilt)
-        {
-            m_tickOps = m_opsFor ? m_opsFor("dm-tick") : aOps;
-            m_tickOpsBuilt = true;
-        }
-        m_session = std::make_unique<Session>(MakeSessionOps(m_tickOps));
-    }
+    if (!m_session) { m_session = std::make_unique<Session>(MakeSessionOps(m_tickOps)); }
     return *m_session;
 }
 
@@ -331,6 +325,7 @@ void Service::RememberChange(const std::string& aKind, const std::string& aTarge
             }
         }
     }
+    change.dormant = false;
     change.sticky = change.sticky || aSticky;
     if (!change.sticky && change.current == change.original)
     {
@@ -1371,16 +1366,30 @@ json Service::GameDigest(const json& aParams, const Ops& aOps)
 
 bool Service::Active() const
 {
+    std::function<size_t()> pending;
+    bool active;
+    {
+        std::scoped_lock _(m_mutex);
+        active = m_notifications || m_cleanupPending || !m_items.empty() || !m_sounds.empty() || !m_changes.empty() ||
+                 (m_session && (m_session->Busy() || m_session->QuestCount() > 0));
+        pending = m_tickOps.microPending;
+    }
+    return active || (pending && pending() > 0);
+}
+
+bool Service::NeedsCleanup() const
+{
     std::scoped_lock _(m_mutex);
-    return m_notifications || m_cleanupPending || !m_items.empty() || !m_sounds.empty() || !m_changes.empty() ||
-           (m_tickOps.microPending && m_tickOps.microPending() > 0) || (m_session && (m_session->Busy() || m_session->QuestCount() > 0));
+    return m_notifications || m_cleanupPending || !m_items.empty() || !m_sounds.empty() ||
+           std::any_of(m_changes.begin(), m_changes.end(), [](const auto& entry) { return !entry.second.dormant; }) ||
+           (m_session && (m_session->Busy() || m_session->QuestCount() > 0));
 }
 
 json Service::Holds() const
 {
     std::scoped_lock _(m_mutex);
     json held = json::array();
-    if (m_cleanupPending) { held.push_back("live-direction cleanup awaiting confirmation"); }
+    if (m_cleanupPending || (m_session && m_session->CleanupPending())) { held.push_back("live-direction cleanup awaiting confirmation"); }
     if (!m_items.empty())
     {
         held.push_back(Plural(m_items.size(), "spawned thing", "spawned things") + " from the live-direction toolkit (world_spawned; world_despawn and light_remove take them away)");
@@ -1399,12 +1408,15 @@ json Service::Holds() const
 
 json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, bool aUi)
 {
-    std::scoped_lock releaseLock(m_mutex);
     std::map<std::string, Change> changes;
     std::vector<Item> items;
     std::vector<Sound> sounds;
+    Session* session = nullptr;
     {
         std::scoped_lock _(m_mutex);
+        m_releaseRequested = true;
+        m_releaseRetry.Attempt(m_clock);
+        session = m_session.get();
         changes = m_changes;
         for (const auto& [handle, item] : m_items)
         {
@@ -1426,7 +1438,7 @@ json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, boo
         {
             if (!aOps.audioStop) { throw MethodError("not_ready", "audio stop unavailable"); }
             aOps.audioStop(sound.event, sound.onId, sound.emitter);
-            m_sounds.erase(sound.id);
+            { std::scoped_lock _(m_mutex); m_sounds.erase(sound.id); }
             ++stopped;
         }
         catch (const std::exception& e) { out["sound_errors"].push_back(e.what()); }
@@ -1435,7 +1447,7 @@ json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, boo
     json restored = json::array();
     for (const auto& [key, change] : changes)
     {
-        if (change.sticky && change.current == change.original)
+        if (change.dormant)
         {
             // Only the unreadable lock remains. Do not reapply old door/engine values every paused tick.
             restored.push_back({{"kind", change.kind}, {"target", change.targetId}, {"ok", false}, {"requires_load", true}});
@@ -1516,8 +1528,15 @@ json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, boo
             }
             restored.push_back({{"kind", change.kind}, {"target", change.targetId}, {"ok", !change.sticky}, {"requires_load", change.sticky}});
             // An unreadable lock baseline cannot be restored by moving its door. Hold until load.
-            if (!change.sticky) { m_changes.erase(key); }
-            else { m_changes.at(key).current = change.original; }
+            {
+                std::scoped_lock _(m_mutex);
+                const auto it = m_changes.find(key);
+                if (it != m_changes.end() && it->second.current == change.current)
+                {
+                    if (!change.sticky) { m_changes.erase(it); }
+                    else { it->second.current = change.original; it->second.dormant = true; }
+                }
+            }
         }
         catch (const std::exception& e)
         {
@@ -1532,16 +1551,13 @@ json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, boo
         {
             if (!aOps.despawn) { throw MethodError("not_ready", "despawn adapter unavailable"); }
             if (!aOps.despawn(item.entity).value("despawned", false)) { throw MethodError("failed", "deletion not confirmed"); }
-            m_items.erase(item.handle);
+            { std::scoped_lock _(m_mutex); m_items.erase(item.handle); }
             ++removed;
         }
         catch (const std::exception& e) { out["despawn_errors"].push_back(e.what()); }
     }
     // The session: lines hidden, the call ended, the tracker restored, watchers dropped.
-    if (m_session)
-    {
-        out["session"] = m_session->Reset(aUi);
-    }
+    if (session) { out["session"] = session->Reset(aUi); }
     // Everything the script holds, in one step.
     try
     {
@@ -1549,20 +1565,26 @@ json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, boo
         {
             out["script"] = aOps.releaseAll(aReason);
             // The script confirms every remaining line, call and tracker resource was cleaned up.
-            if (m_session) { m_session->Reset(false); }
-            m_notifications = false;
-            m_cleanupPending = false;
+            if (session) { session->Reset(false); }
+            { std::scoped_lock _(m_mutex); m_notifications = false; m_cleanupPending = false; }
         }
         else { throw MethodError("not_ready", "script cleanup adapter unavailable"); }
     }
     catch (const std::exception& e)
     {
         out["script_error"] = e.what();
-        m_cleanupPending = true;
+        { std::scoped_lock _(m_mutex); m_cleanupPending = true; }
     }
     out["spawned_removed"] = removed;
     out["sounds_stopped"] = stopped;
-    out["cleanup_pending"] = Active();
+    const bool pending = NeedsCleanup();
+    {
+        std::scoped_lock _(m_mutex);
+        m_releaseRequested = pending;
+        out["cleanup_pending"] = pending;
+        out["automatic_attempts"] = m_releaseRetry.attempts;
+        out["retry_exhausted"] = pending && m_releaseRetry.attempts >= 4;
+    }
     return out;
 }
 
@@ -1574,6 +1596,7 @@ json Service::ReleaseAllNow(const std::string& aReason, const Ops& aOps)
     {
         return json{{"released", false}, {"nothing_held", true}};
     }
+    { std::scoped_lock _(m_mutex); m_releaseRetry = {}; }
     auto out = ReleaseEverything(aReason, aOps, true);
     out["released"] = !Active();
     Emit("released", "warn", Active() ? "toolkit cleanup still holds resources (" + aReason + ")" : "everything the toolkit holds was released (" + aReason + ")", json{{"reason", aReason}, {"auto", true}});
@@ -1588,6 +1611,7 @@ json Service::RestoreAfterKill(const Ops& aOps)
     {
         return json{{"released", false}, {"nothing_held", true}};
     }
+    { std::scoped_lock _(m_mutex); m_releaseRetry = {}; }
     auto out = ReleaseEverything("kill", aOps, true);
     out["released"] = !Active();
     return out;
@@ -1595,25 +1619,19 @@ json Service::RestoreAfterKill(const Ops& aOps)
 
 void Service::DropAll(const std::string& aReason)
 {
-    std::scoped_lock _(m_mutex);
-    const bool had = !m_items.empty() || !m_sounds.empty() || !m_changes.empty() || (m_session && (m_session->Busy() || m_session->QuestCount() > 0));
-    if (m_session)
+    std::function<size_t(const std::string&)> cancel;
+    bool had;
     {
-        m_session->Reset(false); // no game calls: the world is going
+        std::scoped_lock _(m_mutex);
+        had = m_notifications || m_cleanupPending || !m_items.empty() || !m_sounds.empty() || !m_changes.empty() ||
+              (m_session && (m_session->Busy() || m_session->QuestCount() > 0));
+        if (m_session) { m_session->Reset(false); } // plain bookkeeping, no adapters
+        cancel = m_tickOps.microCancel;
+        m_items.clear(); m_sounds.clear(); m_changes.clear();
+        m_notifications = false; m_cleanupPending = false; m_releaseRequested = false; m_releaseRetry = {};
     }
-    if (m_tickOpsBuilt && m_tickOps.microCancel)
-    {
-        m_tickOps.microCancel(aReason);
-    }
-    m_items.clear();
-    m_sounds.clear();
-    m_changes.clear();
-    m_notifications = false;
-    m_cleanupPending = false;
-    if (had)
-    {
-        Emit("released", "info", "the toolkit's state was forgotten (" + aReason + "): the world took what it had brought in", json{{"reason", aReason}});
-    }
+    if (cancel) { cancel(aReason); }
+    if (had) { Emit("released", "info", "the toolkit's state was forgotten (" + aReason + "): the world took what it had brought in", json{{"reason", aReason}}); }
 }
 
 void Service::Tick(double aDt, const TickInput& aInput)
@@ -1640,14 +1658,20 @@ void Service::Tick(double aDt, const TickInput& aInput)
     }
     if (m_tickOpsBuilt && (aInput.killed || aInput.paused || aInput.handedOver || !aInput.gateOpen) && m_tickOps.microCancel)
     { m_tickOps.microCancel("gate_closed"); }
-    if (!aInput.gateOpen || aInput.killed || !m_tickOpsBuilt || !Active())
+    if (!aInput.gateOpen || !m_tickOpsBuilt || !Active() || (aInput.killed && !m_releaseRequested))
     {
         return;
     }
-    if (aInput.paused || aInput.handedOver)
+    if (aInput.paused || aInput.handedOver || m_releaseRequested)
     {
+        if (!NeedsCleanup()) { return; }
+        {
+            std::scoped_lock _(m_mutex);
+            if (!m_releaseRequested) { m_releaseRequested = true; m_releaseRetry = {}; }
+            if (!m_releaseRetry.Due(m_clock)) { return; }
+        }
         // The pause and a handover release everything (a handover's own request has done it already; this is the safety net).
-        const std::string reason = aInput.handedOver ? "handover" : "paused";
+        const std::string reason = aInput.killed ? "kill" : aInput.handedOver ? "handover" : aInput.paused ? "paused" : "cleanup_retry";
         Ops ops;
         {
             std::scoped_lock _(m_mutex);
@@ -1662,53 +1686,47 @@ void Service::Tick(double aDt, const TickInput& aInput)
     {
         return;
     }
-    std::scoped_lock _(m_mutex);
-    // The spawn is asynchronous. Configure only after streaming, with a fixed five-second deadline.
-    std::vector<int32_t> deletedLights;
-    for (auto& [handle, item] : m_items)
+    Ops ops;
+    std::vector<Item> lights;
+    const double now = Now();
     {
-        if (!item.pending) { continue; }
+        std::scoped_lock _(m_mutex);
+        ops = m_tickOps;
+        for (const auto& [handle, item] : m_items) { if (item.pending) { lights.push_back(item); } }
+    }
+    // Game-thread serialization owns execution; the mutex protects snapshots, never adapters.
+    for (const auto& item : lights)
+    {
+        const auto handle = item.handle;
         try
         {
-            if (m_clock >= item.configureUntil) { throw MethodError("not_streamed", "light did not stream within five seconds"); }
+            if (now >= item.configureUntil) { throw MethodError("not_streamed", "light did not stream within five seconds"); }
             LightSetStep set;
-            set.entity = item.entity;
-            set.colour = item.colour;
-            set.intensity = item.intensity;
-            set.radius = item.radius;
-            set.inner = item.inner;
-            set.outer = item.outer;
-            set.on = item.on;
-            if (item.pattern.kind == "flicker")
-            {
-                set.flickerStrength = item.pattern.strength;
-                set.flickerPeriod = item.pattern.period;
-            }
-            m_tickOps.lightSet(set); // validates a real light component before declaring readiness
-            item.pending = false;
+            set.entity = item.entity; set.colour = item.colour; set.intensity = item.intensity;
+            set.radius = item.radius; set.inner = item.inner; set.outer = item.outer; set.on = item.on;
+            if (item.pattern.kind == "flicker") { set.flickerStrength = item.pattern.strength; set.flickerPeriod = item.pattern.period; }
+            ops.lightSet(set);
+            { std::scoped_lock _(m_mutex); if (auto* live = FindItem(handle)) { live->pending = false; } }
             if (item.pattern.kind != "steady" && item.pattern.kind != "flicker")
-            { SessionFor(m_tickOps).AnimateLight(handle, item.intensity, item.pattern, m_clock); }
+            { SessionFor(ops).AnimateLight(handle, item.intensity, item.pattern, now); }
             Emit("light", "info", "light configured", json{{"what", "ready"}, {"handle", handle}, {"pending", false}});
         }
         catch (const MethodError& e)
         {
-            if (e.code == "target_missing" && m_clock < item.configureUntil) { continue; }
-            item.pending = false;
-            item.error = e.code;
-            // Confirmed deletions leave the registry; failed deletions remain owned for retry.
+            if (e.code == "target_missing" && now < item.configureUntil) { continue; }
+            { std::scoped_lock _(m_mutex); if (auto* live = FindItem(handle)) { live->pending = false; live->error = e.code; } }
             try
             {
-                if (m_tickOps.despawn(item.entity).value("despawned", false)) { deletedLights.push_back(handle); }
+                if (ops.despawn(item.entity).value("despawned", false))
+                { std::scoped_lock _(m_mutex); m_items.erase(handle); }
             }
             catch (...) {}
             Emit("light", "warn", "light configuration failed", json{{"what", "failed"}, {"handle", handle}, {"code", e.code}});
         }
     }
-    for (const auto handle : deletedLights) { m_items.erase(handle); }
-    if (m_session)
-    {
-        m_session->Tick(m_clock);
-    }
+    Session* session;
+    { std::scoped_lock _(m_mutex); session = m_session.get(); }
+    if (session) { session->Tick(now); }
 }
 
 // ---- registration ------------------------------------------------------------------------------------------------------

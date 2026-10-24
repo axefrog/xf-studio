@@ -15,6 +15,7 @@
 #include "core/DmMicro.hpp"
 #include <chrono>
 #include <condition_variable>
+#include <future>
 #include <mutex>
 #include "core/Events.hpp"
 
@@ -443,7 +444,7 @@ d::SessionOps OpsOf(FakeGame& aGame)
         aGame.log.push_back("ring:" + aContact + ":" + aMode);
     };
     ops.callStart = [&aGame](const std::string& aContact, const std::string&) { aGame.log.push_back("start:" + aContact); };
-    ops.callEnd = [&aGame](const std::string& aContact) { aGame.log.push_back("end:" + aContact); };
+    ops.callEnd = [&aGame](const std::string& aContact) { aGame.log.push_back("end:" + aContact); return true; };
     ops.tracker = [&aGame](const std::vector<d::Quest>& aQuests) {
         if (aGame.trackerFails)
         {
@@ -800,7 +801,7 @@ d::Ops FakeOps(FakeWorld& aWorld)
     ops.hideLine = [&aWorld](uint64_t) { aWorld.calls.push_back("hide_line"); };
     ops.callRing = [&aWorld](const std::string& aContact, const std::string&, bool) { aWorld.calls.push_back("ring:" + aContact); };
     ops.callStart = [&aWorld](const std::string& aContact, const std::string&) { aWorld.calls.push_back("start:" + aContact); };
-    ops.callEnd = [&aWorld](const std::string& aContact) { aWorld.calls.push_back("call_end:" + aContact); };
+    ops.callEnd = [&aWorld](const std::string& aContact) { aWorld.calls.push_back("call_end:" + aContact); return true; };
     ops.tracker = [&aWorld](const std::vector<d::Quest>& aQuests) { aWorld.calls.push_back("tracker:" + std::to_string(aQuests.size())); };
     ops.lightIntensity = [&aWorld](const std::string& aEntity, double) { aWorld.calls.push_back("light_intensity:" + aEntity); };
     ops.lightSpawn = [&aWorld](const d::LightStep& aStep) {
@@ -1119,6 +1120,148 @@ void ServiceTests()
 void ReviewTests()
 {
     {
+        Rig rig;
+        d::TickInput paused;
+        paused.paused = true;
+        for (int cycle = 0; cycle < 6; ++cycle)
+        {
+            rig.service.NotifyShow(json{{"style", "warning"}, {"text", "new activity"}}, rig.Ops());
+            rig.service.Tick(0.1, paused);
+        }
+        Check("dm fix 2: independent successful cleanup cycles each get a fresh budget", CallCount(rig.world, "release_all:") == 6 && !rig.service.Active());
+    }
+
+    {
+        Rig rig;
+        auto ops = rig.Ops();
+        std::vector<std::future<void>> readers;
+        auto probe = [&] {
+            auto reader = std::async(std::launch::async, [&] { (void)rig.service.Holds(); });
+            const bool unlocked = reader.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+            readers.push_back(std::move(reader)); // even a regression can return from the adapter without joining under its lock
+            Check("dm fix 3: adapter allows another thread to read service bookkeeping", unlocked);
+        };
+        auto door = ops.door;
+        ops.door = [&](const d::DoorStep& step) { probe(); return door(step); };
+        ops.audioStop = [&](const std::string&, const std::string&, const std::string&) { probe(); return json::object(); };
+        ops.despawn = [&](const std::string&) { probe(); return json{{"despawned", true}}; };
+        ops.lightSpawn = [](const d::LightStep&) { return json{{"entity", "EntityID(7001)"}, {"pending", true}}; };
+        ops.lightSet = [&](const d::LightSetStep&) { probe(); return json::object(); };
+        ops.hideLine = [&](uint64_t) { probe(); };
+        ops.callEnd = [&](const std::string&) { probe(); return true; };
+        ops.tracker = [&](const std::vector<d::Quest>&) { probe(); };
+        ops.releaseAll = [&](const std::string&) { probe(); return json::object(); };
+        auto sample = ops.sample;
+        ops.sample = [&](const d::SampleWants& wants, const std::map<std::string, std::string>& entities) { probe(); return sample(wants, entities); };
+        rig.service.SetOpsFor([&](const std::string&) { probe(); return ops; });
+        rig.service.LightSpawn(json{{"template", "base\\lamp.ent"}}, ops);
+        rig.service.NotifyShow(json{{"style", "subtitle"}, {"speaker", "XF"}, {"text", "owned"}}, ops);
+        rig.service.SessionForTest(ops).Call(Call(1), 0.0);
+        rig.service.QuestSet(json{{"id", "lock-test"}, {"title", "Owned quest"}}, ops);
+        rig.service.AudioPlay(json{{"event", "loop"}, {"loop", true}}, ops);
+        rig.service.Door(json{{"target", "EntityID(8102)"}, {"open", true}}, ops);
+        rig.service.Tick(0.1, {});
+        rig.service.ReleaseAllNow("lock-test", ops);
+        for (auto& reader : readers) { reader.get(); }
+        Check("dm fix 3: release reconciles snapshots after unlocked adapters", !rig.service.Active() && rig.service.Holds().empty());
+    }
+
+    {
+        Rig rig;
+        auto ops = rig.Ops();
+        unsigned attempts = 0;
+        ops.releaseAll = [&](const std::string&) -> json { ++attempts; throw xfb::MethodError("failed", "permanent cleanup failure"); };
+        rig.service.SetOpsFor([&](const std::string&) { return ops; });
+        rig.service.NotifyShow(json{{"style", "warning"}, {"text", "retry"}}, ops);
+        d::TickInput paused;
+        paused.paused = true;
+        rig.service.Tick(0.1, paused);
+        rig.service.Tick(0.1, paused);
+        Check("dm fix 2: cleanup backs off between attempts", attempts == 1);
+        for (int i = 0; i < 200; ++i) { rig.service.Tick(0.5, paused); }
+        Check("dm fix 2: automatic cleanup stops at four attempts with ownership and hold retained", attempts == 4 && rig.service.Active() && !rig.service.Holds().empty());
+        rig.service.ReleaseAllNow("explicit retry", ops);
+        Check("dm fix 2: explicit cleanup starts a fresh retry budget", attempts == 5);
+        rig.service.DropAll("load");
+        Check("dm fix 2: load clears exhausted cleanup", !rig.service.Active() && rig.service.Holds().empty());
+    }
+    {
+        Rig rig;
+        rig.service.Vehicle(json{{"target", "mounted"}, {"door", "trunk"}, {"door_state", "locked"}}, rig.Ops());
+        d::TickInput paused;
+        paused.paused = true;
+        rig.service.Tick(0.1, paused);
+        const auto cleanups = CallCount(rig.world, "release_all:");
+        for (int i = 0; i < 100; ++i) { rig.service.Tick(0.5, paused); }
+        Check("dm fix 2: a dormant lock hold schedules no more game cleanup", cleanups == 1 && CallCount(rig.world, "release_all:") == 1 && !rig.service.Holds().empty());
+    }
+    {
+        FakeGame game;
+        auto ops = OpsOf(game);
+        size_t attempts = 0;
+        bool fail = true;
+        ops.hideLine = [&](uint64_t) { ++attempts; if (fail) { throw xfb::MethodError("failed", "hide failed"); } };
+        d::Session session(ops);
+        for (size_t i = 0; i < d::kMaxSubtitleLines; ++i) { session.ShowLine("notify", "XF", "owned", 1, 1.0, 0.0); }
+        session.Tick(0.1);
+        session.Tick(1.1);
+        session.Tick(1.2);
+        Check("dm fix 2: subtitle hides back off", attempts == d::kMaxSubtitleLines);
+        for (int i = 2; i < 100; ++i) { session.Tick(i); }
+        Check("dm fix 2: failed subtitle hides exhaust a bounded budget without eviction", attempts == 4 * d::kMaxSubtitleLines && session.Busy());
+        Check("dm fix 2/14: outstanding subtitles are capped including failed hides", Code([&] { session.ShowLine("notify", "XF", "overflow", 1, 1.0, 100.0); }) == "limit");
+        fail = false;
+        Check("dm fix 2: explicit retry hides every retained subtitle", session.HideAllLines() == d::kMaxSubtitleLines && !session.Busy());
+    }
+    {
+        FakeGame game;
+        game.sample = json{{"v", {0, 0, 0}}, {"call_fact", 2}};
+        d::Session session(OpsOf(game));
+        for (size_t i = 0; i < d::kMaxSubtitleLines - d::kMaxCallLines; ++i) { session.ShowLine("notify", "XF", "owned", 1, 20.0, 0.0); }
+        session.Call(Call(16), 0.0);
+        Check("dm fix 2: ringing calls reserve their subtitle capacity", Code([&] { session.ShowLine("notify", "XF", "overflow", 1, 1.0, 0.0); }) == "limit");
+        session.Tick(0.1);
+        Check("dm fix 2: answering a reserved call stays within the subtitle cap", session.Reset(false)["lines"] == d::kMaxSubtitleLines);
+    }
+    {
+        FakeGame game;
+        auto ops = OpsOf(game);
+        int attempts = 0;
+        ops.callEnd = [&](const std::string&) -> bool { ++attempts; throw xfb::MethodError("failed", "end failed"); };
+        d::Session session(ops);
+        session.Call(Call(1), 0.0);
+        session.EndCall(0.1, "explicit");
+        for (int i = 1; i < 100; ++i) { session.Tick(i); }
+        Check("dm fix 1/2: failed call termination exhausts retries while remaining owned", attempts == 4 && session.CallLive() && session.CleanupPending());
+        session.EndCall(100.0, "retry");
+        Check("dm fix 1/2: explicit end retries an exhausted pending call", attempts == 5 && session.CallLive());
+    }
+
+    for (const int endCase : {0, 1, 2})
+    {
+        Rig rig;
+        auto ops = rig.Ops();
+        int attempts = 0;
+        bool acknowledged = false;
+        ops.callEnd = [&](const std::string&) {
+            if (++attempts == 1) { throw xfb::MethodError("not_ready", "end failed"); }
+            return acknowledged;
+        };
+        if (endCase == 2) { ops.sample = [](const d::SampleWants&, const std::map<std::string, std::string>&) { return json{{"v", {0, 0, 0}}, {"call_fact", 2}}; }; }
+        rig.service.SetOpsFor([&](const std::string&) { return ops; });
+        auto& session = rig.service.SessionForTest(ops);
+        session.Call(Call(1), 0.0);
+        if (endCase == 2) { session.Tick(0.1); session.Tick(5.0); }
+        else if (endCase == 1) { session.Tick(121.0); }
+        else { Check("dm fix 1: explicit failed end reports pending", session.EndCall(0.1, "explicit")["pending"] == true); }
+        Check("dm fix 1: failed explicit/timeout end stays owned and active", attempts == 1 && session.CallLive() && rig.service.Active() && !rig.service.Holds().empty());
+        session.Tick(122.0);
+        Check("dm fix 1: queue acceptance alone does not end ownership", attempts == 2 && session.PhoneState(122.0)["call"]["state"] == "ending");
+        acknowledged = true;
+        session.Tick(124.1);
+        Check("dm fix 1: only acknowledgment clears pending end", !session.CallLive() && !rig.service.Active() && session.PhoneState(123.0)["call"]["state"] == (endCase == 2 ? "ended" : endCase == 1 ? "missed" : "cancelled"));
+    }
+    {
         FakeGame game;
         auto ops = OpsOf(game);
         bool fail = true;
@@ -1134,7 +1277,7 @@ void ReviewTests()
         Check("dm review 5/14: failed expired subtitle hide stays owned", session.Busy() && game.hidden.empty());
         Check("dm review 5/14: failed reset retains subtitle cleanup", session.Reset(true)["cleanup_pending"] == true && session.Busy());
         fail = false;
-        session.Tick(3.1);
+        session.Tick(4.1);
         Check("dm review 5/14: subtitle retry forgets only confirmed hides", !session.Busy() && game.hidden.size() == 1);
     }
     {
@@ -1258,18 +1401,35 @@ void ReviewTests()
         a.sessionToken = "old-session";
         d::MicroAction action;
         action.method = "a";
-        action.delayS = 0.1;
+        action.delayS = 30.0;
         a.actions.push_back(action);
         runner.Enqueue(a);
+        Check("dm fix 5: worker has entered A's cancellable delay", runner.WaitForDelay("a", std::chrono::seconds(2)));
         auto b = a;
         b.watch = "b";
         b.actions[0].method = "b";
+        b.actions[0].delayS = 0.0;
         runner.Enqueue(b);
         const auto pending = runner.Pending();
         const auto cancelled = runner.CancelWatch("a");
         std::unique_lock lock(mutex);
         const bool completed = cv.wait_for(lock, std::chrono::seconds(2), [&] { return !ran.empty(); });
         Check("dm review 3/9: running delays count, cancellation is per watcher and execution uses originating token", pending == 2 && cancelled == 1 && completed && ran == std::vector<std::string>{"b:old-session"});
+        lock.unlock();
+        auto c = a;
+        c.watch = "c";
+        c.actions[0].method = "c";
+        runner.Enqueue(c);
+        Check("dm fix 5: worker has entered C's delay before global cancellation", runner.WaitForDelay("c", std::chrono::seconds(2)));
+        const auto dropped = runner.Cancel("kill");
+        Check("dm fix 5: global cancellation counts the running delay", dropped == 1 && runner.Pending() == 0);
+        auto fence = b;
+        fence.watch = "fence";
+        fence.actions[0].method = "fence";
+        runner.Enqueue(fence);
+        lock.lock();
+        const bool fenced = cv.wait_for(lock, std::chrono::seconds(2), [&] { return ran.size() >= 2; });
+        Check("dm fix 5: a later action fences cancellation without running C", fenced && ran == std::vector<std::string>{"b:old-session", "fence:old-session"});
         lock.unlock();
         runner.Stop();
     }
@@ -1279,7 +1439,8 @@ void ReviewTests()
 
 int DmUnitTests()
 {
-    ReviewTests();
+    try { ReviewTests(); }
+    catch (const std::exception& e) { std::printf("DM review fixture: %s\n", e.what()); Check("dm review tests completed without an unexpected exception", false); }
     ParseTests();
     UndoTests();
     PatternTests();

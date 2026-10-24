@@ -115,6 +115,12 @@ size_t MicroRunner::Pending() const
     return count;
 }
 
+bool MicroRunner::WaitForDelay(const std::string& aWatch, std::chrono::milliseconds aTimeout)
+{
+    std::unique_lock lock(m_mutex);
+    return m_cv.wait_for(lock, aTimeout, [&] { return m_delaying && m_runningWatch == aWatch && !m_runningCancelled; });
+}
+
 uint64_t MicroRunner::Ran() const
 {
     return m_ran.load();
@@ -147,7 +153,10 @@ void MicroRunner::Run()
             {
                 std::unique_lock lock(m_mutex);
                 const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(action.delayS * 1000.0));
+                m_delaying = true;
+                m_cv.notify_all();
                 m_cv.wait_until(lock, until, [&] { return m_stopping || m_generation != generation || m_runningCancelled; });
+                m_delaying = false;
             }
             {
                 std::scoped_lock _(m_mutex);

@@ -11,6 +11,7 @@
 // unload, before the dispatcher goes).
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -46,6 +47,8 @@ public:
     void Stop();
     size_t Pending() const;
     uint64_t Ran() const;
+    // Diagnostics/tests: synchronizes with entry into the worker's cancellable wait.
+    bool WaitForDelay(const std::string& aWatch, std::chrono::milliseconds aTimeout);
 
 private:
     void Run();
@@ -62,6 +65,7 @@ private:
     std::string m_runningWatch;
     size_t m_remaining = 0;
     bool m_runningCancelled = false;
+    bool m_delaying = false;
     std::atomic<uint64_t> m_ran{0};
 };
 } // namespace xfb::dm

@@ -1813,12 +1813,53 @@ void Session::Report(const std::string& aKind, const std::string& aLevel, const 
 
 bool Session::CallLive() const
 {
-    return m_call.state == "ringing" || m_call.state == "answered";
+    return m_call.state == "ringing" || m_call.state == "answered" || m_call.state == "ending";
+}
+
+std::string Session::FinishCall(const std::string& aState, bool aExplicit)
+{
+    const bool wasEnding = m_call.state == "ending";
+    if (aExplicit || !wasEnding) { m_call.endRetry = {}; }
+    m_call.endState = aState;
+    m_call.state = "ending";
+    if (!m_call.endRetry.Due(m_now)) { return {}; }
+    m_call.endRetry.Attempt(m_now);
+    try
+    {
+        if (!m_ops.callEnd) { throw MethodError("not_ready", "call end unavailable"); }
+        if (m_ops.callEnd(m_call.contact))
+        {
+            m_call.state = m_call.endState;
+            if (wasEnding) { Report("phone", "info", "the call end was acknowledged", json{{"what", m_call.state}, {"call", m_call.id}, {"contact", m_call.contact}}); }
+        }
+    }
+    catch (const std::exception& e) { return e.what(); }
+    return {};
 }
 
 bool Session::Busy() const
 {
     return !m_watchers.Empty() || CallLive() || !m_lines.empty() || !m_animated.empty();
+}
+
+bool Session::CleanupPending() const
+{
+    return m_call.state == "ending" || std::any_of(m_lines.begin(), m_lines.end(), [](const TimedLine& line) { return line.hideRetry.attempts > 0; });
+}
+
+bool Session::HideLine(TimedLine& aLine, bool aExplicit)
+{
+    if (!aLine.shown) { return true; }
+    if (aExplicit) { aLine.hideRetry = {}; }
+    if (!aLine.hideRetry.Due(m_now)) { return false; }
+    aLine.hideRetry.Attempt(m_now);
+    try
+    {
+        if (!m_ops.hideLine) { throw MethodError("not_ready", "subtitle hide unavailable"); }
+        m_ops.hideLine(aLine.id);
+        return true;
+    }
+    catch (...) { return false; }
 }
 
 void Session::Fire(const std::vector<Fired>& aFired, const Sample* aSample, double aNow)
@@ -1896,17 +1937,7 @@ void Session::TickCall(const Sample& aSample, double aNow)
         }
         else if (aSample.callFact == 3)
         {
-            m_call.state = "declined";
-            try
-            {
-                if (m_ops.callEnd)
-                {
-                    m_ops.callEnd(contact);
-                }
-            }
-            catch (...)
-            {
-            }
+            FinishCall("declined");
             Report("phone", "done", "the player declined " + contact, json{{"what", "declined"}, {"call", id}, {"contact", contact}});
         }
         else if (aSample.callFact == 0 && m_call.sawRing)
@@ -1917,17 +1948,7 @@ void Session::TickCall(const Sample& aSample, double aNow)
         }
         else if (aSample.callFact == 0 && !m_call.sawRing && aNow - m_call.startedAt > 3.0)
         {
-            m_call.state = "failed";
-            try
-            {
-                if (m_ops.callEnd)
-                {
-                    m_ops.callEnd(contact);
-                }
-            }
-            catch (...)
-            {
-            }
+            FinishCall("failed");
             Report("phone", "warn", "the phone never rang for " + contact + " (the game's phone system didn't take the call)",
                    json{{"what", "failed"}, {"call", id}, {"contact", contact}});
         }
@@ -1993,35 +2014,16 @@ void Session::Tick(double aNow)
     }
 
     // The call's clocks.
+    if (m_call.state == "ending") { FinishCall(m_call.endState); }
     if (m_call.state == "ringing" && aNow >= m_call.ringUntil)
     {
-        m_call.state = "missed";
-        try
-        {
-            if (m_ops.callEnd)
-            {
-                m_ops.callEnd(m_call.contact);
-            }
-        }
-        catch (...)
-        {
-        }
+        FinishCall("missed");
         Report("phone", "info", "the call from " + m_call.contact + " was missed", json{{"what", "missed"}, {"call", m_call.id}, {"contact", m_call.contact}});
     }
     if (m_call.state == "answered" && aNow >= m_call.endsAt)
     {
-        m_call.state = "ended";
-        try
-        {
-            if (m_ops.callEnd)
-            {
-                m_ops.callEnd(m_call.contact);
-            }
-        }
-        catch (...)
-        {
-        }
-        Report("phone", "done", "the call from " + m_call.contact + " ended", json{{"what", "ended"}, {"call", m_call.id}, {"contact", m_call.contact}});
+        FinishCall("ended");
+        Report("phone", CallLive() ? "warn" : "done", CallLive() ? "the call end is pending" : "the call from " + m_call.contact + " ended", json{{"what", CallLive() ? "end_pending" : "ended"}, {"call", m_call.id}, {"contact", m_call.contact}});
     }
 
     // Timed lines.
@@ -2043,19 +2045,7 @@ void Session::Tick(double aNow)
         }
         if (aNow >= it->end)
         {
-            if (it->shown)
-            {
-                try
-                {
-                    if (!m_ops.hideLine) { throw MethodError("not_ready", "subtitle hide unavailable"); }
-                    m_ops.hideLine(it->id);
-                }
-                catch (...)
-                {
-                    ++it;
-                    continue; // retry the expired line on the next tick
-                }
-            }
+            if (!HideLine(*it, false)) { ++it; continue; }
             it = m_lines.erase(it);
             continue;
         }
@@ -2118,6 +2108,9 @@ json Session::WatchList(double aNow) const
 
 uint64_t Session::ShowLine(const std::string& aOwner, const std::string& aSpeaker, const std::string& aText, int32_t aType, double aSeconds, double aNow)
 {
+    const auto reserved = m_call.state == "ringing" ? m_call.lines.size() : 0;
+    if (m_lines.size() + reserved >= kMaxSubtitleLines)
+    { throw MethodError("limit", "too many subtitle lines are still owned; hide them or retry cleanup before adding more"); }
     TimedLine line;
     line.id = NextLineId();
     line.owner = aOwner;
@@ -2137,20 +2130,7 @@ bool Session::HideLines(const std::string& aOwner)
     {
         if (it->owner == aOwner || aOwner.empty())
         {
-            if (it->shown)
-            {
-                try
-                {
-                    if (!m_ops.hideLine) { throw MethodError("not_ready", "subtitle hide unavailable"); }
-                    m_ops.hideLine(it->id);
-                }
-                catch (...)
-                {
-                    it->end = m_now; // no further display; retry hiding on the next tick
-                    ++it;
-                    continue;
-                }
-            }
+            if (!HideLine(*it, true)) { it->end = m_now; ++it; continue; }
             any = true;
             it = m_lines.erase(it);
             continue;
@@ -2167,20 +2147,7 @@ bool Session::HideLinesPrefix(const std::string& aPrefix)
     {
         if (it->owner.rfind(aPrefix, 0) == 0)
         {
-            if (it->shown)
-            {
-                try
-                {
-                    if (!m_ops.hideLine) { throw MethodError("not_ready", "subtitle hide unavailable"); }
-                    m_ops.hideLine(it->id);
-                }
-                catch (...)
-                {
-                    it->end = m_now;
-                    ++it;
-                    continue;
-                }
-            }
+            if (!HideLine(*it, true)) { it->end = m_now; ++it; continue; }
             any = true;
             it = m_lines.erase(it);
             continue;
@@ -2203,6 +2170,8 @@ json Session::Call(const CallRequest& aRequest, double aNow)
     {
         throw MethodError("busy", "a call from " + m_call.contact + " is still " + m_call.state + "; end it first (phone_end)");
     }
+    if (m_lines.size() + aRequest.lines.size() > kMaxSubtitleLines)
+    { throw MethodError("limit", "too many subtitle lines are still owned; retry cleanup before starting another call"); }
     const std::string mode = aRequest.video ? "video" : "audio";
     // The ring first: the game's phone may refuse (a contact the journal doesn't have, a phone the player can't use now), and
     // a refusal leaves nothing behind.
@@ -2246,29 +2215,18 @@ void Session::StartCallLines(double aNow)
 
 json Session::EndCall(double aNow, const std::string& aWhy)
 {
+    m_now = aNow;
     const auto was = m_call.state;
     if (!CallLive())
     {
         return json{{"ended", false}, {"state", was}, {"undo", nullptr}, {"undo_note", "no call was ringing or running"}};
     }
-    m_call.state = "cancelled";
     HideLines("call:" + std::to_string(m_call.id));
-    std::string phoneError;
-    try
-    {
-        if (m_ops.callEnd)
-        {
-            m_ops.callEnd(m_call.contact);
-        }
-    }
-    catch (const std::exception& e)
-    {
-        phoneError = e.what();
-    }
-    Report("phone", "info", "the call from " + m_call.contact + " was ended (" + aWhy + ")",
-           json{{"what", "cancelled"}, {"call", m_call.id}, {"was", was}, {"why", aWhy}});
+    const auto phoneError = FinishCall("cancelled", true);
+    Report("phone", CallLive() ? "warn" : "info", CallLive() ? "the call end is pending (" + aWhy + ")" : "the call from " + m_call.contact + " was ended (" + aWhy + ")",
+           json{{"what", CallLive() ? "end_pending" : "cancelled"}, {"call", m_call.id}, {"was", was}, {"why", aWhy}});
     m_now = aNow;
-    json out{{"ended", true}, {"was", was}, {"undo", nullptr}, {"undo_note", "a call can't be resumed; start another with phone_call"}};
+    json out{{"ended", !CallLive()}, {"pending", CallLive()}, {"was", was}, {"undo", nullptr}, {"undo_note", "a call can't be resumed; start another with phone_call"}};
     if (!phoneError.empty())
     {
         out["phone_error"] = phoneError;
@@ -2588,6 +2546,7 @@ json Session::Reset(bool aUi)
 {
     json out{{"watchers", m_watchers.DisarmAll()}, {"lines", m_lines.size()}, {"quests", m_quests.size()}, {"lights_animated", m_animated.size()}};
     const bool callLive = CallLive();
+    out["call"] = callLive ? m_call.state : "none";
     bool callFailed = false;
     bool trackerFailed = false;
     if (aUi)
@@ -2597,8 +2556,8 @@ json Session::Reset(bool aUi)
         {
             try
             {
-                if (!m_ops.callEnd) { throw MethodError("not_ready", "call end unavailable"); }
-                m_ops.callEnd(m_call.contact);
+                FinishCall(m_call.endState.empty() ? "cancelled" : m_call.endState, true);
+                callFailed = CallLive();
             }
             catch (...)
             {
@@ -2618,7 +2577,6 @@ json Session::Reset(bool aUi)
             }
         }
     }
-    out["call"] = callLive ? m_call.state : "none";
     if (!aUi) { m_lines.clear(); }
     if (!trackerFailed)
     {

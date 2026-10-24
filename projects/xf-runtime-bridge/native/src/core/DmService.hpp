@@ -130,7 +130,7 @@ struct Ops
     std::function<void(uint64_t aLineId)> hideLine;
     std::function<void(const std::string& aContact, const std::string& aMode, bool aRejectable)> callRing;
     std::function<void(const std::string& aContact, const std::string& aMode)> callStart;
-    std::function<void(const std::string& aContact)> callEnd;
+    std::function<bool(const std::string& aContact)> callEnd;
     std::function<void(const std::vector<Quest>& aQuests)> tracker;
     std::function<void(const std::string& aEntity, double aIntensity)> lightIntensity;
     // Everything the script holds, in one step (the kill switch, a pause, a handover): {released: n, ...}. Idempotent.
@@ -249,6 +249,7 @@ private:
         std::string targetId;
         json original = json::object();
         json current = json::object(); // what the asked changes have made of it, as far as the bridge can tell
+        bool dormant = false; // only a load-only hold remains; never schedule cleanup for it
         bool sticky = false;           // a change the bridge cannot read back (a vehicle door's lock): kept until a load
     };
 
@@ -267,6 +268,7 @@ private:
     // state equals the original (a change undone by hand needs no put-back and no longer holds a save).
     void RememberChange(const std::string& aKind, const std::string& aTargetId, const json& aBefore, const std::string& aKey, const json& aAsked, bool aSticky);
     // Puts every changed door, vehicle and radio back and takes everything the script holds down; never throws.
+    bool NeedsCleanup() const;
     json ReleaseEverything(const std::string& aReason, const Ops& aOps, bool aUi);
     json ItemJson(const Item& aItem) const;
     double Now() const;
@@ -281,6 +283,8 @@ private:
     std::map<std::string, Change> m_changes;
     bool m_notifications = false;
     bool m_cleanupPending = false;
+    bool m_releaseRequested = false;
+    CleanupRetry m_releaseRetry;
     EventLog* m_events = nullptr;
     int32_t m_nextHandle = 1;
     int32_t m_nextSound = 1;

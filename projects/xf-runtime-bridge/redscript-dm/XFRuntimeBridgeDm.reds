@@ -785,6 +785,20 @@ public func XFDmQuest(what: String) -> Void {
   };
 }
 
+// Mark desired on/off requests. Vanilla's toggle=true means "next station" when already on.
+@addField(VehicleRadioEvent)
+public let xfsDmSetOn: Bool;
+
+@wrapMethod(VehicleComponent)
+protected cb func OnVehicleRadioEvent(evt: ref<VehicleRadioEvent>) -> Bool {
+  if !evt.xfsDmSetOn { return wrappedMethod(evt); }
+  if !XFBridge_Live() { return false; }
+  // The consumer owns this state and updates it synchronously in wrappedMethod.
+  // Requests queued in the same frame therefore see the preceding request's result.
+  if Equals(evt.toggle, this.m_radioState) { return false; }
+  return wrappedMethod(evt);
+}
+
 public abstract class XFDmWorld {
   public static func DoorState(ps: ref<DoorControllerPS>) -> String {
     return "{\"open\":" + XFJson.Flag(ps.IsOpen()) + ",\"locked\":" + XFJson.Flag(ps.IsLocked()) + ",\"sealed\":" + XFJson.Flag(ps.IsSealed()) + "}";
@@ -968,14 +982,16 @@ public abstract class XFDmWorld {
       evt.station = station;
       vehicle.QueueEvent(evt);
     } else {
-      if on >= 0 && !Equals(on == 1, wasOn) {
+      if on >= 0 {
         let evt = new VehicleRadioEvent();
+        evt.xfsDmSetOn = true;
         evt.toggle = on == 1;
         vehicle.QueueEvent(evt);
       }
     }
     if station >= 0 && on == 0 {
       let off = new VehicleRadioEvent();
+      off.xfsDmSetOn = true;
       off.toggle = false;
       vehicle.QueueEvent(off);
     }
@@ -1213,7 +1229,8 @@ public abstract class XFDmPhone {
 
   public static func End(cid: String, contact: String) -> String {
     let registry = XFDmRegistry.Get();
-    if !IsDefined(registry) || !Equals(registry.CallContact(), contact) { return "{\"ok\":true}"; }
+    if !IsDefined(registry) { return XFJson.Fail("not_ready", "the phone registry is unavailable; ending must be retried"); }
+    if !Equals(registry.CallContact(), contact) { return "{\"ok\":true,\"ended\":true}"; }
     let phone = XFDmPhone.System();
     if !IsDefined(phone) {
       return XFJson.Fail("not_ready", "the phone system is unavailable; ending the owned call must be retried");
@@ -1223,11 +1240,11 @@ public abstract class XFDmPhone {
     let current = FromVariant<PhoneCallInformation>(board.GetVariant(GetAllBlackboardDefs().UI_ComDevice.PhoneCallInformation));
     if NotEquals(current.contactName, StringToName(contact)) || (!Equals(current.callPhase, questPhoneCallPhase.IncomingCall) && !Equals(current.callPhase, questPhoneCallPhase.StartCall)) {
       registry.SetCallContact("");
-      return "{\"ok\":true}";
+      return "{\"ok\":true,\"ended\":true}";
     }
     phone.QueueRequest(XFDmPhone.Request(contact, questPhoneCallPhase.EndCall, "audio", false));
-    XFBridgeLog.Info(cid, "dm call ended with " + contact);
-    return "{\"ok\":true}";
+    XFBridgeLog.Info(cid, "dm call end queued for " + contact);
+    return "{\"ok\":true,\"ended\":false}";
   }
 
   // Our message view data takes plain text and bypasses the vanilla journal lookups and click action.
@@ -1686,6 +1703,7 @@ public abstract class XFDmSense {
   // (it tracks them), the entities deleted. Idempotent.
   public static func ReleaseAll(cid: String, reason: String) -> String {
     let registry = XFDmRegistry.Get();
+    if !IsDefined(registry) { return XFJson.Fail("not_ready", "the toolkit registry is unavailable; cleanup must be retried"); }
     let lines = XFDmLines.HideAll(cid);
     let removed = XFDmSpawn.Clear(cid);
     let call = "";
@@ -1698,12 +1716,12 @@ public abstract class XFDmSense {
         host.XFDmClear();
       }
     }
-    if StrLen(call) > 0 {
-      let ended = XFDmPhone.End(cid, call);
-      if StrContains(ended, "\"ok\":false") { return ended; }
-    }
+    let ended = "";
+    if StrLen(call) > 0 { ended = XFDmPhone.End(cid, call); }
     let hidden = XFDmHud.NotifyHide(cid, "");
     if StrContains(hidden, "\"ok\":false") { return hidden; }
+    if StrContains(ended, "\"ok\":false") { return ended; }
+    if StrContains(ended, "\"ended\":false") { return XFJson.Fail("not_ready", "the owned call end is awaiting acknowledgment"); }
     if lines < 0 || removed < 0 { return XFJson.Fail("not_ready", "some toolkit cleanup could not be confirmed; ownership is retained for retry"); }
     XFBridgeLog.Info(cid, "dm released everything (" + reason + "): lines=" + IntToString(lines) + " entities=" + IntToString(removed));
     return "{\"ok\":true,\"lines_hidden\":" + IntToString(lines) + ",\"entities_removed\":" + IntToString(removed) + ",\"call_ended\":" + XFJson.Flag(StrLen(call) > 0) + "}";
