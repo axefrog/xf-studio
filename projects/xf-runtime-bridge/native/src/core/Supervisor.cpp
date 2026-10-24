@@ -1,6 +1,7 @@
 #include "core/Supervisor.hpp"
 #include <cmath>
 #include <regex>
+#include "core/Recording.hpp"
 
 namespace xfb::supervisor
 {
@@ -90,6 +91,30 @@ Observation ReadObservation(const json& j)
     o.road = j.value("road", std::string("unknown"));
     o.valid = !o.entity.empty() && std::isfinite(o.yaw); return o;
 }
+uint32_t RequiredWriteClasses(const Entry& entry)
+{
+    uint32_t mask = WriteClassBit(Access::WritePlayer);
+    for (const auto& [violation, action] : entry.policy) {
+        if (action == "pause_world") mask |= WriteClassBit(Access::WriteWorld);
+        if (action == "withdraw_nearby") mask |= WriteClassBit(Access::WriteNpc) | WriteClassBit(Access::WriteDm);
+    }
+    return mask;
+}
+uint32_t RequireCapabilities(const Entry& entry, std::optional<uint32_t> caller)
+{
+    const auto required = RequiredWriteClasses(entry);
+    if (!caller || (*caller & required) != required)
+        throw MethodError("permission_denied", "Supervisor arming needs explicit caller capabilities for every selected policy");
+    return *caller;
+}
+json CallerClasses(uint32_t mask)
+{
+    json result = json::array();
+    for (auto access : {Access::WritePhoto, Access::WriteWorld, Access::WriteCharacter, Access::WriteInventory, Access::WriteSave,
+                        Access::WriteShowroom, Access::WritePlayer, Access::ActPlayer, Access::WriteNpc, Access::WriteDm})
+        if (mask & WriteClassBit(access)) result.push_back(ConfigClassName(access));
+    return result;
+}
 void Service::EmitLocked(const std::string& event, json data) const
 {
     data["schema"] = "xfb/supervisor-event-1"; data["generation"] = m_generation;
@@ -97,6 +122,7 @@ void Service::EmitLocked(const std::string& event, json data) const
     data["world_generation"] = m_world;
     data["connection"] = m_connection;
     data["receipt_seq"] = receiptSequence.fetch_add(1) + 1;
+    data["source_s"] = recording::Now(); // creation time survives delayed sink flushes / recording starts
     // Bounded pending ingress, drained after each public plugin operation.
     if (m_events.size() < 256) m_events.emplace_back(event, std::move(data));
     else { ++m_dropped; ++m_pendingDrops; }
@@ -112,7 +138,7 @@ json Service::StateLocked() const
 json Service::State() const { std::scoped_lock lock(m_mutex); return StateLocked(); }
 bool Service::Active() const { std::scoped_lock lock(m_mutex); return m_active; }
 bool Service::Due(double now) const { std::scoped_lock lock(m_mutex); return m_active && now >= m_next; }
-json Service::Set(const json& p, const Observation& o, double now, uint64_t world, uint64_t connection, std::optional<uint64_t> expected)
+json Service::Set(const json& p, const Observation& o, double now, uint64_t world, uint64_t connection, std::optional<uint64_t> expected, uint32_t callerWriteClasses)
 {
     auto entry = Parse(p);
     if (entry.actor.kind != "player") throw MethodError("actor_unavailable", "This slice commissions V only; NPC and spawn references are reserved adapters");
@@ -121,6 +147,7 @@ json Service::Set(const json& p, const Observation& o, double now, uint64_t worl
     if (expected && *expected != m_generation) throw MethodError("interrupted", "Supervisor was cleared while set awaited the game frame");
     if (m_active) ClearLocked("replaced");
     m_entry = std::move(entry); ++m_generation; m_active = true; m_reason = "running";
+    m_callerWriteClasses = callerWriteClasses;
     m_entity = o.entity; m_world = world; m_connection = connection; m_next = now; m_last = now;
     m_seenContact = m_contact; m_safe = nullptr; m_candidateKnown = false; m_violations.clear();
     EmitLocked("supervisor.set", {{"at_s", now}, {"traffic_risk", "unknown"}});
@@ -178,18 +205,20 @@ std::vector<Work> Service::Tick(const Observation& o, double now, uint64_t world
         // Contacts are receipts, not a continuous boolean: each new receipt batch is an edge.
         if (m_violations.count(violation) && violation != "no_contact") continue;
         Work w{m_generation, ++m_incident, m_contact, violation, action, m_safe};
+        w.callerWriteClasses = m_callerWriteClasses;
         EmitLocked("supervisor.violation", {{"at_s", now}, {"incident", w.incident}, {"violation", violation}, {"policy", action}, {"position", o.position}});
         work.push_back(std::move(w));
     }
     m_violations = std::move(current); m_seenContact = m_contact;
     return work;
 }
-void Service::Require(const Work& w, const Observation& o, double now, uint64_t world, uint64_t connection) const
+void Service::Require(const Work& w, const Observation& o, double now, uint64_t world, uint64_t connection, bool changing) const
 {
     std::scoped_lock lock(m_mutex);
     if (!m_active || w.generation != m_generation || world != m_world || connection != m_connection ||
         !o.valid || o.entity != m_entity || o.phase != "gameplay" || o.paused || !o.input.empty() || now - m_last > 2.0 / m_entry.tickHz)
         throw MethodError("precondition_failed", "Supervisor owner, input, world or fresh observation changed");
+    if (!changing) return; // settlement observes the result; it cannot re-apply the policy
     if (w.violation == "no_contact" ? m_contact < w.contact : !Violated(w.violation, o))
         throw MethodError("precondition_failed", "Supervisor violation no longer observed on the executing frame");
     if (w.action == "return_last_safe" && (w.safe.is_null() || o.dead || o.combat))
@@ -205,7 +234,7 @@ void Service::Flush()
     std::scoped_lock flushLock(m_flushMutex);
     std::vector<std::pair<std::string, json>> events;
     { std::scoped_lock lock(m_mutex); events.swap(m_events);
-      if (m_pendingDrops) { events.emplace_back("supervisor.gap", json{{"event", "supervisor.gap"}, {"receipt_seq", receiptSequence.fetch_add(1) + 1}, {"dropped", m_pendingDrops}, {"generation", m_generation}, {"world_generation", m_world}}); m_pendingDrops = 0; }
+      if (m_pendingDrops) { events.emplace_back("supervisor.gap", json{{"event", "supervisor.gap"}, {"source_s", recording::Now()}, {"receipt_seq", receiptSequence.fetch_add(1) + 1}, {"dropped", m_pendingDrops}, {"generation", m_generation}, {"world_generation", m_world}}); m_pendingDrops = 0; }
     }
     if (m_emit) for (const auto& [event, data] : events) m_emit(event, data);
 }

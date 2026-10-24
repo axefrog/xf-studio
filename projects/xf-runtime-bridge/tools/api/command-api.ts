@@ -11,7 +11,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { BridgeClient, PipeConnectError, defaultRuntimeDir, readSession, type BridgeResponse, type BridgeSession } from "../bridge-lib.ts";
 import { DEFAULT_CAPTURE_ROOT, type CaptureTarget } from "../capture/capture.ts";
-import { CATALOGUE, findCommand, type CommandDef, type CommandResult } from "./catalogue.ts";
+import { CATALOGUE, findCommand, PERMISSIONS, type Permission, type CommandDef, type CommandResult } from "./catalogue.ts";
 import { NO_BRIDGE, connectError, plainBridgeError, type PlainError } from "./errors.ts";
 import { validate } from "./schema.ts";
 import { sendKeyToWindow, type KeySender } from "../input/photo-key.ts";
@@ -24,14 +24,14 @@ export type CommandOutcome =
   | { ok: false; command: string; cid: string; error: PlainError };
 
 /** Per-call options: a correlation id, the calling frontend (for logs), where captures go, and a signal that ends a long local wait (game.wait). */
-export type RunOptions = { cid?: string; source?: string; captureRoot?: string; signal?: AbortSignal; deadlineMs?: number };
+export type RunOptions = { cid?: string; source?: string; captureRoot?: string; signal?: AbortSignal; deadlineMs?: number; allow?: readonly Permission[] };
 
 export type ImageRef = { path: string; width: number; height: number; mimeType: "image/png"; role: "view" | "full" };
 
 /** What the command API needs from a bridge connection; the pipe client or a test fake. */
 export interface BridgeTransport {
   /** timeoutMs: a longer wait than the client's own, for a method known to take longer. */
-  call(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number): Promise<BridgeResponse>;
+  call(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, claims?: Record<string, unknown>): Promise<BridgeResponse>;
   close(): void;
 }
 /**
@@ -111,7 +111,7 @@ const pipeTransport =
   async (session, options = {}) => {
     const client = new BridgeClient(session, timeoutMs);
     await client.connect({ busyWaitMs: options.busyWaitMs });
-    return { call: (method, params, cid, timeoutMs) => client.call(method, params, cid, {}, timeoutMs), close: () => client.close() };
+    return { call: (method, params, cid, timeoutMs, claims) => client.call(method, params, cid, claims ?? {}, timeoutMs), close: () => client.close() };
   };
 
 /** The control pipe (RB-121): the same client, aimed at session.json's control_pipe. */
@@ -350,6 +350,9 @@ export class CommandApi {
       return { ok: false, command: name, cid, error: { code: "bad_input", message: problems.join(" ") } };
     }
     const params = { ...input as Record<string, unknown> };
+    const required = [command.permission, ...(command.requiredPermissions?.(params) ?? [])];
+    const missing = options.allow && required.filter(permission => !options.allow!.includes(permission));
+    if (missing?.length) return { ok: false, command: name, cid, error: { code: "permission_denied", message: `This policy needs: ${[...new Set(missing)].join(", ")}. Nothing was sent.` } };
     const when = params.when;
     if (when && !Object.keys(when).length) return { ok: false, command: name, cid, error: { code: "bad_input", message: "when must contain at least one condition" } };
     delete params.when;
@@ -376,7 +379,9 @@ export class CommandApi {
           // RB-121: the control pipe is read at once, beside a request the main pipe still serves.
           response = await this.callControl(command.bridge!.method, bridgeParams, cid, command.bridge!.timeoutMs?.(params));
         } else {
-          response = await this.callBridge(command.bridge!.method, bridgeParams, cid, command.bridge!.timeoutMs?.(params), options.signal);
+          const claims = name === "supervisor.set" ? { caller_write_classes: (options.allow ?? Object.keys(PERMISSIONS)).flatMap(permission =>
+            permission.startsWith("write-") ? [permission.slice(6)] : permission === "act-player" ? ["act"] : []) } : undefined;
+          response = await this.callBridge(command.bridge!.method, bridgeParams, cid, command.bridge!.timeoutMs?.(params), options.signal, claims);
         }
         if (!response.ok && command.name === "bridge.kill" && response.error.code === "bridge_busy") response = this.killByFile();
         if (!response.ok) {
@@ -497,7 +502,7 @@ export class CommandApi {
    * Sends one bridge method; reconnects when the game restarted (new session id). signal (RB-121): a step of a command that
    * an emergency control (or the session runner's Ctrl+C) has cancelled isn't sent; cleanup steps pass none.
    */
-  async callBridge(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal): Promise<BridgeAnswer> {
+  async callBridge(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal, claims?: Record<string, unknown>): Promise<BridgeAnswer> {
     const recordingGeneration = this.recordingGeneration;
     const supervisorGeneration = this.supervisorGeneration;
     if (signal?.aborted) return { ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };
@@ -544,7 +549,7 @@ export class CommandApi {
           break;
         }
         try {
-          response = await connection.transport.call(method, params, cid, timeoutMs);
+          response = await connection.transport.call(method, params, cid, timeoutMs, claims);
         } catch (error) {
           response = { v: 1, id: 0, cid, ok: false, error: { code: "disconnected", message: (error as Error)?.message ?? String(error) } };
         }

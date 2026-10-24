@@ -88,7 +88,7 @@ int SupervisorUnitTests()
         std::atomic<bool> open{true};
         auto task = std::async(std::launch::async, [&] {
             return json::parse(dispatcher.HandleGuarded(SerializeJson({{"v", 1}, {"token", session.token}, {"method", "guarded.action"}}), 1,
-                [&] { if (!open) throw MethodError("precondition_failed", "input"); }).line);
+                [&](bool) { if (!open) throw MethodError("precondition_failed", "input"); }).line);
         });
         Check(task.wait_for(std::chrono::milliseconds(40)) == std::future_status::timeout, "guarded action waits for game frame");
         open = false; queue.Drain(1); const auto answer = task.get();
@@ -103,7 +103,7 @@ int SupervisorUnitTests()
         open = true;
         auto steps = std::async(std::launch::async, [&] {
             return json::parse(dispatcher.HandleGuarded(SerializeJson({{"v", 1}, {"token", session.token}, {"method", "guarded.multistep"}}), 1,
-                [&] { if (!open) throw MethodError("precondition_failed", "replaced"); }).line);
+                [&](bool) { if (!open) throw MethodError("precondition_failed", "replaced"); }).line);
         });
         steps.wait_for(std::chrono::milliseconds(40)); queue.Drain(1); // guarded bridge-thread admission
         steps.wait_for(std::chrono::milliseconds(40)); queue.Drain(1); // handler's own read
@@ -116,6 +116,59 @@ int SupervisorUnitTests()
         service.Set(p, V(), 101, 1, 7); dispatcher.SetHandover(true); Check(!service.Active(), "dispatcher handover cancels synchronously");
         service.Set(p, V(), 102, 1, 7); dispatcher.Kill("test"); Check(!service.Active(), "dispatcher kill cancels synchronously");
         Check(IsControlRouteMethod("supervisor.clear"), "clear is on emergency control route");
+    }
+    {
+        // Review M3: a successful return resolves the goal before its settlement read.
+        // Use the real dispatcher/queue boundary; its result and undo must survive.
+        Service owner; auto observed = V(); owner.Set(p, observed, 0, 1, 1);
+        for (int i = 0; i <= 10; ++i) owner.Tick(observed, i * .4, 1, 1);
+        observed.position = {2, 0, 0}; const auto work = owner.Tick(observed, 4.4, 1, 1).at(0);
+        Config config; config.allowWrites = true; config.maxRequestsPerSecond = 1000;
+        Session session; session.token = "return-fixture"; GameThreadQueue queue; queue.SetPumping(true);
+        Dispatcher d(config, session, queue); int moves = 0;
+        d.Register({"fixture.return", Access::Write, RunOn::BridgeThread, "return and settle", [&](const MethodContext&) {
+            d.RunWrite(std::chrono::milliseconds(1000), [&] { observed.position = {0, 0, 0}; ++moves; return json::object(); }, "move");
+            return RunGameTask(queue, std::chrono::milliseconds(1000), [&] {
+                return json{{"settled", true}, {"undo", {{"method", "player.teleport"}, {"params", {{"position", {2, 0, 0}}}}}}};
+            }, "settlement-read");
+        }});
+        auto task = std::async(std::launch::async, [&] {
+            return json::parse(d.HandleGuarded(SerializeJson({{"v", 1}, {"token", session.token}, {"method", "fixture.return"}}), 1,
+                [&](bool changing) { owner.Require(work, observed, 4.4, 1, 1, changing); }).line);
+        });
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (task.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready && std::chrono::steady_clock::now() < until) queue.Drain(4);
+        const auto result = task.get();
+        Check(moves == 1 && result.value("ok", false) && result.at("result").contains("undo"), "review M3: resolved goal settlement retains success and undo");
+        observed.input = "Reload";
+        Refuses([&] { owner.Require(work, observed, 4.4, 1, 1, false); }, "precondition_failed");
+        observed.input.clear();
+        Refuses([&] { owner.Require(work, observed, 4.4, 2, 1, false); }, "precondition_failed");
+        owner.Clear("replaced");
+        Refuses([&] { owner.Require(work, observed, 4.4, 1, 1, false); }, "precondition_failed");
+    }
+    {
+        // Review H2: config is broad; the arming caller is narrower and remains so later.
+        const auto player = WriteClassBit(Access::WritePlayer), world = WriteClassBit(Access::WriteWorld);
+        auto entry = Parse(p);
+        Refuses([&] { RequireCapabilities(entry, {}); }, "permission_denied");
+        Refuses([&] { RequireCapabilities(entry, player); }, "permission_denied");
+        Check(RequireCapabilities(entry, player | world) == (player | world), "policy-specific caller grant admits world pause");
+        entry.policy["alive"] = "withdraw_nearby";
+        Refuses([&] { RequireCapabilities(entry, player | world | WriteClassBit(Access::WriteNpc)); }, "permission_denied");
+        Refuses([&] { RequireCapabilities(entry, player | world | WriteClassBit(Access::WriteDm)); }, "permission_denied");
+        Check(RequireCapabilities(entry, player | world | WriteClassBit(Access::WriteNpc) | WriteClassBit(Access::WriteDm)) != 0, "withdraw requires both NPC and DM grants");
+        Config config; config.allowWrites = true; config.writeClasses = player | world; config.maxRequestsPerSecond = 1000;
+        Session session; session.token = "caps"; GameThreadQueue queue; Dispatcher d(config, session, queue); int calls = 0;
+        d.Register({"fixture.world", Access::WriteWorld, RunOn::BridgeThread, "world policy", [&](const MethodContext&) { ++calls; return json::object(); }});
+        auto request = [&](uint32_t allowed) { return json::parse(d.Handle(SerializeJson({{"v", 1}, {"token", session.token}, {"method", "fixture.world"},
+            {"caller_write_classes", CallerClasses(allowed)}}), 1).line); };
+        auto denied = request(player);
+        Check(denied["error"]["code"] == "permission_denied" && calls == 0, "per-action dispatcher enforces captured caller set despite config");
+        Check(request(player | world)["ok"] == true && calls == 1, "per-action dispatcher admits explicitly granted class");
+        Service owner; auto capabilityObservation = V(); owner.Set(p, capabilityObservation, 0, 1, 1, {}, player | world);
+        capabilityObservation.combat = true; const auto action = owner.Tick(capabilityObservation, 0, 1, 1).at(0);
+        Check(action.callerWriteClasses == (player | world), "queued work snapshots arming capabilities");
     }
     std::printf("SUPERVISOR UNIT: %d checks, %d failures\n", checks, failures); return failures;
 }

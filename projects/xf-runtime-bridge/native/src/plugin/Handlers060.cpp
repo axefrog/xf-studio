@@ -45,9 +45,9 @@ Vec3 VecOf(const json& aValue)
     throw MethodError("unavailable", "the game answered a point the bridge couldn't read");
 }
 
-json Game(const std::function<json()>& aTask, const std::string& aLabel)
+json Game(const std::function<json()>& aTask, const std::string& aLabel, bool changing = false)
 {
-    return RunGameTask(Get().queue, GameTimeout(), aTask, aLabel);
+    return RunGameTask(Get().queue, GameTimeout(), aTask, aLabel, true, changing);
 }
 
 Dispatcher& TheDispatcher()
@@ -542,7 +542,7 @@ json PlayerStop(const MethodContext& aContext)
     Get().playerStops.Stop(); // 0.8.2: before the game step, so a look or teleport waiting between its steps never goes on
     Get().behaviours.StopAll("player_stop");
     const auto cid = aContext.cid;
-    auto out = Game([cid] { return ScriptCall("XFPlayer", "Stop", {}, {}, cid); }, "player.stop");
+    auto out = Game([cid] { return ScriptCall("XFPlayer", "Stop", {}, {}, cid); }, "player.stop", true);
     out["behaviours"] = "every behaviour stops on the next tick (behave_list)";
     return out;
 }

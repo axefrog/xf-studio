@@ -127,7 +127,7 @@ export function createMcpServer(api: CommandApi, options: McpServerOptions = {})
       const lock = readSessionLock(api.runtimeDir);
       if (lock) return { isError: true, content: [{ type: "text", text: sessionRunningMessage(lock) + "\n[session_running]" }] };
     }
-    const outcome = await api.run(command!.name, request.params.arguments ?? {}, { source: "mcp" });
+    const outcome = await api.run(command!.name, request.params.arguments ?? {}, { source: "mcp", allow: options.allow });
     return toCallResult(outcome, options.inlineImages !== false);
   });
   return server;

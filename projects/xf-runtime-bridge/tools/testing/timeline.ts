@@ -6,6 +6,9 @@ export type TimelineCursor = FileCursor & {
   schema: "xfb/timeline-cursor-1"; sid: string; run: number; world: number; record: number; event: number;
   last_v?: Json;
   contact_observed?: boolean; vehicle_hit_observed?: boolean;
+  supervisor_seen?: number[];
+  supervisor_retired_through?: number;
+  supervisor_reconciliation_lost?: boolean;
 };
 export type TimelineOptions = { run?: number; cursor?: TimelineCursor; detail?: boolean; signal?: AbortSignal; digest?: boolean; archive?: boolean };
 const seq = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
@@ -14,6 +17,9 @@ const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v -
 export async function catchUp(api: TestApi, options: TimelineOptions): Promise<Json> {
   const saved = options.cursor;
   if (saved && (saved.schema !== "xfb/timeline-cursor-1" || !seq(saved.record) || !seq(saved.event) || !seq(saved.run) || !seq(saved.world))) throw new Error("Invalid timeline cursor");
+  if (saved && ((saved.supervisor_seen !== undefined && (!Array.isArray(saved.supervisor_seen) || saved.supervisor_seen.length > 512 || saved.supervisor_seen.some(v => !seq(v) || !v))) ||
+    (saved.supervisor_retired_through !== undefined && !seq(saved.supervisor_retired_through)) ||
+    (saved.supervisor_reconciliation_lost !== undefined && typeof saved.supervisor_reconciliation_lost !== "boolean"))) throw new Error("Invalid supervisor reconciliation cursor");
   const run = saved?.run ?? options.run;
   if (!seq(run) || !run) throw new Error("Supply the recorder run on the first catch-up read");
   const info = await read(api, "bridge.info", {}, options.signal);
@@ -71,6 +77,24 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     if (!eventMore || !advanced) break;
   }
   const counts: Json = {}, channels: Json = {}, path: number[][] = [], supervision: Json[] = [];
+  const supervisorSeen = new Set(saved?.supervisor_seen ?? []);
+  let retired = saved?.supervisor_retired_through ?? 0, outOfScope = 0;
+  const scoped = (v: Json, sourceTime: unknown) => {
+    const time = v?.source_s ?? sourceTime;
+    return v?.world_generation === cursor.world && Number.isFinite(time) && Number.isFinite(status.start_s) && time >= status.start_s &&
+      (status.active === true || (Number.isFinite(status.end_s) && time <= status.end_s));
+  };
+  const receiveSupervisor = (v: Json, source: string, sourceTime: unknown) => {
+    if (!scoped(v, sourceTime)) {
+      outOfScope++;
+      if (!seq(v?.world_generation) || !Number.isFinite(v?.source_s ?? sourceTime) || !Number.isFinite(status.start_s)) gaps.push("supervisor_scope_unknown");
+      return false;
+    }
+    if (!seq(v.receipt_seq) || !v.receipt_seq) { gaps.push("supervisor_receipt_identity_missing"); return false; }
+    if (v.receipt_seq <= retired || supervisorSeen.has(v.receipt_seq)) return false;
+    supervisorSeen.add(v.receipt_seq);
+    supervision.push({ source, source_s: sourceTime, ...v }); return true;
+  };
   let contactObserved = false, vehicleHitObserved = false;
   let travelled = 0;
   let last = cursor.last_v, healthMin: number | null = null, healthMax: number | null = null;
@@ -79,7 +103,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     counts[row.channel] = (counts[row.channel] ?? 0) + 1;
     if (!row.valid) { gaps.push("invalid_source"); continue; }
     const v = row.data;
-    if (v?.event?.startsWith("supervisor.") && v.event !== "supervisor.coverage") supervision.push({ source: "recorder", source_s: row.source_s, ...v });
+    if (v?.event?.startsWith("supervisor.") && v.event !== "supervisor.coverage" && !receiveSupervisor(v, "recorder", row.source_s)) continue;
     if (v?.event === "placement.traffic") alerts.push({ kind: "traffic_risk", seq: row.seq, source_s: row.source_s, ...v });
     if (row.channel === "contacts" && v?.event?.startsWith("contact.") && v.event !== "contact.coverage") {
       contactObserved = true;
@@ -118,19 +142,23 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   }
   // Explicit contact receipts only; a velocity change is not proof of a collision.
   for (const event of events) if (["contact", "collision"].includes(event.kind) || ["contact", "collision"].includes(event.data?.what)) {
-    contactObserved = true; alerts.push({ kind: event.data?.what ?? event.kind, event });
+    if (scoped(event.data, event.source_s)) { contactObserved = true; alerts.push({ kind: event.data?.what ?? event.kind, event }); }
   }
   for (const event of events) if (event.kind === "traffic_risk") alerts.push({ kind: "traffic_risk", event });
-  // Session receipts also cover supervision with recording stopped. Prefer the recorder copy
-  // when both feeds contain the same generation/incident/method; do not count it twice.
-  const supervisorKey = (v: Json) => seq(v.receipt_seq) ? JSON.stringify([v.world_generation, v.receipt_seq]) :
-    JSON.stringify([v.event, v.generation, v.entry_generation, v.incident, v.method, v.at_s, v.reason, v.contact_seq, v.observed_at_s, v.response?.cid, v.dropped]);
-  const supervisorSeen = new Set(supervision.map(supervisorKey));
+  // Receipts can cross calls in either order. The returned cursor reconciles the feeds,
+  // scoped to this run's world and [start,end] source interval (open while active).
   for (const event of events) if (event.kind?.startsWith("supervisor.")) {
     const receipt = { source: "session", ...event.data, event: event.kind };
-    const key = supervisorKey(receipt);
-    if (!supervisorSeen.has(key)) { supervision.push(receipt); supervisorSeen.add(key); }
+    receiveSupervisor(receipt, "session", event.source_s);
   }
+  const identities = [...supervisorSeen].sort((a, b) => a - b);
+  if (identities.length > 512) {
+    retired = Math.max(retired, identities[identities.length - 513]!);
+    cursor.supervisor_reconciliation_lost = true;
+  }
+  cursor.supervisor_seen = identities.slice(-512);
+  cursor.supervisor_retired_through = retired;
+  if (cursor.supervisor_reconciliation_lost) gaps.push("supervisor_reconciliation_history_lost");
   for (const receipt of supervision) if (["supervisor.violation", "supervisor.action", "supervisor.cleared"].includes(receipt.event)) alerts.push({ kind: "supervisor", ...receipt });
   for (const receipt of supervision) if (receipt.event === "supervisor.contact") {
     contactObserved = true; vehicleHitObserved ||= receipt.receipt?.vehicle_hit_observed === true;
@@ -154,6 +182,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       health_min: healthMin, health_max: healthMax, changes, latest: last }, channels, counts,
     events: compact(events), alerts: compact(alerts), omitted: { ...omitted, events: options.detail ? 0 : Math.max(0, events.length - 24), alerts: options.detail ? 0 : Math.max(0, alerts.length - 24) },
     supervisor_summary: { message: supervision.length ? "while you were away: supervisor receipts observed" : "while you were away: no supervisor receipts observed",
+      scope: { world_generation: cursor.world, start_s: status.start_s, end_s: status.end_s }, excluded_out_of_scope: outOfScope,
       counts: { violations: supervision.filter(v => v.event === "supervisor.violation").length, actions: supervision.filter(v => v.event === "supervisor.action").length,
         refused: supervision.filter(v => v.event === "supervisor.action" && v.response?.ok === false).length, cancellations: supervision.filter(v => v.event === "supervisor.cleared").length },
       receipts: compact(supervision), omitted: options.detail ? 0 : Math.max(0, supervision.length - 24), history_complete: !gaps.length && !recordMore && !eventMore },

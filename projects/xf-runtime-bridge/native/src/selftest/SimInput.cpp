@@ -26,7 +26,8 @@ SimInput::SimInput(Dispatcher& d, SimNpc& npc, EventLog& events, bool hooks, std
     // No retail actor/input adapter in this host; state-machine/frame races have native fixtures.
     d.Register({"supervisor.set", Access::WritePlayer, RunOn::BridgeThread, "Requires a retail actor adapter.", [this](const MethodContext& c) -> nlohmann::json {
         if (!m_hooks) throw MethodError("test_hooks_off", "Supervisor test gate closed");
-        supervisor::Parse(c.params);
+        const auto entry = supervisor::Parse(c.params);
+        supervisor::RequireCapabilities(entry, c.callerWriteClasses);
         throw MethodError("supervisor_unavailable", "Simulated host has no retail input/actor adapter; use supervisor core fixtures");
     }});
     d.Register({"supervisor.state", Access::Read, RunOn::BridgeThread, "Read inactive simulated supervisor.", [this](const MethodContext& c) {

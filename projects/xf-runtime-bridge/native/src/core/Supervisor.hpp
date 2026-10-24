@@ -22,6 +22,9 @@ struct Entry
     json plain;
 };
 Entry Parse(const json&);
+uint32_t RequiredWriteClasses(const Entry&);
+uint32_t RequireCapabilities(const Entry&, std::optional<uint32_t> caller);
+json CallerClasses(uint32_t mask);
 struct Observation
 {
     bool valid = false, combat = false, dead = false, paused = false;
@@ -36,13 +39,14 @@ struct Work
     uint64_t generation = 0, incident = 0, contact = 0;
     std::string violation, action;
     json safe = nullptr;
+    uint32_t callerWriteClasses = 0;
 };
 class Service
 {
 public:
     using Emit = std::function<void(const std::string&, const json&)>;
     explicit Service(Emit emit = {}) : m_emit(std::move(emit)) {}
-    json Set(const json&, const Observation&, double now, uint64_t world, uint64_t connection, std::optional<uint64_t> expected = {});
+    json Set(const json&, const Observation&, double now, uint64_t world, uint64_t connection, std::optional<uint64_t> expected = {}, uint32_t callerWriteClasses = 0);
     json State() const;
     json Clear(const std::string& reason);
     bool Active() const;
@@ -51,7 +55,7 @@ public:
     void Input(const std::string&);
     std::vector<Work> Tick(const Observation&, double now, uint64_t world, uint64_t connection);
     // Called again on every executing frame, including later steps of a teleport.
-    void Require(const Work&, const Observation&, double now, uint64_t world, uint64_t connection) const;
+    void Require(const Work&, const Observation&, double now, uint64_t world, uint64_t connection, bool changing = true) const;
     void Result(const Work&, const std::string& method, const json& response);
     void Flush(); // invoke sinks outside the owner lock (recorder and worker have their own locks)
 private:
@@ -64,6 +68,7 @@ private:
     Emit m_emit;
     Entry m_entry;
     bool m_active = false;
+    uint32_t m_callerWriteClasses = 0;
     uint64_t m_generation = 0, m_incident = 0, m_world = 0, m_connection = 0;
     uint64_t m_contact = 0, m_seenContact = 0;
     double m_next = 0, m_last = 0, m_quietAt = 0;

@@ -603,6 +603,10 @@ public class XFGlideInput extends IScriptable {
         moved = value >= 0.3; // stick and key axes, past a dead zone
       } else {
         moved = ListenerAction.IsButtonJustPressed(action);
+        // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+        // Mapped combat triggers may arrive as values; raw fallback only covers axes.
+        if this.xfSupervisorWatch { moved = moved || value >= 0.3; }
+        // END XFB_AUTONOMOUS_TEST_HOOKS
       }
     }
     if moved {

@@ -20,7 +20,7 @@ function fixture() {
     const records = rows.filter(r => r.seq > (input.since ?? 0)).slice(0, 5);
     const result = name === "bridge.info" ? { sid: "s" } : name === "test.record.read" ? {
       run: 1, session: "s", world_generation: 2, active: true, latest: rows.length, next: records.at(-1)?.seq ?? input.since,
-      lost, source_now_s: 10, records,
+      lost, start_s: 0, end_s: null, source_now_s: 10, records,
     } : name === "session.events" ? { events: events.filter(e => e.seq > (input.since ?? 0)), next: events.length, latest: events.length, dropped: 0 } : { v: { busy: "" } };
     return { ok: true, command: name, cid: "test", result };
   } };
@@ -29,8 +29,8 @@ function fixture() {
 
 test("catch-up reconciles supervisor recorder/session receipts and preserves refused interventions", async () => {
   const f = fixture();
-  const violation = { event: "supervisor.violation", generation: 3, incident: 1, violation: "no_contact", at_s: 5 };
-  const action = { event: "supervisor.action", receipt_seq: 10, generation: 3, entry_generation: 3, incident: 1, method: "player.teleport", response: { ok: false, error: { code: "in_combat" } } };
+  const violation = { event: "supervisor.violation", receipt_seq: 9, world_generation: 2, source_s: 5, generation: 3, incident: 1, violation: "no_contact", at_s: 5 };
+  const action = { event: "supervisor.action", receipt_seq: 10, world_generation: 2, source_s: 5, generation: 3, entry_generation: 3, incident: 1, method: "player.teleport", response: { ok: false, error: { code: "in_combat" } } };
   // Several same-method actions in one withdrawal incident must all survive, even if their
   // results are identical; recorder/session copies of each are still reconciled once.
   for (const data of [violation, action, { ...action, receipt_seq: 11 }]) {
@@ -38,8 +38,8 @@ test("catch-up reconciles supervisor recorder/session receipts and preserves ref
     f.events.push({ seq: f.events.length + 1, kind: data.event, data });
   }
   // Recording can stop while the independent supervisor still records session receipts.
-  f.events.push({ seq: f.events.length + 1, kind: "supervisor.contact", data: { generation: 3, contact_seq: 1, receipt: { vehicle_hit_observed: true, other_entity: "car1" } } });
-  f.events.push({ seq: f.events.length + 1, kind: "supervisor.cleared", data: { generation: 4, reason: "player_input:MoveX" } });
+  f.events.push({ seq: f.events.length + 1, kind: "supervisor.contact", data: { receipt_seq: 12, world_generation: 2, source_s: 5, generation: 3, contact_seq: 1, receipt: { vehicle_hit_observed: true, other_entity: "car1" } } });
+  f.events.push({ seq: f.events.length + 1, kind: "supervisor.cleared", data: { receipt_seq: 13, world_generation: 2, source_s: 5, generation: 4, reason: "player_input:MoveX" } });
   const page = await catchUp(f.api, { run: 1, detail: true });
   expect(page.supervisor_summary.counts).toEqual({ violations: 1, actions: 2, refused: 2, cancellations: 1 });
   expect(page.supervisor_summary.message).toContain("while you were away:");

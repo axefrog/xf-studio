@@ -43,8 +43,15 @@ public abstract class XFSupervisor {
       system.watch.xfSupervisorWatch = true;
       // Movement, camera, jump/crouch/sprint/dodge plus deliberate combat/interact input.
       let names = XFGlideInput.Actions();
-      ArrayPush(names, n"PrimaryAttack");
-      ArrayPush(names, n"SecondaryAttack");
+      // 2.31 PSM: weaponTransitions:223–243,321; meleeTransitions:171,206–263.
+      ArrayPush(names, n"RangedAttack");
+      ArrayPush(names, n"CameraAim");
+      ArrayPush(names, n"Reload");
+      ArrayPush(names, n"MeleeAttack");
+      ArrayPush(names, n"MeleeLightAttack");
+      ArrayPush(names, n"MeleeHeavyAttack");
+      ArrayPush(names, n"MeleeStrongAttack");
+      ArrayPush(names, n"MeleeBlock");
       ArrayPush(names, n"QuickMelee");
       ArrayPush(names, n"Interact");
       for name in names { player.RegisterInputListener(system.watch, name); }

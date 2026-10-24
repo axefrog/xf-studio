@@ -127,6 +127,8 @@ export type CommandDef = {
   /** Plain-language description for end users and AI clients. */
   description: string;
   permission: Permission;
+  /** Additional capabilities selected by compound policy data, checked before any bridge call. */
+  requiredPermissions?: (input: Record<string, unknown>) => readonly Permission[];
   input: JsonSchema;
   /** How to undo a write, in plain words. */
   undo?: string;

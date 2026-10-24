@@ -10,6 +10,7 @@ export type PlainError = { code: string; message: string; detail?: string; cause
 
 /** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
+  permission_denied: "The caller did not allow every capability this policy needs. Grant the required classes explicitly or choose a narrower policy; nothing was started.",
   actor_unavailable: "This supervisor candidate supports V only. NPC and vehicle supervision need their own validated actor adapter.",
   supervisor_unavailable: "Supervision needs an observed, living V in unpaused gameplay with an available input listener. Read the game state before arming again.",
   no_safe_position: "The supervisor has no recorded quiet position yet. Let V stand quietly for the configured interval before testing a return.",

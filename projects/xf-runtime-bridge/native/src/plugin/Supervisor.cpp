@@ -50,7 +50,7 @@ bool Near(const json& item, const supervisor::Point& v)
 // Internal envelopes never come from client data. The only methods are built below.
 json Pack(const Work& w, const json& params)
 {
-    return {{"generation", w.generation}, {"incident", w.incident}, {"contact", w.contact}, {"violation", w.violation}, {"action", w.action}, {"safe", w.safe}, {"params", params}};
+    return {{"generation", w.generation}, {"incident", w.incident}, {"contact", w.contact}, {"violation", w.violation}, {"action", w.action}, {"safe", w.safe}, {"caller_write_classes", w.callerWriteClasses}, {"params", params}};
 }
 std::unique_ptr<dm::MicroRunner>& RunnerSlot() { static std::unique_ptr<dm::MicroRunner> runner; return runner; }
 dm::MicroRunner& Runner()
@@ -60,13 +60,14 @@ dm::MicroRunner& Runner()
         [](const std::string& method, const json& p, const std::string& cid, const std::string& token) {
             Work w{p.at("generation").get<uint64_t>(), p.at("incident").get<uint64_t>(), p.at("contact").get<uint64_t>(),
                    p.at("violation").get<std::string>(), p.at("action").get<std::string>(), p.at("safe")};
+            w.callerWriteClasses = p.at("caller_write_classes").get<uint32_t>();
             json response;
             try {
                 auto& s = Get();
                 if (!s.bridge) throw MethodError("no_bridge", "Supervisor lost its dispatcher");
-                auto guard = [w, method, params = p.at("params")] {
+                auto guard = [w, method, params = p.at("params")](bool changing) {
                     Gate();
-                    const auto o = Observe(); Owner().Require(w, o, recording::Now(), World(), Connection());
+                    const auto o = Observe(); Owner().Require(w, o, recording::Now(), World(), Connection(), changing);
                     // Despawn only bridge-owned actors/props still within 30 m on this frame.
                     if (w.action == "withdraw_nearby") {
                         const auto items = method == "npc.release" ? SupervisorNpcs() : SupervisorProps();
@@ -78,7 +79,8 @@ dm::MicroRunner& Runner()
                         if (!found) throw MethodError("precondition_failed", "Owned target moved away or disappeared");
                     }
                 };
-                const json request{{"v", kProtocolVersion}, {"id", cid}, {"cid", cid}, {"token", token}, {"method", method}, {"params", p.at("params")}};
+                const json request{{"v", kProtocolVersion}, {"id", cid}, {"cid", cid}, {"token", token}, {"method", method}, {"params", p.at("params")},
+                                   {"caller_write_classes", supervisor::CallerClasses(w.callerWriteClasses)}};
                 response = json::parse(s.bridge->GetDispatcher().HandleGuarded(request.dump(), GetCurrentProcessId(), guard).line);
             } catch (const MethodError& e) { response = {{"ok", false}, {"error", {{"code", e.code}, {"message", e.what()}}}}; }
             catch (const std::exception& e) { response = {{"ok", false}, {"error", {{"code", "failed"}, {"message", e.what()}}}}; }
@@ -119,13 +121,17 @@ void RegisterSupervisor(Dispatcher& d)
         Gate();
         // Validate everything before replacing the current owner or its input watch.
         const auto entry = supervisor::Parse(c.params);
+        const auto capabilities = supervisor::RequireCapabilities(entry, c.callerWriteClasses);
+        const auto required = supervisor::RequiredWriteClasses(entry);
+        for (auto access : {Access::WritePlayer, Access::WriteWorld, Access::WriteNpc, Access::WriteDm})
+            if (required & WriteClassBit(access)) d.RequireWriteClass(access);
         if (entry.actor.kind != "player") throw MethodError("actor_unavailable", "Only V's actor adapter is active in this slice");
         const auto generation = Owner().State().at("generation").get<uint64_t>();
-        return d.RunWrite(GameTimeout(), [c, generation] {
+        return d.RunWrite(GameTimeout(), [c, generation, capabilities] {
             Gate();
             auto observed = Observe();
             if (!Owner().Active()) observed.input.clear(); // explicit re-arm starts a new watch
-            auto out = Owner().Set(c.params, observed, recording::Now(), World(), Connection(), generation);
+            auto out = Owner().Set(c.params, observed, recording::Now(), World(), Connection(), generation, capabilities);
             gWatchOwed = true;
             try { bool on = true; ScriptCall("XFSupervisor", "Watch", {"Bool"}, {&on}, c.cid); }
             catch (...) { CancelSupervisor("input_watch_failed"); throw; }

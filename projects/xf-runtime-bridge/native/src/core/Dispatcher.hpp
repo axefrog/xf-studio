@@ -71,6 +71,8 @@ struct MethodContext
     std::string cid;
     nlohmann::json params;
     uint32_t clientPid = 0;
+    // Authenticated client may narrow config permissions. Missing claims are forbidden for arming.
+    std::optional<uint32_t> callerWriteClasses;
 };
 
 // Thrown by a method to return a specific error code.
@@ -127,7 +129,7 @@ public:
     DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false) noexcept;
     // Trusted in-process caller only. Propagates an execution-frame guard to every queued step;
     // never accepted from request data. Cleanup inside RestoreScope remains unconditional.
-    using ExecutionGuard = std::function<void()>;
+    using ExecutionGuard = std::function<void(bool changing)>;
     DispatchResult HandleGuarded(const std::string&, uint32_t, ExecutionGuard) noexcept;
     void SetSafetyCancellation(std::function<void(const std::string&)> fn) { m_safetyCancellation = std::move(fn); }
 
@@ -221,7 +223,7 @@ private:
 // (game.status answers "loading" from the plugin's side then). For reads and steps that put things back; a step that
 // changes the game goes through Dispatcher::RunWrite (0.8.1, RB-122).
 nlohmann::json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout,
-                           const std::function<nlohmann::json()>& aTask, const std::string& aLabel, bool aGated = true);
+                           const std::function<nlohmann::json()>& aTask, const std::string& aLabel, bool aGated = true, bool aChanging = false);
 
 // The game gate (bridge 0.5.2, RB-76): a process-wide check run on the game thread right before every game-thread
 // method and every gated RunGameTask step, after the task was queued, so a request queued before the game's

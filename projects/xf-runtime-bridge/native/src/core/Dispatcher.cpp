@@ -255,7 +255,7 @@ const std::set<std::string>& ControlMethods()
 }
 
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
-             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed = false);
+             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed = false, bool aChanging = false);
 } // namespace
 
 void SetGameGate(GameGate aGate)
@@ -298,9 +298,9 @@ bool IsControlRouteMethod(const std::string& aMethod)
 }
 
 json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
-                 const std::string& aLabel, bool aGated)
+                 const std::string& aLabel, bool aGated, bool aChanging)
 {
-    return RunTask(aQueue, aTimeout, aTask, aLabel, aGated, nullptr);
+    return RunTask(aQueue, aTimeout, aTask, aLabel, aGated, nullptr, false, aChanging);
 }
 
 json Dispatcher::RunWrite(std::chrono::milliseconds aTimeout, const std::function<json()>& aTask, const std::string& aLabel) const
@@ -323,7 +323,7 @@ json Dispatcher::RunRead(const std::function<json()>& aTask, const std::string& 
 namespace
 {
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
-             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed)
+             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed, bool aChanging)
 {
     const auto executionGuard = RestoreScope::Active() ? Dispatcher::ExecutionGuard{} : tExecutionGuard;
     // 0.8.2 (the re-check's sixth finding, and the review's): the kill switch closes the queue, which used to refuse a write's
@@ -347,7 +347,7 @@ json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const 
     // RB-122: a changing step checks the kill switch, the pause and a handover on the game thread, right before it runs.
     // Safe to keep the pointer: Run returns only once the task has run, has started (past this check) or will never run.
     const auto result = aQueue.Run(
-        [aTask, aGated, aLabel, aWriteGate, executionGuard]() -> json {
+        [aTask, aGated, aLabel, aWriteGate, executionGuard, aChanging]() -> json {
             try
             {
                 if (aGated)
@@ -358,7 +358,7 @@ json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const 
                 {
                     aWriteGate->RequireWritesOpen();
                 }
-                if (executionGuard) executionGuard();
+                if (executionGuard) executionGuard(aChanging || aWriteGate != nullptr);
                 return json{{"ok", true}, {"result", aTask()}};
             }
             catch (const MethodError& e)
@@ -845,6 +845,26 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     std::string code = "ok";
     try
     {
+        if (request.contains("caller_write_classes")) {
+            const auto& claims = request.at("caller_write_classes");
+            if (!claims.is_array() || claims.size() > 10) throw MethodError("bad_params", "Invalid caller write-class claim");
+            uint32_t mask = 0;
+            for (const auto& name : claims) {
+                bool known = false;
+                for (auto access : {Access::WritePhoto, Access::WriteWorld, Access::WriteCharacter, Access::WriteInventory, Access::WriteSave,
+                                    Access::WriteShowroom, Access::WritePlayer, Access::ActPlayer, Access::WriteNpc, Access::WriteDm}) {
+                    if (name.is_string() && name.get<std::string>() == ConfigClassName(access)) {
+                        const auto bit = WriteClassBit(access);
+                        if (mask & bit) throw MethodError("bad_params", "Duplicate caller write class");
+                        mask |= bit; known = true; break;
+                    }
+                }
+                if (!known) throw MethodError("bad_params", "Unknown caller write class");
+            }
+            context.callerWriteClasses = mask;
+            if (const auto bit = WriteClassBit(spec.access); bit && !(mask & bit))
+                throw MethodError("permission_denied", "The arming caller did not allow this action's write class");
+        }
         json when;
         if (context.params.contains("when")) {
             when = context.params["when"];
@@ -857,7 +877,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
         WhenScope whenScope(when);
         if (spec.runOn == RunOn::BridgeThread)
         {
-            if (tExecutionGuard) RunRead([] { return json::object(); }, "supervisor.admission");
+            if (tExecutionGuard) RunWrite(std::chrono::milliseconds(m_config.requestTimeoutMs), [] { return json::object(); }, "supervisor.admission");
             response = {{"v", kProtocolVersion}, {"id", id}, {"cid", cid}, {"ok", true}, {"result", spec.fn(context)}};
         }
         else
@@ -882,7 +902,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
                             writeGate->RequireWritesOpen();
                         }
                         RequirePrecondition(when);
-                        if (executionGuard) executionGuard();
+                        if (executionGuard) executionGuard(writeGate != nullptr);
                         return json{{"ok", true}, {"result", fn(context)}};
                     }
                     catch (const MethodError& e)
