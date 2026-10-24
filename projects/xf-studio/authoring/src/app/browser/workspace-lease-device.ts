@@ -202,17 +202,20 @@ export function desktopWorkspaceLease(options: {
       return new Promise((resolve, reject) => {
         let granted = false;
         const id = crypto.randomUUID();
-        const request = { id, resolve: (generation: number) => { granted = true; resolve({ generation }); }, reject };
+        const request = { id, resolve: (generation: number) => { granted = true; signal.removeEventListener("abort", abort); resolve({ generation }); }, reject };
         grant = request;
-        // Withdrawn (abandoned, or failed even when the host may have queued it, its answer lost): the host forgets the request, so
-        // a later holder isn't asked on this page's behalf and a later takeover starts clean. Sent whatever became of `grant`.
-        signal.addEventListener("abort", () => {
-          if (granted) return;
+        // A failed POST can have granted already. Withdrawal belongs to this operation: its promise must not settle until
+        // the host has forgotten that request, otherwise a retry can be acknowledged against the old grant and never get its own.
+        let withdrawing: Promise<void> | undefined;
+        const withdraw = (error: unknown) => {
+          if (granted || withdrawing) return;
           if (grant === request) grant = null;
-          // Names this request only: a later takeover's request, even one that reached the host first, is never removed by it.
-          void post({ action: "cancel", request: id }).catch(() => { end(); }).finally(() => reject(signal.reason));
-        }, { once: true });
-        post({ action: "takeover", request: id }).catch(error => { if (grant === request) grant = null; reject(error); });
+          withdrawing = post({ action: "cancel", request: id }).catch(() => { end(); }).finally(() => { signal.removeEventListener("abort", abort); reject(error); });
+        };
+        const abort = () => withdraw(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) { withdraw(signal.reason); return; }
+        post({ action: "takeover", request: id }).catch(withdraw);
       });
     },
     onReleaseRequested(listener) { asked = listener; },

@@ -1,6 +1,7 @@
+import { hostClock } from "../../platform/core/clock";
 import { formatFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../platform/api/document-store";
 import type { MigrationAnswer, MigrationRequest, MigrationResult } from "../profiles/profiles-migration-data";
-import { migrated, ProfilesMigration, type ProfilesMigrationOutcome } from "../profiles/profiles-migration";
+import { migrated, storedProfilesReady, ProfilesMigration, type ProfilesMigrationOutcome } from "../profiles/profiles-migration";
 import type { MigrationMark, WorkspaceProfiles } from "../profiles/profile-session";
 import type { DocumentModel } from "../workspace/collection-workspace";
 import type { WorkspaceState } from "../workspace/workspace-state";
@@ -70,4 +71,55 @@ export function startProfilesMigration(options: {
     options.signal.addEventListener("abort", done, { once: true });
   }).then(() => options.signal.aborted ? "stopped" as const : migration.run(options.signal))
     .catch(error => { options.report?.(error); return "stopped" as const; });
+}
+
+
+/**
+ * An older workspace opened read-only is replaced only once its holder has stored a readable migrated session.
+ * Browser storage events supply the trigger. Desktop reads the existing workspace GET route, only while waiting.
+ * Neither observation path writes or clears the notice: the reloaded page opens and validates the stored session normally.
+ */
+export function watchProfilesMigration(options: {
+  storage: Pick<Storage, "getItem">;
+  key: string;
+  model: DocumentModel;
+  readOnly(): boolean;
+  reload(): void;
+  signal: AbortSignal;
+  page?: Pick<Window, "addEventListener" | "removeEventListener">;
+  /** Desktop only: fetch the host-owned workspace file through its existing read route. */
+  readStored?: (signal: AbortSignal) => Promise<string | null>;
+  clock?: Pick<import("../../platform/core/clock").Clock, "after">;
+}) {
+  const life = new AbortController();
+  const stop = () => life.abort();
+  if (options.signal.aborted) { stop(); return; }
+  options.signal.addEventListener("abort", stop, { once: true });
+  life.signal.addEventListener("abort", () => options.signal.removeEventListener("abort", stop), { once: true });
+  let checked: string | null | undefined;
+  const accept = (text: string | null) => {
+    if (life.signal.aborted || !options.readOnly() || text === checked) return;
+    checked = text;
+    if (!storedProfilesReady(text, options.model)) return;
+    stop(); options.reload();
+  };
+  if (options.readStored) {
+    const clock = options.clock ?? hostClock();
+    const check = async () => {
+      if (life.signal.aborted || !options.readOnly()) { stop(); return; }
+      try { accept(await options.readStored!(life.signal)); } catch { /* Missing, unreadable or offline: keep the notice. */ }
+      if (!life.signal.aborted) clock.after(1000, () => { void check(); }, life.signal);
+    };
+    void check();
+  } else {
+    const page = options.page ?? window;
+    const check = () => {
+      if (!options.readOnly()) { stop(); return; }
+      try { accept(options.storage.getItem(options.key)); } catch { /* Storage still unavailable. */ }
+    };
+    const changed = (event: StorageEvent) => { if (event.key === options.key || event.key === null) check(); };
+    page.addEventListener("storage", changed);
+    life.signal.addEventListener("abort", () => page.removeEventListener("storage", changed), { once: true });
+    check(); // Close the gap between the startup read and subscribing.
+  }
 }

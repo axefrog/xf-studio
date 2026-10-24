@@ -330,6 +330,14 @@ let flushRequest = null;
 window.addEventListener("xfs-desktop-close-flush", () => flushRequest?.());
 void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
   storage: workspaceStorage,
+  readWorkspace: async signal => {
+    const response = await fetch(workspaceEndpoint, { cache: "no-store", signal });
+    if (!response.ok) throw Error("The saved workspace couldn’t be read.");
+    const value = await response.json();
+    if (value.schema !== "xfs/desktop-workspace-1" || (value.workspace !== null && typeof value.workspace !== "string"))
+      throw Error("The saved workspace response is invalid.");
+    return value.workspace;
+  },
   revealWorkspace: async () => {
     const response = await fetch(`/api/desktop/workspace/reveal${verification ? "?verify=1" : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
     if (!response.ok) throw Error("The workspace folder couldn’t be opened. Try again.");

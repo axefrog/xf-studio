@@ -83,11 +83,10 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     element.dataset.settingsSection = id;
     return element;
   };
-  const showWorkspace = button({ label: "Show in folder", small: true, title: "Show the workspace file in its folder",
+  const showWorkspace = button({ label: "Show workspace file", icon: "folder", small: true, title: "Open the folder containing your workspace file",
     onClick: () => void rt.file({ kind: "workspace.showInFolder" }) });
   capabilityScope(showWorkspace, port.files.capability({ kind: "workspace.showInFolder" }));
-  const workspaceFile = h("div", { class: "row wrap gap-s align-center", hidden: !port.files.snapshot().workspaceFile },
-    h("span", { class: "muted small", text: "Workspace file" }), showWorkspace);
+  showWorkspace.hidden = !port.files.snapshot().workspaceFile;
   const sections: Record<SettingsSection, HTMLElement> = {
     game: group("game", "Saved on this computer as you choose. XF Studio finds your game and mod manager for you; change a choice only if it picked the wrong one.",
       form.status, h("div", { class: "row wrap gap-s" }, gameStep.element), form.game),
@@ -95,11 +94,11 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     tools: group("tools", ["XF Studio sets WolvenKit up for you (it asks before downloading). Name your own copy only if you'd rather use it.",
       "The 3D view is built from files XF Studio prepares from your game. Clearing them frees the space; they're prepared again when needed."],
     form.tools, prepared),
-    appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, workspaceFile, h("div", { class: "row wrap gap-s" }, reference)),
+    appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, h("div", { class: "row wrap gap-s" }, reference)),
     updates: group("updates", "New versions are published on GitHub. XF Studio tells you when there's one; you download and install it yourself.",
       checkOnStart.element, h("div", { class: "row wrap gap-s align-center" }, checkNow, updateText, releases)),
     privacy: group("privacy", "Diagnostics stay on this computer. A problem report is prepared for you to review and save; nothing is sent by itself.",
-      deep.element, h("div", { class: "row wrap gap-s" }, report)),
+      deep.element, h("div", { class: "row wrap gap-s" }, report, showWorkspace)),
   };
   const element = h("div", { class: "panel-content settings-panel" }, ...Object.entries(sections).flatMap(([id, content]) => id === "updates" ? [content, experimental] : [content]));
 
@@ -118,7 +117,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       else requestAnimationFrame(() => target.querySelector<HTMLElement>("button:not([hidden]), input:not([hidden])")?.focus());
     },
     update(frame: Frame) {
-      workspaceFile.hidden = !frame.files.workspaceFile;
+      showWorkspace.hidden = !frame.files.workspaceFile;
       const revealCapability = port.files.capability({ kind: "workspace.showInFolder" });
       capabilityScope(showWorkspace, revealCapability); applyCapability(showWorkspace, revealCapability);
       form.update(frame);

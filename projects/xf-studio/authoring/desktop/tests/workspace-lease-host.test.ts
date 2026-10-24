@@ -180,3 +180,62 @@ test("Cancel returns a racing grant and a delayed cancelled request never queues
     expect(leases.holder(false)?.page).toBe("page-bbbbbbbb");
   } finally { a.end(); b.end(); leases.close(); }
 });
+
+
+test("a lost takeover POST finishes withdrawing its real host grant before retry can start", async () => {
+  const { desktopWorkspaceLease } = await import("../../src/app/browser/workspace-lease-device");
+  const { WorkspaceLease } = await import("../../src/app/workspace/workspace-lease");
+  let issued = 0, releaseCancel!: () => void, cancelEntered!: () => void;
+  const cancelGate = new Promise<void>(resolve => { releaseCancel = resolve; });
+  const cancelling = new Promise<void>(resolve => { cancelEntered = resolve; });
+  const leases = new DesktopWorkspaceLeases(() => ++issued, 60_000), a = await page(leases, "page-aaaaaaaa");
+  const life = new AbortController(), posts: { action: string; request?: string }[] = [], delayed: Uint8Array[] = [];
+  let output!: ReadableStreamDefaultController<Uint8Array>, first = true;
+  const adapter = desktopWorkspaceLease({ endpoint: "http://local/lease", page: "page-bbbbbbbb", send: async (_url, init) => {
+    if (init?.method !== "POST") {
+      const source = leases.connect(false, "page-bbbbbbbb", life.signal).body!.getReader();
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+        output = controller;
+        void (async () => {
+          for (;;) {
+            const item = await source.read(); if (item.done) { controller.close(); return; }
+            // Hold only R1's grant; the initial held event and the later R2 grant use the real stream normally.
+            if (first && new TextDecoder().decode(item.value).includes('"event":"granted"')) delayed.push(item.value);
+            else controller.enqueue(item.value);
+          }
+        })().catch(() => {});
+      } }));
+    }
+    const body = JSON.parse(String(init.body)) as { action: string; request?: string };
+    posts.push(body);
+    if (body.action === "cancel") { cancelEntered(); await cancelGate; }
+    const response = await leases.post(false, new Request("http://local/lease", init));
+    if (body.action === "takeover" && first) {
+      await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-racing" });
+      throw Error("R1 response lost after the host granted it.");
+    }
+    return response;
+  } });
+  const lease = new WorkspaceLease(adapter, { clock: { after() {} } });
+  try {
+    await lease.start();
+    const r1 = lease.dispatch({ kind: "workspace.takeOver" });
+    await cancelling;
+    expect(leases.holder(false)?.page).toBe("page-bbbbbbbb");
+    expect(lease.capability({ kind: "workspace.takeOver" })).toMatchObject({ available: false, code: "busy" });
+    expect((await lease.dispatch({ kind: "workspace.takeOver" })).ok).toBe(false);
+    expect(posts.filter(item => item.action === "takeover")).toHaveLength(1);
+    // Deliver the delayed R1 grant while its cancellation is still in transit. It cannot satisfy a retry.
+    await Bun.sleep(0);
+    expect(delayed).toHaveLength(1);
+    first = false;
+    for (const chunk of delayed) output.enqueue(chunk);
+    releaseCancel();
+    expect((await r1).ok).toBe(false);
+    expect(leases.holder(false)).toBeNull();
+    expect((await lease.dispatch({ kind: "workspace.takeOver" })).ok).toBe(true);
+    expect(lease.snapshot().phase).toBe("taken-over");
+    expect(posts.map(item => item.action)).toEqual(["takeover", "cancel", "takeover"]);
+    expect(posts[0]!.request).not.toBe(posts[2]!.request);
+  } finally { releaseCancel(); life.abort(); a.end(); leases.close(); }
+});

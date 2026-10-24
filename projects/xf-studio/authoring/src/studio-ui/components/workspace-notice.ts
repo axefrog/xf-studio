@@ -29,7 +29,7 @@ export type WorkspaceNoticeOptions = {
 export const WORKSPACE_NOTICE_ACTIONS: Record<WorkspaceNoticeAction, { label: string; title?: string }> = {
   takeOver: { label: "Use it here", title: "Edit in this window: the other window finishes saving and becomes read-only" },
   cancelTakeOver: { label: "Cancel", title: "Stop asking for the workspace and keep this window read-only" },
-  showInFolder: { label: "Show in folder", title: "Show the workspace file in its folder" },
+  showInFolder: { label: "Show workspace file", title: "Open the folder containing your workspace file" },
   retryRelease: { label: "Try again", title: "Save your latest changes again, then hand the workspace over" },
   // The recovery export: this window's own copy, with the changes the library doesn't have yet. It needs nothing from the library, so it
   // works in the states that offer it (a handover that couldn't save, a stuck restore, a failed backup), where saving first would fail.

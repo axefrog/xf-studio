@@ -1641,3 +1641,8 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 
 .status-item[data-tone="restoring"] { position: relative; }
 .status-restoring-progress { position: absolute; inset: auto 0 0; height: 3px; margin: 0; }
+
+/* The older-workspace state replaces the whole tab row, including its fixed grid track. */
+.studio.workspace-upgrade-open { grid-template-rows: var(--header-h) auto 0 minmax(0, 1fr) var(--status-h); }
+.workspace-upgrade .empty-body { width: min(320px, 100%); max-width: 320px; text-wrap: pretty; }
+.workspace-upgrade .empty-actions:empty { display: none; }

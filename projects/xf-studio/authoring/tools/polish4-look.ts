@@ -24,6 +24,35 @@ const rows: { name: string; app: string; guide: string }[] = [];
 const errors: unknown[] = [];
 const hook = "window.xfStudioPolish4", presentation = "window.xfStudioPresentation";
 const click = (page: Session, expression: string) => page.evaluate(`(() => { const e = ${expression}; if (!e) throw Error("Missing capture control"); e.click(); return true; })()`);
+async function dismiss(page: Session) {
+  for (let round = 0; round < 8; round++) {
+    const left = await page.evaluate(`(() => {
+      const overlays = () => [...document.querySelectorAll('.popover, .menu, dialog[open]')].filter(e =>
+        e instanceof HTMLDialogElement ? e.open : getComputedStyle(e).position === 'fixed' && e.getClientRects().length);
+      // Static guide specimens deliberately stay visible; only real overlay controls are dismissed.
+      for (const e of overlays()) {
+        if (!e.isConnected) continue;
+        if (e instanceof HTMLDialogElement) e.close();
+        else (e.querySelector('input') ?? e).dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true,cancelable:true}));
+      }
+      return overlays().length;
+    })()`);
+    await page.wait(30);
+    if (!left) return;
+  }
+  throw Error("A popover or menu did not close before the next capture state.");
+}
+async function prepareState() {
+  await app!.evaluate(`${hook}.state("normal")`);
+  await dismiss(app!); await dismiss(guide!);
+  await app!.evaluate(`(() => {
+    const dock = window.xfStudioShell.dock;
+    const panels = node => !node ? [] : node.kind === 'group' ? node.panels : node.children.flatMap(panels);
+    for (const floating of [...dock.tree.floating]) for (const panel of panels(floating.node)) dock.close(panel);
+    if (dock.tree.floating.length) throw Error("Floating panels remain before the next capture state.");
+  })()`);
+  await app!.wait(150);
+}
 async function image(page: Session, name: string, theme: "light" | "dark", width: number, guidePage = false) {
   await page.colorScheme(theme);
   await page.evaluate(guidePage ? `document.querySelector('[data-theme-choice="${theme}"]')?.click()` : `document.documentElement.dataset.theme = "${theme}"; document.documentElement.style.colorScheme = "${theme}"`);
@@ -62,24 +91,42 @@ try {
   for (const width of [900, 1600]) {
     await app.viewport(width, 900); await guide.viewport(width, 900);
     for (const state of POLISH4_STATES.filter(state => state !== "normal")) {
+      await prepareState();
       await app.evaluate(`${hook}.state(${JSON.stringify(state)}); ${hook}.workspaceFile(false)`);
       await app.wait(250);
       await capture(state, state === "older" ? "t-read-only-window" : state.startsWith("restore-") ? "t-recovering" : "lib-workspace-notice", width);
     }
+    await prepareState();
     await app.evaluate(`${hook}.state("unprotected"); ${hook}.workspaceFile(true)`); await app.wait(250);
     await capture("unprotected-file", "t-unprotected", width);
-    await app.evaluate(`${hook}.state("normal"); window.xfStudioShell.runtime.settings.open("appearance")`); await app.wait(500);
+    await prepareState();
+    await app.evaluate(`${hook}.workspaceFile(true); window.xfStudioShell.runtime.settings.open("privacy")`); await app.wait(500);
     await capture("settings-file", "c-gamesetup", width);
-    await app.evaluate(`${hook}.workspaceFile(false)`); await app.wait(250);
+    await prepareState();
+    await app.evaluate(`${hook}.workspaceFile(false); window.xfStudioShell.runtime.settings.open("privacy")`); await app.wait(250);
     await capture("settings-browser", "c-gamesetup", width);
-    // Named + sole unnamed view in both the pane tabs and the Panels menu.
-    await click(app, `[...document.querySelectorAll(".shell-header button")].find(e => e.getAttribute("aria-label") === "Panels")`);
+    // Show exactly one renamed view beside one unnamed view, without another panel or menu covering them.
+    await prepareState();
+    await app.evaluate(`(() => {
+      const p = ${presentation}, dock = window.xfStudioShell.dock, tab = p.tabs.snapshot().shown;
+      const views = p.views.snapshot().views.filter(view => view.tab === tab);
+      const unnamed = views.find(view => !view.title), named = views.find(view => view.title === 'Side view');
+      if (views.length !== 2 || !unnamed || !named) throw Error("Expected one unnamed view and one Side view in the capture tab.");
+      dock.reveal(unnamed.panel); dock.reveal(named.panel);
+      const group = node => !node ? undefined : node.kind === 'group' ? (node.panels.includes(unnamed.panel) ? node.id : undefined)
+        : node.children.map(group).find(Boolean);
+      const groupId = group(dock.tree.root);
+      if (!groupId) throw Error("The unnamed view is not docked.");
+      dock.moveTo(named.panel, {kind:'split',groupId,side:'right'}, "Capture: named and unnamed views side by side");
+    })()`);
+    await app.wait(300);
     await capture("unnamed-views", "d-summon", width);
-    await app.key("Escape");
     // Same-minute defaults with seconds and the later duplicate without them.
+    await prepareState();
     await click(app, `document.querySelector('.layout-tabs > button')`);
     await capture("default-times", "lib-menu-secondary", width);
     await app.key("Escape");
+    await prepareState();
     const tab = await app.evaluate(`(() => { const e = document.querySelector('.layout-tabs [role="tab"][aria-selected="true"]'); if (!e) throw Error("No tab"); const r = e.getBoundingClientRect(); e.dispatchEvent(new MouseEvent("contextmenu", {bubbles:true,clientX:r.x+r.width/2,clientY:r.y+r.height/2})); return true; })()`);
     if (!tab) throw Error("Tab menu did not open");
     await app.evaluate(`(() => { const e = [...document.querySelectorAll('.menu-item')].find(e => e.querySelector('.menu-label')?.textContent === "Reset to default"); if (!e) throw Error("No Reset submenu"); e.dispatchEvent(new KeyboardEvent("keydown", {key:"ArrowRight",bubbles:true})); })()`);

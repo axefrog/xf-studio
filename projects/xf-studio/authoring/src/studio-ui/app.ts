@@ -322,10 +322,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     const pendingMigration = !!port.status.snapshot().lease?.migrationPending;
     if (tabs) tabs.element.hidden = pendingMigration;
     dock.element.hidden = pendingMigration;
-    const takeover = port.workspace.capability({ kind: "workspace.takeOver" });
-    upgrade.update(pendingMigration ? { title: "Workspace needs updating", body: "This workspace is open in an older XF Studio window. Reload that window, or choose Use it here.",
-      choices: [{ id: "takeOver", label: "Use it here", name: "Use this workspace here", capability: takeover,
-        choose: () => { void port.workspace.dispatch({ kind: "workspace.takeOver" }); } }] } : null);
+    root.classList.toggle("workspace-upgrade-open", pendingMigration);
+    upgrade.update(pendingMigration ? { title: "Workspace needs updating", body: "This workspace is open in an older XF Studio window. Reload that window, or choose Use it here above.",
+      choices: [] } : null);
     syncOptional();
     // The shown tab's 3D views each have their pane, and the canvas is in the one holding the picture.
     if (headEntry) viewPanes.sync();

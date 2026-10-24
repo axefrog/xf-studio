@@ -73,7 +73,7 @@ import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-
 import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
 import type { StartedOutbox } from "../app/browser/document-outbox-device";
-import { PROFILES_MIGRATION_ENABLED, startProfilesMigration } from "../app/browser/profiles-migration-device";
+import { PROFILES_MIGRATION_ENABLED, startProfilesMigration, watchProfilesMigration } from "../app/browser/profiles-migration-device";
 import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
@@ -104,6 +104,8 @@ export type StudioHost = {
   storageBudget?: number;
   /** Desktop host’s reveal route for this workspace; omitted on localhost. */
   revealWorkspace?: () => Promise<void>;
+  /** Desktop reads the host-owned file afresh while a read-only page waits for migration. */
+  readWorkspace?: (signal: AbortSignal) => Promise<string | null>;
   /** The host's 3D preview preparation service. */
   previewPreparation: PreviewPreparationActions;
   /** The host's WolvenKit setup service (download with consent, .NET check). */
@@ -216,6 +218,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   // history: its operations and the graph's edits are one history (§4.1).
   const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, { history: historyService,
     graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph });
+  if (lease && !sessionStored && !lease.writable()) watchProfilesMigration({ storage,
+    key: workspaceKeys(verification).workspace, model: STUDIO_COMPOSITION.documents,
+    readOnly: () => !lease.writable(), reload: () => location.reload(), signal: experimentLife.signal, readStored: host.readWorkspace });
   // The shown tab's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   // How a held expression's changes animate (design §5.5): the workspace's setting, available before the head loads.

@@ -17,7 +17,9 @@
  * migrating changes nothing it shows.
  */
 import type { DocumentModel } from "../workspace/collection-workspace";
-import type { WorkspaceState } from "../workspace/workspace-state";
+import { parseWorkspace, type WorkspaceState } from "../workspace/workspace-state";
+import { parseViewGraph } from "../../platform/core/view-graph";
+import { STUDIO_VIEW_GRAPH_RULES } from "../../preview/preview-view-graph";
 import { type MigrationMark, PROFILES_MIGRATION, type WorkspaceProfiles } from "./profile-session";
 import { buildProfileSession, type MigrationAnswer, type MigrationRequest, type MigrationSnapshot, migrationSnapshot, snapshotDigest, workspaceProfiles } from "./profiles-migration-data";
 
@@ -126,4 +128,16 @@ export class ProfilesMigration {
     point("w-done");
     return "done";
   }
+}
+
+
+/** True only when the stored workspace can open its first migrated session, without a fallback graph or any writes. */
+export function storedProfilesReady(text: string | null, model: DocumentModel): boolean {
+  if (text === null) return false;
+  try {
+    const state = parseWorkspace(JSON.parse(text), model);
+    if (!migrated(state)) return false;
+    const session = Object.values(state.profiles!.sessions)[0]!;
+    return !!parseViewGraph(session.views, STUDIO_VIEW_GRAPH_RULES);
+  } catch { return false; }
 }
