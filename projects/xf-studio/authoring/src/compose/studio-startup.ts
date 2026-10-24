@@ -1,4 +1,5 @@
 import { layoutTabsPort } from "../app/profiles/tab-presentation";
+import { tabVerification } from "./tab-verification";
 import type { StudioAction } from "../app/studio-application";
 import { browserReferenceTextures } from "../character/browser/browser-reference-textures-device";
 import { OFF_EXPERIMENTS } from "../platform/core/experiments";
@@ -513,6 +514,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     /** The scene runtime shown now (developer evidence reads only that one). */
     const viewer = () => heads.shown()?.scene;
     Object.assign(window, { xfStudioPresentation: port,
+    xfStudioTabFixtures: tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable()),
     // Verification only (experiment 044 decision M1): a tab (default: the shown one) printed as a module's default layout, to paste into
     // the module's `defaults.ts`, so supplied layouts are arranged in the Studio and replace the contributed ones as data.
     xfStudioTabAsDefault: (meta: { id: string; name: string; description: string }, tab = sessionState.tabId()) =>

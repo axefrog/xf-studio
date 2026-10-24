@@ -1,6 +1,6 @@
 # Profiles, views and layout tabs: design
 
-**Status:** approved design, phase 1 under way (21 October 2026; revised three times after two independent reviews and the spikes, see [Review changes](#review-changes)). Nothing is built beyond the spikes: S1 and S3 pass, and S2 failed as designed, so the scene-runtime split (phase 4a) comes before tabs. The whole proposal is pre-beta work (§9). The [architecture contract](architecture-contract.md) governs throughout, and the backlog's [profiles entry](../backlog/README.md#profiles-and-multiple-vs-after-the-beta) records the product decisions this page builds on.
+**Status:** approved design. Phase 1 and scene runtimes (phase 4a) are built; phase 2's P2-i through P2-iv are built on `claude/profiles-p2` ([experiment 044](../../experiments/044-profile-tabs/README.md)). P2-iv's synthetic timing test could not start Chrome in the sandbox; timing, captures and independent reviews remain with the coordinator. Feature focus, Choose routes and G4 are still pending (P2-v–P2-vii). The design was revised after independent reviews and the spikes ([Review changes](#review-changes)); the whole proposal is pre-beta work (§9). The [architecture contract](architecture-contract.md) governs throughout, and the backlog's [profiles entry](../backlog/README.md#profiles-and-multiple-vs-after-the-beta) records the product decisions this page builds on.
 
 **What this page supersedes in the [view graph design](view-graph-design.md).** This page is the one contract for these topics:
 
@@ -66,7 +66,7 @@ These are the only invariants the model keeps. Each holds because the game or th
 | **Collection** | `xfs/collection-2` identity (`collection.id`), name, look order, `removed` (the last 20, each with when), package plan, `saved?: { revision }` | Its looks | `CollectionService` (`src/library/collection-service.ts`) | Working copy: document `collection-working`. Named versions: the released collection tables. | Per library |
 | **Look** | Parts and memory (with its Undo history); `state: "live" \| "removed"` | n/a | `CollectionService` | Document `look-working`, ID `<collection>/<look>` | Per library |
 | **Look reference** | `LookRef = { collection, look }` | One look | n/a | In scenes, bindings and actions | n/a |
-| **Session** | `xfs/profile-session-1`: `tabs`, `views: ViewGraphData`, `focus`, `closed: TabFragment[]` (the last 5), `seq` | Its profile | `ProfileSessions` (`src/app/profiles/`, successor of `src/app/layout-library.ts`) | Workspace `profiles.sessions[profileId]` | Per profile, per workspace |
+| **Session** | `xfs/profile-session-1`: `tabs`, `views: ViewGraphData`, `focus`, `closed: TabFragment[]` (the last 5), `seq` | Its profile | `ProfileSessions` (`src/app/profiles/`, successor of `layout-library.ts`) | Workspace `profiles.sessions[profileId]` | Per profile, per workspace |
 | **Layout tab** | `id` (`t-<base36>`), `name`, `origin?`, `dock: DockState`, `panels: PanelInstance[]` | Its views (each view's `tab`) | `ProfileSessions` | In the session | Per session |
 | **Panel instance** | `id` (`<type>--<base36>`, never reused), `type`, `binding?`, `state?` | Its type, its binding's target | `ProfileSessions` | In the tab | Per tab |
 | **Binding** | `{ policy: "follow-focus" }` or `{ policy: "pinned", target: { view } \| { scene } \| { subject } \| { look } }` | One entity | `resolveBinding` (pure) | In the panel instance | Per instance |
@@ -453,22 +453,28 @@ type LayoutFragment = {                                         // xfs/layout-fr
 - **Own defaults** are owned by `LayoutDefaults`, through the outbox. A newer build's own default is listed as unavailable, with the reason. Names need not be unique; the list tells defaults apart by when each was saved. An open window finds another window's new defaults at its revision checks.
 - **Nothing accepted can be lost on a restart:** a fragment is read back through the session's own readers before a tab is made from it.
 
+**Presented in P2-iv** ([experiment 044 §12](../../experiments/044-profile-tabs/README.md#12-p2-iv-as-built)). New tab groups defaults by owner, names one-click substitutions and offers a trailing Delete with an Undo notice on own defaults. Ambiguous slots open the library's choice popover: visible radio options, searchable long look lists, M2's shared scene or New scene and a plain sharing note. Choices are checked again as candidates change; a removed choice falls back to Leave empty with a note. Rename and Save as default use the value popover. Own-default names may coincide (P2-ii review decision); equal names are told apart by saved time in the menu.
+
 ### 4.3 Feature focus from the tab
 
 - **A module is active in a tab** when one of its panel instances is in the tab's dock. That set is the view-tool filter's `modules` (`platform/api/module.ts`).
 - **Content still draws.** Makeup stays on V in a Poses tab.
-- **The Modules menu and `UIPreferences.modules` are removed.**
+- **P2-v removes the Modules menu and its live preference use.** The stored legacy `UIPreferences.modules` value is kept unchanged (§2.4).
+
+**Pending P2-v:** the tab strip is built, but module visibility still follows the legacy preference. P2-v removes the menu and its actions, derives the tool filter from docked instances and moves Presets and Library to eye makeup. Legacy preference values must round-trip unchanged for older builds (§2.4).
 
 ### 4.4 What folds in from today
 
 | Today | Becomes | Kept |
 |---|---|---|
-| `LayoutLibrary` (`src/app/layout-library.ts`) | Own defaults, plus tab 1 | Saved layouts as own defaults; the live arrangement as tab 1 |
+| `LayoutLibrary` (`layout-library.ts`) | Own defaults, plus tab 1 | Saved layouts as own defaults; the live arrangement as tab 1 |
 | `SavedLayout.working` (inactive), `modules`, `autoSize`, `seen`, `UIPreferences.modules` | Removed or derived | Dropped |
 | Parked panels | A panel removed through the picker parks at its place | Per tab |
 | Factory layouts (`studio-ui/layout-defaults.ts`) | Eye makeup's feature default, with one character subject slot and one look slot | The slot arrangement |
 | View graph, `MAX_VIEWS = 16` | Inside the session; each view has a `tab`; the limit goes (the workspace size budget bounds it) | Nodes, links, lighting setups |
 | `main` view, `head` panel | Ordinary views and instances. `main` and `head` survive only as aliases in capture tools and evidence keys ("the most recently focused 3D view in the visible tab"). | n/a |
+
+**Built in P2-iv:** the Layouts button, its controller/library and the preference relay are retired. Dock saves already name the rendered tab; the session is their only destination. A tab with an empty arrangement opens no factory panels. The legacy `layout`, `layouts` and `modules` values remain unchanged in preferences.
 
 ### 4.5 Scene runtimes and switching (phase 4a)
 
@@ -597,6 +603,8 @@ Names go in the value popover. Entries that can't run are left out.
 | Palette | n/a | "Tab: <name>", "New tab: <default>", "Reset tab to <default>", "Save tab as default…", "Reopen closed tab", "Show/Hide <panel> in this tab", "Panels…" |
 
 Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+PageUp/PageDown are not used, because the browser keeps them on localhost. The bindings go into `KEY_BINDINGS` (`src/app/input-bindings.ts`).
+
+**Built in P2-iv:** U1–U5 and the tab keys above are wired through the action registry and `KEY_BINDINGS`. The strip selects optimistically, uses roving focus and announces switches and reorders; Enter or Down enters the dock. Read-only pages can switch without saving, while editing controls retain their refusal reason. The palette offers Tab, New tab, Reset, Save as default, Close and Reopen; the panel picker commands wait for phase 3. The spec-fields golden was recaptured with unchanged states and its capture history appended. The synthetic Chrome timing test is written; this sandbox could not start Chrome, so its timing gate remains for the coordinator. Captures and independent UI review are also pending.
 
 ## 7. De-singletoning
 

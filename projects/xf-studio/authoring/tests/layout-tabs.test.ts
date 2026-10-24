@@ -185,7 +185,7 @@ test("empty tab arrangement remains empty, and a minimal arrangement never opens
   const catalogue = viewCatalogue([SHELL_VIEW]), area = { x: 0, y: 0, w: 1200, h: 800 };
   const empty = restoreDockPreference(null, area, catalogue, [], catalogue.ids, true).state;
   expect(empty.wide.root).toBeNull(); expect(empty.compact.floating).toEqual([]);
-  const tree = { root: { kind: "group", id: "g1", panels: ["help"], active: "help" }, floating: [], closed: [] };
+  const tree = { root: { kind: "group" as const, id: "g1", panels: ["help"], active: "help" }, floating: [], closed: [] };
   const restored = restoreDockPreference({ format: "xfs/dock", version: 1, state: { wide: tree, compact: tree } }, area, catalogue, [], catalogue.ids, true).state;
   expect(restored.wide.root).toEqual(tree.root); expect(restored.wide.floating).toEqual([]);
 });
