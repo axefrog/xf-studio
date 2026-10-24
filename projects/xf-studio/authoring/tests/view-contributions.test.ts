@@ -63,8 +63,8 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   expect(STUDIO_CATALOGUE.heavy).toEqual(["library", "package"]);
   expect(PANEL_META.warp).toEqual({ title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask." });
   expect(PANEL_META["package"].title).toBe("Mod package");
-  // Eye makeup's view contributes its six panels; the shell the rest.
-  expect(EYE_MAKEUP_GRANDFATHERED_PANELS).toEqual(["layers", "uv", "finish", "shape", "edge", "warp"]);
+  // Eye makeup's view contributes its eight panels (Presets and Library since P2-v); the shell the rest. The IDs are unchanged.
+  expect(EYE_MAKEUP_GRANDFATHERED_PANELS).toEqual(["presets", "library", "layers", "uv", "finish", "shape", "edge", "warp"]);
   expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup", "save-explorer", "expressions", "poses"]);
 });
 
@@ -121,7 +121,9 @@ test("a second feature's view slots into the shell's layouts, and a saved layout
   // Without eye makeup's view the shell's layout drops the slots nobody fills.
   const shellOnly = defaultWide(viewCatalogue([SHELL_VIEW]));
   expect(locate(shellOnly, "uv")).toBeUndefined();
-  expect(locate(shellOnly, "presets")!.group.panels).toEqual(["presets", "library", "package"]);
+  // Presets and Library are eye makeup's (P2-v): without its view, the collection group keeps only the shell's Mod package.
+  expect(locate(shellOnly, "presets")).toBeUndefined();
+  expect(locate(shellOnly, "package")!.group.panels).toEqual(["package"]);
 });
 
 test("the shell names no feature's panels: panel modules are bound only by the view factories", () => {

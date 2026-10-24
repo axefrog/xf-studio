@@ -55,7 +55,7 @@ export class Frame {
   get canUndo() { return this.once("canUndo", () => this.port.authoring.history().undo !== undefined); }
   /** The plain reason when the selected look was made with a newer XF Studio (its eye makeup is kept as it is); else undefined. */
   get locked() { return this.once("locked", () => this.port.feature("eye-makeup").locked()); }
-  get library() { return this.once("library", () => this.port.library.summary()); }
+  get library() { return this.once("librarySummary", () => this.port.library.summary()); }
   get persistence() { return this.once("persistence", () => this.port.library.persistence()); }
   get files() { return this.once("files", () => this.port.files.snapshot()); }
   get preview() { return this.once("preview", () => this.port.authoring.previewState()); }
