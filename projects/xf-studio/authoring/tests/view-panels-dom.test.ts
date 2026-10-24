@@ -68,6 +68,8 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
   const panes = new ViewPanels({
     views: readViews, drawn: () => state.drawn,
     arrangement: () => ({ tab: session?.tabId(), layout: preferences.snapshot().layout ?? null }),
+    save: (tab, next) => { saves.push(next);
+      if (session && tab !== undefined) session.dispatch({ kind: "tabs.arrange", tab, layout: serializeDockState(next) }); },
     make: panel => { const pane = fakePane(panel); made.set(panel, pane); return pane; },
     catalogue: setViews,
     dock: { addPanels: specs => dock.addPanels(specs), removePanels: (ids, options) => dock.removePanels(ids, options), get dockState() { return dock.dockState; } },
@@ -82,8 +84,7 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
   const others = catalogue.panels.filter(panel => !panel.id.startsWith("view.") && panel.id !== "head")
     .map(panel => ({ id: panel.id, title: panel.title, icon: panel.icon, description: panel.description, element: document.createElement("div") }));
   dock = new DockView({ panels: [...others, ...panes.controllers().map(pane => pane.spec)], state: restored.state, sizeClass: () => "wide",
-    defaults: size => defaultDockStateFor(catalogue)[size], save: next => { saves.push(next);
-      if (session) preferences.dispatch({ kind: "layout.set", layout: serializeDockState(next) }); }, announce: () => {} });
+    defaults: size => defaultDockStateFor(catalogue)[size], save: next => panes.save(next), announce: () => {} });
   dock.render();
   panes.sync();
   const group = (panel: string) => { const found = [dock.tree.root, ...dock.tree.floating.map(window => window.node)];
@@ -95,6 +96,36 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
 }
 
 describe("a pane per view", () => {
+  test("a dock save between showing B and syncing belongs to rendered A and keeps B's floating pane", async () => {
+    const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A", character: "c-1" }, seededRandom(43)));
+    const a = session.tabId(), b = session.duplicate(a), bPanel = session.graph.snapshot().views.find(view => view.tab === b)!.panel;
+    const { panes, dock, group, saves } = await harness([], {}, undefined, session);
+    dock.moveTo(bPanel, { kind: "float", x: 100, y: 100, w: 450, h: 350 }, "");
+    const customB = structuredClone(session.dock(b)), groupB = group(bPanel)!.id;
+    session.show(a); panes.sync();
+    saves.length = 0;
+
+    session.show(b); dock.close("history"); panes.sync();
+
+    expect(session.dock(b)).toEqual(customB);
+    expect(group(bPanel)?.id).toBe(groupB);
+    expect(dock.tree.floating).toHaveLength(1);
+    expect(session.dock(a)!.state).toMatchObject({ wide: { closed: expect.arrayContaining(["history"]) } });
+    expect(saves).toHaveLength(2); // A's close, then B's whole arrangement; no intermediate destination save.
+    panes.sync(); expect(saves).toHaveLength(2);
+    // A real edit after the switch still saves once, and is never mistaken for an external restore.
+    dock.close("history");
+    const editedB = structuredClone(session.dock(b));
+    expect(editedB!.state).toMatchObject({ wide: { closed: expect.arrayContaining(["history"]) } });
+    expect(saves).toHaveLength(3);
+    panes.sync(); expect(saves).toHaveLength(3);
+    session.show(a); panes.sync();
+    expect(dock.tree.closed).toContain("history");
+    session.show(b); panes.sync();
+    expect(session.dock(b)).toEqual(editedB);
+    expect(group(bPanel)?.id).toBe(groupB);
+  });
+
   test("switching A to B keeps B's custom arrangement through the real session, dock and save relay", async () => {
     const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A", character: "c-1" }, seededRandom(41)));
     const a = session.tabId(), b = session.duplicate(a), bPanel = session.graph.snapshot().views.find(view => view.tab === b)!.panel;

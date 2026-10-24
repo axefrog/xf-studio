@@ -11,7 +11,7 @@ import type { ViewId } from "../../platform/api/view-graph";
 import type { DrawnViews } from "../../app/viewport-attachment";
 import { serializeDockState } from "../dock/persist";
 import type { DockView, PanelSpec } from "../dock/dock-view";
-import type { PanelId } from "../dock/layout";
+import type { DockState, PanelId } from "../dock/layout";
 import type { PanelContribution } from "../views/contribution";
 import type { PanelController } from "./collection";
 
@@ -58,6 +58,8 @@ export type ViewPanelsDeps = {
   arrangement(): { readonly tab?: string; readonly layout: unknown };
   /** Load the captured destination arrangement with the reconciled controllers and catalogue. Saves once, after the whole load. */
   restore(layout: unknown): void;
+  /** Persist to the tab the dock actually renders, which can lag behind the shown tab until the next paint. */
+  save(tab: string | undefined, state: DockState): void;
   /** The shown tab's 3D views and their panels, in graph order. */
   views(): readonly ShownView[];
   /** Which view is drawn and whose picture the canvas holds. */
@@ -84,6 +86,8 @@ export class ViewPanels {
   private placed: HTMLElement | undefined;
   private tab: string | undefined;
   private layout: string | undefined;
+  private reconciling = false;
+  private pendingSave: DockState | undefined;
   constructor(private readonly deps: ViewPanelsDeps) {}
 
   /** The panel IDs the shown tab's views need, in graph order. */
@@ -108,36 +112,51 @@ export class ViewPanels {
     for (const panel of wanted) this.make(panel);
     return this.controllers();
   }
+  /** Dock saves belong to its rendered tab; reconciliation publishes only its final state, after the destination takes ownership. */
+  save(state: DockState) {
+    if (this.reconciling) this.pendingSave = state;
+    else this.deps.save(this.tab, state);
+  }
   /**
    * Bring the panes in line with the shown tab's views: a new view's pane is made and placed; a closed view's is withdrawn (only that one,
    * leaving no place behind). Then the canvas goes to the pane that holds the picture. Returns whether a pane came or went.
    */
   sync(): boolean {
+    if (this.reconciling) return false;
     const destination = this.deps.arrangement(), layout = JSON.stringify(destination.layout);
     // A dock drag has already placed and saved this tree; only an external restore needs loading again. Compare the tree only when the
     // preference changed, rather than cloning the dock on every paint. Capture the destination before any dock operation can save.
     const restore = destination.tab !== this.tab || (layout !== this.layout && layout !== JSON.stringify(serializeDockState(this.deps.dock.dockState)));
     const wanted = this.wanted(), want = new Set(wanted);
     const gone = [...this.panes.keys()].filter(panel => !want.has(panel)), fresh = wanted.filter(panel => !this.panes.has(panel));
-    if (gone.length || fresh.length || restore) {
-      this.deps.catalogue(wanted);
-      const leaving = gone.map(panel => this.panes.get(panel)!);
-      if (gone.length) {
-        // The canvas never leaves with a withdrawn pane for good: it waits for the pane that holds the picture next (placed below).
-        if (leaving.some(pane => pane.slot === this.placed)) this.placed = undefined;
-        // Only a closed view is forgotten incrementally. On a tab switch the whole destination tree replaces this one: the leaving
-        // tab's own arrangement stays untouched, and no intermediate tree is saved into the destination tab.
-        if (!restore) this.deps.dock.removePanels(gone, { forget: true });
-        for (const pane of leaving) { this.panes.delete(pane.spec.id); this.deps.removed?.(pane); }
+    this.reconciling = true;
+    try {
+      if (gone.length || fresh.length || restore) {
+        this.deps.catalogue(wanted);
+        const leaving = gone.map(panel => this.panes.get(panel)!);
+        if (gone.length) {
+          // The canvas never leaves with a withdrawn pane for good: it waits for the pane that holds the picture next (placed below).
+          if (leaving.some(pane => pane.slot === this.placed)) this.placed = undefined;
+          // Only a closed view is forgotten incrementally. On a tab switch the whole destination tree replaces this one: the leaving
+          // tab's own arrangement stays untouched, and no intermediate tree is saved into the destination tab.
+          if (!restore) this.deps.dock.removePanels(gone, { forget: true });
+          for (const pane of leaving) { this.panes.delete(pane.spec.id); this.deps.removed?.(pane); }
+        }
+        const specs = fresh.map(panel => this.deps.spec(this.make(panel)));
+        if (restore) this.deps.restore(destination.layout);
+        else if (specs.length) this.deps.dock.addPanels(specs);
+        for (const pane of leaving) { pane.spec.visibility?.(false); pane.dispose?.(); }
       }
-      const specs = fresh.map(panel => this.deps.spec(this.make(panel)));
-      if (restore) this.deps.restore(destination.layout);
-      else if (specs.length) this.deps.dock.addPanels(specs);
-      for (const pane of leaving) { pane.spec.visibility?.(false); pane.dispose?.(); }
+      this.tab = destination.tab;
+      if (this.pendingSave) this.deps.save(this.tab, this.pendingSave);
+      const settled = this.deps.arrangement();
+      this.layout = JSON.stringify(settled.tab === this.tab ? settled.layout : destination.layout);
+      this.place();
+      return gone.length > 0 || fresh.length > 0;
+    } finally {
+      this.pendingSave = undefined;
+      this.reconciling = false;
     }
-    this.rememberArrangement();
-    this.place();
-    return gone.length > 0 || fresh.length > 0;
   }
   private rememberArrangement() {
     const { tab, layout } = this.deps.arrangement();

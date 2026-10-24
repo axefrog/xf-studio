@@ -308,8 +308,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The session as it is now, stored with the migration's mark (a session made for this window from the library is stored nowhere).
   const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
     profiles: sessionStored ? sessionState.stored(workspace.profiles) : workspace.profiles });
-  // The dock saves to the shown tab (`tabs.arrange`, never Undo). Until the tab strip replaces the Layouts button (P2-iv), the dock still
-  // saves through `layout.set`, kept in memory only (the workspace's own arrangement stays frozen), and is passed on from there.
+  // The dock saves to its rendered tab (`tabs.arrange`, never Undo). Until the tab strip replaces the Layouts button (P2-iv), this relays
+  // the button's `layout.set` changes and mirrors the shown tab in memory (the workspace's own arrangement stays frozen).
   relayDockSaves(preferences, sessionState, action => core.app.dispatch(action));
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,

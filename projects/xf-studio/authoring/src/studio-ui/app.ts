@@ -140,6 +140,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const paneAnchors = new Map<PanelController, () => void>();
   const viewPanes = new ViewPanels({
     arrangement: () => ({ tab: port.focus.targets().tab, layout: port.preferences.snapshot().layout ?? null }),
+    save: (tab, state) => {
+      if (tab === undefined) return;
+      const action = { kind: "tabs.arrange" as const, tab, layout: serializeDockState(state) }, allowed = port.authoring.capability(action);
+      if (allowed.available) {
+        const result = port.authoring.dispatch(action);
+        if (!result.ok) feedback.toast("warning", "Layout", result.message);
+      } else feedback.toast("warning", "Layout", allowed.reason ?? "This layout could not be saved.");
+    },
     restore: layout => { const parked = parkedPanels();
       dock.load(restoreDockPreference(layout, dock.area(), catalogue, parked, viewPanelIds(port.views.snapshot())).state,
         panels.filter(panel => !parked.includes(panel.spec.id)).map(specOf)); },
@@ -176,11 +184,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (module) feedback.toast("info", "Modules", `${catalogue.meta[id]?.title ?? id} belongs to ${module.label}, which is hidden.`,
         [{ label: `Show ${module.label}`, run: () => setModuleShown(module.id, true) }]);
     },
-    save: state => {
-      const layout = serializeDockState(state), allowed = port.preferences.capability({ kind: "layout.set", layout });
-      if (allowed.available) port.preferences.dispatch({ kind: "layout.set", layout });
-      else feedback.toast("warning", "Layout", allowed.reason ?? "This layout could not be saved.");
-    },
+    save: state => viewPanes.save(state),
     announce: message => feedback.announce(message),
     beforeLayout: () => port.viewport.cancelInput(),
     // A layout change (a tab switched, a pane hidden or resized) may leave the setup card in a pane that is no longer shown or roomy:

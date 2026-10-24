@@ -87,9 +87,9 @@ export function openProfileSession(workspace: WorkspaceState, services: Pick<Pro
 }
 
 /**
- * Until the tab strip (P2-iv) has the dock save straight to `tabs.arrange`, the dock saves through `layout.set` (the Layouts button reads
- * it) and this passes each save on to the shown tab (`arrange`, the `tabs.arrange` action). Only a change of the preference's arrangement
- * itself is a save, compared by value (a snapshot is a copy, and another preference changing is no save). An arrangement the session makes
+ * The legacy Layouts button still changes `layout.set`; this passes those changes on to the shown tab (`tabs.arrange`). Ordinary dock
+ * saves name the rendered tab directly, which may differ from the shown tab until its queued paint. Only a change of the preference's
+ * arrangement itself is a save, compared by value (a snapshot is a copy, and another preference changing is no save). An arrangement the session makes
  * for the shown tab otherwise (`tabs.arrange` from elsewhere, another tab shown, a reset) becomes the preference's, so the relay never
  * passes a stale one on. Returns the unsubscribe.
  */
