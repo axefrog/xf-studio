@@ -11,7 +11,7 @@ import type { LookRef } from "../../library/collection-documents";
 /** Read-only input for layout-tab presentation. Mutations go through the registered actions. */
 export type LayoutTabsPort = {
   snapshot(): { tabs: readonly LayoutTab[]; shown: string; closed: readonly ClosedTab[]; lastDefault?: string };
-  dock(): DockLayout | null;
+  dock(tab?: string): DockLayout | null;
   defaults(): readonly LayoutDefaultView[];
   substitution(id: string, choice?: SubstitutionChoice): ReturnType<TabDefaults["substitution"]>;
   subject(ref: SubjectRef): string;
@@ -23,7 +23,7 @@ export function layoutTabsPort(session: ProfileSessions, defaults: TabDefaults,
   services: Pick<ProfileServices, "defaults" | "characters" | "collections" | "profiles">): LayoutTabsPort {
   return Object.freeze({
     snapshot: () => ({ tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault() }),
-    dock: () => session.dock(), defaults: () => services.defaults.list(),
+    dock: (tab?: string) => session.dock(tab), defaults: () => services.defaults.list(),
     substitution: (id: string, choice?: SubstitutionChoice) => defaults.substitution(id, choice),
     subject: (ref: SubjectRef) => ref.kind === "character" ? services.characters.character(ref.id)?.label ?? "Unnamed V" : ref.kind,
     look: (ref: LookRef) => services.collections.look(ref)?.name ?? "Unnamed look",

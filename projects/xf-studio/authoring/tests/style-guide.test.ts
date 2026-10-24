@@ -22,6 +22,15 @@ test("c-setup uses the library's resting state and the app's game-folder next st
   expect(setup).not.toContain("V · Valerie");
 });
 
+test("U6 documents one chooser per missing target, a quiet owner pointer and the centred head state", () => {
+  const empty = guide.split('id="c-empty"')[1]!.split("</article>")[0]!;
+  expect(empty).toContain("One chooser per missing target");
+  expect(empty).toContain('class="empty-target-pointer muted small"');
+  expect(empty).toContain('Choose one in <button type="button" class="link-button" data-read-safe>Presets</button>.');
+  expect(empty).toContain('class="viewport-state empty-choices"'); expect(empty).toContain('class="viewport-state-icon"');
+  expect(empty).toContain("the new panel is shown, drawn and focused");
+});
+
 test("d-summon groups early-access panels with their stages and documents the fixed anchor", () => {
   const summon = guide.split('id="d-summon"')[1]!.split("</article>")[0]!;
   for (const name of ["Save Explorer", "Expressions", "Poses"]) {

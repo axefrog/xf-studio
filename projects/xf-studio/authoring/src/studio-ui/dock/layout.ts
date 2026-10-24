@@ -345,6 +345,33 @@ export function summonPanel(tree: DockTree, panel: PanelId, fallback: DockTree, 
   }
   return showPanelDocked(revealPanel(tree, panel), panel);
 }
+/** U6's first view fills the tab's former 3D slot, else the factory slot, and becomes visible there. */
+export function openViewPanel(tree: DockTree, panel: PanelId, fallback: DockTree, arrangement?: DockTree): DockTree {
+  const base = detachPanel(tree, panel);
+  const isView = (id: string) => id === "head" || id.startsWith("view.");
+  for (const source of [arrangement, fallback]) {
+    if (!source) continue;
+    const home = allGroups(source).find(({ group }) => group.panels.some(isView));
+    if (!home) continue;
+    const old = home.group.panels.find(isView)!, current = findGroup(base, home.group.id);
+    let placed: DockTree | undefined;
+    if (current) placed = insertNode(base, group([panel]), { kind: "tab", groupId: current.group.id, index: current.group.panels.length });
+    else {
+      const place = placeOf(source, old, new Set(home.group.panels.filter(isView)));
+      if (place && !("closed" in place)) placed = restorePlace(base, panel, { ...place,
+        group: place.group.map(id => id === old ? panel : id), active: true, collapsed: false });
+    }
+    if (placed) {
+      if (!current) placed = mapGroups(placed, item => item.panels.includes(panel) ? { ...item, id: home.group.id } : item);
+      return showPanelDocked(revealPanel(placed, panel), panel);
+    }
+  }
+  // A tab with none of the factory neighbours still gets its own docked view group.
+  const home = locate(fallback, panel)?.group;
+  const created = group([panel], panel, home && !findGroup(base, home.id) ? home.id : undefined);
+  const placed = base.root ? insertNode(base, created, { kind: "edge", side: "right" }) : { ...base, root: created };
+  return showPanelDocked(revealPanel(placed, panel), panel);
+}
 /** Reopen a closed panel as a tab beside a preferred sibling, else floating. */
 export function openPanel(tree: DockTree, panel: PanelId, preferredSiblings: PanelId[], area: Rect): DockTree {
   if (locate(tree, panel)) return activate(tree, panel);

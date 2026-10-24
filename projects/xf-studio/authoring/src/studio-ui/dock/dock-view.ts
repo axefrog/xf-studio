@@ -14,6 +14,7 @@ import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, fo
   summonPanel, unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
+import { openViewDockState } from "./persist";
 
 /** A tab's tooltip: its title, what it shows, and how to move it. */
 const tabTip = (title: string, context: string) => `${title}${context ? ` · ${context}` : ""} — drag to move, right-click for layout options`;
@@ -496,6 +497,13 @@ export class DockView {
     this.update(tree, !before ? `${this.title(id)} opened ${after?.windowId ? "in a floating window" : `in ${this.describeGroup(after!.group)}`}`
       : before.group.collapsed ? `${this.describeGroup(before.group)} expanded, showing ${this.title(id)}` : undefined);
     if (focus) this.focusTab(id);
+  }
+  /** A newly created first 3D view uses its tab's view slot, shown and focused, in both size classes. */
+  openView(id: PanelId, arrangement: unknown) {
+    if (!this.panels.has(id)) return;
+    this.state = openViewDockState(this.state, arrangement,
+      { wide: this.options.defaults("wide"), compact: this.options.defaults("compact") }, id);
+    this.render(); this.options.save(this.dockState); this.focusTab(id);
   }
   /** Move focus to a panel's tab once the layout it just got has rendered. */
   private focusTab(id: PanelId) {

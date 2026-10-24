@@ -2,6 +2,7 @@ import { h, setAttr, setText } from "../dom";
 import { applyCapability, button, setButtonLabel } from "../controls";
 import { closeMenus, place, type Capability } from "../menu";
 import { SearchField } from "./search-field";
+import { icon } from "../icons";
 
 export type EmptyChoice = { readonly id: string; readonly label: string; readonly name: string;
   readonly capability?: Capability; choose(): void };
@@ -19,7 +20,13 @@ export class EmptyChoices {
   private state: EmptyChoicesState | null = null;
   private closePicker?: () => void;
   private readonly more = button({ label: "Choose…", onClick: () => this.openPicker() });
-  constructor() { this.element.append(this.title, this.body, this.reason, this.actions); }
+  constructor(layout: "panel" | "viewport" = "panel") {
+    if (layout === "viewport") {
+      this.element.className = "viewport-state empty-choices"; this.element.dataset.tone = "neutral";
+      this.element.append(h("span", { class: "viewport-state-icon" }, icon("head")));
+    }
+    this.element.append(this.title, this.body, this.reason, this.actions);
+  }
   update(state: EmptyChoicesState | null) {
     this.state = state; this.element.hidden = !state;
     if (!state) return;
@@ -77,4 +84,22 @@ export class EmptyChoices {
     setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, true); });
   }
   dispose() { this.closePicker?.(); }
+}
+
+/** U6: other panels sharing a missing target point to its owner instead of repeating its chooser. */
+export class EmptyTargetPointer {
+  readonly element = h("p", { class: "empty-target-pointer muted small", hidden: true });
+  private readonly message = h("span");
+  private readonly owner = h("button", { type: "button", class: "link-button", "data-read-safe": "" });
+  constructor(reveal: (panel: string) => void) {
+    this.element.append(this.message, this.owner, ".");
+    this.owner.addEventListener("click", () => { if (this.target) reveal(this.target.panel); });
+  }
+  private target: { readonly panel: string; readonly label: string; readonly prompt: string } | null = null;
+  update(target: typeof this.target) {
+    this.target = target; this.element.hidden = !target;
+    if (!target) return;
+    setText(this.message, `${target.prompt} `); setText(this.owner, target.label);
+    setAttr(this.owner, "aria-label", `Open ${target.label}`);
+  }
 }

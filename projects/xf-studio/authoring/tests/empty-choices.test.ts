@@ -19,6 +19,10 @@ import { profileStudio } from "./fixtures/profile-studio";
 import { lookContent } from "../src/library/look-editor";
 import { tabDefaults } from "../src/app/profiles/profile-window";
 import { STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS } from "../src/compose/layout-defaults";
+import { withEmptyChoices } from "../src/studio-ui/panels/empty-choices";
+import type { Frame, StudioRuntime } from "../src/studio-ui/runtime";
+import { h } from "../src/studio-ui/dom";
+import { installLightDom, uninstallLightDom, type LightElement } from "./light-dom";
 
 async function fixture(count: number) {
   const documents = storeDocuments(), outbox = new DocumentOutbox(documents, memoryOutboxStorage()); outbox.open();
@@ -82,11 +86,44 @@ describe.each([0, 1, 8])("U6 with %i profile candidates", count => {
     expect(await f.port.execute(state.choices[0]!.action)).toEqual({ ok: true });
     const view = f.session.graph.viewIds()[0]!;
     expect(f.session.viewTab(view)).toBe(f.session.tabId());
+    expect(f.session.focus.topView([view])).toBe(view);
+    expect(f.session.focus.focusedPanel()).toBe(f.session.instance(`view.${view}`));
     expect(f.session.scene(f.session.graph.node(view, "scene").id).subject).toBeDefined();
     expect(f.session.graph.history().depth).toBe(depth + 1);
     expect(f.session.graph.undo()).toBe(true); expect(f.session.graph.viewIds()).toHaveLength(0);
     expect(f.session.graph.redo()).toBe(true); expect(f.session.graph.viewIds()).toEqual([view]); await f.outbox.settle();
   });
+});
+
+for (const count of [0, 1, 8]) test(`after choosing a V, only Presets offers look choices (${count} candidates)`, async () => {
+  const f = await fixture(count), revealed: string[] = [];
+  installLightDom();
+  const rt = { port: { emptyChoices: f.port }, dock: { reveal: (panel: string) => revealed.push(panel) }, changed() {}, report() {} } as unknown as StudioRuntime;
+  const panels = ["presets", "layers", "uv", "finish", "shape", "edge", "warp", "library"].map(id => withEmptyChoices(rt, {
+    spec: { id, title: id, icon: "head", description: "", element: h("div", {}, h("p", {}, "Editor content")) }, update() {},
+  }));
+  const visible = (node: LightElement) => { for (let at: LightElement | null = node; at; at = at.parentNode) if (at.hidden) return false; return true; };
+  try {
+    expect(await f.port.execute(f.port.snapshot("head")!.choices[0]!.action)).toEqual({ ok: true });
+    expect(f.session.scene(f.scene).look).toBeUndefined();
+    const paint = () => panels.forEach(panel => panel.update({} as Frame));
+    paint();
+    const owners = panels.filter(panel => {
+      const root = panel.spec.element as unknown as LightElement;
+      return root.querySelector(".empty-actions")!.querySelectorAll("button").some(visible);
+    });
+    expect(owners.map(panel => panel.spec.id)).toEqual(["presets"]);
+    for (const panel of panels.slice(1)) {
+      const pointer = (panel.spec.element as unknown as LightElement).querySelector(".empty-target-pointer")!;
+      expect(visible(pointer)).toBe(true); expect(pointer.textContent).toBe("No look in this scene. Choose one in Presets.");
+      pointer.querySelector("button")!.click();
+    }
+    expect(revealed).toEqual(Array(7).fill("presets"));
+    f.readonly(); paint();
+    const pointer = (panels[1]!.spec.element as unknown as LightElement).querySelector(".empty-target-pointer")!.querySelector("button")!;
+    pointer.click(); expect(revealed).toEqual(Array(8).fill("presets"));
+    expect(pointer.getAttribute("aria-disabled")).toBeNull();
+  } finally { panels.forEach(panel => panel.dispose?.()); uninstallLightDom(); await f.outbox.settle(); }
 });
 
 test("a real default's tab resolves its V and look without any explicit focus", async () => {

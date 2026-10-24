@@ -422,7 +422,9 @@ export class ProfileSessions {
       this.graph.restructure({ add: [{ view }], nodes: nodes.map(({ slot, node }) => ({ slot, node: slot === "scene" ? graphScene(node) : node })) }, { label: "Open a 3D view" });
       this.targets.set(refs.scene, { subject: clone(subject), gen: 0 });
       this.placed([id, ...nodes.map(item => item.node.id)]);
+      this.focus.showTab(tab);
       this.focus.focusView(id);
+      this.focus.focusPanel(this.instance(viewPanel(id), tab));
       return id;
     });
   }

@@ -16,6 +16,7 @@ export type EmptyDestination = { readonly instance: string; readonly tab: string
 export type EmptyChoiceValue = { readonly subject: SubjectRef } | { readonly look: LookRef } | { readonly defaultV: "female" | "male" } | { readonly createLook: true };
 export type EmptyChoiceRequest = { readonly kind: "empty.choose"; readonly destination: EmptyDestination; readonly choice: EmptyChoiceValue };
 export type EmptyChoiceSnapshot = { readonly title: string; readonly body: string; readonly capability: Capability;
+  readonly owner?: { readonly panel: string; readonly label: string; readonly prompt: string };
   readonly choices: readonly { readonly id: string; readonly label: string; readonly name: string; readonly action: EmptyChoiceRequest }[] };
 export type EmptyChoicesPort = {
   snapshot(panel: string): EmptyChoiceSnapshot | null;
@@ -88,7 +89,8 @@ export function emptyChoicesPort(deps: Deps): EmptyChoicesPort {
       if (!empty || route === "subject") add("default-male", "Default V (masculine)",
         route === "view" ? "Open a 3D view showing the default masculine V in this tab" : "Show the default masculine V in this 3D view", { defaultV: "male" });
     }
-    return { title: route === "view" ? "Open a 3D view" : route === "look" ? "Show which look?" : "Show which V?", body, choices, capability: deps.access() };
+    return { title: route === "view" ? "Open a 3D view" : route === "look" ? "Show which look?" : "Show which V?", body, choices, capability: deps.access(),
+      ...(route === "look" ? { owner: { panel: "presets", label: "Presets", prompt: "No look in this scene. Choose one in" } } : {}) };
   }
   async function execute(action: EmptyChoiceRequest): Promise<StudioDispatchResult> {
     const allowed = capability(action); if (!allowed.available) return failed(allowed);

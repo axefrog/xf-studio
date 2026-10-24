@@ -5,7 +5,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 import type { DrawnViews } from "../src/app/viewport-attachment";
-import type { DockTree, GroupNode } from "../src/studio-ui/dock/layout";
+import { group, split, locate, type DockTree, type GroupNode } from "../src/studio-ui/dock/layout";
+import { serializeDockState } from "../src/studio-ui/dock/persist";
 import { canvasView, tabViews, viewPaneState, ViewPanels, viewPanelEntries, viewPanelIds, type ShownView, type ViewPaneController } from "../src/studio-ui/panels/view-panels";
 import { viewCatalogue } from "../src/studio-ui/views/contribution";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
@@ -99,6 +100,25 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
 }
 
 describe("a pane per view", () => {
+  for (const slot of ["arranged", "factory", "empty"] as const) test(`a first 3D view opens active, expanded and focused in its ${slot} slot`, async () => {
+    const arranged = { ...group(["head", "lighting"], "lighting", "custom-head"), collapsed: true };
+    const tree: DockTree = { root: slot === "empty" ? null : split("row", [group(["package"], "package", "collection"),
+      slot === "arranged" ? arranged : group(["lighting"], "lighting", "inspect"), group(["history"], "history", "stack")]),
+      floating: [], closed: [], ...(slot === "arranged" ? { maximized: "collection" } : {}) };
+    const layout = serializeDockState({ wide: tree, compact: tree }), h = await harness([], {}, tree);
+    h.state.views.push("created"); h.state.drawn = { drawn: "created", onCanvas: "created" };
+    h.panes.sync(); h.dock.openView("view.created", layout);
+    for (const size of ["wide", "compact"] as const) {
+      const state = h.dock.dockState[size], at = locate(state, "view.created")!;
+      expect(at).toBeDefined(); expect(at.windowId).toBeUndefined();
+      expect(at.group.id).toBe(slot === "arranged" ? "custom-head" : "g-head");
+      expect(at.group.active).toBe("view.created"); expect(at.group.collapsed).not.toBe(true);
+      expect(at.group.panels).not.toContain("package"); expect(state.maximized).toBeUndefined();
+    }
+    expect(h.panes.canvasPanel()).toBe("view.created"); expect(h.attached.at(-1)).toBe("view.created");
+    await Bun.sleep(5);
+    expect(lightDocument.activeElement?.getAttribute("id")).toBe("dock-tab-view.created");
+  });
   test("a ready head, a tab switch and a pane change never dismiss a closed setup card or leave a status refusal", async () => {
     const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A", character: "c-1" }, seededRandom(51)));
     const a = session.tabId(), b = session.duplicate(a), current = session.graph.snapshot().views.find(view => view.tab === b)!;

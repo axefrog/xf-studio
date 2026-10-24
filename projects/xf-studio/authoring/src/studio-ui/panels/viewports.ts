@@ -128,7 +128,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext, id = "head"): Vi
   /** The view this pane shows (the graph names its panel), read at each paint. */
   let paneView: ViewId | undefined;
   const idle = notDrawnState(element, () => { if (paneView !== undefined) port.focus.view(paneView); });
-  const empty = panelEmptyChoices(rt, id);
+  const empty = panelEmptyChoices(rt, id, "viewport");
   // Quiet, overlaid status for the V's skin, face details, eyes, brows, lashes, hair, piercings and body: progress while they prepare, one plain line
   // when something can't be shown, with its one next step when it waits for WolvenKit (NATIVE-47). While the V shown stays and the next one
   // is made ready (profiles phase 4a-v), it says which stage that is, with a thin bar for how far. Absolutely placed, so it never moves the

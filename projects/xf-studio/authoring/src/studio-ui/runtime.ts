@@ -104,6 +104,8 @@ export class StudioRuntime {
    * forward and expanded where it is, then the group is shown and focused. The shell sets this once the dock exists.
    */
   settings: { open(section?: SettingsSection): void } = { open: () => {} };
+  /** Reconcile a just-created first view, then reveal and focus it in the captured tab's 3D slot. */
+  showOpenedView: (tab: string, arrangement: unknown) => void = () => {};
   /**
    * @param views the catalogue of every contributed panel (the shell's and each feature's) that the
    *   composition root handed `mountStudio`.

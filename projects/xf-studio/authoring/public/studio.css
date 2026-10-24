@@ -686,7 +686,12 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .empty-choice-picker { position: fixed; z-index: 1000; width: 360px; max-width: calc(100vw - 12px); max-height: calc(100vh - 12px); overflow: auto; }
 .empty-choices-list { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-3); }
 .empty-choices-list .btn { justify-content: flex-start; }
-.viewport-panel > .empty-choices { position: absolute; inset: var(--sp-4); overflow: auto; background: var(--bg-panel); }
+.viewport-panel > .panel-empty-target { position: absolute; inset: 0; overflow: auto; }
+.viewport-panel > .panel-empty-target > .empty { margin: var(--sp-4); background: var(--bg-panel); }
+.empty-target-pointer { margin: var(--sp-4); }
+.viewport-state.empty-choices { grid-template-columns: minmax(0, 40ch); justify-content: center; align-content: safe center; overflow: auto; }
+.viewport-state.empty-choices .empty-title { color: var(--stage-text); }
+.viewport-state.empty-choices .empty-actions { justify-content: center; }
 .button-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-3); }
 .button-grid .btn { justify-content: flex-start; }
 

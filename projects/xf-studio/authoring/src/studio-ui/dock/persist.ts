@@ -1,6 +1,6 @@
 import { recoverDockLayout, type DockLayout, type JsonValue } from "../../app/ui-preferences";
 import { DOCK_FORMAT, DOCK_VERSION, keepDockExpanded, parkPanels, parseTree, recoverWindows, unparkPanels, type DockState, type DockTree, type PanelId,
-  type Rect } from "./layout";
+  openViewPanel, type Rect } from "./layout";
 import { defaultDockState } from "../layout-defaults";
 import type { ViewCatalogue } from "../views/contribution";
 
@@ -50,6 +50,18 @@ function namedPanels(tree: unknown): { named: Set<string>; parked: Set<string> }
   if (input.parked && typeof input.parked === "object" && !Array.isArray(input.parked))
     for (const id of Object.keys(input.parked)) if (panelId(id)) { named.add(id); parked.add(id); }
   return { named, parked };
+}
+
+/** Read the tab's former view slot before stale view IDs are pruned by normal recovery. */
+export function openViewDockState(state: DockState, saved: unknown, defaults: DockState, panel: PanelId): DockState {
+  const layout = saved as DockLayout | null | undefined;
+  const source = layout?.format === DOCK_FORMAT && layout.version === DOCK_VERSION ? layout.state as Record<string, unknown> : undefined;
+  const tree = (size: "wide" | "compact") => {
+    const value = source?.[size], known = [...namedPanels(value).named];
+    const arrangement = parseTree(value, known, { root: null, floating: [], closed: [] });
+    return openViewPanel(state[size], panel, defaults[size], arrangement);
+  };
+  return { wide: tree("wide"), compact: tree("compact") };
 }
 
 /**
