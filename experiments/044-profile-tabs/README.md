@@ -604,7 +604,7 @@ Markdown link and source-path checks pass (429 documents), the tracked-text priv
 
 **Knowledge used for the design fixes:** `knowledge/README.md` (no game-resource knowledge page central), profiles design §3/§4, the architecture contract, this section's existing Review fixes, and `c-empty`/U6, `c-setup`, `c-viewport` and the component-library contracts. No new engine finding.
 
-**Design fixes 2 (U6 re-review 1, items 5–10, 24 October 2026).** This round replaces the duplicate empty-collection card with the sole look chooser, places that chooser first, and extends the one-chooser rule to missing views. Paths below are relative to `projects/xf-studio/authoring/`.
+**Design fixes 2 (U6 re-review 1, items 5–10, 24 October 2026).** This round replaces the duplicate empty-collection card with the sole look chooser, places that chooser first, and extends the one-chooser rule to missing views. Paths below are relative to `projects/xf-studio/authoring/`. The item-8 capture follow-up now creates a missing head group as its own factory-positioned column between the left and right subtrees, preserves the factory head proportion while enforcing every sibling group’s minimum width, and proves the no-head and undersized-left cases on first open and two Undo/Redo cycles in both size classes, with the same 24 targeted files passing (255 tests, 0 failures, 79,063 assertions), `bun run check` passing under the 3 GB guard and no commit made.
 
 | Item | Files and result | Regression |
 |---|---|---|

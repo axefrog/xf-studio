@@ -11,7 +11,7 @@ import type { Stage } from "../components/stage-tag";
 import { ScrollMemory } from "../scroll-anchor";
 import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, foldAxes, isStripStack, keepDockExpanded, lastExpandedDocked, locate,
   openShares, parkPanels, raiseWindow, recoverWindows, revealPanel, setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, splitShares, splitterPair,
-  summonPanel, unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
+  summonPanel, unparkPanels, MIN_WINDOW, MIN_GROUP, type DockNode, type DockState, type DockTree,
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
 import { openViewDockState } from "./persist";
@@ -44,7 +44,6 @@ export type DockViewOptions = {
   /** Someone asked to open a panel this dock doesn't hold now (its module is hidden): the shell offers to show it. */
   withdrawn?(id: PanelId): void;
 };
-const MIN_GROUP = { w: 150, h: 96 };
 const sideNames: Record<Side, string> = { left: "left", right: "right", top: "above", bottom: "below" };
 const edgeNames: Record<Side, string> = { left: "Left edge", right: "Right edge", top: "Top edge", bottom: "Bottom edge" };
 
