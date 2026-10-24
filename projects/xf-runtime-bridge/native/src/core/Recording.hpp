@@ -31,7 +31,11 @@ public:
     void RequestStop(const char* reason);
     json Read(const json& params, double now);
     void Tick(double now, uint64_t world, uint64_t connection, bool live, uint64_t tick, const Ops& ops);
+    bool Wants(const std::string& channel) const; // atomic fast gate, no game access
+    bool Ingress(const std::string& channel, const std::string& payload, double now,
+                 uint64_t world, uint64_t connection, uint64_t tick);
 private:
+    bool Append(const std::string& channel, const std::string& payload, double at, double end, uint64_t tick, bool valid);
     struct Record
     {
         uint64_t seq = 0, tick = 0, run = 0;
@@ -52,6 +56,9 @@ private:
     double m_start = 0, m_end = 0, m_next = 0, m_until = 0, m_last = 0, m_gap = 0;
     bool m_active = false;
     std::atomic<const char*> m_requested{nullptr};
+    std::atomic<unsigned> m_eventMask{0};
+    std::atomic<uint64_t> m_ingressDropped{0};
+    double m_nextHeartbeat = 0;
     std::filesystem::path m_root, m_output;
     std::thread m_writer;
     std::condition_variable_any m_wake;

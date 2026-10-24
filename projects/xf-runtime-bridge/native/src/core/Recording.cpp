@@ -15,6 +15,7 @@ double Now()
 }
 namespace
 {
+unsigned EventBit(const std::string& channel) { return channel == "subtitles" ? 1 : channel == "voice" ? 2 : 0; }
 void Keys(const json& p, const std::set<std::string>& keys)
 {
     if (!p.is_object()) throw MethodError("bad_params", "Expected an object.");
@@ -81,6 +82,9 @@ void Service::WriteFiles()
                 out.close(); std::filesystem::rename(m_output / "manifest.json.tmp", m_output / "manifest.json");
                 break;
             }
+            // Drain the current backlog before waiting. Five rows every 250 ms would cap the
+            // writer at 20 rows/s, below the default three 10 Hz sources even without taps.
+            if (cursor < page.at("latest").get<uint64_t>()) continue;
             std::unique_lock lock(m_mutex);
             m_wake.wait_for(lock, std::chrono::milliseconds(250), [this] { return !m_active || m_requested.load(); });
         }
@@ -103,11 +107,11 @@ json Service::Status(double now) const
         {"world_generation", m_world}, {"connection", m_connection}, {"active", m_active}, {"reason", m_reason},
         {"clock", "QueryPerformanceCounter_seconds"}, {"source_now_s", now}, {"start_s", m_start}, {"end_s", m_active ? json(nullptr) : json(m_end)},
         {"requested_hz", 10}, {"actual_hz", elapsed > 0 ? static_cast<double>(m_samples) / elapsed : 0}, {"channel_stats", counts},
-        {"sample_ticks", m_samples}, {"missed_deadlines", m_missed}, {"dropped", m_dropped}, {"invalid", m_invalid}, {"bytes", m_bytes},
+        {"sample_ticks", m_samples}, {"missed_deadlines", m_missed}, {"dropped", m_dropped + m_ingressDropped.load()}, {"invalid", m_invalid}, {"bytes", m_bytes},
         {"largest_gap_s", m_gap}, {"age_s", m_samples ? json(std::max(0.0, now - m_last)) : json(nullptr)},
         {"latest", m_latest}, {"channels", m_channels}, {"actors", m_actors}, {"capacity", kCapacity},
         {"output", m_output.string()}, {"writer_pending", m_writerBusy}, {"file_error", m_fileError},
-        {"coverage", "source_snapshots; not rendered or audible proof"}};
+        {"coverage", "source_snapshots + subtitle/controller + script_voice_requests; not rendered or audible proof"}};
 }
 json Service::Start(const json& p, double now, uint64_t world, uint64_t connection, const std::string& session)
 {
@@ -120,12 +124,12 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     if (!duration || cap < kPayload) throw MethodError("bad_params", "duration_s must be positive; byte_cap at least 8192.");
     auto channels = p.value("channels", json::array({"v", "actors", "camera"}));
     auto actors = p.value("actors", json::array());
-    if (!channels.is_array() || channels.empty() || channels.size() > 3 || !actors.is_array() || actors.size() > 16)
-        throw MethodError("bad_params", "Choose 1–3 channels and at most 16 actor handles.");
+    if (!channels.is_array() || channels.empty() || channels.size() > 5 || !actors.is_array() || actors.size() > 16)
+        throw MethodError("bad_params", "Choose 1 to 5 channels and at most 16 actor handles.");
     std::vector<std::string> selected, whos;
     for (const auto& c : channels)
     {
-        if (!c.is_string() || (c != "v" && c != "actors" && c != "camera")) throw MethodError("bad_params", "Unknown recorder channel.");
+        if (!c.is_string() || (c != "v" && c != "actors" && c != "camera" && c != "subtitles" && c != "voice")) throw MethodError("bad_params", "Unknown recorder channel.");
         const auto s = c.get<std::string>();
         if (std::find(selected.begin(), selected.end(), s) != selected.end()) throw MethodError("bad_params", "Duplicate channel.");
         selected.push_back(s);
@@ -143,6 +147,8 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     ++m_run; m_world = world; m_connection = connection; m_session = session;
     m_latest = m_ack = m_dropped = m_missed = m_samples = m_bytes = m_invalid = 0;
     m_start = m_next = now; m_until = now + static_cast<double>(duration); m_last = m_gap = m_end = 0;
+    m_ingressDropped.store(0); m_nextHeartbeat = now;
+    unsigned mask = 0; for (const auto& c : m_channels) mask |= EventBit(c); m_eventMask.store(mask);
     m_cap = cap; m_active = true; m_reason.clear(); m_requested.store(nullptr);
     m_fileError.clear(); m_output.clear();
     if (!m_root.empty())
@@ -157,10 +163,10 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
 json Service::Stop(const std::string& reason, double now)
 {
     std::scoped_lock lock(m_mutex);
-    if (m_active) { m_active = false; m_reason = reason; m_end = now; m_wake.notify_all(); }
+    if (m_active) { m_eventMask.store(0); m_active = false; m_reason = reason; m_end = now; m_wake.notify_all(); }
     return Status(now);
 }
-void Service::RequestStop(const char* reason) { m_requested.store(reason); m_wake.notify_all(); }
+void Service::RequestStop(const char* reason) { m_eventMask.store(0); m_requested.store(reason); m_wake.notify_all(); }
 void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, uint64_t tick, const Ops& ops)
 {
     std::scoped_lock lock(m_mutex);
@@ -173,8 +179,11 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
     m_next = m_start + (std::floor((now - m_start + 1e-9) / 0.1) + 1) * 0.1;
     if (m_samples) m_gap = std::max(m_gap, now - m_last);
     m_last = now; ++m_samples;
+    const bool heartbeat = now >= m_nextHeartbeat;
+    if (heartbeat) m_nextHeartbeat = now + 1.0;
     for (const auto& channel : m_channels)
     {
+        if (EventBit(channel) && !heartbeat) continue; // event channels have a 1 Hz coverage heartbeat only
         if (const auto reason = m_requested.load()) { Stop(reason, Now()); break; }
         const double at = Now();
         json payload; bool valid = false;
@@ -182,21 +191,43 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
         catch (const MethodError& e) { payload = {{"error", e.code}}; }
         catch (...) { payload = {{"error", "sample_failed"}}; }
         const double end = Now();
-        ++m_counts[channel][0]; if (valid) ++m_counts[channel][1];
-        if (!valid) ++m_invalid;
-        const auto text = SerializeJson(payload);
-        ++m_latest;
-        if (text.size() >= kPayload) { ++m_dropped; continue; }
-        // Include envelope allowance in the session cap, rather than counting payload alone.
-        const auto bytes = text.size() + 768;
-        if (m_bytes + bytes > m_cap) { ++m_dropped; Stop("byte_cap", now); break; }
-        m_bytes += bytes;
-        auto& r = (*m_ring)[(m_latest - 1) % kCapacity];
-        if (r.run == m_run && r.seq > m_ack) ++m_dropped;
-        r.run = m_run; r.seq = m_latest; r.tick = tick; r.at = at; r.end = end; r.valid = valid;
-        std::memcpy(r.channel.data(), channel.c_str(), channel.size() + 1);
-        std::memcpy(r.payload.data(), text.c_str(), text.size() + 1);
+        Append(channel, SerializeJson(payload), at, end, tick, valid);
+        if (!m_active) break;
     }
+}
+bool Service::Wants(const std::string& channel) const { return (m_eventMask.load() & EventBit(channel)) != 0; }
+bool Service::Append(const std::string& channel, const std::string& text, double at, double end, uint64_t tick, bool valid)
+{
+    ++m_counts[channel][0]; if (valid) ++m_counts[channel][1];
+    if (!valid) ++m_invalid;
+    ++m_latest;
+    if (text.size() >= kPayload) { ++m_dropped; return false; }
+    const auto bytes = text.size() + 768;
+    if (m_bytes + bytes > m_cap) { ++m_dropped; Stop("byte_cap", at); return false; }
+    m_bytes += bytes;
+    auto& r = (*m_ring)[(m_latest - 1) % kCapacity];
+    if (r.run == m_run && r.seq > m_ack) ++m_dropped;
+    r.run = m_run; r.seq = m_latest; r.tick = tick; r.at = at; r.end = end; r.valid = valid;
+    std::memcpy(r.channel.data(), channel.c_str(), channel.size() + 1);
+    std::memcpy(r.payload.data(), text.c_str(), text.size() + 1);
+    m_wake.notify_all();
+    return true;
+}
+bool Service::Ingress(const std::string& channel, const std::string& payload, double now,
+                      uint64_t world, uint64_t connection, uint64_t tick)
+{
+    if (!Wants(channel)) return false;
+    std::unique_lock lock(m_mutex, std::try_to_lock);
+    if (!lock.owns_lock()) { ++m_ingressDropped; return false; }
+    if (!m_active || m_requested.load()) return false;
+    if (world != m_world || connection != m_connection) { Stop("owner_or_world_changed", now); return false; }
+    if (now >= m_until) { Stop("duration", now); return false; }
+    // Script callbacks only; reject before parsing. Never use this on audio/render hooks.
+    if (payload.size() >= kPayload || JsonNestingDepth(payload, 12) > 12) { ++m_invalid; ++m_dropped; return false; }
+    const auto parsed = json::parse(payload, nullptr, false);
+    if (!parsed.is_object() || !parsed.contains("event") || !parsed["event"].is_string() ||
+        (parsed.contains("valid") && !parsed["valid"].is_boolean())) { ++m_invalid; ++m_dropped; return false; }
+    return Append(channel, payload, now, now, tick, parsed.value("valid", true));
 }
 json Service::Read(const json& p, double now)
 {
@@ -216,7 +247,7 @@ json Service::Read(const json& p, double now)
         if (r.run != m_run || r.seq != next) { ++lost; continue; }
         rows.push_back({{"schema", "xfb/source-record-1"}, {"pid", GetCurrentProcessId()}, {"run", m_run}, {"session", m_session}, {"world_generation", m_world},
             {"seq", r.seq}, {"tick", r.tick}, {"channel", r.channel.data()}, {"source_s", r.at}, {"source_end_s", r.end},
-            {"simulation_s", nullptr}, {"age_s", std::max(0.0, now - r.at)}, {"valid", r.valid}, {"dropped", m_dropped},
+            {"simulation_s", nullptr}, {"age_s", std::max(0.0, now - r.at)}, {"valid", r.valid}, {"dropped", m_dropped + m_ingressDropped.load()},
             {"data", json::parse(r.payload.data())}});
     }
     out["records"] = std::move(rows); out["next"] = next; out["lost"] = lost; return out;

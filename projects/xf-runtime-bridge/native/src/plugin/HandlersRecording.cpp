@@ -2,6 +2,7 @@
 #include "core/Recording.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/Natives.hpp"
 
 namespace xfb::plugin
 {
@@ -17,6 +18,27 @@ void Guard()
     if (!s.config.allowTestHooks || !s.bridge || !s.bridge->HasClient() || s.bridge->GetDispatcher().IsKilled())
         throw MethodError("test_hooks_off", "Recorder owner or test gate closed.");
 }
+}
+bool RecordingWanted(const std::string& channel)
+{
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    auto& s = Get();
+    return s.config.allowTestHooks && s.scriptLayer.Ready() && s.bridge && s.bridge->HasClient() &&
+           !s.bridge->GetDispatcher().IsKilled() && Recorder().Wants(channel);
+#else
+    (void)channel;
+    return false;
+#endif
+}
+bool RecordingIngress(const std::string& channel, const std::string& payload)
+{
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    if (!RecordingWanted(channel)) return false;
+    return Recorder().Ingress(channel, payload, recording::Now(), World(), Connection(), Get().runningTicks.load());
+#else
+    (void)channel; (void)payload;
+    return false;
+#endif
 }
 void RegisterRecording(Dispatcher& d)
 {

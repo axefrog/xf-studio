@@ -14,7 +14,7 @@
     "candidate": {
       "plugin_version": "0.8.13",
       "build_commit": "0000000000000000000000000000000000000000",
-      "natives": 29,
+      "natives": 31,
       "write_classes": [
         "photo",
         "world",

@@ -63,7 +63,7 @@ Research questions from any chat go to the meta-coordinator's [research queue](r
 
 - **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
 - **In-game overlay and UI; custom material shaders** (below). *29 Sep*
-- **The runtime bridge** (its own chat, XF · Runtime bridge): 0.8.3 on `main`, proven in session 11; sessions 9–11 done. Next 0.8.4 (session 11's findings, the UI review's UI-180..184), then the XF Core plugin host, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *22 Oct*
+- **The runtime bridge** (its own chat, XF · Runtime bridge): session 17 ran 0.8.10; 0.8.14 is the offline recorder/input-and-choices candidate on top of 0.8.11 fixes and the 0.8.12 live-direction toolkit. The source recorder, subtitle/widget and script-voice taps and native-global package lint are built; runtime listener/controller counts, cadence, cost and teardown await the prepared session. Native Wwise observation is a follow-up to R2, not audible proof. Next: finish the current checks, then the XF Core plugin host ([bridge autonomy](bridge-autonomy.md), [autonomous testing](../runtime/autonomous-testing.md)).
 - **Story Engine** (its own chat, XF · Story Engine): procedural gigs, quests and encounters over a level-of-detail world simulation ([hub](../story-engine/README.md)). It is R&D at its own pace, outside the finish-first rule, and is gated mainly on runtime bridge work. *22 Oct*
 
 ### After 1.0 (banked)

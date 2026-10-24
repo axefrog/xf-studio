@@ -54,6 +54,30 @@ int RecordingUnitTests()
     s.Start({{"channels", {"v"}}}, 500, 6, 3, "test");
     s.Tick(500, 6, 4, true, 1, ops);
     Check(!s.Read({{"run", 5}}, 500)["active"].get<bool>(), "new connection cancels owner");
+    // Event ingress uses the same run/ring/cap and source QPC, without resampling each line.
+    Service taps;
+    taps.Start({{"channels", {"subtitles", "voice"}}}, 600, 7, 4, "tap-test");
+    Check(taps.Wants("subtitles") && taps.Wants("voice") && !taps.Wants("v"), "selected event channels only");
+    Check(taps.Ingress("subtitles", R"({"event":"line.requested","text":"Question?"})", 600.01, 7, 4, 1), "bounded event accepted");
+    Check(taps.Ingress("voice", R"({"event":"voice.requested","trigger":"greeting"})", 600.02, 7, 4, 2), "voice request accepted");
+    auto events = taps.Read({{"run", 1}}, 600.1);
+    Check(events["records"].size() == 2 && events["records"][0]["source_s"] == 600.01 && events["records"][1]["channel"] == "voice", "events in shared sequence with source time");
+    Check(!taps.Ingress("voice", std::string(9000, 'x'), 600.03, 7, 4, 3), "oversize ingress refused");
+    Check(!taps.Ingress("voice", "{bad", 600.04, 7, 4, 3), "malformed ingress refused");
+    Check(!taps.Ingress("voice", std::string(20, '[') + "0" + std::string(20, ']'), 600.05, 7, 4, 3), "nested ingress refused before parse");
+    Check(taps.Read({{"run", 1}}, 600.1)["invalid"] == 3, "ingress failures invalidate absence proof");
+    int heartbeats = 0;
+    ops.sample = [&](const std::string&, const std::vector<std::string>&) { ++heartbeats; return json{{"event", "tap.coverage"}, {"valid", true}}; };
+    for (int i = 0; i < 10; ++i) taps.Tick(600.1 + i * 0.1, 7, 4, true, i, ops);
+    Check(heartbeats == 2, "one coverage heartbeat per channel, no per-line polling flood");
+    taps.RequestStop("cancelled");
+    Check(!taps.Wants("voice") && !taps.Ingress("voice", R"({"event":"voice.requested"})", 601, 7, 4, 4), "cancel closes event ingress immediately");
+    Check(!taps.Read({{"run", 1}}, 601)["active"].get<bool>(), "cancel drain retains events");
+    Service changed; changed.Start({{"channels", {"voice"}}}, 700, 8, 4, "tap-test");
+    Check(!changed.Ingress("voice", R"({"event":"voice.requested"})", 700.1, 9, 4, 1) && !changed.Wants("voice"), "world change closes ingress before record");
+    Service capped; capped.Start({{"channels", {"voice"}}, {"byte_cap", 8192}}, 800, 8, 4, "tap-test");
+    for (int i = 0; i < 20; ++i) capped.Ingress("voice", R"({"event":"voice.requested"})", 800.1, 8, 4, i);
+    Check(capped.Read({{"run", 1}}, 801)["reason"] == "byte_cap", "event byte cap stops run");
     // File writer is the single off-thread drain, independent of a killed/disconnected pipe.
     const std::string sid = "fixture";
     const auto dir = std::filesystem::temp_directory_path() / ("xfb-record-" + std::to_string(Now()));

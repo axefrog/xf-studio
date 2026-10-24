@@ -5,6 +5,7 @@ module XFRuntimeBridge
 public abstract class XFRecording {
   public static func Sample(cid: String, channel: String, whos: String) -> String {
     if !XFBridge_Live() { return XFJson.Fail("game_loading", "Recorder live gate closed"); }
+    if Equals(channel, "subtitles") || Equals(channel, "voice") { return XFRecordingTap.Status(channel); }
     if Equals(channel, "camera") {
       let camera = XFPlayer.CameraJson();
       return "{\"ok\":true,\"valid\":" + XFJson.Flag(NotEquals(camera, "null")) + ",\"camera\":" + camera + "}";
@@ -70,3 +71,337 @@ public abstract class XFRecordingActors {
     return "{\"ok\":true,\"valid\":false,\"reason\":\"codeware_missing\"}";
   }
 }
+
+
+// Only the autonomous package carries this file. No timer, per-frame widget walk or second event ring.
+// The source listener uses immediate notifications. Consumer delayed callbacks are independently tapped.
+@if(ModuleExists("Codeware"))
+public abstract class XFRecordingTap {
+  public static func Get() -> ref<XFRecordingListeners> {
+    let container = GameInstance.GetScriptableSystemsContainer(GetGameInstance());
+    return IsDefined(container) ? container.Get(n"XFRuntimeBridge.XFRecordingListeners") as XFRecordingListeners : null;
+  }
+  public static func On(channel: String) -> Bool { return XFBridge_RecordEnabled(channel); }
+  public static func Emit(channel: String, event: String, body: String) -> Void {
+    if XFRecordingTap.On(channel) { XFBridge_Record(channel, "{\"event\":" + XFJson.Str(event) + "," + body + "}"); }
+  }
+  public static func NewId() -> String {
+    let taps = XFRecordingTap.Get();
+    return IsDefined(taps) ? taps.NextId() : "";
+  }
+  public static func Id(id: CRUID) -> String { return ToString(CRUIDToHash(id)); }
+  public static func Entity(obj: wref<GameObject>) -> String {
+    return IsDefined(obj) ? EntityID.ToDebugString(obj.GetEntityID()) : "";
+  }
+  public static func Line(line: scnDialogLineData) -> String {
+    let display = scnDialogLineData.GetDisplayText(line);
+    return "\"line_id\":" + XFJson.Str(XFRecordingTap.Id(line.id)) + ",\"speaker\":" + XFJson.Str(XFRecordingTap.Entity(line.speaker))
+      + ",\"speaker_name\":" + XFJson.Str(line.speakerName) + ",\"text\":" + XFJson.Str(line.text)
+      + ",\"display_text\":" + XFJson.Str(display.text) + ",\"type\":" + XFJson.Str(EnumValueToString("scnDialogLineType", Cast<Int64>(EnumInt(line.type))))
+      + ",\"duration_s\":" + XFJson.Num(line.duration) + ",\"persistent\":" + XFJson.Flag(line.isPersistent);
+  }
+  public static func Widget(widget: wref<inkWidget>) -> String {
+    if !IsDefined(widget) { return "\"widget_defined\":false"; }
+    let visible = true;
+    let opacity = 1.0;
+    let parent = widget;
+    let depth = 0;
+    while IsDefined(parent) && depth < 32 {
+      visible = visible && parent.IsVisible(); opacity *= parent.GetOpacity();
+      parent = parent.parentWidget; depth += 1;
+    }
+    let a = WidgetUtils.LocalToGlobal(widget, new Vector2(0.0, 0.0));
+    let b = WidgetUtils.LocalToGlobal(widget, widget.GetSize());
+    return XFRecordingTap.WidgetIdentity(widget) + ",\"widget_defined\":true,\"effective_visible\":" + XFJson.Flag(visible && opacity > 0.0)
+      + ",\"opacity\":" + XFJson.Num(opacity) + ",\"ancestor_limit\":" + XFJson.Flag(IsDefined(parent))
+      + ",\"rect\":[" + XFJson.Num(a.X) + "," + XFJson.Num(a.Y) + "," + XFJson.Num(b.X) + "," + XFJson.Num(b.Y) + "],\"geometry_phase\":\"callback_not_settled\"";
+  }
+  public static func WidgetIdentity(widget: wref<inkWidget>) -> String {
+    let controller = IsDefined(widget) ? widget.GetController() as BaseSubtitleLineLogicController : null;
+    return IsDefined(controller) ? "\"widget_id\":" + XFJson.Str(controller.xfbRecordingWidgetId) + ",\"consumer\":" + (StrLen(controller.xfbRecordingConsumer) > 0 ? controller.xfbRecordingConsumer : "null") : "\"widget_id\":null";
+  }
+  public static func Status(channel: String) -> String {
+    let taps = XFRecordingTap.Get();
+    return IsDefined(taps) ? taps.Status(channel) : "{\"valid\":false,\"reason\":\"listeners_missing\"}";
+  }
+  public static func Voice(event: String, obj: wref<GameObject>, trigger: CName, context: CName, delay: Float, extra: String) -> Void {
+    if !XFRecordingTap.On("voice") { return; }
+    XFRecordingTap.Emit("voice", event, "\"coverage\":\"script_request\",\"entity\":" + XFJson.Str(XFRecordingTap.Entity(obj))
+      + ",\"trigger\":" + XFJson.Str(NameToString(trigger)) + ",\"initial_context\":" + XFJson.Str(NameToString(context))
+      + ",\"delay_s\":" + XFJson.Num(delay) + extra);
+  }
+}
+@if(!ModuleExists("Codeware"))
+public abstract class XFRecordingTap {
+  public static func Status(channel: String) -> String { return "{\"valid\":false,\"reason\":\"codeware_missing\"}"; }
+}
+
+@if(ModuleExists("Codeware"))
+public class XFRecordingListeners extends ScriptableSystem {
+  private let m_nextId: Int32;
+  public func NextId() -> String { this.m_nextId += 1; return IntToString(this.m_nextId); }
+  private let m_board: wref<IBlackboard>;
+  private let m_show: ref<CallbackHandle>;
+  private let m_hide: ref<CallbackHandle>;
+  private let m_hideData: ref<CallbackHandle>;
+  private let m_controllers: array<wref<BaseSubtitlesGameController>>;
+  private let m_overflow: Bool;
+  private let m_showBatches: Int32;
+  private let m_hideBatches: Int32;
+  private func OnPlayerAttach(request: ref<PlayerAttachRequest>) -> Void {
+    if IsDefined(this.m_board) || (XFBridge_ProbeFlags() & 1) == 0 { return; }
+    this.m_board = GameInstance.GetBlackboardSystem(this.GetGameInstance()).Get(GetAllBlackboardDefs().UIGameData);
+    this.m_show = this.m_board.RegisterListenerVariant(GetAllBlackboardDefs().UIGameData.ShowDialogLine, this, n"OnXFShow");
+    this.m_hide = this.m_board.RegisterListenerVariant(GetAllBlackboardDefs().UIGameData.HideDialogLine, this, n"OnXFHide");
+    this.m_hideData = this.m_board.RegisterListenerVariant(GetAllBlackboardDefs().UIGameData.HideDialogLineByData, this, n"OnXFHideData");
+  }
+  private func OnDetach() -> Void {
+    if IsDefined(this.m_board) {
+      this.m_board.UnregisterListenerVariant(GetAllBlackboardDefs().UIGameData.ShowDialogLine, this.m_show);
+      this.m_board.UnregisterListenerVariant(GetAllBlackboardDefs().UIGameData.HideDialogLine, this.m_hide);
+      this.m_board.UnregisterListenerVariant(GetAllBlackboardDefs().UIGameData.HideDialogLineByData, this.m_hideData);
+    }
+    this.m_board = null; this.m_show = null; this.m_hide = null; this.m_hideData = null;
+    ArrayClear(this.m_controllers);
+  }
+  public func Track(controller: ref<BaseSubtitlesGameController>) -> Void {
+    let i = ArraySize(this.m_controllers) - 1;
+    while i >= 0 {
+      if !IsDefined(this.m_controllers[i]) { ArrayErase(this.m_controllers, i); }
+      i -= 1;
+    }
+    if ArrayContains(this.m_controllers, controller) { return; }
+    if ArraySize(this.m_controllers) >= 16 { this.m_overflow = true; return; }
+    ArrayPush(this.m_controllers, controller);
+  }
+  public func Status(channel: String) -> String {
+    let count = 0; let subscriptions = 0; let widgets = 0; let controllers = "";
+    let subtitles = false; let chatters = false;
+    for controller in this.m_controllers {
+      if IsDefined(controller) && controller.xfbRecordingSubscribed {
+        count += 1; subscriptions += controller.XFRecordingListenerCount(); widgets += controller.XFRecordingWidgetCount();
+        subtitles = subtitles || Equals(controller.GetClassName(), n"SubtitlesGameController");
+        chatters = chatters || Equals(controller.GetClassName(), n"ChattersGameController");
+        controllers += (StrLen(controllers) > 0 ? "," : "") + controller.XFRecordingIdentity();
+      }
+    }
+    let listeners = (IsDefined(this.m_show) ? 1 : 0) + (IsDefined(this.m_hide) ? 1 : 0) + (IsDefined(this.m_hideData) ? 1 : 0);
+    return "{\"event\":\"tap.coverage\",\"valid\":" + XFJson.Flag(listeners == 3 && !this.m_overflow && count == 2 && subscriptions == 6 && subtitles && chatters)
+      + ",\"source_listeners\":" + IntToString(listeners) + ",\"controller_count\":" + IntToString(count)
+      + ",\"controller_listeners\":" + IntToString(subscriptions) + ",\"active_widgets\":" + IntToString(widgets)
+      + ",\"controllers\":[" + controllers + "],\"source_show_batches\":" + IntToString(this.m_showBatches)
+      + ",\"source_hide_batches\":" + IntToString(this.m_hideBatches) + ",\"registry_overflow\":" + XFJson.Flag(this.m_overflow)
+      + ",\"coverage\":\"immediate_blackboard_notifications; delayed_controller_delivery; PlayVoiceOver; reaction_and_AI_callers\",\"audible_proof\":false}";
+  }
+  protected cb func OnXFShow(value: Variant) -> Bool {
+    if !XFRecordingTap.On("subtitles") { return false; }
+    this.m_showBatches += 1;
+    let lines = FromVariant<array<scnDialogLineData>>(value);
+    if ArraySize(lines) > 64 { XFRecordingTap.Emit("subtitles", "tap.truncated", "\"valid\":false"); }
+    let i = 0;
+    while i < Min(ArraySize(lines), 64) {
+      XFRecordingTap.Emit("subtitles", "line.requested", XFRecordingTap.Line(lines[i])); i += 1;
+    }
+  }
+  protected cb func OnXFHide(value: Variant) -> Bool {
+    if !XFRecordingTap.On("subtitles") { return false; }
+    this.m_hideBatches += 1;
+    let ids = FromVariant<array<CRUID>>(value);
+    if ArraySize(ids) > 64 { XFRecordingTap.Emit("subtitles", "tap.truncated", "\"valid\":false"); }
+    let i = 0;
+    while i < Min(ArraySize(ids), 64) {
+      XFRecordingTap.Emit("subtitles", "line.hidden", "\"by\":\"id\",\"line_id\":" + XFJson.Str(XFRecordingTap.Id(ids[i]))); i += 1;
+    }
+  }
+  protected cb func OnXFHideData(value: Variant) -> Bool {
+    if !XFRecordingTap.On("subtitles") { return false; }
+    this.m_hideBatches += 1;
+    let lines = FromVariant<array<scnDialogLineData>>(value);
+    if ArraySize(lines) > 64 { XFRecordingTap.Emit("subtitles", "tap.truncated", "\"valid\":false"); }
+    let i = 0;
+    while i < Min(ArraySize(lines), 64) {
+      XFRecordingTap.Emit("subtitles", "line.hidden", "\"by\":\"data\"," + XFRecordingTap.Line(lines[i])); i += 1;
+    }
+  }
+}
+
+@if(ModuleExists("Codeware"))
+@addField(BaseSubtitlesGameController)
+public let xfbRecordingSubscribed: Bool;
+@if(ModuleExists("Codeware"))
+@addField(BaseSubtitlesGameController)
+private let xfbRecordingId: String;
+@if(ModuleExists("Codeware"))
+@addMethod(BaseSubtitlesGameController)
+public func XFRecordingIdentity() -> String {
+  if StrLen(this.xfbRecordingId) == 0 { this.xfbRecordingId = XFRecordingTap.NewId(); }
+  return "{\"controller\":" + XFJson.Str(NameToString(this.GetClassName())) + ",\"controller_id\":" + XFJson.Str(this.xfbRecordingId) + "}";
+}
+@if(ModuleExists("Codeware"))
+@addMethod(BaseSubtitlesGameController)
+public func XFRecordingListenerCount() -> Int32 {
+  return (IsDefined(this.m_bbCbShowDialogLine) ? 1 : 0) + (IsDefined(this.m_bbCbHideDialogLine) ? 1 : 0) + (IsDefined(this.m_bbCbHideDialogLineByData) ? 1 : 0);
+}
+@if(ModuleExists("Codeware"))
+@addMethod(BaseSubtitlesGameController)
+public func XFRecordingBody() -> String {
+  return "\"consumer\":" + this.XFRecordingIdentity() + ",\"mapped_widgets\":" + IntToString(ArraySize(this.m_lineMap)) + ",\"disabled_by_settings\":" + XFJson.Flag(this.m_disabledBySettings) + ",\"radio_enabled\":" + XFJson.Flag(this.m_isRadioSubtitleEnabled);
+}
+@if(ModuleExists("Codeware"))
+@addMethod(BaseSubtitlesGameController)
+private func XFRecordingTrack() -> Void {
+  if (XFBridge_ProbeFlags() & 1) == 0 || !XFBridge_Live() { return; }
+  let taps = XFRecordingTap.Get();
+  if IsDefined(taps) { taps.Track(this); }
+}
+@if(ModuleExists("Codeware"))
+@wrapMethod(BaseSubtitlesGameController)
+private final func RegisterToDialogBlackboard(value: Bool) -> Void {
+  wrappedMethod(value);
+  this.xfbRecordingSubscribed = value;
+  // Before the live gate opens, keep only this controller's own bookkeeping. A later
+  // delivered line discovers it without querying session systems during initialization/teardown.
+  this.XFRecordingTrack();
+  if XFRecordingTap.On("subtitles") {
+    XFRecordingTap.Emit("subtitles", "controller.listeners", this.XFRecordingBody() + ",\"registered\":" + XFJson.Flag(value));
+  }
+}
+@if(ModuleExists("Codeware"))
+@wrapMethod(BaseSubtitlesGameController)
+protected cb func OnShowDialogLine(value: Variant) -> Bool {
+  this.XFRecordingTrack();
+  if XFRecordingTap.On("subtitles") {
+    let lines = FromVariant<array<scnDialogLineData>>(value);
+    let i = 0;
+    while i < Min(ArraySize(lines), 64) {
+      XFRecordingTap.Emit("subtitles", "line.delivered", this.XFRecordingBody() + "," + XFRecordingTap.Line(lines[i])); i += 1;
+    }
+    if ArraySize(lines) > 64 { XFRecordingTap.Emit("subtitles", "tap.truncated", "\"valid\":false"); }
+  }
+  return wrappedMethod(value);
+}
+@if(ModuleExists("Codeware"))
+@wrapMethod(BaseSubtitlesGameController)
+private final func SpawnDialogLine(const lineData: script_ref<scnDialogLineData>) -> Void {
+  if XFRecordingTap.On("subtitles") { XFRecordingTap.Emit("subtitles", "line.accepted", this.XFRecordingBody() + "," + XFRecordingTap.Line(Deref(lineData))); }
+  wrappedMethod(lineData);
+}
+@if(ModuleExists("Codeware"))
+@wrapMethod(BaseSubtitlesGameController)
+protected cb func OnLineSpawned(widget: ref<inkWidget>, userData: ref<IScriptable>) -> Bool {
+  this.XFRecordingTrack();
+  // The async spawn callback owns a real newly-created widget at entry; pending hides can remove it inside wrappedMethod.
+  if XFRecordingTap.On("subtitles") {
+    let spawn = userData as LineSpawnData;
+    if IsDefined(widget) {
+      let controller = widget.GetController() as BaseSubtitleLineLogicController;
+      if IsDefined(controller) { controller.xfbRecordingWidgetId = XFRecordingTap.NewId(); controller.xfbRecordingConsumer = this.XFRecordingIdentity(); }
+    }
+    if IsDefined(spawn) { XFRecordingTap.Emit("subtitles", IsDefined(widget) ? "line.widget_created" : "line.spawn_failed", XFRecordingTap.Line(spawn.m_lineData) + "," + XFRecordingTap.Widget(widget)); }
+  }
+  let result = wrappedMethod(widget, userData);
+  if XFRecordingTap.On("subtitles") && IsDefined(widget) && IsDefined(widget.parentWidget) {
+    let spawn = userData as LineSpawnData;
+    if IsDefined(spawn) { XFRecordingTap.Emit("subtitles", "line.widget_state", XFRecordingTap.Line(spawn.m_lineData) + "," + XFRecordingTap.Widget(widget)); }
+  }
+  return result;
+}
+
+@if(ModuleExists("Codeware"))
+@wrapMethod(GameObject)
+public final static func PlayVoiceOver(self: ref<GameObject>, voName: CName, debugInitialContext: CName, opt delay: Float, opt answeringEntityID: EntityID, opt canPlayInVehicle: Bool) -> DelayID {
+  if XFRecordingTap.On("voice") {
+    XFRecordingTap.Voice("voice.requested", self, voName, debugInitialContext, delay,
+      ",\"can_play_in_vehicle\":" + XFJson.Flag(canPlayInVehicle) + ",\"answering_entity\":" + XFJson.Str(EntityID.ToDebugString(answeringEntityID)));
+  }
+  return wrappedMethod(self, voName, debugInitialContext, delay, answeringEntityID, canPlayInVehicle);
+}
+@if(ModuleExists("Codeware"))
+@wrapMethod(ReactionManagerComponent)
+private final func TriggerFacialLookAtReaction(opt forceFear: Bool, opt playVO: Bool) -> Void {
+  if XFRecordingTap.On("voice") { XFRecordingTap.Voice("voice.reaction_caller", this.GetOwner(), n"", n"Scripts:TriggerLookAtReaction", 0.0, ",\"force_fear\":" + XFJson.Flag(forceFear) + ",\"play_vo_argument\":" + XFJson.Flag(playVO)); }
+  wrappedMethod(forceFear, playVO);
+}
+@if(ModuleExists("Codeware"))
+@wrapMethod(ReactionManagerComponent)
+public final static func SendVOEventToSquad(owner: wref<GameObject>, voEvent: CName, opt setOwnerAsAnsweringEntity: Bool, opt onlyForMembersInCombat: Bool) -> Void {
+  if XFRecordingTap.On("voice") { XFRecordingTap.Voice("voice.squad_caller", owner, voEvent, n"Scripts:SendVOEventToSquad", 0.0, ""); }
+  wrappedMethod(owner, voEvent, setOwnerAsAnsweringEntity, onlyForMembersInCombat);
+}
+@if(ModuleExists("Codeware"))
+@wrapMethod(AISubActionPlayVoiceOver_Record_Implementation)
+public final static func SendVoiceOverEvent(context: ScriptExecutionContext, record: wref<AISubActionPlayVoiceOver_Record>, debugInitContext: CName) -> Void {
+  if XFRecordingTap.On("voice") { XFRecordingTap.Voice("voice.ai_caller", ScriptExecutionContext.GetOwner(context), record.Name(), debugInitContext, record.Delay(), ""); }
+  wrappedMethod(context, record, debugInitContext);
+}
+
+@if(ModuleExists("Codeware"))
+@wrapMethod(SubtitlesGameController)
+protected func OnHideLine(const lineData: script_ref<subtitleLineMapEntry>) -> Void {
+  let identity = XFRecordingTap.On("subtitles") ? XFRecordingTap.WidgetIdentity(Deref(lineData).widget) : "";
+  wrappedMethod(lineData);
+  if XFRecordingTap.On("subtitles") {
+    XFRecordingTap.Emit("subtitles", "line.widget_removed", identity + ",\"line_id\":" + XFJson.Str(XFRecordingTap.Id(Deref(lineData).id)) + ",\"speaker\":" + XFJson.Str(XFRecordingTap.Entity(Deref(lineData).owner)) + ",\"reason\":\"OnHideLine\",\"detached\":" + XFJson.Flag(!IsDefined(Deref(lineData).widget) || !IsDefined(Deref(lineData).widget.parentWidget)));
+  }
+}
+
+@if(ModuleExists("Codeware"))
+@wrapMethod(SubtitlesGameController)
+protected func OnHideLineByData(const lineData: script_ref<subtitleLineMapEntry>) -> Void {
+  let identity = XFRecordingTap.On("subtitles") ? XFRecordingTap.WidgetIdentity(Deref(lineData).widget) : "";
+  wrappedMethod(lineData);
+  if XFRecordingTap.On("subtitles") {
+    XFRecordingTap.Emit("subtitles", "line.widget_removed", identity + ",\"line_id\":" + XFJson.Str(XFRecordingTap.Id(Deref(lineData).id)) + ",\"speaker\":" + XFJson.Str(XFRecordingTap.Entity(Deref(lineData).owner)) + ",\"reason\":\"OnHideLineByData\",\"detached\":" + XFJson.Flag(!IsDefined(Deref(lineData).widget) || !IsDefined(Deref(lineData).widget.parentWidget)));
+  }
+}
+
+@if(ModuleExists("Codeware"))
+@wrapMethod(ChattersGameController)
+protected func OnHideLine(const lineData: script_ref<subtitleLineMapEntry>) -> Void {
+  let identity = XFRecordingTap.On("subtitles") ? XFRecordingTap.WidgetIdentity(Deref(lineData).widget) : "";
+  wrappedMethod(lineData);
+  if XFRecordingTap.On("subtitles") {
+    XFRecordingTap.Emit("subtitles", "line.widget_removed", identity + ",\"line_id\":" + XFJson.Str(XFRecordingTap.Id(Deref(lineData).id)) + ",\"speaker\":" + XFJson.Str(XFRecordingTap.Entity(Deref(lineData).owner)) + ",\"reason\":\"OnHideLine\",\"detached\":" + XFJson.Flag(!IsDefined(Deref(lineData).widget) || !IsDefined(Deref(lineData).widget.parentWidget)));
+  }
+}
+
+@if(ModuleExists("Codeware"))
+@wrapMethod(ChattersGameController)
+protected func OnHideLineByData(const lineData: script_ref<subtitleLineMapEntry>) -> Void {
+  let identity = XFRecordingTap.On("subtitles") ? XFRecordingTap.WidgetIdentity(Deref(lineData).widget) : "";
+  wrappedMethod(lineData);
+  if XFRecordingTap.On("subtitles") {
+    XFRecordingTap.Emit("subtitles", "line.widget_removed", identity + ",\"line_id\":" + XFJson.Str(XFRecordingTap.Id(Deref(lineData).id)) + ",\"speaker\":" + XFJson.Str(XFRecordingTap.Entity(Deref(lineData).owner)) + ",\"reason\":\"OnHideLineByData\",\"detached\":" + XFJson.Flag(!IsDefined(Deref(lineData).widget) || !IsDefined(Deref(lineData).widget.parentWidget)));
+  }
+}
+
+@if(ModuleExists("Codeware"))
+@wrapMethod(SubtitleLineLogicController)
+public func SetLineData(const lineData: script_ref<scnDialogLineData>) -> Void {
+  wrappedMethod(lineData);
+  if !XFRecordingTap.On("subtitles") { return; }
+  let text = inkWidgetRef.Get(this.m_targetTextWidgetRef) as inkText;
+  let actual = IsDefined(text) ? text.GetText() : "";
+  XFRecordingTap.Emit("subtitles", "line.widget_bound", XFRecordingTap.Line(Deref(lineData)) + ",\"actual_text\":" + XFJson.Str(actual) + ",\"line_controller\":\"SubtitleLineLogicController\"," + XFRecordingTap.Widget(this.GetRootWidget()));
+}
+
+@if(ModuleExists("Codeware"))
+@wrapMethod(ChatterLineLogicController)
+public func SetLineData(const lineData: script_ref<scnDialogLineData>) -> Void {
+  wrappedMethod(lineData);
+  if !XFRecordingTap.On("subtitles") { return; }
+  let normal = inkWidgetRef.Get(this.m_text_normal) as inkText;
+  let wide = inkWidgetRef.Get(this.m_text_wide) as inkText;
+  let actual = IsDefined(normal) && normal.IsVisible() ? normal.GetText() : IsDefined(wide) ? wide.GetText() : "";
+  XFRecordingTap.Emit("subtitles", "line.widget_bound", XFRecordingTap.Line(Deref(lineData)) + ",\"actual_text\":" + XFJson.Str(actual) + ",\"line_controller\":\"ChatterLineLogicController\"," + XFRecordingTap.Widget(this.GetRootWidget()));
+}
+
+@if(ModuleExists("Codeware"))
+@addField(BaseSubtitleLineLogicController)
+public let xfbRecordingWidgetId: String;
+@if(ModuleExists("Codeware"))
+@addField(BaseSubtitleLineLogicController)
+public let xfbRecordingConsumer: String;
+@if(ModuleExists("Codeware"))
+@addMethod(BaseSubtitlesGameController)
+public func XFRecordingWidgetCount() -> Int32 { return ArraySize(this.m_lineMap); }

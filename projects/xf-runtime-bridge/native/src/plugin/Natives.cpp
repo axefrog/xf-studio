@@ -20,6 +20,7 @@
 
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
+#include "core/Recording.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Natives.hpp"
 #include "plugin/Plugin.hpp"
@@ -862,6 +863,25 @@ void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aO
 }
 
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
+void RecordEnabled(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool* out, int64_t)
+{
+    RED4ext::CString channel; RED4ext::GetParameter(frame, &channel); frame->code++;
+    if (out) *out = false;
+    Guarded("XFBridge_RecordEnabled", [&] { if (out) *out = RecordingWanted(ToStd(channel)); });
+}
+void RecordIngress(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool* out, int64_t)
+{
+    RED4ext::CString channel, payload;
+    RED4ext::GetParameter(frame, &channel); RED4ext::GetParameter(frame, &payload); frame->code++;
+    if (out) *out = false;
+    Guarded("XFBridge_Record", [&] {
+        // Consume ignored return values too; no unbounded copy before the core's length/nesting checks.
+        const auto text = payload.Length() < recording::kPayload ? ToStd(payload) : std::string(recording::kPayload, ' ');
+        const bool accepted = RecordingIngress(ToStd(channel), text);
+        if (out) *out = accepted;
+    });
+}
+
 // Test-only ingress: arming/taking cannot invoke SaveAnyway or enqueue any CET action.
 void TestUiTake(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, RED4ext::CString* out, int64_t)
 {
@@ -966,13 +986,15 @@ void PostRegisterTypes()
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
         RegisterGlobal(rtti, "XFBridge_TestUiTake", &TestUiTake, "String", {"draw"});
         RegisterGlobal(rtti, "XFBridge_TestUiReport", &TestUiReport, "String", {"receipt"});
+        RegisterGlobal(rtti, "XFBridge_RecordEnabled", &RecordEnabled, "Bool", {"channel"});
+        RegisterGlobal(rtti, "XFBridge_Record", &RecordIngress, "Bool", {"channel", "payload"});
 #endif
         RegisterGlobal(rtti, "XFBridge_Event", &ProbeEvent, "Bool", {"kind", "data"});
         RegisterGlobal(rtti, "XFBridge_ProbeFlags", &ProbeFlags, "Int32", {});
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
         #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-        log::Info("rtti.register_types", "phase=post_register natives=29");
+        log::Info("rtti.register_types", "phase=post_register natives=31");
 #else
         log::Info("rtti.register_types", "phase=post_register natives=27");
 #endif

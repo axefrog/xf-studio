@@ -17,7 +17,8 @@
 // wrong @wrapMethod parameter list is not reported; wrap targets are copied from published mods.
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { assertNativeGlobals, packageScripts } from "./redscript-natives.ts";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const args = process.argv.slice(2);
@@ -25,6 +26,16 @@ const option = (name: string) => {
   const index = args.indexOf(name);
   return index >= 0 ? args[index + 1] : undefined;
 };
+
+// Run this contract before redscript-cli: its lint cannot validate the DLL's native table.
+const project = resolve(import.meta.dir, "..");
+try {
+  const cpp = readFileSync(join(project, "native/src/plugin/Natives.cpp"), "utf8");
+  for (const [variant, hooks] of [["default", false], ["diagnostic", false], ["writes", false], ["writes", true]] as const)
+    assertNativeGlobals(packageScripts(project, variant, hooks), cpp, hooks);
+  console.log("native globals: all four package sets passed (normal and autonomous flags)");
+} catch (error) { console.error(String(error)); process.exit(1); }
+if (args.includes("--natives-only")) process.exit(0);
 
 const cli = option("--cli") ?? process.env.XFB_REDSCRIPT_CLI ?? "D:/Dev/tools/redscript-cli/0.5.31/redscript-cli.exe";
 const bundle = option("--bundle") ?? process.env.XFB_REDSCRIPT_BUNDLE;

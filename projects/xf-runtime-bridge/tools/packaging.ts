@@ -25,7 +25,9 @@
 
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
+
+import { assertNativeGlobals, packageScripts, stagedScripts } from "./redscript-natives.ts";
 
 export type Variant = "default" | "diagnostic" | "writes";
 export const VARIANTS: readonly Variant[] = ["default", "diagnostic", "writes"];
@@ -247,8 +249,9 @@ export function stageVariant(options: StageOptions): Manifest {
   const config = variantConfig(readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8"), variant, { allowInventory: options.allowInventory });
   mkdirSync(join(stageDir, PLUGIN_DIR), { recursive: true });
   writeFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), config);
-  for (const name of readdirSync(join(projectDir, "redscript"))) {
-    if (name.endsWith(".reds") && (name !== "XFRuntimeBridgeRecording.reds" || options.autonomousTests)) put(join(projectDir, "redscript", name), `${PLUGIN_DIR}/Scripts/${name}`);
+  for (const source of packageScripts(projectDir, variant, options.autonomousTests === true)) {
+    const target = join(stageDir, PLUGIN_DIR, "Scripts", basename(source.path));
+    mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, source.text);
   }
   put(join(projectDir, "tweaks", "xf_runtime_bridge.yaml"), "r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml");
   // XF photo-mode camera presets (photo_mode.std_preset_6..9) for repeatable framing: approved for the
@@ -264,31 +267,20 @@ export function stageVariant(options: StageOptions): Manifest {
   // 0.8.7: the test probes (the game-events, save-identity and companion probes, behind [bridge] allow_test_hooks): only the
   // -writes package carries their scripts and the companion. They come out, or move into XF Lab, when XF Core's C1 to C3 land.
   if (variant === "writes") {
-    for (const name of readdirSync(join(projectDir, "redscript-probes"))) {
-      if (name.endsWith(".reds")) put(join(projectDir, "redscript-probes", name), `${PLUGIN_DIR}/Scripts/${name}`);
-    }
     put(options.companion ?? join(dirname(dll), COMPANION_FILE), `${PLUGIN_DIR}/${COMPANION_FILE}`);
   }
   if (options.autonomousTests) {
-    for (const folder of ["redscript-input", "redscript-probes/autonomous"]) {
-      for (const name of readdirSync(join(projectDir, folder))) {
-        if (name.endsWith(".reds")) put(join(projectDir, folder, name), `${PLUGIN_DIR}/Scripts/${name}`);
-      }
-    }
     put(join(projectDir, "cet", "xf_runtime_bridge", "test-input.lua"), `${CET_DIR}/test-input.lua`);
   }
   // 0.8.12: the live-direction toolkit's scripts (the wraps on three HUD controllers must not ship in the distribution package):
   // the -writes package only, beside the probes.
-  if (variant === "writes") {
-    for (const name of readdirSync(join(projectDir, "redscript-dm"))) {
-      if (name.endsWith(".reds")) put(join(projectDir, "redscript-dm", name), `${PLUGIN_DIR}/Scripts/${name}`);
-    }
-  }
   // 0.8: the XF actor records and (when built) the gesture carrier: the test profile's -writes package only.
   if (variant === "writes") put(join(projectDir, "tweaks", "test-profile", "xf_npc_actors.yaml"), NPC_ACTORS_FILE);
   const carrier = variant === "writes" && options.npcCarrier ? options.npcCarrier : undefined;
   if (carrier) put(carrier, NPC_CARRIER_ARCHIVE);
 
+  const nativeCount = assertNativeGlobals(stagedScripts(stageDir),
+    readFileSync(join(projectDir, "native/src/plugin/Natives.cpp"), "utf8"), options.autonomousTests === true);
   const files = listFiles(stageDir).map((path) => ({
     path: relative(stageDir, path).replaceAll("\\", "/"),
     bytes: statSync(path).size,
@@ -306,7 +298,7 @@ export function stageVariant(options: StageOptions): Manifest {
     allow_live_pose: variant === "writes",
     allow_test_hooks: variant === "writes",
     autonomous_test_hooks: options.autonomousTests === true,
-    native_count: options.autonomousTests ? 29 : 27,
+    native_count: nativeCount,
     test_probes: variant === "writes" ? [...TEST_PROBES] : [],
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],

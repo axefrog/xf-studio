@@ -49,6 +49,7 @@
 #include <mutex>
 
 int RunUnitTests();
+int RecordingUnitTests();
 int RunPipeStress(int aRounds);
 int RunLayoutRepro();
 
@@ -157,6 +158,7 @@ int wmain(int argc, wchar_t** argv)
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
+        if (arg == L"--unit-recording") return RecordingUnitTests();
         if (arg == L"--unit")
         {
             return RunUnitTests();
