@@ -1,3 +1,5 @@
+// S3J: first-save ended edges at s75/s185/s824 now survive. See SPEC-NOTES 195
+// for the authorized old/new digest comparison; semantic outputs are unchanged.
 // The determinism digest: the cross-implementation check for a later native core (spec 17, open item 1).
 //
 // A fixed script of 1,000 mixed operations runs against the synthetic schema in test/synthetic.ts
@@ -70,10 +72,10 @@ describe('the determinism digest', () => {
   test('1,000 mixed operations hash to the frozen digest', () => {
     const { digest, entries, k } = run();
     expect(entries).toBe(1067);
-    expect(k.revision).toBe(2057);
+    expect(k.revision).toBe(2058);
     expect(k.store.allPins()).toHaveLength(135);
-    expect(k.store.allContributions()).toHaveLength(51);
-    expect(digest).toBe('d534e0dcef3f85d27cefa552217152ec');
+    expect(k.store.allContributions()).toHaveLength(121);
+    expect(digest).toBe('746601727380a3fdff647f873c91c971');
   });
 
   test('SR-14: the script covers what the digest claims: saves, branches, snapshots, loads with outstanding batches, beliefs, summaries, groups', () => {
@@ -107,7 +109,7 @@ describe('the determinism digest', () => {
 
   test('SR-14: the digest moves when a save, a load, the belief, summary or outstanding-batch state, or a group decision changes', () => {
     const base = run().digest;
-    expect(base).toBe('d534e0dcef3f85d27cefa552217152ec');
+    expect(base).toBe('746601727380a3fdff647f873c91c971');
     // A save record that differs only in its lineage metadata.
     const save = Persistence.prototype.save;
     expect(digestWith(Persistence.prototype, 'save', function (this: Persistence, key: string) {

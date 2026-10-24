@@ -201,6 +201,7 @@ export class Dispatcher {
    * the emission threshold: 0 when nothing matches. It writes nothing, queues nothing and does not wait for the frame worklist.
    */
   matchStrength(actor: Id, change: Change, types?: readonly InterestType[], time: GameTime = this.k.now): number {
+    this.k.persistence.recoverIfSaved(actor, change);
     const k = this.k;
     const fr = k.frames;
     const mine = new Set(fr.all().filter((f) => f.actor === actor && fr.eligible(f)).map((f) => f.id));

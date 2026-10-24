@@ -33,6 +33,7 @@ export class Queries {
 
   /** An outer query. Hard limits give `failed` and record a defect. */
   run(q: Query, ctx: OpCtx = newOpCtx(this.k.config.allowance)): QueryOutcome {
+    this.k.persistence.recoverIfSaved(q);
     try {
       return { status: 'ok', items: this.execute(ctx, q) };
     } catch (e) {
@@ -46,6 +47,7 @@ export class Queries {
 
   /** The candidate set of a ref (spec 2.4): the complete result, cut to the `max` lowest Ids. Throws LimitExceeded. */
   candidateSet(ctx: OpCtx, cq: CandidateQuery, t: GameTime): Id[] {
+    this.k.persistence.recoverIfSaved(cq);
     if (this.candRevision !== this.k.revision || this.candNow !== this.k.now) {
       this.candCache.clear();
       this.candRevision = this.k.revision;

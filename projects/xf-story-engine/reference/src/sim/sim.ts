@@ -193,7 +193,7 @@ export class Sim {
       const item = this.summaryOfItem(id);
       let original: Parameters<Kernel['events']['mintedSpec']>[1];
       if (item) {
-        const h = this.k.store.header(item.summary);
+        const h = this.k.persistence.restoreReferencedHeader(item.summary);
         // Read the summary's original committed descriptor, never a resolved overlay. S1 summaries use their cell as scope/place.
         const own = (slot: string) => this.k.store.pinsOfNode(item.summary).find((p) => p.slot === slot && p.reason === 'committed' && h?.origin.by === 'minted' && p.cause === h.origin.cause)?.value;
         const from = own('from'), length = own('length'), kind = own('kind'), place = own('scope');
@@ -331,7 +331,7 @@ export class Sim {
 
   /** The summary an item belongs to and its index, from the item's header. */
   summaryOfItem(item: Id): { summary: Id; index: number } | undefined {
-    const h = this.k.store.header(item);
+    const h = this.k.persistence.restoreReferencedHeader(item);
     if (!h || h.origin.by !== 'minted' || h.origin.creator !== h.origin.cause) return undefined;
     const m = /^item:(\d+)$/.exec(h.origin.name);
     return m ? { summary: h.origin.creator, index: Number(m[1]) } : undefined;

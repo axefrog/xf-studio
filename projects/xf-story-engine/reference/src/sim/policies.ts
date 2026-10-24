@@ -119,7 +119,7 @@ export class Policies {
       const c = k.value(id, `causes[${i}]`);
       if (typeof c === 'string') causes.push(c);
     }
-    const h = k.store.header(id);
+    const h = k.persistence.restoreReferencedHeader(id);
     const v: EventView = { id, kind, time, participants, effects, witnesses, causes, creator: h?.origin.by === 'minted' ? h.origin.creator : undefined };
     const place = k.value(id, 'place');
     if (typeof place === 'string') v.place = place;
@@ -174,6 +174,7 @@ export class Policies {
   }
 
   observedByV(n: Id): boolean {
+    this.k.persistence.recoverIfSaved(n);
     for (const p of this.k.store.pinsOfNode(n)) if (p.reason === 'observed' && !this.k.store.isWithdrawn(p.id)) return true;
     return false;
   }
@@ -599,7 +600,7 @@ export class Policies {
   // ---- readings: reconcile and v.frames (S1 8.2, 8.8) ----
 
   private heardReading(ch: Extract<Change, { c: 'reading' }>): void {
-    const h = this.k.store.header(ch.node);
+    const h = this.k.persistence.restoreReferencedHeader(ch.node);
     if (!h) return;
     if (h.kind === 'xf:person' && (ch.slot === 'alive' || ch.slot === 'affiliation' || ch.slot === 'quest-linked')) this.reconcile(ch.node, ch.slot, ch.new, ch.old);
     else if (ch.node === this.sim.w.vState && ch.slot === 'cell') this.sim.vFrames.cellChanged(ch.old, ch.new);
@@ -627,6 +628,7 @@ export class Policies {
 
   /** The game is ground truth (S1 8.8): end what the game now contradicts; beliefs are left, and the divergence is logged. */
   reconcile(person: Id, slot: string, value: unknown, old: unknown, quiet = false): void {
+    this.k.persistence.recoverIfSaved(person);
     const k = this.k;
     const w = this.sim.windowNow();
     let corrected = false;

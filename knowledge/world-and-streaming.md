@@ -13,7 +13,7 @@ This page answers: *how is the world organised in files, how do location mods ch
 | [ArchiveXL](https://github.com/psiberx/cp2077-archive-xl) (MIT) | `v1.27.3` (`5474e34d`) | `streaming:` blocks, sector deletions and mutations, resource patches, quest phases (§2.1–2.4) |
 | [Codeware](https://github.com/psiberx/cp2077-codeware) (MIT) | `v1.20.4` (`613a1cb8`) | Entity spawning, world-state and node access from script (§2.6) |
 | [Red Hot Tools](https://github.com/psiberx/cp2077-red-hot-tools) (MIT) | `b4d34152` | World inspector, node registry, streaming override, archive hot reload (§2.6, §3.3) |
-| RED4ext.SDK (MIT) and the RTTI dump in `red-dump-json` | `ad772771`; `a8e52990` | World class layouts; the 122 `worldNode` subclasses |
+| RED4ext.SDK (MIT) and the RTTI dump in `red-dump-json` | `ad727771`; `a8e52990` | World class layouts; the 122 `worldNode` subclasses |
 | [World Builder](https://github.com/justarandomguyintheinternet/CP77_entSpawner) (Nexus 20660), by keanuWheeze | source `d9680f4d` (1.0.81 + 4); installed 1.0.7 | Authoring model, export format and in-game preview (§2.5). The repository has no licence file; its `init.lua` notice forbids reuse of its code without credit or permission, so only its data formats are described here |
 | [Appearance Menu Mod](https://github.com/MaximiliumM/appearancemenumod) | `1.8.4-167-g5427235` (no licence file; techniques only) | Spawning, decor presets and teleports (§2.6) |
 | Cyberpunk 2077 Modding Wiki (local clone) | `be2f44eed841` | Sector, block, variant, node-ref, removal, community and World Builder pages and their screenshots |

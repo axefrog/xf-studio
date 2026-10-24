@@ -55,7 +55,7 @@ export interface EventFacts {
 /** The fields of an event node, read at its own time. Undefined when the event's time does not resolve. */
 export function eventFacts(l2: Layer2, event: Id): EventFacts | undefined {
   const k = l2.k;
-  const h = k.store.header(event);
+  const h = k.persistence.restoreReferencedHeader(event);
   if (!h || !k.schema.isKind(h.kind, 'core:event')) return undefined;
   const time = k.value(event, 'time', k.now);
   if (typeof time !== 'number') return undefined;
@@ -148,6 +148,7 @@ export function patternFields(pat: EventPattern): Array<'time' | 'place' | 'kind
 export function readSeedFact(l2: Layer2, inst: Instance, key: string): number {
   const decl = inst.st.document.facts?.[key];
   const cur = inst.st.facts[key];
+  if (cur?.pin !== undefined) l2.k.persistence.recoverIfSaved(cur.pin);
   if (cur?.pin !== undefined && !l2.k.store.isWithdrawn(cur.pin)) {
     const p = l2.k.store.pin(cur.pin);
     if (p && typeof p.value === 'number') return p.value;

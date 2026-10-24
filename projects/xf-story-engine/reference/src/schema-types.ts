@@ -46,6 +46,8 @@ export type Facet = 'actor' | 'group' | 'place' | 'event' | 'summary';
 export interface KindDef {
   id: KindId;
   extends?: KindId[];
+  /** Nominal identity/pattern compatibility, without inheriting slots or query membership (SPEC-NOTES 180). */
+  classifiesAs?: KindId[];
   slots: SlotDef[];
   facets?: Facet[];
   tags?: string[];

@@ -3,7 +3,8 @@
 // A summary says "n events of one kind happened in a scope over a span". Item i is derivable from the
 // summary alone: its Id, time and place are pure functions of (summary, i), so overlapping queries see
 // the same items and nothing is counted twice. Materialising an item is silent cache population: it
-// adds a header and bumps no revision. Only canon items persist (their fields become pins).
+// adds a header and bumps no revision. Canon items persist as pins; referenced opened items also keep
+// their materialisation facts, with time/kind/place still supplied by the summary (S0 14.1).
 
 import { ln } from './fdlibm-log.ts';
 import { H, i as hi, id as hid, mintedId, rand, s as hs } from './id.ts';
@@ -59,6 +60,7 @@ export class Summaries {
 
   /** Mint a summary node and pin its fields `committed` by the cause (spec 9.3, SPEC-NOTES 31). */
   mintSummary(spec: SummarySpec): Id {
+    this.k.persistence.recoverIfSaved(spec);
     const k = this.k;
     const nid = k.mint(spec.creator, spec.cause, spec.name, 'core:summary');
     // a pin that was there before this mint may restate a field: then the span is resolved when it is first read, not taken from the spec
@@ -79,11 +81,13 @@ export class Summaries {
   // ---- canon ----
 
   canonOf(summary: Id): number[] {
+    this.k.persistence.recoverIfSaved(summary);
     return [...(this.canon.get(summary) ?? [])].sort((a, b) => a - b);
   }
 
   /** The kind, start and length of a summary, from the cache or resolved once. */
   spanOf(ctx: OpCtx, summary: Id, t: GameTime): { kind: Value | undefined; from: number; length: number } | null {
+    this.k.persistence.recoverIfSaved(summary);
     const have = this.spans.get(summary);
     const local = this.k.store.localState(summary);
     // The span taken at minting holds at any time (nothing local touched the summary then, and a change since moves the stamp). One
@@ -125,6 +129,7 @@ export class Summaries {
 
   /** Header the item (silent cache population: no revision bump, no change). */
   materialise(summary: Id, i: number): Id {
+    this.k.persistence.recoverIfSaved(summary);
     return this.k.mintSilent(summary, summary, `item:${i}`, 'core:event');
   }
 
@@ -132,6 +137,7 @@ export class Summaries {
   makeItemCanon(summary: Id, i: number, reason: 'observed' | 'committed', cause: Id): Id {
     const k = this.k;
     k.assertWritable();
+    this.k.persistence.recoverIfSaved(summary);
     const count = k.resolve(summary, 'count');
     if (typeof count.value !== 'number' || i < 0 || i >= count.value) throw new Error(`item ${i} does not exist`);
     const nid = this.materialise(summary, i);
@@ -169,6 +175,7 @@ export class Summaries {
 
   /** The descriptor of item i: its Id, time and place (spec 9.3). Undefined if the summary's fields are not all known. */
   descriptor(ctx: OpCtx, summary: Id, index: number, t: GameTime): ItemDescriptor | undefined {
+    this.k.persistence.recoverIfSaved(summary);
     if (this.descRevision !== this.k.revision || this.descNow !== this.k.now) {
       this.descCache.clear();
       this.descRevision = this.k.revision;
@@ -235,6 +242,7 @@ export class Summaries {
 
   /** The descriptor value for an item node's slot, or undefined if the node is not a summary item (spec 9.3). */
   itemConstraint(ctx: OpCtx, header: NodeHeader, path: SlotPath, t: GameTime): Value | undefined {
+    this.k.persistence.recoverIfSaved(header.id);
     if (path !== 'time' && path !== 'place' && path !== 'kind') return undefined;
     const it = this.itemOf(header);
     if (!it) return undefined;
@@ -255,6 +263,7 @@ export class Summaries {
    * the scope. The query then checks each exactly. Charged to the query's allowance.
    */
   itemCandidates(ctx: OpCtx, scope: QueryScope, t: GameTime, roots: Id[], pre?: ItemPrefilter): Id[] {
+    this.k.persistence.recoverIfSaved(scope, roots);
     if ('nodes' in scope) return [];
     const env = this.k.resolver.makeEnv(ctx, t);
     const out: Id[] = [];
@@ -302,6 +311,7 @@ export class Summaries {
 
   /** Queue a summary's items to be materialised in the background. */
   queueMaterialise(summary: Id): void {
+    this.k.persistence.recoverIfSaved(summary);
     this.warmList.push({ summary, next: 0 });
   }
 

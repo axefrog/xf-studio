@@ -91,21 +91,25 @@ export class StagedBatch {
   }
 
   resolve(node: Id, path: SlotPath, t?: GameTime): ResolveResult {
+    this.k.persistence.recoverIfSaved(node);
     this.assertOpen();
     return this.k.resolver.resolve(node, path, t ?? this.k.now, this.ctx());
   }
 
   value(node: Id, path: SlotPath, t?: GameTime): Value | undefined {
+    this.k.persistence.recoverIfSaved(node);
     const r = this.resolve(node, path, t);
     return r.status === 'ok' || r.status === 'contradiction' ? r.value : undefined;
   }
 
   trace(node: Id, path: SlotPath, t?: GameTime): Trace {
+    this.k.persistence.recoverIfSaved(node);
     this.assertOpen();
     return this.k.resolver.trace(node, path, t ?? this.k.now, this.ctx());
   }
 
   query(q: Query): QueryOutcome {
+    this.k.persistence.recoverIfSaved(q);
     this.assertOpen();
     return this.k.queries.run(q, this.ctx());
   }

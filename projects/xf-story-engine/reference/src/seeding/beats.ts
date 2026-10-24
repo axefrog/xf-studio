@@ -194,7 +194,8 @@ export function chooseFragment(l2: Layer2, inst: Instance, key: string, n: numbe
       const prior = inst.st.draws[choice];
       if (prior && best.some((f) => f.id === prior.value)) pick = best.find((f) => f.id === prior.value);
       else {
-        const d = l2.draw(inst.id, choice, best.map((f) => ({ id: f.id })), inst.st.beats[key]!.attempt);
+        const options = best.map(f => ({id: f.id,fragment: f.id}));
+        const d = l2.draw(inst.id, choice, options, inst.st.beats[key]!.attempt, l2.fitWeights({id: inst.id,template: inst.st.template.id,pack: inst.st.template.pack,sowSeq: inst.st.sowSeq,document: inst.st.document,choice,options,report: inst.fitSample}));
         inst.st.draws[choice] = { value: d.value, attempt: inst.st.beats[key]!.attempt, ...(d.raw !== undefined ? { raw: d.raw } : {}), ...(d.clamped !== undefined ? { clamped: d.clamped } : {}) };
         pick = best.find((f) => f.id === d.value);
       }

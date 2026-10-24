@@ -11,7 +11,7 @@ import { idsIn as idFields } from './canon.ts';
 import type { Kernel } from './kernel.ts';
 import { splitWindowPath } from './kernel.ts';
 import { isId } from './id.ts';
-import type { Edge, GameTime, Id, Pin, Region, Value } from './types.ts';
+import type { Edge, GameTime, Id, NodeHeader, Pin, Region, Value } from './types.ts';
 import { type Budget, Worklist } from './work.ts';
 
 export interface SeedRecord {
@@ -29,8 +29,10 @@ const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 export class Retention {
   readonly seeds = new Map<Id, SeedRecord>();
   readonly streamed = new Set<Id>();
-  private cache: { revision: number; now: GameTime; marked: Set<Id>; maxMember: Map<string, number> } | null = null;
+  private cache: { revision: number; now: GameTime; marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id> } | null = null;
   private sweepList = new Worklist<{ id: Id }>();
+  /** Ownership of unrecoverable location edges survives their unsaved event header, without rooting it. */
+  private sweptEventLocations = new Set<Id>();
 
   constructor(private readonly k: Kernel) {}
 
@@ -41,6 +43,8 @@ export class Retention {
     this.seeds.set(rec.id, { ...rec, nodes: [...rec.nodes] });
     if (rec.actor !== undefined) this.k.frames.demandRoots.add(rec.actor);
     this.k.bump();
+    // Seed consumers may read immediately: restore swept saved dependencies through the common traversal.
+    this.marked();
   }
 
   endSeed(id: Id): void {
@@ -54,12 +58,14 @@ export class Retention {
 
   streamIn(ids: Id[]): void {
     this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(ids);
     for (const i of ids) this.streamed.add(i);
     this.k.bump();
   }
 
   streamOut(ids: Id[]): void {
     this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(ids);
     for (const i of ids) this.streamed.delete(i);
     this.k.bump();
   }
@@ -70,16 +76,17 @@ export class Retention {
 
   /** A deep copy of the seeds, streaming and sweep state, for a staged batch's discard (spec 14.2a). */
   capture(): unknown {
-    return structuredClone({ seeds: this.seeds, streamed: this.streamed, sweep: this.sweepList.snapshot() });
+    return structuredClone({ seeds: this.seeds, streamed: this.streamed, sweep: this.sweepList.snapshot(), locations: this.sweptEventLocations });
   }
 
   restoreFrom(cap: unknown): void {
-    const c = structuredClone(cap) as { seeds: Map<Id, SeedRecord>; streamed: Set<Id>; sweep: Array<{ id: Id }> };
+    const c = structuredClone(cap) as { seeds: Map<Id, SeedRecord>; streamed: Set<Id>; sweep: Array<{ id: Id }>; locations: Set<Id> };
     this.seeds.clear();
     for (const [k, v] of c.seeds) this.seeds.set(k, v);
     this.streamed.clear();
     for (const i of c.streamed) this.streamed.add(i);
     this.sweepList.restore(c.sweep);
+    this.sweptEventLocations = c.locations;
     this.cache = null;
   }
 
@@ -88,17 +95,22 @@ export class Retention {
     this.streamed.clear();
     this.cache = null;
     this.sweepList.clear();
+    this.sweptEventLocations.clear();
   }
 
   // ---- roots ----
+
+  /** A minted event's spatial link is part of its facts, rather than an independent retention root. */
+  isOwnEventLocation(e: Edge, h: NodeHeader | undefined = this.k.store.header(e.from) ?? this.k.persistence.savedHeader(e.from)): boolean {
+    return e.cause === e.from && e.type === 'core:located-in' &&
+      ((h !== undefined && this.k.schema.hasFacet(h.kind, 'event')) || this.sweptEventLocations.has(e.id));
+  }
 
   /** Whether an edge is a root: not ended, or ended but referenced by a canon event. An event's own location edge is not. */
   isRootEdge(e: Edge, canonEvents: Set<Id> = new Set(this.k.events.canonEvents())): boolean {
     const k = this.k;
     const live = e.valid.to === undefined || e.valid.to > k.now;
-    const fromHeader = k.store.header(e.from);
-    const ownEventEdge = e.cause === e.from && e.type === 'core:located-in' && fromHeader !== undefined &&
-      k.schema.hasFacet(fromHeader.kind, 'event') && !canonEvents.has(e.from);
+    const ownEventEdge = this.isOwnEventLocation(e) && !canonEvents.has(e.from);
     const referenced = canonEvents.has(e.from) || canonEvents.has(e.to) || canonEvents.has(e.cause);
     return (live && !ownEventEdge) || (!live && referenced);
   }
@@ -192,21 +204,53 @@ export class Retention {
     return this.compute().marked;
   }
 
-  private compute(): { marked: Set<Id>; maxMember: Map<string, number> } {
+  /** Own event constants that persisted consumers cannot regenerate after replay. */
+  eventFacts(): ReadonlySet<Id> { return this.compute().eventFacts; }
+
+  private compute(): { marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id> } {
     if (this.cache && this.cache.revision === this.k.revision && this.cache.now === this.k.now) return this.cache;
     const store = this.k.store;
     const marked = new Set<Id>();
     const stack = [...this.rootIds()];
+    // Every persisted reference can depend on event facts, including pins, frames, edges and canon fields.
+    const eventRoots = new Set(stack);
+    const follow = (...refs: Id[]): void => {
+      stack.push(...refs);
+      for (const ref of refs) eventRoots.add(ref);
+    };
+    const traversedEvents = new Set<Id>();
+    const eventFacts = new Set<Id>();
     while (stack.length > 0) {
       const id = stack.pop()!;
-      if (marked.has(id)) continue;
+      const firstVisit = !marked.has(id);
+      const traverseEvent = eventRoots.has(id) && !traversedEvents.has(id);
+      if (!firstVisit && !traverseEvent) continue;
       marked.add(id);
-      const h = store.header(id);
+      const h = this.k.persistence.restoreReferencedHeader(id);
       if (!h) continue;
-      if (h.origin.by === 'value' || h.origin.by === 'member') stack.push(h.origin.owner);
-      else if (h.origin.by === 'minted') stack.push(h.origin.creator, h.origin.cause);
+      if (traverseEvent) traversedEvents.add(id);
+      if (h.origin.by === 'value' || h.origin.by === 'member') follow(h.origin.owner);
+      else if (h.origin.by === 'minted') follow(h.origin.creator, h.origin.cause);
+      // A retained non-canon event keeps its described people, place and causes too (S3-I-22).
+      // Its fields are simulation constants, so they need not have canon pins. Read the stored
+      // constants directly: resolution here would recursively ask retention about member counts.
+      if (traverseEvent && this.k.schema.isKind(h.kind, 'core:event')) {
+        // Summary descriptors own time/kind/place; the process that opens an item owns its other facts.
+        const materialisation = this.k.events.materialisationOf(id)?.materialisation;
+        const fields = [id], seenFields = new Set<Id>();
+        for (let n = 0; n < fields.length; n++) {
+          const field = fields[n]; if (seenFields.has(field)) continue; seenFields.add(field);
+          stack.push(field);
+          fields.push(...store.ownedOf(field));
+          for (const c of store.contributionsNaming(field)) if (c.form.f === 'const') {
+            if (c.source.layer === 'simulation' && (c.source.origin === id ||
+              (c.source.origin === materialisation && !(field === id && ['time', 'kind', 'place'].includes(c.target.slot))))) eventFacts.add(c.id);
+            const refs: Id[] = []; this.idsIn(c.form.value, refs); follow(...refs);
+          }
+        }
+      }
       for (const o of store.ownedOf(id)) {
-        if (store.header(o)?.origin.by === 'value') stack.push(o);
+        if (store.header(o)?.origin.by === 'value') follow(o);
       }
     }
     const maxMember = new Map<string, number>();
@@ -218,7 +262,7 @@ export class Retention {
         if (cur === undefined || h.origin.index > cur) maxMember.set(key, h.origin.index);
       }
     }
-    this.cache = { revision: this.k.revision, now: this.k.now, marked, maxMember };
+    this.cache = { revision: this.k.revision, now: this.k.now, marked, maxMember, eventFacts };
     return this.cache;
   }
 
@@ -250,16 +294,25 @@ export class Retention {
     return this.sweepList.length;
   }
 
-  /** Discard one node's in-memory state. A minted node, which nothing can regenerate, goes entirely with the records it owns. */
+  /** Discard caches and regenerable headers; facts leave memory only when recovery can restore them exactly. */
   sweepNode(id: Id): void {
     const store = this.k.store;
     const h = store.header(id);
     if (!h) return;
     store.dropNode(id);
     if (h.origin.by === 'minted') {
-      for (const c of store.contributionsOrigin(id)) store.removeContribution(c.id);
-      for (const e of store.edgesFrom(id)) if (e.cause === id) store.removeEdge(e.id);
+      for (const e of store.edgesFrom(id)) if (e.cause === id) {
+        if (this.k.persistence.canSweepEdge(e)) {
+          store.removeEdge(e.id);
+          this.sweptEventLocations.delete(e.id);
+        } else if (this.isOwnEventLocation(e, h)) this.sweptEventLocations.add(e.id);
+      }
+      this.k.events.forgetMaterialisation(id);
       this.removeTree(id);
+      // Origin lifetime does not determine applicability: general authored rules and facts on live
+      // targets stay. Unsaved targets and pending updates cannot be recovered exactly either.
+      for (const c of store.contributionsOrigin(id))
+        if (this.k.persistence.canSweepContribution(c)) store.removeContribution(c.id);
       // Removing a node's records changes what resolves, so cached results go (no change is emitted).
       this.k.bump();
     } else if ((h.origin.by === 'value' || h.origin.by === 'member') && !store.header(h.origin.owner)) {

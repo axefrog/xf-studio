@@ -29,6 +29,7 @@ export interface EventSpec {
 export type EventField = 'time' | 'place' | 'kind' | 'participants' | 'effects' | 'witnesses' | 'causes' | 'outcome' | 'served';
 /** An opened summary item's descriptor belongs to its summary; its other fields belong to the opening process. */
 export interface EventProvenance { descriptor: Id; materialisation: Id }
+export interface EventMaterialisation { event: Id; provenance: EventProvenance }
 /** The fields every event has (spec 9.2). `outcome` and `served` are optional and joined in only when the event carries them. */
 export const EVENT_FIELDS: readonly EventField[] = ['time', 'place', 'kind', 'participants', 'effects', 'witnesses', 'causes'];
 
@@ -46,6 +47,7 @@ export interface EventCanonRecord {
 
 export class Events {
   private canonRecords = new Map<Id, CanonEntry[]>();
+  private materialisations = new Map<Id, EventProvenance>();
   /** Summary items published as events in this session (V4-47). Not persisted: the publishing layer keeps its own record. */
   readonly published = new Set<Id>();
   /** The kind and time each event was minted with: a cache for queries to reject a candidate before resolving it. Not persisted. */
@@ -56,11 +58,45 @@ export class Events {
    * may restate either, and then the resolved value is the one a query must test (S0 8.3).
    */
   mintedFacts(id: Id): { kind: string; time: number } | undefined {
+    this.k.persistence.recoverIfSaved(id);
     const f = this.minted.get(id);
     return f !== undefined && this.k.store.localState(id) === f.local ? f : undefined;
   }
 
   constructor(private readonly k: Kernel) {}
+
+  /** Explicit ownership of an opened item's facts, shared by views and retention (S0 14.1). */
+  materialisationOf(event: Id): EventProvenance | undefined {
+    this.k.persistence.recoverIfSaved(event);
+    const provenance = this.materialisations.get(event);
+    return provenance && { ...provenance };
+  }
+
+  materialisationRecords(): EventMaterialisation[] {
+    return [...this.materialisations].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+      .map(([event, provenance]) => ({ event, provenance: { ...provenance } }));
+  }
+
+  /** Silent ownership declaration; replay and process application use the same authority as restoration. */
+  setMaterialisation(event: Id, provenance: EventProvenance): void {
+    const h = this.k.store.header(event);
+    if (!h || h.origin.by !== 'minted' || h.origin.creator !== provenance.descriptor ||
+      h.origin.cause !== provenance.descriptor || !/^item:\d+$/.test(h.origin.name) ||
+      !this.k.schema.hasFacet(this.k.store.header(provenance.descriptor)?.kind ?? '', 'summary'))
+      throw new Error(`not an item of summary ${provenance.descriptor}: ${event}`);
+    const have = this.materialisations.get(event);
+    if (have && (have.descriptor !== provenance.descriptor || have.materialisation !== provenance.materialisation))
+      throw new Error(`materialisation owner already declared: ${event}`);
+    if (have) return;
+    this.materialisations.set(event, { ...provenance });
+    this.k.store.changeMaterialisations.set(event, { event, provenance: { ...provenance } });
+    this.k.retention.invalidate();
+  }
+
+  forgetMaterialisation(event: Id): void {
+    this.materialisations.delete(event);
+    this.k.store.referencesVersion++;
+  }
 
   /**
    * Mint an event. Adds its fields as simulation contributions, a `core:located-in` edge to its place,
@@ -68,24 +104,27 @@ export class Events {
    * Minting the same (creator, cause, name) again returns the same node and does nothing.
    */
   mintEvent(spec: EventSpec): Id {
+    this.k.persistence.recoverIfSaved(spec);
     return this.put(spec, false);
   }
 
   /**
    * Put an event's fields back under its own Id and announce nothing (S0 14.3, SPEC-NOTES 116, 140): the occurrence was announced when it
-   * first happened. A load keeps the header of an event that a memorable belief cites, and none of its fields; a layer that can say what
-   * the event was restores it here, whether or not the header survived. An event whose fields are already there is left alone.
+   * first happened. Referenced events retain their own facts across loads (S0 14.1); a layer may also regenerate unretained materialisation
+   * here, whether or not the header survived. An event whose fields are already there is left alone.
    */
   restoreEvent(spec: EventSpec, provenance?: EventProvenance): Id {
+    this.k.persistence.recoverIfSaved(spec, provenance);
     return this.put(spec, true, provenance);
   }
 
   /**
    * The fields a minted event carries, read from the contributions that hold them (the simulation-layer constants whose origin is the event
    * itself), not from what the event resolves to now: a pin or a rule that restates a field for a while changes what it resolves to and not
-   * what it was minted with. Undefined for a node that is not a minted event, or whose own fields are not there (a load drops them).
+   * what it was minted with. Undefined for a node that is not a minted event, or whose own fields are not there.
    */
   mintedSpec(id: Id, item?: { descriptor: Pick<EventSpec, 'time' | 'kind' | 'place'>; provenance: EventProvenance }): EventSpec | undefined {
+    this.k.persistence.recoverIfSaved(id);
     const k = this.k;
     const h = k.store.header(id);
     if (!h || h.origin.by !== 'minted' || !k.schema.isKind(h.kind, 'core:event')) return undefined;
@@ -145,11 +184,18 @@ export class Events {
     const k = this.k;
     k.assertWritable();
     const nid = H(hs('mint'), hid(spec.creator), hid(spec.cause), hs(spec.name));
-    // A retained header with no fields is an event a load kept as an addressable Id (it is evidence of a memorable belief): its fields
-    // are regenerated by minting it again, silently, because the occurrence was announced when it first happened.
-    const have = k.store.header(nid) !== undefined;
-    if (have && k.store.contributionsNaming(nid).some((c) => c.source.layer === 'simulation' && c.source.origin === (provenance?.materialisation ?? nid))) return nid;
+    // Reusing a header is silent: the occurrence was announced when it first happened.
+    const have = k.persistence.restoreReferencedHeader(nid) !== undefined;
     if (!have) k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
+    if (provenance) this.setMaterialisation(nid, provenance);
+    // A surviving constant proves only that constant exists. Check the complete owned payload,
+    // including member fields, and repair the spatial link from the original stored description.
+    const complete = have ? this.mintedSpec(nid, provenance ? { descriptor: spec, provenance } : undefined) : undefined;
+    if (complete) {
+      if (!provenance && complete.place !== undefined) k.addEdge({ type: 'core:located-in', from: nid,
+        to: complete.place, cause: nid, valid: { from: complete.time }, silent: true });
+      return nid;
+    }
     // a pin that survived a load may already restate the kind or the time: then what the event was minted with is not what it resolves to, and nothing is cached
     const untouched = k.store.localState(nid) === 0;
     const put = (node: Id, slot: SlotPath, value: Value): void => {
@@ -216,6 +262,7 @@ export class Events {
   publishItem(item: Id): boolean {
     const k = this.k;
     k.assertWritable();
+    this.k.persistence.recoverIfSaved(item);
     const h = k.store.header(item);
     if (!h || h.origin.by !== 'minted' || h.origin.creator !== h.origin.cause || !/^item:\d+$/.test(h.origin.name)) {
       throw new Error(`not a summary item: ${item}`);
@@ -303,6 +350,7 @@ export class Events {
   makeCanon(event: Id, reason: 'observed' | 'committed', cause: Id, fields?: readonly EventField[]): Id[] {
     const k = this.k;
     k.assertWritable();
+    this.k.persistence.recoverIfSaved(event);
     fields ??= this.defaultFields(event);
     const h = k.store.header(event);
     if (!h || !k.schema.isKind(h.kind, 'core:event')) throw new Error(`not an event: ${event}`);
@@ -325,6 +373,7 @@ export class Events {
 
   /** Every field the event has: the seven of spec 9.2, and `outcome` and `served` when the event carries them (v4). */
   defaultFields(event: Id): EventField[] {
+    this.k.persistence.recoverIfSaved(event);
     const out: EventField[] = [...EVENT_FIELDS];
     const h = this.k.store.header(event);
     if (h && this.k.schema.slotInfo(h.kind, 'outcome')) {
@@ -336,6 +385,7 @@ export class Events {
   }
 
   isCanon(event: Id): boolean {
+    this.k.persistence.recoverIfSaved(event);
     return this.canonRecords.has(event);
   }
 
@@ -344,6 +394,7 @@ export class Events {
   }
 
   canonRecord(event: Id): EventCanonRecord | undefined {
+    this.k.persistence.recoverIfSaved(event);
     const e = this.canonRecords.get(event);
     return e ? { event, entries: e.map((x) => ({ ...x, fields: [...x.fields], pins: [...x.pins] })) } : undefined;
   }
@@ -352,21 +403,23 @@ export class Events {
     this.canonRecords.set(rec.event, rec.entries.map((x) => ({ ...x, fields: [...x.fields], pins: [...x.pins] })));
   }
 
-  /** A replacement load: the canon records go, and so do this session's publications and the minting cache (S0 14.3). */
+  /** Replacement clears canon and materialisation records, session publications and the minting cache (S0 14.3). */
   clear(): void {
     this.canonRecords.clear();
+    this.materialisations.clear();
     this.minted.clear();
     this.published.clear();
   }
 
-  /** The state a staged batch can discard (S0 14.2a): the canon records and what has been published in this session. */
+  /** The records and session publications a staged batch can discard (S0 14.2a). */
   capture(): unknown {
-    return structuredClone({ canon: this.canonRecords, published: this.published });
+    return structuredClone({ canon: this.canonRecords, published: this.published, materialisations: this.materialisations });
   }
 
   restoreFrom(cap: unknown): void {
-    const c = structuredClone(cap) as { canon: Map<Id, CanonEntry[]>; published: Set<Id> };
+    const c = structuredClone(cap) as { canon: Map<Id, CanonEntry[]>; published: Set<Id>; materialisations: Map<Id, EventProvenance> };
     this.canonRecords = c.canon;
+    this.materialisations = c.materialisations;
     this.published.clear();
     for (const id of c.published) this.published.add(id);
     // events minted in the discarded stage are gone from the store: the cache of what they were minted with goes too

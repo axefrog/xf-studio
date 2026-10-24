@@ -106,7 +106,7 @@ export function weekLines(sim: Sim, w: number): WeekLine[] {
   // what the game reported of the order of the street, which the mirror does not re-describe
   const T0 = w * sim.data.time.W;
   for (const id of sim.k.store.idsOfKind('core:event')) {
-    const h = sim.k.store.header(id);
+    const h = sim.k.persistence.restoreReferencedHeader(id);
     if (h?.origin.by !== 'minted' || h.origin.creator !== sim.w.port) continue;
     const kind = sim.k.value(id, 'kind');
     const time = sim.k.value(id, 'time');

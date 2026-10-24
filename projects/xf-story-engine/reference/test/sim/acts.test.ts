@@ -48,6 +48,7 @@ describe('SF1-A-1: opening and publication', () => {
     expect(st.published.map((p) => p.summary)).toEqual([S, S, S]);
     expect(st.published.map((p) => p.index).sort()).toEqual([0, 1, 2]);
     for (const p of st.published) {
+      expect(sim.k.events.materialisationOf(p.item)).toEqual({ descriptor: S, materialisation: 'scene.acts' });
       const ev = sim.policies.viewEvent(p.item)!;
       expect(ev.kind).toBe('theft');
       expect(ev.outcome).toBe('done');

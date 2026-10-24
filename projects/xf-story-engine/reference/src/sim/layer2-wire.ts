@@ -6,8 +6,8 @@ import { L2Registry } from '../seeding/registries.ts';
 import type { Sim } from './sim.ts';
 
 /** Build layer 2 on the kernel of a sim, with its reads attached. */
-export function attachLayer2(sim: Sim, opts: Omit<Layer2Options, 'spine'>): Layer2 {
+export function attachLayer2(sim: Sim, opts: Omit<Layer2Options, 'worldRegistry'>): Layer2 {
   const reg = opts.reg ?? new L2Registry();
   reg.sim = sim.reads.port();
-  return new Layer2(sim.k, { ...opts, reg, spine: sim.spine });
+  return new Layer2(sim.k, { ...opts, reg, worldRegistry: sim.reads });
 }

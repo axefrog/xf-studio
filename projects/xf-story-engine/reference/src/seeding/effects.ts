@@ -45,6 +45,7 @@ export function writeSeedFact(l2: Layer2, inst: Instance, key: string, value: nu
     }
     cls = 'lasting';
   }
+  if (cur.pin !== undefined) k.persistence.recoverIfSaved(cur.pin);
   if (cur.pin !== undefined && !k.store.isWithdrawn(cur.pin)) k.withdrawPin(cur.pin, inst.id, now);
   const pinId = ids.seedFactPinId(inst.id, key, cur.n);
   k.pin({ id: pinId, node, slot: 'value', value, reason: 'committed', cause: inst.id, at: now });
@@ -157,6 +158,7 @@ export function runMaintenance(l2: Layer2, now: GameTime): number {
   for (const j of due) {
     if (j.kind === 'reset') {
       const inst = l2.insts.get(j.seed);
+      k.persistence.recoverIfSaved(j.pin);
       const live = !k.store.isWithdrawn(j.pin) && k.store.pin(j.pin) !== undefined;
       if (live) k.withdrawPin(j.pin, j.seed, now);
       if (inst && inst.st.facts[j.fact]?.pin === j.pin) inst.st.facts[j.fact] = { n: inst.st.facts[j.fact]!.n };

@@ -156,7 +156,7 @@ describe('roots, marks and forgetting (spec 7.3, I-3)', () => {
     expect(read()).toEqual(before);
   });
 
-  test('a minted non-canon event is forgotten with the records it owns; re-minting regenerates it identically', () => {
+  test('a minted non-canon header is forgotten; unsaved facts stay for exact regeneration', () => {
     const k = coreKernel('events');
     const place = k.root('place', 'core:place');
     const alice = k.root('alice', 'core:person');
@@ -166,19 +166,22 @@ describe('roots, marks and forgetting (spec 7.3, I-3)', () => {
     const member = k.address(e, 'participants[0]');
     const snapshot = () => [k.value(e, 'time'), k.value(e, 'kind'), k.value(e, 'place'), k.value(member, 'who'), k.value(member, 'role')];
     const before = snapshot();
+    const facts = structuredClone(k.store.contributionsOrigin(e));
+    const edges = structuredClone(k.store.edgesFrom(e));
     expect(k.retention.isRetained(e)).toBe(false);
     k.retention.scheduleSweep();
     k.settle();
     expect(k.store.header(e)).toBeUndefined();
     expect(k.store.header(member)).toBeUndefined();
-    expect(k.store.contributionsOrigin(e)).toHaveLength(0);
-    expect(k.store.edgesFrom(e)).toHaveLength(0);
+    expect(k.store.contributionsOrigin(e), 'unsaved records cannot be recovered from the save chain').toEqual(facts);
+    expect(k.store.edgesFrom(e), 'unsaved intervals cannot be recovered from the save chain').toEqual(edges);
+    expect(k.retention.isRetained(e), 'preserved ownership never roots the swept event').toBe(false);
     expect(k.resolve(e, 'time')).toEqual({ status: 'unavailable' });
     expect(k.events.mintEvent(spec)).toBe(e);
     expect(snapshot()).toEqual(before);
   });
 
-  test('an event kept as the evidence of a memorable belief is a bare header after a load; minting it again restates its fields, silently', () => {
+  test('an event kept as memorable belief evidence retains its facts after a load; re-minting is silent and idempotent', () => {
     const k = coreKernel('restate');
     const place = k.root('place', 'core:place');
     const alice = k.root('alice', 'core:person');
@@ -189,7 +192,10 @@ describe('roots, marks and forgetting (spec 7.3, I-3)', () => {
     k.persistence.save('A');
     k.persistence.load('A');
     expect(k.store.header(e)).toBeDefined();
-    expect(k.value(e, 'kind')).toBeUndefined();
+    expect(k.value(e, 'kind')).toBe('sale');
+    expect(k.value(e, 'time')).toBe(77);
+    expect(k.value(e, 'place')).toBe(place);
+    expect(k.value(k.address(e, 'participants[0]'), 'who')).toBe(alice);
     const announced = k.pending.length;
     expect(k.events.mintEvent(spec)).toBe(e);
     expect(k.value(e, 'time')).toBe(77);

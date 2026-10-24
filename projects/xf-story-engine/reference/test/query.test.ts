@@ -245,8 +245,9 @@ describe('a query tests what a node resolves to, not what it was minted with (So
     expect(ids('assault')).toEqual([]);
     k.persistence.save('A');
     k.persistence.load('A');
-    // the pin is what survives; the event is minted again by whoever holds its record, and the pin still decides its kind
+    // The minted facts and location survive with the pin; the pin still decides the resolved kind.
     expect(k.value(e, 'kind')).toBe('sale');
+    expect(ids('sale'), 'referenced event remains spatially discoverable immediately after replacement').toEqual([e]);
     k.root('place', 'core:place');
     k.root('alice', 'core:person');
     expect(k.events.mintEvent(spec)).toBe(e);

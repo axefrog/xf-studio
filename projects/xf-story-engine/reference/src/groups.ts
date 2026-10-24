@@ -52,6 +52,7 @@ export class Groups {
 
   /** The membership edges of a member that are in force at `t`. */
   memberships(member: Id, t: GameTime = this.k.now): Edge[] {
+    this.k.persistence.recoverIfSaved(member);
     return this.k.store
       .edgesFrom(member)
       .filter((e) => e.type === 'core:member-of' && e.valid.from <= t && (e.valid.to === undefined || t < e.valid.to))
@@ -59,6 +60,7 @@ export class Groups {
   }
 
   membersOf(group: Id, t: GameTime = this.k.now): Edge[] {
+    this.k.persistence.recoverIfSaved(group);
     return this.k.store
       .edgesTo(group)
       .filter((e) => e.type === 'core:member-of' && e.valid.from <= t && (e.valid.to === undefined || t < e.valid.to))
@@ -72,6 +74,7 @@ export class Groups {
   }
 
   isLeader(person: Id, group: Id): boolean {
+    this.k.persistence.recoverIfSaved(person, group);
     return this.memberships(person).some((e) => e.to === group && e.attrs.role === 'leader');
   }
 
@@ -139,6 +142,7 @@ export class Groups {
 
   /** Recompute the membership parents of an actor's frames. Returns the work units used. */
   syncMember(actor: Id): number {
+    this.k.persistence.recoverIfSaved(actor);
     const fr = this.k.frames;
     if (fr.isGroupActor(actor)) return 1;
     let cost = 1;
@@ -196,6 +200,7 @@ export class Groups {
    * weight `pressure` (S1 computes it). The new goal frame's origin is the group's goal (SPEC-NOTES 24).
    */
   issueOrder(opts: { groupFrame: Id; member: Id; goal: Goal; pressure: number; cause: Id }): ContextFrame {
+    this.k.persistence.recoverIfSaved(opts);
     const fr = this.k.frames;
     const gf = fr.frame(opts.groupFrame);
     if (!gf || gf.level !== 'goal' || !fr.eligible(gf)) throw new Error('an order follows an active goal frame of the group');
@@ -211,6 +216,7 @@ export class Groups {
 
   /** A leader changes a group's frames. The only way a group's concerns and goals change. */
   decide(leader: Id, group: Id, decision: Decision): ContextFrame {
+    this.k.persistence.recoverIfSaved(leader, group, decision);
     if (!this.isLeader(leader, group)) throw new Error('only a leader of the group decides for it');
     const fr = this.k.frames;
     fr.viaDecision = true;

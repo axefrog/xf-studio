@@ -19,6 +19,7 @@ import type { CompiledResult } from './compile.ts';
 import type { ChannelId, ContentRef, EffectDecl, Finding, SeedInput, TimingRequest } from './types.ts';
 
 export interface FitReport {
+  fit?: import('./fit-types.ts').FitReportFit;
   verdict: 'fits' | 'waits' | 'no-fit';
   why: string[];
   windows: Record<string, 'open' | 'pending' | 'closed'>;
@@ -57,8 +58,9 @@ export function fitReport(l2: Layer2, packId: string, templateId: string): FitRe
     return base;
   }
   const fitId = H(hs('fit'), hs(packId), hs(templateId));
+  const sample: Record<string, import('./fit-types.ts').FitTerm[]> = {};
   const res = l2.compile(packId, template as SeedInput, {
-    draw: (choice, options) => ({ value: l2.draw(fitId, choice, options.map((o) => ({ id: o.id, weight: o.weight })), 0).value, attempt: 0 }),
+    draw: (choice, options, document) => ({ ...l2.draw(fitId, choice, options.map((o) => ({ id: o.id, weight: o.weight })), 0, l2.fitWeights({id: fitId,template: templateId,pack: packId,sowSeq: l2.global.nextSowSeq,document: (document ?? template) as import('./types.ts').Seed,choice,options,report: sample})), attempt: 0 }),
     evalPred: (p) => evalPred(l2, { t: k.now }, p),
   });
   if (!res.ok) {
@@ -67,13 +69,14 @@ export function fitReport(l2: Layer2, packId: string, templateId: string): FitRe
     return base;
   }
   base.findings = res.findings;
-  return evaluate(l2, base, res, fitId, packId, templateId);
+  return evaluate(l2, base, res, fitId, packId, templateId, sample);
 }
 
-function evaluate(l2: Layer2, out: FitReport, res: CompiledResult, fitId: Id, packId: string, templateId: string): FitReport {
+function evaluate(l2: Layer2, out: FitReport, res: CompiledResult, fitId: Id, packId: string, templateId: string, sample: Record<string, import('./fit-types.ts').FitTerm[]>): FitReport {
   const k = l2.k;
   const st = newInstanceState(res, { pack: packId, template: templateId, version: res.seed.version, by: 'pack', layer: 'authored', sowSeq: 0, now: k.now, playTotal: l2.playTotal() });
-  const inst: Instance = { id: fitId, st };
+  st.sowSeq = l2.global.nextSowSeq;
+  const inst: Instance = { id: fitId, st, fitSample: sample };
   const doc = st.document;
   let withdraw: string | undefined;
   let waiting = false;
@@ -163,6 +166,10 @@ function evaluate(l2: Layer2, out: FitReport, res: CompiledResult, fitId: Id, pa
     else if (index.text(ref)) out.cost.written++;
     else out.cost.missing++;
   }
+  const window = doc.windows.find((_,i) => ws[i] === 'open');
+  let urgency = 0;
+  for (const u of window?.urgency ?? []) if (evalPred(l2,{inst,t:k.now},u.when) === 'yes') urgency = Math.max(urgency,u.level);
+  l2.hooks.fitReport?.(out,doc,sample,window ? {lead:window.lead,urgency} : undefined);
   return out;
 }
 

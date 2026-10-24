@@ -153,7 +153,7 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
         .map((it) => ({ id: it.id, time: c.pctx.value(it.id, 'time') as number, kind: c.pctx.value(it.id, 'kind') as string, place: c.pctx.value(it.id, 'place') as Id }))
         .filter((e) => !seen.has(e.id) && typeof e.time === 'number')
         .filter((e) => {
-          const h = sim.k.store.header(e.id);
+          const h = sim.k.persistence.restoreReferencedHeader(e.id);
           return !(h?.origin.by === 'minted' && h.origin.creator === proc);
         })
         .sort((a, b) => a.time - b.time || cmp(a.id, b.id));

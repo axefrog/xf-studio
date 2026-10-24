@@ -23,7 +23,7 @@ import { atoms, fragmentSites, predSites } from './doc.ts';
 import { L2Registry } from './registries.ts';
 import * as ids from './ids.ts';
 import type { DisplayReport, Layer2Port } from './port.ts';
-import { Arbiter, arbiterStep, displayReport, findDelivery, replyTo, respondTo, startDirect, type Response } from './arbiter.ts';
+import { Arbiter, arbiterStep, preparePlaySecond, displayReport, findDelivery, replyTo, respondTo, startDirect, type Response } from './arbiter.ts';
 import { completeBeat } from './beats.ts';
 import { marksAt } from './effects.ts';
 import { evalPred, explainPred, ledger, type Explain, type LedgerEntry } from './eval.ts';
@@ -42,6 +42,8 @@ import type {
 export interface Instance {
   id: Id;
   st: InstanceState;
+  /** A fit report's local collector; absent on live instances and never saved. */
+  fitSample?: Record<string, import('./fit-types.ts').FitTerm[]>;
 }
 
 export interface Tunables {
@@ -113,6 +115,9 @@ export interface HookInputs {
 
 /** Layer 3's hooks (S3 section 1.4): the ones the core uses. A missing hook means layer 3 is absent. */
 export interface Layer3Hooks {
+  /** Complete world-only draw metadata. The legacy scalar seam remains for existing clients. */
+  weigh?(req: WorldFitInput): number[];
+  fitReport?(report: import('./fit.ts').FitReport, document: import('./types.ts').CompiledSeed, terms: Record<string, import('./fit-types.ts').FitTerm[]>, window?: {lead?: 'early'|'preferred'|'late'; urgency: number}): void;
   /** World fitting only: a weight for an option of a draw; clamped to +/- fitCap (S2 section 3.4). */
   fit?(choice: string, option: string, inst: { id: Id; template: string }): number;
   /** The phase hook: may only remove a delivery (returns true to hold it back). Ignored for pull, class-0 and closing deliveries. */
@@ -134,9 +139,15 @@ export interface Layer2Options {
   lab?: boolean;
   tunables?: Partial<Tunables>;
   /** Main-story (spine) characters: the director never casts them (S2 section 5.2). */
-  spine?: ReadonlySet<Id>;
+  worldRegistry?: { isSpine?(node: Id): boolean };
   /** Names of facts that record a relationship's status elsewhere (L-16). */
   relationshipFacts?: ReadonlySet<string>;
+}
+
+export interface WorldFitInput {
+  id: Id; template: string; pack?: string; sowSeq: number; document: Seed | import('./types.ts').CompiledSeed;
+  choice: string; options: Array<{id: string; node?: Id; fragment?: string}>;
+  report?: Record<string, import('./fit-types.ts').FitTerm[]>;
 }
 
 export type Trigger = { time: GameTime; change?: import('../types.ts').Change; reason: string };
@@ -161,6 +172,8 @@ export interface SowRequest {
 export const isTerminal = (s: string): boolean => s === 'resolved' || s === 'withered' || s === 'withdrawn';
 
 export class Layer2 implements Layer2Hook {
+  /** Shared world authority, also used by S3. Attaching S3 supplies its registry here. */
+  worldRegistry: NonNullable<Layer2Options['worldRegistry']>;
   readonly reg: L2Registry;
   readonly tun: Tunables;
   readonly hooks: Layer3Hooks;
@@ -186,6 +199,7 @@ export class Layer2 implements Layer2Hook {
   private parsed = new Map<string, Pred>();
 
   constructor(readonly k: Kernel, readonly opts: Layer2Options) {
+    this.worldRegistry = opts.worldRegistry ?? {};
     this.reg = opts.reg ?? new L2Registry();
     this.tun = { ...DEFAULT_TUNABLES, ...(opts.tunables ?? {}) };
     this.hooks = opts.hooks ?? {};
@@ -200,6 +214,11 @@ export class Layer2 implements Layer2Hook {
 
   get port(): Layer2Port {
     return this.opts.port;
+  }
+
+  isSpine(node: Id): boolean { return this.worldRegistry.isSpine?.(node) ?? false; }
+  directorExcludes(node: Id, at = this.k.now): boolean {
+    return this.isSpine(node) || (this.k.settings.at(at).storyExclusions ?? []).some((e) => e.kind === 'npc' && e.value === node);
   }
 
   get worldSeed(): Id {
@@ -344,6 +363,16 @@ export class Layer2 implements Layer2Hook {
 
   // ---- packs ----
 
+  fitWeights(req: WorldFitInput): ((option: string) => number) | undefined {
+    if (this.hooks.weigh) {
+      if (req.options.length <= 1) return undefined;
+      const weights = this.hooks.weigh(req);
+      if (weights.length !== req.options.length || weights.some(w => !Number.isFinite(w))) throw new Error('fit hook returned invalid weights');
+      return option => weights[req.options.findIndex(o => o.id === option)] ?? 0;
+    }
+    return this.hooks.fit ? o => this.hooks.fit!(req.choice,o,{id: req.id,template: req.template}) : undefined;
+  }
+
   /** Install (or replace) a pack. Its pack-level findings come back; a broken pack never takes down the others. */
   installPack(pack: Pack): Finding[] {
     const index = new PackIndex(pack);
@@ -416,6 +445,31 @@ export class Layer2 implements Layer2Hook {
     const r = this.sow(packId, req.template, o);
     if (r.ok) return { ok: true, instance: r.instance!, existing: r.existing ?? false };
     return { ok: false, findings: r.findings };
+  }
+
+  /** S3's bounded sow: kernel tables and the layer's own mutations commit together. */
+  atomicSow(req: SowRequest, accepted: (instance: Id) => void, validate?: (inst: Instance) => Finding[]): ReturnType<Layer2['sowRequest']> {
+    const batch = this.k.stage();
+    const mark = {global: structuredClone(this.global),ids: new Set(this.insts.keys()),queue: structuredClone(this.queue),actors: new Set(this.actorSet),refusals: this.sowRefusals.length};
+    let committed = false;
+    try {
+      const result = batch.write(() => this.sowRequest(req));
+      if (result.ok && validate) {
+        const findings = batch.write(() => validate(this.instance(result.instance)!));
+        if (findings.length) return { ok: false, findings };
+      }
+      if (result.ok) {batch.write(() => {accepted(result.instance);this.flush();});batch.commit();committed = true;}
+      return result;
+    } finally {
+      if (!committed) {
+        if (batch.state === 'open') batch.discard();
+        this.global = mark.global;
+        for (const id of this.insts.keys()) if (!mark.ids.has(id)) this.insts.delete(id);
+        this.queue.clear(); for (const [id,triggers] of mark.queue) this.queue.set(id,triggers);
+        this.actorSet = mark.actors;
+        this.sowRefusals.length = mark.refusals;
+      }
+    }
   }
 
   /** The fit report: a template run against the current state without changing it (S2 section 11.2). */
@@ -556,12 +610,16 @@ export class Layer2 implements Layer2Hook {
   }
 
   /** Advance the play clock to `to` (the port's seconds), one second at a time: the arbiter runs once a second of play (S2 section 8.3). */
-  advancePlay(to: number, onSecond?: (s: number) => void): void {
+  advancePlay(to: number, onSecond?: (s: number) => void, beforeWork?: (s: number) => void): void {
     const rel = to - this.playBase;
     for (let s = this.arbiter.lastStep + 1; s <= rel; s++) {
       this.arbiter.play = s;
+      if (beforeWork) {
+        beforeWork(s + this.playBase);
+        preparePlaySecond(this, s);
+      }
       onSecond?.(s + this.playBase);
-      arbiterStep(this, s);
+      arbiterStep(this, s, beforeWork !== undefined);
     }
     this.arbiter.play = Math.max(this.arbiter.play, rel);
   }
@@ -611,7 +669,7 @@ export class Layer2 implements Layer2Hook {
       const node = d.bindings[role] ?? inst.st.roles[role]?.cast;
       const a = attr ?? 'name';
       if (node === undefined) return `[${role}.${a}]`;
-      const kind = this.k.store.header(node)?.kind ?? '';
+      const kind = this.k.persistence.restoreReferencedHeader(node)?.kind ?? '';
       if (a === 'name' && kind && this.k.schema.slotInfo(kind, 'name')?.isNode) {
         const nm = this.k.value(this.k.address(node, 'name'), 'display');
         if (typeof nm === 'string') return nm;
@@ -633,6 +691,16 @@ export class Layer2 implements Layer2Hook {
 
   exposedNode(node: Id, atLeast: 'ambient' | 'presented' | 'confirmed' = 'confirmed'): boolean {
     const rank = { ambient: 0, presented: 1, confirmed: 2 } as const;
+    for (const e of this.ledger()) if (e.kind === 'event' && rank[e.grade] >= rank[atLeast] && (e.event === node || e.facts.place === node || e.facts.participants.some(p => p.who === node))) return true;
+    for (const r of [...this.global.receipts,...this.all().flatMap(i => i.st.receipts)]) if (rank[r.grade] >= rank[atLeast]) {
+      if (Object.values(r.cue).includes(node) || r.cites.includes(node)) return true;
+      for (const cite of r.cites) {
+        const place = this.k.value(cite,'place');
+        if (place === node) return true;
+        const count = this.k.value(cite,'participants#count');
+        if (typeof count === 'number') for (let j=0;j<count;j++) if (this.k.value(this.k.address(cite,`participants[${j}]`),'who') === node) return true;
+      }
+    }
     for (const inst of this.all()) {
       for (const d of inst.st.deliveries) {
         if (Object.values(d.bindings).includes(node) && d.grade !== undefined && rank[d.grade] >= rank[atLeast]) return true;
@@ -649,8 +717,8 @@ export class Layer2 implements Layer2Hook {
     return [...(this.global.sownBy[decision] ?? [])];
   }
 
-  claimConflict(node: Id, span: 'seed' | 'beats', share: 'none' | 'background' | 'any'): boolean {
-    return claimConflictRead(this, node, span, share);
+  claimConflict(node: Id, span: 'seed' | 'beats', share: 'none' | 'background' | 'any', except?: Id): boolean {
+    return claimConflictRead(this, node, span, share, except);
   }
 
   marksAt(carrier: Id): import('./types.ts').CosmeticMark[] {

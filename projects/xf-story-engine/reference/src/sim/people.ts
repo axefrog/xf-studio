@@ -116,7 +116,7 @@ export class People {
     let n: Id | undefined = node;
     for (let depth = 0; n !== undefined && depth < 16; depth++) {
       out.push(n);
-      const h = this.k.store.header(n);
+      const h = this.k.persistence.restoreReferencedHeader(n);
       n = h && (h.origin.by === 'value' || h.origin.by === 'member') ? h.origin.owner : undefined;
     }
     this.chains.set(node, out);
@@ -262,11 +262,11 @@ export class People {
 
   /** Where a resident lives, from the headers the kernel keeps: `undefined` for a node that is not a resident. */
   refOf(res: Id): { household: Id; cell: Id; hIndex: number; j: number } | undefined {
-    const h = this.k.store.header(res);
+    const h = this.k.persistence.restoreReferencedHeader(res);
     if (!h || h.origin.by !== 'value') return undefined;
     const m = /^m(\d)$/.exec(h.origin.slot);
     if (!m) return undefined;
-    const hh = this.k.store.header(h.origin.owner);
+    const hh = this.k.persistence.restoreReferencedHeader(h.origin.owner);
     if (!hh || hh.origin.by !== 'member' || hh.origin.slot !== 'households') return undefined;
     return { household: hh.id, cell: hh.origin.owner, hIndex: hh.origin.index, j: Number(m[1]) };
   }
@@ -281,7 +281,7 @@ export class People {
     if (!ref) return undefined;
     const k = this.k;
     const members = [0, 1, 2, 3, 4, 5].map((j) => this.residentId(ref.household, j));
-    const nodes = [ref.household, ...members.filter((m) => k.store.header(m) !== undefined)];
+    const nodes = [ref.household, ...members.filter((m) => k.persistence.restoreReferencedHeader(m) !== undefined)];
     const general = this.general();
     const cacheable = this.cacheOn && !this.hasUncertainInputs(this.ownerChain(ref.household), nodes, general);
     const stamp = this.stampOf(nodes);
@@ -403,6 +403,7 @@ export class People {
    */
   protectedAt(n: Id, t: GameTime): boolean {
     const k = this.k;
+    k.persistence.recoverIfSaved(n);
     if (t < k.now) {
       if (this.hooks.protectedBefore?.(n, t)) return true;
     } else {
@@ -413,7 +414,7 @@ export class People {
         if (p.reason === 'observed' && p.at <= t && !k.store.isWithdrawn(p.id)) return true;
       }
     }
-    const h = k.store.header(n);
+    const h = k.persistence.restoreReferencedHeader(n);
     if (h?.origin.by === 'mirrored') {
       const q = k.value(n, 'quest-linked', t);
       if (q === 'yes') return true;

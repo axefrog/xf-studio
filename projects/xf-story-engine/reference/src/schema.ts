@@ -27,6 +27,8 @@ export interface ResolvedKind {
   tags: Set<string>;
   /** The kind itself and every kind it extends, transitively. */
   ancestors: KindId[];
+  /** Kind compatibility through inheritance and nominal classification, without changing query membership. */
+  compatibleKinds: KindId[];
 }
 
 /** A slot path resolved against a kind. */
@@ -124,6 +126,11 @@ export class Schema {
     return this.kind(kind).ancestors.includes(ancestor);
   }
 
+  /** Explicit identity and pattern compatibility; nominal classification does not inherit slots or widen queries. */
+  isCompatibleKind(kind: KindId, target: KindId): boolean {
+    return this.kind(kind).compatibleKinds.includes(target);
+  }
+
   hasFacet(kind: KindId, facet: Facet): boolean {
     return this.kind(kind).facets.has(facet);
   }
@@ -183,12 +190,13 @@ export class Schema {
     const def = this.kindDefs.get(id);
     if (!def) return undefined;
     // Guard against an inheritance cycle in an unvalidated schema.
-    this.resolved.set(id, { id, slots: [], index: new Map(), facets: new Set(), tags: new Set(), ancestors: [id] });
+    this.resolved.set(id, { id, slots: [], index: new Map(), facets: new Set(), tags: new Set(), ancestors: [id], compatibleKinds: [id] });
     const slots: SlotDef[] = [];
     const index = new Map<string, number>();
     const facets = new Set<Facet>();
     const tags = new Set<string>();
     const ancestors: KindId[] = [id];
+    const compatibleKinds: KindId[] = [id];
     const put = (s: SlotDef) => {
       const at = index.get(s.key);
       if (at === undefined) {
@@ -203,11 +211,16 @@ export class Schema {
       for (const f of p.facets) facets.add(f);
       for (const t of p.tags) tags.add(t);
       for (const a of p.ancestors) if (!ancestors.includes(a)) ancestors.push(a);
+      for (const a of p.compatibleKinds) if (!compatibleKinds.includes(a)) compatibleKinds.push(a);
     }
     for (const s of def.slots) put(s);
+    for (const parentId of def.classifiesAs ?? []) {
+      const p = this.resolveKind(parentId);
+      for (const a of p?.compatibleKinds ?? []) if (!compatibleKinds.includes(a)) compatibleKinds.push(a);
+    }
     for (const f of def.facets ?? []) facets.add(f);
     for (const t of def.tags ?? []) tags.add(t);
-    const rk: ResolvedKind = { id, slots, index, facets, tags, ancestors };
+    const rk: ResolvedKind = { id, slots, index, facets, tags, ancestors, compatibleKinds };
     this.resolved.set(id, rk);
     return rk;
   }
@@ -322,6 +335,7 @@ export class Schema {
     const kindIds = new Set(defs.kinds.map((k) => k.id));
     for (const k of defs.kinds) {
       for (const p of k.extends ?? []) if (!kindIds.has(p)) problems.push(`kind ${k.id}: extends unknown kind ${p}`);
+      for (const p of k.classifiesAs ?? []) if (!kindIds.has(p)) problems.push(`kind ${k.id}: classifies as unknown kind ${p}`);
     }
     const visiting = new Set<string>();
     const done = new Set<string>();
@@ -332,7 +346,8 @@ export class Schema {
         return;
       }
       visiting.add(id);
-      for (const p of this.kindDefs.get(id)?.extends ?? []) if (this.kindDefs.has(p)) walk(p, [...trail, id]);
+      const def = this.kindDefs.get(id);
+      for (const p of [...def?.extends ?? [],...def?.classifiesAs ?? []]) if (this.kindDefs.has(p)) walk(p, [...trail, id]);
       visiting.delete(id);
       done.add(id);
     };

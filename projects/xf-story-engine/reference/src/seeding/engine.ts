@@ -50,8 +50,8 @@ function applyOverlay(l2: Layer2, input: SeedInput, overlay: NonNullable<SowOpts
       findings.push({ code: 'overlay', level: 'error', engine: true, message: `The overlay names the role "${key}", which the template does not have.` });
       continue;
     }
-    const h = l2.k.store.header(o.identity);
-    if (!h || !l2.k.schema.isKind(h.kind, role.kind)) {
+    const h = l2.k.persistence.restoreReferencedHeader(o.identity);
+    if (!h || !l2.k.schema.isCompatibleKind(h.kind, role.kind)) {
       findings.push({ code: 'overlay', level: 'error', engine: true, message: `The node the overlay names for "${key}" is not a ${role.kind}.` });
       continue;
     }
@@ -94,13 +94,13 @@ export function sowTemplate(l2: Layer2, packId: string, templateId: string, opts
     layer = index.pack.source === 'procedural' ? 'procedural' : 'authored';
   } else if (by === 'director') {
     creator = rootId(l2.worldSeed, 'director');
-    if (!k.store.header(creator)) k.root('director', 'core:seed');
+    if (!k.persistence.restoreReferencedHeader(creator)) k.root('director', 'core:seed');
     cause = opts.decision ?? ids.sowCause(packId, templateId);
     name = ids.instanceName(templateId, undefined, opts.localName ?? 'sown');
     layer = 'procedural';
   } else {
     creator = rootId(l2.worldSeed, `plugin:${opts.pluginId ?? 'unknown'}`);
-    if (!k.store.header(creator)) k.root(`plugin:${opts.pluginId ?? 'unknown'}`, 'core:seed');
+    if (!k.persistence.restoreReferencedHeader(creator)) k.root(`plugin:${opts.pluginId ?? 'unknown'}`, 'core:seed');
     cause = opts.decision ?? ids.sowCause(packId, templateId);
     name = ids.instanceName(templateId, undefined, opts.localName ?? 'sown');
     layer = opts.authoringSource ? 'authored' : 'procedural';
@@ -123,8 +123,8 @@ export function sowTemplate(l2: Layer2, packId: string, templateId: string, opts
   const lintCtx = l2.lintContext(index);
   let overlayFindings: Finding[] = [];
   const res = compileSeed(template as SeedInput, lintCtx, {
-    draw: (choice, options) => {
-      const d = l2.draw(iid, choice, options.map((o) => ({ id: o.id, weight: o.weight })), 0, l2.hooks.fit ? (o) => l2.hooks.fit!(choice, o, { id: iid, template: templateId }) : undefined);
+    draw: (choice, options, document) => {
+      const d = l2.draw(iid, choice, options.map((o) => ({ id: o.id, weight: o.weight })), 0, l2.fitWeights({id: iid,template: templateId,pack: packId,sowSeq: l2.global.nextSowSeq,document: (document ?? template) as Seed,choice,options}));
       // The record keeps what the fit hook returned and what the draw used of it (S2 section 3.4).
       return { value: d.value, attempt: 0, ...(d.raw !== undefined ? { raw: d.raw } : {}), ...(d.clamped !== undefined ? { clamped: d.clamped } : {}) };
     },

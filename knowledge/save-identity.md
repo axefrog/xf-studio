@@ -57,6 +57,48 @@ Studied by reading the mods' scripts (technique only; [Sources](#sources)).
 
 ## 3. What happens to mod state
 
+**Reference-model check [offline].** The Story Engine's S3 core now carries its chronological event buffer, pool,
+occurrence identities, tombstones, cooldowns, pending lifetimes, recent choices, schedule position, outcome-consumption
+position and arc lock in one
+branch-local record. Its [reload tests](../projects/xf-story-engine/reference/test/s3/reload.test.ts) verify selected-save
+inheritance and atomic sowing; the [Kabuki fixture](../projects/xf-story-engine/reference/test/s3/e2e.test.ts) agrees with
+uninterrupted play after fresh-process reloads at each of five simulation boundaries, including reloading at every boundary.
+This checks the external ledger's reference semantics. It does not validate the proposed five-fact key or a game save hook.
+
+**Event facts are part of the saved dependency [offline].** Keeping an event's id/header alone does not keep its fields
+readable after replay. The [review regressions](../projects/xf-story-engine/reference/test/s3/review-fixes.test.ts) verify
+that a story handed to S2 retains its constituent events and transitive causes across fresh loads after pool reclamation,
+and releases them only after the last consumer finishes. The [kernel regression](../projects/xf-story-engine/reference/test/process-evidence.test.ts)
+also checks a non-canon raw event referenced by an outstanding output batch: its own facts survive the save before the
+batch applies. A closure saved before the next director tick remains unconsumed, so the next tick establishes the arc
+opening lock; saving after consumption cannot extend it again. These are reference-model checks, not game-save evidence.
+
+The kernel's S3B regressions extend this to pin evidence, frame focus, edge causes, canon causes/participants/served,
+memorable beliefs and transitive header creator/cause links. Referenced summary items keep participant/effect facts
+under their opening process's materialisation owner (`scene.acts` in the fixture); their time and place still change
+with the summary descriptor. Both direct seed references and pending output batches agree with uninterrupted execution
+after fresh replacement loads. A retained event's own location edge persists for spatial discovery without rooting
+unreferenced events. These [offline] checks implement S0 v4.16 §14.1; the old bare-header expectation is superseded.
+
+**Retention release is separate from edge validity [offline].** The reference model's
+[event-persistence regressions](../projects/xf-story-engine/reference/test/process-evidence.test.ts) release an event at 10,
+reference it again at 20, and compare uninterrupted execution with fresh incremental and snapshot loads: the spatial
+queries and the entire later save record agree. Release is carried by the retained-reference records and their marked
+closure; it never invents an edge end. Saved history keeps actual validity without becoming a retention root, including
+after sweeping. Re-reference completes missing headers, owned facts, materialisation provenance and transitive event
+dependencies from the selected save through the same header-first replay as load, even when a summary query has
+already recreated the event header. Live records remain authoritative; recovery fills only absent records and follows
+only reached references. The S3F-01 matrix checks query-before-reference and reference-before-query, with/without a sweep,
+in both incremental and snapshot modes against fresh B loads; all eight materialisation-owned facts and the minted
+participant recover, while unrelated saved events remain unretained and sweepable. Releasing again makes the recovered
+closure sweepable. Both B and C
+loads in a release/re-reference/release sequence preserve later records and readable facts. The live edge interval is
+authoritative, even when reopening reuses the previous start timestamp: equal starts do not identify an interval. The
+tests preserve both `{ from: 20, to: 30 }` after a previous end at 10 and `{ from: 0, to: 30 }` after a previous end at 0,
+as well as an interval left open. They also cover an end beyond save time, sweeping before saving, an end before the first
+save, and retention monotonicity/root insertion order for ordinary and materialised events. These are reference-model
+guarantees ([SPEC-NOTES 191–192](../projects/xf-story-engine/reference/SPEC-NOTES.md)), not game-save evidence.
+
 | Event | State inside the save (fields, facts, entity state) | An external store | Grade |
 |---|---|---|---|
 | **New game** | A fresh facts table and default fields: GameSession mints a key because the fact reads 0; the AI NPC mod treats a detach with no restore after it as a new game | Untouched: Codeware services and CET files carry on, so a store without a key mixes playthroughs | [source] [community]; the facts reset itself is [hypothesis], session card 6 |
@@ -117,6 +159,81 @@ Studied by reading the mods' scripts (technique only; [Sources](#sources)).
 **Why facts, and not the alternatives.** Facts survive removal of the mod, need no system class, are in the save atomically, are readable offline by the Studio and in game by the bridge (`world.state` reads named facts), and are the pattern GameSession and the AI NPC mod already use. A persistent field on a scriptable system could carry a string or a snapshot, but its removal behaviour is unknown. Keying by time, as GameSession does, fails on same-second saves and copies the whole state into every save. A Codeware service or CET store has no link to saves at all. The game's own `playthroughID` is the right id for a playthrough, but scripts cannot read it, so it serves only as an optional offline cross-check by the Studio.
 
 **What the bridge needs.** Read and set named facts from the plugin (`world.state` reads; a write route inside the plugin's own scope); the load-time read point; the save hooks as a convenience, not a dependency; and a store namespace per campaign with a megabyte-scale quota. Requirement P1 can then be marked as designed, pending the session card.
+
+## Reference-model persistence checks
+
+The deterministic reference model tests the logical ledger independently of the game's save-key
+carrier **[offline]**. Its save/recovery contract is:
+
+1. Every change to a saved record is written independently of retention. A first-save change that its
+   regeneration recipe cannot reproduce is written too: edge ends, reopened intervals, attribute/data
+   updates and ends of an event's own simulation constants. Changed pack contributions keep their ends
+   across pack regeneration. The exact record, original identity headers and origin closure survive a
+   sweep before the save. A newly saved event identity includes its complete own payload, spatial link,
+   transitive event dependencies and explicit materialisation ownership, so direct reference operations
+   need no author recipe after reload. These supporting records never become retention roots.
+2. `Persistence.recoverIfSaved` is the common boundary for semantic references. Pinning, observation,
+   canonisation, resolution, queries, event and record operations recover before inspecting live
+   headers or selecting defaults. Typed restoration adapters and the S1/S2/S3 header readers reach the
+   same gate. It uses only the selected save, replays headers before facts/provenance and leaves newer
+   live records authoritative. Missing records are installed silently; no changes or relevance are
+   emitted. Replacement load selects that baseline before reconciliation, excluding discarded branches.
+3. A sweep drops only exactly recoverable records. Pending edits, unsaved facts and general authored
+   rules remain available without becoming roots. Release never ends or reopens an interval, and a
+   reopened interval keeps its actual end even when its start matches an earlier one. Retention
+   membership queries walk gated roots but do not acquire the queried node as a new reference. Raw
+   stores, replay/collector hooks and metadata predicates observe physical/data state; they must not
+   resurrect the history they collect. The public API inventory and its explicit routes are in
+   [SPEC-NOTES 195](../projects/xf-story-engine/reference/SPEC-NOTES.md).
+4. Regeneration checks the whole owned event payload. One surviving constant is insufficient evidence
+   of completeness. Summary items keep immutable descriptor/materialisation ownership independently
+   of contribution order or expired overlays; time/kind/place remain live descriptor dependencies.
+
+Evidence is the earlier S3C-I regressions in
+[`process-evidence.test.ts`](../projects/xf-story-engine/reference/test/process-evidence.test.ts),
+[`sweep-replay.test.ts`](../projects/xf-story-engine/reference/test/sweep-replay.test.ts) and
+[`sweep-operations.test.ts`](../projects/xf-story-engine/reference/test/sweep-operations.test.ts), plus
+S3J's incremental/snapshot first-save edge-end/data/own-end and direct pin/observation/canonisation
+checks. Additional checks cover complete changed-event identities with and without a pre-edit sweep,
+ordinary events and summary items, transitive dependencies, staged discard and changed pack replay.
+S1's bounded protection/tie histories agree with the replayed explicit ends. Their two former
+raw-absence expectations now require exact saved intervals; protection, casting and tie-reopening
+assertions are unchanged and pass. Persisted history and physical residency are separate contracts.
+The legacy S1 R3-01 mutation is now obsolete: removing S1 evidence materialisation still passes all
+seven regression assertions against HEAD `3b2f9cae` **[offline counterfactual]**. S0 v4.15/v4.16's
+saved event facts and S1's evidence records provide overlapping defences. S1's capture/materialisation
+may be removable later, after its separate consumers are audited; no defence is removed in S3J.
+
+The property compares unswept, swept and freshly reloaded executions after every operation and compares
+whole save records. A stratified lifecycle grammar supplies release/save/end/reopen/sweep/re-reference
+combinations and partial regeneration; random operations independently select saved/unsaved events
+and authored/own simulation constants. The raw observer starts from every retention-root category,
+walks owned fields and origin/constant references, and compares headers, factual contributions,
+intervals/data, pins, withdrawals, provenance, resolved slot values, `readEvent()` and pending semantic
+changes. Deliberately ephemeral unpersisted overlays are excluded from fact equality; expired ones
+remain present when checking event views so they cannot masquerade as provenance.
+
+All lazy reads run on a disposable projection with an empty recovery baseline. Missing retained data
+is compared first and is never filled from saved history. Spatial queries compare all logical results,
+including unreferenced saved history, without filtering to seed descendants. The source execution's
+complete tables, queues/worklists and revision are serialized before/after observation; no query may
+populate its headers or repair its facts. Physical residency outside the retained closure is not a
+semantic difference, and wholly unpersisted material still requires its producer's recipe after load.
+
+The default property rejects all 28 historical S3C-I probes when each defect is restored independently;
+the probe runner rejects setup errors and timeouts as evidence. After the common gate was introduced,
+two probes were adapted to restore the same defects at the current boundaries: partial-header recovery
+also bypasses the new provenance read gate, and contribution re-submission bypasses identity recovery
+and the new target-validation recovery gate together. The dedicated regressions retain their
+semantic assertions.
+
+The post-bar hunt passed 2,048 distinct seeds in both snapshot modes (4,096 scenarios and 102,400
+generated operations), with no divergence; the 4 GB guard measured a 0.4 GB peak over 1,363.01 seconds.
+The final guarded suite passes 1,340 tests across 81 files in 256.96 seconds (1.1 GB peak), and the
+typecheck passes. Validation and the persistence-only digest migration are recorded in SPEC-NOTES 195.
+The preceding S3I hunt's 2,048 seeds
+covered its narrower generator but detected only 14/28 historical mutations, so that hunt is not evidence
+that the classes were closed. These are offline oracle results, not new game-runtime evidence.
 
 ## Session card
 

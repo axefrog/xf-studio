@@ -7,7 +7,7 @@
 import { canonicalKey } from '../canon.ts';
 import type { Id } from '../types.ts';
 import { Arbiter } from './arbiter.ts';
-import { atoms, fragmentSites, predSites } from './doc.ts';
+import { atoms, bound, fragmentSites, predSites } from './doc.ts';
 import { PLAN_RESTART_KEY, planPlayFrom, sincePlayFrom, sinceRestartKey } from './eval.ts';
 import { emptyGlobal } from './state.ts';
 import { runMaintenance } from './effects.ts';
@@ -23,6 +23,10 @@ export function instanceNodes(l2: Layer2, inst: Instance): Id[] {
   const out = new Set<Id>([inst.id]);
   for (const k of Object.keys(st.facts)) out.add(ids.seedFactNode(inst.id, k));
   for (const rs of Object.values(st.roles)) if (rs.cast !== undefined) out.add(rs.cast);
+  for (const role of Object.values(st.document.roles)) {
+    const identity = bound(role.identity);
+    if (identity.status === 'fixed' && typeof identity.value === 'string') out.add(l2.k.expandId(identity.value));
+  }
   void l2;
   return [...out].sort();
 }
@@ -190,7 +194,7 @@ function reinstall(l2: Layer2, inst: Instance): void {
             : { f: 'set' as const, region: { r: 'set' as const, values: (Array.isArray(arg) ? arg : [arg]) as string[] }, allow: true })
           : { f: 'set' as const, region: { r: 'ivl' as const, ivls: [[(arg as number[])[0]!, (arg as number[])[1]!] as [number, number]] }, allow: true };
         // The stand-in's own header is a minted node nothing else regenerates; it is a root through the cast edge.
-        if (!k.store.header(rs.cast)) k.store.addHeader({ id: rs.cast, kind: rs.minted.kind, origin: { by: 'minted', creator: inst.id, cause: inst.id, name: `role:${rk}` } });
+        if (!k.persistence.restoreReferencedHeader(rs.cast)) k.store.addHeader({ id: rs.cast, kind: rs.minted.kind, origin: { by: 'minted', creator: inst.id, cause: inst.id, name: `role:${rk}` } });
         k.contribute({ source: { layer: layerOfInstance(inst), origin: originOf(inst) }, target: { slot: c.path, scope: { nodes: [rs.cast] } }, form, mode: 'constrain', valid: { from: rs.committedAt ?? k.now }, silent: true });
       }
     }

@@ -14,7 +14,7 @@ export function recordOf(sim: Sim, skip: { processes?: string[]; logProcs?: stri
   sim.flush();
   const data = sim.k.persistence.currentView().toData();
   const out: Sections = {};
-  for (const key of ['headers', 'pins', 'edges', 'contributions', 'beliefs', 'canon', 'summaries', 'frames', 'seeds', 'settings'] as const) {
+  for (const key of ['headers', 'pins', 'edges', 'contributions', 'beliefs', 'canon', 'materialisations', 'summaries', 'frames', 'seeds', 'settings'] as const) {
     out[key] = canonicalKey(data[key] ?? []);
   }
   for (const p of data.processes) if (!skip.processes?.includes(p.id)) out[`process:${p.id}`] = canonicalKey(p);
@@ -41,4 +41,3 @@ export function linesOnlyIn(a: unknown, b: unknown, max = 12): string {
   const lb = new Set(JSON.stringify(b, null, 1).split('\n'));
   return JSON.stringify(JSON.stringify(a, null, 1).split('\n').filter((l) => !lb.has(l)).slice(0, max));
 }
-

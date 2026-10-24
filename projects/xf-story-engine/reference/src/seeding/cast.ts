@@ -37,12 +37,12 @@ export function identityNode(l2: Layer2, role: Role): { status: 'fixed' | 'prefe
   let node: Id | undefined;
   if (raw.startsWith(GAME_PREFIX)) {
     const id = mirroredId(raw.slice(GAME_PREFIX.length));
-    node = l2.k.store.header(id) ? id : undefined;
+    node = l2.k.persistence.restoreReferencedHeader(id) ? id : undefined;
   } else if (raw.startsWith('root:')) node = l2.k.expandId(raw);
   else node = raw;
   const out: { status: 'fixed' | 'prefer' | 'none'; node?: Id; strength?: 1 | 2 | 3; reason?: string } = { status: b.status === 'fixed' ? 'fixed' : 'prefer' };
   if (b.strength !== undefined) out.strength = b.strength;
-  if (node === undefined || !l2.k.store.header(node)) out.reason = `the game does not know "${raw}" yet`;
+  if (node === undefined || !l2.k.persistence.restoreReferencedHeader(node)) out.reason = `the game does not know "${raw}" yet`;
   else out.node = node;
   return out;
 }
@@ -202,8 +202,9 @@ export function claimWins(a: Holder, b: Holder): boolean {
 }
 
 /** The claim conflict `claimConflict(node, span, share)` read for layer 3 (S2 section 10.1a). */
-export function claimConflictRead(l2: Layer2, node: Id, span: 'seed' | 'beats', share: 'none' | 'background' | 'any'): boolean {
+export function claimConflictRead(l2: Layer2, node: Id, span: 'seed' | 'beats', share: 'none' | 'background' | 'any', except?: Id): boolean {
   for (const other of l2.live()) {
+    if (other.id === except) continue;
     for (const [role, rs] of Object.entries(other.st.roles)) {
       if (rs.cast !== node || rs.shrunk) continue;
       const c = claimOf(other, role);
@@ -232,6 +233,7 @@ function scopeOf(l2: Layer2, inst: Instance, role: Role): QueryScope | { missing
     if (sc === undefined) {
       for (const [k2, r2] of Object.entries(inst.st.document.roles)) {
         if (l2.k.schema.hasKind(r2.kind) && l2.k.schema.hasFacet(r2.kind, 'place') && inst.st.roles[k2]?.cast !== undefined && r2 !== role) {
+          l2.k.persistence.recoverIfSaved(inst.st.roles[k2]!.cast!);
           const district = l2.k.store.edgesFrom(inst.st.roles[k2]!.cast!).find((e) => e.type === 'core:located-in' && e.valid.to === undefined);
           if (district) return { under: district.to };
         }
@@ -276,8 +278,8 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
 
   if (ident.status === 'fixed') {
     if (!ident.node) return fail(ident.reason ?? 'its identity is not known');
-    const hdr = l2.k.store.header(ident.node)!;
-    if (!l2.k.schema.isKind(hdr.kind, role.kind)) return fail(`${ident.node} is not a ${role.kind}`);
+    const hdr = l2.k.persistence.restoreReferencedHeader(ident.node)!;
+    if (!l2.k.schema.isCompatibleKind(hdr.kind, role.kind)) return fail(`${ident.node} is not a ${role.kind}`);
     const v = allMust(l2, inst, ident.node, must, t);
     if (v.v === 'maybe') return fail(v.missing ? `waiting for the role "${v.missing}"` : 'a requirement of the role cannot be read yet', { maybe: true });
     if (v.v === 'no') return fail('the fixed person does not meet the role\'s requirements');
@@ -296,8 +298,8 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
     if (out.status === 'failed') return fail(`the search was too broad (${out.reason})`, { tooBroad: true });
     candidates = out.items.map((x) => x.id);
     if (ident.status === 'prefer' && ident.node && !candidates.includes(ident.node)) {
-      const hdr = l2.k.store.header(ident.node);
-      if (hdr && l2.k.schema.isKind(hdr.kind, role.kind) && allMust(l2, inst, ident.node, must, t).v === 'yes') candidates.push(ident.node);
+      const hdr = l2.k.persistence.restoreReferencedHeader(ident.node);
+      if (hdr && l2.k.schema.isCompatibleKind(hdr.kind, role.kind) && allMust(l2, inst, ident.node, must, t).v === 'yes') candidates.push(ident.node);
     }
   }
   candidates = [...new Set(candidates)].sort();
@@ -306,8 +308,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
   candidates = candidates.filter((c) => !ROOT_ACTORS.some((r) => rootId(l2.worldSeed, r) === c));
   // Source filters: a seed the director sowed excludes main-story characters and the player's excluded NPCs (S2 section 5.2).
   if (inst.st.source.by === 'director') {
-    const excl = new Set<Id>([...(l2.opts.spine ?? []), ...l2.k.settings.at(t).exclusions]);
-    candidates = candidates.filter((c) => !excl.has(c));
+    candidates = candidates.filter((c) => !l2.directorExcludes(c, t));
   }
   // The minors floor: casting removes non-adults from barred roles (S2 section 2.19).
   if (barredOf(l2, inst).has(key)) candidates = candidates.filter((c) => isAdultNode(l2, c, t));
@@ -345,7 +346,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
   let node: Id;
   if (prior && prior.attempt === rs.attempt && candidates.includes(prior.value)) node = prior.value;
   else {
-    const fit = l2.hooks.fit ? (o: string): number => l2.hooks.fit!(choice, o, { id: inst.id, template: inst.st.template.id }) : undefined;
+    const fit = l2.fitWeights({id: inst.id,template: inst.st.template.id,pack: inst.st.template.pack,sowSeq: inst.st.sowSeq,document: inst.st.document,choice,options: candidates.map(id => ({id,node: id})),report: inst.fitSample});
     const d = l2.draw(inst.id, choice, options, rs.attempt, fit);
     node = d.value;
     const rec: { value: string; attempt: number; raw?: number; clamped?: number } = { value: d.value, attempt: rs.attempt };

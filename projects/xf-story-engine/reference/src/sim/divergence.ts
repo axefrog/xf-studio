@@ -20,7 +20,7 @@ export class Divergence {
 
   /** The divergence of a believer from the game about a subject, from the beliefs held now and the mirrored reading at `t` (not before now). */
   current(believer: Id, subject: Id, t: GameTime = this.k.now): DivValue {
-    const h = this.k.store.header(subject);
+    const h = this.k.persistence.restoreReferencedHeader(subject);
     if (!h || h.origin.by !== 'mirrored') return 'none';
     let out: DivValue = 'none';
     for (const b of this.k.beliefs.activeOf(believer)) {
@@ -66,7 +66,7 @@ export class Divergence {
 
   /** A belief about a mirrored subject was set or dropped, by anyone: the believer's divergence from the game is looked at now (SIM-08). */
   noteBelief(believer: Id, subject: Id): void {
-    const h = this.k.store.header(subject);
+    const h = this.k.persistence.restoreReferencedHeader(subject);
     if (!h || h.origin.by !== 'mirrored') return;
     this.log(believer, subject, this.k.now, this.current(believer, subject));
   }

@@ -265,6 +265,8 @@ export interface ResponseTemplate {
 
 export interface Fragment {
   id: string;
+  /** Structural skeleton facets supplied by the pack; never inferred from V. */
+  features?: Partial<Record<'verb'|'stake'|'relationship'|'outcome'|'tone',string>>;
   level: 'phrase' | 'exchange' | SeedLevel;
   needs?: PredInput;
   leaves?: EffectDecl[];

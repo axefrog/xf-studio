@@ -8,6 +8,7 @@ import { evalPred } from '../../src/seeding/eval.ts';
 import { Layer2, type Instance } from '../../src/seeding/layer2.ts';
 import { ScriptPort } from '../../src/seeding/port.ts';
 import { L2Registry } from '../../src/seeding/registries.ts';
+import { Layer3 } from '../../src/procedural/layer3.ts';
 import type { FactsTable, Finding, Pack, Pred } from '../../src/seeding/types.ts';
 import { attachLayer2 } from '../../src/sim/layer2-wire.ts';
 import { ReplayPort } from '../../src/sim/port.ts';
@@ -157,7 +158,15 @@ describe('the city and social atoms over the simulation layer', () => {
 
   test('the spine of S1 is the set of characters the director never casts', () => {
     const { sim, l2 } = world('L2-f');
-    expect(l2.opts.spine).toBe(sim.spine);
+    const node = sim.k.root('spine-test', 'core:person');
+    expect(l2.isSpine(node)).toBe(false);
+    sim.spine.add(node);
+    expect(l2.isSpine(node)).toBe(true);
+    expect(l2.worldRegistry).toBe(sim.reads);
+    const l3 = new Layer3(l2, { registry: sim.w.kinds });
+    expect(l2.isSpine(node), 'S3-04-registry semantic: event-kind-only attachment preserves S1 spine authority').toBe(true);
+    expect(l3.kv.isSpine(node)).toBe(true);
+    expect(l2.worldRegistry).toBe(sim.reads);
   });
 });
 
