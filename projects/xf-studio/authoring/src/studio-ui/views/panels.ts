@@ -10,7 +10,7 @@ import type { PanelController } from "../panels/collection";
 import type { ViewPaneController } from "../panels/view-panels";
 import { activityPanel, lightingPanel, motionPanel, qualityPanel } from "../panels/preview";
 import { characterPanel } from "../panels/character";
-import { libraryPanel, packagePanel, presetsPanel } from "../panels/collection";
+import { packagePanel } from "../panels/collection";
 import { historyPanel } from "../panels/history";
 import { headPanel } from "../panels/viewports";
 import { settingsPanel } from "../panels/settings";
@@ -49,7 +49,7 @@ export type ViewPaneFactory = (rt: StudioRuntime, context: ViewContext, panel?: 
 export type PanelFactories<V extends { panels: readonly { id: string }[] }> = { readonly [K in V["panels"][number]["id"]]: PanelFactory };
 
 export const SHELL_PANELS: PanelFactories<typeof SHELL_VIEW> = {
-  presets: presetsPanel, history: historyPanel, library: libraryPanel, package: packagePanel, head: headPanel,
+  history: historyPanel, package: packagePanel, head: headPanel,
   character: characterPanel, lighting: lightingPanel, motion: motionPanel, quality: qualityPanel, activity: activityPanel,
   settings: settingsPanel, help: (rt, context) => helpPanel(rt, context.guidance),
 };

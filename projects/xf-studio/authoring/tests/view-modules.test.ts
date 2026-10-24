@@ -9,13 +9,15 @@ import { deriveViewSummaries, deriveViewTools, moduleRegistrationIssues, viewTit
 import { PLATFORM_VIEW_TOOLS } from "../src/platform/core/view-tools";
 import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { activate, allGroups, applyDrop, closePanel, locate, openShares, panelsIn, parkPanels, parseTree, setCollapsed, unparkPanels, type DockNode, type DockTree } from "../src/studio-ui/dock/layout";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
-import { modulePanelChanges } from "../src/studio-ui/runtime";
+import { activeModules, toolFilter } from "../src/studio-ui/runtime";
+import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
 import { parseUIPreferences, UIPreferenceActions } from "../src/app/ui-preferences";
+import type { LayoutTab } from "../src/app/profiles/profile-session";
+import { group } from "../src/studio-ui/dock/layout";
 import { EYE_MAKEUP_GRANDFATHERED_PANELS } from "../src/features/eye-makeup/view/contribution";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
@@ -110,7 +112,9 @@ test("the application resolves each tool's state and action; view.setTool edits 
 test("a tool the presentation withdraws keeps its state but reaches no device until it is offered again (UI-102)", () => {
   const workspace = freshWorkspace(), calls: string[] = [];
   workspace.preview.wire = true;
-  const { app, views } = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
+  let stackResets = 0;
+  const { app, views } = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => { stackResets++; }, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
+  const recipe = structuredClone(workspace.recipe), resetsBefore = stackResets;
   // Research tools are hidden before the head loads: the head starts with the wireframe it stored, then turns it off at once.
   app.withdrawViewTools(["eye-makeup.wire", "no.such-tool"]);
   const preview = new PreviewActions(workspace.preview, recordingPreviewPort(calls), views);
@@ -121,6 +125,9 @@ test("a tool the presentation withdraws keeps its state but reaches no device un
   expect(calls).toEqual(["wire:false", "surface:false"]);
   expect(views.state("main", "tools")).toEqual({ on: { "eye-makeup.surface": true, "eye-makeup.wire": true } });
   expect(preview.snapshot()).toMatchObject({ surface: true, wire: true });
+  // Withdrawing editing tools does not clear or recompile the makeup a scene keeps drawing.
+  expect(workspace.recipe).toEqual(recipe);
+  expect(stackResets).toBe(resetsBefore);
   expect(views.history().depth).toBe(0);
   // A choice made while withdrawn is kept and reaches the device only once the tool is offered again.
   app.dispatch({ kind: "view.setTool", view: "main", tool: "eye-makeup.surface", enabled: false });
@@ -214,27 +221,47 @@ test("a collapsed group's neighbours share all of its split's space, whatever th
   expect(openShares([0.5, 0.5], [false, false])).toEqual([0.5, 0.5]);
 });
 
-test("module visibility is a bounded presentation preference, stored only where the person chose", () => {
-  expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", theme: "dark", inputHints: true }).modules).toBeUndefined();
-  expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", theme: "dark", inputHints: true, modules: { "eye-makeup": false, "Bad Id": true, poses: "yes" } }).modules)
-    .toEqual({ "eye-makeup": false });
-  const actions = new UIPreferenceActions();
-  expect(actions.capability({ kind: "modules.set", module: "", shown: true }).available).toBe(false);
-  actions.dispatch({ kind: "modules.set", module: "eye-makeup", shown: false });
-  expect(actions.snapshot().modules).toEqual({ "eye-makeup": false });
+test("legacy modules, layout and layouts survive a newer build, unrelated edits and an older-build JSON reader unchanged", () => {
+  const legacy = { modules: { "eye-makeup": false, "Bad Id": true, poses: "yes", future: { nested: true } },
+    layout: { format: "future/dock", version: 2, state: { unknown: [1, "panel"] }, extra: "keep" },
+    layouts: { future: true, entries: [{ working: { modules: { poses: false } } }] } };
+  const actions = new UIPreferenceActions({ schema: "xfs/ui-preferences-1", theme: "dark", ...legacy });
+  actions.dispatch({ kind: "theme.set", theme: "light" });
+  actions.dispatch({ kind: "researchTools.set", enabled: true });
+  expect(() => actions.dispatch({ kind: "modules.set", module: "poses", shown: true } as never)).toThrow("That preference isn't available.");
+  const oldReader = (value: unknown) => JSON.parse(JSON.stringify(value));
+  const older = oldReader(new UIPreferenceActions(oldReader(actions.snapshot())).snapshot());
+  for (const key of ["modules", "layout", "layouts"] as const) expect(older[key]).toEqual(legacy[key]);
+  for (const value of [{}, null, []]) expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", modules: value }).modules as unknown).toEqual(value);
 });
 
-test("CORE-115: one path places a module's panels from the modules preference, whoever set it", () => {
-  const modules = [{ id: "eye-makeup" }, { id: "character" }, { id: "poses" }];
-  const panels: Record<string, string[]> = { "eye-makeup": ["layers", "shape"], character: ["character"], poses: ["poses"] };
-  const panelsOf = (module: { id: string }) => panels[module.id] ?? [];
-  const dock = new Set(["layers", "shape", "poses"]);
-  // A typed `modules.set` showed Character and hid Poses: Character's panel comes back, Poses' is parked.
-  expect(modulePanelChanges(modules, ["eye-makeup", "character"], panelsOf, panel => dock.has(panel))).toEqual({ add: ["character"], remove: ["poses"] });
-  // Once the dock matches (the Modules menu, a layout's switch, or an earlier paint placed them), there is nothing left to do.
-  expect(modulePanelChanges(modules, ["eye-makeup", "poses"], panelsOf, panel => dock.has(panel))).toEqual({ add: [], remove: [] });
-  // The shown list comes from the preference, as the menu's does.
-  const actions = new UIPreferenceActions();
-  actions.dispatch({ kind: "modules.set", module: "poses", shown: false });
-  expect(actions.snapshot().modules).toEqual({ poses: false });
+// Instances retained after closing, parked places and another size class must not activate tools.
+test("feature focus derives per tab from docked instances, including collapsed and floating panels", () => {
+  const make = (type: string): LayoutTab => {
+    const id = `${type}--1`, tree = { root: group([id]), floating: [], closed: [] };
+    return { id: type, name: type, panels: [{ id, type }], dock: serializeDockState({ wide: tree, compact: tree }) };
+  };
+  const eye = make("presets"), poses = make("poses.library"), library = make("library");
+  const focused = (tab: LayoutTab, size: "wide" | "compact" = "wide") => activeModules(tab, (tab.dock?.state as unknown as import("../src/studio-ui/dock/layout").DockState | undefined)?.[size], STUDIO_MODULE_REGISTRATION.modules, STUDIO_CATALOGUE);
+  expect(focused(eye)).toEqual(["eye-makeup"]);
+  expect(focused(library)).toEqual(["eye-makeup"]);
+  expect(activeModules(eye, { root: group(["presets"]), floating: [], closed: [] }, STUDIO_MODULE_REGISTRATION.modules, STUDIO_CATALOGUE)).toEqual(["eye-makeup"]);
+  expect(activeModules(eye, { root: null, floating: [], closed: ["presets"] }, STUDIO_MODULE_REGISTRATION.modules, STUDIO_CATALOGUE)).toEqual([]);
+  expect(focused(poses)).toEqual(["poses"]);
+  const closed = structuredClone(eye), state = closed.dock!.state as unknown as import("../src/studio-ui/dock/layout").DockState;
+  state.wide = { root: null, floating: [], closed: ["presets--1"], parked: { "presets--1": { closed: true } } };
+  expect(focused(closed)).toEqual([]);
+  expect(focused(closed, "compact")).toEqual(["eye-makeup"]);
+  state.wide = { root: null, floating: [{ id: "f", x: 0, y: 0, w: 300, h: 200, node: { ...group(["presets--1"]), collapsed: true } }], closed: [] };
+  expect(focused(closed)).toEqual(["eye-makeup"]);
+  expect(focused({ ...eye, panels: [] })).toEqual([]);
+  expect(activeModules(undefined, undefined, STUDIO_MODULE_REGISTRATION.modules, STUDIO_CATALOGUE)).toEqual([]);
+  let shown = eye;
+  const port = { preferences: { snapshot: () => ({ modules: { "eye-makeup": false, poses: true } }) },
+    views: { modules: () => STUDIO_MODULE_REGISTRATION.modules },
+    tabs: { snapshot: () => ({ shown: shown.id, tabs: [eye, poses] }) } };
+  const filter = () => toolFilter(port as never, STUDIO_CATALOGUE, (shown.dock!.state as unknown as import("../src/studio-ui/dock/layout").DockState).wide);
+  expect(ids(deriveViewTools(STUDIO_MODULE_REGISTRATION, "character", filter()))).toContain("eye-makeup.surface");
+  shown = poses;
+  expect(ids(deriveViewTools(STUDIO_MODULE_REGISTRATION, "character", filter()))).not.toContain("eye-makeup.surface");
 });

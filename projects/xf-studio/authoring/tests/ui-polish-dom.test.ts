@@ -834,16 +834,16 @@ describe("Polish batch 2: the profiles phase 1 UI follow-ups", () => {
 
   test("UI-187: the header gives way in its fixed order until the names have room", async () => {
     const { HEADER_STAGES, MIN_CHARACTERS, headerStages, nameFits, stagesThatFit } = await import("../src/studio-ui/header-fit");
-    expect(HEADER_STAGES).toEqual(["category", "commands", "layout", "flag", "package", "brand", "save", "collection"]);
+    expect(HEADER_STAGES).toEqual(["commands", "flag", "package", "brand", "save", "collection"]);
     expect(MIN_CHARACTERS).toBe(12);
     // The fewest stages that fit; all of them when none does.
     expect(stagesThatFit(applied => applied >= 3)).toBe(3);
     expect(stagesThatFit(() => true)).toBe(0);
     expect(stagesThatFit(() => false)).toBe(HEADER_STAGES.length);
-    // Whole names first, with up to seven stages given way (never the collection's name); else readable names, the collection's last to go.
+    // Whole names first, with up to five stages given way (never the collection's name); else readable names, the collection's last to go.
     expect(headerStages((applied, whole) => whole ? applied >= 5 : applied >= 2)).toBe(5);
     expect(headerStages((applied, whole) => whole ? false : applied >= 2)).toBe(2);
-    expect(headerStages((applied, whole) => whole ? applied >= 8 : applied >= 8)).toBe(HEADER_STAGES.length);
+    expect(headerStages((applied, whole) => whole ? applied >= HEADER_STAGES.length : applied >= HEADER_STAGES.length)).toBe(HEADER_STAGES.length);
     // A name fits whole, or with at least the minimum shown; a short name never needs the minimum.
     expect([nameFits(40, 40, 96), nameFits(96, 140, 96), nameFits(60, 140, 96), nameFits(50, 60, 96)]).toEqual([true, true, false, false]);
   });

@@ -13,7 +13,7 @@ afterAll(() => { uninstallLightDom(); if (had === undefined) delete globals.wind
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 
 test("conflict notices show what differs; Keep mine and Use theirs ask first, naming what goes; Keep both acts at once; they go once resolved", async () => {
-  const { presetsPanel } = await import("../src/studio-ui/panels/collection");
+  const { presetsPanel } = await import("../src/features/eye-makeup/view/collection");
   const requests: unknown[] = [];
   let conflicts = [
     { id: "c1", message: "You changed the preset “Smoky” here too (its makeup). Which version should it keep?", keepBoth: true, subject: "the preset “Smoky”" },
@@ -28,7 +28,10 @@ test("conflict notices show what differs; Keep mine and Use theirs ask first, na
   };
   const rt = { port, anchors: { register() {} }, dispatch: () => true, request: async (request: unknown) => { requests.push(request); },
     feedback: { announce() {}, toast() {} }, toolFilter: () => ({}), editor: { recipe: () => ({ layers: [] }) } };
-  const panel = presetsPanel(rt as never);
+  const panel = presetsPanel({ platform: rt.dispatch, feedback: rt.feedback, anchors: rt.anchors, collection: {
+    summary: port.library.summary, capability: port.library.capability, fileCapability: port.files.capability,
+    requestCapability: port.authoring.requestCapability, request: rt.request, menuCapability: () => ({ available: true }),
+  } } as never);
   const frame = () => ({ library: port.library.summary() }) as never;
   panel.update(frame());
   const root = panel.spec.element as unknown as LightElement;

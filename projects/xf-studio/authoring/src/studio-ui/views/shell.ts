@@ -1,5 +1,5 @@
 /**
- * The shell's own view contribution: the platform's panels (collection and library, History, the 3D
+ * The shell's own view contribution: the platform's panels (History, the 3D
  * head, the character and preview inspectors, Activity, Settings, Help) and the activity sources of the system
  * families (history, collection, camera and preview, motion, quality, saved V, 3D preview setup).
  */
@@ -8,12 +8,8 @@ import type { ViewContribution } from "./contribution";
 export const SHELL_VIEW = {
   owner: "shell",
   panels: [
-    { id: "presets", context: { kind: "look" }, title: "Presets", icon: "presets", order: 10, slot: "collection",
-      description: "Named looks in the current collection; each is one choice in the game selector." },
     { id: "history", title: "History", icon: "history", order: 30, slot: "stack",
       description: "Your recent changes to what you last edited, a preset or a V; click any step to go back to it." },
-    { id: "library", context: { kind: "look" }, title: "Library", icon: "library", order: 40, slot: "collection", heavy: true,
-      description: "Saved versions of your collection, recovery and files." },
     { id: "package", title: "Mod package", icon: "package", order: 50, slot: "collection", heavy: true,
       description: "Check and build your mod files." },
     // The main view's panel keeps the ID `head` so saved layouts restore; its tab is titled from the view graph (viewTitles).

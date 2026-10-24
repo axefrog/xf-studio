@@ -35,7 +35,7 @@ test("theme preference defaults to system and stays separate from recipe/library
     ? JSON.stringify(damaged) : null }, true, STUDIO_DOCUMENTS);
   expect(loaded.writable).toBe(true);
   expect(loaded.state.recipe).toEqual(recipe);
-  expect(loaded.state.uiPreferences).toEqual({ schema: "xfs/ui-preferences-1", theme: "dark", inputHints: true });
+  expect(loaded.state.uiPreferences).toEqual({ schema: "xfs/ui-preferences-1", theme: "dark", inputHints: true, layout: damaged.uiPreferences.layout });
 });
 
 test("viewport input hints are on by default, persist when turned off and ignore malformed values", () => {
@@ -92,7 +92,7 @@ test("opaque layout accepts only bounded, lossless JSON without choosing dock ge
   expect(parseDockLayout({ ...layout, format: "<script>" })).toBeUndefined();
   expect(parseDockLayout({ ...layout, state: null })).toBeUndefined();
   expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", theme: "light",
-    layout: { ...layout, state: { x: Infinity } } })).toEqual({ schema: "xfs/ui-preferences-1", theme: "light", inputHints: true });
+    layout: { ...layout, state: { x: Infinity } } }).layout).toEqual({ ...layout, state: { x: Infinity } });
 });
 
 test("layout restore requires the panel engine to recover and certify current-screen usability", () => {

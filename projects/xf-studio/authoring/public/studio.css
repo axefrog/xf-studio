@@ -101,7 +101,7 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .stack { display: flex; flex-direction: column; gap: var(--sp-6); }
 @supports (corner-shape: bevel) {
   .btn, .chip, .badge, .segmented, .field, .select-wrap select, .swatch-frame, .toast, .menu, .popover, .palette, .sheet, .result-card,
-  .dock-window, .finish-option, .ready-badge, .category, .brand-mark, .empty { corner-shape: bevel; }
+  .dock-window, .finish-option, .ready-badge, .brand-mark, .empty { corner-shape: bevel; }
 }
 
 /* ---------- Boot ---------- */
@@ -116,13 +116,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .brand { display: flex; align-items: center; gap: var(--sp-4); flex: none; }
 .brand-mark { display: grid; place-items: center; width: 30px; height: 24px; background: var(--accent); color: var(--accent-ink); font: 700 13px/1 var(--font-display); letter-spacing: .04em; border-radius: 0 var(--bevel) 0 var(--bevel); }
 .brand-name { font: 600 var(--fs-lg)/1 var(--font-display); letter-spacing: .16em; text-transform: uppercase; }
-/* The shown modules' names (DESK-06) show whole or not at all: they are the header fit's first stage to give way (header-fit.ts), when the
-   button shows its icon alone and the names stay its tooltip and accessible name. */
-.category { display: flex; align-items: center; gap: var(--sp-3); height: var(--control-h); padding: 0 var(--sp-4); white-space: nowrap; flex: none; border: 1px solid var(--line); background: var(--bg-raised); border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm);
-  font: 600 var(--fs-sm)/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; }
-button.category:hover { background: var(--bg-hover); }
-span.category { border-color: transparent; background: transparent; padding-left: 0; }
-.category .icon:first-child { color: var(--accent-text); flex: none; }
 .shell-header > .chip-slot { flex: none; display: flex; margin-left: calc(-1 * var(--sp-2)); }
 .crumbs { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; flex: 0 1 auto; color: var(--text-muted); }
 .crumbs > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -131,13 +124,11 @@ span.category { border-color: transparent; background: transparent; padding-left
 .crumbs .icon { width: 12px; height: 12px; color: var(--text-faint); }
 .verify-flag { flex: none; font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--signal); border: 1px dashed var(--signal-line); padding: 5px 7px; white-space: nowrap; }
 /* The header's fit (header-fit.ts, style guide s-header, UI-187): so the collection and preset names stay readable, its other items give
-   way one stage at a time, always in this order: Commands, the layout's name, the verification label, Package, the brand word, Save
+   way one stage at a time, always in this order: Commands, the verification label, Package, the brand word, Save
    version, then the collection's name. A label that gives way stays the button's accessible name (visually hidden, not removed). */
-.shell-header[data-fit~="category"] .category { position: relative; width: var(--control-h); padding: 0; justify-content: center; }
-.shell-header[data-fit~="category"] .category > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.shell-header[data-fit~="commands"] .header-commands, .shell-header[data-fit~="layout"] .layouts-btn,
+.shell-header[data-fit~="commands"] .header-commands,
 .shell-header[data-fit~="package"] .header-package, .shell-header[data-fit~="save"] .header-save { position: relative; width: var(--control-h); padding: 0; }
-.shell-header[data-fit~="commands"] .header-commands > span, .shell-header[data-fit~="layout"] .layouts-btn > span,
+.shell-header[data-fit~="commands"] .header-commands > span,
 .shell-header[data-fit~="package"] .header-package > span, .shell-header[data-fit~="save"] .header-save > span {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .shell-header[data-fit~="flag"] .verify-rest, .shell-header[data-fit~="brand"] .brand-name,
@@ -1513,7 +1504,7 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 
 /* ---------- Compact workspaces ---------- */
 @media (max-width: 720px) {
-  .category span, .verify-flag, .chip, .chip-slot { display: none; }
+  .verify-flag, .chip, .chip-slot { display: none; }
   .input-hints .hint-more { display: none; }
   .status-message { max-width: 40vw; }
 }

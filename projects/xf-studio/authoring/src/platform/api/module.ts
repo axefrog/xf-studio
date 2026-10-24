@@ -1,7 +1,7 @@
 /**
- * Studio modules (research/authoring/view-graph-design.md §3.9, §4): the unit a person shows or hides from the Modules menu. A
- * module owns panels, view tools, view summaries and (later) scene kinds, all keyed by its ID. Modules are combinable, not
- * exclusive. Hiding one withdraws its panels and tools and parks its layout; its data and exports are untouched. A feature module
+ * Studio modules (research/authoring/view-graph-design.md §3.9, §4) own panels, defaults, view tools, summaries and scene kinds,
+ * all keyed by ID. The shown tab's docked panel instances determine which modules offer tools; content and exports are untouched.
+ * A feature module
  * is presented by the Studio module of the same ID; a module need not present a feature (Poses, World).
  *
  * Types and pure helpers only: data a composition lists (`compose/modules.ts`), which the application derives from.
@@ -11,7 +11,7 @@ import type { SceneKind } from "./view-graph";
 import type { DefaultLayoutContribution } from "./layout-fragment";
 
 export type ModuleId = string;
-/** The Modules menu's sections. */
+/** Module grouping metadata. */
 export type ModuleGroup = "character" | "world" | "assets" | "tools";
 export type StudioModule = {
   readonly id: ModuleId;
@@ -22,8 +22,9 @@ export type StudioModule = {
   readonly stage: "stable" | "preview" | "dev";
   /** The feature module it presents, if any. */
   readonly feature?: string;
+  /** Baseline for legacy workspace migration only; live feature focus comes from the tab. */
   readonly shownByDefault: boolean;
-  /** One plain line of what it adds, for the Modules menu. */
+  /** One plain line of what it adds. */
   readonly description: string;
   /**
    * Its default layouts (profiles design §4.2): read-only, listed under it in New tab ▸ (with the Early access tag unless it is stable),
@@ -75,8 +76,8 @@ export type ViewToolContribution = {
 export type ViewSummaryContribution = { readonly module: ModuleId; readonly scenes: readonly SceneKind[] };
 
 /**
- * A module on the roadmap with an agreed design but nothing built (ui-copy-and-layout-review.md §6): the Modules menu lists it as
- * Planned, with its one "Coming soon" line, and it can never be shown. Its `id` is the ID its live module will have: once a module
+ * A module on the roadmap with an agreed design but nothing built: Panels > Coming soon lists it under research tools,
+ * with its one reason, and it cannot be opened. Its `id` is the ID its live module will have: once a module
  * with that ID registers, `plannedModules` drops the entry, and `tests/coming-soon.test.ts` fails until the entry is deleted.
  */
 export type PlannedModule = {

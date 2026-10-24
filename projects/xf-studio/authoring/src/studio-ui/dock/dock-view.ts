@@ -218,8 +218,7 @@ export class DockView {
     else if (tree.root) this.surface.append(this.renderNode(tree.root, false, shown));
     else this.surface.append(this.options.emptyState?.() ?? h("div", { class: "dock-empty" },
       h("p", { text: "Every panel is floating or closed." }),
-      h("p", { class: "muted", text: "Drag a panel onto an edge guide, or reset the layout." }),
-      button({ label: "Reset layout", onClick: () => this.reset() })));
+      h("p", { class: "muted", text: "Use Panels to open one, or Reset to default in the tab menu." })));
     // Floating windows stay available above a maximized docked group.
     tree.floating.forEach((window, index) => this.floatingLayer.append(this.renderWindow(window, index, shown)));
     const previous = this.visible;
@@ -533,9 +532,6 @@ export class DockView {
     const on = this.tree.maximized !== groupId;
     this.update(setMaximized(this.tree, on ? groupId : undefined), on ? "Group maximized. Double-click its tab bar or use Restore to return." : "Layout restored");
   }
-  reset() {
-    this.update(this.options.defaults(this.sizeClass), `${this.sizeClass === "wide" ? "Wide" : "Compact"} layout reset`);
-  }
   private groupRect(groupId?: string): Rect | undefined {
     if (!groupId) return;
     const element = this.element.querySelector<HTMLElement>(`[data-group="${groupId}"]`);
@@ -584,8 +580,7 @@ export class DockView {
     return items;
   }
   openPanelMenu(id: PanelId, anchor: Element | { x: number; y: number }, invoker?: Element) {
-    openMenu([...this.panelMenuItems(id), { kind: "separator" },
-      { kind: "action", label: "Reset layout", icon: "reset", run: () => this.reset() }], anchor, { label: `${this.title(id)} layout options`, invoker });
+    openMenu(this.panelMenuItems(id), anchor, { label: `${this.title(id)} layout options`, invoker });
   }
   private openWindowMenu(windowId: string, anchor: Element) {
     const window = this.tree.floating.find(item => item.id === windowId);

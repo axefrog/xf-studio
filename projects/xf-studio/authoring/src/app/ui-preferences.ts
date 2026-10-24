@@ -16,8 +16,7 @@ export type TourRecord = "completed" | "skipped" | "declined";
  * `tours`: guided tour progress by tour ID (absent until a tour ends or its offer is declined).
  * `researchTools`: the Studio's research and calibration tools (lighting calibration, the glitter model studies, compiler plans,
  * developer IDs), off by default so the everyday interface shows only what a person uses (UI-85). Stored only once turned on.
- * `modules`: which Studio modules show (view-graph-design.md §4.2), by module ID, only where the person chose; a module not listed
- * follows its manifest's default. Presentation state: the application never reads it, and a hidden module's actions stay dispatchable.
+ * `modules`: frozen legacy migration input, round-tripped unchanged for older builds. Feature focus comes from the shown tab.
  * `expanded`: whether each foldable heading, row or group is open (view-state.ts), by its view key (`<namespace>:<path>` or
  * `<namespace>.<path>`, e.g. `character:head/Hair`, `expressions.mouth`); absent: the control's own default. Least recently set first,
  * bounded per namespace and in all, so a row whose mod isn't loaded keeps its state until it shows again. The older `folded` list
@@ -61,7 +60,6 @@ export type UIPreferenceAction =
   | { kind: "theme.set"; theme: ThemePreference }
   | { kind: "inputHints.set"; enabled: boolean }
   | { kind: "researchTools.set"; enabled: boolean }
-  | { kind: "modules.set"; module: string; shown: boolean }
   | { kind: "layout.set"; layout?: DockLayout }
   | { kind: "expanded.set"; keys: readonly string[]; expanded: boolean }
   | { kind: "scroll.set"; key: string; anchor?: ScrollAnchor }
@@ -83,8 +81,6 @@ const unsafeKeys = new Set(["__proto__", "constructor", "prototype"]);
 const MAX_TOURS = 64;
 const tourId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9.-]{0,63}$/.test(value);
 const tourRecord = (value: unknown): value is TourRecord => value === "completed" || value === "skipped" || value === "declined";
-const MAX_MODULES = 64;
-const moduleId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9.-]{0,63}$/.test(value);
 /** Remembered open states: at most this many per namespace, and in all (least recently set go first). */
 const MAX_EXPANDED_PER_NAMESPACE = 192;
 const MAX_EXPANDED = 512;
@@ -224,14 +220,9 @@ export function parseUIPreferences(value: unknown): UIPreferences {
     if (theme(candidate.theme)) result.theme = candidate.theme;
     if (typeof candidate.inputHints === "boolean") result.inputHints = candidate.inputHints;
     if (candidate.researchTools === true) result.researchTools = true;
-    const layout = parseDockLayout(candidate.layout);
-    if (layout) result.layout = layout;
-    // Legacy layout data stays byte-for-byte as read; only migration interprets it.
-    if (candidate.layouts && typeof candidate.layouts === "object") result.layouts = structuredClone(candidate.layouts) as LayoutLibrary;
-    if (candidate.modules && typeof candidate.modules === "object" && !Array.isArray(candidate.modules)) {
-      const modules = Object.entries(candidate.modules).filter(([id, shown]) => moduleId(id) && typeof shown === "boolean").slice(0, MAX_MODULES);
-      if (modules.length) result.modules = Object.fromEntries(modules) as Record<string, boolean>;
-    }
+    // Frozen legacy fields: only migration interprets them. Keep even empty and newer-build values exactly as read.
+    for (const key of ["layout", "layouts", "modules"] as const)
+      if (Object.hasOwn(candidate, key)) Object.assign(result, { [key]: structuredClone(candidate[key]) });
     // The older `folded` list (headings folded) first, so a newer `expanded` entry for the same key wins.
     const legacy: [string, boolean][] = Array.isArray(candidate.folded) ? candidate.folded.filter(viewKey).map(key => [key, false]) : [];
     const expanded = candidate.expanded && typeof candidate.expanded === "object" && !Array.isArray(candidate.expanded)
@@ -290,12 +281,6 @@ export class UIPreferenceActions {
       return { available: false, reason: "Viewport hints are either shown or hidden." };
     if (action.kind === "researchTools.set" && typeof action.enabled !== "boolean")
       return { available: false, reason: "Research tools are either shown or hidden." };
-    if (action.kind === "modules.set") {
-      if (!moduleId(action.module) || typeof action.shown !== "boolean") return { available: false, reason: "Choose a module and whether it shows." };
-      const known = this.value.modules ?? {};
-      if (!Object.hasOwn(known, action.module) && Object.keys(known).length >= MAX_MODULES)
-        return { available: false, reason: "Too many module choices are remembered already." };
-    }
     // Always room: the least recently set open states and scroll anchors make way.
     if (action.kind === "expanded.set" && (!Array.isArray(action.keys) || !action.keys.length || action.keys.length > MAX_EXPANDED ||
         !action.keys.every(viewKey) || typeof action.expanded !== "boolean"))
@@ -341,7 +326,6 @@ export class UIPreferenceActions {
     else if (action.kind === "inputHints.set") this.value.inputHints = action.enabled;
     else if (action.kind === "researchTools.set") { if (action.enabled) this.value.researchTools = true; else delete this.value.researchTools; }
     else if (action.kind === "tours.record") this.value.tours = { ...this.value.tours, [action.tourId]: action.outcome };
-    else if (action.kind === "modules.set") this.value.modules = { ...this.value.modules, [action.module]: action.shown };
     else if (action.kind === "choiceSize.set") this.value.choiceSizes = { ...this.value.choiceSizes, [action.type]: action.size };
     else if (action.kind === "choiceLayout.set") {
       if (action.type === null) { this.value.choiceLayout = action.layout; delete this.value.choiceLayouts; }
@@ -359,11 +343,12 @@ export class UIPreferenceActions {
       const sizes = remember(this.value.sizes, [[action.key, action.height]], MAX_SIZES, MAX_SIZES);
       if (sizes) this.value.sizes = sizes; else delete this.value.sizes;
     }
-    else {
+    else if (action.kind === "layout.set") {
       const layout = action.layout === undefined ? undefined : parseDockLayout(action.layout)!;
       if (layout) this.value.layout = layout;
       else delete this.value.layout;
     }
+    else throw Error("That preference isn't available.");
     for (const listener of this.listeners) listener();
   }
 }

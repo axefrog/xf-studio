@@ -920,7 +920,7 @@ With the default plan, a collection containing both features builds one "XF Look
 
 If either module needs a platform change beyond the composition list, the design has failed; record the gap in the [boundary assessment](ui-architecture-boundary.md).
 
-**Modules without a part.** Poses (V-centric, no document part) and World (not about V, with its own `location` scene kind) are Studio modules that register no feature module. They plug in through the [view graph design](view-graph-design.md#5-placeholder-modules)'s module manifest, view contributions, view tools and scene kinds, under the same acceptance rule: only the `compose/` lists change outside their folders.
+**Modules without a part.** Poses (V-centric, no document part) and World (not about V, with its own `location` scene kind) are Studio modules that register no feature module. They plug in through the [view graph design](view-graph-design.md#5-part-less-modules-and-future-scene-kinds)'s module manifest, view contributions, view tools and scene kinds, under the same acceptance rule: only the `compose/` lists change outside their folders.
 
 ## Decisions
 

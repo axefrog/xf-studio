@@ -136,7 +136,7 @@ The feature-renderer layer is the exception. It is already close to multi-view r
 ### 2.12 Guidance anchors
 
 - `studio-ui/guidance/anchors.ts:18–19` names `uv.canvas` and `head.view`, one per panel, and the tours point at them (`tours.ts:20`, `:23`).
-- With several views, `head.view` should mean the main view, or the focused one. Anchors of a hidden module's panels already fall back ("a closed panel is offered"). A tour step on a hidden module must first offer to show that module (§4).
+- With several views, `head.view` should mean the main view, or the focused one. Anchors of a hidden module's panels already fall back ("a closed panel is offered"). A tour summons its panel in the shown tab through the ordinary panel commands (§4).
 
 ### 2.13 Tests that encode the singleton
 
@@ -225,7 +225,7 @@ Orbiting in either view writes `c1`, which dirties both views. A light change in
 ### 3.3 Ownership and lifetime
 
 - **The graph.** A DOM-free application service, `platform/core/view-graph.ts`, owns the graph. It validates every edit, counts references and publishes a detached snapshot. It is the one owner of camera, light, display and tool *state*. `PreviewActions` stops storing them and routes to the graph (P1).
-- **Garbage collection.** A node lives while a view references it, or while a parked view of a hidden module does (§4). An edit that leaves a node unreferenced removes it in the same commit. There are no dangling nodes and no manual clean-up.
+- **Garbage collection.** A node lives while a view references it, or while a retained tab references it (§4). An edit that leaves a node unreferenced removes it in the same commit. There are no dangling nodes and no manual clean-up.
 - **GPU objects.** The platform scene layer (`platform/scene/`) owns the GPU objects, one runtime per node:
   - `SceneRuntime` per scene node;
   - `ViewRuntime` per view: a `PerspectiveCamera` at that view's aspect, controls and camera input on its canvas, its editors, its presentation canvas;
@@ -324,47 +324,16 @@ Rigs differ in light count (the studio rig has three directional lights and a pr
 
 ### 3.9 How modules contribute to each view
 
-A **Studio module** is the unit a person shows or hides. It has a manifest, and every contribution carries its module ID. A feature module (§1 of the platform) is presented by the Studio module of the same ID; a module need not have a document part (Poses and World have none).
+A **Studio module** owns a manifest and contributions keyed by its ID; the shown tab's docked panel instances determine whether its tools are offered (§4). A feature module is presented by the Studio module of the same ID; a module need not have a document part (Poses and World have none).
 
-```ts
-// platform/api/module.ts (sketch)
-export type ModuleId = string & { readonly __module: unique symbol };
-export interface StudioModule {
-  readonly id: ModuleId;                       // "eye-makeup", "poses", "world"
-  readonly label: string; readonly icon: IconName;
-  readonly group: "character" | "world" | "assets" | "tools";   // the Modules menu's sections
-  readonly stage: "stable" | "preview" | "dev";
-  readonly feature?: FeatureId;                // the feature module it presents, if any
-  readonly shownByDefault: boolean;
-}
-
-// platform/api/view-graph.ts (sketch)
-export type SceneKind = "character" | (string & {});
-export interface SceneKindContribution {       // a module's own kind of content (World: "location")
-  readonly kind: SceneKind; readonly module: ModuleId;
-  readonly cameras: readonly CameraKind[]; readonly rigs: readonly RigKind[];
-  create(port: SceneContentPort): SceneContent; // Three allowed: the module's render/ folder
-}
-export interface ViewToolContribution {
-  readonly id: string;                         // "eye-makeup.surface"
-  readonly module: ModuleId | "platform";
-  readonly label: string; readonly icon: IconName; readonly order: number;
-  readonly scenes: readonly SceneKind[];       // where it applies
-  readonly placement: "toolbar" | "menu" | "research";
-  readonly kind: "toggle" | "action" | "menu";
-  readonly state: "tools" | "camera" | "scene"; // which node holds its state
-}
-export interface ViewSummaryContribution {     // the crumb: "Preset › Layer"
-  readonly module: ModuleId; readonly scenes: readonly SceneKind[];
-}
-```
+The current typed contracts are in [`platform/api/module.ts`](../../projects/xf-studio/authoring/src/platform/api/module.ts): `StudioModule` supplies identity, stage, feature ownership and read-only layout defaults; `ViewToolContribution` names its scene kinds, placement, state owner and dispatched action; `ViewSummaryContribution` names the scene kinds its crumb applies to. `shownByDefault` is only a legacy migration baseline. A module's later scene-kind contribution supplies content and compatible camera/rig kinds; it is separate from authoring-tool focus.
 
 What each contribution does:
 
 - **Scene content.** `FeatureRendererFactory` gains `scenes: SceneKind[]` (eye makeup: `["character"]`). The platform creates one renderer set per scene node of a matching kind, not per view. A module's own scene kind registers a `SceneKindContribution`, whose content receives a `SceneContentPort`: the scene port without the head anchors, plus the shared detail and texture caches.
 - **Per-view differences** reach a renderer only through one optional hook, `FeatureRenderer.viewTools?(on: Readonly<Record<string, boolean>>)`. It is called before each view's draw with that view's states for the feature's own tools; eye makeup's wireframe is a per-draw material flag. A renderer never sees a camera, rig or view ID (rule 4, §6.3).
-- **Tools, the toolbar and menus** are derived, not written. Derivation lives in the application, so a future UI or an MCP client gets the same list. `port.views.tools(view)` returns the platform's tools and the tools of **shown** modules whose `scenes` include the view's scene kind, filtered by placement and the research preference and sorted by `order`. Each entry carries its current state and capability. `port.views.setTool(view, id, value)` dispatches through the registry. The toolbar, the view's context-menu section, the palette's View group and the Camera & light panel's Display section all render this one list. They re-derive on module visibility, the view's scene kind, the research preference and capability changes (at paint time, like every capability today).
-- **Summaries and readiness.** The crumb is the shown modules' summaries for the scene. Readiness is aggregated from the scene's renderers.
+- **Tools, the toolbar and menus** are derived, not written. Derivation lives in the application, so a future UI or an MCP client gets the same list. `port.views.tools(view)` returns the platform's tools and the tools of the tab's **active** modules whose `scenes` include the view's scene kind, filtered by placement and the research preference and sorted by `order`. Each entry carries its current state and capability. `port.views.setTool(view, id, value)` dispatches through the registry. The toolbar, the view's context-menu section, the palette's View group and the Camera & light panel's Display section all render this one list. They re-derive on docked panel instances, the view's scene kind, the research preference and capability changes (at paint time, like every capability today).
+- **Summaries and readiness.** The crumb is the active modules' summaries for the scene. Readiness is aggregated from the scene's renderers.
 - **Bindings.** A module's pointer targets and keys are its `InputBindingContribution` (platform §1). The hint strip in a view lists only the targets of tools active there.
 
 Platform tools, by scene kind:
@@ -392,36 +361,19 @@ Placing a V into a location later is a `location` scene that references a charac
 
 ## 4. Module activation
 
-### 4.1 Options
+### 4.1 Feature focus from the shown tab
 
-| Option | How it works | For | Against |
-|---|---|---|---|
-| **A. Exclusive modes** | One module at a time; switching swaps panels, views and tools | Uncluttered, simple to explain | One look spans several features with one history. Eye makeup is judged on the V, with Character and Poses beside it. Switching back and forth would be constant. |
-| **B. Combinable modules** (proposed default) | Each module shown or hidden independently, from a **Modules** menu | Matches "one look, many features"; panels simply appear and disappear | More panels as modules grow |
-| **C. Named workspaces** (later, on top of B) | A workspace is a set of shown modules, a dock layout and a view graph, switched from tabs in the header (Blender-like) | Cures B's clutter once there are many modules; a "World" workspace can hide every V module | Heavier; premature with three modules |
+Profiles phase 2, P2-v replaces module visibility switches with focus derived from the shown tab ([profiles design §4.3](profiles-views-layouts-design.md#43-feature-focus-from-the-tab), [experiment 044 §13](../../experiments/044-profile-tabs/README.md#13-p2-v-as-built)). A module is active when one of its panel instances is docked in the current size class: floating and collapsed groups count; closed instances and remembered places do not. Panel ownership supplies the view-tool filter's modules. Optional experiments receive the same derived visibility. The application receives withdrawn tool IDs; it never reads the legacy preference.
 
-**Current implementation on `claude/profiles-p2`:** layout tabs now hold arrangements and view graphs, with contributed and own defaults (§4.5). The Layouts button is retired. Module visibility still follows its preference until P2-v derives it from the shown tab.
+### 4.2 Panels and header
 
-### 4.2 The Modules menu
+The Modules button, menu, palette commands and `modules.set` are retired. Panels opens or closes a panel **in this tab**, under owner headings, with open, collapsed and closed states. It offers no module switches or parked-module rows. With research tools on, the folded **Coming soon** submenu lists planned modules with their reasons. Early-access panels retain their stage tags. Layout tabs replace the Layouts button, and Reset to default in the tab menu restores both size classes; the old dock Reset routes are retired. Guidance targets `tabs.strip`.
 
-It replaces the header's authoring-category label (`studio-ui/app.ts:251`), which today reads "Eye makeup" because only one feature is registered.
+### 4.3 Content and retained state
 
-- **Layout.** One checkbox row per module, grouped (Character: Eye makeup, Poses; World: World), with a stage tag ("Early access"; components/stage-tag.ts) and one plain line of what it adds ("Adds 6 panels and 2 view tools").
-- **Palette.** "Show Eye makeup" and "Hide Eye makeup" appear as palette commands.
-- **Storage.** The state is `UIPreferences.modules` (workspace and verification-scoped, like the layout), with defaults from each manifest.
-- **Boundary.** It is a presentation preference only. The application never reads it, and actions stay dispatchable (a future MCP client can still drive a hidden module).
+A Poses tab offers no Surface controls; Eye makeup keeps drawing on V. Tools, summaries and editing hints follow the tab, while parts, histories and exports stay unchanged. Presets and Library belong to Eye makeup's contribution and factories, and its default already includes them in both size classes. Every other shell panel keeps its owner. There is no requirement for a shell panel to appear in every tab; an empty tab stays empty.
 
-### 4.3 Hiding a module
-
-- **Panels** leave the dock. Their places are **parked** per size class in the dock state: each panel's group sibling and index, or its floating window rectangle. Showing the module again puts each panel back where it was (`openPanel` with the remembered siblings). A group emptied by hiding collapses and is recreated beside its remembered sibling. The parser treats a hidden module's panels as known but parked, so it does not re-add them (fixing the `layout.ts:410` behaviour for this case).
-- **View tools, summaries, bindings and hint targets** vanish from every view at once, because they are derived (§3.9).
-- **Views of the module's own scene kind** (a World location view) are parked with its panels. Their graph nodes stay.
-- **Content** keeps drawing: the look is unchanged, and hiding the editor is not hiding the makeup. Each view's display node has **Show in this view** per module for anyone who wants the V without it (question Q2).
-- **Data and exports** are untouched. Parts, history and the package plan are the same whether the module is shown or not.
-- **An open gesture or form edit** of the module is committed or cancelled (Escape rules) before its panels go.
-- **A guidance tour** that reaches a hidden module's anchor offers "Show Eye makeup" as that step's action, instead of skipping.
-- **The shell** always stays: Presets, Library, Mod package, History, the main view, Character, Camera & light, Motion, Quality, Activity and Help. With every module hidden, the Studio is still usable (the UI-75 end state: "the shell mounts with no features").
-- **Shares and state.** A group that left whole comes back at the share of its split it had, the other members giving up theirs (a three-way `[.3, .3, .4]` comes back as it was), and collapsed if it was, docked or floating (UI-104). A member of a floating composite still comes back to its factory home.
+The stored legacy `UIPreferences.modules`, `layout` and `layouts` fields are copied unchanged for older builds. Only migration interprets them. `shownByDefault` is a legacy migration baseline; opening a feature default or panel chooses the current work area. Dock parking remains for recovery of unavailable panel types and retained layouts, rather than a live module switch.
 
 ### 4.4 Collapsed panel groups
 
@@ -445,25 +397,15 @@ Each tab owns its arrangement in both size classes, panel instances and views. A
 
 **Forward compatibility.** Unknown feature panels and panels of live or retained newer-version views stay parked with their places. Deleted views' panel IDs are pruned from groups, closed and parked places and remembered references. A newer build's default stays listed unavailable with its reason, and can still be deleted.
 
-The strip, its menus, visible substitution choices, naming forms, keys and palette are recorded in [experiment 044 §12](../../experiments/044-profile-tabs/README.md#12-p2-iv-as-built) and the [profiles design](profiles-views-layouts-design.md#6-presentation). P2-v still removes the Modules menu and derives feature focus from the shown tab. Synthetic main-thread timing and real-data G4 are separate gates; the synthetic probe does not establish game rendering or real-asset switch latency.
+The strip, its menus, visible substitution choices, naming forms, keys and palette are recorded in [experiment 044 §12](../../experiments/044-profile-tabs/README.md#12-p2-iv-as-built) and the [profiles design](profiles-views-layouts-design.md#6-presentation). P2-v removed the Modules menu and derives feature focus from the shown tab (§4.1–§4.3). Synthetic main-thread timing and real-data G4 are separate gates; the synthetic probe does not establish game rendering or real-asset switch latency.
 
-## 5. Placeholder modules
+## 5. Part-less modules and future scene kinds
 
-Both placeholders are listed under Modules as **Preview** and hidden by default (question Q6). Neither pretends to a capability it lacks. Every line they show is true and actionable, and nothing claims poses or locations load.
+Part-less modules contribute panels and defaults without a document part. Their stage is independent of tab-derived feature focus; see the [module stages](module-stages.md). World remains a future scene-kind design, not a registered or offered module.
 
 ### 5.1 Poses (V-centric, no document part)
 
-It follows the [pose library design](../animation/pose-library-design.md) §6–7, which already says the library is not a feature module. That is exactly a Studio module without a part.
-
-| Piece | Placeholder |
-|---|---|
-| Manifest | `poses`, group `character`, stage `preview`, no feature |
-| Panel `poses.library` | Beside Character (slot `inspect`). The design's two fixed entries, both real: **Creator idle** (`motion.setIdle` on; the existing clip decoded from the game) and **Stand still** (idle off). Below them one line: "Poses from your game and mods will be listed here." A disabled search field shows where search goes. |
-| View tool `poses.menu` | A `menu` tool on character scenes: the same two entries. It appears in the toolbar only while Poses is shown, which demonstrates derivation. |
-| Second view | **Open a whole-body view** in the panel creates view `v2`, sharing the scene and lights, with its own camera framed by `camera.body`. It demonstrates two views of one V: a head close-up and the whole body. |
-| Later | P0–P3 of the pose library replace the placeholder list; `BodyPosePort` becomes the character scene's, so both views pose together. |
-
-**Built (27 September, claude/pose-panel; [pose library](../animation/pose-library-design.md#8-phases-and-effort) P2–P3).** The manifest and the panel `poses.library` hold the real library: search, Stand still and Idle, Frame V, Favourites, Recent and the game's categories, one click to pose V (`features/poses/`, a part-less module service like the Save Explorer's; boundary exceptions 14 and 16). There is no `poses.menu` view tool and no second view yet: the panel is the one place to choose a pose, and a second view waits for P4. The body source is still the motion service's (`MotionActions.holdPose`; a pose plays on the idle's rig) and the held pose is stored in the workspace's `preview` block with the idle (`preview.pose`), so it moves into the character scene node with the rest of the subject's motion in P3.
+The early-access `poses` module has a real `poses.library` panel: installed poses, search, Stand still and Idle, Frame V, Favourites, Recent and the game's categories ([pose library](../animation/pose-library-design.md#8-phases-and-effort)). Its contributed default opens a Poses work area without activating Eye makeup tools. Poses is chosen in that panel, with no separate `poses.menu` view tool. The scene's motion service owns the held pose; showing a different layout tab does not remove authored content from V.
 
 ### 5.2 World (non-V)
 
@@ -475,16 +417,9 @@ It follows the [pose library design](../animation/pose-library-design.md) §6–
 | Toolbar on that view | Only **Reset view**, the orbit camera's platform tool. No Front, Whole body, Idle, Surface controls or Plate wireframe: their `scenes` lists name only `character`. This is the demonstration that buttons follow content. |
 | Later | [World and streaming](../../knowledge/world-and-streaming.md) §3.1: sector selection, the native sector reader and instanced drawing replace the grid. |
 
-### 5.3 Minimal wiring
+### 5.3 Composition
 
-Beyond the platform work of P1–P4:
-
-- `compose/modules.ts` lists `EYE_MAKEUP_MODULE`, `POSES_MODULE` and `WORLD_MODULE`;
-- `compose/views.ts` adds the two contributions (panels and tools);
-- `compose/scene-kinds.ts` lists World's `location` kind;
-- `features/poses/view/` and `features/world/{view,render}/` hold the code.
-
-**Acceptance test (as platform §9):** adding either module touches no file outside its own folder except the `compose/` lists.
+Modules, defaults, tools and panels register through the `compose/` lists and their owning feature folders; the shell derives its UI without naming them. A future World's `location` content also needs a scene-kind registration. Adding a module should touch no file outside its own folder except those composition lists (platform §9).
 
 ## 6. Migration plan
 
@@ -496,7 +431,7 @@ Each phase leaves `main` green: suite, typecheck, bundle build and its gates. Ef
 |---|---|---|---|---|
 | P0 | Audit and ratchets | This page; `tests/view-graph-audit.test.ts` | The ratchets pass on `main` | 0.5 (done) |
 | P1 | View identity and the graph service, one view | `platform/api/view-graph.ts` types. `platform/core/view-graph.ts` (DOM-free): nodes, reference counts, link and fork, validation, the default graph derived from `preview`, `xfs/view-graph-1` read and write. `PreviewActions` split behind the same action kinds into camera, lights, display, scene and tool handlers that edit graph nodes; camera, preview and motion actions gain an optional `view` (default: the focused view). `StudioTarget {kind: "viewport", view}`. `GestureSource = {view}`. `ViewportAttachment` keyed by view ID, with `head` kept as the port's alias for `main`. `SceneHostPort.lighting()` and `subscribeLighting` removed (unused). | The registry changes only by the optional `view` payload fields. Workspace fixtures round-trip byte-identical. Existing tests unchanged. The ratchet's fixed viewport-kind list loses `authoring-gestures`, `viewport-adapter` and `viewport-attachment`. | 3 |
-| P2 | Modules and derived tools | `platform/api/module.ts`, `compose/modules.ts`, `UIPreferences.modules`, the Modules menu. Parked layouts in the dock state; `parseTree` takes shown and parked panels; `DockView` adds and removes panels at run time. `ViewToolContribution`, platform tools and `port.views.tools/setTool`. The head toolbar, its context-menu section, the palette's View entries and Camera & light › Display derived from one list. Eye makeup contributes Surface controls, Plate wireframe (research placement everywhere), its summary and its readiness. | Pure derivation tests (eye makeup shown or hidden, research on or off, each scene kind). A parked-layout round trip per size class. A shell-only composition mounts (the UI-75 runtime row). The ratchet's shell-tool list is emptied. `?verify=1`: hide eye makeup, then show it, and the layout returns exactly. | 3 |
+| P2 | Modules and derived tools | Module manifests, tools, summaries and `port.views`. Profiles P2-v replaces switches with tab-derived feature focus (§4); Panels owns Coming soon. | Derivation per tab, research on/off and scene kind; legacy-field round trips; panel-menu states; boundary scans. Coordinator captures and UI review remain gates for profiles P2-v. | 3 |
 | P3 | Scene host split, still one view | `SceneRuntime`, `ViewRuntime`, `LightRigRuntime` and `GraphRenderer` in `platform/scene/` (one context, one scheduler, dirty propagation and a draw list; the direct-draw path for one visible view). The character context, saved V and detail actions leave the head attachment and become the character scene's services. The flat host API is replaced by per-node ports. `setWire`/`setNormals` become the per-view tool hook and a scene study. | Scene parity **byte-identical** (`tools/scene-parity.ts`: 20 frames, both presets, 1K and 2K). Ready at 1K and 2K within noise. Frame-on-demand and dispose-leak GPU tests. Context loss and restore. The ratchet's scene-host list shrinks to the viewport device. | 6 |
 | P4 | Multiple views | New, Duplicate and Close view, Compare lighting, Link and Unlink per slot, Reopen closed view. Dynamic `view.<id>` panels. Focus routing, per-view editors, hints and menus. Camera & light follows focus with link badges. Graph persistence and legacy mirroring. The blit path, the frame budget and hidden-view pause. | A two-view GPU probe: orbiting the shared camera moves both views; a light change in one leaves the other's pixels byte-identical; a hidden view draws no frames; the program count is stable after warm-up; 1–4 views timed per view. `?verify=1` session. The 0.1.0-alpha.1 reader opens a workspace with `views`. | 4 |
 | P5 | Placeholder modules | Poses (panel and tool after P2; the whole-body view after P4) and World (after P4), as in §5 | The acceptance test (only `compose/` lists touched). Derivation shows no character tools on a location view. `?verify=1`: show and hide both, open both views, reload. | 2 |
@@ -519,7 +454,7 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 3. studio-ui names no module's view tool, summary or readiness. The toolbar, menus, palette and Display section render `port.views` (ratchet, then a rule after P2).
 4. Feature renderers are view-independent. `platform/api/scene.ts` names no camera, light rig or view type, and a renderer's only per-view input is `viewTools`.
 5. Camera, light, display and tool state has one owner, the view graph service. No other service stores it (`PreviewActions` included), and no device writes it except through the graph's port.
-6. Module visibility is presentation state. No application, platform or feature module reads `UIPreferences.modules`.
+6. Feature focus is derived in presentation from the shown tab. No live code reads `UIPreferences.modules`; migration alone interprets it.
 7. Registry completeness: every tool, summary, scene kind and renderer names a registered module. Every scene kind lists at least one camera kind, and every tool's `scenes` are registered kinds. A golden snapshot of the module registry guards against ID churn.
 
 ### 6.4 Risks
@@ -540,16 +475,7 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 
 **P1 (built).** `platform/api/view-graph.ts` and `platform/core/view-graph.ts` hold the graph: views referencing scene, camera, lights, display and tools nodes, link, unlink, add and close view, collection in the same commit, validation against each slot's codec and each scene kind's camera and rig kinds, and `xfs/view-graph-1`. `preview-view-graph.ts` gives the Studio's codecs, derives the default one-view graph from `preview` and mirrors the main view back. `PreviewActions` stores nothing: each action edits its view's node (optional `view`, default the focused view) and the device follows the graph for the view it draws, applying only what changed. The View and lighting history (§3.6) is the history service's `view` scope over the graph: light, display and scene settings and camera jumps record coalesced, session-only steps (values kept by reference, so a drag costs no serialisation; Redo restores what the Undo replaced); navigation and tool toggles record nothing; each camera node keeps a Back/Forward trail (`camera.back`, `camera.forward`). `StudioTarget {kind:"viewport", view}`, `GestureSource {view}` (a bare view ID, and `surface` for the main view, still accepted), the viewport attachment and editor adapter keyed by host and slot IDs (`head` stays the main view's alias), `SceneHostPort.lighting()` removed. Gates met: the registry changed only by the optional `view` fields; a workspace that never adds a view keeps its bytes (`tests/view-graph.test.ts`); the existing tests pass unchanged except the scene port's key list. Ratchet: the fixed viewport-kind list went from 8 modules to 2 in P1 and to 1 (`input-bindings`) in P2.
 
-**P2 (built).** `platform/api/module.ts` (`StudioModule`, `ViewToolContribution`, `ViewSummaryContribution`, derivation and completeness), `platform/core/view-tools.ts` (Front view, Whole body view, Idle), `compose/modules.ts`, eye makeup's `features/eye-makeup/module.ts` (Surface controls on the toolbar, Plate wireframe as a research tool everywhere, its summary), the `views` family (`view.setTool`, `view.undo`, `view.redo`) and `port.views`. The toolbar, the head menu's view section, the palette's View entries and Camera & light › Display render one derived list; the crumb and the readiness badge are eye makeup's view contributions. `UIPreferences.modules`, the header's Modules menu (replacing the category label) and the Panels flyout, now grouped by module with each module's toggle on its heading, each panel's state (open, collapsed, closed, parked) and the views. Hiding a module withdraws its panels, parks their places per size class and restores them exactly (`tests/view-modules.test.ts`, and the `?verify=1` run of 27 September); `parseTree` never re-adds a parked panel. Groups collapse to their tab bar (saved with the layout, keyboard reachable, in the palette), under one folding rule (§4.4). Ctrl+Z in Camera & light acts on View and lighting. The ratchet's shell-tool list is empty and boundary rules 3, 4, 5, 6 and 7 hold (`tests/view-graph-audit.test.ts`, `tests/view-modules.test.ts`, `tests/golden/module-registry.json`).
-
-**P1–P2 review fixes** (27 September; [code-health ledger](code-health.md), UI-102, UI-106, CORE-94..98).
-
-- Hiding a module withdraws its view tools: the presentation passes `port.views.withdraw(ids)` the tools it doesn't offer (a hidden module's, and research tools while hidden), each view keeps and saves its choice, and the device applies `ViewGraph.activeTools`, so Surface controls stops drawing and editing. Research-only view settings go with them (UI-163): while research tools are off the presentation also passes the IDs `port.views.settings(filter)` leaves out (the Rendering options: skin scattering, face shadows, Hair look), and devices apply those at their defaults (`previewFields(…, { active: true })`), each stored choice kept for when research tools come back on. The 3D view's hint strip follows the tool marked `editing`: without one it hints camera input only.
-- `view.setTool` is `not_ready` until the 3D view is ready.
-- History: see §3.6.
-- Persistence: see §3.5. View IDs `uv`, `surface` and `head` are reserved.
-- Each tool contribution names the action it dispatches (`dispatches`), and the application resolves tools by that action, not by tool ID.
-- A camera jump that didn't move the camera records nothing and leaves no Back step.
+**P2 (built; feature focus revised by profiles P2-v).** Module manifests, completeness checks, derived tools, summaries and `port.views` remain. The toolbar, viewport menu, palette and Camera & light Display share the tab-derived filter (§4). Research tools and settings are withdrawn while unavailable, keeping each stored choice; Surface controls stops drawing and editing without changing the look. The hint strip follows the offered editing tool. Panels now lists panels by owner without switches, and Coming soon lives there under research tools. Legacy module preferences survive unchanged. Collapsed groups follow §4.4. Offline coverage: `view-modules.test.ts`, `coming-soon.test.ts`, `view-panels-dom.test.ts` and the boundary tests; browser captures and independent UI review remain coordinator gates for profiles P2-v.
 
 **Lighting setups (built, claude/lighting-setups).** The lights node holds one flat list of complete lighting setups ([creator lighting §9](../../knowledge/creator-lighting.md#lighting-setups)): `setup` (the one shown), `setups` (the person's own) and the creator calibration, and its kind follows the shown setup's display. Built-ins are read-only templates; the first change to one forks it into an own setup in the same View and lighting step, so Undo takes the fork away again, and a slider drag stays one step. The node codec migrates a node stored before setups (its preset and studio stage) and recomputes the legacy fields (`exposure`, `lightAngle`, `studioLights`) from the setups on every edit, so builds before setups still parse a stored graph and the `preview` mirror stays readable to them. `sessionViewGraph` writes every lights node's calibration in its stored form, the untouched token, as `preview` does (PREV-135). The device takes one `LightingSource` per view (`PreviewPort.setLighting`): a complete definition, or the built-in game rig to resolve for its body. Deferred: own setups kept in the library for use across workspaces (the part-preset table needs a feature part; a lights "part" or a table of its own is the follow-up), and the setup list and light editor in Camera & light (waiting for the library's ChoiceList).
 
@@ -563,17 +489,16 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 
 **Deferred from P1–P2, and why.**
 
-- A shell-only composition that mounts with no features registered: the runtime still asks for eye makeup's facade at construction (the UI-75 rows in the [presentation boundary](ui-architecture-boundary.md#open-work)). Hiding eye makeup already runs the shell without its panels, tools and crumb.
+- A shell-only composition that mounts with no features registered: the runtime still asks for eye makeup's facade at construction (the UI-75 rows in the [presentation boundary](ui-architecture-boundary.md#open-work)). A tab without eye-makeup panels offers no makeup tools or crumb.
 - Undo by focus beyond Camera & light: Ctrl+Z in a viewport would step View and lighting rather than the makeup being edited on the head, which changes the head's editing flow; this needs the maintainer's call. The header Undo button and the History panel still show look history only (the History panel's View and lighting category is not built).
 - Camera Back/Forward after a long navigation (only jumps leave trail entries until the camera input writes the node, P3), and `head.front`-style bindings resolving against the focused view (one view until P4).
-- A guidance tour step on a hidden module's panel offers "Show Eye makeup" through the dock's withdrawn-panel notice, not yet as the tour step's own action.
 - The Panels flyout's New view and Duplicate view (shared camera) entries (P4; the list of views is derived from the graph already).
 
 ## 7. Open questions, with proposed defaults
 
 | # | Question | Proposed default |
 |---|---|---|
-| Q1 | Are modules exclusive or combinable? | Combinable, from a Modules menu; named workspaces later, as saved sets |
+| Q1 | Are modules exclusive or combinable? | Combinable, with feature focus from layout-tab panel instances (§4) |
 | Q2 | Does a hidden module's content still draw on V? | Yes, the look is unchanged; each view can hide a module's content |
 | Q3 | What does a new view share? | Scene, lights and display; camera copied; tools fresh. Compare lighting as its own command. |
 | Q4 | Do camera, light or graph edits enter Undo? | Yes, in their own **View and lighting** history, separate from look history; camera navigation itself isn't recorded, discrete camera jumps are, with a camera Back/Forward (§3.6; revised 27 September). |

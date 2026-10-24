@@ -9,10 +9,10 @@ Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[runt
 | Stage (code) | What the person sees | Meaning |
 |---|---|---|
 | `stable` | No tag | Finished to the [1.0 bar](../../docs/release-readiness.md): what it makes works in game, its UI is finished and reviewed, and nothing about it is provisional. |
-| `preview` | An **Early access** stage tag wherever it's listed or shown (Modules menu, Panels, tabs, switches; `studio-ui/components/stage-tag.ts`) | Usable, but some part of its promise is unproven or unfinished. Each preview module has an exit list below. |
+| `preview` | An **Early access** stage tag wherever it's listed or shown (New tab, Panels and panel tabs; `studio-ui/components/stage-tag.ts`) | Usable, but some part of its promise is unproven or unfinished. Each preview module has an exit list below. |
 | `dev` | The same Early access tag | Reserved for work that is not for users yet. No module uses it today. |
 
-"Hidden by default" is separate from the stage. It is the module manifest's `shownByDefault: false`: the person turns the module on in the Modules menu. Today every `preview` module is also hidden by default. The word "preview" in the code means the release stage. In the UI, "preview" means the 3D view, so the UI says "Early access".
+"Hidden by default" is separate from stage. In profiles phase 2, there is no Modules menu: opening a contributed default through **New tab** chooses the feature's work area. A module offers tools when one of its panel instances is docked in the shown tab (floating and collapsed groups count; closed panels do not). Content keeps drawing in every tab. The manifest's `shownByDefault` remains only as the baseline for legacy workspace migration, not a live visibility switch. Eye makeup is the starting arrangement for a migrated workspace; early-access modules are available as explicit defaults and panels. The word "preview" in code means release stage; the UI says "Early access" to distinguish it from the 3D view.
 
 **A module leaves preview** when:
 - everything on its exit list is done;
@@ -21,7 +21,7 @@ Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[runt
 
 ## 2. The register
 
-| Module | Stage | Shown by default | Makes anything for the game? | Summary of why it isn't stable |
+| Module | Stage | Legacy migration baseline | Makes anything for the game? | Summary of why it isn't stable |
 |---|---|---|---|---|
 | Eye makeup | stable | yes | XF Eye Artistry | Stable. Finish-level limits are listed in [status](../../docs/status.md) (some finishes are experimental) |
 | Expressions | preview | no | XF Expressions (photo-mode expression mods) | §3: the formal in-game comparison (R4) hasn't run, the protection for a carried table hasn't been built, and the shared-pack route conflicts with other expression mods |
@@ -82,7 +82,7 @@ Each exit item is a blocker unless marked otherwise.
 - A read-only save inspector: nodes, objects and script mods' data [offline].
 
 ### Why it is still early access
-- It's a research tool, not a user feature. The [release-readiness audit](release-readiness-audit.md) recommends moving it under research tools rather than the Modules menu. It has no exit to stable planned: either it moves to research tools, or a user feature is built on it.
+- It's a research tool, not a user feature. The [release-readiness audit](release-readiness-audit.md) recommends moving it under research tools. Its default is currently available through New tab, with its Early access tag. It has no exit to stable planned: either it moves to research tools, or a user feature is built on it.
 
 ## 6. Early-access settings outside modules
 - **Hair physics** (Motion) carries the Early access tag: a preview-only motion setting [offline]. It has no export.

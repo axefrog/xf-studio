@@ -1,5 +1,5 @@
 /**
- * Eye makeup's Studio module (view-graph-design.md §3.9, §4): the manifest the Modules menu lists, the view tools it contributes
+ * Eye makeup's Studio module (view-graph-design.md §3.9, §4): its contributed defaults and the view tools it contributes
  * to character scenes (Surface controls on the toolbar; Plate wireframe as a research tool, everywhere at once), and its crumb.
  * Data only: the application derives each view's tools from it, and eye makeup's view renders its summary and readiness.
  */

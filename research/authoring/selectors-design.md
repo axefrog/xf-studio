@@ -137,7 +137,7 @@ export type SelectorTarget =
 | **Nails** (Nail Salon) | No (a second nail mesh would draw over V's own; a lifted overlay is a later option) | `nails_color` with its first-person and cyberware followers (slot overlay, which patches new-named appearances into the nail `.app` and `.mesh` files) | Vanilla row | **1** total: every look sits in one grid | [Nail Salon §2](../nails/nail-salon-design.md#2-what-an-xf-export-is) (design, needs discussion) |
 | **Tattoos** | Yes (the community rows 3300–3309 are candidate placements) | `facial_tattoo`, `body_tattoo` (sub-row) | Vanilla row | None | [Tattoos brief](../character-customization/tattoos-brief.md) |
 
-**Not selectors.** Some modules have no creator row. They stay global modules, shown from the Modules menu ([view graph §4.2](view-graph-design.md#42-the-modules-menu)):
+**Not selectors.** Some modules have no creator row. They stay global modules, opened through their own tabs (New tab ▸, [view graph §4.2](view-graph-design.md#42-panels-and-header)):
 
 - **Poses and expressions** (photo-mode content): export products, but not creator rows;
 - **World**;
@@ -249,7 +249,7 @@ Two selectors on one vanilla row (sub-row) are two entries in that row, still on
 
 ### 3.1 The Selectors panel
 
-A shell panel, placed in the `inspect` slot beside Character. It replaces the header's authoring-category label as the primary way to switch modules; the view graph design's Modules menu would have taken that place ([view graph §4.2](view-graph-design.md#42-the-modules-menu)).
+A shell panel, placed in the `inspect` slot beside Character. It replaces the header's authoring-category label as the primary way to switch modules; the view graph design's Modules menu would have taken that place ([view graph §4.2](view-graph-design.md#42-panels-and-header)).
 
 ```text
 Selectors                                             [Add selector]
@@ -293,7 +293,7 @@ Eye makeup (XF): settings                          (the active one)
 ### 3.3 Activation drives modules, panels, views and toolbars
 
 - **One active selector** is application state (`selector.activate`, editor state, no Undo). The feature panels' live document is the active selector's worn look, so the application routes feature actions and Undo by it, and an MCP client can activate selectors too.
-- **Modules follow activation.** The presentation derives module visibility from the active selector: its type's module is shown and bound to it. Modules of inactive selector types park their editing panels, with layouts remembered per size class, as [view graph §4.3](view-graph-design.md#43-hiding-a-module) specifies.
+- **Modules follow activation.** The presentation derives module visibility from the active selector: its type's module is shown and bound to it. Modules of inactive selector types park their editing panels, with layouts remembered per size class, as [view graph §4.3](view-graph-design.md#43-content-and-retained-state) specifies.
   - A module can be **pinned** from the Modules menu. It then stays shown, bound to the last selector of its type that was active.
   - Global modules (Poses, World) are shown and hidden from the Modules menu, independently of selectors.
   - This combines the view graph's options: exclusive switching for editing, the maintainer's idea, and combinable modules for everything else (Q2).
@@ -317,7 +317,7 @@ Eye makeup (XF): settings                          (the active one)
 ### 3.5 Views linked to a selector
 
 - A view's `tools` node ([view graph §3.1](view-graph-design.md#31-node-types)) gains a binding: `selector: "active" | SelectorId`, default `active`. A view bound to a specific selector keeps showing that selector's tools, and its editor where the module has one, whichever selector is active. An example is a second view pinned to XF Ears while XF Eyeliner is edited in the main view.
-- **Hiding a selector** parks every view bound to it, as a hidden module parks its own views ([view graph §4.3](view-graph-design.md#43-hiding-a-module)), and removes its content from the other views' draws. Other views stay as they are.
+- **Hiding a selector** parks every view bound to it, as a hidden module parks its own views ([view graph §4.3](view-graph-design.md#43-content-and-retained-state)), and removes its content from the other views' draws. Other views stay as they are.
 - The UV map becomes eye makeup's flat view kind in view graph P6. Until then it is a panel of the eye makeup module and follows the active selector like any panel.
 
 ### 3.6 The Character panel, and modules that aren't selectors

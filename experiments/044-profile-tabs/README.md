@@ -1,6 +1,6 @@
 # Experiment 044: profile tabs and contributed defaults (profiles phase 2)
 
-**Status:** P2-i through P2-iv are built on `claude/profiles-p2`: session operations (§8), fragments and defaults (§9), per-view editing (§10), view panes (§11) and U1–U5 (§12). P2-iv's synthetic timing test could not run in the sandbox; its Chrome gate, captures and independent reviews remain with the coordinator. P2-v to P2-vii are to come. The coordinator's M1–M3 decisions are in §6. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
+**Status:** P2-i through P2-v are built on `claude/profiles-p2`: session operations (§8), fragments and defaults (§9), per-view editing (§10), view panes (§11) U1–U5 (§12), and feature focus with U8/U9 (§13). P2-iv's synthetic timing test could not run in the sandbox; its Chrome gate, captures and independent reviews remain with the coordinator. P2-vi and P2-vii are to come. The coordinator's M1–M3 decisions are in §6. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `076a7a65`. Tests are in `projects/xf-studio/authoring/tests/`. Effort is in the design's units (agent-days).
 
@@ -505,6 +505,37 @@ The fixture seed is additive; reload alone keeps it in the isolated verification
 - Remove the Modules button/menu/palette commands, `modules.set`, Panels-menu module switches and parked-module rows; put Coming soon in Panels under research tools. Compose U8/U9 from the guide and obtain the independent UI review.
 - Keep legacy `modules`, `layout` and `layouts` values unchanged. The Layouts deletion and preference-relay retirement are already done here; do not recreate them. `layout.reset` is already absent: Reset to default is the tab action.
 - Run the early timing test outside this sandbox and capture/review U1–U5 before delivery. P2-vi still owns the Choose routes, and P2-vii still owns G4 on real data.
+
+## 13. P2-v as built
+
+Uncommitted on `claude/profiles-p2`, 24 October 2026. The author followed the no-browser/no-GPU brief; captures and independent code/UI reviews remain with the coordinator.
+
+**Style guide first (U8/U9).** `d-summon`, `s-header`, `s-category` and `d-sizes` now specify the tab-scoped Panels menu and header. `d-layouts` was already absent after P2-iv and stays retired. The header specimens and fit stages have no category, Modules or Layouts control. Defaults keep both size classes; the tab menu's Reset to default restores both. The remaining dock Reset buttons and menu row were retired too, and `d-max`/`d-keyboard` updated. `public/style-guide.html` is regenerated.
+
+**Feature focus.** `studio-ui/runtime.ts` derives active modules from the shown tab's instances and the recovered dock's current groups, including floating and collapsed groups. Closed instances, parked records, the other size class and other tabs activate nothing. The toolbar, viewport menu, palette, Camera & light and optional experiments use that focus. Surface controls is withdrawn on a Poses tab, preserving its stored choice; content rendering, looks and exports are unchanged. Reading the current tree avoids cloning both dock sizes for every tool query.
+
+**Eye makeup owns Presets and Library.** Their unchanged IDs, binding contexts and catalogue positions moved from the shell contribution to Eye makeup; their factories moved to `features/eye-makeup/view/collection.ts`, receiving a typed collection presentation service through `FeatureViewContext`. They already belong to Eye makeup's contributed default in both sizes, so its serialized layout needed no change. Shared save-state and recovery presentation remains in the shell.
+
+**Panels and header.** The Modules button/menu/palette commands, `modules.set`, preference-driven panel parking and module switches are gone. Panels lists open, collapsed and closed panels by owner and changes this tab only; Early access tags stay on panel rows. Its folded Coming soon submenu lists planned modules only with research tools on. Duplicate view rows spanning other tabs are gone. Crumbs still follow the drawn look. Guidance registers `tabs.strip`.
+
+**Legacy fields.** `UIPreferences.modules`, `layout` and `layouts` are copied unchanged, including empty values and fields a newer build added. Only migration interprets them. A regression round-trips them through unrelated preference changes, JSON and another preference reader; a retired `modules.set` call cannot fall through to clear the old layout. No Layouts code or `layout.reset` action was recreated. No actions were removed from the spec-fields golden: preference actions are outside that observation, and it passes unchanged.
+
+**Offline checks.** The twelve targeted files named in the handoff report pass (142 tests); `bun run check` passes under the 3 GB guard. Guard peaks: about 0.5 GB for tests and 1.5 GB for typechecking. No full suite, browser, screenshots, GPU, game, server or port changes. The Impeccable mechanical scan reports nine inherited CSS border/stripe warnings outside the changed rules; no new warning in the changed TypeScript.
+
+**Verification hooks (isolated `?verify=1` only).** `const s = xfStudioShell`, `const t = s.tabs`:
+
+| Capture | Route |
+|---|---|
+| U8 open/collapsed/closed rows | Use Eye makeup, then `s.dock.reveal('layers')`, `s.dock.toggleCollapse('layers')`, or `s.dock.close('layers')`; open the header's Panels button after each. `s.panelsMenu()` returns the exact item models. Selecting a collapsed row expands it; selecting an open row closes it. |
+| U8 research off/on; folded/open Coming soon | Dispatch `{kind:'researchTools.set',enabled:false}` or `true` through `s.runtime.port.preferences`, call `s.runtime.changed()`, and open Panels. With research on, open Coming soon by pointer or Right arrow; its rows state why unavailable. |
+| U9 widths/themes; no retired buttons | Set theme through preferences or View preferences, resize narrow/wide, and compare with the guide's `s-header`/`s-category`. `s.runtime.anchors.state('tabs.strip')` inspects the new anchor; layout tabs sit below the header. |
+| Feature tools and persistent makeup | New tab → Poses (or `t.newMenu()`); share the Eye makeup tab's scene when offered. Inspect the 3D tools and `s.runtime.toolFilter()`, switch back, and confirm the same makeup remains. `xfStudioTabFixtures.seed()` supplies extra Vs/looks when needed. |
+
+The branch lacked `research/authoring/module-stages.md`; its coordinator-checkout copy was brought in and updated to distinguish stage from tab-derived visibility. No new engine finding belongs in the knowledge base. Browser evidence of makeup remaining visible, light/dark narrow/wide captures beside the guide, and independent reviews are still required before delivery.
+
+**Knowledge used:** `knowledge/README.md` (no game-resource page central), profiles design §4, view-graph design §3.9/§4, module stages, experiment 044 through §12, and the existing style-guide contracts.
+
+**What P2-vi needs.** Write U6 first; implement the resolver's empty-state Choose routes for a scene without a V, a scene without a look, and a panel without a 3D view in its tab. Dispatch `scene.setSubject`, `scene.setLook` or a new view against the captured scene, refusing `missing_target` after it changes. Cover zero, one and several candidates and instant feedback. Keep the legacy fields frozen and use the tab-derived tools; no module switch is needed. The coordinator still owns P2-iv's synthetic timing/captures and reviews, U8/U9 captures/reviews, and P2-vii's real-data G4.
 
 ## Related pages
 

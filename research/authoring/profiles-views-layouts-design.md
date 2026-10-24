@@ -459,9 +459,9 @@ type LayoutFragment = {                                         // xfs/layout-fr
 
 - **A module is active in a tab** when one of its panel instances is in the tab's dock. That set is the view-tool filter's `modules` (`platform/api/module.ts`).
 - **Content still draws.** Makeup stays on V in a Poses tab.
-- **P2-v removes the Modules menu and its live preference use.** The stored legacy `UIPreferences.modules` value is kept unchanged (§2.4).
+- **P2-v removed the Modules menu and its live preference use.** The stored legacy `UIPreferences.modules` value is kept unchanged (§2.4).
 
-**Pending P2-v:** the tab strip is built, but module visibility still follows the legacy preference. P2-v removes the menu and its actions, derives the tool filter from docked instances and moves Presets and Library to eye makeup. Legacy preference values must round-trip unchanged for older builds (§2.4).
+**Built in phase 2, P2-v** ([experiment 044 §13](../../experiments/044-profile-tabs/README.md#13-p2-v-as-built)). The view-tool filter follows the shown tab's docked instances in the current size class, including floating and collapsed groups. Closed or merely retained instances activate nothing. Presets and Library are Eye makeup's contribution and factories, already included in its default in both size classes. Optional experiments receive the same tab-derived visibility. Panels lists open, collapsed and closed panels in this tab, with owner headings and a folded Coming soon submenu only under research tools. The header has neither Modules nor Layouts; its crumbs keep following the drawn look, and guidance uses `tabs.strip`. The module switches, palette commands, `modules.set` and the dock's old single-size Reset routes are gone. The legacy `modules`, `layout` and `layouts` fields round-trip without interpretation.
 
 ### 4.4 What folds in from today
 

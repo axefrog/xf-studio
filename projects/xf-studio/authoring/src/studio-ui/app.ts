@@ -2,14 +2,14 @@ import { viewCatalogue } from "./views/contribution";
 import { tabViews, viewPanelEntries, viewPanelIds, ViewPanels } from "./panels/view-panels";
 import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
-import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
+import { plannedShown } from "./coming-soon";
 import type { PresentationAction } from "../app/studio-presentation";
 import type { PresentationFileAction } from "../app/studio-presentation";
 import { effectiveTheme, type ThemePreference } from "../app/ui-preferences";
 import { shortcutLabel } from "../app/input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
-import { applyCapability, badge, button, setButtonLabel } from "./controls";
+import { applyCapability, badge, button } from "./controls";
 import { installReasonTips } from "./reason-tip";
 import { installHelpTips } from "./help-tip";
 import { DockView } from "./dock/dock-view";
@@ -31,7 +31,7 @@ import { mountGuidance, type GuidanceController } from "./guidance/controller";
 import type { ViewComposition, ViewContext, ViewPaneFactory } from "./views/panels";
 import { featureCommands, featureViewContext, moduleViewContext } from "./views/feature-context";
 import type { FeatureViewContext, ModuleViewContext } from "./views/feature-view";
-import { Frame, modulePanelChanges, StudioRuntime, type Port } from "./runtime";
+import { Frame, StudioRuntime, type Port } from "./runtime";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./guidance/desktop-app-sheet";
 import { openReportDialog } from "./diagnostics/report-dialog";
 import { readinessText } from "./readiness-text";
@@ -73,10 +73,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const modules = [...port.views.modules()];
   const moduleOfOwner = (owner: string) => modules.find(module => (module.feature ?? module.id) === owner);
   const moduleOfPanel = (panel: PanelId) => { const entry = catalogue.panels.find(item => item.id === panel); return entry ? moduleOfOwner(entry.owner) : undefined; };
-  const panelsOf = (module: StudioModule) => catalogue.panels.filter(panel => moduleOfOwner(panel.owner)?.id === module.id).map(panel => panel.id);
-  /** The panels of hidden modules: withdrawn from the dock, their places parked (design §4.3). */
-  const parkedPanels = () => { const shown = new Set(rt.shownModules()); return catalogue.panels.filter(panel => {
-    const module = moduleOfOwner(panel.owner); return !!module && !shown.has(module.id); }).map(panel => panel.id); };
   const featureViewOf = (module: StudioModule) => featureViews.find(entry => entry.binding.owner === (module.feature ?? module.id));
   const context: ViewContext = {
     guidance: { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) },
@@ -149,9 +145,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
         if (!result.ok) feedback.toast("warning", "Layout", result.message);
       } else feedback.toast("warning", "Layout", allowed.reason ?? "This layout could not be saved.");
     },
-    restore: layout => { const parked = parkedPanels();
-      dock.load(restoreDockPreference(layout, dock.area(), catalogue, parked, viewPanelIds(port.views.snapshot()), !!port.tabs).state,
-        panels.filter(panel => !parked.includes(panel.spec.id)).map(specOf)); },
+    restore: layout => dock.load(restoreDockPreference(layout, dock.area(), catalogue, [], viewPanelIds(port.views.snapshot()), !!port.tabs).state, panels.map(specOf)),
     views: () => { const graph = port.views.snapshot(); return graph ? tabViews(graph.views, port.focus.targets().tab) : []; },
     drawn: () => port.viewport.snapshot().head,
     make: panel => (views.shell.head as ViewPaneFactory)(rt, context, panel),
@@ -164,27 +158,20 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     removed: pane => { panels.splice(panels.indexOf(pane), 1); byId.delete(pane.spec.id); paneAnchors.get(pane)?.(); paneAnchors.delete(pane); },
   });
   if (headEntry) viewPanes.start();
-  const parkedAtStart = parkedPanels();
   const restored = restoreDockPreference(port.tabs?.dock(),
-    { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, parkedAtStart, viewPanelIds(port.views.snapshot()), !!port.tabs);
+    { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, [], viewPanelIds(port.views.snapshot()), !!port.tabs);
   // A preview module's panels carry its stage on their tabs (components/stage-tag.ts).
   const specOf = (panel: PanelController) => ({ ...panel.spec, stage: moduleOfPanel(panel.spec.id)?.stage, visibility: (visible: boolean) => {
     panel.spec.visibility?.(visible);
-    if (visible) panel.update(new Frame(port));
+    if (visible) panel.update(new Frame(port, catalogue, dockRef?.tree));
   } });
   /** Put the 3D preview setup card where it belongs now (set below, once the card exists): after every dock layout too (UI-164). */
   let placeSetupCard = () => {};
   const dock = new DockView({
-    // A hidden module's panels are not in the dock: they come back when it is shown (design §4.3).
-    panels: panels.filter(panel => !parkedAtStart.includes(panel.spec.id)).map(specOf),
+    panels: panels.map(specOf),
     state: restored.state,
     sizeClass: () => sizeClassFor(window.innerWidth),
-    defaults: size => { const defaults = defaultDockStateFor(catalogue, parkedPanels()); return size === "wide" ? defaults.wide : defaults.compact; },
-    withdrawn: id => {
-      const module = moduleOfPanel(id);
-      if (module) feedback.toast("info", "Modules", `${catalogue.meta[id]?.title ?? id} belongs to ${module.label}, which is hidden.`,
-        [{ label: `Show ${module.label}`, run: () => setModuleShown(module.id, true) }]);
-    },
+    defaults: size => { const defaults = defaultDockStateFor(catalogue); return size === "wide" ? defaults.wide : defaults.compact; },
     save: state => viewPanes.save(state),
     announce: message => feedback.announce(message),
     emptyState: () => port.tabs && !port.tabs.snapshot().tabs.length ? h("div", { class: "dock-empty" },
@@ -214,42 +201,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     port.views.withdraw(all.filter(id => !offered.has(id)));
   };
   withdrawUnoffered();
-  /**
-   * Show or hide a module (design §4.3): its panels leave the dock with their places parked, or come back where they were; its view
-   * tools and crumb follow at once because they are derived. An open gesture or form edit is finished first. Its data and exports
-   * are untouched, and its actions stay dispatchable.
-   */
-  /** Finish an open gesture or form edit before its panels may leave the dock. */
-  function finishInput() {
-    port.viewport.cancelInput();
-    const control = port.authoring.previewState().control;
-    if (control) port.authoring.controlCommit(control.id);
-  }
-  function setModuleShown(id: string, shown: boolean) {
-    const module = modules.find(item => item.id === id);
-    if (!module || rt.shownModules().includes(id) === shown) return;
-    if (!shown) finishInput();
-    if (!setPreference(port, feedback, { kind: "modules.set", module: id, shown }, `${module.label} ${shown ? "shown" : "hidden"}`)) return;
-    placeModules();
-  }
-  /**
-   * Bring the dock in line with the modules preference (CORE-115): the menu above calls it at once, and every paint checks it, so a
-   * `modules.set` dispatched through the port by anything else places (or parks) the module's panels the same way. A saved layout's
-   * switch loads its own arrangement first, so there is nothing left to do by then.
-   */
-  let placedModules = rt.shownModules().join(",");
-  function placeModules() {
-    const shown = rt.shownModules();
-    for (const registration of port.experiments?.registrations() ?? []) registration.visibility?.(shown.includes(registration.module.id));
-    placedModules = shown.join(",");
-    const { add, remove } = modulePanelChanges(modules, shown, panelsOf, panel => !!dock.panel(panel));
-    if (!add.length && !remove.length) return;
-    if (remove.length) { finishInput(); dock.removePanels(remove); }
-    if (add.length) dock.addPanels(add.map(panel => specOf(byId.get(panel)!)));
-    withdrawUnoffered();
-    schedule();
-  }
-  rt.modules = { list: modules, panels: panelsOf, set: setModuleShown };
   const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
   /**
    * Settings (UI-109) is summoned like any panel (`reveal`, dock/layout.ts `summonPanel`): with no home among the docked groups a closed
@@ -271,6 +222,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     dispatch: action => port.authoring.dispatch(action), feedback, dock: main,
     moduleIcon: id => modules.find(module => module.id === id)?.icon,
     changed: () => { viewPanes.sync(); schedule(); } }) : undefined;
+  if (tabs) rt.anchors.register("tabs.strip", tabs.element);
   // A read-only window: controls marked unavailable never act, whatever kind of control they are (the reason tip answers instead).
   const refuseUnavailable = (event: Event) => {
     if (root.dataset.workspace !== "read-only") return;
@@ -325,6 +277,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
   let optionalKey = "";
+  let experimentFocus = "";
   function syncOptional() {
     const optional = views.optional?.() ?? [], key = optional.map(item => item.contribution.owner).join(",");
     if (key === optionalKey) return;
@@ -345,7 +298,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
         panels.push(panel); byId.set(entry.id, panel); rt.anchors.register(panelAnchor(entry.id), panel.spec.element);
       }
     }
-    optionalKey = key; withdrawnKey = ""; placeModules();
+    optionalKey = key; withdrawnKey = ""; experimentFocus = "";
+    // Reload against the refreshed catalogue; absent experiment panels stay closed.
+    dock.load(restoreDockPreference(port.tabs?.dock(), dock.area(), catalogue, [], viewPanelIds(port.views.snapshot()), !!port.tabs).state, panels.map(specOf));
   }
   const paint = () => {
     queued = false;
@@ -353,11 +308,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     syncOptional();
     // The shown tab's 3D views each have their pane, and the canvas is in the one holding the picture.
     if (headEntry) viewPanes.sync();
-    // A module shown or hidden through the port (a typed `modules.set`) places its panels as the Modules menu does (CORE-115).
-    if (rt.shownModules().join(",") !== placedModules) placeModules();
+    const focused = rt.shownModules(), focusKey = JSON.stringify(focused);
+    if (experimentFocus !== focusKey) {
+      experimentFocus = focusKey;
+      for (const registration of port.experiments?.registrations() ?? []) registration.visibility?.(focused.includes(registration.module.id));
+    }
     // The research preference may have changed: its tools are withdrawn or offered again before anything reads the tools.
     withdrawUnoffered();
-    const frame = new Frame(port);
+    const frame = new Frame(port, catalogue, dockRef?.tree);
     // Editor adapters report limits and rejected gestures; show each once.
     const message = frame.status.message;
     if (message && message.id !== lastMessage) {
@@ -462,8 +420,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   header.bindPalette(() => openPalette(commands));
   // The check at start (the host skips it when Settings › Updates turns it off); the service waits until after first paint.
   startupUpdateCheck(rt);
-  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, tabs, preferences: () => port.preferences.snapshot(),
-    guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port)) } } });
+  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, tabs, panelsMenu: () => panelMenuItems(rt, view.research()), preferences: () => port.preferences.snapshot(),
+    guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port, catalogue, dockRef?.tree)) } } });
   return { dock, runtime: rt };
 }
 
@@ -533,11 +491,6 @@ function themeItems(theme: Theme): MenuItem[] {
 
 function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp: () => void) {
   const port = rt.port;
-  // The Modules menu (view-graph-design.md §4.2): the shown modules' names, and a menu to show or hide each.
-  const categoryText = h("span");
-  const category = h("button", { class: "category", type: "button", "aria-haspopup": "menu", title: "Modules: show or hide parts of the Studio",
-    onclick: (event: MouseEvent) => openMenu(moduleMenuItems(rt, view.research()), event.currentTarget as Element,
-      { label: "Modules", invoker: event.currentTarget as Element }) }, icon("category"), categoryText);
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
   // The chip's room is kept at its widest word, so a save or an edit that changes it moves nothing in the header (header-fit.ts).
@@ -558,7 +511,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   for (const [anchor, control] of [["header.save", save], ["header.package", pkg], ["header.history", historyButton], ["header.palette", palette], ["header.help", helpButton],
     ["header.settings", settingsButton]] as const)
     rt.anchors.register(anchor, control);
-  const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels, modules and views", onClick: event => {
+  const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels in this tab", onClick: event => {
     openMenu(panelMenuItems(rt, view.research()), event.currentTarget as Element,
       { label: "Panels", invoker: event.currentTarget as Element });
   } });
@@ -574,7 +527,6 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     // The release stage beside the name (release-readiness-audit.md item 22): the first public release is a beta.
     h("div", { class: "brand", "aria-label": "XF Studio beta" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, "XF"), h("span", { class: "brand-name" }, "Studio"),
       Object.assign(badge("Beta", "accent"), { title: "XF Studio is in beta: it may not work on every setup yet. Help › Report a problem… tells us what doesn't." })),
-    category,
     // The library chip sits after the crumbs, not inside them, so the names give way before it and it never runs over the verification
     // flag in a crowded header (DESK-06).
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset), verify, chipSlot,
@@ -586,10 +538,6 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     element,
     bindPalette(open: () => void) { palette.onclick = open; },
     update(frame: Frame) {
-      const shown = frame.toolFilter.modules, names = rt.modules.list.filter(module => shown.includes(module.id)).map(module => module.label);
-      setText(categoryText, names.length ? names.join(" · ") : "Modules");
-      // The list may end with an ellipsis in a crowded header, so its whole text is the tooltip (I3).
-      category.title = names.length ? `${names.join(" · ")}: show or hide parts of the Studio` : "Modules: show or hide parts of the Studio";
       const draft = frame.library.draft;
       setText(collection, draft?.name ?? "Loading…");
       setText(preset, draft?.presets.find(item => item.id === draft.selected)?.name ?? "No preset");
@@ -608,7 +556,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       themeButton.replaceChildren(icon(theme.preference === "system" ? "monitor" : theme.preference === "dark" ? "moon" : "sun"));
       setAttr(themeButton, "aria-label", `View preferences (theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference})`);
       // Not the chip's words: its room is reserved (above), so they change no stage.
-      const key = JSON.stringify([categoryText.textContent, collection.textContent, preset.textContent, verify.hidden]);
+      const key = JSON.stringify([collection.textContent, preset.textContent, verify.hidden]);
       if (key !== fitKey) { fitKey = key; fit.refit(); }
     },
   };
@@ -737,89 +685,34 @@ function cycleRegions(root: HTMLElement, backwards: boolean) {
   (target ?? next).focus();
 }
 
-/** Module groups in the Modules menu, in order. */
-const MODULE_GROUPS: Record<StudioModule["group"], string> = { character: "Character", world: "World", assets: "Assets", tools: "Tools" };
-
-/**
- * The Modules menu (view-graph-design.md §4.2): one row per module, grouped, each a checkbox with its stage (an Early access stage tag) and what it adds. Hiding
- * one keeps its work and exports; its panels and view tools leave until it is shown again.
- */
-function moduleMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
-  const shown = rt.shownModules(), items: MenuItem[] = [{ kind: "heading", label: "Modules", detail: "Show or hide; your work and exports are kept either way" }];
-  for (const [group, label] of Object.entries(MODULE_GROUPS)) {
-    const members = rt.modules.list.filter(module => module.group === group);
-    const planned = plannedShown(rt.port.views.plannedModules(), research).filter(module => module.group === group);
-    if (!members.length && !planned.length) continue;
-    items.push({ kind: "heading", label });
-    for (const module of members) items.push({ kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category",
-      checked: shown.includes(module.id), stage: module.stage, hint: `${module.description} ${moduleAdds(rt, module)}`,
-      run: () => rt.modules.set(module.id, !shown.includes(module.id)) });
-    // Planned modules (ui-copy-and-layout-review.md §6), only with research tools on (coming-soon.ts): each says what it will let the person do.
-    for (const module of planned) items.push({ kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category",
-      tag: "Soon", capability: { available: false, reason: `Coming soon: ${module.comingSoon}` }, run: () => {} });
-  }
-  return items;
-}
-/** "Adds 6 panels and 2 view tools", from the module's contributions. */
-function moduleAdds(rt: StudioRuntime, module: StudioModule) {
-  const panels = rt.modules.panels(module).length;
-  const tools = rt.port.views.tools(undefined, { modules: [module.id], research: true }).filter(tool => tool.module === module.id).length;
-  const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
-  return `Adds ${[panels ? count(panels, "panel") : "", tools ? count(tools, "view tool") : ""].filter(Boolean).join(" and ") || "nothing yet"}.`;
-}
-/**
- * The Panels menu (the header's top-right flyout): the shell's panels, then each module's panels under its own visibility toggle,
- * each with its state (open, collapsed, closed, or parked while its module is hidden), then the views. Derived from the view
- * catalogue, the module registry and the view graph; nothing is listed by hand.
- */
-function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
-  const dock = rt.dock, shown = rt.shownModules();
-  // A 3D view's panel is named by its view ("3D view 1", "Side view"), so several of them read apart (experiment 044 P2-iii-b).
+/** The Panels flyout changes panels in the shown tab. Module ownership supplies headings, never switches. */
+export function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
+  const dock = rt.dock, modules = rt.port.views.modules();
   const titles = new Map(rt.port.views.titles().map(entry => [entry.panel, entry.title]));
   const row = (id: string): MenuItem => {
     const meta = rt.views.meta[id], state = dock.panelState(id);
-    const module = rt.modules.list.find(item => rt.modules.panels(item).includes(id));
-    // One row per panel (C-32): the tick says it's open, and what the panel is lives in the row's tooltip, so the menu fits the
-    // window. Only a state the tick can't show gets a line: collapsed. A parked panel sits under its hidden module's unticked switch,
-    // and its tooltip says that choosing it shows the module too.
-    const tip = [meta?.description, state === "parked" ? `Choosing it shows ${module?.label ?? "its module"} too.` : ""].filter(Boolean).join(" ");
-    return { kind: "action", label: titles.get(id) ?? meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
-      ...(tip ? { tip } : {}), ...(state === "collapsed" ? { hint: "Collapsed" } : {}),
-      // A parked panel is one choice away (UI-144): choosing it shows its module again, which puts its panels back where they were,
-      // then brings this one forward.
+    const owner = rt.views.panels.find(panel => panel.id === id)?.owner;
+    return { kind: "action", label: titles.get(id) ?? meta?.title ?? id, icon: meta?.icon ?? "dot",
+      checked: state === "open" || state === "collapsed", tip: meta?.description, stage: modules.find(module => (module.feature ?? module.id) === owner)?.stage,
+      ...(state === "collapsed" ? { hint: "Collapsed" } : {}),
       run: () => {
-        if (state === "parked" && module) { rt.modules.set(module.id, true); dock.reveal(id); }
-        else if (state === "collapsed") dock.reveal(id);
+        if (state === "collapsed") dock.reveal(id);
         else if (id === SETTINGS_PANEL && state === "closed") rt.settings.open();
         else dock.toggle(id);
       } };
   };
-  const owned = new Set(rt.modules.list.flatMap(module => rt.modules.panels(module)));
-  const items: MenuItem[] = [{ kind: "heading", label: "Panels" },
-    ...rt.views.panels.filter(panel => !owned.has(panel.id)).map(panel => row(panel.id))];
-  for (const module of rt.modules.list) {
-    const on = shown.includes(module.id);
-    // The module's group: its heading, its visibility toggle, then its panels.
-    // Its switch heads the group: the switch's name says the module, its tick whether it is shown, and what showing it does is its
-    // tooltip, so a module adds no heading or lines of its own (C-32).
-    items.push({ kind: "separator" },
-      { kind: "action", label: `Show ${module.label}`, icon: isIconName(module.icon) ? module.icon : "category", checked: on, stage: module.stage,
-        tip: on ? "Turn off to hide its panels and view tools; your work is kept" : "Its panels are parked where they were and come back there",
-        run: () => rt.modules.set(module.id, !on) },
-      ...rt.modules.panels(module).map(row));
+  const items: MenuItem[] = [{ kind: "heading", label: "Panels", detail: "In this tab" },
+    ...rt.views.panels.filter(panel => panel.owner === "shell" && !!dock.panel(panel.id)).map(panel => row(panel.id))];
+  for (const module of modules) {
+    const panels = rt.views.panels.filter(panel => panel.owner === (module.feature ?? module.id) && !!dock.panel(panel.id));
+    if (!panels.length) continue;
+    items.push({ kind: "separator" }, { kind: "heading", label: module.label }, ...panels.map(panel => row(panel.id)));
   }
-  // The views (view-graph-design.md §3.4): each 3D view and its panel, then, only with research tools on, New view and Duplicate view
-  // (shared camera) as Coming soon until P4 registers their actions (coming-soon.ts).
-  const graph = rt.port.views.snapshot();
-  const live = liveFeatures(rt.port);
-  const upcoming = (["viewsNew", "viewsDuplicate"] as const).flatMap(id => { const entry = comingSoon(id, live, research);
-    return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, tag: "Soon", capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
-  // One 3D view and nothing planned: its row would do what the 3D view panel's row above does, so the section isn't listed (C-32).
-  if (graph && (graph.views.length > 1 || upcoming.length)) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
-    ...graph.views.map(entry => { const panel = entry.panel;
-      return { kind: "action" as const, label: entry.title ?? rt.views.meta[panel]?.title ?? entry.id, icon: "head" as const,
-        hint: `${entry.id === rt.port.focus.targets().view ? "Focused · " : ""}${entry.sceneKind === "character" ? "Your V" : entry.sceneKind}${entry.shared.length ? ` · shares ${entry.shared.join(", ")}` : ""}`,
-        run: () => dock.reveal(panel) }; }), ...upcoming);
+  const planned = plannedShown(rt.port.views.plannedModules(), research);
+  if (planned.length) items.push({ kind: "separator" }, { kind: "submenu", label: "Coming soon", items: () => planned.map(module => ({
+    kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category", tag: "Soon",
+    capability: { available: false, reason: `Coming soon: ${module.comingSoon}` }, run: () => {},
+  })) });
   return items;
 }
 
@@ -933,10 +826,6 @@ export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, 
       { icon: "undo", keywords: "undo light lighting camera display view" }),
     act("view.redo", views.history.redo ? `Redo view or lighting change: ${views.history.redo}` : "Redo view or lighting change", "View", { kind: "view.redo" },
       { icon: "redo", keywords: "redo light lighting camera display view" }),
-    // Modules (view-graph-design.md §4.2): shown or hidden, never exclusive.
-    ...rt.modules.list.map(module => { const shown = rt.shownModules().includes(module.id); return { id: `module.${module.id}`,
-      title: `${shown ? "Hide" : "Show"} ${module.label}`, group: "Modules", icon: "category" as const, keywords: `module ${module.description}`,
-      ...always, run: () => rt.modules.set(module.id, !shown) }; }),
     act("preview.body", preview.preview?.body === false ? "Show the body" : "Hide the body", "View", { kind: "preview.setBody", enabled: preview.preview?.body === false },
       { icon: "body", keywords: "body arms hands feet nails tattoos visibility 3d view" }),
     // The 3D view's switches (UI-91): the same actions as the Character panel's.

@@ -14,6 +14,7 @@ export const CONTROL_ANCHORS = {
   "header.help": { label: "Help button" },
   "header.settings": { label: "Settings button" },
   "header.palette": { label: "Commands button" },
+  "tabs.strip": { label: "Layout tabs" },
   "layers.add": { panel: "layers", label: "Add layer" },
   "layers.list": { panel: "layers", label: "Layer list" },
   "uv.canvas": { panel: "uv", label: "UV map" },

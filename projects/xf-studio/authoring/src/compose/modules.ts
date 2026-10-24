@@ -13,7 +13,7 @@ import { POSES_MODULE } from "../features/poses/module";
 export const STUDIO_MODULES = [EYE_MAKEUP_MODULE, SAVE_EXPLORER_MODULE, EXPRESSIONS_MODULE, POSES_MODULE] as const;
 
 /**
- * Modules on the roadmap with an agreed design (ui-copy-and-layout-review.md §6), listed as Planned in the Modules menu. The module
+ * Modules on the roadmap with an agreed design, listed in Panels > Coming soon with research tools on. The module
  * that lands with one of these IDs deletes its entry here in the same change (tests/coming-soon.test.ts fails while both exist).
  */
 export const PLANNED_MODULES: readonly PlannedModule[] = Object.freeze([
