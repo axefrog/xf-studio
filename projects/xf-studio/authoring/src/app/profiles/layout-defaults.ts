@@ -24,7 +24,7 @@ import type { DocumentOutbox, OutboxEntry } from "../../platform/core/document-o
 import { notifyAll } from "../../platform/core/listeners";
 import { hostRandom } from "../../platform/core/random";
 import { buildIssues, fragmentIssues, type FragmentKnowledge } from "./layout-fragment";
-import { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA } from "./profiles-migration-data";
+import { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, valueKey, type MigrationLayout } from "./profiles-migration-data";
 import { nameIssue } from "./profile-sessions";
 
 export { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA };
@@ -48,7 +48,9 @@ export type ContributedLayoutDefault = {
 export type OwnDefaultDocument = { readonly schema: typeof LAYOUT_DEFAULT_SCHEMA; readonly id: string; readonly name: string; readonly owner: "user";
   readonly fragment: LayoutFragment; readonly createdAt: number;
   /** When the fragment was last saved (create or Update); a document written before it has only `createdAt`. */
-  readonly savedAt?: number };
+  readonly savedAt?: number;
+  /** Content identities already recovered from the retired Layouts UI, kept across rename, Update and deletion. */
+  readonly legacyLayouts?: readonly string[] };
 /** A default as listed: a module's or the person's, with the reason it can't be used here, if any. Detached. */
 export type LayoutDefaultView = {
   readonly id: string;
@@ -185,6 +187,37 @@ export class LayoutDefaults {
   }
 
   // ----- Commands -----
+  /**
+   * Recover layouts saved by the old Layouts UI after profiles-1. One durable outbox write keeps the source identities with their
+   * defaults, so a retry, rename, Update or deletion never imports them again. Existing defaults (including tombstones) are reused by
+   * name and arrangement, as profiles-1 did. Different arrangements stay separate. No session or legacy preference is changed.
+   */
+  importLegacy(layouts: readonly MigrationLayout[]): void {
+    const held = [...this.ids].flatMap(id => { const document = this.held(id); return document ? [{ id, value: document.value }] : []; });
+    const valueOf = (value: unknown) => ownDefaultOf(isTombstone(value) ? value.value : value);
+    const sourceOf = (name: string, fragment: LayoutFragment) => valueKey({ name, dock: fragment.tab.dock });
+    const writes = new Map<string, unknown>();
+    const now = (this.deps.now ?? Date.now)();
+    for (const layout of layouts) {
+      const source = sourceOf(layout.name, layout.fragment);
+      if (held.some(item => {
+        const value = valueOf(item.value);
+        return value?.legacyLayouts?.includes(source);
+      })) continue;
+      const existing = held.find(item => { const value = valueOf(item.value); return value?.fragment.tab?.dock && sourceOf(value.name, value.fragment) === source; });
+      const id = existing?.id ?? `d-${source.slice(0, 40)}`;
+      const previous = existing && valueOf(existing.value);
+      const value = { ...(previous ?? { schema: LAYOUT_DEFAULT_SCHEMA, id, name: layout.name, owner: "user", fragment: structuredClone(layout.fragment), createdAt: now }),
+        legacyLayouts: [...(previous?.legacyLayouts ?? []), source] };
+      const stored = existing && isTombstone(existing.value) ? { ...existing.value, value } : value;
+      writes.set(id, stored);
+      if (existing) existing.value = stored; else held.push({ id, value: stored });
+    }
+    if (!writes.size) return;
+    this.deps.outbox.commit("layout-default.importLegacy", [...writes].map(([id, value]) => ({ ...ref(id), value })));
+    for (const id of writes.keys()) this.ids.add(id);
+    this.changed();
+  }
   capability(command: DefaultsCommand): Capability {
     if (command.kind === "create") return this.nameCheck(command.name) ?? this.fragmentCheck(command.fragment) ?? { available: true };
     if (this.isContributed(command.id)) return refusal("invalid_value", CONTRIBUTED);

@@ -139,6 +139,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let dockRef: DockView | undefined;
   const paneAnchors = new Map<PanelController, () => void>();
   const viewPanes = new ViewPanels({
+    instances: { controllers: () => panels, instance: panel => port.panels.instance(panel) },
     arrangement: () => ({ tab: port.focus.targets().tab, layout: port.tabs?.dock() ?? null }),
     save: (tab, state) => {
       if (tab === undefined) return;

@@ -27,6 +27,8 @@ export type WorkspacePoint = typeof WORKSPACE_POINTS[number];
 export type ProfilesMigrationOutcome = "done" | "already" | "stopped";
 
 export type ProfilesMigrationDeps = {
+  /** The first tab's contributed arrangement, used only when there is no legacy arrangement to preserve. */
+  readonly initial?: { origin: string; dock: import("../ui-preferences").DockLayout };
   /** The workspace's identity (its lease key). */
   readonly workspace: string;
   readonly model: DocumentModel;
@@ -117,7 +119,7 @@ export class ProfilesMigration {
         continue;
       }
       // The session, and `done`, in one write.
-      const session = buildProfileSession(state, snapshot, answer.result, deps.random);
+      const session = buildProfileSession(state, snapshot, answer.result, deps.random, deps.initial);
       if (!deps.record({ migration: { ...mark, state: "done" }, profiles: workspaceProfiles(answer.result.profile, session) })) return "stopped";
       break;
     }

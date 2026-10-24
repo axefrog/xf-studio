@@ -9,6 +9,8 @@ import type { FragmentKnowledge } from "../app/profiles/layout-fragment";
 import { STUDIO_VIEW_GRAPH_RULES } from "../preview/preview-view-graph";
 import { STUDIO_MODULE_REGISTRATION, STUDIO_MODULES } from "./modules";
 import { STUDIO_CATALOGUE } from "./views";
+import type { DockLayout } from "../app/ui-preferences";
+import { rewriteDock } from "../app/profiles/profiles-migration-data";
 
 const panels = new Set<string>(STUDIO_CATALOGUE.ids), tools = new Set(STUDIO_MODULE_REGISTRATION.tools.map(tool => tool.id));
 export const STUDIO_FRAGMENT_KNOWLEDGE: FragmentKnowledge = Object.freeze({ panel: (type: string) => panels.has(type), tool: (id: string) => tools.has(id),
@@ -18,5 +20,9 @@ const issues = contributedDefaultIssues(STUDIO_MODULES, STUDIO_FRAGMENT_KNOWLEDG
 if (issues.length) throw Error(`The modules' default layouts are incomplete: ${issues.join("; ")}.`);
 
 export const STUDIO_LAYOUT_DEFAULTS = contributedDefaults(STUDIO_MODULES);
+// A first workspace keeps its legacy view graph, and starts with Eye makeup's contributed panel arrangement in both size classes.
+const first = STUDIO_LAYOUT_DEFAULTS.find(item => item.id === "eye-makeup/default")!;
+export const STUDIO_INITIAL_LAYOUT = { origin: first.id, dock: rewriteDock(first.fragment.tab.dock as DockLayout,
+  key => key === `view:${first.fragment.views[0]!.key}` ? "head" : first.fragment.panels.find(panel => panel.key === key)?.type ?? key)! };
 /** Panel types whose state a default keeps (`stateInDefaults`). */
 export const keepsStateInDefaults = (type: string) => STUDIO_CATALOGUE.panels.some(panel => panel.id === type && panel.stateInDefaults === true);

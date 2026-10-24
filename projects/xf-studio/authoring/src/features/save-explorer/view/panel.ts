@@ -42,14 +42,15 @@ const when = (iso: string) => { const date = new Date(iso); return Number.isNaN(
 
 export function explorerPanel(ctx: Ctx): PanelController {
   // This panel instance's own session in the module's service (profiles design §7): every action and read names it.
-  const instance = ctx.instance(PANEL_ID), service = ctx.facade;
+  let instance: string | undefined;
+  const service = ctx.facade;
   const facade = {
-    snapshot: () => service.snapshot(instance), capability: (action: SaveExplorerAction) => service.capability({ ...action, instance }),
-    tree: () => service.tree(instance), node: (id: number) => service.node(instance, id), modData: () => service.modData(instance),
-    entries: (offset: number, limit: number, filter?: string) => service.entries(instance, offset, limit, filter),
-    object: (ref: ObjectRef) => service.object(instance, ref), thumbnail: (folder: string) => service.thumbnail(instance, folder),
+    snapshot: () => service.snapshot(instance!), capability: (action: SaveExplorerAction) => service.capability({ ...action, instance: instance! }),
+    tree: () => service.tree(instance!), node: (id: number) => service.node(instance!, id), modData: () => service.modData(instance!),
+    entries: (offset: number, limit: number, filter?: string) => service.entries(instance!, offset, limit, filter),
+    object: (ref: ObjectRef) => service.object(instance!, ref), thumbnail: (folder: string) => service.thumbnail(instance!, folder),
   };
-  const dispatch = (action: SaveExplorerAction, options?: Parameters<Ctx["dispatch"]>[1]) => ctx.dispatch({ ...action, instance }, options);
+  const dispatch = (action: SaveExplorerAction, options?: Parameters<Ctx["dispatch"]>[1]) => instance === undefined ? Promise.resolve(false) : ctx.dispatch({ ...action, instance }, options);
   // ---- The saves list ----
   const refresh = button({ label: "Refresh", icon: "refresh", small: true, variant: "quiet", onClick: () => { void dispatch({ kind: "saves.refresh" }); } });
   const openFile = button({ label: "Open a save file…", icon: "folder", small: true, variant: "quiet",
@@ -277,12 +278,20 @@ export function explorerPanel(ctx: Ctx): PanelController {
 
   let refreshed = false;
   return {
-    spec: { id: "save-explorer.explorer", ...SAVE_EXPLORER_PANEL_META["save-explorer.explorer"], element,
+    bind(next) {
+      if (next === instance) return;
+      instance = next;
+      expanded.clear(); focusId = null; entryOffset = 0; entryFilter = ""; objectsShown = OBJECTS_PAGE; typeFilter = "";
+      listKey = treeKey = nodeKey = objectKey = modsKey = lastSource = ""; lastNode = null;
+      rowsCache = { revision: -1, rows: [] }; refreshed = false;
+    },
+    spec: { id: PANEL_ID, ...SAVE_EXPLORER_PANEL_META["save-explorer.explorer"], element,
       // The list is read when the panel is first shown, never at startup.
-      visibility: visible => { if (visible && !refreshed) { refreshed = true; void dispatch({ kind: "saves.refresh" }, { quiet: true }); } } },
+      visibility: visible => { if (visible && instance !== undefined && !refreshed) { refreshed = true; void dispatch({ kind: "saves.refresh" }, { quiet: true }); } } },
     // The panel is gone (its module hidden): its session, and any open save, go with it.
-    dispose: () => service.release(instance),
+    dispose: () => { if (instance !== undefined) service.release(instance); },
     update() {
+      if (instance === undefined) return;
       const state = facade.snapshot(), open = state.open;
       const isOpen = open.phase !== "none";
       listView.hidden = isOpen; openView.hidden = !isOpen;

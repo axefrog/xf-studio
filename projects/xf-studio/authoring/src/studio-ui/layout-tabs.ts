@@ -149,13 +149,14 @@ export function layoutTabs(deps: TabsDeps) {
     const command = (label: string, action: LayoutTabAction, icon: IconName): MenuItem => ({ kind: "action", label, icon, capability: cap(action), run: () => { run(action); } });
     const items: MenuItem[] = [{ kind: "heading", label: tab.name },
       { kind: "action", label: "Rename…", icon: "rename", capability: cap({ kind: "tabs.rename", tab: id, name: tab.name }), run: () => rename(id, invoker) }];
-    if (tabs.defaults().length) items.push({ kind: "submenu", label: "Reset to default", icon: "reset",
-      capability: cap(defaultAction(tabs.defaults().find(view => view.id === tab.origin) ?? tabs.defaults()[0]!, id)), items: () => defaultItems(invoker, id) });
+    const resets = tabs.defaults().map(view => cap(defaultAction(view, id)));
+    if (resets.length) items.push({ kind: "submenu", label: "Reset to default", icon: "reset",
+      capability: resets.find(choice => choice.available) ?? resets[0], items: () => defaultItems(invoker, id) });
     items.push({ kind: "action", label: "Save as default…", icon: "save", capability: cap({ kind: "tabs.saveAsDefault", tab: id, name: tab.name }), run: () => rename(id, invoker, true) });
     if (origin?.owner.kind === "user") items.push(command(`Update “${origin.name}”`, { kind: "tabs.updateDefault", tab: id }, "save"));
     items.push(command("Close tab", { kind: "tabs.close", tab: id }, "close"));
     if (state.closed.length) items.push({ kind: "submenu", label: "Reopen closed tab", icon: "undo", capability: cap({ kind: "tabs.reopen" }), items: () => [...tabs.snapshot().closed].reverse().map(closed =>
-      command(`${closed.tab.name}${closed.reset ? " before reset" : ""}`, { kind: "tabs.reopen", closed: closed.tab.id }, "undo")) });
+      command(`${closed.tab.name}${closed.reset ? " before reset" : ""}`, { kind: "tabs.reopen", closed: closed.id ?? closed.tab.id }, "undo")) });
     return items;
   }
   function menu(id: string, invoker: HTMLElement, anchor: HTMLElement | { x: number; y: number } = invoker) {

@@ -173,6 +173,7 @@ export class ProfileSessions {
     this.closed = clone([...data.closed]).map(item => ({ ...item, tab: this.held(item.tab) }));
     for (const scene of data.views.scenes) this.targets.set(scene.id, targetOf(scene));
     for (const id of this.idsOf(data)) this.used.add(id);
+    this.closed = this.closed.map(fragment => fragment.id ? fragment : { ...fragment, id: this.fresh(undefined, "closed-") });
     this.focus.restore({ ...data.focus, seq: data.seq });
     if (!this.focus.shownTab() || !this.tab(this.focus.shownTab()!)) this.focus.showTab(this.tabs[0]?.id);
     this.focus.subscribe(() => this.changed());
@@ -344,8 +345,8 @@ export class ProfileSessions {
   /**
    * Reopen a closed tab (default: the most recently closed) under its own IDs, in its place, with its views' focus numbers, and show it.
    * Nodes still in the graph (shared with another tab) are linked again; the others come back from their copies. A reset's fragment
-   * comes back as a tab of its own beside the tab it was reset from. `closed` names a fragment by its tab's ID (the newest, when a tab was
-   * reset more than once).
+   * comes back as a tab of its own beside the tab it was reset from. `closed` names the fragment's own ID; older callers can still name
+   * a tab's ID to reopen its newest fragment.
    */
   reopen(closed?: TabId): TabId {
     const fragment = this.closedFragment(closed);
@@ -625,9 +626,9 @@ export class ProfileSessions {
     return at;
   }
   private existing(tab: TabId) { this.index(tab); }
-  /** The closed fragment of tab `closed`, the newest when there are several (default: the most recently closed). */
+  /** An exact fragment, with the tab-ID route kept for older callers (default: the most recently closed). */
   private closedFragment(closed: TabId | undefined): HeldClosed | undefined {
-    return closed === undefined ? this.closed.at(-1) : [...this.closed].reverse().find(item => item.tab.id === closed);
+    return closed === undefined ? this.closed.at(-1) : this.closed.find(item => item.id === closed) ?? [...this.closed].reverse().find(item => item.tab.id === closed);
   }
   /**
    * Throws a refusal (with the reason) when the tab's views can't go: one is a newer build's. The view the window draws may go: the window
@@ -653,7 +654,7 @@ export class ProfileSessions {
       nodes.push({ slot, node: target ? withTarget(node, target) : node, at: index });
     }
     const focus = Object.fromEntries(views.flatMap(({ view }) => order[view.id] !== undefined ? [[view.id, order[view.id]!]] : []));
-    return clone({ tab, at, views, nodes, focus });
+    return clone({ id: this.fresh(undefined, "closed-"), tab, at, views, nodes, focus });
   }
   /** The nodes a fragment brings back (those not in the graph); refused when its views or nodes collide with the session's. */
   private reopenedNodes(fragment: ClosedTab): ClosedTab["nodes"] {
@@ -726,7 +727,7 @@ export class ProfileSessions {
     const graph = data.views as unknown as Record<string, { id: string }[]>;
     return [...data.tabs.flatMap(tab => [tab.id, ...tab.panels.map(panel => panel.id)]),
       ...[...VIEW_SLOTS.map(slot => SLOT_COLLECTIONS[slot]), "views"].flatMap(list => (graph[list] ?? []).map(item => item.id)),
-      ...data.closed.flatMap(item => [item.tab.id, ...item.tab.panels.map(panel => panel.id), ...item.views.map(view => view.view.id), ...item.nodes.map(node => node.node.id)])];
+      ...data.closed.flatMap(item => [...(item.id ? [item.id] : []), item.tab.id, ...item.tab.panels.map(panel => panel.id), ...item.views.map(view => view.view.id), ...item.nodes.map(node => node.node.id)])];
   }
 }
 

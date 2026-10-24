@@ -358,7 +358,7 @@ describe("T1: seeded random runs against an independent model", () => {
       holds(run);
       invariants(s);
     }
-  });
+  }, 30_000); // 40 seeded runs with Undo and Redo to both ends: about 5 s alone, more under a loaded suite
 
   test("with navigation between the operations (show, focus, arrange, another look), the model's account, what stays outside Undo and every invariant hold", () => {
     for (let seed = 1; seed <= 40; seed++) {

@@ -59,6 +59,8 @@ export type SessionFocus = { readonly views: Readonly<Record<string, number>>; r
  * the content before the reset.
  */
 export type ClosedTab = {
+  /** This fragment's identity, independent of the tab it came from. Absent in older sessions. */
+  readonly id?: string;
   readonly tab: LayoutTab;
   readonly at: number;
   readonly views: readonly { readonly view: SessionView & ViewRecord; readonly at: number }[];
@@ -161,7 +163,7 @@ function closedTabOf(value: unknown, taken: { views: Set<string>; instances: Set
   const focus = Object.fromEntries(Object.entries(value.focus).filter(([view, at]) => ids.includes(view) && Number.isSafeInteger(at) && (at as number) > 0));
   for (const id of ids) taken.views.add(id!);
   for (const id of instances) taken.instances.add(id);
-  return { tab, at: value.at as number, views, nodes, focus, ...(value.reset === true ? { reset: true } : {}) } as unknown as ClosedTab;
+  return { ...(text(value.id) ? { id: value.id } : {}), tab, at: value.at as number, views, nodes, focus, ...(value.reset === true ? { reset: true } : {}) } as unknown as ClosedTab;
 }
 /** A stored session, validated (null when it isn't one); unknown fields are kept. */
 export function profileSessionOf(value: unknown): ProfileSessionData | null {

@@ -66,3 +66,15 @@ test("the guide names the site link and closes a tab opened by the localhost Stu
   expect(has("XF Studio site</span></a>")).toBe(true);
   expect(has("Close this guide and return to XF Studio")).toBe(true);
 });
+
+
+test("Review A design 3: entry text never opens a raw-text title or script element", async () => {
+  const { LIBRARY } = await import("../src/studio-ui/style-guide/library");
+  const unsafe = LIBRARY.flatMap(entry => Object.entries(entry).flatMap(([field, value]) =>
+    typeof value === "string" && /<(?:title|script)(?:\s|>)/i.test(value) ? [`${entry.id}.${field}`] : []));
+  expect(unsafe).toEqual([]);
+  // Cover every generated pattern too; the document's head title and its one script live outside these articles.
+  const entries = [...guide.matchAll(/<article\b[^>]*>[\s\S]*?<\/article>/g)];
+  expect(entries.length).toBeGreaterThan(60);
+  expect(entries.filter(([html]) => /<(?:title|script)(?:\s|>)/i.test(html)).map(([html]) => /id="([^"]+)"/.exec(html)?.[1])).toEqual([]);
+});

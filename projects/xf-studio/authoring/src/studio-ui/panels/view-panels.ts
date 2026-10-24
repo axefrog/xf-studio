@@ -54,6 +54,8 @@ export function viewPanelEntries<E extends PanelContribution>(base: E, panels: r
 export type ViewPaneController = PanelController & { readonly slot: HTMLElement };
 
 export type ViewPanelsDeps = {
+  /** Bind the other reusable panel controllers before the destination dock can show or update them. */
+  instances?: { controllers(): readonly PanelController[]; instance(panel: PanelId): string };
   /** The shown tab and its saved arrangement. A tab switch or an external arrangement restore is one dock load, never incremental saves. */
   arrangement(): { readonly tab?: string; readonly layout: unknown };
   /** Load the captured destination arrangement with the reconciled controllers and catalogue. Saves once, after the whole load. */
@@ -89,6 +91,11 @@ export class ViewPanels {
   private reconciling = false;
   private pendingSave: DockState | undefined;
   constructor(private readonly deps: ViewPanelsDeps) {}
+  private bind(tab: string | undefined) {
+    const instances = this.deps.instances;
+    for (const panel of instances?.controllers() ?? []) if (panel.bind)
+      panel.bind(tab === undefined ? undefined : instances!.instance(panel.spec.id));
+  }
 
   /** The panel IDs the shown tab's views need, in graph order. */
   wanted(): PanelId[] { return this.deps.views().map(entry => entry.panel); }
@@ -107,6 +114,7 @@ export class ViewPanels {
    */
   start(): ViewPaneController[] {
     this.rememberArrangement();
+    this.bind(this.tab);
     const wanted = this.wanted();
     this.deps.catalogue(wanted);
     for (const panel of wanted) this.make(panel);
@@ -131,6 +139,7 @@ export class ViewPanels {
     const gone = [...this.panes.keys()].filter(panel => !want.has(panel)), fresh = wanted.filter(panel => !this.panes.has(panel));
     this.reconciling = true;
     try {
+      this.bind(destination.tab);
       if (gone.length || fresh.length || restore) {
         this.deps.catalogue(wanted);
         const leaving = gone.map(panel => this.panes.get(panel)!);

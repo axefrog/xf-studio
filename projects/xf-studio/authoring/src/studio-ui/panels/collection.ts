@@ -34,6 +34,8 @@ const DRAFT_STATE: Record<"never" | "same" | "edited" | "unknown", (revision?: n
 };
 
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
+  /** Reuse this controller for the shown tab's instance; undefined while the session is empty. */
+  bind?(instance: string | undefined): void;
   /** The panel is gone for good (its module was hidden): what it holds in a service lets go (a Save Explorer's open save). */
   dispose?(): void;
   /** The panel's own palette commands (its presentation state, e.g. folding), read when the palette opens. */

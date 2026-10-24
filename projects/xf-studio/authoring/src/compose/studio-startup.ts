@@ -77,7 +77,8 @@ import type { TargetResolver } from "../app/profiles/targets";
 import { createProfileServices, createTargetResolver, drawnScene, drawnView as drawnViewOf, historyScopeName, openProfileSession,
   sceneCharacter, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
 import { printDefault } from "../app/profiles/layout-fragment";
-import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS } from "./layout-defaults";
+import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS, STUDIO_INITIAL_LAYOUT } from "./layout-defaults";
+import { layoutsOf } from "../app/profiles/profiles-migration-data";
 import { viewPanel } from "../app/profiles/profile-sessions";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
@@ -194,10 +195,14 @@ async function start(host: StudioHost, root: HTMLElement) {
       ...(lease ? { canWrite: () => lease.draining() } : {}) });
     early.activate();
     await startProfilesMigration({ endpoint: `${base}/profiles/migrate`, send: fetch, workspace: documents.workspace, fence: documents.fence,
-      model: STUDIO_COMPOSITION.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal,
+      model: STUDIO_COMPOSITION.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal, initial: STUDIO_INITIAL_LAYOUT,
       report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
   }
   await services.load();
+  if (restored.writable && (!lease || lease.writable())) {
+    try { services.defaults.importLegacy(layoutsOf(workspace)); }
+    catch (error) { diagnostics.failure("library", "layouts_migration_failed", "Your saved layouts couldn't be restored yet. Restart XF Studio to try again.", error, { level: "warn" }); }
+  }
   // The session this window opens on (its tabs, the views and scenes, and what each scene shows), with the window's focus: the history
   // service records the editing context into it (profiles design §3.3, §3.7). The session owns the view graph and its View and lighting
   // history: its operations and the graph's edits are one history (§4.1).

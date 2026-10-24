@@ -189,3 +189,70 @@ test("empty tab arrangement remains empty, and a minimal arrangement never opens
   const restored = restoreDockPreference({ format: "xfs/dock", version: 1, state: { wide: tree, compact: tree } }, area, catalogue, [], catalogue.ids, true).state;
   expect(restored.wide.root).toEqual(tree.root); expect(restored.wide.floating).toEqual([]);
 });
+
+
+test("Review A finding 3: choosing the older reset fragment reopens that exact snapshot after reload", async () => {
+  const h = await harness(), tab = h.session.tabId();
+  h.session.rename(tab, "Original");
+  h.actions.dispatch({ kind: "tabs.reset", tab, default: EYE });
+  h.session.rename(tab, "Second arrangement");
+  h.actions.dispatch({ kind: "tabs.reset", tab, default: EYE });
+  const closed = h.session.closedTabs();
+  expect(new Set(closed.map(fragment => fragment.id)).size).toBe(2);
+  const menu = h.view.menuItems(tab, h.view.add).find(item => item.kind === "submenu" && item.label === "Reopen closed tab");
+  if (menu?.kind !== "submenu") throw Error("No reopen menu");
+  const original = menu.items().find(item => item.kind === "action" && item.label === "Original before reset");
+  if (original?.kind !== "action") throw Error("No original fragment");
+  original.run();
+  expect(h.session.tab(h.session.tabId())!.name).toBe("Original");
+  const restored = openSession(h.session.session());
+  restored.reopen(restored.closedTabs()[0]!.id);
+  expect(restored.tab(restored.tabId())!.name).toBe("Second arrangement");
+});
+
+test("Review A finding 5: Reset stays available when a newer-build origin is unavailable", async () => {
+  const h = await harness(), tab = h.session.tabId();
+  const base = STUDIO_LAYOUT_DEFAULTS[0]!.fragment;
+  // Read a real stored fragment from a newer build, rather than substituting capabilities in the menu.
+  const fragment = { ...structuredClone(base), panels: [...base.panels, { key: "future", type: "future.panel" }] };
+  h.defaults.importLegacy([{ name: "Newer default", fragment }]);
+  const own = h.defaults.list().find(view => view.name === "Newer default")!;
+  // A tab can outlive the build that supplied its origin.
+  h.session.setOrigin(tab, own.id);
+  const reset = h.view.menuItems(tab, h.view.add).find(item => item.kind === "submenu" && item.label === "Reset to default");
+  if (reset?.kind !== "submenu") throw Error("No reset menu");
+  expect(reset.capability?.available).toBe(true);
+  const rows = reset.items().filter(item => item.kind === "action");
+  expect(rows[0]!.capability).toMatchObject({ available: false, reason: own.unavailable });
+  const eye = rows.find(row => row.label.startsWith("Eye makeup"))!;
+  expect(eye.capability?.available).toBe(true);
+  eye.run(); expect(h.session.tab(tab)!.origin).toBe(EYE);
+});
+
+test("Review A design 2: substitution focuses a visible first field and Escape from it cancels", async () => {
+  const h = await harness(); h.candidates.subjects.push(V2);
+  h.view.add.focus(); h.view.newMenu(); h.row("Eye makeup").click(); await tick();
+  const form = lightDocument.body.querySelector(".choice-popover")!;
+  const focused = lightDocument.activeElement!;
+  expect(focused.closest("[hidden]")).toBeNull();
+  expect(form.contains(focused)).toBe(true);
+  expect(focused.getAttribute("role")).toBe("radio");
+  focused.dispatchEvent(lightEvent("keydown", { key: "Escape" }));
+  expect(form.isConnected).toBe(false);
+  expect(h.session.tabList()).toHaveLength(1);
+  expect(lightDocument.activeElement).toBe(el(h.view.add));
+});
+
+test("Review A finding 4: Enter on Cancel keeps native activation and creates nothing", async () => {
+  const h = await harness(); h.candidates.subjects.push(V2);
+  h.view.newMenu(); h.row("Eye makeup").click(); await tick();
+  const form = lightDocument.body.querySelector(".choice-popover")!;
+  const cancel = form.querySelectorAll("button").find(button => button.textContent === "Cancel")!;
+  cancel.focus(); const event = lightEvent("keydown", { key: "Enter" }); cancel.dispatchEvent(event);
+  expect(event.defaultPrevented).not.toBe(true);
+  expect(h.session.tabList()).toHaveLength(1);
+  // The light DOM has no native keyboard defaults; emulate the button's resulting click.
+  cancel.click(); expect(form.isConnected).toBe(false);
+  expect(h.session.tabList()).toHaveLength(1);
+  expect(lightDocument.activeElement).toBe(el(h.view.add));
+});

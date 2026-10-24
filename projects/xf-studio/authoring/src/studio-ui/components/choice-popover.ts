@@ -56,10 +56,14 @@ export function openChoicePopover(anchor: MenuAnchor, options: { title: string; 
   form.addEventListener("submit", event => { event.preventDefault(); commit(); });
   form.addEventListener("keydown", event => {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); }
-    else if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); commit(); }
+    else if (event.key === "Enter" && (event.target === form || event.target instanceof HTMLInputElement)) {
+      event.preventDefault(); event.stopPropagation(); commit();
+    }
   });
   document.body.append(form); refresh();
-  requestAnimationFrame(() => { if (!closed) form.querySelector<HTMLElement>("[tabindex='0'], input, button")?.focus(); });
+  // A hidden search input cannot take focus in a browser. Start on the first visible field, so Escape reaches the form too.
+  const first = [...controls.values()].find(control => !control.list.element.hidden);
+  (first ? !first.search.element.hidden ? first.search.input : first.list.element.querySelector<HTMLElement>("[tabindex='0']") : apply)?.focus();
   setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, true); });
   return { refresh, close };
 }

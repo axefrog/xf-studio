@@ -286,7 +286,7 @@ export function layoutFragment(name: string, dock: DockLayout, graph: ViewGraphD
     panels: panels.filter(panel => !viewOfPanel(panel)).map(panel => ({ key: panel, type: panel })) };
 }
 /** The saved layouts as own defaults: each layout's saved arrangement (an inactive layout's working state is dropped, §8). */
-function layoutsOf(state: WorkspaceState): MigrationLayout[] {
+export function layoutsOf(state: WorkspaceState): MigrationLayout[] {
   const library = state.uiPreferences.layouts;
   if (!library) return [];
   const graph = workspaceViewGraph(state.preview, state.views);
@@ -307,12 +307,12 @@ export const FIRST_TAB_NAME = "Layout 1";
  * draft's selected look.
  */
 export function buildProfileSession(state: WorkspaceState, snapshot: Pick<MigrationSnapshot, "selected" | "layouts">, result: MigrationResult,
-  random: () => number = Math.random): ProfileSessionData {
+  random: () => number = Math.random, initial?: { origin: string; dock: DockLayout }): ProfileSessionData {
   const active = snapshot.layouts.findIndex(layout => layout.active);
   const lookId = snapshot.selected ? result.idMap.looks[snapshot.selected] : undefined;
   return sessionOfWorkspace(state, { tab: active >= 0 ? snapshot.layouts[active]!.name : FIRST_TAB_NAME,
     ...(active >= 0 && result.defaults[active] ? { origin: result.defaults[active] } : {}), character: result.character,
-    ...(lookId ? { look: { collection: result.collection, look: lookId } } : {}) }, random);
+    ...(lookId ? { look: { collection: result.collection, look: lookId } } : {}) }, random, initial);
 }
 /**
  * A session made from the workspace's live arrangement and view graph: tab 1 (named `tab`, made from the own default `origin`) holds the
@@ -320,16 +320,17 @@ export function buildProfileSession(state: WorkspaceState, snapshot: Pick<Migrat
  * context (§3.7) is the look's history, so Undo reaches it as it did before the session existed.
  */
 export function sessionOfWorkspace(state: WorkspaceState, input: { tab: string; origin?: string; character?: string; look?: { collection: string; look: string } },
-  random: () => number = Math.random): ProfileSessionData {
+  random: () => number = Math.random, initial?: { origin: string; dock: DockLayout }): ProfileSessionData {
   const tab = `t-${base36(random)}`;
-  const live = state.uiPreferences.layout ?? null;
+  const live = state.uiPreferences.layout ?? initial?.dock ?? null;
   const instances = new Map<string, PanelInstance>();
   for (const panel of dockPanels(live)) {
     const view = viewOfPanel(panel);
     instances.set(panel, view ? { id: `view--${base36(random)}`, type: "view", binding: { policy: "pinned", target: { view } } }
       : { id: `${panel}--${base36(random)}`, type: panel });
   }
-  const tabValue: LayoutTab = { id: tab, name: input.tab, ...(input.origin ? { origin: input.origin } : {}),
+  const origin = input.origin ?? (!state.uiPreferences.layout ? initial?.origin : undefined);
+  const tabValue: LayoutTab = { id: tab, name: input.tab, ...(origin ? { origin } : {}),
     dock: rewriteDock(live, panel => instances.get(panel)?.id ?? panel), panels: [...instances.values()] };
   const graph = workspaceViewGraph(state.preview, state.views), look = input.look;
   const scenes: SessionScene[] = graph.scenes.map(scene => scene.kind === "character"

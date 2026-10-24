@@ -6,13 +6,18 @@ import { SaveExplorerActions, SaveExplorerSessions, saveExplorerFacade, type Sav
 import { explorerPanel } from "../src/features/save-explorer/view/panel";
 import type { ModuleViewContext } from "../src/studio-ui/views/feature-view";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
+import { ViewPanels } from "../src/studio-ui/panels/view-panels";
+import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
+import type { ProfileSessions } from "../src/app/profiles/profile-sessions";
+import { openSession, seededRandom } from "./fixtures/profile-sessions";
+import { freshWorkspace } from "./fixtures/eye-region";
 import { nestedSave, syntheticSave } from "./fixtures/synthetic-explorer-save";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 const settle = (ms = 5) => new Promise(resolve => setTimeout(resolve, ms));
 
-function harness(overrides: Partial<SaveExplorerDevice> = {}, options: ConstructorParameters<typeof SaveExplorerActions>[2] = {}) {
+function harness(overrides: Partial<SaveExplorerDevice> = {}, options: ConstructorParameters<typeof SaveExplorerActions>[2] = {}, session?: ProfileSessions) {
   const settingsOpened: (string | undefined)[] = [];
   const device: SaveExplorerDevice = {
     list: async () => ({ available: true, saves: [{ folder: "ManualSave-7", kind: "manual", savedAt: "2026-09-20T10:00:00.000Z", location: "Watson", level: 3,
@@ -27,18 +32,27 @@ function harness(overrides: Partial<SaveExplorerDevice> = {}, options: Construct
   const INSTANCE = "save-explorer.explorer--test";
   const facade = { snapshot: () => module.snapshot(INSTANCE), tree: () => module.tree(INSTANCE),
     dispatch: (action: SaveExplorerAction) => module.dispatch({ ...action, instance: INSTANCE }), subscribe: module.subscribe };
-  const toasts: string[] = [];
+  const toasts: string[] = [], dispatched: { kind: string; instance?: string }[] = [];
   let panel!: ReturnType<typeof explorerPanel>;
   const ctx: ModuleViewContext<SaveExplorerFacade> = {
-    facade: module, instance: panelId => `${panelId}--test`, targets: () => ({}),
-    dispatch: async (action, _options) => { const outcome = await module.dispatch(action); if (!outcome.ok) toasts.push(outcome.message); panel.update(undefined as never); return outcome.ok; },
+    facade: module, instance: panelId => session ? session.instance(panelId) : `${panelId}--test`, targets: () => ({}),
+    dispatch: async (action, _options) => { dispatched.push(action); const outcome = await module.dispatch(action); if (!outcome.ok) toasts.push(outcome.message); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: (_tone, _source, message) => { toasts.push(message); return undefined as never; }, announce: () => {}, record: () => undefined as never },
     anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { settingsOpened.push(section); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),
   };
   panel = explorerPanel(ctx);
+  // Production reconciliation owns binding, including the empty-session case. Tests never bind the controller themselves.
+  const empty = { root: null, floating: [], closed: [] };
+  const panes = new ViewPanels({ instances: { controllers: () => [panel], instance: ctx.instance },
+    arrangement: () => ({ tab: session ? session.tabId() || undefined : "t-test", layout: session?.dock() ?? null }),
+    views: () => [], drawn: () => ({}), save() {}, catalogue() {}, attach() {},
+    dock: { addPanels() {}, removePanels() {}, dockState: { wide: empty, compact: empty } },
+    make: () => { throw Error("No view panes in this controller test"); }, spec: pane => pane.spec,
+    restore: () => { panel.spec.visibility?.(true); panel.update(undefined as never); } });
+  panes.start();
   facade.subscribe(() => panel.update(undefined as never));
   const root = panel.spec.element as unknown as LightElement;
-  return { panel, facade, root, toasts, settingsOpened, service };
+  return { panel, facade, root, toasts, settingsOpened, service, panes, dispatched };
 }
 const texts = (elements: LightElement[]) => elements.map(element => element.textContent);
 
@@ -189,4 +203,41 @@ describe("Save Explorer panel", () => {
     expect(service.instances()).not.toContain("save-explorer.explorer--test");
     expect(facade.snapshot().open.phase).toBe("none");
   });
+});
+
+
+test("Review A finding 2: the real Save Explorer controller refreshes and reads the destination instance across switches", async () => {
+  const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A" }, seededRandom(92)));
+  const a = session.tabId(), h = harness({}, {}, session), aInstance = session.instance(h.panel.spec.id);
+  h.panel.spec.visibility?.(true); await settle();
+  h.root.querySelector("button.save-row")!.click(); await settle(20);
+  expect(h.service.snapshot(aInstance).open.phase).toBe("ready");
+  const b = session.duplicate(a), bInstance = session.instance(h.panel.spec.id);
+  expect(bInstance).not.toBe(aInstance);
+  h.panes.sync(); await settle();
+  expect(h.dispatched.at(-1)).toMatchObject({ kind: "saves.refresh", instance: bInstance });
+  expect(h.root.querySelector(".save-explorer-list")!.hidden).toBe(false);
+  const refresh = h.root.querySelectorAll("button").find(button => button.textContent === "Refresh")!;
+  refresh.click(); await settle();
+  expect(h.dispatched.at(-1)).toMatchObject({ kind: "saves.refresh", instance: bInstance });
+  expect(h.service.snapshot(aInstance).open.phase).toBe("ready");
+  session.show(a); h.panes.sync(); await settle();
+  expect(h.root.querySelector(".save-explorer-open")!.hidden).toBe(false);
+  session.show(b); h.panes.sync(); await settle();
+  expect(h.root.querySelector(".save-explorer-list")!.hidden).toBe(false);
+  h.service.release(aInstance); h.service.release(bInstance);
+});
+
+test("Review A finding 2: an empty session reload defers instance-dependent controller construction", () => {
+  const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A" }, seededRandom(93)));
+  session.close(session.tabId());
+  const reopened = openSession(session.session());
+  let h!: ReturnType<typeof harness>;
+  expect(() => { h = harness({}, {}, reopened); }).not.toThrow();
+  h.panel.update(undefined as never); h.panel.spec.visibility?.(true);
+  expect(h.service.instances()).toEqual([]);
+  expect(h.dispatched).toEqual([]);
+  reopened.reopen(); h.panes.sync();
+  expect(h.dispatched.at(-1)).toMatchObject({ kind: "saves.refresh", instance: reopened.instance(h.panel.spec.id) });
+  h.panel.dispose?.();
 });
