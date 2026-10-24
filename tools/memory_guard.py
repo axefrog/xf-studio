@@ -212,15 +212,19 @@ def record(line: str) -> None:
 
 
 def lowest_disk_free() -> int:
-    """Free bytes on drive C and on the working folder's drive, whichever is lower."""
-    drives = {"C:\\", Path.cwd().anchor}
+    """Free bytes on drive C and on the working folder's volume, whichever is lower.
+
+    The working folder itself is queried, not its drive letter, so a junction or mounted folder
+    reports the volume it really lives on. A failed query counts as no free space (fail closed),
+    like the memory check.
+    """
     free = []
-    for d in drives:
+    for d in ("C:\\", str(Path.cwd())):
         try:
             free.append(shutil.disk_usage(d).free)
         except OSError:
-            pass
-    return min(free) if free else 1 << 62
+            free.append(0)
+    return min(free)
 
 
 def main() -> int:

@@ -24,13 +24,28 @@ HOME = Path(os.environ["USERPROFILE"])
 TEMP = Path(os.environ.get("TEMP", HOME / "AppData/Local/Temp"))
 
 
-def size(path: Path) -> float:
-    out = subprocess.run(
+# Robocopy's summary block has one row per counter (dirs, files, bytes, times), each with six
+# columns. The labels are localised, so match the shape: a label, a colon and six integers. The
+# third such row is the byte count (/BYTES makes it a plain integer). Times rows hold h:mm:ss.
+SUMMARY_ROW = re.compile(r"^\s*[^:\d]+:\s+(\d+)(?:\s+\d+){5}\s*$", re.M)
+
+
+def size(path: Path) -> float | None:
+    """GB under path, skipping junctions; None if robocopy failed or its summary didn't parse."""
+    if path.is_symlink() or path.is_junction():
+        return 0.0
+    run = subprocess.run(
         ["robocopy", str(path), "C:\\__nul__", "/L", "/S", "/NJH", "/NFL", "/NDL", "/BYTES", "/XJ", "/R:0", "/W:0", "/NP"],
         capture_output=True, text=True, errors="replace",
-    ).stdout
-    m = re.search(r"^\s*Bytes\s*:\s*(\d+)", out, re.M)
-    return int(m.group(1)) / GB if m else 0.0
+    )
+    counts = SUMMARY_ROW.findall(run.stdout)
+    if run.returncode >= 8 or len(counts) < 3:  # 8 and above: some entries couldn't be read
+        return None
+    return int(counts[2]) / GB
+
+
+def show(gb: float | None) -> str:
+    return "      ? GB (scan incomplete)" if gb is None else f"{gb:7.1f} GB"
 
 
 def rows(parent: Path, min_gb: float):
@@ -38,11 +53,16 @@ def rows(parent: Path, min_gb: float):
         return []
     found = []
     for d in parent.iterdir():
-        if d.is_dir() and not d.is_symlink():
+        try:
+            if not d.is_dir() or d.is_symlink() or d.is_junction():
+                continue
             gb = size(d)
-            if gb >= min_gb:
-                found.append((gb, d.name, datetime.fromtimestamp(d.stat().st_mtime).strftime("%m-%d")))
-    return sorted(found, reverse=True)
+            when = datetime.fromtimestamp(d.stat().st_mtime).strftime("%m-%d")
+        except OSError:  # removed while we were scanning
+            continue
+        if gb is None or gb >= min_gb:
+            found.append((gb, d.name, when))
+    return sorted(found, key=lambda r: -1 if r[0] is None else r[0], reverse=True)
 
 
 def main() -> int:
@@ -52,16 +72,16 @@ def main() -> int:
     print(f"Drive C: {shutil.disk_usage('C:/').free / GB:.1f} GB free\n")
     for title, parent in [("Worktrees", HOME / "xfs-worktrees"), ("XF scratch", HOME / "xfs-scratch"), ("Fabric work", HOME / "fabric-work")]:
         r = rows(parent, a.min_gb)
-        total = sum(g for g, _, _ in r)
+        total = sum(g for g, _, _ in r if g is not None)
         print(f"{title} ({parent}): {total:.1f} GB in folders of at least {a.min_gb:g} GB")
         for gb, name, when in r:
-            print(f"  {gb:7.1f} GB  {name}  (last changed {when})")
+            print(f"  {show(gb)}  {name}  (last changed {when})")
         print()
     print("Other folders agents' tools fill:")
     for p in [HOME / ".codex/sessions", HOME / ".codex/archived_sessions", HOME / "AppData/Local/Claude-Data",
               HOME / ".cache", HOME / ".bun/install/cache", TEMP]:
         if p.exists():
-            print(f"  {size(p):7.1f} GB  {p}")
+            print(f"  {show(size(p))}  {p}")
     groups = defaultdict(lambda: [0, 0.0])
     for e in TEMP.iterdir():
         try:
