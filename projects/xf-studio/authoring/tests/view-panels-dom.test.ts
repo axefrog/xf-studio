@@ -18,6 +18,9 @@ import { freshWorkspace } from "./fixtures/eye-region";
 import { viewTitles } from "../src/platform/api/view-graph";
 import { previewSetupCard } from "../src/studio-ui/preview-setup-card";
 import { statusActivity, panelMenuItems } from "../src/studio-ui/app";
+import { STUDIO_CATALOGUE } from "../src/compose/views";
+import { defaultViewGraph } from "../src/preview/preview-view-graph";
+import { drawnView } from "../src/app/profiles/profile-window";
 import { Feedback } from "../src/studio-ui/feedback";
 import type { PreviewSetupSnapshot } from "../src/preview/preview-setup";
 
@@ -54,11 +57,11 @@ function fakePane(id: string): ViewPaneController & { disposed: boolean } {
   return pane;
 }
 
-async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, session?: ProfileSessions) {
+async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, session?: ProfileSessions, base = viewCatalogue([SHELL_VIEW])) {
   const { DockView } = await import("../src/studio-ui/dock/dock-view");
   const { restoreDockPreference, serializeDockState } = await import("../src/studio-ui/dock/persist");
   const { defaultDockStateFor } = await import("../src/studio-ui/dock/persist");
-  const base = viewCatalogue([SHELL_VIEW]), head = base.panels.find(panel => panel.id === "head")!;
+  const head = base.panels.find(panel => panel.id === "head")!;
   const catalogue = { ...base, panels: [...base.panels], ids: [...base.ids], meta: { ...base.meta } };
   const setViews = (panels: readonly string[]) => {
     catalogue.panels.splice(0, catalogue.panels.length, ...base.panels.flatMap(panel => panel.id === "head" ? viewPanelEntries(head, panels) : [panel]));
@@ -72,6 +75,7 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
   const panes = new ViewPanels({
     views: readViews, drawn: () => state.drawn,
     arrangement: () => ({ tab: session?.tabId(), layout: session ? session.dock() : preferences.snapshot().layout ?? null }),
+    opening: () => session?.viewOpening(), openView: (panel, arrangement) => dock.openView(panel, arrangement),
     save: (tab, next) => { saves.push(next);
       if (session && tab !== undefined) session.dispatch({ kind: "tabs.arrange", tab, layout: serializeDockState(next) }); },
     make: panel => { const pane = fakePane(panel); made.set(panel, pane); return pane; },
@@ -100,6 +104,35 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
 }
 
 describe("a pane per view", () => {
+  test("a first view's history restores its head slot, drawing and focus through the real session and dock", async () => {
+    const workspace = freshWorkspace(), session = openSession(sessionOfWorkspace(workspace, { tab: "A", character: "c-1" }, seededRandom(57)));
+    const tab = session.tabId(); session.closeView("main");
+    const tree: DockTree = { root: split("row", [{ ...group(["presets"], "presets", "g-collection"), collapsed: true },
+      group(["lighting"], "lighting", "g-inspect")]), floating: [], closed: [] };
+    session.arrange(tab, serializeDockState({ wide: tree, compact: tree }));
+    const h = await harness([], {}, tree, session, STUDIO_CATALOGUE), depth = session.graph.history().depth;
+    const view = session.openView(tab, defaultViewGraph(workspace.preview), { kind: "character", id: "c-1" }), panel = panelOf(view);
+    const paint = () => { h.state.drawn = { drawn: drawnView(session) }; h.panes.sync(); };
+    const check = async () => {
+      expect(session.tabId()).toBe(tab); expect(drawnView(session)).toBe(view);
+      expect(session.graph.history().depth).toBe(depth + 1);
+      expect(session.focus.focusedPanel()).toBe(session.instance(panel, tab));
+      for (const size of ["wide", "compact"] as const) {
+        const at = locate(h.dock.dockState[size], panel)!;
+        expect(at?.group.id).toBe("g-head"); expect(at.windowId).toBeUndefined();
+        expect(at.group.active).toBe(panel); expect(at.group.collapsed).not.toBe(true);
+      }
+      expect(h.panes.canvasPanel()).toBe(panel); expect(h.attached.at(-1)).toBe(panel);
+      await Bun.sleep(5); expect(lightDocument.activeElement?.getAttribute("id")).toBe(`dock-tab-${panel}`);
+    };
+    paint(); await check();
+    for (let replay = 0; replay < 2; replay++) {
+      expect(session.graph.undo()).toBe(true); paint();
+      expect(session.graph.has(view)).toBe(false); expect(locate(h.dock.tree, panel)).toBeUndefined();
+      session.focus.focusPanel(session.instance("presets", tab));
+      expect(session.graph.redo()).toBe(true); paint(); await check();
+    }
+  });
   for (const slot of ["arranged", "factory", "empty"] as const) test(`a first 3D view opens active, expanded and focused in its ${slot} slot`, async () => {
     const arranged = { ...group(["head", "lighting"], "lighting", "custom-head"), collapsed: true };
     const tree: DockTree = { root: slot === "empty" ? null : split("row", [group(["package"], "package", "collection"),

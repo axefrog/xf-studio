@@ -138,6 +138,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const viewPanes = new ViewPanels({
     instances: { controllers: () => panels, instance: panel => port.panels.instance(panel) },
     arrangement: () => ({ tab: port.focus.targets().tab || undefined, layout: port.tabs?.dock() ?? null }),
+    opening: () => port.tabs?.snapshot().opening,
+    openView: (panel, arrangement) => dock.openView(panel, arrangement),
     save: (tab, state) => {
       if (!tab) return;
       const action = { kind: "tabs.arrange" as const, tab, layout: serializeDockState(state) }, allowed = port.authoring.capability(action);
@@ -184,12 +186,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
   rt.dock = dock;
   dockRef = dock;
-  rt.showOpenedView = (tab, arrangement) => {
-    if (port.focus.targets().tab !== tab) return;
-    viewPanes.sync();
-    const view = port.views.snapshot()?.views.find(view => view.tab === tab);
-    if (view) dock.openView(view.panel, arrangement);
-  };
   /**
    * Withdraw every view tool this presentation doesn't offer (UI-102): a hidden module's, and research tools while they are hidden; and
    * the research-only view settings with them (the Rendering options, UI-163: drawn at their defaults). Each keeps its state, and no

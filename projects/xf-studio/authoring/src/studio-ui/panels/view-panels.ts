@@ -14,6 +14,7 @@ import type { DockView, PanelSpec } from "../dock/dock-view";
 import type { DockState, PanelId } from "../dock/layout";
 import type { PanelContribution } from "../views/contribution";
 import type { PanelController } from "./collection";
+import type { ViewOpening } from "../../app/profiles/profile-sessions";
 
 /** What a 3D view's pane shows: the picture (the canvas is in it), its own progress while it is made ready, or that it isn't drawn (U7). */
 export type ViewPaneState = "canvas" | "preparing" | "not-drawn";
@@ -58,6 +59,9 @@ export type ViewPanelsDeps = {
   instances?: { controllers(): readonly PanelController[]; instance(panel: PanelId): string };
   /** The shown tab and its saved arrangement. A tab switch or an external arrangement restore is one dock load, never incremental saves. */
   arrangement(): { readonly tab?: string; readonly layout: unknown };
+  /** The session's initial/replayed opening intent, consumed once after its pane exists. */
+  opening?(): ViewOpening | undefined;
+  openView?(panel: PanelId, arrangement: unknown): void;
   /** Load the captured destination arrangement with the reconciled controllers and catalogue. Saves once, after the whole load. */
   restore(layout: unknown): void;
   /** Persist to the tab the dock actually renders, which can lag behind the shown tab until the next paint. */
@@ -90,6 +94,7 @@ export class ViewPanels {
   private layout: string | undefined;
   private reconciling = false;
   private pendingSave: DockState | undefined;
+  private openingRevision: number | undefined;
   constructor(private readonly deps: ViewPanelsDeps) {}
   private bind(tab: string | undefined) {
     const instances = this.deps.instances;
@@ -157,6 +162,12 @@ export class ViewPanels {
         for (const pane of leaving) { pane.spec.visibility?.(false); pane.dispose?.(); }
       }
       this.tab = destination.tab;
+      const opening = this.deps.opening?.();
+      if (opening && opening.revision !== this.openingRevision) {
+        this.openingRevision = opening.revision;
+        const pane = opening.tab === this.tab && this.deps.views().find(view => view.view === opening.view);
+        if (pane) this.deps.openView?.(pane.panel, opening.arrangement);
+      }
       if (this.pendingSave) this.deps.save(this.tab, this.pendingSave);
       const settled = this.deps.arrangement();
       this.layout = JSON.stringify(settled.tab === this.tab ? settled.layout : destination.layout);

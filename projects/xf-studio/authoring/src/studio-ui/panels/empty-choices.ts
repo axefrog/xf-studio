@@ -12,13 +12,10 @@ export function panelEmptyChoices(rt: StudioRuntime, panel: string, layout: "pan
     const owner = state?.owner && panel !== state.owner.panel ? state.owner : null;
     element.hidden = !state; pointer.update(owner);
     component.update(state && !owner ? { ...state, choices: state.choices.map(choice => ({ ...choice, choose: () => {
-      const destination = choice.action.destination;
-      const arrangement = destination.route === "view" ? rt.port.tabs?.dock(destination.tab) : undefined;
       const pending = rt.port.emptyChoices!.execute(choice.action);
       // Document and session owners publish their optimistic values before the library acknowledges them.
       rt.changed();
       void pending.then(result => {
-        if (result.ok && destination.route === "view") rt.showOpenedView(destination.tab, arrangement);
         rt.report("empty.choose", result); rt.changed();
       });
     } })) } : null);

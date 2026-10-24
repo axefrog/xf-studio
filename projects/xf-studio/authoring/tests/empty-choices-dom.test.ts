@@ -154,21 +154,19 @@ for (const closed of [false, true]) test(`the read-only pointer reveals and focu
   } finally { panel.dispose?.(); }
 });
 
-test("Open a 3D view requests its captured slot only after a successful application choice", async () => {
-  const arrangement = { saved: "the requested tab's arrangement" }, shown: unknown[][] = [], calls: string[] = [];
+test("Open a 3D view reports the application outcome; session reconciliation owns placement", async () => {
+  const calls: string[] = [], reported: unknown[] = [];
   let ok = true;
-  const rt = { port: { tabs: { dock: (tab: string) => { expect(tab).toBe("requested"); return arrangement; } },
-    emptyChoices: { snapshot: () => ({ title: "Open a 3D view", body: "This tab has no 3D view.", choices: [{
+  const rt = { port: { emptyChoices: { snapshot: () => ({ title: "Open a 3D view", body: "This tab has no 3D view.", choices: [{
       id: "default", label: "Use the default V", action: { destination: { route: "view", tab: "requested" } },
     }] }), execute: async () => { calls.push("execute"); return { ok }; } } },
-    changed: () => { calls.push("changed"); }, report() {},
-    showOpenedView: (...args: unknown[]) => { shown.push(args); } } as unknown as StudioRuntime;
+    changed: () => { calls.push("changed"); }, report: (kind: string, result: unknown) => { reported.push({ kind, result }); } } as unknown as StudioRuntime;
   const panel = withEmptyChoices(rt, { spec: { id: "layers", title: "Layers", description: "", icon: "layers", element: h("div") }, update() {} });
   try {
     panel.update({} as Frame); el(panel.spec.element).querySelector(".empty-actions")!.querySelector("button")!.click();
-    expect(calls).toEqual(["execute", "changed"]); expect(shown).toEqual([]);
-    await Promise.resolve(); expect(shown).toEqual([["requested", arrangement]]);
+    expect(calls).toEqual(["execute", "changed"]); expect(reported).toEqual([]);
+    await Promise.resolve(); expect(reported).toEqual([{ kind: "empty.choose", result: { ok: true } }]);
     ok = false; el(panel.spec.element).querySelector(".empty-actions")!.querySelector("button")!.click(); await Promise.resolve();
-    expect(shown).toHaveLength(1);
+    expect(reported).toEqual([{ kind: "empty.choose", result: { ok: true } }, { kind: "empty.choose", result: { ok: false } }]);
   } finally { panel.dispose?.(); }
 });

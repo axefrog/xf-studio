@@ -57,6 +57,10 @@ import { CLOSED_TAB_LIMIT, PROFILE_SESSION_SCHEMA, type ClosedTab, type LayoutTa
 
 /** What a scene shows. */
 export type SceneTarget = { readonly subject?: SubjectRef; readonly look?: LookRef; readonly gen: number };
+/** A first view's intended slot; its structural history step keeps it across Undo and Redo. */
+type ViewPlacement = { readonly view: ViewId; readonly tab: TabId; readonly arrangement: DockLayout | null };
+/** One application request to present a just-opened view, on initial execution or replay. */
+export type ViewOpening = ViewPlacement & { readonly revision: number };
 /**
  * A new tab's content, its IDs fresh (`ProfileSessions.freshId`): its name, origin, arrangement and instances, its views (the session sets
  * their tab) and the nodes made with them (a scene may name what it shows). A view may name an existing node instead: a shared scene.
@@ -93,8 +97,8 @@ type HeldClosed = Omit<ClosedTab, "tab"> & { readonly tab: HeldTab };
 type Header = Omit<LayoutTab, "dock" | "panels">;
 type Content = Pick<HeldTab, "dock" | "panels" | typeof CONTENT_ID>;
 type Tabs = { readonly order: readonly TabId[]; readonly closed: readonly HeldClosed[]; readonly shown?: TabId };
-const TABS = "@tabs", HEADER = "@tab:", CONTENT = "@content:", CONTENT_ID = "@content";
-const sessionKey = (key: string) => key === TABS || key.startsWith(HEADER) || key.startsWith(CONTENT);
+const TABS = "@tabs", HEADER = "@tab:", CONTENT = "@content:", CONTENT_ID = "@content", VIEW_PLACEMENT = "@viewPlacement:";
+const sessionKey = (key: string) => key === TABS || key.startsWith(HEADER) || key.startsWith(CONTENT) || key.startsWith(VIEW_PLACEMENT);
 const STRUCTURE = "@structure";
 const clone = <T>(value: T): T => structuredClone(value);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -158,7 +162,9 @@ export class ProfileSessions {
   private graphTarget!: HistoryTarget;
   /** The tabs of views this build keeps unchanged (a newer build's): they can't be closed or reset. */
   private readonly keptTabs = new Set<TabId>();
-  /** While an operation runs: the graph's values before it, by key (its checkpoints join the operation's one step). */
+  private opening?: ViewOpening;
+  private openingRevision = 0;
+  /** While an operation runs: graph and placement values before it (their checkpoints join the operation's one step). */
   private collecting?: Map<string, unknown>;
 
   constructor(deps: ProfileSessionsDeps) {
@@ -222,6 +228,8 @@ export class ProfileSessions {
   tab(id: TabId): LayoutTab | undefined { const found = this.tabs.find(tab => tab.id === id); return found && clone(bare(found)); }
   /** The closed tabs, newest last, detached. */
   closedTabs(): readonly ClosedTab[] { return clone(this.closed.map(bareClosed)); }
+  /** The last view-opening request; presentation consumes each revision once during normal pane reconciliation. */
+  viewOpening(): ViewOpening | undefined { return this.opening && clone(this.opening); }
   /** The tab a view is in: the graph's (each view names its tab), else the shown tab. */
   viewTab(view: ViewId): TabId { return this.graph.tabOf(view) ?? this.tabId(); }
   /** A panel instance of any tab (instance IDs are unique in the session), with its tab. Read while painting: not detached (read-only). */
@@ -406,6 +414,7 @@ export class ProfileSessions {
   /** A first view in an existing tab, from a contributed baseline, with fresh identities throughout (U6). */
   openView(tab: TabId, baseline: ViewGraphData, subject: SubjectRef): ViewId {
     this.existing(tab);
+    const arrangement = this.dock(tab);
     const source = baseline.views[0] as ViewRecord | undefined;
     if (!source || source.kind !== "3d") throw new TabRefusal("invalid_value", "A 3D view isn't available here.");
     const id = this.fresh("view"), refs = {} as Record<ViewSlot, string>;
@@ -422,11 +431,16 @@ export class ProfileSessions {
       this.graph.restructure({ add: [{ view }], nodes: nodes.map(({ slot, node }) => ({ slot, node: slot === "scene" ? graphScene(node) : node })) }, { label: "Open a 3D view" });
       this.targets.set(refs.scene, { subject: clone(subject), gen: 0 });
       this.placed([id, ...nodes.map(item => item.node.id)]);
-      this.focus.showTab(tab);
-      this.focus.focusView(id);
-      this.focus.focusPanel(this.instance(viewPanel(id), tab));
+      this.collecting!.set(VIEW_PLACEMENT + id, undefined);
+      this.presentView({ view: id, tab, arrangement });
       return id;
     });
+  }
+  private presentView(placement: ViewPlacement) {
+    this.opening = { ...clone(placement), revision: ++this.openingRevision };
+    this.focus.showTab(placement.tab);
+    this.focus.focusView(placement.view);
+    this.focus.focusPanel(this.instance(viewPanel(placement.view), placement.tab));
   }
   closeView(view: ViewId) {
     if (!this.graph.has(view)) throw new TabRefusal("missing_target", "That view is closed.");
@@ -533,6 +547,13 @@ export class ProfileSessions {
     return values;
   }
   private readKey(key: string): unknown {
+    if (key.startsWith(VIEW_PLACEMENT)) {
+      const view = key.slice(VIEW_PLACEMENT.length);
+      if (!this.graph.has(view)) return undefined;
+      const tab = this.viewTab(view);
+      // Undo captures the slot actually used, including any arrangement saved since the view opened.
+      return { view, tab, arrangement: this.dock(tab) } satisfies ViewPlacement;
+    }
     if (key === TABS) {
       const shown = this.focus.shownTab();
       return clone({ order: this.tabs.map(tab => tab.id), closed: this.closed, ...(shown ? { shown } : {}) } satisfies Tabs);
@@ -578,6 +599,10 @@ export class ProfileSessions {
         const structure = graphValues[STRUCTURE] as { views: readonly ViewRecord[] } | undefined;
         const views = structure ? structure.views : (this.graphTarget.read(STRUCTURE) as { views: readonly ViewRecord[] }).views;
         if (views.some(view => !view.tab || !live.has(view.tab)) || [...this.keptTabs].some(tab => !live.has(tab))) return false;
+        const placements = keys.filter(key => key.startsWith(VIEW_PLACEMENT) && values[key] !== undefined)
+          .map(key => ({ key, placement: values[key] as ViewPlacement }));
+        if (placements.some(({ key, placement }) => key !== VIEW_PLACEMENT + placement.view
+          || !views.some(view => view.id === placement.view && view.tab === placement.tab))) return false;
         // What the step holds of the state outside Undo (arrangements and instances, what scenes show, focus numbers) is as it was when it
         // was recorded: a tab or fragment it brings in takes that state from what it takes away, so nothing done since is lost.
         const closed = this.replayedFragments(tabs ? tabs.closed : this.closed, order, contents, key => key in values);
@@ -589,6 +614,7 @@ export class ProfileSessions {
         this.tabs = order.map(id => clone({ ...headers.get(id)!, ...contents.get(id)! }) as HeldTab);
         this.closed = clone(closed);
         this.settleShown({ ...(tabs?.shown ? { shown: tabs.shown } : {}), back, removed });
+        for (const { placement } of placements) this.presentView(placement);
         this.changed();
         return true;
       },
