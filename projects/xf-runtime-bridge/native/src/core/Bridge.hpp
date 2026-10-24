@@ -38,6 +38,8 @@ public:
     // queue (queued writes never run), drop the client, remove session.json; the watcher thread
     // then stops the listener.
     void Kill(const std::string& aReason);
+    // Install before Start. Pure nonblocking notification; never game/file work on the kill route.
+    void SetStopObserver(std::function<void()> aObserver) { m_stopObserver = std::move(aObserver); }
     // Re-arm after the kill switch (the in-game panel's Reconnect), from the game thread between queue
     // drains. Refuses (false, aError) unless the bridge was killed and its listener has stopped; the
     // caller also makes sure the kill switch's restore has run. Then: the old watcher is joined, the
@@ -84,6 +86,7 @@ private:
     PipeServer m_control;
 
     std::thread m_watcher;
+    std::function<void()> m_stopObserver;
     std::mutex m_watchMutex;
     std::condition_variable m_watchWake;
     std::atomic<bool> m_watching{false};

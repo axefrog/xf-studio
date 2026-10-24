@@ -279,6 +279,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             TickBehaviours(dt, scriptsReady);
             TickNpc(dt, scriptsReady); // 0.8: NPC direction's timers, poll and automatic release (plugin/HandlersNpc.cpp)
             TickInputChoices(scriptsReady);
+            TickRecording(scriptsReady);
             TickDm(dt, scriptsReady);  // 0.8.12: the live-direction toolkit's watchers, phone call, lines and light patterns (plugin/HandlersDm080.cpp)
         }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
@@ -584,6 +585,7 @@ void Unload()
 {
     auto& state = Get();
     StopInputChoices("plugin_unload");
+    StopRecording("plugin_unload");
     // RB-107: the overlay's detours stay attached until RED4ext detaches them at exit; from here they only pass through.
     state.overlayHost.SetPassThrough(true);
     log::Info("plugin.unload", "requests_served=" +

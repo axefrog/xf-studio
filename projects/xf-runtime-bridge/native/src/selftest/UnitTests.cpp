@@ -5332,6 +5332,7 @@ int SensesUnitTests();
 int DmUnitTests();
 
 int InputUnitTests();
+int RecordingUnitTests();
 
 int RunUnitTests()
 {
@@ -5375,6 +5376,7 @@ int RunUnitTests()
     gFailures += SensesUnitTests();
     gFailures += DmUnitTests();
     gFailures += InputUnitTests();
+    gFailures += RecordingUnitTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

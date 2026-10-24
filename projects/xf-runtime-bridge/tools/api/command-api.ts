@@ -134,7 +134,7 @@ const nextCid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${++ci
  * session.resume too, so taking the game back never waits behind another process's polling on the main pipe; its steps
  * (bridge.handover {on: false}, ui.message) are on the control route.
  */
-export const EMERGENCY_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "behave.stop", "player.stop", "session.handover", "session.resume"]);
+export const EMERGENCY_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "behave.stop", "player.stop", "test.record.stop", "session.handover", "session.resume"]);
 /** Of those, the ones that supersede everything sent before them: queued commands are cancelled and running ones aborted. */
 export const SUPERSEDING_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "session.handover"]);
 

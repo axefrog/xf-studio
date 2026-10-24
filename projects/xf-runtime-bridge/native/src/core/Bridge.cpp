@@ -118,6 +118,7 @@ bool Bridge::Start(std::string& aError)
 
 void Bridge::Stop(const std::string& aReason)
 {
+    if (m_stopObserver) m_stopObserver();
     if (m_watching.exchange(false))
     {
         m_watchWake.notify_all();
@@ -155,6 +156,7 @@ void Bridge::Kill(const std::string& aReason)
     // is cancelled and never runs, so nothing can run after the kill-switch undo, which the game
     // thread starts only once RestoreReady() is true.
     m_queue.Close();
+    if (m_stopObserver) m_stopObserver();
     m_server.DropClient();
     m_control.DropClient();
     RemoveSessionFile();

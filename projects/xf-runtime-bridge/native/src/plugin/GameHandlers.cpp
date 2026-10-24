@@ -1184,6 +1184,7 @@ json GameLoadMethod(const MethodContext& aContext)
             [cid] {
                 auto result = CallScript("XFGame", "LoadLatest", {}, {}, cid);
                 // In the same game-thread step (RB-76): no script call until the loaded session is ready.
+                StopRecording("load_requested");
                 Get().scriptLayer.OnLoadRequested();
                 return result;
             },
@@ -1200,6 +1201,7 @@ json GameLoadMethod(const MethodContext& aContext)
             [cid, aName] {
                 RED4ext::CString name(aName.c_str());
                 auto result = CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
+                StopRecording("load_requested");
                 Get().scriptLayer.OnLoadRequested(); // as for the latest save (RB-76)
                 return result;
             },
@@ -2162,6 +2164,7 @@ void RegisterMethods(Dispatcher& aDispatcher)
     RegisterMethods070(aDispatcher);
     RegisterMethodsNpc(aDispatcher);
     RegisterInputChoices(aDispatcher);
+    RegisterRecording(aDispatcher);
     RegisterMethodsDm(aDispatcher);
     RegisterMethodsSenses(aDispatcher);
     auto& state = Get();

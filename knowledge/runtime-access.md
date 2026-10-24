@@ -12,6 +12,14 @@
 | TweakXL data | `r6/tweaks/**.yaml\|.yml\|.tweak`, imported right after TweakDB loads | none (data) | [source] TweakXL `Environment.hpp:13-16`, `TweakService.cpp:25-59` |
 | CET mod | `bin/x64/plugins/cyber_engine_tweaks/mods/<name>/init.lua` | `registerForEvent` at top level only; `Game` and `Observe` are available from `onInit` | [source] CET `ScriptStore.cpp:31-64`, `ScriptContext.cpp:46-65, 194-196` |
 
+## Source recording [source]
+
+Bridge 0.8.14's test-only `core/Recording.*`, `plugin/HandlersRecording.cpp` and `redscript/XFRuntimeBridgeRecording.reds` own fresh V, selected-actor and camera snapshots on 100 ms game-update deadlines. This is independent of `npc.status`'s 250 ms cache. The read adapter deliberately avoids `XFNpc.Poll`, which also refreshes the hub. Every individual script call checks the live guard; detach/load invalidate the run, and reconnect cannot continue an old run. QPC timestamps bracket each source acquisition; unavailable simulation time is null. Actual/valid rates, age, misses and drops are exposed rather than assuming 10 achieved samples per second.
+
+The 512-slot/8192-byte-payload ring is bounded. One off-thread native writer drains private 1 MiB JSONL chunks and a final manifest even after kill closes the pipe; errors/loss/invalid samples make it incomplete. `test.record.stop` uses the existing control route without game access. Package gating omits the adapter and commands from normal builds; only explicit autonomous `-writes` builds with `allow_test_hooks` enable them. These are source properties, not measured game performance or rendered/aural proof. [Recorder API](../projects/xf-runtime-bridge/docs/mcp.md#source-recorder-0814).
+
+**Offline verification, 24 October 2026:** the guarded Release build and 1,078 self-test checks passed, including the native recorder's 18 checks (fresh scheduling, skipped deadlines, ring loss, stale run/cursor refusal, lifecycle/connection stop, oversize records and kill-driven file drain). The full tool suite passed 653 tests with four opt-in screen tests skipped; TypeScript, Lua and the generated reference checks passed. The new adapter lints against the hash-matched 2.31 bundle with and without Codeware. This confirms the source/ownership model offline; achieved game cadence, observer cost and runtime teardown remain unverified.
+
 ## 2. Rules learned the hard way (from source)
 
 - **Declare natives outside a module.** Redscript prefixes the module onto global natives (`XFRuntimeBridge.XFBridge_Ping`), but the plugin registers the plain name. Declare them in a module-less file, as Codeware does [source] redscript `unit.rs:1023`, `symbol.rs:222-246`.

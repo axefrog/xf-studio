@@ -152,3 +152,7 @@ The third run, on the same street ([card](../research/runtime/runtime-bridge-tes
 ## Related pages
 
 [NPC reactions](npc-reactions.md) · [Quests and story](quests-and-story.md) · [Player control](player-control.md) · [Lip sync](lipsync.md) · [Facial expressions](facial-expressions.md) · [World and streaming](world-and-streaming.md) · [Runtime access](runtime-access.md) · [NPC direction design](../research/runtime/npc-direction-design.md) · [Channels to the player](player-channels.md) · [Population and affiliations](population-and-affiliations.md)
+
+## Source recorder [source]
+
+Bridge 0.8.14 adds an independent 100 ms source schedule for selected bridge actor/pick handles through `XFRecordingActors.Sample` (`redscript/XFRuntimeBridgeRecording.reds`). It resolves the registry's entity afresh and reads position, yaw, current command state and prepared flag; it does not poll `npc.status` or invoke `XFNpc.Poll`'s hub refresh. Records bind entity/handle to session and world generation. Missing puppets are invalid evidence. Requested 10 Hz is a target: actual/valid rate, deadline misses, source acquisition intervals and drops are recorded. Game cadence/perturbation remain unverified; held/prepared/command state still does not prove the final animated pose. See [runtime recording](runtime-access.md#source-recording-source).

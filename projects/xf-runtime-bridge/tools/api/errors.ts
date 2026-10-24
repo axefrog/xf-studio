@@ -10,6 +10,8 @@ export type PlainError = { code: string; message: string; detail?: string; cause
 
 /** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
+  recording_busy: "The recorder is still active or draining. Stop it and finish saving its records before starting another run.",
+  recording_changed: "That recording is no longer current. Use the run identifier returned by its start; never join samples from different runs.",
   test_build_required: "This action needs the separate autonomous test candidate. Stage that candidate in the dedicated test profile.",
   test_run_required: "Arm a bounded test fixture before submitting this input.",
   stale_context: "The expected game screen or choices changed. Read the current state and prepare a fresh fixture.",

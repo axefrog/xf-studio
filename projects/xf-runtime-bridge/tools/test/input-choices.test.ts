@@ -128,7 +128,7 @@ describe("autonomous package isolation", () => {
     for (const variant of VARIANTS) {
       const m = stage(variant);
       expect(m.autonomous_test_hooks).toBe(false);
-      expect(m.files.some(f => /test-input|TestUi|XFRuntimeBridgeInput/.test(f.path))).toBe(false);
+      expect(m.files.some(f => /test-input|TestUi|XFRuntimeBridgeInput|XFRuntimeBridgeRecording/.test(f.path))).toBe(false);
     }
     expect(() => stage("writes", true)).toThrow("require");
     writeFileSync(dll, "XFB_AUTONOMOUS_TEST_HOOKS=1");
@@ -136,6 +136,7 @@ describe("autonomous package isolation", () => {
     expect(() => stage("diagnostic", true)).toThrow();
     const m = stage("writes", true);
     expect(m.native_count).toBe(29);
+    expect(m.files.map(f => f.path)).toContain(`${PLUGIN_DIR}/Scripts/XFRuntimeBridgeRecording.reds`);
     expect(m.files.map(f => f.path)).toContain(`${PLUGIN_DIR}/Scripts/XFRuntimeBridgeTestUi.reds`);
     expect(m.files.some(f => f.path.endsWith("/test-input.lua"))).toBe(true);
   }, 30_000);

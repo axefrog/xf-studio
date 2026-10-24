@@ -248,7 +248,7 @@ export function stageVariant(options: StageOptions): Manifest {
   mkdirSync(join(stageDir, PLUGIN_DIR), { recursive: true });
   writeFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), config);
   for (const name of readdirSync(join(projectDir, "redscript"))) {
-    if (name.endsWith(".reds")) put(join(projectDir, "redscript", name), `${PLUGIN_DIR}/Scripts/${name}`);
+    if (name.endsWith(".reds") && (name !== "XFRuntimeBridgeRecording.reds" || options.autonomousTests)) put(join(projectDir, "redscript", name), `${PLUGIN_DIR}/Scripts/${name}`);
   }
   put(join(projectDir, "tweaks", "xf_runtime_bridge.yaml"), "r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml");
   // XF photo-mode camera presets (photo_mode.std_preset_6..9) for repeatable framing: approved for the

@@ -12,6 +12,7 @@ import type { CommandContext, CommandDef, CommandResult } from "./catalogue.ts";
 import { bool, type JsonSchema } from "./schema.ts";
 import { NPC_REFUSALS } from "./catalogue080npc.ts";
 import { DM_REFUSALS } from "./catalogue080dm.ts";
+import { TESTING_COMMANDS } from "./catalogueTesting.ts";
 import { INPUT_CHOICE_COMMANDS } from "./catalogueInputChoices.ts";
 
 type Json = Record<string, any>;
@@ -240,6 +241,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   ...DM_REFUSALS,
   // Derive from the single contribution instead of maintaining another refusal catalogue.
   ...Object.fromEntries(INPUT_CHOICE_COMMANDS.map((command) => [command.name, command.refusals ?? []])),
+  ...Object.fromEntries(TESTING_COMMANDS.map((command) => [command.name, command.refusals ?? []])),
 };
 
 /**

@@ -53,6 +53,14 @@ Typical uses: preparing a photo-mode shot and comparing it with an XF Studio pre
 
 ## Installing it
 
+### Source recorder (0.8.14)
+
+Only the explicit autonomous `-writes` build with `allow_test_hooks=true` exposes `test_record_start`, `test_record_read` and `test_record_stop`. Start selects `v`, `actors` and/or `camera`, up to 16 returned actor handles, a 10 Hz target, a duration (at most 1800 s) and a byte cap (at most 512 MiB). It reads the source on 100 ms game-update deadlines, independently of the 4 Hz NPC status cache. Actual/valid per-channel rates, age, largest gap, missed deadlines and drops are reported. A late update takes one fresh sample and counts missed deadlines; it never invents catch-up samples.
+
+Read with the returned `run` and your last durably saved `since`; pages contain at most five records. Stop uses the emergency control pipe. The bounded native owner writes private 1 MiB JSONL chunks and an atomic final manifest under `<runtime>/recordings/<session>/run-<id>/`. Load, disconnect, kill and unload stop it, with the file writer draining independently of the transport. `tools/testing/recording.ts:recordSources` streams a second private copy into a new directory, records SHA-256 chunk hashes and bounds the host/QPC clock offset by request round-trip time. If kill closes the pipe, that tools copy says incomplete; use the native manifest after its writer finishes. Never silently rearm the bridge to drain it.
+
+Every source row includes its run/session/world identity, sequence, game-update tick, QPC acquisition interval, validity and read age; simulation time is explicitly unavailable. Camera basis/FOV/aspect and fresh actor entity/position/yaw/AI-command/prepared state are source observations, not final rendered or audible evidence. The recorder does no inventory or whole-world scan. Runtime cadence and perturbation remain unverified.
+
 ### Input and choices candidate (0.8.13)
 
 **[source]** This candidate is separate from normal default, diagnostic and writes packages. Build with `XFB_AUTONOMOUS_TEST_HOOKS=ON` (and `XFB_ENGINE_INPUT_TESTS=ON` for the engine-input gate), and package only with `--autonomous-tests`. It requires `allow_test_hooks=true`, `allow_writes=true`, the relevant write classes and an expiring `test_input_arm` run bound to the current context/world/connection. The normal packages omit the autonomous scripts and CET module; a test DLL is rejected outside that explicit candidate. The test build registers 29 natives; normal builds register 27.

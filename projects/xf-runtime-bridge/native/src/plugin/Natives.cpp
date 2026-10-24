@@ -391,6 +391,7 @@ void ScriptLayerEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool*
     }
     Guarded("XFBridge_ScriptLayer", [&] {
         const bool known = Get().scriptLayer.OnEvent(ToStd(event));
+        if (known && ToStd(event) == "detach") StopRecording("world_detach");
         if (!known)
         {
             log::Warn("script_layer.unknown_event", "event=" + Sanitize(ToStd(event), 32));

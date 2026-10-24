@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 141 tools, 87 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 144 tools, 87 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -13,6 +13,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Connection, session and answers](#connection-session-and-answers) (14)
 - [Photo mode](#photo-mode) (18)
 - [Appearance screen (character creator)](#appearance-screen-character-creator) (6)
+- [Test source recorder](#test-source-recorder) (3)
 - [Autonomous input and choice tests](#autonomous-input-and-choice-tests) (8)
 - [Player](#player) (8)
 - [Behaviours](#behaviours) (6)
@@ -33,7 +34,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 46 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 48 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -45,7 +46,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | `write-npc` | Direct NPCs | 14 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
 | `write-dm` | Direct the scene | 21 | Yes | Brings props, vehicles and lights into the world near V and changes doors and vehicles; plays sounds and a vehicle's radio; shows message toasts and a real incoming call from a contact the player has, with subtitle lines; puts an XF quest in the HUD's tracker; shows the game's own banners and quest toasts; and arms watchers that run micro-actions inside the game without the agent. Nothing is saved: the answers' undos, the kill switch, the pause, a handover or loading a save take it all back, and saving waits until the spawned things and changed doors are gone. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only. |
 | `act-player` | Act for V | 2 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
-| `control` | Stop the bridge | 5 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
+| `control` | Stop the bridge | 6 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
 
 ## Refusals any tool can give
 
@@ -716,6 +717,56 @@ No parameters.
 - **Changes the game:** Yes
 - **Undo:** Nothing to undo: the changes made on the screen were discarded.
 - **Refusals:** [`creator_leave_disabled`](#refusal-creator-leave-disabled), [`not_in_character_menu`](#refusal-not-in-character-menu)
+
+No parameters.
+
+## Test source recorder
+
+Explicit autonomous -writes candidate only. Bounded source sampling and private chunks; not rendered or audible proof.
+
+### `test_record_start`
+
+**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
+
+- **Command:** `test.record.start`, the bridge method `test.record.start`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`recording_busy`](#refusal-recording-busy), [`game_loading`](#refusal-game-loading)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `channels` | array of string | 1 to 3 items; each `v`, `actors`, `camera` | Source channels to sample |
+| `actors` | array of string | at most 16 items; each matches `^[ap][0-9]{1,15}$` | Selected returned actor or pick handles |
+| `rate_hz` | integer | exactly 10 | Source target (10 only) |
+| `duration_s` | integer | 1 to 1800 | Maximum recording lifetime |
+| `byte_cap` | integer | 8192 to 536870912 | Maximum payload plus envelope bytes |
+
+### `test_record_read`
+
+**Read source recording.** Autonomous -writes test build and allow_test_hooks only. Bounded replay pages, including after stop/load. since acknowledges only records already saved by the caller. Empty final read acknowledges the final cursor. Missing records, invalid sources and missed deadlines cannot prove absence. Source snapshots do not prove rendered or audible output.
+
+- **Command:** `test.record.read`, the bridge method `test.record.read`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`recording_changed`](#refusal-recording-changed)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `run` (required) | integer | 1 to 9007199254740991 | Run returned by start |
+| `since` | integer | 0 to 9007199254740991 | Last durably saved sequence |
+| `limit` | integer | 1 to 5 | Records per page (wire bounded) |
+
+### `test_record_stop`
+
+**Stop source recording.** Autonomous -writes test build and allow_test_hooks only. Emergency control route; no game access. Cancels sampling and keeps final records drainable. Load, disconnect and kill also stop the owner; kill closes the transport, so a failed tools drain must be reported incomplete.
+
+- **Command:** `test.record.stop`, the bridge method `test.record.stop`
+- **Permission:** Stop the bridge (`control`)
+- **Changes the game:** Only the bridge's own work: it stops or pauses it
+- **Undo:** Start a new recording explicitly after the previous writer drains; stopped samples are never resumed.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
 
 No parameters.
 
@@ -2673,6 +2724,8 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-player-busy"></a>`player_busy` | V is busy (jumping, sliding, falling or landing, swimming, in a workspot, a takedown or grapple, carrying a body, in a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play; player_state's busy_state says which. |
 | <a id="refusal-quest-scene"></a>`quest_scene` | A story scene is playing, and the story may hold the weather itself, so the bridge didn't change it. Nothing was changed. Try again once the scene is over. |
 | <a id="refusal-rate-limited"></a>`rate_limited` | The game bridge was sent too many requests in a short time, and it was still refusing after the tools waited a few seconds. Nothing was changed by the refused request. Wait a moment and try again. |
+| <a id="refusal-recording-busy"></a>`recording_busy` | The recorder is still active or draining. Stop it and finish saving its records before starting another run. |
+| <a id="refusal-recording-changed"></a>`recording_changed` | That recording is no longer current. Use the run identifier returned by its start; never join samples from different runs. |
 | <a id="refusal-rtti-missing"></a>`rtti_missing` | This game version doesn't have a function the bridge needs for this action, so nothing was changed. The game may have been updated: the bridge needs a rebuild for it. |
 | <a id="refusal-rtti-signature"></a>`rtti_signature` | A game function this action uses has changed shape in this game version, so the bridge refused to call it and nothing was changed. The bridge needs updating for this game version. |
 | <a id="refusal-save-failed"></a>`save_failed` | The game answered that the save failed. Nothing new was saved. Check free disk space and the game's save folder. |

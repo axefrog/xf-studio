@@ -8,6 +8,9 @@ SimInput::SimInput(Dispatcher& d, SimNpc& npc, EventLog& events, bool hooks, std
     : m_service(events), m_dispatcher(d), m_npc(npc), m_context(std::move(context)), m_world(std::move(world)), m_live(std::move(live)), m_connection(std::move(connection)), m_hooks(hooks)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    recording::RegisterMethods(d, m_recording, hooks, m_world, m_connection, [] { return "simulated"; }, [this] {
+        if (!m_live() || m_dispatcher.IsKilled()) throw MethodError("game_loading", "Simulation gate closed.");
+    });
     input::RegisterMethods(d, m_service, hooks,
 #ifdef XFB_ENGINE_INPUT_TESTS
                           true,
@@ -58,6 +61,12 @@ input::Ops SimInput::Ops()
 }
 void SimInput::Tick()
 {
+    recording::Ops recorderOps;
+    recorderOps.guard = [this] { if (!m_live() || m_dispatcher.IsKilled()) throw MethodError("game_loading", "Simulation gate closed."); };
+    recorderOps.sample = [](const std::string& channel, const std::vector<std::string>&) {
+        return input::json{{"simulated", true}, {"valid", true}, {"channel", channel}, {"position", {0, 0, 0}}};
+    };
+    m_recording.Tick(recording::Now(), m_world(), m_connection(), m_hooks && m_live() && !m_dispatcher.IsKilled(), ++m_recordTick, recorderOps);
     bool open = m_hooks && m_live();
     try { m_dispatcher.RequireWritesOpen(); } catch (...) { open = false; }
     m_service.SetLock(1, m_offered);

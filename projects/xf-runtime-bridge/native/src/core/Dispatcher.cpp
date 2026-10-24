@@ -215,7 +215,7 @@ thread_local int tRestoreDepth = 0;
 // The control pipe's methods (0.8.1, RB-121): the emergency controls and the steps a handover takes.
 const std::set<std::string>& ControlMethods()
 {
-    static const std::set<std::string> methods{"bridge.kill", "behave.stop", "player.stop", "bridge.handover",
+    static const std::set<std::string> methods{"bridge.kill", "behave.stop", "player.stop", "test.record.stop", "bridge.handover",
                                                "game.status", "photo.hud.hide", "showroom.clear", "ui.message"};
     return methods;
 }

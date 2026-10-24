@@ -110,7 +110,7 @@ describe("RB-121: emergency controls never wait behind the queue", () => {
   });
 
   test("the sets and the plain words", () => {
-    expect([...EMERGENCY_COMMANDS].sort()).toEqual(["behave.stop", "bridge.kill", "player.stop", "session.handover", "session.resume"]);
+    expect([...EMERGENCY_COMMANDS].sort()).toEqual(["behave.stop", "bridge.kill", "player.stop", "session.handover", "session.resume", "test.record.stop"]);
     expect([...SUPERSEDING_COMMANDS].sort()).toEqual(["bridge.kill", "session.handover"]);
     expect(BRIDGE_MESSAGES.superseded).toContain("emergency control");
   });
@@ -502,7 +502,7 @@ describe("0.8.1 against the self-test host", () => {
     await ok(api, "inventory.unequip", { slot: "OuterChest" });
   });
 
-  test("the tools' version is 0.8.13", () => {
-    expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.13");
+  test("the tools' version is 0.8.14", () => {
+    expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.14");
   });
 });

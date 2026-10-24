@@ -1,5 +1,6 @@
 #pragma once
 #include "core/InputChoices.hpp"
+#include "core/Recording.hpp"
 #include "selftest/SimNpc.hpp"
 namespace xfb::selftest
 {
@@ -13,6 +14,7 @@ public:
 private:
     input::Ops Ops();
     input::Service m_service;
+    recording::Service m_recording;
     Dispatcher& m_dispatcher;
     SimNpc& m_npc;
     std::function<std::string()> m_context;
@@ -20,6 +22,7 @@ private:
     std::function<bool()> m_live;
     std::function<uint64_t()> m_connection;
     bool m_hooks;
+    uint64_t m_recordTick = 0;
     bool m_changed = true, m_modal = true, m_confirmation = false, m_offered = false;
     int m_generation = 100;
 };
