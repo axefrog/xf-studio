@@ -141,6 +141,20 @@ unreferenced events. These [offline] checks implement S0 v4.15 §14.1; the old b
 
 **What the bridge needs.** Read and set named facts from the plugin (`world.state` reads; a write route inside the plugin's own scope); the load-time read point; the save hooks as a convenience, not a dependency; and a store namespace per campaign with a megabyte-scale quota. Requirement P1 can then be marked as designed, pending the session card.
 
+## Reference-model persistence checks
+
+The Story Engine's deterministic reference model tests the logical ledger independently of the game's save-key carrier
+**[offline]**. Under S0 v4.15 §14.1, a referenced summary item preserves an explicit descriptor/materialisation ownership
+record alongside its own participant/effect constants. Both retention and event views read that record; an expired overlay
+cannot impersonate the materialising process by being the first contribution. Time and place remain live summary dependencies.
+A saved edge also needs an explicit end after its last reference is released: dropping it from today's view or sweeping its
+event cannot delete the earlier `EdgeAdded` from an append-only chain. Preserve the original termination, including through
+later saves and sweeps, so replacement replay cannot reopen the edge. Evidence: the expired-overlay incremental/snapshot
+and edge-release save-chain regressions in
+[`process-evidence.test.ts`](../projects/xf-story-engine/reference/test/process-evidence.test.ts), verified 24 October 2026;
+implementation choices and record forms are in
+[`SPEC-NOTES.md`, finding 192](../projects/xf-story-engine/reference/SPEC-NOTES.md). These are oracle results, not new game-runtime evidence.
+
 ## Session card
 
 For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/README.md). `C` is Claude, `M` is the maintainer. Rows marked **probe** use bridge 0.8.7's save-identity probe (the -writes package only, `[bridge] allow_test_hooks`; [design §3.15](../research/runtime/runtime-bridge-design.md#315-bridge-087-session-14s-findings-and-three-test-probes-for-session-15)): `test_save_identity {mode: "write"}` sets the test fact pair `xfs_probe_a`, `xfs_probe_b` and a test pin `xfs_probe_sk_c0`, `_c1`, `_b`, `_n`, `_k` (the save key's facts under the probe's prefix, the check written last), `arm_before_save: true` makes `Session/BeforeSave` write a fresh `xfs_probe_b` (row 4), and `persist {value, kib}` fills a persistent probe system kept in a file of its own (rows 11 and 12); `mode: "read"` answers them and whether the pin's check holds. Each lifecycle point is a `session` record with the facts read there while the script gate is open (points before it opens carry `live: false` and no facts, since the probe reads no game system then; so row 3 is answered up to "readable when the gate opens") (`OnGameRestored`, Codeware's `Session/*`, `OnGameAttached`, `OnTakeControl`, the probe's `OnPlayerAttach`), read with `test_events`; a delete in the Load menu is one too (row 9: the wrap is on the menu's `OnRelease`, since `DeleteSavedGame` itself is native). They are scheduled in [session 15](../research/runtime/runtime-bridge-test-card.md#session-15-checks-bridge-088). The maintainer picks saves; `game_saves` lists them. `M` plays and presses keys; `C` reads the log.

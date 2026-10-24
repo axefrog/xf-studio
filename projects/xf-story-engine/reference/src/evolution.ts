@@ -41,6 +41,8 @@ export type ProcessOp =
   /** `creator` and `cause` default to the process's own Id, and name the node's identity (`H("mint", creator, cause, name)`). */
   | { op: 'mint-event'; spec: Omit<EventSpec, 'creator' | 'cause'> & { creator?: Id; cause?: Id } }
   | { op: 'mint-summary'; spec: Omit<SummarySpec, 'creator' | 'cause'> & { creator?: Id; cause?: Id } }
+  /** Declare this process as the owner of an opened item's fields, independently of its contributions. */
+  | { op: 'materialise-item'; item: Id }
   /** Publish a summary item once, as one `event` change (V4-47). Regeneration of the item stays silent. */
   | { op: 'publish-item'; item: Id }
   | { op: 'frame-open'; frame: FrameSpec }
@@ -444,6 +446,12 @@ export class Evolution {
       case 'mint-summary':
         k.summaries.mintSummary({ ...op.spec, creator: op.spec.creator ?? cause, cause: op.spec.cause ?? cause });
         break;
+      case 'materialise-item': {
+        const h = k.store.header(op.item);
+        if (!h || h.origin.by !== 'minted') throw new Error(`unknown summary item: ${op.item}`);
+        k.events.setMaterialisation(op.item, { descriptor: h.origin.creator, materialisation: processId });
+        break;
+      }
       case 'publish-item':
         k.events.publishItem(op.item);
         break;

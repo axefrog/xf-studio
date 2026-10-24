@@ -11,7 +11,7 @@ import { idsIn as idFields } from './canon.ts';
 import type { Kernel } from './kernel.ts';
 import { splitWindowPath } from './kernel.ts';
 import { isId } from './id.ts';
-import type { Edge, GameTime, Id, Pin, Region, Value } from './types.ts';
+import type { Edge, GameTime, Id, NodeHeader, Pin, Region, Value } from './types.ts';
 import { type Budget, Worklist } from './work.ts';
 
 export interface SeedRecord {
@@ -93,8 +93,7 @@ export class Retention {
   // ---- roots ----
 
   /** A minted event's spatial link is part of its facts, rather than an independent retention root. */
-  isOwnEventLocation(e: Edge): boolean {
-    const h = this.k.store.header(e.from);
+  isOwnEventLocation(e: Edge, h: NodeHeader | undefined = this.k.store.header(e.from)): boolean {
     return e.cause === e.from && e.type === 'core:located-in' && h !== undefined && this.k.schema.hasFacet(h.kind, 'event');
   }
 
@@ -228,11 +227,7 @@ export class Retention {
       // constants directly: resolution here would recursively ask retention about member counts.
       if (traverseEvent && this.k.schema.isKind(h.kind, 'core:event')) {
         // Summary descriptors own time/kind/place; the process that opens an item owns its other facts.
-        const descriptor = h.origin.by === 'minted' ? store.header(h.origin.creator) : undefined;
-        const summaryItem = h.origin.by === 'minted' && h.origin.creator === h.origin.cause && /^item:\d+$/.test(h.origin.name) &&
-          descriptor !== undefined && this.k.schema.hasFacet(descriptor.kind, 'summary');
-        const materialisation = summaryItem ? store.contributionsNaming(id).find((c) =>
-          c.source.layer === 'simulation' && c.target.slot === 'participants#count' && c.form.f === 'const')?.source.origin : undefined;
+        const materialisation = this.k.events.materialisationOf(id)?.materialisation;
         const fields = [id], seenFields = new Set<Id>();
         for (let n = 0; n < fields.length; n++) {
           const field = fields[n]; if (seenFields.has(field)) continue; seenFields.add(field);
@@ -298,7 +293,14 @@ export class Retention {
     store.dropNode(id);
     if (h.origin.by === 'minted') {
       for (const c of store.contributionsOrigin(id)) store.removeContribution(c.id);
-      for (const e of store.edgesFrom(id)) if (e.cause === id) store.removeEdge(e.id);
+      for (const e of store.edgesFrom(id)) if (e.cause === id) {
+        // The append-only chain still owns a saved edge. Keep its actual end, or close it at release,
+        // so forgetting the event cannot erase the next save's EdgeEnded (S3C-02).
+        const to = this.k.persistence.releasedEdgeEnd(e);
+        if (to !== undefined) e.valid = { from: e.valid.from, to };
+        else store.removeEdge(e.id);
+      }
+      this.k.events.forgetMaterialisation(id);
       this.removeTree(id);
       // Removing a node's records changes what resolves, so cached results go (no change is emitted).
       this.k.bump();

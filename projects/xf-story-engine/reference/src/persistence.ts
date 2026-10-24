@@ -9,7 +9,7 @@
 import type { BeliefEntry } from './beliefs.ts';
 import { canonicalEqual } from './canon.ts';
 import { rootId } from './id.ts';
-import type { EventCanonRecord } from './events.ts';
+import type { EventCanonRecord, EventMaterialisation } from './events.ts';
 import type { ProcessState } from './evolution.ts';
 import type { ContextFrame } from './frames.ts';
 import type { Kernel } from './kernel.ts';
@@ -30,6 +30,7 @@ export type PersistOp =
   | { op: 'BeliefSet'; entry: BeliefEntry }
   | { op: 'BeliefDropped'; belief: Id }
   | { op: 'EventCanon'; canon: EventCanonRecord }
+  | { op: 'EventMaterialised'; materialisation: EventMaterialisation }
   | { op: 'SummarySet'; summary: SummaryRecord }
   | { op: 'FrameState'; id: Id; frame: ContextFrame | null }
   | { op: 'SeedState'; id: Id; seed: SeedRecord | null }
@@ -74,6 +75,8 @@ export interface PersistedData {
   contributions: Contribution[];
   beliefs: BeliefEntry[];
   canon: EventCanonRecord[];
+  /** Explicit summary-item ownership. Omitted when empty to preserve pre-materialisation records. */
+  materialisations?: EventMaterialisation[];
   summaries: SummaryRecord[];
   frames: ContextFrame[];
   seeds: SeedRecord[];
@@ -134,6 +137,7 @@ export class PersistedView {
   contributions = new Map<Id, Contribution>();
   beliefs = new Map<Id, BeliefEntry>();
   canon = new Map<Id, EventCanonRecord>();
+  materialisations = new Map<Id, EventMaterialisation>();
   summaries = new Map<Id, SummaryRecord>();
   frames = new Map<Id, ContextFrame>();
   seeds = new Map<Id, SeedRecord>();
@@ -149,6 +153,7 @@ export class PersistedView {
     for (const c of d.contributions) v.contributions.set(c.id, clone(c));
     for (const b of d.beliefs) v.beliefs.set(b.belief.id, clone(b));
     for (const c of d.canon) v.canon.set(c.event, clone(c));
+    for (const m of d.materialisations ?? []) v.materialisations.set(m.event, clone(m));
     for (const s of d.summaries) v.summaries.set(s.summary, clone(s));
     for (const f of d.frames) v.frames.set(f.id, clone(f));
     for (const s of d.seeds) v.seeds.set(s.id, clone(s));
@@ -165,6 +170,7 @@ export class PersistedView {
       seeds: sorted(this.seeds), processes: sorted(this.processes),
     };
     if (this.settings.length > 0) out.settings = clone(this.settings);
+    if (this.materialisations.size > 0) out.materialisations = sorted(this.materialisations);
     return out;
   }
 
@@ -216,6 +222,9 @@ export class PersistedView {
       case 'EventCanon':
         this.canon.set(op.canon.event, clone(op.canon));
         break;
+      case 'EventMaterialised':
+        this.materialisations.set(op.materialisation.event, clone(op.materialisation));
+        break;
       case 'SummarySet':
         this.summaries.set(op.summary.summary, clone(op.summary));
         break;
@@ -255,6 +264,12 @@ export class Persistence {
     return this.baseKey;
   }
 
+  /** A sweep may forget live storage, but must preserve the end of an edge already in the chain. */
+  releasedEdgeEnd(edge: Edge, base: PersistedView = this.base): GameTime | undefined {
+    const saved = base.edges.get(edge.id);
+    return saved && Math.min(edge.valid.to ?? this.k.now, saved.valid.to ?? this.k.now, this.k.now);
+  }
+
   // ---- packs (spec 14.1: reloaded, not stored) ----
 
   /**
@@ -287,11 +302,13 @@ export class Persistence {
       if (h) v.headers.set(id, clone(h));
     }
     // Edges that are retention roots.
-    // (An edge or pin the chain already holds stays in the view, so its end or withdrawal is recorded even when it is no longer a root.)
+    // Other saved edges and pins stay in the view so their end or withdrawal is recorded even when no longer roots.
     // A retained event's own location edge is needed by spatial queries, but must not root an otherwise unretained event.
-    // Its lifetime follows the event, including when an earlier save held the edge (S3B-01).
-    for (const e of k.store.allEdges()) if (k.retention.isRootEdge(e) ||
-      (k.retention.isOwnEventLocation(e) ? marked.has(e.from) : base.edges.has(e.id))) v.edges.set(e.id, clone(e));
+    // Released own links are absent from this live view. The save writer separately closes their saved history.
+    for (const e of k.store.allEdges()) {
+      const own = k.retention.isOwnEventLocation(e, k.store.header(e.from) ?? base.headers.get(e.from));
+      if (k.retention.isRootEdge(e) || (own ? marked.has(e.from) : base.edges.has(e.id))) v.edges.set(e.id, clone(e));
+    }
     // Event facts referenced by persisted consumers (including outstanding output batches)
     // cannot be regenerated from a header. Preserve their own constants, never a resolved overlay.
     const eventFacts = k.retention.eventFacts();
@@ -302,6 +319,7 @@ export class Persistence {
     }
     for (const e of k.beliefs.memorable()) v.beliefs.set(e.belief.id, clone(e));
     for (const id of k.events.canonEvents()) v.canon.set(id, clone(k.events.canonRecord(id)!));
+    for (const m of k.events.materialisationRecords()) if (marked.has(m.event)) v.materialisations.set(m.event, clone(m));
     for (const s of k.summaries.records()) v.summaries.set(s.summary, clone(s));
     for (const fid of k.retention.rootFrameIds()) v.frames.set(fid, clone(k.frames.frame(fid)!));
     for (const s of k.retention.seeds.values()) v.seeds.set(s.id, clone(s));
@@ -389,6 +407,8 @@ export class Persistence {
     }
     for (const id of [...base.beliefs.keys()].sort(cmp)) if (!cur.beliefs.has(id)) ops.push({ op: 'BeliefDropped', belief: id });
     for (const [id, c] of [...cur.canon].sort((a, b) => cmp(a[0], b[0]))) if (!same(base.canon.get(id), c)) ops.push({ op: 'EventCanon', canon: clone(c) });
+    for (const [id, m] of [...cur.materialisations].sort((a, b) => cmp(a[0], b[0])))
+      if (!same(base.materialisations.get(id), m)) ops.push({ op: 'EventMaterialised', materialisation: clone(m) });
     for (const [id, s] of [...cur.summaries].sort((a, b) => cmp(a[0], b[0]))) if (!same(base.summaries.get(id), s)) ops.push({ op: 'SummarySet', summary: clone(s) });
     for (const [id, f] of [...cur.frames].sort((a, b) => cmp(a[0], b[0]))) if (!same(base.frames.get(id), f)) ops.push({ op: 'FrameState', id, frame: clone(f) });
     for (const id of [...base.frames.keys()].sort(cmp)) if (!cur.frames.has(id)) ops.push({ op: 'FrameState', id, frame: null });
@@ -413,6 +433,13 @@ export class Persistence {
     if (this.chain.has(saveKey)) throw new Error(`save key already used: ${saveKey}`);
     const k = this.k;
     const cur = this.currentView();
+    // Absence from the live view cannot delete a prior EdgeAdded. Record termination even after
+    // the final consumer releases the event or a sweep removes its header (S3C-02).
+    for (const e of this.base.edges.values()) if (!cur.edges.has(e.id)) {
+      const edge = clone(k.store.edges.get(e.id) ?? e);
+      edge.valid = { from: edge.valid.from, to: this.releasedEdgeEnd(edge)! };
+      cur.edges.set(e.id, edge);
+    }
     const ops = Persistence.diff(this.base, cur);
     const parent = this.baseKey ? this.chain.get(this.baseKey)! : undefined;
     const total = (parent?.meta.total ?? 0) + ops.length;
@@ -499,6 +526,7 @@ export class Persistence {
     for (const c of view.contributions.values()) k.store.addContribution(clone(c));
     for (const b of view.beliefs.values()) k.beliefs.restore(clone(b));
     for (const c of view.canon.values()) k.events.setCanonRecord(clone(c));
+    for (const m of view.materialisations.values()) k.events.setMaterialisation(m.event, clone(m.provenance));
     for (const s of view.summaries.values()) k.summaries.setRecord(clone(s));
     k.settings.restore(view.settings);
     for (const f of view.frames.values()) k.frames.insert(clone(f));

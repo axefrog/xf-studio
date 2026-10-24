@@ -136,12 +136,7 @@ export function readEvent(k: Kernel, id: string): EventView | undefined {
   if (outcome === 'done' || outcome === 'failed' || outcome === 'prevented') e.outcome = outcome;
   const served = k.value(id, 'served');
   if (typeof served === 'string') e.served = served;
-  if (h.origin.creator === h.origin.cause && /^item:\d+$/.test(h.origin.name)) {
-    const source = k.store
-      .contributionsNaming(id)
-      .find((c) => c.source.layer === 'simulation' && c.target.slot === 'participants#count' && c.form.f === 'const')
-      ?.source.origin;
-    if (source && source !== id) e.provenance = { descriptor: h.origin.creator, materialisation: source };
-  }
+  const provenance = k.events.materialisationOf(id);
+  if (provenance) e.provenance = provenance;
   return e;
 }

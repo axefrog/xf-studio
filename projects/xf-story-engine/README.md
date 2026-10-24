@@ -76,7 +76,7 @@ events, silent restatement, nominal kind compatibility), the cores of S1 v0.5 an
   and the arc lock survive replacement loads. Later capabilities receive plain "not supported yet" findings.
   [The fixture index](reference/test/s3/README.md) records coverage and limits, including R1, the literal SF3-37
   script, and Kabuki with S1/S2 attached and fresh-process crashes at each tested window boundary.
-  Findings 175–191 in SPEC-NOTES identify contract additions and fixture contradictions for the coordinator.
+  Findings 175–192 in SPEC-NOTES identify contract additions and fixture contradictions for the coordinator.
 
 The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits use the pinned TypeScript dev dependency's compiler AST API.
 
@@ -105,10 +105,11 @@ with a 4 GB limit, using the full Python interpreter path as the repository rule
 `bun run test/sim/check-review-mutations.ts` (optionally followed by one probe name, such as `R3-06`): it changes only the targeted
 behaviour in memory and requires failure at the named semantic assertion. Setup and import failures are rejected as evidence.
 
-S3 has 92 tests (about six seconds locally), including nominal-query boundaries and the S3-01–07 review regressions.
-All 18 source-loader mutation probes reach their intended semantic assertions; `bun run check` passes. The guarded full
-suite passes **1,181 tests across 78 files in 109.66 seconds**, peaking at **1.1 GB** under the 4 GB limit; all three existing
-frozen digests remain unchanged. A new S3 transcript checks independently encoded identities and draws, plus explicit
+S3 and its kernel regressions cover nominal-query boundaries, the S3-01–07 review fixes, explicit summary-materialisation
+ownership and released event-location history through fresh loads. All 36 source-loader mutation probes reach their intended
+semantic assertions; `bun run check` passes. The guarded full suite passes **1,200 tests across 78 files in 103.87 seconds**,
+peaking at **1.1 GB** under the 4 GB limit. Kernel digests stay at v3 `f924d2c9d1159bca85bbfa4cf18dba6c` and v4
+`42d5a84e16dde21cc0bca7fe50c01d72`; the S1 frozen transcript is unchanged. The S3 transcript checks independently encoded identities and draws, plus explicit
 persisted records. Hand-over facts, pending closure consumption and output-batch event facts survive replacement loads;
 NPC/spine filtering has one authority across casting and preparation. The coordinator owns independent review before
 integration. No game session is needed. All review fixes remain uncommitted for the coordinator.

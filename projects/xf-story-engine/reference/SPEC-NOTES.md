@@ -1268,8 +1268,9 @@ the batch applies. The kernel preserves own simulation constants of events reach
 SeedRecord nodes, outstanding output operations, pins, frames, edges, canon fields and memorable beliefs. Both creator
 and cause links propagate event dependencies transitively, independently of root order. A retained event's own location
 edge also persists so spatial queries work immediately after replacement; it does not make an unreferenced event a root.
-Summary-item participant/effect constants keep their materialisation owner (such as `scene.acts`), while time/kind/place
-remain live summary dependencies. Facts use ordinary `ContributionAdded` records. Resolved
+Summary-item participant/effect constants keep their explicitly declared materialisation owner (such as `scene.acts`), while time/kind/place
+remain live summary dependencies. Ownership comes from the event subsystem's materialisation record, never from contribution order;
+retention and event views consult that same record (192). Facts use ordinary `ContributionAdded` records. Resolved
 overlays are never substituted for minted facts; other simulation contributions remain regenerable. This lives at
 retention/persistence, shared by every layer, not in S3's evidence boundary. `process-evidence.test.ts` checks a pending
 batch, replacement replay, application and transitive raw facts against uninterrupted execution. S3B-01/02 cover each
@@ -1286,3 +1287,33 @@ discovery restores both previous hashes exactly; this is a persistence-contract 
 The project README and fixture index record validation. The review regressions also have a source-loader mutation
 runner that rejects setup errors and requires the intended semantic assertion for each reversed fix. Changes remain
 uncommitted for the coordinator's independent review and integration.
+
+**192. Materialisation ownership and released edge history must replay explicitly (S3C-01/02).** Opening a summary item
+declares `{ event, provenance: { descriptor, materialisation } }` in `Events`; restoration declares it directly, and
+`scene.acts` declares it through a `materialise-item` operation before its field contributions apply. Ownership is immutable
+for that materialisation, independent of overlays, and shared by retention and event views. Referenced declarations save as
+`EventMaterialised` operations and optional snapshot `materialisations`; a header saved before opening can therefore gain its
+provenance later. Replacement clears and replays the records, staged discard restores them, and sweeping forgets their live
+storage. No constant replaces a summary's live time/kind/place dependency.
+
+A previously saved event-location edge remains in the append-only chain after its last reference ends. Omitting it from
+`currentView()` cannot remove it from replay. The save writer separately records its end with `EdgeEnded`, preserving an
+earlier actual or already-saved end and closing an otherwise live edge at release/save time. Sweeping keeps the terminated
+saved edge until that end can be recorded; unsaved owned edges can still be removed. Later saves or sweeps cannot move the
+termination forward. Released links stay absent from the live persistable view, so append-only history does not change
+current semantic comparisons between uninterrupted and reloaded runs; the historical edge remains terminated in the chain.
+
+`process-evidence.test.ts` reproduces the expired overlay before `scene.acts` restoration, through a prior header save and
+fresh incremental/snapshot loads. It checks participants, effects, explicit provenance and live descriptor edits. The located
+event reproductions save A, end the edge at 10, release its seed, optionally sweep at 20, save B and load into a fresh kernel;
+both require the original end at 10 and an empty spatial query. Additional release-only checks save B then C, with and without
+an intervening sweep. The three original reproductions fail at their named semantic assertions before the fixes; all four
+new mutation probes (retention ownership, view ownership, release diffing and sweep history) also require semantic failures.
+The v3 and v4 frozen digests remain `f924d2c9d1159bca85bbfa4cf18dba6c` and `42d5a84e16dde21cc0bca7fe50c01d72`;
+neither script materialises summary participant/effect facts or releases a saved event-location edge, so their saved records
+are unchanged. The S1 frozen transcript is also unchanged.
+
+Validation: all 19 event-persistence tests and the real scene-materialisation fixtures pass, as does `bun run check`.
+All 36 S3/review mutation probes reach their intended assertions. The guarded full suite passes 1,200 tests across
+78 files in 103.87 seconds, peaking at 1.1 GB under the 4 GB limit. S1's record comparisons now include the new
+materialisation section; partition/reload assertions and SF3-38's strict state comparison remain intact.

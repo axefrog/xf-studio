@@ -29,6 +29,7 @@ export interface EventSpec {
 export type EventField = 'time' | 'place' | 'kind' | 'participants' | 'effects' | 'witnesses' | 'causes' | 'outcome' | 'served';
 /** An opened summary item's descriptor belongs to its summary; its other fields belong to the opening process. */
 export interface EventProvenance { descriptor: Id; materialisation: Id }
+export interface EventMaterialisation { event: Id; provenance: EventProvenance }
 /** The fields every event has (spec 9.2). `outcome` and `served` are optional and joined in only when the event carries them. */
 export const EVENT_FIELDS: readonly EventField[] = ['time', 'place', 'kind', 'participants', 'effects', 'witnesses', 'causes'];
 
@@ -46,6 +47,7 @@ export interface EventCanonRecord {
 
 export class Events {
   private canonRecords = new Map<Id, CanonEntry[]>();
+  private materialisations = new Map<Id, EventProvenance>();
   /** Summary items published as events in this session (V4-47). Not persisted: the publishing layer keeps its own record. */
   readonly published = new Set<Id>();
   /** The kind and time each event was minted with: a cache for queries to reject a candidate before resolving it. Not persisted. */
@@ -61,6 +63,36 @@ export class Events {
   }
 
   constructor(private readonly k: Kernel) {}
+
+  /** Explicit ownership of an opened item's facts, shared by views and retention (S0 14.1). */
+  materialisationOf(event: Id): EventProvenance | undefined {
+    const provenance = this.materialisations.get(event);
+    return provenance && { ...provenance };
+  }
+
+  materialisationRecords(): EventMaterialisation[] {
+    return [...this.materialisations].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+      .map(([event, provenance]) => ({ event, provenance: { ...provenance } }));
+  }
+
+  /** Silent ownership declaration; replay and process application use the same authority as restoration. */
+  setMaterialisation(event: Id, provenance: EventProvenance): void {
+    const h = this.k.store.header(event);
+    if (!h || h.origin.by !== 'minted' || h.origin.creator !== provenance.descriptor ||
+      h.origin.cause !== provenance.descriptor || !/^item:\d+$/.test(h.origin.name) ||
+      !this.k.schema.hasFacet(this.k.store.header(provenance.descriptor)?.kind ?? '', 'summary'))
+      throw new Error(`not an item of summary ${provenance.descriptor}: ${event}`);
+    const have = this.materialisations.get(event);
+    if (have && (have.descriptor !== provenance.descriptor || have.materialisation !== provenance.materialisation))
+      throw new Error(`materialisation owner already declared: ${event}`);
+    if (have) return;
+    this.materialisations.set(event, { ...provenance });
+    this.k.retention.invalidate();
+  }
+
+  forgetMaterialisation(event: Id): void {
+    this.materialisations.delete(event);
+  }
 
   /**
    * Mint an event. Adds its fields as simulation contributions, a `core:located-in` edge to its place,
@@ -147,8 +179,9 @@ export class Events {
     const nid = H(hs('mint'), hid(spec.creator), hid(spec.cause), hs(spec.name));
     // Reusing a header is silent: the occurrence was announced when it first happened.
     const have = k.store.header(nid) !== undefined;
-    if (have && k.store.contributionsNaming(nid).some((c) => c.source.layer === 'simulation' && c.source.origin === (provenance?.materialisation ?? nid))) return nid;
     if (!have) k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
+    if (provenance) this.setMaterialisation(nid, provenance);
+    if (have && k.store.contributionsNaming(nid).some((c) => c.source.layer === 'simulation' && c.source.origin === (provenance?.materialisation ?? nid))) return nid;
     // a pin that survived a load may already restate the kind or the time: then what the event was minted with is not what it resolves to, and nothing is cached
     const untouched = k.store.localState(nid) === 0;
     const put = (node: Id, slot: SlotPath, value: Value): void => {
@@ -351,21 +384,23 @@ export class Events {
     this.canonRecords.set(rec.event, rec.entries.map((x) => ({ ...x, fields: [...x.fields], pins: [...x.pins] })));
   }
 
-  /** A replacement load: the canon records go, and so do this session's publications and the minting cache (S0 14.3). */
+  /** Replacement clears canon and materialisation records, session publications and the minting cache (S0 14.3). */
   clear(): void {
     this.canonRecords.clear();
+    this.materialisations.clear();
     this.minted.clear();
     this.published.clear();
   }
 
-  /** The state a staged batch can discard (S0 14.2a): the canon records and what has been published in this session. */
+  /** The records and session publications a staged batch can discard (S0 14.2a). */
   capture(): unknown {
-    return structuredClone({ canon: this.canonRecords, published: this.published });
+    return structuredClone({ canon: this.canonRecords, published: this.published, materialisations: this.materialisations });
   }
 
   restoreFrom(cap: unknown): void {
-    const c = structuredClone(cap) as { canon: Map<Id, CanonEntry[]>; published: Set<Id> };
+    const c = structuredClone(cap) as { canon: Map<Id, CanonEntry[]>; published: Set<Id>; materialisations: Map<Id, EventProvenance> };
     this.canonRecords = c.canon;
+    this.materialisations = c.materialisations;
     this.published.clear();
     for (const id of c.published) this.published.add(id);
     // events minted in the discarded stage are gone from the store: the cache of what they were minted with goes too

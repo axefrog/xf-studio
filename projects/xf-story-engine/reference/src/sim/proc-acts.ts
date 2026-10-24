@@ -53,7 +53,7 @@ export function itemDescriptor(sim: Sim, summary: Id, index: number, w: number, 
 export function itemFieldOps(sim: Sim, d: Descriptor, cast: CastEntry[], witnesses: Id[], silent: boolean): ProcessOp[] {
   const k = sim.k;
   const occ = sim.occurrenceOf(d, cast, processCause('scene.acts'), 'sim');
-  const ops: ProcessOp[] = [];
+  const ops: ProcessOp[] = [{ op: 'materialise-item', item: d.id }];
   const put = (node: Id, slot: string, value: string | number): void => {
     ops.push({ op: 'contribute', target: { slot, scope: { nodes: [node] } }, form: { f: 'const', value }, mode: 'constrain', silent });
   };
