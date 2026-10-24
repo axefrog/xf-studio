@@ -1,6 +1,6 @@
 # Story Engine
 
-**Status:** an R&D vertical, started 22 October 2026. It is at the research and design stage, with no code yet. It runs at its own pace beside XF Studio's 1.0 work: the finish-first rule governs the Studio product, not this research. The practical dependency is the [runtime bridge](../../projects/xf-runtime-bridge/README.md) and its successor, [XF Core](../runtime/xf-core-architecture.md).
+**Status:** an R&D vertical, started 22 October 2026. Design is complete for milestone M3 (specs S0 to S3), and the reference model in `projects/xf-story-engine/reference/` implements the kernel and layer 2's core, with layer 1's core in review. It runs at its own pace beside XF Studio's 1.0 work: the finish-first rule governs the Studio product, not this research. The practical dependency is the [runtime bridge](../../projects/xf-runtime-bridge/README.md) and its successor, [XF Core](../runtime/xf-core-architecture.md).
 
 ## Start here
 
