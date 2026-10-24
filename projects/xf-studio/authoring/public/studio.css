@@ -681,6 +681,12 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .empty-title { margin: 0; color: var(--text); font-weight: 600; }
 .empty-body { margin: 0; font-size: var(--fs-sm); }
 .empty-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-2); }
+.empty-choices { min-width: 0; }
+.empty-choices .btn, .empty-choices-list .btn { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.empty-choice-picker { position: fixed; z-index: 1000; width: 360px; max-width: calc(100vw - 12px); max-height: calc(100vh - 12px); overflow: auto; }
+.empty-choices-list { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-3); }
+.empty-choices-list .btn { justify-content: flex-start; }
+.viewport-panel > .empty-choices { position: absolute; inset: var(--sp-4); overflow: auto; background: var(--bg-panel); }
 .button-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-3); }
 .button-grid .btn { justify-content: flex-start; }
 

@@ -74,6 +74,15 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 
+test("an explicitly empty scene loads without creating a V or building a head, then follows U6's choice", async () => {
+  const o = owner({ v1: "female" });
+  delete (o.scene as { subject?: string }).subject;
+  await o.heads.load();
+  expect(o.heads.shown()).toBeUndefined(); expect(o.prepared).toHaveLength(0); expect(o.shown).toHaveLength(0);
+  o.scene.subject = "v1"; o.changeScene(); await o.heads.load();
+  expect(o.heads.shown()?.characterContext).toBe(o.people.contexts.get("v1")); o.heads.dispose();
+});
+
 test("a superseding body switch shows the last choice: the female V stays drawn while the male head builds, and back to female the male build and its wait for his core stop (D1)", async () => {
   const o = owner({ v1: "female" });
   await o.heads.load();

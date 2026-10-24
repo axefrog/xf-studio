@@ -355,6 +355,11 @@ export const PREVIEW_PREPARATION_DESCRIPTORS = {
   "preview.rebuild": request("host", "derive", {}, true),
 } satisfies Record<PreviewAction["kind"], RequestDescriptor>;
 
+/** U6's captured Choose route; existing scene actions still perform subject and look selection. */
+export const EMPTY_CHOICE_DESCRIPTORS = {
+  "empty.choose": request("workspace", "save", { destination: target("object"), choice: input("object") }),
+} satisfies Record<"empty.choose", RequestDescriptor>;
+
 /**
  * WolvenKit CLI setup. `wolvenkit.install` is the person's consent to download exactly the pinned
  * release they were shown (its version is the only payload); the host supplies the URL, hash and folder.

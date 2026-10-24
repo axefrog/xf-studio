@@ -1,4 +1,6 @@
 import { layoutTabsPort } from "../app/profiles/tab-presentation";
+import { emptyChoicesPort } from "../app/profiles/empty-choices";
+import { defaultViewGraph } from "../preview/preview-view-graph";
 import { tabVerification } from "./tab-verification";
 import type { StudioAction } from "../app/studio-application";
 import { browserReferenceTextures } from "../character/browser/browser-reference-textures-device";
@@ -299,6 +301,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
   core.app.attach({ targetCheck: targets });
+  const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.named()), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
@@ -489,6 +492,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
     panelInstance: panel => sessionState.instance(panel),
     tabs: layoutTabsPort(sessionState, layoutTabs, services),
+    emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
+      baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
     targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
     characterName: character => services.characters.character(character)?.label,
@@ -514,7 +519,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     /** The scene runtime shown now (developer evidence reads only that one). */
     const viewer = () => heads.shown()?.scene;
     Object.assign(window, { xfStudioPresentation: port,
-    xfStudioTabFixtures: tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable()),
+    xfStudioTabFixtures: tabFixtures,
     // Verification only (experiment 044 decision M1): a tab (default: the shown one) printed as a module's default layout, to paste into
     // the module's `defaults.ts`, so supplied layouts are arranged in the Studio and replace the contributed ones as data.
     xfStudioTabAsDefault: (meta: { id: string; name: string; description: string }, tab = sessionState.tabId()) =>

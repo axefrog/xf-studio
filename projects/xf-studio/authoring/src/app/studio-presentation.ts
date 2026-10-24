@@ -15,6 +15,7 @@ import type { StudioBoundContext, StudioContextHit } from "./studio-context-targ
 import { nameTargets, type NamedTargets, type Unnamed } from "./action-targets";
 import type { TargetResolver } from "./profiles/targets";
 import type { LayoutTabsPort } from "./profiles/tab-presentation";
+import type { EmptyChoicesPort } from "./profiles/empty-choices";
 import type { FocusService } from "../platform/core/focus";
 import { lookScope } from "../platform/core/history-service";
 import { viewPanelId } from "../platform/api/view-graph";
@@ -292,6 +293,7 @@ export type StudioPresentationPort<Slot> = {
    * (`<panel>--<base36>`), which names its session in its module's service.
    */
   readonly tabs?: LayoutTabsPort;
+  readonly emptyChoices?: EmptyChoicesPort;
   readonly panels: {
     instance(panel: string): string;
     /**
@@ -404,6 +406,7 @@ export function createStudioPresentation<Slot>(sources: {
   /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
   panelInstance?: (panel: string) => string;
   tabs?: LayoutTabsPort;
+  emptyChoices?: EmptyChoicesPort;
   /**
    * The input layer's target resolution (app/profiles/targets.ts) and the session's focus: what each action the presentation dispatches
    * names. Without them (tools) actions are dispatched as given, and one that leaves a target out is refused.
@@ -655,6 +658,7 @@ export function createStudioPresentation<Slot>(sources: {
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     ...(sources.tabs ? { tabs: sources.tabs } : {}),
+    ...(sources.emptyChoices ? { emptyChoices: sources.emptyChoices } : {}),
     panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local`,
       historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
     focus: Object.freeze({

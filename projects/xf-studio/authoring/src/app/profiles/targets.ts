@@ -96,7 +96,7 @@ export class TargetResolver {
   /** What a resolution names, by target field (`bindings.ts` `Target` to the actions' fields), with the editing context as `scope`. */
   named(instance?: string): NamedTargets {
     const resolved = this.resolve(instance);
-    return this.namedOf(resolved.state === "resolved" ? resolved.target : {});
+    return this.namedOf(resolved.state === "resolved" || resolved.state === "empty" ? resolved.target ?? {} : {});
   }
   private namedOf(target: Target): NamedTargets {
     const scope = this.editing(), collection = target.look?.collection ?? this.deps.collection?.();
@@ -112,7 +112,7 @@ export class TargetResolver {
   // ----- Captures -----
   /** Freeze what `instance` resolves to now (§3.3) until `signal` is aborted. */
   capture(instance: string | undefined, signal: AbortSignal): Capture {
-    const resolved = this.resolve(instance), target = resolved.state === "resolved" ? resolved.target : {};
+    const resolved = this.resolve(instance), target = resolved.state === "resolved" || resolved.state === "empty" ? resolved.target ?? {} : {};
     const id = ++this.next;
     let released = signal.aborted;
     if (!released) {

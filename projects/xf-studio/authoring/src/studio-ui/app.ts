@@ -1,4 +1,5 @@
 import { viewCatalogue } from "./views/contribution";
+import { withEmptyChoices } from "./panels/empty-choices";
 import { tabViews, viewPanelEntries, viewPanelIds, ViewPanels } from "./panels/view-panels";
 import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
@@ -122,7 +123,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     const view = featureViews.find(entry => entry.binding.owner === owner), factory = view?.binding.panels[id];
     if (!view || !factory) throw Error(`Panel ${id} has no factory.`);
     return (factory as (ctx: FeatureViewContext) => PanelController)(view.ctx);
-  });
+  }).map(panel => catalogue.context(panel.spec.id).kind === "profile" ? panel : withEmptyChoices(rt, panel));
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
   const help = byId.get("help") as PanelController & { focusSearch?(): void };
   // A view's panel ID (`view.<id>`) need not be an anchor's form; only the panels a tour can name are anchors.

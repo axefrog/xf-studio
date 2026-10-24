@@ -1,5 +1,5 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
-import { menuSecondaryRow, openChoicePopover, badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
+import { menuSecondaryRow, openChoicePopover, badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, EmptyChoices, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, notDrawnState, type LightListItem, type TabItem, type TreeNodeData } from "../components";
@@ -271,9 +271,15 @@ const MOUNTS: Record<string, Mount> = {
   },
   "lib-panel-header": () => header(260),
   "lib-status": () => { const bar = progressBar({ label: "Building the package", fraction: .42 }); const sweep = progressBar({ label: "Working" });
+    const choices = (names: string[], unavailable = false) => { const sample = new EmptyChoices();
+      sample.update({ title: "Show which look?", body: names.length ? "This scene has no look yet." : "There are no looks in this profile yet.",
+        ...(unavailable ? { capability: { available: false, reason: "This workspace is open in another window." } } : {}),
+        choices: (names.length ? names : ["Create a look"]).map(label => ({ id: label, label, name: `Show ${label} in this scene`, choose: () => {
+          sample.update({ title: `Showing ${label}`, body: "The choice acts immediately.", choices: [] }); } })) }); return sample.element; };
     return stack({ gap: "normal" }, h("div", { class: "row wrap gap-s" }, badge("Can be built", "success"), badge("Preview only", "warning"), badge("Blocked", "error")),
       note("Built and checked; not tested in game."), note("Sharing a scene means lighting and look changes show in both tabs."), bar.element, sweep.element,
-      new EmptyState({ title: "No layers in this preset", body: "Layers stack like makeup: the top of the list is applied last.", actions: [button({ label: "Add layer", icon: "plus", onClick: () => {} })] }).element); },
+      new EmptyState({ title: "No layers in this preset", body: "Layers stack like makeup: the top of the list is applied last.", actions: [button({ label: "Add layer", icon: "plus", onClick: () => {} })] }).element,
+      choices([]), choices(["Smoky"]), choices(["Smoky", "Chrome dusk", "Soft plum", "Copper", "Graphite", "Gold", "Midnight", "Rose"]), choices(["Smoky"], true)); },
   "lib-layout": () => { const head = new PageHeader({ title: "QuickSave-0", back: { label: "All saves", onClick: () => {} }, meta: "Quick save · game 2.31 · save version 269 · 336 nodes · 2.12 MB",
       actions: [new Segmented({ label: "Show", options: [{ value: "n", label: "Nodes" }, { value: "m", label: "Mod data" }], onSelect: () => {}, compact: true, showLabel: false }).element] });
     return stack({ gap: "loose" }, head.element, blockSection({ title: "game::SessionConfig" }, propertyList([["Kind", "A layout of its own"], ["Size", "54 B"], ["Where", "offset 6,181, chunk 1"]]),

@@ -1,6 +1,6 @@
 # Experiment 044: profile tabs and contributed defaults (profiles phase 2)
 
-**Status:** P2-i through P2-v are built on `claude/profiles-p2`: session operations (§8), fragments and defaults (§9), per-view editing (§10), view panes (§11) U1–U5 (§12), and feature focus with U8/U9 (§13). P2-iv's synthetic timing test could not run in the sandbox; its Chrome gate, captures and independent reviews remain with the coordinator. P2-vi and P2-vii are to come. The coordinator's M1–M3 decisions are in §6. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
+**Status:** P2-i through P2-vi are built on `claude/profiles-p2`: session operations (§8), fragments and defaults (§9), per-view editing (§10), view panes (§11), U1–U5 (§12), feature focus with U8/U9 (§13), and the U6 Choose routes (§14, uncommitted). P2-iv's synthetic timing test could not run in the sandbox; its Chrome gate, captures and independent reviews remain with the coordinator. P2-vii's real-data G4 is to come. The coordinator's M1–M3 decisions are in §6. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 (its §9.2 row: [phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)). It builds on phase 1 (merged `35e3c5b6`) and phase 4a, scene runtimes ([experiment 043](../043-scene-runtimes/README.md), merged `5b315f9b`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `076a7a65`. Tests are in `projects/xf-studio/authoring/tests/`. Effort is in the design's units (agent-days).
 
@@ -545,6 +545,51 @@ The branch lacked `research/authoring/module-stages.md`; its coordinator-checkou
 **Knowledge used:** `knowledge/README.md` (no game-resource page central), profiles design §4, view-graph design §3.9/§4, module stages, experiment 044 through §12, and the existing style-guide contracts.
 
 **What P2-vi needs.** Write U6 first; implement the resolver's empty-state Choose routes for a scene without a V, a scene without a look, and a panel without a 3D view in its tab. Dispatch `scene.setSubject`, `scene.setLook` or a new view against the captured scene, refusing `missing_target` after it changes. Cover zero, one and several candidates and instant feedback. Keep the legacy fields frozen and use the tab-derived tools; no module switch is needed. The coordinator still owns P2-iv's synthetic timing/captures and reviews, U8/U9 captures/reviews, and P2-vii's real-data G4.
+
+## 14. P2-vi as built
+
+Built in the assigned `profiles-p2` worktree on `claude/profiles-p2`, after `86202cdc`, 24 October 2026. All changes are left uncommitted for the coordinator. This round uses no browser, GPU, game, server or port; 4317 and 4331 are untouched. Light/dark captures at narrow/wide panel widths and independent code/UI reviews remain with the coordinator.
+
+**U6 first.** The `c-empty` entry now specifies the three titles, one line of explanation, target-named choice buttons, zero candidates, six visible choices followed by a searchable **Choose…**, and unavailable choices with the read-only reason. `lib-status` documents `EmptyChoices` with live zero/one/several/overflow/read-only specimens; `public/style-guide.html` is regenerated. The component reuses the existing buttons, search and popover positioning. Its native buttons support Tab and Enter; search takes focus, Down enters the results, and Escape returns focus to Choose…. Long target names wrap. The searchable list keeps the callbacks captured when it opened, even if the pane repaints meanwhile.
+
+**Three routes, one application port.** `emptyChoicesPort` derives candidates from profile membership and the resolver's `empty` state. It owns no documents, focus or pending writes. The resolver now preserves the partial target and names the missing subject, look or view. A subject context can follow an empty character scene without becoming eligible for an unrelated scene kind.
+
+- **Show which V?** The profile's live Vs, then the game's default feminine and masculine Vs. Selecting dispatches `scene.setSubject`; no V labels gain the History kind prefix.
+- **Show which look?** The profile's live looks. Selecting dispatches `scene.setLook`. With none, **Create a look** creates a look in an existing collection or makes “My looks”, with collection membership in the same outbox command, and shows it on that scene.
+- **Open a 3D view.** The profile's Vs, with defaults after them. With no profile Vs, one **Use the default V** action. `ProfileSessions.openView` adds a view to the captured tab from the contributed baseline with fresh view/node IDs, its selected subject and focus, in one View and lighting step. It works even when the whole graph has no view; Undo/Redo remove/restore the view coherently. Phase 2 creates no pins.
+
+**Captured and immediate.** The registered `empty.choose` request describes the typed route on the presentation port. Each choice retains its panel instance, tab and full target chain, including scene generation. A focus move keeps the captured scene; closing/resetting its tab, replacing its scene, changing what the scene shows or losing the chosen candidate refuses `missing_target` with a plain message. A second Open choice is refused after the first fills the tab. Read-only uses the real lease's refusal. Owners publish local changes synchronously before library acknowledgement. `CharacterService.create` already recorded synchronously; it now returns that result synchronously too (existing awaiting callers still work), so even a newly made default fills in the same task without an intervening selection race.
+
+**Composition.** A shell controller composes the library component for bound panels, hiding their previous content while empty and preserving their normal DOM hierarchy and hidden states. Feature controllers are not painted against a missing target, and no feature facade gains application access. A head pane presents U6 before its canvas/loading/not-drawn state. An explicitly V-less scene no longer silently creates a default V during initial head loading; after the choice the heads owner follows it normally.
+
+**Changed files, grouped by scope** (paths below `projects/xf-studio/authoring/` unless stated):
+
+| Scope | Files |
+|---|---|
+| 1 — guide and component | `src/studio-ui/style-guide/{components,guidance,library,library-demo}.ts`; `src/studio-ui/components/{empty-choices,index}.ts`; `public/{studio.css,style-guide.html}` |
+| 2–4 — resolver, commands, capture and composition | `src/app/profiles/{bindings,targets,empty-choices,profile-sessions,profile-window}.ts`; `src/app/{studio-action-descriptors,studio-presentation,trusted-studio-bootstrap}.ts`; `src/character/character-service.ts`; `src/compose/{studio-startup,tab-verification}.ts`; `src/preview/browser/browser-scene-heads.ts`; `src/studio-ui/app.ts`; `src/studio-ui/panels/{empty-choices,viewports}.ts` |
+| Gates | `tests/{empty-choices,empty-choices-dom,profiles-targets,tab-verification,browser-scene-heads}.test.ts`; `tests/golden/spec-fields.json` (provenance appended; all six observed states unchanged) |
+| 5 — records | This README and `research/authoring/profiles-views-layouts-design.md` |
+
+**Offline validation.** The brief's ten requested files plus `empty-choices.test.ts`, `empty-choices-dom.test.ts`, `tab-verification.test.ts`, `profiles-targets.test.ts`, `profiles-targets-dispatch.test.ts`, `browser-scene-heads.test.ts` and `profiles-characters.test.ts` pass: **198 tests, 0 failures**, 2,169 assertions, under the 3 GB guard (peak 0.5 GB). They cover all routes at 0/1/8 profile candidates, immediate selection and creation, both default bodies, captures across focus changes, stale/closed/linked targets, removed candidates, read-only refusal, first-view Undo/Redo, searchable overflow, stable named native buttons, search focus and Escape, and fixture reachability. `bun run check` passes for the app, tools and experiment scripts (3 GB guard, peak 1.4 GB). `git diff --check` passes. The Impeccable scan reports nine inherited accent-border/history-stripe warnings in unchanged CSS, no TypeScript findings and no findings on the six added CSS rules; the existing design is preserved. No full suite is run.
+
+**Verification hooks (`?verify=1` only).** Set `const f = xfStudioTabFixtures`, `const p = xfStudioPresentation`. The fixture resets only this verification profile's candidate memberships/live looks, leaves source documents restorable, and opens an Eye makeup tab with the requested missing target. It never touches the maintainer's ordinary draft.
+
+| U6 capture | Hook |
+|---|---|
+| No V, 0/1/several Vs | `await f.u6('subject', 0)`, `1`, or `8`; the returned `panel` names its view pane. Both game defaults follow profile Vs. |
+| No look, 0/1/several looks | `await f.u6('look', 0)`, `1`, or `8`; Layers is open in the contributed arrangement and has a V even with no profile candidates. |
+| No 3D view, 0/1/several Vs | `await f.u6('view', 0)`, `1`, or `8`; Layers offers Open a 3D view. Choosing creates a new view in this tab. |
+| Read-only for any route | After a fixture, `f.u6ReadOnly(true)`; `false` restores editing. This is a U6-only lease specimen; the real lease still fences all writes. The hook triggers repaint and `p.emptyChoices.execute` refuses it too. |
+| Inspect or capture a choice | `const c = await f.u6('look', 8); const a = p.emptyChoices.snapshot(c.panel).choices[0].action`; the snapshot names every button and its captured action. |
+| Stale chooser | Open Choose… after the previous fixture, then `p.authoring.dispatch({kind:'scene.setLook', scene:c.scene, sceneGen:a.destination.target.sceneGen, look:{collection:c.collection, look:c.looks[1]}})`; choosing from the old list refuses `missing_target` and preserves the new look. |
+| Component comparison | `/style-guide.html#c-empty` and `#lib-status`, with the same light/dark theme and narrow/wide panel widths. |
+
+**Surprises and limits.** The old resolver called a look-less scene “resolved”; it now exposes the same captured partial target through `empty`. The old initial head loader made a V automatically, which would erase U6 after reload. A V-less 3D view offers both game defaults even with zero profile candidates, following U6's explicit subject-route requirement; the no-view and no-look routes each offer one creation action when empty. No engine finding belongs in the knowledge base. DOM tests and static guide generation are not visual evidence or game evidence.
+
+**Knowledge used:** `knowledge/README.md` (no game-resource page central), profiles design §3/§4, experiment 044's P2-vi/U6/D4/§13, and the existing `c-empty`/component-library contracts.
+
+**What P2-vii needs.** Run real-data G4 using the completed tabs, feature focus and Choose routes; include the three U6 states, scene captures and first-view creation in the prepared session. The coordinator still owns pending P2-iv timing, light/dark narrow/wide captures beside the guide, and independent code/UI reviews for these chunks. Do not call the offline results runtime proof. No merge or commit was made in this round.
 
 ## Related pages
 

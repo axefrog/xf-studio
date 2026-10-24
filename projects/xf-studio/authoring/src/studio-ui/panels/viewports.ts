@@ -13,6 +13,7 @@ import type { ViewId } from "../../platform/api/view-graph";
 import { viewPaneState, type ViewPaneController, type ViewPaneState } from "./view-panels";
 import { PANEL_META } from "../panel-meta";
 import { DETAIL_NOTICE_TEXT } from "./preview";
+import { panelEmptyChoices } from "./empty-choices";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import { PREPARATION_LINE_DELAY_MS, preparationLine } from "../preparation-text";
 
@@ -127,6 +128,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext, id = "head"): Vi
   /** The view this pane shows (the graph names its panel), read at each paint. */
   let paneView: ViewId | undefined;
   const idle = notDrawnState(element, () => { if (paneView !== undefined) port.focus.view(paneView); });
+  const empty = panelEmptyChoices(rt, id);
   // Quiet, overlaid status for the V's skin, face details, eyes, brows, lashes, hair, piercings and body: progress while they prepare, one plain line
   // when something can't be shown, with its one next step when it waits for WolvenKit (NATIVE-47). While the V shown stays and the next one
   // is made ready (profiles phase 4a-v), it says which stage that is, with a thin bar for how far. Absolutely placed, so it never moves the
@@ -140,7 +142,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext, id = "head"): Vi
   /** When the preparation shown now began (its key), so a preparation shorter than the delay never flashes a line. */
   let preparingKey = "", preparingSince = 0, lineTimer: ReturnType<typeof setTimeout> | undefined, lastFrame: Frame | undefined;
   const top = h("div", { class: "viewport-top" }, context, toolbar.element), bottom = h("div", { class: "viewport-bottom" }, hints.strip, badge.element);
-  element.append(slot, loading, idle.element, detailStatus, top, bottom, hints.tip);
+  element.append(slot, loading, idle.element, detailStatus, top, bottom, hints.tip, empty.element);
   /** What the pane shows now (view-panels.ts): the picture, its own progress, or not drawn. */
   let paneState: ViewPaneState = "not-drawn", releaseAnchor: (() => void) | undefined;
   const holds = () => paneState === "canvas";
@@ -223,12 +225,18 @@ export function headPanel(rt: StudioRuntime, view: ViewContext, id = "head"): Vi
     slot,
     spec: { id, ...PANEL_META["head"], element,
       visibility: visible => { if (visible && holds()) requestAnimationFrame(() => port.viewport.resize("head")); } },
-    dispose() { releaseAnchor?.(); releaseAnchor = undefined; clearTimeout(lineTimer); hints.dispose(); idle.dispose(); },
+    dispose() { releaseAnchor?.(); releaseAnchor = undefined; clearTimeout(lineTimer); hints.dispose(); idle.dispose(); empty.dispose(); },
     update(frame) {
       paneView = frame.views?.views.find(entry => entry.panel === id)?.id;
       const state = frame.viewport.head, title = frame.viewTitles.find(entry => entry.panel === id)?.title ?? "3D view";
       const was = paneState;
       paneState = viewPaneState(paneView, state);
+      const missing = empty.update();
+      slot.hidden = missing;
+      if (missing) {
+        idle.update({ shown: false }); loading.hidden = top.hidden = bottom.hidden = detailStatus.hidden = hints.tip.hidden = true;
+        clearTimeout(lineTimer); setAttr(element, "aria-label", title); return;
+      }
       element.dataset.drawn = String(paneState !== "not-drawn");
       // The guidance anchor is the pane with the picture.
       if (holds() && was !== "canvas") { releaseAnchor?.(); releaseAnchor = rt.anchors.register("head.view", element); }

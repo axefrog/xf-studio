@@ -400,6 +400,29 @@ export class ProfileSessions {
     this.existing(tab);
     return this.operate("New view", "tabs.addView", () => this.graph.addView(from, share, { tab, label: "New view", ...(options.title ? { title: options.title } : {}) }));
   }
+  /** A first view in an existing tab, from a contributed baseline, with fresh identities throughout (U6). */
+  openView(tab: TabId, baseline: ViewGraphData, subject: SubjectRef): ViewId {
+    this.existing(tab);
+    const source = baseline.views[0] as ViewRecord | undefined;
+    if (!source || source.kind !== "3d") throw new TabRefusal("invalid_value", "A 3D view isn't available here.");
+    const id = this.fresh("view"), refs = {} as Record<ViewSlot, string>;
+    const nodes = VIEW_SLOTS.map(slot => {
+      const node = baseline[SLOT_COLLECTIONS[slot]].find(node => node.id === source[slot]);
+      if (!node) throw new TabRefusal("invalid_value", "That 3D view's settings are missing.");
+      refs[slot] = this.fresh(slot);
+      return { slot, node: { ...clone(node), id: refs[slot], ...(slot === "scene" ? { subject: clone(subject), gen: 0 } : {}) } };
+    });
+    const view: ViewRecord = { id, kind: "3d", tab, ...refs };
+    // Validate whole before recording any change; the session remains the sole structural owner.
+    this.checkContent({ name: "3D view", dock: null, panels: [], views: [view], nodes });
+    return this.operate("Open a 3D view", "empty.choose", () => {
+      this.graph.restructure({ add: [{ view }], nodes: nodes.map(({ slot, node }) => ({ slot, node: slot === "scene" ? graphScene(node) : node })) }, { label: "Open a 3D view" });
+      this.targets.set(refs.scene, { subject: clone(subject), gen: 0 });
+      this.placed([id, ...nodes.map(item => item.node.id)]);
+      this.focus.focusView(id);
+      return id;
+    });
+  }
   closeView(view: ViewId) {
     if (!this.graph.has(view)) throw new TabRefusal("missing_target", "That view is closed.");
     this.operate("Close view", "tabs.closeView", () => this.graph.closeView(view, { label: "Close view" }));

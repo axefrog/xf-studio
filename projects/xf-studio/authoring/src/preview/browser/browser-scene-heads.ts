@@ -227,7 +227,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   }
   /** The drawn view's scene (undefined: none is drawn). */
   function drawnScene(): string | undefined { const view = drawn(); return view === undefined ? undefined : ports.scenes.of(view); }
-  /** What the drawn scene wants now (undefined while nothing is drawn, or its V isn't known: `load` makes one). */
+  /** What the drawn scene wants now (undefined while nothing is drawn, or until U6 chooses its V). */
   function current(): SceneHeadWant | undefined {
     const view = drawn(), scene = drawnScene();
     if (view === undefined || scene === undefined) return undefined;
@@ -286,7 +286,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
 
   return {
     /**
-     * Show the drawn scene's head (made with a V when the scene has none). Resolves once a head of the drawn scene is shown: a want
+     * Show the drawn scene's head. A scene without a V stays empty for U6. Resolves once a head of the drawn scene is shown: a want
      * superseded meanwhile (the V changed body during the first load) waits for the one that replaced it. Rejects when the head can't be
      * built, with nothing shown, so the preview setup offers Try again.
      */
@@ -297,6 +297,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
         // Nothing to draw (the shown tab holds no view): the first view shown later is wanted then.
         const view = drawn(), scene = drawnScene();
         if (view === undefined || scene === undefined) return;
+        if (ports.scenes.subject(scene) === undefined) { residency.hideShown(); return; }
         const character = await ports.scenes.ensureSubject(scene);
         if (!character) throw Error("The V couldn't be shown: this window can't make one. Reload the window to continue.");
         if (drawn() !== view) continue;

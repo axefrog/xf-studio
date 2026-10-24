@@ -7,8 +7,7 @@
  * - **The session** is the workspace's (`profiles.sessions`, made by the profiles migration), held by `ProfileSessions`, the one owner of
  *   its tabs, view graph and focus. A window that has none to open (another window holds an unmigrated workspace, or the workspace can't be
  *   written) opens a session made for it from the library's first profile, stored nowhere.
- * - **What a scene shows** must exist: a scene whose V was deleted gets a new default V (listed in the profile), so the 3D view always has
- *   one to show.
+ * - **What a scene shows** may be empty. U6 presents the profile's choices; an explicitly empty scene never makes a V during loading.
  */
 import type { SubjectRef, SubjectRegistryPort } from "../../platform/api/subjects";
 import { characterRef } from "../../platform/api/characters";

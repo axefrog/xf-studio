@@ -26,6 +26,7 @@ export { GroupSection, type GroupSectionOptions } from "./group-section";
 export { RememberedSet } from "../view-state";
 export { holdScroll, revealInView, ScrollMemory, VIEW_KEY, type ScrollMemoryOptions } from "../scroll-anchor";
 export { SearchField, type SearchFieldOptions } from "./search-field";
+export { EmptyChoices, type EmptyChoice, type EmptyChoicesState } from "./empty-choices";
 export { Combobox, type ComboboxOptions, type ComboGroup, type ComboOption } from "./combobox";
 export { blockSection, codeBlock, PageHeader, propertyList, stack, type Gap, type Property } from "./layout";
 export { SplitView, type SplitViewOptions } from "./split-view";
