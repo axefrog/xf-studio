@@ -85,8 +85,13 @@ unreferenced events. These [offline] checks implement S0 v4.15 §14.1; the old b
 reference it again at 20, and compare uninterrupted execution with fresh incremental and snapshot loads: the spatial
 queries and the entire later save record agree. Release is carried by the retained-reference records and their marked
 closure; it never invents an edge end. Saved history keeps actual validity without becoming a retention root, including
-after sweeping. Re-reference restores the swept header, owned facts and transitive event dependencies from the selected
-saved closure through the common retention traversal; releasing again makes that live closure sweepable. Both B and C
+after sweeping. Re-reference completes missing headers, owned facts, materialisation provenance and transitive event
+dependencies from the selected saved closure through the common retention traversal, even when a summary query has
+already recreated the event header. Live records remain authoritative; recovery fills only absent records and follows
+only reached references. The S3F-01 matrix checks query-before-reference and reference-before-query, with/without a sweep,
+in both incremental and snapshot modes against fresh B loads; all eight materialisation-owned facts and the minted
+participant recover, while unrelated saved events remain unretained and sweepable. Releasing again makes the recovered
+closure sweepable. Both B and C
 loads in a release/re-reference/release sequence preserve later records and readable facts. The live edge interval is
 authoritative, even when reopening reuses the previous start timestamp: equal starts do not identify an interval. The
 tests preserve both `{ from: 20, to: 30 }` after a previous end at 10 and `{ from: 0, to: 30 }` after a previous end at 0,

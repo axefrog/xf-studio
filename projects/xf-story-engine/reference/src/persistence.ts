@@ -276,7 +276,9 @@ export class Persistence {
   restoreReferencedHeader(id: Id): NodeHeader | undefined {
     const store = this.k.store;
     const h = store.header(id) ?? this.base.headers.get(id);
-    if (!h || store.header(id)) return h;
+    // A summary query can recreate the header alone. Complete every reached saved reference,
+    // while leaving live headers, contributions, intervals and provenance authoritative.
+    if (!h || !this.base.headers.has(id)) return h;
     if (this.recovery?.base !== this.base) {
       const saved = new Store();
       for (const header of this.base.headers.values()) saved.addHeader(header);
@@ -285,18 +287,22 @@ export class Persistence {
       this.recovery = { base: this.base, store: saved };
     }
     const saved = this.recovery.store, fields = [id];
+    let changed = false;
     for (let n = 0; n < fields.length; n++) {
       const field = fields[n];
-      store.addHeader(clone(saved.header(field)!));
+      if (!store.header(field)) changed = store.addHeader(clone(saved.header(field)!)) || changed;
       fields.push(...saved.ownedOf(field));
-      for (const c of saved.contributionsNaming(field)) store.addContribution(clone(c));
+      for (const c of saved.contributionsNaming(field))
+        if (!store.contribution(c.id)) changed = store.addContribution(clone(c)) || changed;
     }
     for (const e of saved.edgesFrom(id))
-      if (this.k.retention.isOwnEventLocation(e, h) && !store.edges.has(e.id)) store.addEdge(clone(e));
+      if (this.k.retention.isOwnEventLocation(e, h) && !store.edges.has(e.id)) changed = store.addEdge(clone(e)) || changed;
     const materialisation = this.base.materialisations.get(id);
-    if (materialisation && !this.k.events.materialisationOf(id))
+    if (materialisation && !this.k.events.materialisationOf(id)) {
       this.k.events.setMaterialisation(id, clone(materialisation.provenance));
-    this.k.bump();
+      changed = true;
+    }
+    if (changed) this.k.bump();
     return store.header(id);
   }
 

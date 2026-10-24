@@ -219,7 +219,7 @@ export class Retention {
       const traverseEvent = eventRoots.has(id) && !traversedEvents.has(id);
       if (!firstVisit && !traverseEvent) continue;
       marked.add(id);
-      const h = store.header(id) ?? this.k.persistence.restoreReferencedHeader(id);
+      const h = this.k.persistence.restoreReferencedHeader(id);
       if (!h) continue;
       if (traverseEvent) traversedEvents.add(id);
       if (h.origin.by === 'value' || h.origin.by === 'member') follow(h.origin.owner);

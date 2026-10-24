@@ -107,10 +107,11 @@ behaviour in memory and requires failure at the named semantic assertion. Setup 
 
 S3 and its kernel regressions cover nominal-query boundaries, the S3-01–07 review fixes, explicit summary-materialisation
 ownership and released event-location history through fresh loads. Release preserves actual edge validity; re-reference
-restores swept saved headers and facts through retention and produces identical later records with or without two loads.
+completes missing saved headers, owned facts and provenance through retention, including when a summary query has
+already recreated an event's header, and produces identical later records with or without two loads.
 Reopened intervals keep their own unclamped ends even when their starts match a previous interval, with/without loading
-A or sweeping before B. All 47 source-loader mutation probes reach their intended semantic assertions; `bun run check` passes. The guarded
-full suite passes **1,242 tests across 78 files in 158.31 seconds**, peaking at **1.1 GB** under the 4 GB limit.
+A or sweeping before B. All 50 source-loader mutation probes reach their intended semantic assertions; `bun run check` passes. The guarded
+full suite passes **1,251 tests across 78 files in 91.82 seconds**, peaking at **1.1 GB** under the 4 GB limit.
 Kernel digests stay at v3 `f924d2c9d1159bca85bbfa4cf18dba6c` and v4
 `42d5a84e16dde21cc0bca7fe50c01d72`; the S1 frozen transcript is unchanged. The S3 transcript checks independently encoded identities and draws, plus explicit
 persisted records. Hand-over facts, pending closure consumption and output-batch event facts survive replacement loads;

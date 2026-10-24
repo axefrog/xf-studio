@@ -1313,9 +1313,9 @@ The v3 and v4 frozen digests remain `f924d2c9d1159bca85bbfa4cf18dba6c` and `42d5
 neither script materialises summary participant/effect facts or releases a saved event-location edge, so their saved records
 are unchanged. The S1 frozen transcript is also unchanged.
 
-Validation: all 61 event-persistence tests (including 193–194) and the real scene-materialisation fixtures pass, as does
-`bun run check`. All 47 S3/review mutation probes reach their intended assertions. The guarded full suite passes
-1,242 tests across 78 files in 158.31 seconds, peaking at 1.1 GB under the 4 GB limit. S1's record comparisons include the new
+Validation: all 70 event-persistence tests (including 193–194 and S3F-01) and the real scene-materialisation fixtures pass, as does
+`bun run check`. All 50 S3/review mutation probes reach their intended assertions. The guarded full suite passes
+1,251 tests across 78 files in 91.82 seconds, peaking at 1.1 GB under the 4 GB limit. S1's record comparisons include the new
 materialisation section; partition/reload assertions and SF3-38's strict state comparison remain intact.
 
 **193. Retention release is not edge validity (S3D-01/02).** Release and re-reference are transitions of the existing
@@ -1343,10 +1343,11 @@ mutation runner rejects setup/import failures. Frozen digest expectations and sc
 `f924d2c9d1159bca85bbfa4cf18dba6c` and v4 `42d5a84e16dde21cc0bca7fe50c01d72`. Neither script releases a saved event-location
 edge, so no record in either digest transcript changes. Validation is recorded in 192. No game session is needed.
 
-**194. Re-reference restores swept saved closure through retention (S3E-01/02).** A newly reached reference whose live
-header has been swept restores that header and its saved owned field tree, missing contributions, owned location links
-and explicit materialisation provenance from the selected saved view. The normal retention traversal then follows the
-restored Id fields and origin chains, including other swept events and their facts. Seed registration completes this
+**194. Re-reference completes saved closure through retention (S3E-01/02, S3F-01).** Every reached reference completes
+its missing header, saved owned field tree, contributions, owned location links and explicit materialisation provenance
+from the selected saved view, even when its live header already exists. A summary query can silently recreate only that
+header; its existence does not prove that the saved fields or provenance are present. The normal retention traversal
+then follows the restored Id fields and origin chains, including other swept events and their facts. Seed registration completes this
 same traversal before returning, so its consumer can immediately read the event. Restoration emits no event or relevance
 change and never replaces a live record. Saved lookup indexes are lazy, discarded on save/load, and never enumerated as
 roots; releasing the consumer makes the restored closure sweepable again. History alone still retains nothing.
@@ -1359,9 +1360,23 @@ insertion order. S3E-02 ends an interval at its start (0), saves A, reopens at 0
 All combinations of loading A, sweeping before B and snapshot mode preserve the live interval and its query results.
 The original S3C-02, S3D-01/02 and end-before-first-save fixtures remain intact.
 
-All 20 initial S3E boundary cases failed at their named semantic assertions against the pre-fix source. The expanded
-event-persistence file has 61 passing tests, including ten further cross-reference/materialisation checks. All 47
-source-loader mutation probes require their intended semantic failures; setup/import errors are rejected. `bun run check`
+The S3F-01 matrix materialises a summary item under `scene.acts`, retains it, saves A, releases, optionally sweeps, saves
+B, then queries and re-references in either order. All 16 combinations of snapshot mode, initial sweep, query order and
+fresh B load preserve the minted participant, eight materialisation-owned contributions and explicit provenance.
+The participant's origin reaches another swept event: its facts must recover too. Full event views and C records agree
+with uninterrupted execution and fresh C loads. Unrelated saved events remain absent after sweeping and save-view reads;
+releasing the new consumer makes the recovered closure sweepable again. A separate partial-tree test preserves the
+live header and a contribution ended since A, restores a missing owned header/contribution, and checks recovery is
+idempotent without a revision bump when nothing is missing. Recovery changes only absent records and bumps the revision
+only when data was restored; it emits no changes.
+
+All 20 initial S3E boundary cases failed at their named semantic assertions against the pre-fix source. Both S3F-01
+query-first/sweep reproductions (incremental and snapshot) failed at the missing-participant semantic assertion before
+the fix; reference-first and no-sweep controls passed. Three new mutation probes independently reverse the retention
+short-circuit or persistence guard and require those semantic failures. The expanded event-persistence file has 70 passing
+tests, including ten cross-reference/materialisation checks and nine S3F-01 tests. All 50 source-loader mutation probes
+require their intended semantic failures; setup/import errors are rejected. `bun run check`
 passes. Frozen digest scripts and expectations are unchanged: v3 `f924d2c9d1159bca85bbfa4cf18dba6c`, v4
-`42d5a84e16dde21cc0bca7fe50c01d72`. Neither script re-references swept history or releases an equal-start reopened edge.
+`42d5a84e16dde21cc0bca7fe50c01d72`. Neither script re-references swept history, completes partially rematerialised summary
+fields or releases an equal-start reopened edge.
 No game session is needed.

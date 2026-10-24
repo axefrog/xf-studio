@@ -77,7 +77,13 @@ release/re-reference/release sequence: live headers, owned facts, transitive eve
 C/D records agree with incremental and snapshot replay. Seed/frame/pin/edge/origin reference fixtures cover ordinary and
 materialised events, monotonicity and root insertion order. S3E-02 reopens at the previous start, with/without loading A,
 with/without sweeping before B, and with an open interval or an end at 30. All 20 initial S3E boundary cases fail at their
-named semantic assertions without the fixes. All 47 S3/review mutation probes pass their rejection checks.
+named semantic assertions without the fixes. S3F-01 adds query-before-reference after a sweep and save B: a recreated
+summary header still requires missing owned facts and provenance to recover. Sixteen boundary combinations cover
+incremental/snapshot records, sweeps, query order and fresh B loads, with transitive dependencies, unrelated history,
+complete C record comparisons and fresh C loads. A partial-tree fixture also checks authoritative live records and
+idempotence. Both original query-first/sweep reproductions fail at the missing-participant semantic assertion without
+the fix. Three new source-loader probes reverse each header short-circuit independently. All 50 S3/review mutation
+probes pass their rejection checks.
 
 Host entry: attach `new Layer3(l2, { registry: sim.w.kinds, patterns })`, then drive unpaused seconds through
 `layer3.advancePlay(portClock, senseFrame, beforeSecond)`. That boundary runs earlier kernel/S2 work, the director,

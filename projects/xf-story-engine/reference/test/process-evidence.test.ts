@@ -286,6 +286,108 @@ for (const materialised of [false, true]) for (const reference of ['seed', 'fram
     expect(run(false), 'root insertion order cannot change restored facts or the retained closure').toEqual(run(true));
   });
 
+for (const snapshot of [false, true]) for (const sweepBeforeB of [false, true]) for (const queryFirst of [false, true])
+  test(`S3F-01${snapshot ? '-snapshot' : ''}${sweepBeforeB ? '-sweep' : ''}${queryFirst ? '-query-first' : ''}: a summary header cannot suppress saved fact recovery`, () => {
+    const label = `S3F-01${snapshot ? '-snapshot' : ''}${sweepBeforeB ? '-sweep' : ''}${queryFirst ? '-query-first' : ''}`;
+    const run = (loadB: boolean) => {
+      const name = 'partially-rematerialised-reference';
+      let k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 });
+      const creator = k.root('producer', 'core:person'), scope = k.root('scope', 'core:place'),
+        place = k.root('place', 'core:place'),
+        earlier = k.events.mintEvent({ creator, cause: creator, name: 'earlier', kind: 'arrival', time: 0 }),
+        person = k.mint(creator, earlier, 'participant', 'core:person'),
+        unrelated = k.events.mintEvent({ creator, cause: creator, name: 'unrelated', kind: 'arrival', time: 0 });
+      k.addEdge({ type: 'core:located-in', from: place, to: scope, cause: creator });
+      const summary = k.summaries.mintSummary({ creator, cause: creator, name: 'summary', kind: 'arrival',
+        from: 0, length: 600, scope, count: 1 }), item = k.summaries.materialise(summary, 0),
+        provenance = { descriptor: summary, materialisation: 'scene.acts' },
+        seed = H(s('initial-consumer')), nextSeed = H(s('next-consumer'));
+      k.events.restoreEvent({ creator: summary, cause: summary, name: 'item:0', kind: 'arrival',
+        time: k.value(item, 'time') as number, participants: [{ who: person, role: 'actor' }],
+        effects: [{ on: person, effect: 'harm' }] }, provenance);
+      const facts = [readEvent(k, item), readEvent(k, earlier)];
+      const sweep = () => { k.retention.scheduleSweep(); k.settle(); };
+      const query = () => {
+        const result = k.query({ find: 'core:event', scope: { under: scope }, at: k.now, must: [], limit: 'all' });
+        expect(result.status).toBe('ok');
+        expect(result.status === 'ok' ? result.items.map((i) => i.id) : []).toEqual([item]);
+      };
+      const materialisedFacts = () => [...k.retention.eventFacts()]
+        .filter((id) => k.store.contribution(id)?.source.origin === 'scene.acts').sort();
+      k.retention.setSeed({ id: seed, state: {}, nodes: [item, unrelated] });
+      const ownFacts = materialisedFacts();
+      expect(ownFacts).toHaveLength(8);
+      k.persistence.save('A');
+      k.retention.endSeed(seed);
+      if (sweepBeforeB) {
+        sweep();
+        expect(k.store.header(item)).toBeUndefined();
+        expect(k.store.header(person)).toBeUndefined();
+      }
+      const b = k.persistence.save('B');
+      expect(Boolean(b.snapshot)).toBe(snapshot);
+      if (loadB) k = replacement(k, name, 'B');
+      expect(k.retention.isRetained(item), 'history alone cannot root the item').toBe(false);
+      if (queryFirst) {
+        query();
+        expect(k.store.header(item)).toBeDefined();
+        if (sweepBeforeB && !loadB) {
+          expect(k.store.header(person), 'the summary query only recreates the item header').toBeUndefined();
+          expect(k.events.materialisationOf(item)).toBeUndefined();
+        }
+      }
+      const pending = structuredClone(k.pending);
+      k.retention.setSeed({ id: nextSeed, state: {}, nodes: [item] });
+      expect(k.store.header(person), `${label} semantic: re-reference restores the participant even when the event header exists`).toBeDefined();
+      expect(k.retention.isRetained(person), `${label} semantic: recovered field references retain the participant`).toBe(true);
+      expect(k.events.materialisationOf(item), `${label} semantic: re-reference restores explicit provenance`).toEqual(provenance);
+      expect(materialisedFacts(), `${label} semantic: all eight owned event facts are retained`).toEqual(ownFacts);
+      expect([readEvent(k, item), readEvent(k, earlier)], `${label} semantic: owned facts and their transitive event dependencies recover`).toEqual(facts);
+      expect(k.pending, `${label} semantic: recovery emits no changes`).toEqual(pending);
+      if (!queryFirst) query();
+      checkRetentionMonotonicity(k, item);
+      sweep();
+      expect(k.store.header(unrelated), `${label} semantic: recovery never resurrects unrelated saved history`).toBeUndefined();
+      expect(k.persistence.currentView().headers.has(unrelated)).toBe(false);
+      expect(k.store.header(unrelated)).toBeUndefined();
+      expect([readEvent(k, item), readEvent(k, earlier)]).toEqual(facts);
+      const c = k.persistence.save('C'), freshC = replacement(k, name, 'C');
+      expect([readEvent(freshC, item), readEvent(freshC, earlier)], `${label} semantic: fresh C agrees with live execution`).toEqual(facts);
+      k.retention.endSeed(nextSeed); sweep();
+      expect(k.store.header(item), `${label} semantic: restored data is sweepable after release`).toBeUndefined();
+      expect(k.persistence.currentView().headers.has(item)).toBe(false);
+      expect(k.store.header(item)).toBeUndefined();
+      return c;
+    };
+    expect(run(false), `${label} semantic: C records agree with and without a fresh B load`).toEqual(run(true));
+  });
+
+test('S3F-01-live: completing partial saved data preserves authoritative live records and is idempotent', () => {
+  const k = coreKernel('partial-live-records'), creator = k.root('producer', 'core:person'),
+    person = k.mint(creator, creator, 'participant', 'core:person'),
+    event = k.events.mintEvent({ creator, cause: creator, name: 'event', kind: 'arrival', time: 0,
+      participants: [{ who: person, role: 'actor' }] }), seed = H(s('consumer'));
+  k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+  k.persistence.save('A');
+  k.retention.endSeed(seed);
+  const header = k.store.header(event), member = k.store.ownedOf(event)[0], memberHeader = k.store.header(member),
+    contribution = k.store.contributionsNaming(event).find((c) => c.target.slot === 'participants#count')!,
+    missing = structuredClone(k.store.contributionsNaming(member)[0]);
+  // Exercise a partially present owned tree alongside a contribution updated since A.
+  k.endContribution(contribution.id, 30);
+  k.store.removeHeader(member); k.store.removeContribution(missing.id); k.bump();
+  k.retention.setSeed({ id: seed, state: {}, nodes: [event] });
+  expect(k.store.header(event), 'S3F-01-live semantic: the live header remains authoritative').toBe(header);
+  expect(k.store.contribution(contribution.id), 'S3F-01-live semantic: the updated live contribution is not replaced').toBe(contribution);
+  expect(contribution.valid.to, 'S3F-01-live semantic: recovery cannot reopen an ended live contribution').toBe(30);
+  expect(k.store.header(member), 'S3F-01-live semantic: missing owned headers are completed').toEqual(memberHeader);
+  expect(k.store.contribution(missing.id), 'S3F-01-live semantic: missing owned contributions are completed').toEqual(missing);
+  const revision = k.revision, count = k.store.allContributions().length;
+  k.persistence.restoreReferencedHeader(event);
+  expect(k.revision, 'complete records require no recovery revision').toBe(revision);
+  expect(k.store.allContributions()).toHaveLength(count);
+});
+
 for (const snapshot of [false, true]) for (const loadA of [false, true]) for (const sweep of [false, true])
   for (const end of [undefined, 30])
   test(`S3E-02${snapshot ? '-snapshot' : ''}${loadA ? '-load-A' : ''}${sweep ? '-sweep' : ''}${end === undefined ? '-open' : ''}: equal-start reopening keeps its live interval`, () => {
