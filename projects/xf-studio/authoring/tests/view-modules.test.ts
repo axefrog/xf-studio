@@ -214,10 +214,10 @@ test("a view's title comes from the graph: its own name, else \"3D view\", numbe
   expect(STUDIO_CATALOGUE.meta.head?.title).toBe("3D view");
 });
 
-test("view titles number within each tab, preserve renamed views and renumber after removal", () => {
+test("view titles number only unnamed views within each tab, preserve renamed views and renumber after removal", () => {
   const views = [{ id: "main", tab: "a" }, { id: "poses", tab: "b" }, { id: "side", tab: "a", title: "Side view" },
     { id: "close", tab: "c", title: "Close-up" }, { id: "back", tab: "b" }];
-  expect(viewTitles(views)).toEqual(["3D view 1", "3D view 1", "Side view", "Close-up", "3D view 2"]);
+  expect(viewTitles(views)).toEqual(["3D view", "3D view 1", "Side view", "Close-up", "3D view 2"]);
   expect(viewTitles(views.filter(view => view.id !== "side" && view.id !== "back"))).toEqual(["3D view", "3D view", "Close-up"]);
   const core = createTrustedAuthoringCore(freshWorkspace(), { resetStack() {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   // Separate tabs each have a sole view; the application supplies these same titles to every presentation.

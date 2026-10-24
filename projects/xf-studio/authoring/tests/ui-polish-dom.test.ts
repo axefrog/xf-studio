@@ -676,7 +676,7 @@ describe("The workspace notice (style guide t-recovering, t-unprotected): it nev
     const notice = workspaceNotice(rt as never);
     const root = notice.element as unknown as LightElement;
     const frame = (recovering: { shown: boolean; long: boolean; safe: boolean; missing: number }, extra: { unprotected?: number; reason?: "pending" | "failed" | "storage-full"; gesture?: boolean } = {}) =>
-      ({ status: { outbox: { unprotected: extra.unprotected ?? 0, unprotectedReason: extra.reason, pending: 1, conflicts: 0, failing: false, recovering } },
+      ({ status: { outbox: { unprotected: extra.unprotected ?? 0, unprotectedReason: extra.reason, pending: 1, conflicts: 0, failing: false, recovering } }, files: {},
         preview: { gesture: extra.gesture ? { source: "uv" } : null, control: null } }) as never;
     const visible = () => buttons(root).filter(button => !button.hidden).map(button => text(button));
     const shown = (name: string) => buttons(root).find(button => !button.hidden && text(button) === name)!;

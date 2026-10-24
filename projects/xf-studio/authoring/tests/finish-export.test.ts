@@ -117,7 +117,7 @@ test("faceted presets add grain normals only where Shimmer covers, flat elsewher
     if (!shimmerMask[p * 4 + 3] && !matteMask[p * 4 + 3]) expect(c.diffuse[p * 4 + 3]).toBe(0);
   }
   expect(tilted).toBeGreaterThan(20);
-});
+}, 20_000); // It exports real textures, which can take over 5 s while the full suite shares the machine.
 
 test("colour-shift presets write linear coverage, a uniform base colour and normalised shift constants", () => {
   const r = recipe({ finish: "iridescent", optics: { ...game, shift }, color: "#3a2350", opacity: .5 });
