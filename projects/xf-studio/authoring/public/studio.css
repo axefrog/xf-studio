@@ -105,8 +105,8 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 }
 
 /* ---------- Boot ---------- */
-.studio { height: 100vh; display: grid; grid-template-rows: var(--header-h) auto minmax(0, 1fr) var(--status-h); }
-.studio > .shell-header { grid-row: 1; } .studio > .workspace-notice { grid-row: 2; } .studio > .workspace { grid-row: 3; } .studio > .status-bar { grid-row: 4; }
+.studio { height: 100vh; display: grid; grid-template-rows: var(--header-h) auto var(--tab-h) minmax(0, 1fr) var(--status-h); }
+.studio > .shell-header { grid-row: 1; } .studio > .workspace-notice { grid-row: 2; } .studio > .layout-tabs { grid-row: 3; } .studio > .workspace { grid-row: 4; } .studio > .status-bar { grid-row: 5; }
 .boot { display: grid; place-content: center; gap: var(--sp-5); justify-items: center; grid-row: 1 / -1; color: var(--text-muted); font-family: var(--font-display); letter-spacing: .12em; text-transform: uppercase; font-size: var(--fs-sm); }
 .boot-error { padding: var(--sp-8); color: var(--danger); }
 .device-parking { position: absolute; width: 0; height: 0; overflow: hidden; }
@@ -1606,3 +1606,24 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .poses-panel { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
 .poses-panel .poses-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
 /* The tree's height is its size bar's (20 rows by default). */
+
+/* Layout tabs (U1) and the default/substitution patterns (U3–U4). */
+.layout-tabs { display:flex; min-width:0; align-items:stretch; background:var(--bg-panel); border-bottom:1px solid var(--line); }
+.layout-tabs > .tab-strip { flex:1; min-width:0; }
+.layout-tabs > .btn { flex:none; border-radius:0; }
+.layout-tabs:not(.empty) > .btn > span { display:none; }
+.layout-tabs .dock-tab { position:relative; }
+.layout-tabs .dock-tab.naming { background:var(--bg-hover); }
+.layout-tabs .drop-before::before, .layout-tabs .drop-after::after { content:""; position:absolute; top:2px; bottom:2px; width:2px; background:var(--accent); z-index:2; }
+.layout-tabs .drop-before::before { left:0; } .layout-tabs .drop-after::after { right:0; }
+.layout-tabs.dragging { cursor:grabbing; }
+.menu-secondary-row { display:flex; align-items:stretch; }
+.menu-secondary-row > .menu-item:first-child { flex:1; min-width:0; }
+.menu-secondary { flex:none; padding-inline:var(--sp-3); }
+.menu-secondary-row .menu-label { white-space:normal; }
+.choice-popover { position:fixed; z-index:1000; width:420px; max-width:calc(100vw - 12px); max-height:calc(100vh - 12px); overflow:auto; }
+.choice-popover-fields { display:grid; gap:var(--sp-4); }
+.choice-popover-field { min-width:0; }
+.choice-popover-field .search-field { margin-bottom:var(--sp-2); }
+.popover-choice-text { margin:0; color:var(--text-muted); }
+.choices [role=radio][aria-checked=true] { border-color:var(--accent); background:var(--bg-hover); box-shadow:inset 0 -2px var(--accent); }

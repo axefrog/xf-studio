@@ -97,7 +97,7 @@ export class LightElement extends LightNode {
   focus() { lightDocument.activeElement = this; this.dispatchEvent(lightEvent("focus")); }
   /** Every descendant, depth first. */
   descendants(): LightElement[] { return this.children.flatMap(child => [child, ...child.descendants()]); }
-  querySelectorAll(selector: string): LightElement[] { return this.descendants().filter(element => matches(element, selector)); }
+  querySelectorAll(selector: string): LightElement[] { return this.descendants().filter(element => element.matches(selector)); }
   querySelector(selector: string): LightElement | null { return this.querySelectorAll(selector)[0] ?? null; }
   /** A comma list of simple selectors, each optionally with `:not(simple)` clauses. */
   matches(selector: string): boolean { return selector.split(",").some(part => matchesWithNot(this, part.trim())); }
@@ -108,7 +108,10 @@ function matchesWithNot(element: LightElement, selector: string): boolean {
   const base = selector.replace(/:not\(([^)]*)\)/g, "");
   return (!base || matches(element, base)) && nots.every(not => !matches(element, not));
 }
-export class LightInput extends LightElement {}
+export class LightInput extends LightElement {
+  override setAttribute(name: string, value: string) { super.setAttribute(name, value); if (name === "value") this.value = value; }
+  select() {}
+}
 
 /** Simple selectors only: a tag, `.class`, `[attr]` or `[attr="value"]`, combined without spaces. */
 function matches(element: LightElement, selector: string): boolean {
@@ -117,7 +120,7 @@ function matches(element: LightElement, selector: string): boolean {
     if (part.startsWith(".")) return element.classList.contains(part.slice(1));
     if (part.startsWith("[")) {
       const [name, value] = part.slice(1, -1).split("=");
-      return value === undefined ? element.hasAttribute(name!) : element.getAttribute(name!) === value.replace(/^"|"$/g, "");
+      return value === undefined ? element.hasAttribute(name!) : element.getAttribute(name!) === value.replace(/^["']|["']$/g, "");
     }
     return element.tagName === part.toLowerCase();
   });
@@ -132,6 +135,8 @@ export const lightDocument = {
   createElement: (tag: string) => tag === "input" ? new LightInput(tag) : new LightElement(tag),
   createElementNS: (_ns: string, tag: string) => new LightElement(tag),
   createTextNode: (text: string) => new LightText(text),
+  querySelector: (selector: string): LightElement | null => lightDocument.body.querySelector(selector),
+  querySelectorAll: (selector: string): LightElement[] => lightDocument.body.querySelectorAll(selector),
   // The document is an event target too (panels listen for scrolls there); its listeners are cleared on each install.
   listeners: new Map<string, Set<Listener>>(),
   addEventListener(type: string, listener: Listener) { if (!this.listeners.has(type)) this.listeners.set(type, new Set()); this.listeners.get(type)!.add(listener); },

@@ -64,8 +64,11 @@ function namedPanels(tree: unknown): { named: Set<string>; parked: Set<string> }
  * at its parked place rather than its factory home. Without a graph, only the catalogue's views are known to exist.
  */
 export function restoreDockPreference(saved: unknown, area: Rect, catalogue: ViewCatalogue, parked: readonly PanelId[] = [],
-  viewPanels: readonly PanelId[] = catalogue.ids): { state: DockState; recovered: boolean } {
-  const factory = defaultDockState(catalogue), defaults = defaultDockStateFor(catalogue, parked);
+  viewPanels: readonly PanelId[] = catalogue.ids, tab = false): { state: DockState; recovered: boolean } {
+  // A tab supplies its own complete arrangement; missing panels stay closed. Empty means empty.
+  const empty = (): DockTree => ({ root: null, floating: [], closed: [...catalogue.ids] });
+  const factory = tab ? { wide: empty(), compact: empty() } : defaultDockState(catalogue);
+  const defaults = tab ? factory : defaultDockStateFor(catalogue, parked);
   const layout = recoverDockLayout(pruneViewPanels(saved, new Set(viewPanels)), {
     workAreas: [{ x: area.x, y: area.y, width: Math.max(1, area.w), height: Math.max(1, area.h) }],
     panelIds: [...catalogue.ids],

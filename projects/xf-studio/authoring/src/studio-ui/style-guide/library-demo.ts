@@ -1,5 +1,5 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
-import { badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
+import { menuSecondaryRow, openChoicePopover, badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, notDrawnState, type LightListItem, type TabItem, type TreeNodeData } from "../components";
@@ -228,6 +228,19 @@ const MOUNTS: Record<string, Mount> = {
       onSelect: id => { selected = id; list.update(items, selected); }, onMove: (id, index) => { const item = items.find(i => i.id === id)!; items = items.filter(i => i.id !== id); items.splice(index, 0, item); list.update(items, selected); },
       onRename: (id, name) => { items = items.map(i => i.id === id ? { ...i, name } : i); list.update(items, selected); }, onMenu: () => {} });
     list.update(items, selected); return h("div", { style: "max-width:360px" }, list.element); },
+  "lib-menu-secondary": () => {
+    const main = h("div", { class: "menu-item", role: "menuitem", tabindex: "0" }, h("span", { class: "menu-label", text: "My lighting — V · ManualSave-12 · Look 3" }));
+    const row = menuSecondaryRow(main, { label: "Delete", name: "Delete default My lighting", run: () => { row.element.remove(); } });
+    return h("div", { class: "menu static-menu", role: "menu", "aria-label": "Yours" }, row.element);
+  },
+  "lib-choice-popover": () => button({ label: "New tab: Eye makeup…", onClick: event => {
+    let selected = "";
+    openChoicePopover(event.currentTarget as HTMLElement, { title: "New tab: Eye makeup", apply: "Create", snapshot: () => ({ fields: [
+      { key: "v1", label: "Show which V?", name: "V v1 for Eye makeup", value: selected,
+        options: [{ value: "v1", label: "V · ManualSave-12" }, { value: "v2", label: "V · Streetkid" }, { value: "", label: "Leave empty" }] },
+      { key: "scene", label: "Scene", name: "Scene for Eye makeup", value: "shared", options: [{ value: "shared", label: "Share the scene of Eye makeup · V · ManualSave-12 · Look 3" }, { value: "", label: "New scene" }] }],
+      note: "Sharing a scene means lighting and look changes show in both tabs." }), select: (_key, value) => { selected = value; }, commit: () => {} });
+  } }),
   "lib-tab-strip": () => header(560),
   "lib-panel-header": () => header(260),
   "lib-status": () => { const bar = progressBar({ label: "Building the package", fraction: .42 }); const sweep = progressBar({ label: "Working" });

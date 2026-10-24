@@ -303,6 +303,8 @@ export class ProfileSessions {
     this.existing(tab);
     this.focus.showTab(tab);
   }
+  lastDefault(): string | undefined { return typeof this.extra.lastDefault === "string" ? this.extra.lastDefault : undefined; }
+  usedDefault(id: string) { this.extra.lastDefault = id; this.changed(); }
   rename(tab: TabId, name: string) {
     const at = this.index(tab), next = name.trim(), issue = nameIssue(next);
     if (issue) throw new TabRefusal("invalid_value", issue);

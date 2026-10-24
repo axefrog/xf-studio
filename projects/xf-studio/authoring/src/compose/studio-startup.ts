@@ -1,3 +1,4 @@
+import { layoutTabsPort } from "../app/profiles/tab-presentation";
 import type { StudioAction } from "../app/studio-application";
 import { browserReferenceTextures } from "../character/browser/browser-reference-textures-device";
 import { OFF_EXPERIMENTS } from "../platform/core/experiments";
@@ -72,7 +73,7 @@ import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-s
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
-import { createProfileServices, createTargetResolver, drawnScene, drawnView as drawnViewOf, historyScopeName, openProfileSession, relayDockSaves,
+import { createProfileServices, createTargetResolver, drawnScene, drawnView as drawnViewOf, historyScopeName, openProfileSession,
   sceneCharacter, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
 import { printDefault } from "../app/profiles/layout-fragment";
 import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS } from "./layout-defaults";
@@ -202,9 +203,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, { history: historyService,
     graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph });
   // The shown tab's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
-  const legacyLayout = workspace.uiPreferences.layout, tabDock = sessionState.dock();
-  const { layout: _legacy, ...uiPreferences } = workspace.uiPreferences;
-  const preferences = new UIPreferenceActions({ ...uiPreferences, ...(tabDock ? { layout: tabDock } : {}) });
+  const preferences = new UIPreferenceActions(workspace.uiPreferences);
   // How a held expression's changes animate (design §5.5): the workspace's setting, available before the head loads.
   const transitions = new TransitionSettings(workspace.preview.transitions);
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
@@ -308,9 +307,6 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The session as it is now, stored with the migration's mark (a session made for this window from the library is stored nowhere).
   const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
     profiles: sessionStored ? sessionState.stored(workspace.profiles) : workspace.profiles });
-  // The dock saves to its rendered tab (`tabs.arrange`, never Undo). Until the tab strip replaces the Layouts button (P2-iv), this relays
-  // the button's `layout.set` changes and mirrors the shown tab in memory (the workspace's own arrangement stays frozen).
-  relayDockSaves(preferences, sessionState, action => core.app.dispatch(action));
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).
@@ -322,7 +318,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
       preview: () => shownHead()?.preview.snapshot(), sample: () => shownHead()?.motion.sample(), views: () => workspace.views,
-      uiPreferences: () => { const { layout: _live, ...rest } = preferences.snapshot(); return { ...rest, ...(legacyLayout ? { layout: legacyLayout } : {}) }; },
+      uiPreferences: () => preferences.snapshot(),
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
       profiles: profileMarks,
@@ -491,6 +487,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
     panelInstance: panel => sessionState.instance(panel),
+    tabs: layoutTabsPort(sessionState, layoutTabs, services),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
     targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
     characterName: character => services.characters.character(character)?.label,

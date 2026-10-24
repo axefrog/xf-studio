@@ -2,6 +2,7 @@ import { Toggle } from "./controls";
 import { clamp, h, uid } from "./dom";
 import { icon, type IconName } from "./icons";
 import { stageTag, type Stage } from "./components/stage-tag";
+import { menuSecondaryRow } from "./components/menu-secondary";
 
 /**
  * Accessible menu and popover primitives. Items carry their own capability, so a
@@ -20,7 +21,8 @@ export type MenuItem =
        * What the entry is (a panel's description): its tooltip and accessible description, never a visible line, so a long menu of
        * like entries stays one row each (G2: what a thing is goes in a tip; C-32). A visible `hint` or reason still shows as usual.
        */
-      tip?: string }
+      tip?: string;
+      secondary?: { label: string; name: string; capability?: Capability; run(): void } }
   | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[] }
   | { kind: "separator" }
   | { kind: "heading"; label: string; detail?: string };
@@ -64,7 +66,7 @@ function menuLayer() {
   if (!layer?.isConnected) { layer = h("div", { class: "menu-layer" }); document.body.append(layer); }
   return layer;
 }
-function place(element: HTMLElement, anchor: MenuAnchor, submenu = false) {
+export function place(element: HTMLElement, anchor: MenuAnchor, submenu = false) {
   const margin = 6, { innerWidth: vw, innerHeight: vh } = window;
   element.style.left = "0px"; element.style.top = "0px";
   const rect = element.getBoundingClientRect();
@@ -96,11 +98,11 @@ export const menuCapability = (items: readonly MenuItem[], reason: string): Capa
  * actionable, never informational, so the owner disables its trigger with the reason instead (`hasCommands` asks first). Returns the
  * open menu, or undefined when it didn't open.
  */
-export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label: string; invoker?: Element | null; onClose?(): void } = { label: "Menu" }) {
+export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label: string; invoker?: Element | null; onClose?(): void; focusLabel?: string } = { label: "Menu" }) {
   if (!hasCommands(items)) return undefined;
   closeMenus(false);
   const invoker = options.invoker ?? (document.activeElement instanceof Element ? document.activeElement : null);
-  root = build(items, anchor, options.label, undefined, invoker, options.onClose);
+  root = build(items, anchor, options.label, undefined, invoker, options.onClose, options.focusLabel);
   const outside = (event: PointerEvent) => {
     if (!root) return;
     const path = event.composedPath();
@@ -116,7 +118,7 @@ export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label
 }
 
 function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: OpenMenu | undefined,
-  invoker: Element | null, onClose?: () => void): OpenMenu {
+  invoker: Element | null, onClose?: () => void, focusLabel?: string): OpenMenu {
   const element = h("div", { class: "menu", role: "menu", "aria-label": label, tabindex: "-1" });
   const entries: HTMLElement[] = [];
   const self: OpenMenu = { element, parent, invoker, close(restore) {
@@ -161,11 +163,19 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
       else self.child?.close(false);
     });
     entry.addEventListener("keydown", event => {
+      if (event.key === "Delete" && item.kind === "action" && item.secondary) {
+        event.preventDefault(); event.stopPropagation();
+        if (item.secondary.capability?.available !== false) { closeMenus(true); item.secondary.run(); }
+      }
       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); }
       if (event.key === "ArrowRight" && item.kind === "submenu") { event.preventDefault(); if (available) openChild(entry, item, true); }
     });
     entries.push(entry);
-    element.append(entry);
+    if (item.kind === "action" && item.secondary) {
+      const secondary = item.secondary;
+      const row = menuSecondaryRow(entry, { ...secondary, run: () => { closeMenus(true); secondary.run(); } });
+      entries.push(row.action); element.append(row.element);
+    } else element.append(entry);
   }
   function openChild(entry: HTMLElement, item: Extract<MenuItem, { kind: "submenu" }>, focusFirst = false) {
     if (self.child?.invoker === entry) { if (focusFirst) focusEntry(self.child, 0); return; }
@@ -197,7 +207,11 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
   });
   menuLayer().append(element);
   place(element, anchor, !!parent);
-  if (!parent) requestAnimationFrame(() => focusEntry(self, 0));
+  if (!parent) requestAnimationFrame(() => {
+    if (!element.isConnected) return;
+    const target = focusLabel ? entries.find(entry => entry.querySelector(".menu-label")?.textContent === focusLabel) : undefined;
+    if (target) target.focus(); else focusEntry(self, 0);
+  });
   return self;
 }
 function focusEntry(menu: OpenMenu, index: number) {
@@ -221,9 +235,11 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   options?: readonly ValueOption[];
   /** What the value is used for, muted on the note line while the value is accepted; a refusal takes its place (UI-143). */
   hint?: string;
+  invoker?: HTMLElement;
+  onClose?(): void;
 }) {
   closeMenus(false);
-  const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const invoker = options.invoker ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const inputId = uid("value");
   const input = field.kind === "text"
     ? h("input", { id: inputId, type: "text", value: field.value, maxlength: String(field.maxLength), class: "field" })
@@ -255,15 +271,17 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
   let closed = false;
   function close(restore: boolean) {
+    if (closed) return;
     closed = true;
     document.removeEventListener("pointerdown", outside, { capture: true });
     form.remove();
+    options.onClose?.();
     if (restore && invoker?.isConnected) invoker.focus();
   }
   menuLayer().append(form);
   place(form, anchor);
   check();
-  requestAnimationFrame(() => { input.focus(); if (input instanceof HTMLInputElement && field.kind === "text") input.select(); });
+  requestAnimationFrame(() => { if (closed) return; input.focus(); if (input instanceof HTMLInputElement && field.kind === "text") input.select(); });
   // Armed after the press that opened it, unless it was closed first (a listener left behind would outlive it).
   setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, { capture: true }); });
   return { close };

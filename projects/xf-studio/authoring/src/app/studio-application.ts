@@ -687,7 +687,7 @@ export class StudioApplication {
   capability(action: StudioAction): StudioCapability {
     const s = this.services, route = this.routes.route(action.kind);
     if (!route.ok) return unknownCommand();
-    const denied = this.denied();
+    const denied = action.kind === "tabs.show" ? undefined : this.denied();
     if (denied) return denied;
     // With a loaded collection but no selected preset the editor shows an empty recipe no
     // preset owns; content written there would be discarded at the next preset switch.

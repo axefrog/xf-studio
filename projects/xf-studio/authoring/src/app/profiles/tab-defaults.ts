@@ -69,6 +69,7 @@ export class TabDefaults {
       case "tabs.new": {
         const { view, substitution } = this.plan(act.default, act.choice);
         sessions.newTab(instantiateFragment(view.fragment, fillOf(substitution), sessions, { name: view.name, origin: view.id }));
+        sessions.usedDefault(view.id);
         break;
       }
       case "tabs.reset": {

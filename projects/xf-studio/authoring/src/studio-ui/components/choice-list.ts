@@ -32,6 +32,8 @@ export type ChoiceOption<T extends string> = { value: T; label: string; title?: 
   swatch?: string };
 export type ChoiceListOptions<T extends string> = {
   label: string; onSelect(value: T): void;
+  /** Radio fields select on arrows (U4); ordinary lists keep focus and selection separate. */
+  radio?: boolean;
   layout?: "chips" | "rows" | "tiles";
   help?: HelpText; showLabel?: boolean;
   /** Keep the note line from the start (a passing state or the list's reason comes and goes there). */
@@ -90,7 +92,7 @@ export class ChoiceList<T extends string> {
   private readonly tip: HTMLButtonElement | null;
   constructor(private readonly options: ChoiceListOptions<T>) {
     const labelId = uid("choices");
-    this.list = h("div", { class: `choices ${options.layout ?? "chips"}`, role: "listbox",
+    this.list = h("div", { class: `choices ${options.layout ?? "chips"}`, role: options.radio ? "radiogroup" : "listbox",
       "aria-label": options.showLabel === false ? options.label : undefined, "aria-labelledby": options.showLabel === false ? undefined : labelId });
     this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.mark = options.swatchCard && options.showLabel !== false ? contrastMark() : null;
@@ -120,6 +122,7 @@ export class ChoiceList<T extends string> {
       const element = choiceItem({ label: choice.name ?? choice.label, title: this.options.swatchCard && choice.swatch ? undefined : choice.title ?? choice.name, swatch: false, selected: choice.value === this.selected,
         content: h("span", { class: "choice-content" }, choice.swatch ? h("span", { class: "swatch", "aria-hidden": "true", style: `--swatch:${choice.swatch}` }) : null,
           h("span", { class: "choice-label", text: choice.label })) });
+      if (this.options.radio) { element.setAttribute("role", "radio"); element.removeAttribute("aria-selected"); }
       element.addEventListener("click", () => { if (element.getAttribute("aria-disabled") === "true") return; this.rove(element); this.options.onSelect(choice.value); });
       element.addEventListener("focus", () => this.rove(element));
       return { value: choice.value, element };
@@ -146,7 +149,7 @@ export class ChoiceList<T extends string> {
     this.selected = selected;
     if (this.mark) setContrastMark(this.mark, !!state.enhanced);
     for (const { value, element } of this.items) {
-      setAttr(element, "aria-selected", String(value === selected));
+      setAttr(element, this.options.radio ? "aria-checked" : "aria-selected", String(value === selected));
       const allowed = state.disabled ? { available: false, reason: state.reason } : capability(value);
       setUnavailable(element, !allowed.available && (!!state.disabled || value !== selected), allowed.reason);
     }
@@ -180,6 +183,7 @@ export class ChoiceList<T extends string> {
     const target = elements[Math.max(0, Math.min(elements.length - 1, next))]!;
     this.rove(target);
     target.focus();
+    if (this.options.radio && target.getAttribute("aria-disabled") !== "true") this.options.onSelect(this.items[elements.indexOf(target)]!.value);
   }
   /** How many tiles a row holds (from the laid-out positions; 1 without layout). */
   private columns() {

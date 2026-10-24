@@ -1,5 +1,9 @@
-import { applyLayoutAction, isLayoutAction, layoutCapability, parseLayoutLibrary, type LayoutAction, type LayoutLibrary } from "./layout-library";
 import { isEasing, type EasingId } from "../platform/api/easing";
+
+/** Frozen migration input for older builds. No active saved-layout commands remain. */
+export type LegacySavedLayout = { id: string; name: string; dock: DockLayout; modules?: Record<string, boolean>;
+  autoSize?: "wide" | "compact"; working?: { dock: DockLayout; modules?: Record<string, boolean> } };
+export type LayoutLibrary = { schema: "xfs/layout-library-1"; layouts: LegacySavedLayout[]; active: string; seen?: "wide" | "compact" };
 
 /** Workspace-only preferences. A dock implementation owns the meaning of `state`. */
 export type ThemePreference = "system" | "light" | "dark";
@@ -22,8 +26,7 @@ export type TourRecord = "completed" | "skipped" | "declined";
  * by the container's view key (e.g. `panel:character`), least recently set first. Presentation state, never Undo.
  * `sizes`: the height each resizable region (a list, tree or scroll region with a size bar, components/size-bar.ts) was given, in CSS
  * pixels, by its view key (e.g. `expressions:start-from`), least recently set first; absent: its default. Presentation state, never Undo.
- * `layouts`: the saved layouts (layout-library.ts, view-graph-design.md §4.5); `layout` is the active one's live arrangement. Absent until
- * the person first saves, renames or otherwise changes a layout.
+ * `layouts` and `layout`: frozen migration input, retained for older builds. Layout tabs own arrangements and defaults now.
  */
 export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout;
   tours?: Record<string, TourRecord>; researchTools?: boolean; modules?: Record<string, boolean>; expanded?: Record<string, boolean>;
@@ -70,7 +73,7 @@ export type UIPreferenceAction =
   | { kind: "easing.set"; scope: string; easing: EasingId }
   | { kind: "controlSize.set"; control: string; size: number }
   | { kind: "tours.record"; tourId: string; outcome: TourRecord }
-  | LayoutAction;
+;
 export type UIPreferenceCapability = { available: boolean; reason?: string };
 
 const MAX_LAYOUT_BYTES = 128 * 1024;
@@ -223,8 +226,8 @@ export function parseUIPreferences(value: unknown): UIPreferences {
     if (candidate.researchTools === true) result.researchTools = true;
     const layout = parseDockLayout(candidate.layout);
     if (layout) result.layout = layout;
-    const layouts = parseLayoutLibrary(candidate.layouts, parseDockLayout);
-    if (layouts) result.layouts = layouts;
+    // Legacy layout data stays byte-for-byte as read; only migration interprets it.
+    if (candidate.layouts && typeof candidate.layouts === "object") result.layouts = structuredClone(candidate.layouts) as LayoutLibrary;
     if (candidate.modules && typeof candidate.modules === "object" && !Array.isArray(candidate.modules)) {
       const modules = Object.entries(candidate.modules).filter(([id, shown]) => moduleId(id) && typeof shown === "boolean").slice(0, MAX_MODULES);
       if (modules.length) result.modules = Object.fromEntries(modules) as Record<string, boolean>;
@@ -281,7 +284,6 @@ export class UIPreferenceActions {
   snapshot(): Readonly<UIPreferences> { return structuredClone(this.value); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   capability(action: UIPreferenceAction): UIPreferenceCapability {
-    if (isLayoutAction(action)) return layoutCapability(this.value, action, parseDockLayout);
     if (action.kind === "theme.set" && !theme(action.theme))
       return { available: false, reason: "Choose System, Light or Dark." };
     if (action.kind === "inputHints.set" && typeof action.enabled !== "boolean")
@@ -335,8 +337,7 @@ export class UIPreferenceActions {
   dispatch(action: UIPreferenceAction) {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
-    if (isLayoutAction(action)) this.value = applyLayoutAction(this.value, action, parseDockLayout);
-    else if (action.kind === "theme.set") this.value.theme = action.theme;
+    if (action.kind === "theme.set") this.value.theme = action.theme;
     else if (action.kind === "inputHints.set") this.value.inputHints = action.enabled;
     else if (action.kind === "researchTools.set") { if (action.enabled) this.value.researchTools = true; else delete this.value.researchTools; }
     else if (action.kind === "tours.record") this.value.tours = { ...this.value.tours, [action.tourId]: action.outcome };

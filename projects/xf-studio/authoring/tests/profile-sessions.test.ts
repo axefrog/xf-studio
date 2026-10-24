@@ -22,7 +22,7 @@ import { sessionOfWorkspace, workspaceProfiles } from "../src/app/profiles/profi
 import { PROFILES_MIGRATION } from "../src/app/profiles/profile-session";
 import { type ProfileSessions, type TabContent } from "../src/app/profiles/profile-sessions";
 import { UIPreferenceActions, type DockLayout } from "../src/app/ui-preferences";
-import { drawnView, relayDockSaves } from "../src/app/profiles/profile-window";
+import { drawnView } from "../src/app/profiles/profile-window";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
@@ -808,30 +808,12 @@ describe("replays keep what Undo doesn't hold (review P2-1, finding 3)", () => {
   });
 });
 
-describe("the dock relay (review P2-1, finding 4)", () => {
-  test("only a change of the dock's arrangement passes on to the shown tab; another preference changing passes nothing on; an arrangement the session makes becomes the preference's", () => {
-    const s = open(77), [first, second] = s.tabList();
-    const preferences = new UIPreferenceActions({ ...freshWorkspace().uiPreferences, ...(s.dock() ? { layout: s.dock()! } : {}) });
-    const relayed: unknown[] = [];
-    relayDockSaves(preferences, s, action => { relayed.push(action); s.dispatch(action); });
-    // An arrangement set elsewhere stays when another preference changes (the review's case), and becomes the preference's.
-    s.dispatch({ kind: "tabs.arrange", tab: first!.id, layout: dockOf(["layers"]) });
-    preferences.dispatch({ kind: "inputHints.set", enabled: false });
-    expect(s.dock(first!.id)).toEqual(dockOf(["layers"]));
-    expect(relayed).toEqual([]);
-    expect(preferences.snapshot().layout).toEqual(dockOf(["layers"]));
-    // The dock saves: passed on, once.
-    preferences.dispatch({ kind: "layout.set", layout: dockOf(["presets", "history"]) });
-    preferences.dispatch({ kind: "theme.set", theme: "dark" });
-    expect(relayed).toEqual([{ kind: "tabs.arrange", tab: first!.id, layout: dockOf(["presets", "history"]) }]);
-    expect(s.dock(first!.id)).toEqual(dockOf(["presets", "history"]));
-    // Another tab shown: the preference follows it, and nothing is passed on to either tab.
-    s.show(second!.id);
-    expect(preferences.snapshot().layout ?? null).toEqual(s.dock(second!.id));
-    preferences.dispatch({ kind: "inputHints.set", enabled: true });
-    expect(relayed).toHaveLength(1);
-    expect(s.dock(first!.id)).toEqual(dockOf(["presets", "history"]));
-  });
+test("legacy preferences never relay into the tab arrangement", () => {
+  const s = open(77), before = s.dock();
+  const preferences = new UIPreferenceActions(freshWorkspace().uiPreferences);
+  preferences.dispatch({ kind: "layout.set", layout: dockOf(["layers"]) });
+  preferences.dispatch({ kind: "theme.set", theme: "dark" });
+  expect(s.dock()).toEqual(before);
 });
 
 describe("the editing context (review P2-1, finding 5)", () => {

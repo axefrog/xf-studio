@@ -28,8 +28,6 @@ const views = readdirSync(join(root, "features")).map(id => join(root, "features
 const CORE_VALUES = new Map<string, readonly string[]>([
   // The theme, the dock's recovery gate, and the remembered scroll anchor's validation (view-state.ts reads stored anchors through it).
   ["app/ui-preferences", ["effectiveTheme", "parseScrollAnchor", "recoverDockLayout"]],
-  // Saved layouts' pure reads: the library as shown (the first layout when none is stored), names and the automatic size switch.
-  ["app/layout-library", ["activeLayout", "autoSwitchTarget", "layoutLibraryOf", "layoutNameProblem", "MAX_LAYOUT_NAME", "nextLayoutName"]],
   ["legacy/eye-makeup/mod-branding", ["EYE_MAKEUP_MOD", "MOD_NAME_HINT"]],
   // The Character panel's hierarchy: the Studio's own section contributions and the pure tree derivation (character-panel-sections.ts).
   ["character/character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],

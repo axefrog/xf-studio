@@ -10,7 +10,6 @@ import { canvasView, tabViews, viewPaneState, ViewPanels, viewPanelEntries, view
 import { viewCatalogue } from "../src/studio-ui/views/contribution";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
 import { UIPreferenceActions } from "../src/app/ui-preferences";
-import { relayDockSaves } from "../src/app/profiles/profile-window";
 import type { ProfileSessions } from "../src/app/profiles/profile-sessions";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
@@ -62,12 +61,11 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
   const state = { views: [...initial], drawn: { ...drawn } };
   const readViews = () => session ? tabViews(session.graph.snapshot().views, session.tabId()) : shownOf(state.views);
   const preferences = new UIPreferenceActions({ ...freshWorkspace().uiPreferences, ...(session?.dock() ? { layout: session.dock()! } : {}) });
-  if (session) relayDockSaves(preferences, session, action => session.dispatch(action));
   const attached: string[] = [], made = new Map<string, ReturnType<typeof fakePane>>(), saves: unknown[] = [];
   let dock!: InstanceType<typeof DockView>;
   const panes = new ViewPanels({
     views: readViews, drawn: () => state.drawn,
-    arrangement: () => ({ tab: session?.tabId(), layout: preferences.snapshot().layout ?? null }),
+    arrangement: () => ({ tab: session?.tabId(), layout: session ? session.dock() : preferences.snapshot().layout ?? null }),
     save: (tab, next) => { saves.push(next);
       if (session && tab !== undefined) session.dispatch({ kind: "tabs.arrange", tab, layout: serializeDockState(next) }); },
     make: panel => { const pane = fakePane(panel); made.set(panel, pane); return pane; },

@@ -59,6 +59,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   outbox?: import("../platform/core/document-outbox").DocumentOutbox;
   /** A panel's instance in the tab shown (the profile session's). */
   panelInstance?: (panel: string) => string;
+  tabs?: import("./profiles/tab-presentation").LayoutTabsPort;
   /** The input layer's target resolution and the session's focus (profiles design §3.3, §3.6): what the presentation's actions name. */
   targets?: import("./profiles/targets").TargetResolver;
   focus?: Pick<import("../platform/core/focus").FocusService, "focusView" | "focusPanel">;
@@ -119,7 +120,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),
     ...(options.targets ? { targets: options.targets } : {}), ...(options.focus ? { focus: options.focus } : {}),
     ...(options.scopeName ? { scopeName: options.scopeName } : {}),
-    ...(options.characterName ? { characterName: options.characterName } : {}) });
+    ...(options.characterName ? { characterName: options.characterName } : {}), ...(options.tabs ? { tabs: options.tabs } : {}) });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

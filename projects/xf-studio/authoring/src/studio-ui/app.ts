@@ -21,7 +21,7 @@ import { markReadOnly } from "./read-only-sweep";
 import { Feedback } from "./feedback";
 import { icon, isIconName } from "./icons";
 import { sizeClassFor } from "./layout-defaults";
-import { layoutController, type LayoutController } from "./layouts";
+import { layoutTabs } from "./layout-tabs";
 import { closeMenus, openMenu, type Capability, type MenuItem } from "./menu";
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
@@ -139,7 +139,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let dockRef: DockView | undefined;
   const paneAnchors = new Map<PanelController, () => void>();
   const viewPanes = new ViewPanels({
-    arrangement: () => ({ tab: port.focus.targets().tab, layout: port.preferences.snapshot().layout ?? null }),
+    arrangement: () => ({ tab: port.focus.targets().tab, layout: port.tabs?.dock() ?? null }),
     save: (tab, state) => {
       if (tab === undefined) return;
       const action = { kind: "tabs.arrange" as const, tab, layout: serializeDockState(state) }, allowed = port.authoring.capability(action);
@@ -149,7 +149,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       } else feedback.toast("warning", "Layout", allowed.reason ?? "This layout could not be saved.");
     },
     restore: layout => { const parked = parkedPanels();
-      dock.load(restoreDockPreference(layout, dock.area(), catalogue, parked, viewPanelIds(port.views.snapshot())).state,
+      dock.load(restoreDockPreference(layout, dock.area(), catalogue, parked, viewPanelIds(port.views.snapshot()), !!port.tabs).state,
         panels.filter(panel => !parked.includes(panel.spec.id)).map(specOf)); },
     views: () => { const graph = port.views.snapshot(); return graph ? tabViews(graph.views, port.focus.targets().tab) : []; },
     drawn: () => port.viewport.snapshot().head,
@@ -164,8 +164,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
   if (headEntry) viewPanes.start();
   const parkedAtStart = parkedPanels();
-  const restored = restoreDockPreference(port.preferences.snapshot().layout,
-    { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, parkedAtStart, viewPanelIds(port.views.snapshot()));
+  const restored = restoreDockPreference(port.tabs?.dock(),
+    { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, parkedAtStart, viewPanelIds(port.views.snapshot()), !!port.tabs);
   // A preview module's panels carry its stage on their tabs (components/stage-tag.ts).
   const specOf = (panel: PanelController) => ({ ...panel.spec, stage: moduleOfPanel(panel.spec.id)?.stage, visibility: (visible: boolean) => {
     panel.spec.visibility?.(visible);
@@ -247,10 +247,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     schedule();
   }
   rt.modules = { list: modules, panels: panelsOf, set: setModuleShown };
-  // Saved layouts (view-graph-design.md §4.5): a layout loads its arrangement and modules, and the rest is derived as for a module toggle.
-  const layouts = layoutController({ port, feedback, dock, catalogue, modules, shownModules: () => rt.shownModules(), parkedPanels,
-    viewPanels: () => viewPanelIds(port.views.snapshot()),
-    panelSpecs: () => panels.map(specOf), area: () => dock.area(), finishInput, changed: () => { withdrawUnoffered(); schedule(); } });
   const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
   /**
    * Settings (UI-109) is summoned like any panel (`reveal`, dock/layout.ts `summonPanel`): with no home among the docked groups a closed
@@ -263,11 +259,15 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     requestAnimationFrame(() => settingsPanel?.show?.(section));
   } };
   guidance = mountGuidance(rt, { openHelp });
-  const header = shellHeader(rt, theme, view, openHelp, layouts);
+  const header = shellHeader(rt, theme, view, openHelp);
   const status = statusBar(rt);
   const leaseNotice = workspaceNotice(rt);
   const setupCard = previewSetupCard(rt);
-  const main = h("main", { class: "workspace", "aria-label": "Workspace panels" }, dock.element);
+  const main = h("main", { class: "workspace", id: "layout-dock", "aria-label": "Workspace panels" }, dock.element);
+  const tabs = port.tabs ? layoutTabs({ tabs: port.tabs, capability: action => port.authoring.capability(action),
+    dispatch: action => port.authoring.dispatch(action), feedback, dock: main,
+    moduleIcon: id => modules.find(module => module.id === id)?.icon,
+    changed: () => { viewPanes.sync(); schedule(); } }) : undefined;
   // A read-only window: controls marked unavailable never act, whatever kind of control they are (the reason tip answers instead).
   const refuseUnavailable = (event: Event) => {
     if (root.dataset.workspace !== "read-only") return;
@@ -286,15 +286,10 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   };
   main.addEventListener("focusin", event => reportFocus(event.target, true));
   main.addEventListener("pointerdown", event => reportFocus(event.target, false), true);
-  root.replaceChildren(header.element, leaseNotice.element, main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
+  root.replaceChildren(header.element, leaseNotice.element, ...(tabs ? [tabs.element] : []), main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
   root.classList.add("studio-ready");
   dock.render();
   requestAnimationFrame(() => dock.recover());
-  if (restored.recovered === false && port.preferences.snapshot().layout)
-    feedback.toast("warning", "Layout", "The saved panel layout could not be restored safely, so the default layout is shown.");
-  // A window that opens in another size class than last time counts as crossing into it.
-  requestAnimationFrame(() => layouts.sizeClass(dock.sizeClass, false));
-
   /**
    * The 3D preview setup card sits in the 3D view pane, its subject, whenever that pane is shown and has room for it
    * (release-readiness-audit.md item 10), so it never covers an inspector; it floats over the window only while the pane is hidden or
@@ -351,6 +346,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   }
   const paint = () => {
     queued = false;
+    tabs?.sync();
     syncOptional();
     // The shown tab's 3D views each have their pane, and the canvas is in the one holding the picture.
     if (headEntry) viewPanes.sync();
@@ -426,18 +422,18 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (dock.sizeClass !== lastClass) {
         lastClass = dock.sizeClass; dock.render();
         feedback.announce(`${lastClass === "wide" ? "Wide" : "Compact"} layout`);
-        layouts.sizeClass(lastClass, true);
+        tabs?.fit();
       }
       dock.recover(); dock.condenseTabs(); port.viewport.resize(); schedule();
     }, 120);
   });
 
   const commands = () => withPreviewSetup(rt, [...buildCommands(rt, theme, view, byId,
-    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx)), layouts), ...panels.flatMap(panel => panel.commands?.() ?? []), ...guidance.commands()]);
+    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx))), ...panels.flatMap(panel => panel.commands?.() ?? []), ...(tabs?.commands() ?? []), ...guidance.commands()]);
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
-    if (event.defaultPrevented) return;
+    if (event.defaultPrevented || tabs?.globalKey(event)) return;
     const modalOpen = !!document.querySelector("dialog[open]");
     const shortcut = studioShortcut(event, { textInput: isTextInput(event.target), modalOpen });
     if (!shortcut) return;
@@ -463,7 +459,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   header.bindPalette(() => openPalette(commands));
   // The check at start (the host skips it when Settings › Updates turns it off); the service waits until after first paint.
   startupUpdateCheck(rt);
-  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, layouts, preferences: () => port.preferences.snapshot(),
+  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, tabs, preferences: () => port.preferences.snapshot(),
     guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port)) } } });
   return { dock, runtime: rt };
 }
@@ -532,7 +528,7 @@ function themeItems(theme: Theme): MenuItem[] {
     { kind: "action", label: "Dark", icon: "moon", checked: theme.preference === "dark", run: () => theme.set("dark") }];
 }
 
-function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp: () => void, layouts: LayoutController) {
+function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp: () => void) {
   const port = rt.port;
   // The Modules menu (view-graph-design.md §4.2): the shown modules' names, and a menu to show or hide each.
   const categoryText = h("span");
@@ -560,20 +556,9 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     ["header.settings", settingsButton]] as const)
     rt.anchors.register(anchor, control);
   const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels, modules and views", onClick: event => {
-    openMenu([...panelMenuItems(rt, view.research()),
-      { kind: "separator" },
-      // Which arrangement a reset applies to is the entry's tooltip (C-32: the menu fits a 900 px window, one row per entry). Keyboard &
-      // mouse lives in Help, Settings › Appearance and the palette, where people look for it, not among the panels.
-      { kind: "action", label: "Reset this layout", icon: "reset", tip: `Resets the ${rt.dock.sizeClass === "wide" ? "wide" : "compact"} arrangement: each window size keeps its own.`,
-        run: () => rt.dock.reset() }],
-    event.currentTarget as Element, { label: "Panels and layout", invoker: event.currentTarget as Element });
+    openMenu(panelMenuItems(rt, view.research()), event.currentTarget as Element,
+      { label: "Panels", invoker: event.currentTarget as Element });
   } });
-  // Saved layouts (view-graph-design.md §4.5): the current layout's name, collapsing to its icon in narrow windows.
-  const layoutsButton = button({ label: "Layouts", icon: "layouts", variant: "ghost", menu: true, className: "layouts-btn", onClick: event => {
-    const anchor = event.currentTarget as Element;
-    openMenu(layouts.menuItems(anchor), anchor, { label: "Layouts", invoker: anchor });
-  } });
-  rt.anchors.register("header.layouts", layoutsButton);
   const themeButton = button({ label: "View preferences", icon: "monitor", iconOnly: true, variant: "ghost", menu: true, onClick: event =>
     openMenu([...themeItems(theme), { kind: "separator" }, ...view.items(), { kind: "separator" },
       { kind: "action", label: "All settings…", icon: "settings", hint: "Game, saves folder, WolvenKit, appearance and diagnostics", run: () => rt.settings.open("appearance") }],
@@ -590,7 +575,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     // The library chip sits after the crumbs, not inside them, so the names give way before it and it never runs over the verification
     // flag in a crowded header (DESK-06).
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset), verify, chipSlot,
-    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, layoutsButton, themeButton));
+    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, themeButton));
   // The crumbs stay readable (UI-187): the header's other items give way first, in a fixed order, whenever the window or the words change.
   const fit = new HeaderFit(element, [collection, preset], { slot: chipSlot, element: chip, words: LIBRARY_CHIP_WIDEST });
   let fitKey = "";
@@ -617,13 +602,10 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       const saveCap = port.authoring.requestCapability({ kind: "save" });
       applyCapability(save, saveCap); save.title = saveCap.available ? `Save version (${keys.save})` : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
-      const layout = layouts.label();
-      setButtonLabel(layoutsButton, layout.name);
-      layoutsButton.title = layout.title; layoutsButton.dataset.title = layout.title; setAttr(layoutsButton, "aria-label", layout.accessible);
       themeButton.replaceChildren(icon(theme.preference === "system" ? "monitor" : theme.preference === "dark" ? "moon" : "sun"));
       setAttr(themeButton, "aria-label", `View preferences (theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference})`);
       // Not the chip's words: its room is reserved (above), so they change no stage.
-      const key = JSON.stringify([categoryText.textContent, collection.textContent, preset.textContent, verify.hidden, layout.name]);
+      const key = JSON.stringify([categoryText.textContent, collection.textContent, preset.textContent, verify.hidden]);
       if (key !== fitKey) { fitKey = key; fit.refit(); }
     },
   };
@@ -873,7 +855,7 @@ export function withPreviewSetup(rt: Pick<StudioRuntime, "port" | "feedback" | "
 }
 
 /** The palette's commands: the platform's own, with each feature view's commands after the platform's Edit entries. */
-export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
+export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[]): Command[] {
   const port = rt.port;
   const act = (id: string, title: string, group: string, action: PresentationAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra,
@@ -1017,8 +999,6 @@ export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, 
       return { id: `panel.collapse.${panel.spec.id}`, title: `${collapsed ? "Expand" : "Collapse"} ${panel.spec.title}`, group: "Layout",
         icon: (collapsed ? "chevronRight" : "chevronDown") as "chevronRight", keywords: "collapse expand fold minimise header",
         capability: () => collapsed || !blocked ? { available: true } : { available: false, reason: blocked }, run: () => rt.dock.toggleCollapse(panel.spec.id) }; }),
-    { id: "layout.reset", title: "Reset to factory layout", group: "Layout", icon: "reset", keywords: "reset layout default factory", ...always, run: () => layouts.resetFactory() },
-    ...layouts.commands(),
     { id: "theme.system", title: `Theme: match system (${theme.system})`, group: "Appearance", icon: "monitor", ...always, run: () => theme.set("system") },
     { id: "theme.light", title: "Theme: light", group: "Appearance", icon: "sun", ...always, run: () => theme.set("light") },
     { id: "theme.dark", title: "Theme: dark", group: "Appearance", icon: "moon", ...always, run: () => theme.set("dark") },
