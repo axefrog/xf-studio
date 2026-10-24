@@ -7,7 +7,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { PROFILES_MIGRATION_ENABLED, profilesMigrationTransport, startProfilesMigration } from "../src/app/browser/profiles-migration-device";
 import { checkMigrationRequest, createProfilesMigrationHandler } from "../src/app/profiles/host/profiles-migrate";
-import { buildProfileSession, dockPanels, LAYOUT_DEFAULT_DOCUMENT, migrationSnapshot, type MigrationResult, snapshotDigest, layoutsOf } from "../src/app/profiles/profiles-migration-data";
+import { buildProfileSession, dockPanels, LAYOUT_DEFAULT_DOCUMENT, migrationSnapshot, type MigrationResult, snapshotDigest } from "../src/app/profiles/profiles-migration-data";
 import { PANEL_INSTANCE_ID, profileSessionOf } from "../src/app/profiles/profile-session";
 import { ProfilesMigration } from "../src/app/profiles/profiles-migration";
 import { decodedSaveId } from "../src/character/character-document";
@@ -21,9 +21,6 @@ import { alpha2Library, alpha2SaveNamed, COLLECTION, documentRows, fixtureSave, 
 import { HarnessHost, HarnessWorkspace, migrateUntilDone } from "./fixtures/profiles-migration-harness";
 import { restore } from "./fixtures/workspace-observable";
 import { looseWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
-import { LayoutDefaults } from "../src/app/profiles/layout-defaults";
-import { DocumentOutbox } from "../src/platform/core/document-outbox";
-import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
 import { STUDIO_INITIAL_LAYOUT } from "../src/compose/layout-defaults";
 import { openSession } from "./fixtures/profile-sessions";
 import { freshWorkspace } from "./fixtures/eye-region";
@@ -506,104 +503,6 @@ describe("second review of chunk 1d-i", () => {
   });
 });
 
-
-test("Review A finding 1: layouts saved after profiles-1 import once without changing tabs or existing defaults", async () => {
-  const { path } = library(), host = new HarnessHost(path), workspace = new HarnessWorkspace(realWorkspace(), "post-profiles-layouts");
-  await migrateUntilDone(workspace, host);
-  // A damaged default is kept for recovery/deletion and must not block importing every usable saved layout.
-  expect(host.documents.transact({ id: "damaged-default", command: "fixture", writes: [{ kind: LAYOUT_DEFAULT_DOCUMENT, id: "d-unreadable", base: 0,
-    value: { schema: "xfs/layout-default-1", id: "d-unreadable", name: "Damaged", owner: "user", createdAt: 1, fragment: {} } }] }).ok).toBe(true);
-  const initial = rows(path, LAYOUT_DEFAULT_DOCUMENT);
-  workspace.edit(state => {
-    const saved = state.uiPreferences.layouts!.layouts;
-    // An already consumed legacy entry stays consumed; two new same-named entries must both be recovered.
-    saved[0] = { ...saved[0]!, dock: saved[1]!.dock };
-    saved.push({ id: "l3", name: "After migration", dock: LIVE_DOCK });
-    saved.push({ id: "l4", name: "After migration", dock: saved[1]!.dock });
-  });
-  expect(await workspace.run(host)).toBe("already");
-  const state = workspace.state(), tabs = structuredClone(state.profiles), legacy = structuredClone(state.uiPreferences);
-  const documents = storeDocuments(path), storage = memoryOutboxStorage();
-  let sending = false;
-  const outbox = new DocumentOutbox(documents, storage, { sendable: () => sending }); outbox.open();
-  const defaults = new LayoutDefaults({ documents, outbox }); await defaults.load();
-  defaults.importLegacy(layoutsOf(state));
-  const recovered = defaults.list();
-  expect(recovered).toHaveLength(initial.length + 2);
-  for (const old of initial) expect(recovered.find(value => value.id === old.id)?.fragment).toEqual(old.value.fragment);
-  const pairs = recovered.filter(value => value.fragment.tab).map(value => [value.name, JSON.stringify(value.fragment.tab.dock)]);
-  for (const layout of layoutsOf(state).slice(1)) expect(pairs).toContainEqual([layout.name, JSON.stringify(layout.fragment.tab.dock)]);
-  const pending = structuredClone(outbox.pendingEntries());
-  defaults.importLegacy(layoutsOf(state));
-  expect(outbox.pendingEntries()).toEqual(pending);
-  expect(state.profiles).toEqual(tabs); expect(state.uiPreferences).toEqual(legacy);
-  // A lost response/restart replays the same durable import, then a later load reads it from the library.
-  outbox.stop();
-  const resumed = new DocumentOutbox(documents, storage, { sendable: () => sending }); resumed.open();
-  const again = new LayoutDefaults({ documents, outbox: resumed }); await again.load();
-  again.importLegacy(layoutsOf(state));
-  const content = (values: ReturnType<LayoutDefaults["list"]>) => values.map(({ id, name, fragment }) => ({ id, name, fragment })).sort((a, b) => a.id.localeCompare(b.id));
-  expect(content(again.list())).toEqual(content(recovered));
-  expect(resumed.pendingEntries()).toEqual(pending);
-  sending = true; await resumed.flush();
-  const stored = documentRows(path);
-  again.importLegacy(layoutsOf(state)); await resumed.flush();
-  expect(documentRows(path)).toEqual(stored);
-  // Explicit edits and deletion after import stay explicit: startup neither recreates nor overwrites them.
-  const edited = recovered.find(value => value.name === "After migration")!;
-  expect(again.dispatch({ kind: "rename", id: edited.id, name: "Renamed default" }).ok).toBe(true);
-  expect(again.dispatch({ kind: "delete", id: edited.id }).ok).toBe(true);
-  const afterDelete = structuredClone(resumed.pendingEntries());
-  again.importLegacy(layoutsOf(state));
-  expect(resumed.pendingEntries()).toEqual(afterDelete);
-  expect(again.get(edited.id)).toBeUndefined();
-  resumed.stop(); host.close();
-});
-
-test.each(["rename", "update", "rename-delete", "update-delete"] as const)("Review C: original migration provenance survives %s before first recovery", async edit => {
-  const { path } = library(), host = new HarnessHost(path), workspace = new HarnessWorkspace(realWorkspace(), `provenance-${edit}`);
-  await migrateUntilDone(workspace, host);
-  const state = workspace.state(), documents = storeDocuments(path), storage = memoryOutboxStorage();
-  const outbox = new DocumentOutbox(documents, storage); outbox.open();
-  const defaults = new LayoutDefaults({ documents, outbox }); await defaults.load();
-  const original = defaults.list()[0]!;
-  if (edit.startsWith("rename")) expect(defaults.dispatch({ kind: "rename", id: original.id, name: "My renamed default" }).ok).toBe(true);
-  else expect(defaults.dispatch({ kind: "update", id: original.id, fragment: defaults.list()[1]!.fragment }).ok).toBe(true);
-  if (edit.endsWith("delete")) expect(defaults.dispatch({ kind: "delete", id: original.id }).ok).toBe(true);
-  await outbox.flush(); outbox.stop();
-  const restarted = new DocumentOutbox(documents, memoryOutboxStorage()); restarted.open();
-  try {
-    const again = new LayoutDefaults({ documents, outbox: restarted }); await again.load();
-    const before = again.list();
-    again.importLegacy(layoutsOf(state)); await restarted.flush();
-    expect(again.list()).toHaveLength(before.length);
-    for (const value of before) expect(again.get(value.id)).toMatchObject({ id: value.id, name: value.name, fragment: value.fragment });
-    expect(restarted.status().conflicts).toBe(0);
-  } finally { restarted.stop(); host.close(); }
-});
-
-test("Review C: a purged deleted default never resurrects its consumed legacy layout", async () => {
-  const documents = storeDocuments(), state = realWorkspace();
-  const open = async () => {
-    const outbox = new DocumentOutbox(documents, memoryOutboxStorage()); outbox.open();
-    const defaults = new LayoutDefaults({ documents, outbox, now: () => 100 }); await defaults.load();
-    return { outbox, defaults };
-  };
-  const first = await open(); first.defaults.importLegacy(layoutsOf(state)); await first.outbox.flush();
-  const deleted = first.defaults.list()[0]!;
-  expect(first.defaults.dispatch({ kind: "delete", id: deleted.id }).ok).toBe(true);
-  await first.outbox.flush(); first.outbox.stop();
-  // The injected deletion time is 100 ms after epoch, well past the real cleanup's 30-day cutoff.
-  expect(documents.store.cleanup().tombstones).toBe(1);
-  expect(documents.store.get(LAYOUT_DEFAULT_DOCUMENT, deleted.id)).toBeNull();
-  const second = await open();
-  try {
-    const before = second.defaults.list();
-    second.defaults.importLegacy(layoutsOf(state)); await second.outbox.flush();
-    expect(second.defaults.list()).toEqual(before);
-    expect(documents.store.get(LAYOUT_DEFAULT_DOCUMENT, deleted.id)).toBeNull();
-  } finally { second.outbox.stop(); }
-});
 
 test("Review A design 1: a fresh workspace migrates the default arrangement in both sizes, preserving legacy bytes", async () => {
   const { path } = library(), host = new HarnessHost(path), state = freshWorkspace();

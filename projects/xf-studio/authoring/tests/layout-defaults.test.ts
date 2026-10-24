@@ -23,7 +23,7 @@ import { TabDefaults } from "../src/app/profiles/tab-defaults";
 import { drawnView, substitutionContext } from "../src/app/profiles/profile-window";
 import { profileSessionOf } from "../src/app/profiles/profile-session";
 import type { ProfileSessions } from "../src/app/profiles/profile-sessions";
-import { layoutFragment, layoutsOf, sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
+import { layoutFragment, sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS } from "../src/compose/layout-defaults";
 import { STUDIO_MODULES } from "../src/compose/modules";
 import { defaultViewGraph, STUDIO_VIEW_GRAPH_RULES } from "../src/preview/preview-view-graph";
@@ -81,51 +81,6 @@ const filled = (fragment: LayoutFragment): SubstitutionChoice => ({ subjects: Ob
 const dockOf = (panels: readonly string[]): DockLayout => ({ format: "xfs/dock", version: 1, state: {
   wide: { floating: [], root: { kind: "group", id: "g1", panels: [...panels], active: panels[0] }, closed: ["help"] },
   compact: { floating: [], root: { kind: "group", id: "g1", panels: [...panels], active: panels[0] }, closed: ["help"] } } });
-
-test.each([false, true])("Review C: concurrent recovery with different clocks converges (overlapping imports: %s)", async overlapping => {
-  const documents = storeDocuments(), state = freshWorkspace();
-  let sending = false;
-  state.uiPreferences.layouts = { schema: "xfs/layout-library-1", active: "old", layouts: [
-    { id: "old", name: "Saved layout", dock: dockOf(["head"]), createdAt: 123 },
-  ] };
-  const open = async (now: number) => {
-    const outbox = new DocumentOutbox(documents, memoryOutboxStorage(), { sendable: () => sending }); outbox.open();
-    const defaults = new LayoutDefaults({ documents, outbox, now: () => now }); await defaults.load();
-    return { outbox, defaults };
-  };
-  const a = await open(1000), b = await open(2000);
-  try {
-    a.defaults.importLegacy(layoutsOf(state));
-    if (overlapping) state.uiPreferences.layouts!.layouts.push({ id: "other", name: "Another layout", dock: dockOf(["help"]), createdAt: 456 });
-    b.defaults.importLegacy(layoutsOf(state));
-    // The real store's equal-value rule must acknowledge the second workspace, without a conflict or a second default.
-    sending = true; await a.outbox.flush(); await b.outbox.flush();
-    expect([a.outbox.status().conflicts, b.outbox.status().conflicts]).toEqual([0, 0]);
-    expect([a.outbox.status().pending, b.outbox.status().pending]).toEqual([0, 0]);
-    await a.outbox.check();
-    expect(a.defaults.list()).toEqual(b.defaults.list());
-    expect(a.defaults.list()[0]!.owner).toMatchObject({ createdAt: 123 });
-    expect(documents.store.list(LAYOUT_DEFAULT_DOCUMENT)).toHaveLength(overlapping ? 2 : 1);
-  } finally { a.outbox.stop(); b.outbox.stop(); }
-});
-
-test("Review C: distinct legacy IDs survive identical content; ID-less entries use their original saved data", async () => {
-  const w = windowOn(), state = freshWorkspace();
-  const layout = { name: "Twins", dock: dockOf(["head"]) };
-  state.uiPreferences.layouts = { schema: "xfs/layout-library-1", active: "one", layouts: [
-    { ...layout, id: "one" }, { ...layout, id: "two" },
-    { ...layout, modules: { eye: true } }, { ...layout, modules: { eye: false } },
-  ] };
-  try {
-    w.defaults.importLegacy(layoutsOf(state));
-    expect(w.defaults.list().filter(view => view.owner.kind === "user")).toHaveLength(4);
-    const pending = structuredClone(w.outbox.pendingEntries());
-    // Mutable labels and arrangements don't change the identity of an entry with an old library ID.
-    state.uiPreferences.layouts.layouts[0] = { ...layout, id: "one", name: "Renamed", dock: dockOf(["help"]) };
-    w.defaults.importLegacy(layoutsOf(state));
-    expect(w.outbox.pendingEntries()).toEqual(pending);
-  } finally { w.outbox.stop(); }
-});
 /**
  * A fragment with its keys replaced by their places (subjects, looks, nodes per slot, views, panels) and each node's state as the graph's
  * codec reads it (a calibration in its stored form reads as the same calibration): equal for fragments equal up to keys.

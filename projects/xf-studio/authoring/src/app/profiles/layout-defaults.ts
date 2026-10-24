@@ -24,7 +24,7 @@ import type { DocumentOutbox, OutboxEntry } from "../../platform/core/document-o
 import { notifyAll } from "../../platform/core/listeners";
 import { hostRandom } from "../../platform/core/random";
 import { buildIssues, fragmentIssues, type FragmentKnowledge } from "./layout-fragment";
-import { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, LEGACY_LAYOUT_DOCUMENT, legacyLayoutSource, legacyLayoutReceipt, type MigrationLayout } from "./profiles-migration-data";
+import { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA } from "./profiles-migration-data";
 import { nameIssue } from "./profile-sessions";
 
 export { LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA };
@@ -97,7 +97,6 @@ export type LayoutDefaultsDeps = {
 export class LayoutDefaults {
   /** Every own default this window knows of (deleted ones too: restore names them). */
   private readonly ids = new Set<string>();
-  private readonly consumed = new Set<string>();
   private readonly listeners = new Set<() => void>();
   private views: readonly LayoutDefaultView[] | null = null;
   private readonly contributed: readonly ContributedLayoutDefault[];
@@ -107,7 +106,6 @@ export class LayoutDefaults {
     deps.outbox.subscribe(event => {
       if (event.kind === "status") return;
       const refs = event.kind === "external" || event.kind === "resolved" || event.kind === "recorded" ? event.refs : event.entry.writes;
-      for (const item of refs) if (item.kind === LEGACY_LAYOUT_DOCUMENT) this.consumed.add(item.id);
       if (!refs.some(item => item.kind === LAYOUT_DEFAULT_DOCUMENT)) return;
       for (const item of refs) if (item.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(item.id);
       this.changed();
@@ -117,10 +115,7 @@ export class LayoutDefaults {
 
   /** Read every own default from the library (deleted ones too), and those this window's outbox still holds from its last session. */
   async load(signal?: AbortSignal): Promise<void> {
-    for (const entry of this.deps.outbox.pendingEntries()) for (const write of entry.writes) {
-      if (write.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(write.id);
-      if (write.kind === LEGACY_LAYOUT_DOCUMENT) this.consumed.add(write.id);
-    }
+    for (const entry of this.deps.outbox.pendingEntries()) for (const write of entry.writes) if (write.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(write.id);
     await this.refresh(signal, true);
   }
   /**
@@ -134,10 +129,6 @@ export class LayoutDefaults {
       this.deps.outbox.hold(ref(document.id), { revision: document.revision, value: document.value });
       this.ids.add(document.id);
       found = true;
-    }
-    for (const document of await this.deps.documents.list(LEGACY_LAYOUT_DOCUMENT, signal)) {
-      this.deps.outbox.hold({ kind: LEGACY_LAYOUT_DOCUMENT, id: document.id }, { revision: document.revision, value: document.value });
-      this.consumed.add(document.id);
     }
     if (found || always) this.changed();
   }
@@ -194,21 +185,6 @@ export class LayoutDefaults {
   }
 
   // ----- Commands -----
-  /**
-   * Recover each old library entry once. Its permanent receipt and default are one durable outbox command. Receipts survive edits,
-   * deletion and tombstone cleanup; deterministic values let concurrent imports converge. No session or legacy preference changes.
-   */
-  importLegacy(layouts: readonly MigrationLayout[]): void {
-    for (const layout of layouts) {
-      const source = legacyLayoutSource(layout);
-      if (this.consumed.has(source)) continue;
-      const id = `d-${source.slice(0, 40)}`;
-      // Each source is independent: overlapping imports from two workspaces still meet the store's equal-value rule.
-      this.deps.outbox.commit("layout-default.importLegacy", [{ ...ref(id), value: { schema: LAYOUT_DEFAULT_SCHEMA, id, name: layout.name, owner: "user",
-        fragment: structuredClone(layout.fragment), createdAt: layout.createdAt ?? 0 } },
-        { kind: LEGACY_LAYOUT_DOCUMENT, id: source, value: legacyLayoutReceipt(id) }]);
-    }
-  }
   capability(command: DefaultsCommand): Capability {
     if (command.kind === "create") return this.nameCheck(command.name) ?? this.fragmentCheck(command.fragment) ?? { available: true };
     if (this.isContributed(command.id)) return refusal("invalid_value", CONTRIBUTED);

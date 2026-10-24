@@ -4,7 +4,7 @@ import { layoutTabs } from "../src/studio-ui/layout-tabs";
 import { closeMenus } from "../src/studio-ui/menu";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import { TabDefaults, type LayoutTabAction } from "../src/app/profiles/tab-defaults";
-import { LayoutDefaults } from "../src/app/profiles/layout-defaults";
+import { LayoutDefaults, LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA } from "../src/app/profiles/layout-defaults";
 import type { LayoutTabsPort } from "../src/app/profiles/tab-presentation";
 import type { SubstitutionContext } from "../src/app/profiles/layout-fragment";
 import { STUDIO_LAYOUT_DEFAULTS, STUDIO_FRAGMENT_KNOWLEDGE } from "../src/compose/layout-defaults";
@@ -36,8 +36,8 @@ afterEach(() => {
 });
 
 async function harness(feedback?: Pick<Feedback, "announce" | "toast">) {
-  const outbox = new DocumentOutbox(storeDocuments(), memoryOutboxStorage()); outbox.open();
-  const defaults = new LayoutDefaults({ documents: { list: async () => [] }, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(31) });
+  const documents = storeDocuments(), outbox = new DocumentOutbox(documents, memoryOutboxStorage()); outbox.open();
+  const defaults = new LayoutDefaults({ documents, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(31) });
   await defaults.load();
   const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "Eye makeup", character: V1.id, look: LOOK }, seededRandom(1)));
   const candidates: { subjects: typeof V1[]; looks: typeof LOOK[]; scenes: SubstitutionContext["scenes"] } = { subjects: [V1], looks: [LOOK], scenes: [] };
@@ -62,7 +62,7 @@ async function harness(feedback?: Pick<Feedback, "announce" | "toast">) {
     if (!item || item.kind !== "action") throw Error(`No ${label}`);
     item.run();
   };
-  return { view, session, candidates, defaults, actions, announcements, toasts, dispatched, dockButton, changed, row, action,
+  return { view, session, candidates, defaults, documents, actions, announcements, toasts, dispatched, dockButton, changed, row, action,
     readOnly: () => { readOnly = true; view.sync(); } };
 }
 
@@ -232,7 +232,9 @@ test("Review A finding 5: Reset stays available when a newer-build origin is una
   const base = STUDIO_LAYOUT_DEFAULTS[0]!.fragment;
   // Read a real stored fragment from a newer build, rather than substituting capabilities in the menu.
   const fragment = { ...structuredClone(base), panels: [...base.panels, { key: "future", type: "future.panel" }] };
-  h.defaults.importLegacy([{ name: "Newer default", fragment }]);
+  expect(h.documents.store.transact({ id: "newer-default", command: "fixture", writes: [{ kind: LAYOUT_DEFAULT_DOCUMENT, id: "d-newer", base: 0,
+    value: { schema: LAYOUT_DEFAULT_SCHEMA, id: "d-newer", name: "Newer default", owner: "user", fragment, createdAt: 1 } }] }).ok).toBe(true);
+  await h.defaults.load();
   const own = h.defaults.list().find(view => view.name === "Newer default")!;
   // A tab can outlive the build that supplied its origin.
   h.session.setOrigin(tab, own.id);

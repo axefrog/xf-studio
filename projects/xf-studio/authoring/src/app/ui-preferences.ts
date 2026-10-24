@@ -1,8 +1,7 @@
 import { isEasing, type EasingId } from "../platform/api/easing";
 
 /** Frozen migration input for older builds. No active saved-layout commands remain. */
-export type LegacySavedLayout = { id?: string; name: string; dock: DockLayout; modules?: Record<string, boolean>;
-  createdAt?: number;
+export type LegacySavedLayout = { id: string; name: string; dock: DockLayout; modules?: Record<string, boolean>;
   autoSize?: "wide" | "compact"; working?: { dock: DockLayout; modules?: Record<string, boolean> } };
 export type LayoutLibrary = { schema: "xfs/layout-library-1"; layouts: LegacySavedLayout[]; active: string; seen?: "wide" | "compact" };
 

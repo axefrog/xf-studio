@@ -637,7 +637,7 @@ A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal o
       - Prefer a profile that already holds this V and collection.
       - Otherwise: with none, create "My profile"; with exactly one, use it; with several, create "From this browser".
       - Add the members. Without the first rule, each re-upgrade with several profiles would make another "From this browser".
-   4. **Own defaults** from saved layouts, taken over once per legacy entry's stable ID (or original saved-data hash when no ID exists). A permanent source receipt is stored separately from its default in the same transaction, so rename, Update, deletion and tombstone cleanup cannot import that entry again; recovered IDs and creation times are deterministic, using the legacy creation time or zero when absent.
+   4. **Own defaults** from saved layouts, deduplicated by name and dock hash.
    5. **Record** the result, including the ID map, under the token.
 3. **Session.** The workspace builds tab 1 and the graph from the result:
    - tab 1 holds the live arrangement, with panel IDs rewritten to instance IDs;
@@ -656,6 +656,8 @@ A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal o
    - a fork "(from this browser)";
 
    all in the one profile, with one V. A second round trip with nothing edited adds only its migration record (S3).
+
+There is no post-migration layout recovery pass or take-over receipt. Neither `v0.1.0-alpha.1` nor `v0.1.0-alpha.2` contained `src/app/layout-library.ts`; it arrived on 21 October, so only development builds from 22–24 October could save layouts after `profiles-1`, and the one real workspace checked has no `uiPreferences.layouts`. The original one-time import above is unchanged. Legacy `uiPreferences.layouts` is still parsed and left stored; it is never silently deleted or imported a second time.
 
 | Kept | May be dropped |
 |---|---|
