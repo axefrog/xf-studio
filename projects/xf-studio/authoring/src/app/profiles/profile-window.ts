@@ -52,14 +52,14 @@ export type ProfileServices = {
 export function createProfileServices(deps: { documents: DocumentStorePort; outbox: DocumentOutbox; subjects: SubjectRegistryPort; catalogue: CreatorCatalogue;
   history: HistoryService; versions?: CollectionVersionsPort; report?: (error: unknown) => void;
   /** The modules' default layouts and what the build has (`compose/layout-defaults.ts`). */
-  layouts?: { contributed: readonly ContributedLayoutDefault[]; known: FragmentKnowledge } }): ProfileServices {
+  layouts?: { contributed: readonly ContributedLayoutDefault[]; known: FragmentKnowledge; writable?: () => boolean; note?: (message: string) => void } }): ProfileServices {
   const profiles = new ProfileService({ documents: deps.documents, outbox: deps.outbox, subjects: deps.subjects });
   const characters = new CharacterService({ documents: deps.documents, outbox: deps.outbox, catalogue: deps.catalogue, history: deps.history, profiles,
     ...(deps.report ? { report: deps.report } : {}) });
   const collections = new CollectionOwner({ documents: deps.documents, outbox: deps.outbox, ...(deps.versions ? { versions: deps.versions } : {}),
     ...(deps.report ? { report: deps.report } : {}) });
   const looks = new LookSessions(collections, deps.outbox);
-  const defaults = new LayoutDefaults({ documents: deps.documents, outbox: deps.outbox, ...(deps.layouts ? { contributed: deps.layouts.contributed, known: deps.layouts.known } : {}) });
+  const defaults = new LayoutDefaults({ documents: deps.documents, outbox: deps.outbox, ...deps.layouts, ...(deps.report ? { report: deps.report } : {}) });
   return { profiles, characters, collections, looks, defaults,
     load: async signal => { await Promise.all([profiles.load(signal), characters.load(signal), collections.load(signal), defaults.load(signal)]); } };
 }

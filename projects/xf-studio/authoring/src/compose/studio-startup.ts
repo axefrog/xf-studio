@@ -183,8 +183,12 @@ async function start(host: StudioHost, root: HTMLElement) {
   // One creator catalogue for the page (creator-catalogue.ts): every character, and every head made again for another body, shares it.
   const creatorCatalogue = new CreatorCatalogue(createBrowserCreatorDevice());
   // The library's owners (profiles design §7): profiles, Vs, collections and looks, each changed only through its commands (the outbox).
+  // Startup preservation can finish before the presentation exists. Deliver its information through the usual message route once mounted.
+  const defaultNotes: string[] = [];
+  let defaultNote: (text: string) => void = text => { defaultNotes.push(text); };
   const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
-    layouts: { contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE },
+    layouts: { contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE,
+      writable: () => restored.writable && (lease?.writable() ?? true), note: text => defaultNote(text) },
     catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
     report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
   // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
@@ -514,6 +518,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The only object handed to the presentation.
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
+  defaultNote = text => adapterMessage("layout-default", text);
+  if (defaultNotes.length) { defaultNote(defaultNotes.join("\n\n")); defaultNotes.length = 0; }
   host.onMounted?.({ openGameSetup: () => void previewSetup.dispatch({ kind: "previewSetup.openSetup" }) });
   if (verification) {
     /** The scene runtime shown now (developer evidence reads only that one). */

@@ -7,13 +7,13 @@
  *   with New scene beside it; a look only shared scenes use isn't asked for; a choice naming nothing on offer is refused.
  * - **Contributed defaults are immutable**; the composition refuses a default naming a panel type, view tool or node state the build lacks.
  * - **Own defaults** are saved, updated, renamed, deleted (a tombstone) and restored through the outbox, survive a restart before and after
- *   the library has them, and a write two windows make to one default is a conflict, resolved either way.
+ *   the library has them; conflicts automatically preserve this window's edit as a copy and keep the other window's original.
  * - **Validation on read**: a newer build's or a damaged own default is listed as unavailable with the reason, and no tab is made from it.
  * - **Reset** fills a tab from its default again, the tab holding the drawn view included (P2-iii).
  */
 import { describe, expect, test } from "bun:test";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
-import { isTombstone } from "../src/platform/api/document-commands";
+import { isTombstone, tombstoneOf } from "../src/platform/api/document-commands";
 import type { LayoutFragment } from "../src/platform/api/layout-fragment";
 import { VIEW_SLOTS } from "../src/platform/api/view-graph";
 import { buildIssues, fillOf, fragmentIssues, fragmentOfTab, instantiateFragment, printDefault, substitutionOf, type Substitution,
@@ -49,11 +49,13 @@ async function quiet(outbox: DocumentOutbox) { for (let i = 0; i < 200 && (outbo
 type Profile = { subjects: { kind: string; id: string }[]; looks: string[] };
 let windows = 0;
 /** A window: its outbox over the library, its defaults, its session (tab 1 shows V1 wearing LOOK) and the tabs' actions. */
-function windowOn(documents = storeDocuments(), storage = memoryOutboxStorage(), options: { profile?: Profile } = {}) {
-  const outbox = new DocumentOutbox(documents, storage, { retryMs: 5 });
+function windowOn(documents = storeDocuments(), storage = memoryOutboxStorage(), options: { profile?: Profile; writable?: () => boolean } = {}) {
+  const outbox = new DocumentOutbox(documents, storage, { retryMs: 5, writable: options.writable });
   outbox.open();
   // Each window its own source of randomness, as each page has: two windows saving in the same millisecond never make the same ID.
-  const defaults = new LayoutDefaults({ documents, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE, random: seededRandom(11 + ++windows) });
+  const notes: string[] = [], errors: unknown[] = [];
+  const defaults = new LayoutDefaults({ documents, outbox, contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE,
+    random: seededRandom(11 + ++windows), writable: options.writable, note: text => notes.push(text), report: error => errors.push(error) });
   const s = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "Layout 1", character: V1.id, look: LOOK }, seededRandom(1)),
     { random: seededRandom(7) });
   const profile: Profile = options.profile ?? { subjects: [V1], looks: [LOOK.look, OTHER_LOOK.look] };
@@ -64,7 +66,7 @@ function windowOn(documents = storeDocuments(), storage = memoryOutboxStorage(),
     characters: { document: (id: string) => deleted.has(id) ? null : { id } } };
   const tabs = new TabDefaults({ sessions: s, defaults, candidates: () => substitutionContext(s, services as never), keepsState: keepsStateInDefaults,
     known: STUDIO_FRAGMENT_KNOWLEDGE });
-  return { documents, storage, outbox, defaults, s, tabs, profile, deleted };
+  return { documents, storage, outbox, defaults, s, tabs, profile, deleted, notes, errors };
 }
 type Window = ReturnType<typeof windowOn>;
 /** Dispatch after checking the capability, as the application does; returns the refusal's reason when refused. */
@@ -384,7 +386,7 @@ describe("own defaults: Save as default, update, rename, delete and restore, thr
     expect(act(c, { kind: "tabs.new", default: id })).toBeUndefined();
   });
 
-  test("two windows renaming one default: the second to reach the library is a conflict, resolved either way, never written over", async () => {
+  test.each(["rename", "update"] as const)("two windows changing one default (%s): keep this window's full version as a copy and the other window's original", async kind => {
     const documents = storeDocuments(), a = windowOn(documents);
     expect(act(a, { kind: "tabs.saveAsDefault", tab: a.s.tabId(), name: "Shared" })).toBeUndefined();
     const id = a.s.tab(a.s.tabId())!.origin!;
@@ -393,22 +395,121 @@ describe("own defaults: Save as default, update, rename, delete and restore, thr
     await b.defaults.load();
     expect(act(b, { kind: "defaults.rename", default: id, name: "B's name" })).toBeUndefined();
     await quiet(b.outbox);
-    expect(act(a, { kind: "defaults.rename", default: id, name: "A's name" })).toBeUndefined();
-    await quiet(a.outbox);
-    expect(a.defaults.conflicts().length).toBe(1);
-    expect(documents.store.get<{ name: string }>(LAYOUT_DEFAULT_DOCUMENT, id)!.value.name).toBe("B's name");
-    expect(a.defaults.resolve(a.defaults.conflicts()[0]!.id, "theirs")).toEqual({ available: true });
-    expect(a.defaults.get(id)!.name).toBe("B's name");
-    // Again, keeping mine this time: an explicit command over theirs.
-    await b.outbox.check();
-    expect(act(b, { kind: "defaults.rename", default: id, name: "B again" })).toBeUndefined();
-    await quiet(b.outbox);
-    expect(act(a, { kind: "defaults.rename", default: id, name: "A again" })).toBeUndefined();
-    await quiet(a.outbox);
-    expect(a.defaults.resolve(a.defaults.conflicts()[0]!.id, "mine")).toEqual({ available: true });
+    a.s.arrange(a.s.tabId(), dockOf(["head", "presets", "layers"]));
+    const localName = kind === "rename" ? "A".repeat(60) : "Shared";
+    expect(act(a, kind === "rename" ? { kind: "defaults.rename", default: id, name: localName }
+      : { kind: "tabs.updateDefault", tab: a.s.tabId() })).toBeUndefined();
+    const mine = a.defaults.get(id)!.fragment;
     await quiet(a.outbox);
     expect(a.defaults.conflicts()).toEqual([]);
-    expect(documents.store.get<{ name: string }>(LAYOUT_DEFAULT_DOCUMENT, id)!.value.name).toBe("A again");
+    expect(documents.store.get<{ name: string }>(LAYOUT_DEFAULT_DOCUMENT, id)!.value.name).toBe("B's name");
+    expect(a.defaults.get(id)!.name).toBe("B's name");
+    const copy = a.defaults.list().find(item => item.owner.kind === "user" && item.id !== id)!;
+    const copyName = `${localName.slice(0, 46)} (this window)`;
+    expect(copy).toMatchObject({ name: copyName, fragment: mine });
+    expect(copy.name.length).toBeLessThanOrEqual(60);
+    expect(documents.store.get(LAYOUT_DEFAULT_DOCUMENT, copy.id)!.value).toMatchObject({ name: copyName, fragment: mine });
+    expect(a.notes).toEqual([`“${localName}” was also changed in another window. Both are kept: yours is “${copyName}”.`]);
+    expect(a.errors).toEqual([]);
+    // Repeated checks and a fresh window cannot produce another copy or another toast.
+    await a.outbox.check(); await a.outbox.check();
+    const c = windowOn(documents, a.storage);
+    await c.defaults.load(); await quiet(c.outbox);
+    expect(documents.store.list(LAYOUT_DEFAULT_DOCUMENT)).toHaveLength(2);
+    expect(a.notes).toHaveLength(1);
+    expect(c.notes).toEqual([]);
+  });
+
+  test("a local deletion conflicting with the other window's edit keeps their version without a copy", async () => {
+    const documents = storeDocuments(), a = windowOn(documents);
+    act(a, { kind: "tabs.saveAsDefault", tab: a.s.tabId(), name: "Night shoot" });
+    const id = a.s.tab(a.s.tabId())!.origin!;
+    await quiet(a.outbox);
+    const b = windowOn(documents); await b.defaults.load();
+    act(b, { kind: "defaults.rename", default: id, name: "Their night shoot" }); await quiet(b.outbox);
+    expect(act(a, { kind: "defaults.delete", default: id })).toBeUndefined();
+    await quiet(a.outbox);
+    expect(a.defaults.conflicts()).toEqual([]);
+    expect(a.defaults.get(id)!.name).toBe("Their night shoot");
+    expect(documents.store.list(LAYOUT_DEFAULT_DOCUMENT)).toHaveLength(1);
+    expect(a.notes).toEqual(["“Night shoot” was changed in another window, so it's kept."]);
+    expect(a.errors).toEqual([]);
+    await a.outbox.check(); await a.outbox.check();
+    expect(a.notes).toHaveLength(1);
+  });
+
+  /** Make the on-disk conflict an earlier build left, using the real outbox and store, before this owner starts. */
+  async function storedConflict(deleted: boolean) {
+    const documents = storeDocuments(), a = windowOn(documents), storage = memoryOutboxStorage();
+    act(a, { kind: "tabs.saveAsDefault", tab: a.s.tabId(), name: "Night shoot" });
+    const id = a.s.tab(a.s.tabId())!.origin!;
+    await quiet(a.outbox); a.outbox.stop();
+    const before = documents.store.get<Record<string, unknown>>(LAYOUT_DEFAULT_DOCUMENT, id)!;
+    const old = new DocumentOutbox(documents, storage); old.open();
+    old.hold({ kind: LAYOUT_DEFAULT_DOCUMENT, id }, before);
+    const b = windowOn(documents); await b.defaults.load();
+    act(b, { kind: "defaults.rename", default: id, name: "Other window" }); await quiet(b.outbox);
+    const mine = { ...before.value, name: "Mine", future: { kept: true } };
+    old.commit(`layout-default.${deleted ? "delete" : "rename"}`, [{ kind: LAYOUT_DEFAULT_DOCUMENT, id,
+      value: deleted ? tombstoneOf(before.value, 10) : mine }]);
+    await quiet(old);
+    expect(old.conflicts()).toHaveLength(1);
+    old.stop();
+    return { documents, storage, id, mine };
+  }
+
+  test.each([false, true])("a conflict held at startup (deleted: %s) resolves once, preserving unknown fields and surviving another restart", async deleted => {
+    const { documents, storage, id, mine } = await storedConflict(deleted);
+    // The library is unreachable for sends: the preserved copy must survive in the outbox alone until the next restart.
+    const a = windowOn({ ...documents, transact: () => new Promise<never>(() => {}) }, storage);
+    await a.defaults.load();
+    expect(a.defaults.conflicts()).toEqual([]);
+    expect(a.defaults.get(id)!.name).toBe("Other window");
+    const copies = a.defaults.list().filter(item => item.owner.kind === "user" && item.id !== id);
+    expect(copies).toHaveLength(deleted ? 0 : 1);
+    if (!deleted) expect(a.outbox.document({ kind: LAYOUT_DEFAULT_DOCUMENT, id: copies[0]!.id })!.value).toMatchObject({ ...mine,
+      id: copies[0]!.id, name: "Mine (this window)", createdAt: expect.any(Number), savedAt: expect.any(Number) });
+    expect(a.notes).toHaveLength(1);
+    expect(a.errors).toEqual([]);
+    await a.outbox.check(); await a.outbox.check(); await a.defaults.load();
+    expect(a.notes).toHaveLength(1);
+    a.outbox.stop();
+    const b = windowOn(documents, storage); await b.defaults.load(); await quiet(b.outbox);
+    expect(documents.store.list(LAYOUT_DEFAULT_DOCUMENT)).toHaveLength(deleted ? 1 : 2);
+    expect(b.notes).toEqual([]);
+  });
+
+  test("a read-only window leaves a stored conflict untouched; its writable holder resolves it at the revision check", async () => {
+    const { documents, storage } = await storedConflict(false);
+    const stored = [...storage.keys];
+    let writable = false;
+    const a = windowOn(documents, storage, { writable: () => writable });
+    await a.defaults.load(); await a.outbox.check();
+    expect(a.defaults.conflicts()).toHaveLength(1);
+    expect([...storage.keys]).toEqual(stored);
+    expect(documents.store.list(LAYOUT_DEFAULT_DOCUMENT)).toHaveLength(1);
+    expect(a.notes).toEqual([]); expect(a.errors).toEqual([]);
+    writable = true;
+    await a.outbox.check(); await quiet(a.outbox);
+    expect(a.defaults.conflicts()).toEqual([]);
+    expect(documents.store.list(LAYOUT_DEFAULT_DOCUMENT)).toHaveLength(2);
+    expect(a.notes).toHaveLength(1);
+    await a.outbox.check();
+    expect(a.notes).toHaveLength(1);
+  });
+
+  test("a conflict resolved while the startup read is pending makes no copy and gives no preservation toast", async () => {
+    const { documents, storage, id } = await storedConflict(false);
+    const outbox = new DocumentOutbox(documents, storage); outbox.open();
+    const notes: string[] = [];
+    const defaults = new LayoutDefaults({ documents, outbox, note: text => notes.push(text) });
+    const loading = defaults.load();
+    outbox.useTheirs(outbox.conflicts()[0]!.id);
+    await loading; await outbox.check();
+    expect(defaults.get(id)!.name).toBe("Other window");
+    expect(defaults.conflicts()).toEqual([]);
+    expect(documents.store.list(LAYOUT_DEFAULT_DOCUMENT)).toHaveLength(1);
+    expect(notes).toEqual([]);
   });
 
   test("validation on read: a newer build's or a damaged default is listed with the reason, can be renamed or deleted, and makes no tab", async () => {

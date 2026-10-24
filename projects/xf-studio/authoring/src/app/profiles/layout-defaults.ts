@@ -9,6 +9,8 @@
  *   update (Update "<name>"), rename, and delete as a tombstone, which restore takes back (the Undo notice's action). Names are 1 to 60
  *   characters and need not be unique (the coordinator's decision): two windows could otherwise both take a name, so one window enforcing
  *   it would only make the two disagree. The list tells same-named defaults apart by when each was saved (`savedAt`).
+ * - **Conflicts keep both at once.** This window's edit becomes a new default named "(this window)"; the original takes the other
+ *   window's version. A local deletion takes the other version alone. One atomic outbox resolution protects the copy across a restart.
  * - **Another window's new defaults** are found at every revision check (`DocumentOutbox.onCheck`): the kind is listed again and the
  *   documents this window didn't know are held, beside its own pending writes.
  * - **Read as this build can.** An own default whose fragment doesn't read, or needs panel types or view tools this build lacks (a newer
@@ -92,6 +94,10 @@ export type LayoutDefaultsDeps = {
   readonly known?: FragmentKnowledge;
   readonly random?: () => number;
   readonly now?: () => number;
+  readonly writable?: () => boolean;
+  /** Ordinary information, sent through the application's existing feedback route. */
+  readonly note?: (message: string) => void;
+  readonly report?: (error: unknown) => void;
 };
 
 export class LayoutDefaults {
@@ -100,6 +106,7 @@ export class LayoutDefaults {
   private readonly listeners = new Set<() => void>();
   private views: readonly LayoutDefaultView[] | null = null;
   private readonly contributed: readonly ContributedLayoutDefault[];
+  private resolving = false;
 
   constructor(private readonly deps: LayoutDefaultsDeps) {
     this.contributed = deps.contributed ?? [];
@@ -108,6 +115,7 @@ export class LayoutDefaults {
       const refs = event.kind === "external" || event.kind === "resolved" || event.kind === "recorded" ? event.refs : event.entry.writes;
       if (!refs.some(item => item.kind === LAYOUT_DEFAULT_DOCUMENT)) return;
       for (const item of refs) if (item.kind === LAYOUT_DEFAULT_DOCUMENT) this.ids.add(item.id);
+      if (event.kind === "conflict" || event.kind === "recorded") this.resolveConflicts();
       this.changed();
     });
     deps.outbox.onCheck(signal => this.refresh(signal));
@@ -131,6 +139,7 @@ export class LayoutDefaults {
       found = true;
     }
     if (found || always) this.changed();
+    this.resolveConflicts();
   }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private changed() { this.views = null; notifyAll(this.listeners); }
@@ -149,14 +158,39 @@ export class LayoutDefaults {
   }
   /** Whether `id` names a module's default. */
   isContributed(id: string): boolean { return this.contributed.some(item => item.id === id); }
-  /** The own defaults this owner's commands are in conflict over (Changed in another window). */
+  /** Own-default conflicts awaiting automatic preservation (only a writable window resolves them). */
   conflicts(): readonly OutboxEntry[] { return this.deps.outbox.conflicts().filter(entry => entry.writes.some(write => write.kind === LAYOUT_DEFAULT_DOCUMENT)); }
-  /** Keep mine (written over theirs) or Use other window's. */
-  resolve(conflictId: string, keep: "mine" | "theirs"): Capability {
-    if (!this.conflicts().some(entry => entry.id === conflictId)) return refusal("invalid_value", "That was already resolved.");
-    try { if (keep === "mine") this.deps.outbox.keepMine(conflictId); else this.deps.outbox.useTheirs(conflictId); }
-    catch (error) { return refusal("unavailable", (error as Error).message); }
-    return { available: true };
+  /** No owning panel exists to ask in. Preserve mine as a copy and take theirs, in the outbox's single crash-safe operation. */
+  private resolveConflicts(): void {
+    if (this.resolving || this.deps.writable?.() === false || this.deps.outbox.status().stopped) return;
+    this.resolving = true;
+    const notes: string[] = [];
+    try {
+      for (const entry of this.conflicts()) {
+        // A listener may already have resolved it. This owner only makes single-document commands.
+        if (!this.conflicts().some(item => item.id === entry.id) || entry.writes.length !== 1) continue;
+        const write = entry.writes[0]!, deleted = isTombstone(write.value);
+        const value = ownDefaultOf(isTombstone(write.value) ? write.value.value : write.value);
+        if (!value) continue;
+        try {
+          if (deleted) {
+            this.deps.outbox.useTheirs(entry.id);
+            notes.push(`“${value.name}” was changed in another window, so it's kept.`);
+          } else {
+            const suffix = " (this window)", name = `${value.name.slice(0, 60 - suffix.length)}${suffix}`;
+            this.deps.outbox.keepBoth(entry.id, () => {
+              const now = (this.deps.now ?? Date.now)(), id = this.newId(now);
+              return [{ ...ref(id), value: { ...value, id, name, createdAt: now, savedAt: now } }];
+            });
+            notes.push(`“${value.name}” was also changed in another window. Both are kept: yours is “${name}”.`);
+          }
+        } catch (error) {
+          // The outbox also checks the lease at the point of resolution; a lost lease leaves the conflict for its holder.
+          if (this.deps.writable?.() !== false && this.conflicts().some(item => item.id === entry.id)) this.deps.report?.(error);
+        }
+      }
+    } finally { this.resolving = false; }
+    if (notes.length) this.deps.note?.(notes.join("\n\n"));
   }
 
   private held(id: string): { value: unknown; revision: number } | null {

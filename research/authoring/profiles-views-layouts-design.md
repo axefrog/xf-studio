@@ -572,6 +572,8 @@ The menu has these entries:
 
 Names go in the value popover. Entries that can't run are left out.
 
+**Own-default conflicts.** Own layout defaults have no panel section for a conflict notice. The writable window's `LayoutDefaults` therefore resolves them at once, including conflicts restored at startup: a local change or rename is kept as a new own default named with the preset Keep both suffix, “(this window)” (within the 60-character limit), while the original takes the other window's version. A local deletion takes the other window's edit without making a copy. Preservation is one atomic outbox Keep both operation (Use other window's for a deletion), so repeated checks and restarts cannot duplicate a copy or lose it between writes. One ordinary info toast says what was kept. Read-only windows leave resolution to the writable window.
+
 ### 6.3 Substitution menu
 
 **New tab ▸ <default>** and **Duplicate tab** show one compact step per slot: subject, look and "share scene". Each step defaults to **Leave empty**, or to the only candidate, named. The steps are keyboard-navigable, the slot is named in each step's accessible name, and Escape cancels without creating anything.

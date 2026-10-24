@@ -277,6 +277,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   };
   placeSetupCard = () => dockSetupCard(port.previewSetup.snapshot().card.open);
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
+  const showMessage = (message: ReturnType<Port["status"]["snapshot"]>["message"]) => {
+    if (!message || message.id === lastMessage) return;
+    lastMessage = message.id;
+    // Routine raster timings are not activity; failures also surface through readiness.
+    if (message.source === "preview") { if (/fail|error|unavailable|exceed/i.test(message.text)) feedback.record("warning", "Preview", message.text); }
+    else if (message.source === "layout-default") feedback.toast("info", "Layout defaults", message.text);
+    else feedback.toast("warning", message.source === "uv" ? "UV map" : "3D view", message.text);
+  };
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
   let optionalKey = "";
@@ -320,13 +328,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     withdrawUnoffered();
     const frame = new Frame(port, catalogue, dockRef?.tree);
     // Editor adapters report limits and rejected gestures; show each once.
-    const message = frame.status.message;
-    if (message && message.id !== lastMessage) {
-      lastMessage = message.id;
-      // Routine raster timings are not activity; failures also surface through readiness.
-      if (message.source === "preview") { if (/fail|error|unavailable|exceed/i.test(message.text)) feedback.record("warning", "Preview", message.text); }
-      else feedback.toast("warning", message.source === "uv" ? "UV map" : "3D view", message.text);
-    }
+    showMessage(frame.status.message);
     // A failure an app service met in the background (a V that couldn't be prepared): shown once, with its reference.
     const notice = port.diagnostics.snapshot().notice;
     if (notice && notice.id !== lastNotice) {
@@ -377,7 +379,12 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     return false;
   };
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(paint); } };
-  port.subscribe(schedule); rt.subscribe(schedule); feedback.subscribe(schedule);
+  port.subscribe(() => {
+    // A preservation notice must reach feedback before another adapter message can replace it while a paint is queued.
+    const message = port.status.snapshot().message;
+    if (message?.source === "layout-default") showMessage(message);
+    schedule();
+  }); rt.subscribe(schedule); feedback.subscribe(schedule);
   paint();
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   window.addEventListener("resize", () => {
