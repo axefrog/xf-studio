@@ -1,29 +1,16 @@
 // Syntax-aware source audits. TypeScript owns lexical context, including regex literals and nested template expressions.
-import * as ts from 'typescript/unstable/ast';
-import { API } from 'typescript/unstable/sync';
-import { createVirtualFileSystem } from 'typescript/unstable/fs';
-import { resolve } from 'node:path';
+import ts from 'ts-parser';
 import type { Finding, SourceFile } from './audit.ts';
 
 export type StringMode = 'blank' | 'keep' | 'mark';
-export const MARK_OPEN = '\u0001';
-export const MARK_CLOSE = '\u0002';
+export const MARK_OPEN = '';
+export const MARK_CLOSE = '';
 const isStringLiteralLike = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral => ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
-// TypeScript 7 exposes parsing through its compiler service. This virtual project is entirely in memory.
+// The audit needs a parser only: TypeScript 5's in-process `createSourceFile` (package alias `ts-parser`) owns lexical
+// context, including regex literals and nested template expressions. TypeScript 7's compiler service runs a separate
+// process over stdio, which Bun on Linux CI cannot drive.
 function parsed<T>(files: SourceFile[], fn: (trees: ts.SourceFile[]) => T): T {
-  const root = resolve('__xf_source_audit__').replaceAll('\\', '/');
-  const config = root + '/tsconfig.json';
-  const paths = files.map((_, n) => root + '/f' + n + '.ts');
-  const contents = Object.fromEntries(paths.map((p, n) => [p, files[n]!.text]));
-  contents[config] = JSON.stringify({ compilerOptions: { noLib: true, noResolve: true }, files: paths });
-  const fs = createVirtualFileSystem(contents);
-  const api = new API({ fs: { ...fs, readFile: (p) => fs.readFile!(p) ?? null } });
-  try {
-    using snap = api.updateSnapshot({ openProjects: [config] });
-    const project = snap.getProject(config);
-    if (!project) throw new Error('source audit: compiler project unavailable');
-    return fn(paths.map((p) => { const file = project.program.getSourceFile(p); if (!file) throw new Error('source audit: parse failed'); return file; }));
-  } finally { api.close(); }
+  return fn(files.map((f, n) => ts.createSourceFile('f' + n + '.ts', f.text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)));
 }
 
 /** A syntax view for diagnostics/tests only. The lint walks AST nodes, never this text. */
