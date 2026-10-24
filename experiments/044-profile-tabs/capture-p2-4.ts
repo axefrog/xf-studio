@@ -14,6 +14,7 @@
  *   new        U3: New tab with grouped defaults, stage tags, one-click and ellipsis rows, Yours with Delete, last used, the Undo notice, a
  *              newer-build default
  *   subst      U4: the substitution step: sharing versus a new scene, a long list with search, a candidate that dropped out
+ *   close      closing tabs from the tab menu: the ordinary toast with Undo, and the last tab closed (no warning)
  *   naming     U5: Rename and Save as default popovers, normal and refused
  *   readonly   U1/U2/U3 in a second page of the same browser while the first holds the lease
  *   header     the header without the Layouts button, with the strip beneath it
@@ -196,6 +197,7 @@ async function strip(page: Session) {
     for (let i = 1; i <= 14; i++) { await page.mouse("mouseMoved", from[0] + (to[0] - from[0]) * i / 14, y, { button: "left", buttons: 1 }); await Bun.sleep(16); }
     await page.wait(250);
     texts[`strip-dragging-${size}`] = await page.evaluate(`({ dragging: document.querySelector(".layout-tabs").classList.contains("dragging"),
+      draggedTab: (() => { const t = document.querySelector(".layout-tabs .dock-tab.dragging"); if (!t) return null; const s = getComputedStyle(t); return { text: t.textContent.trim(), opacity: s.opacity, filter: s.filter, transform: s.transform }; })(),
       markers: [...document.querySelectorAll(".layout-tabs .dock-tab")].filter(t => t.classList.contains("drop-before") || t.classList.contains("drop-after")).map(t => [t.textContent.trim(), t.className]) })`);
     await capture(page, "strip-dragging", STRIP, "U1 dragging the first tab (Layout 1) right: the drop marker sits between Save Explorer and Expressions; nothing reorders until release", { paired: "lib-tab-strip" });
     // Released outside the strip: cancelled, nothing moves.
@@ -292,6 +294,14 @@ async function tabMenu(page: Session) {
     async () => { await open(eye)(); await openSub(page, "Reopen closed tab"); }, { paired: "lib-menu-secondary" });
   await sized(page, "menu-with-reopen", "U2 the full tab menu: Rename…, Reset to default ▸, Save as default…, Update “My eye layout”, Close tab, Reopen closed tab ▸", MENUS, open(eye), { paired: "lib-menu-secondary" });
 
+  // A long-named own default: its Reset row must not cut the name, and the row's tooltip (native title) carries the full name (item 6).
+  const longName = "My very long eye makeup layout for the night market photo shoot";
+  await act(page, { kind: "tabs.saveAsDefault", tab: (await tabsOf(page)).tabs.find(tab => tab.id !== eye)!.id, name: longName }); await page.wait(500);
+  await sized(page, "menu-reset-long-row", "U2 Reset to default ▸ with a long own-default name (item 6): the row shows the name in full or ends with an ellipsis, and its tooltip carries the whole name (tooltips are native, so the title text is in run.json)", MENUS,
+    async () => { await open(eye)(); await openSub(page, "Reset to default");
+      texts["menu-reset-long-titles"] = await page.evaluate(`[...document.querySelectorAll(".menu-layer .menu-item")].filter(e => e.textContent.includes("My very long")).map(e => ({ title: e.title, text: e.textContent.trim(), clientWidth: e.clientWidth, scrollWidth: e.scrollWidth, label: (() => { const l = e.querySelector(".menu-label"); return l ? { clientWidth: l.clientWidth, scrollWidth: l.scrollWidth } : null; })() }))`); },
+    { paired: "lib-menu-secondary" });
+
   // Origin gone: the own default is deleted from New tab; the menu's Reset omits it and Update goes.
   await act(page, { kind: "defaults.delete", default: (await tabsOf(page)).tabs.find(tab => tab.id === eye)!.origin }); await page.wait(400);
   await sized(page, "menu-origin-gone", "U2 origin gone: the own default was deleted, so Update is left out and Reset to default lists only the defaults that still exist", MENUS, open(eye), { paired: "lib-menu-secondary" });
@@ -343,6 +353,14 @@ async function newMenuStates(page: Session) {
     texts["new-delete-focused-active"] = await page.evaluate(`document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.textContent`);
   }, { paired: "lib-menu-secondary" });
 
+  // The bin under the pointer (hover; the row also takes focus on pointer enter): the danger colour appears only now (item 14).
+  await sized(page, "new-bin-hover", "U3 the bin of an own default under the pointer: quiet at rest (see the other rows), danger-coloured only on hover or focus (item 14)", MENUS, async () => {
+    await open();
+    const at = await page.evaluate(`(() => { const e = [...document.querySelectorAll(".menu-layer .menu-item.menu-secondary")].find(e => e.getAttribute("aria-label") === "Delete default My explorer"); if (!e) return null; const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`) as [number, number] | null;
+    if (at) { await page.mouse("mouseMoved", at[0] - 10, at[1], { button: "none", buttons: 0 }); await page.mouse("mouseMoved", at[0], at[1], { button: "none", buttons: 0 }); await page.wait(300); }
+    texts["new-bin-hover-style"] = await page.evaluate(`(() => { const rows = [...document.querySelectorAll(".menu-layer .menu-item.menu-secondary")]; const info = e => ({ name: e.getAttribute("aria-label"), color: getComputedStyle(e).color, focused: document.activeElement === e, hovered: e.matches(":hover") }); return rows.map(info); })()`);
+  }, { paired: "lib-menu-secondary", keepToasts: true });
+
   // Delete: a tombstone with an Undo notice.
   await open();
   await page.evaluate(`(() => { const e = [...document.querySelectorAll(".menu-layer .menu-item.menu-secondary")].find(e => e.getAttribute("aria-label") === "Delete default My explorer"); e?.click(); })()`);
@@ -391,6 +409,18 @@ async function substitution(page: Session) {
   // A V no tab shows yet: nothing to share, so a new scene.
   await sized(page, "subst-other-v", "U4 a V no tab shows yet (Capture V A): there is nothing to share, so Scene is New scene (plain text, one choice) and the look field is shown", area,
     async () => { await form(); await choose("Capture V A", "V "); await page.wait(350); }, { paired: "lib-choice-popover" });
+  // Item 2: focus starts on the first field; Escape cancels and returns focus to the invoker (the + button the menu hung from).
+  for (const size of SIZES) {
+    await view(page, size, 450);
+    await form();
+    texts[`subst-focus-${size}`] = await page.evaluate(`({ inPopover: !!document.activeElement?.closest(".popover"), active: document.activeElement?.tagName + " role=" + document.activeElement?.getAttribute("role") + " " + (document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.textContent ?? "").trim().slice(0, 60), visible: !!document.activeElement?.matches(":focus-visible") })`);
+    await capture(page, "subst-focus-first-field", area, "U4 the substitution step with focus on its first field (the V choice), item 2", { paired: "lib-choice-popover" });
+    await page.key("Escape"); await page.wait(350);
+    texts[`subst-escape-${size}`] = { popoverGone: !(await page.evaluate(`!!document.querySelector(".popover")`)), focusOnPlus: await page.evaluate(`document.activeElement === ${T}.add`), tabs: (await tabsOf(page)).tabs.length };
+    await capture(page, "subst-escaped-focus-returned", STRIP, "U4 after Escape: the step is gone, no tab was made, focus is back on + (New tab), item 2", { paired: "lib-tab-strip" });
+    await closeAll(page);
+  }
+  await view(page, WIDE, 300);
   // Escape creates nothing, Create makes the tab.
   const before = (await tabsOf(page)).tabs.length;
   await form();
@@ -422,6 +452,42 @@ async function substitution(page: Session) {
     texts[`subst-dropped-v-${size}`] = { subject, result: await page.evaluate(`window.__removed`), popups: await popupText(page) };
     await capture(page, "subst-candidate-dropped-v", area, `U4 a V deleted while the step is open (Capture V ${letter}, which was chosen): its choice falls back to Leave empty and the note says a choice is no longer available`, { paired: "lib-choice-popover" });
     await closeAll(page);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Closing tabs (item 15): through the tab menu's Close tab, so the strip's own notice shows, as it does for a person.
+
+async function closing(page: Session) {
+  await factory(page);
+  await newTab(page, "save-explorer/default");
+  const closeVia = async (id: string) => {
+    await page.evaluate(`${T}.menu(${JSON.stringify(id)}, ${T}.strip.tab(${JSON.stringify(id)}))`); await page.wait(350);
+    await press(page, menuItem("Close tab")); await page.wait(600);
+  };
+  const notices = () => page.evaluate(`({ toasts: [...document.querySelectorAll(".toasts > *")].map(t => ({ text: t.innerText.replace(/\\n+/g, " | "), class: t.className })),
+    status: (() => { const s = document.querySelector(".status-bar"); return s ? { text: s.innerText.replace(/\\n+/g, " | "), warning: !!s.querySelector(".warning, [data-tone=warning], [class*=warn]") } : null; })() })`);
+  for (const size of SIZES) {
+    await view(page, size, 450);
+    const state = (await tabsOf(page)).tabs;
+    const extra = state.length < 2 ? (await newTab(page, "poses/default"), (await tabsOf(page)).tabs) : state;
+    // Close a tab that is not the last: toast with Undo.
+    await closeVia(extra.at(-1)!.id);
+    texts[`close-one-${size}`] = await notices();
+    await capture(page, "close-tab-toast", [".toasts", ".layout-tabs", ".status-bar"], "Item 15 closing a tab (not the last): an ordinary info toast with Undo, no warning colour anywhere", { keepToasts: true, paired: "c-toasts" });
+    await page.evaluate(`(() => { [...document.querySelectorAll(".toasts button")].find(b => b.textContent.trim() === "Undo")?.click(); })()`); await page.wait(600);
+    texts[`close-undone-${size}`] = (await tabsOf(page)).tabs.map(tab => tab.name);
+    await capture(page, "close-tab-undone", [".toasts", ".layout-tabs"], "Item 15 after Undo: the tab is back in the strip", { keepToasts: true });
+  }
+  // Close every tab through the menu: the last close is the one that used to leave a warning in the status bar.
+  for (const size of SIZES) {
+    await view(page, size, 450);
+    while ((await tabsOf(page)).tabs.length > 0) await closeVia((await tabsOf(page)).tabs[0]!.id);
+    texts[`close-last-${size}`] = await notices();
+    await capture(page, "close-last-tab-window", [], "Item 15 closing the last tab: the whole window with the toast (Undo) and the status bar, no warning", { keepToasts: true, whole: true, paired: "c-toasts" });
+    await capture(page, "close-last-tab-notices", [".toasts", ".layout-tabs", ".status-bar"], "Item 15 closing the last tab: the toast with Undo, the strip's empty session and the status bar", { keepToasts: true, paired: "c-toasts" });
+    await page.evaluate(`(() => { [...document.querySelectorAll(".toasts button")].find(b => b.textContent.trim() === "Undo")?.click(); })()`); await page.wait(600);
+    texts[`close-last-undone-${size}`] = (await tabsOf(page)).tabs.map(tab => tab.name);
   }
 }
 
@@ -584,6 +650,10 @@ async function guide(page: Session) {
   // The specimens are built by the page's module once it has loaded: wait until no placeholder is left.
   await page.waitFor(`!document.querySelector(".live-specimen[data-live] > p.note")`, 60_000).catch(() => { unreached.push({ state: "guide specimens", why: "some live specimens never replaced their placeholder" }); });
   await page.wait(800);
+  // Item 3: the guide's own script runs (the live specimens are built) and no entry text swallowed the page; item 10: the tab-strip entry has its layout-tabs specimen.
+  texts["guide-script-ran"] = await page.evaluate(`({ title: document.title, liveSpecimens: document.querySelectorAll(".live-specimen[data-live]").length, placeholdersLeft: document.querySelectorAll(".live-specimen[data-live] > p.note").length,
+    entries: document.querySelectorAll("[id^=lib-], [id^=c-]").length, rawTitleTags: document.querySelectorAll("body title").length,
+    tabStripSpecimen: (() => { const e = document.getElementById("lib-tab-strip"); return e ? { layoutTabsRows: e.querySelectorAll(".layout-tabs").length, tabs: e.querySelectorAll(".dock-tab").length, headings: [...e.querySelectorAll("h2, h3, h4, .specimen-label")].map(x => x.textContent.trim()).slice(0, 12) } : null; })() })`);
   const ids = [["lib-tab-strip", "Tab strip (U1: layout tabs)"], ["c-context", "Context menu"], ["lib-menu-secondary", "Menu row with secondary action (U2 and U3)"],
     ["lib-stage-tag", "Stage tag (the Early access tag in New tab)"], ["lib-choice-popover", "Choice popover (U4)"], ["c-choice-list", "Choice list"],
     ["c-popover", "Value popover (U5 Rename and Save as default)"], ["c-toasts", "Toasts (the Undo notice)"]] as const;
@@ -622,6 +692,7 @@ if (want("strip")) await session("strip", strip);
 if (want("menu")) await session("menu", tabMenu);
 if (want("new")) await session("new", newMenuStates);
 if (want("subst")) await session("subst", substitution);
+if (want("close")) await session("close", closing);
 if (want("naming")) await session("naming", naming);
 if (want("readonly")) await session("readonly", readonly);
 if (want("header")) await session("header", header);
