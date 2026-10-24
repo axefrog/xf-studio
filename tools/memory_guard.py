@@ -9,6 +9,8 @@ tree when either line is crossed:
     python tools/memory_guard.py --limit 2 --floor 20 -- bun tools/native-limits.ts
 
 --limit   GB of private memory the command's processes may use together (default 8).
+--disk-floor  GB of free disk space on drive C and the working folder's drive below which
+          the guard trips (default 20): catches a job writing far more than it should.
 --floor   GB of free memory (the lower of available RAM and available commit) below which
           the guard trips (default 4): a tripwire near the
           machine's maximum, not a reservation. Use memory freely above it.
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import shutil
 import subprocess
 import sys
 import time
@@ -208,10 +211,23 @@ def record(line: str) -> None:
         pass
 
 
+def lowest_disk_free() -> int:
+    """Free bytes on drive C and on the working folder's drive, whichever is lower."""
+    drives = {"C:\\", Path.cwd().anchor}
+    free = []
+    for d in drives:
+        try:
+            free.append(shutil.disk_usage(d).free)
+        except OSError:
+            pass
+    return min(free) if free else 1 << 62
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--limit", type=float, default=8.0, help="GB the command's processes may use together")
     parser.add_argument("--floor", type=float, default=4.0, help="GB of free memory (min of available RAM and available commit) below which the guard trips")
+    parser.add_argument("--disk-floor", type=float, default=20.0, help="GB of free space on drive C (and on the working folder's drive) below which the guard trips")
     parser.add_argument("--interval", type=float, default=0.5, help="seconds between checks")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -219,7 +235,13 @@ def main() -> int:
     if not command:
         parser.error("give the command after --")
     limit, floor = int(args.limit * GB), int(args.floor * GB)
+    disk_floor = int(args.disk_floor * GB)
 
+    disk_free = lowest_disk_free()
+    if disk_free < disk_floor:
+        print(f"MEMORY GUARD: not starting; only {disk_free / GB:.1f} GB free on disk, below the {args.disk_floor:g} GB "
+              "disk floor. Clean up your scratch, worktrees and build outputs first.", file=sys.stderr)
+        return KILLED_EXIT
     if available_headroom() < floor:
         print(f"MEMORY GUARD: not starting; only {available_headroom() / GB:.1f} GB free, below the {args.floor:g} GB "
               "floor. Wait for other work to finish.", file=sys.stderr)
@@ -245,6 +267,9 @@ def main() -> int:
             elif free < floor:
                 reason = (f"the machine's free memory fell to {free / GB:.1f} GB (floor {args.floor:g} GB) "
                           f"while it held {used / GB:.1f} GB")
+            elif (disk := lowest_disk_free()) < disk_floor:
+                reason = (f"free disk space fell to {disk / GB:.1f} GB (disk floor {args.disk_floor:g} GB); "
+                          "the job may be writing far more than it should (captures, build outputs, extractions)")
             if reason:
                 kernel32.TerminateJobObject(job, KILLED_EXIT)
                 proc.wait()
