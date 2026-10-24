@@ -8,12 +8,13 @@
 //  - an explicit DACL granting access only to the user running the game (no Everyone read);
 //  - FILE_FLAG_FIRST_PIPE_INSTANCE: fails if another process already owns the name;
 //  - bounded message size, an idle timeout, and a connection drop after
-//    kMaxRejectedPerConnection malformed or unauthenticated requests;
+//    kMaxRejectedPerConnection malformed, unauthenticated or abusive reader requests;
 //  - overlapped I/O, and every wait except the fixed kLingerMs window also watches the stop
 //    event, so Stop() is bounded: it never waits for a client to read (no FlushFileBuffers),
 //    and if the thread takes longer than kStopBudgetMs it warns and cancels the pipe's I/O.
 
 #include <atomic>
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -25,7 +26,32 @@ namespace xfb
 struct PipeReply
 {
     std::string line;      // response, without the newline
-    bool rejected = false; // malformed or unauthenticated; counts towards the per-connection limit
+    bool rejected = false; // counts towards the per-connection rejection limit
+    uint32_t backoffMs = 0; // transport-only; never supplied by request data
+    bool throttled = false;
+};
+
+// Endpoint-owned, not connection-owned. Injected monotonic milliseconds keep its
+// reconnect/backoff contract deterministic in unit tests. Used only on the pipe worker.
+class ReaderBackoff
+{
+public:
+    void Observe(uint64_t now, uint32_t minimumMs, bool abuse)
+    {
+        uint32_t delay = std::min<uint32_t>(1000, minimumMs);
+        if (abuse) {
+            if (now > m_lastAbuse + 5000) m_strikes = 0;
+            m_strikes = std::min<uint32_t>(6, m_strikes + 1);
+            m_lastAbuse = now;
+            delay = std::max(delay, std::min<uint32_t>(1000, 50u << (m_strikes - 1)));
+        }
+        m_until = std::max(m_until, now + delay);
+    }
+    void Reconnect(uint64_t now) { Observe(now, 100, false); }
+    uint32_t Remaining(uint64_t now) const { return now < m_until ? static_cast<uint32_t>(m_until - now) : 0; }
+private:
+    uint64_t m_until = 0, m_lastAbuse = 0;
+    uint32_t m_strikes = 0;
 };
 
 class PipeServer
@@ -83,6 +109,9 @@ private:
     std::wstring m_pipeName;
     uint32_t m_idleDisconnectSeconds = 120;
     Handler m_handler;
+    ReaderBackoff m_readerBackoff; // survives client reconnects (and Stop/Start)
+    uint64_t m_nextReaderConnectionLogMs = 0;
+    bool m_readerEndpoint = false;
     std::function<void()> m_onIdle;
     std::thread m_thread;
     void* m_pipe = nullptr;      // HANDLE

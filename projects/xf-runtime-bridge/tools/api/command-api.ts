@@ -253,7 +253,7 @@ export class CommandApi {
     name = findCommand(name)?.name ?? name;
     const command = findCommand(name);
     if (this.options.readOnly && !EMERGENCY_COMMANDS.has(name) &&
-        (command?.permission !== "read" || name === "test.record.start")) {
+        (command?.permission !== "read" || name === "test.record.start" || name === "npc.pick")) {
       return Promise.resolve({ ok: false, command: name, cid: options.cid ?? nextCid("read"),
         error: { code: "read_only_connection", message: "This connection observes only; use a writer for this command." } });
     }

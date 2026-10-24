@@ -3,6 +3,7 @@
 #include "core/Log.hpp"
 
 #include <set>
+#include <algorithm>
 #include <utility>
 
 namespace xfb
@@ -516,6 +517,7 @@ bool Dispatcher::IsKilled() const
 
 void Dispatcher::Revive()
 {
+    m_commandEpoch.fetch_add(1);
     {
         std::scoped_lock _(m_mutex);
         m_killReason.clear();
@@ -647,6 +649,12 @@ uint64_t Dispatcher::RequestCount() const
     return m_requests.load();
 }
 
+bool Dispatcher::TakeReaderLogToken(std::atomic<int64_t>& next, int64_t now)
+{
+    auto expected = next.load(std::memory_order_relaxed);
+    return now >= expected && next.compare_exchange_strong(expected, now + 1000, std::memory_order_relaxed);
+}
+
 bool Dispatcher::TakeRateToken(bool aReadOnly)
 {
     std::scoped_lock _(m_mutex);
@@ -706,12 +714,17 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     m_requests.fetch_add(1);
     const auto pidText = " client_pid=" + std::to_string(aClientPid);
 
-    // Every refusal is logged under its own event name; `rejected` marks malformed or
-    // unauthenticated requests, which count towards the transport's per-connection limit.
+    // Refusals have their own event names; reader floods are sampled before the sink.
+    // `rejected` includes malformed/unauthenticated requests and reader pacing abuse.
     const auto refuse = [&](const char* aEvent, const json& aId, const std::string& aCid, const std::string& aCode,
                             const std::string& aMessage, bool aRejected, const std::string& aDetail = {}) {
-        log::Warn(aEvent, "code=" + aCode + (aDetail.empty() ? "" : " " + aDetail) + pidText, aCid);
-        return DispatchResult{SerializeJson(ErrorResponse(aId, aCid, aCode, aMessage)), aRejected};
+        const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(started.time_since_epoch()).count();
+        // Sample before entering the sink: suppressed floods cannot contend on its game-thread mutex.
+        if (!tReadOnly || TakeReaderLogToken(m_nextReaderRefusalLogMs, nowMs))
+            log::Warn(aEvent, "code=" + aCode + (aDetail.empty() ? "" : " " + aDetail) + pidText, aCid);
+        const bool throttled = tReadOnly && (aRejected || aCode == "rate_limited" || aCode == "bad_version" || aCode == "unknown_method");
+        return DispatchResult{SerializeJson(ErrorResponse(aId, aCid, aCode, aMessage)), aRejected,
+                              tReadOnly ? 50u : 0u, throttled};
     };
 
     const auto depth = JsonNestingDepth(aLine, kMaxJsonDepth);
@@ -764,7 +777,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     {
         return refuse("bridge.rate_limited", id, cid, "rate_limited",
                       "more than " + std::to_string(m_config.maxRequestsPerSecond) + " requests per second",
-                      !authenticated, authenticated ? "" : "authenticated=false");
+                      tReadOnly || !authenticated, authenticated ? "" : "authenticated=false");
     }
 
     // Token before anything else: an unauthenticated caller learns nothing about the bridge.
@@ -812,7 +825,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     // save-list/CET request exchanges. Those reads remain writer-only this round.
     // test.events may observe the tap but cannot switch it.
     if (tReadOnly && ((!IsEmergencyMethod(methodName) && spec.access != Access::Read) ||
-                     methodName == "test.record.start" || methodName == "game.saves" || methodName == "game.options.read" ||
+                     methodName == "npc.pick" || methodName == "test.record.start" || methodName == "game.saves" || methodName == "game.options.read" ||
                      (methodName == "test.events" && request.contains("params") &&
                       request["params"].is_object() && request["params"].contains("stims")))) {
         return refuse("bridge.read_only_refused", id, cid, "read_only_connection",
@@ -820,7 +833,35 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     }
 
     tEmergency = IsEmergencyMethod(methodName);
-    log::Info("bridge.request", "method=" + methodName + " access=" + accessName + pidText, cid);
+    std::optional<size_t> readerEmergencySlot;
+    std::string readerEmergencyKey;
+    uint64_t readerEmergencyEpoch = 0;
+    const auto readerEmergencyUntil = started + std::chrono::milliseconds(1000);
+    if (tReadOnly && tEmergency) {
+        static constexpr std::array<std::string_view, 6> methods{
+            "bridge.kill", "behave.stop", "player.stop", "test.record.stop", "supervisor.clear", "bridge.handover"};
+        const auto index = static_cast<size_t>(std::find(methods.begin(), methods.end(), methodName) - methods.begin());
+        const auto params = request.find("params");
+        readerEmergencyKey = SerializeJson(params != request.end() && params->is_object() ? *params : json::object());
+        readerEmergencyEpoch = m_commandEpoch.load();
+        std::scoped_lock lock(m_readerEmergencyMutex);
+        auto& previous = m_readerEmergencies.at(index);
+        if (previous.key == readerEmergencyKey && previous.epoch == readerEmergencyEpoch && started < previous.until) {
+            // Receipt of admission only: neither a second execution nor proof the async stop finished.
+            const json response{{"v", kProtocolVersion}, {"id", id}, {"cid", cid}, {"ok", true},
+                {"result", {{"coalesced", true}, {"method", methodName},
+                            {"note", "Matching cancellation already admitted; consult state for completion."}}}};
+            return {SerializeJson(response), false, 100, true};
+        }
+        previous = {readerEmergencyKey, readerEmergencyUntil, readerEmergencyEpoch};
+        readerEmergencySlot = index;
+    } else if (spec.access != Access::Read || methodName == "npc.pick" || methodName == "test.record.start") {
+        // A new changing command invalidates old receipts, including an in-flight reader stop.
+        m_commandEpoch.fetch_add(1);
+    }
+    const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(started.time_since_epoch()).count();
+    const bool logDetails = !tReadOnly || !tEmergency || TakeReaderLogToken(m_nextReaderEmergencyLogMs, nowMs);
+    if (logDetails) log::Info("bridge.request", "method=" + methodName + " access=" + accessName + pidText, cid);
     m_lastRequestMs.store(std::chrono::duration_cast<std::chrono::milliseconds>(started.time_since_epoch()).count());
 
     // The session event stream hears every refused write too (0.6).
@@ -1003,7 +1044,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     const auto elapsedMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
     const auto level = code == "ok" ? Level::Info : Level::Warn;
-    log::Write(level, "native", cid, "bridge.response",
+    if (logDetails) log::Write(level, "native", cid, "bridge.response",
                "method=" + methodName + " code=" + code + " ms=" + std::to_string(elapsedMs));
     // The session event stream (0.6): every write the bridge answered, with its outcome and, when it gave one, its undo.
     if (IsWrite(spec.access) && m_eventSink)
@@ -1022,10 +1063,16 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
         {
         }
     }
-    if (code == "ok" && log::MinLevel() == Level::Debug)
+    if (logDetails && code == "ok" && log::MinLevel() == Level::Debug)
     {
         log::Debug("bridge.result", "method=" + methodName + " result=" + SerializeJson(response["result"]), cid);
     }
-    return {SerializeJson(response), false};
+    if (readerEmergencySlot && code != "ok") {
+        std::scoped_lock lock(m_readerEmergencyMutex);
+        auto& entry = m_readerEmergencies[*readerEmergencySlot];
+        if (entry.key == readerEmergencyKey && entry.epoch == readerEmergencyEpoch && entry.until == readerEmergencyUntil)
+            entry.until = {}; // failed cancellation must remain retryable
+    }
+    return {SerializeJson(response), false, tReadOnly && tEmergency ? 100u : 0u, false};
 }
 } // namespace xfb

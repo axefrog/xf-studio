@@ -7,7 +7,7 @@ import { startSelftestHost, type Host, sleep } from "./helpers.ts";
 let host: Host;
 const clients: BridgeClient[] = [];
 const apis: CommandApi[] = [];
-beforeAll(async () => { host = await startSelftestHost(["--allow-writes", "--allow-test-hooks"]); }, 60000);
+beforeAll(async () => { host = await startSelftestHost(["--allow-writes", "--allow-test-hooks", "--write-classes", "photo,world,character,npc"]); }, 60000);
 afterAll(async () => { for (const api of apis) api.close(); for (const c of clients) c.close(); await host?.stop(); });
 const client = async (readOnly = false) => {
   const c = new BridgeClient(host.session, 500); clients.push(c);
@@ -66,6 +66,56 @@ test("native reader enforces role, pool capacity and independent cursors; slot r
     expect((await writer.call("ping")).ok).toBe(true);
   } finally { writer.close(); a.close(); b.close(); c.close(); }
 }, 10000);
+
+test("reader NPC picks cannot consume shared ownership; list/status remain readable", async () => {
+  const writer = await client(), raw = await client(true);
+  let opened = 0;
+  const reader = new CommandApi({ readOnly: true, runtimeDir: host.dir, transport: async () => {
+    ++opened; throw new Error("reader policy must refuse before transport opens");
+  } });
+  try {
+    const refused = await reader.run("npc.pick", { id: "EntityID(9001)" });
+    expect(refused.ok ? "ok" : refused.error.code).toBe("read_only_connection");
+    expect(opened).toBe(0);
+    for (let i = 0; i < 6; ++i)
+      expect((await raw.call("npc.pick", { id: "EntityID(9001)" })).error?.code).toBe("read_only_connection");
+    expect((await raw.call("npc.list", {})).ok).toBe(true);
+    const status = await raw.call("npc.status", {});
+    expect(status.ok).toBe(true); expect((status.result as any).npcs).toEqual([]);
+    raw.close();
+    const pick = await writer.call("npc.pick", { id: "EntityID(9001)" });
+    expect(pick.ok).toBe(true); expect((pick.result as any).already).not.toBe(true);
+    if (pick.ok) expect((await writer.call("npc.release", { who: (pick.result as any).who })).ok).toBe(true);
+  } finally { writer.close(); raw.close(); reader.close(); }
+});
+
+test("reader flood backs off across reconnect; writer/control remain usable and repeats coalesce", async () => {
+  const endpoint = { ...host.session, pipe: host.session.read_only_pipes![0]! };
+  const flood = new BridgeClient(endpoint, 3000), replacement = new BridgeClient(endpoint, 3000);
+  clients.push(flood, replacement);
+  const writer = api();
+  try {
+    await flood.connect({ busyWaitMs: 2000 });
+    let limited = false;
+    for (let i = 0; i < 100; ++i) {
+      const result = await flood.call("ping", {});
+      if (result.error?.code === "rate_limited") { limited = true; break; }
+    }
+    expect(limited).toBe(true);
+    const began = performance.now(); flood.close();
+    await replacement.connect({ busyWaitMs: 2000 });
+    // A client may open the OS handle during cooldown; its request must still wait.
+    await replacement.call("ping", {});
+    expect(performance.now() - began).toBeGreaterThanOrEqual(80);
+    expect((await writer.run("session.note", { text: "writer survives flood" })).ok).toBe(true);
+    expect((await writer.run("behave.stop", { all: true })).ok).toBe(true);
+    const first = await replacement.call("player.stop", {});
+    const second = await replacement.call("player.stop", {});
+    expect(first.ok).toBe(true); expect(second.ok).toBe(true);
+    expect((second.result as any).coalesced).toBe(true);
+    expect((await writer.run("player.stop", {})).ok).toBe(true);
+  } finally { flood.close(); replacement.close(); writer.close(); }
+}, 15000);
 
 test("reader emergency route remains available", async () => {
   const reader = api(true);

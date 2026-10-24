@@ -126,6 +126,7 @@ bool PipeServer::Start(const std::wstring& aPipeName, uint32_t aIdleDisconnectSe
         m_dropEvent = dropEvent;
     }
     m_pipeName = aPipeName;
+    m_readerEndpoint = PipeKind() == "reader";
     m_idleDisconnectSeconds = aIdleDisconnectSeconds;
     m_handler = std::move(aHandler);
     m_running.store(true);
@@ -231,6 +232,9 @@ void PipeServer::Run()
     DWORD backoffMs = 0;
     while (m_running.load() && !IsSignalled(stop))
     {
+        // A disconnect (even before reading its refusal) cannot reset this endpoint's penalty.
+        if (m_readerEndpoint && WaitForSingleObject(stop, m_readerBackoff.Remaining(GetTickCount64())) == WAIT_OBJECT_0)
+            break;
         OVERLAPPED overlapped{};
         overlapped.hEvent = connectEvent;
         ResetEvent(connectEvent);
@@ -283,7 +287,10 @@ void PipeServer::Run()
         m_hasClient.store(true);
         ResetEvent(drop);
         // 0.8.3: which pipe (session 10 couldn't tell the control pipe's connections from the main pipe's in the log).
-        log::Info("bridge.client_connected", "client_pid=" + std::to_string(clientPid) +
+        const auto now = GetTickCount64();
+        const bool logConnection = !m_readerEndpoint || now >= m_nextReaderConnectionLogMs;
+        if (m_readerEndpoint && logConnection) m_nextReaderConnectionLogMs = now + 1000;
+        if (logConnection) log::Info("bridge.client_connected", "client_pid=" + std::to_string(clientPid) +
                                                  " connection=" + std::to_string(m_connections.load()) + " pipe=" + PipeKind());
 
         const auto reason = ServeClient(clientPid);
@@ -294,7 +301,11 @@ void PipeServer::Run()
         // No FlushFileBuffers: it waits until the client reads, which a client can refuse to do.
         DisconnectNamedPipe(pipe);
         m_hasClient.store(false);
-        log::Info("bridge.client_disconnected", "pipe=" + PipeKind() + " client_pid=" + std::to_string(clientPid) +
+        if (m_readerEndpoint) {
+            m_readerBackoff.Reconnect(GetTickCount64());
+            if (reason == EndReason::TooLarge) m_readerBackoff.Observe(GetTickCount64(), 0, true);
+        }
+        if (logConnection) log::Info("bridge.client_disconnected", "pipe=" + PipeKind() + " client_pid=" + std::to_string(clientPid) +
                                                     " reason=" + ReasonName(static_cast<int>(reason)));
         if (reason == EndReason::TooManyRejected)
         {
@@ -428,8 +439,25 @@ PipeServer::EndReason PipeServer::ServeClient(uint32_t aClientPid)
             {
                 line.pop_back();
             }
-            if (line.empty())
-            {
+            if (m_readerEndpoint) {
+                // This worker may wait; the control pipe/kill key never wait for it.
+                HANDLE waits[] = {drop, stop};
+                const auto wait = WaitForMultipleObjects(2, waits, FALSE, m_readerBackoff.Remaining(GetTickCount64()));
+                if (wait == WAIT_OBJECT_0 || wait == WAIT_OBJECT_0 + 1) {
+                    reason = wait == WAIT_OBJECT_0 ? EndReason::Dropped : EndReason::Stopped;
+                    endClient = true;
+                    break;
+                }
+            }
+            if (line.empty()) {
+                if (m_readerEndpoint) {
+                    m_readerBackoff.Observe(GetTickCount64(), 50, true);
+                    if (++rejected >= kMaxRejectedPerConnection) {
+                        reason = EndReason::TooManyRejected;
+                        endClient = true;
+                        break;
+                    }
+                }
                 continue;
             }
             PipeReply reply;
@@ -442,6 +470,8 @@ PipeServer::EndReason PipeServer::ServeClient(uint32_t aClientPid)
                 log::Error("bridge.handler_failed", "client_pid=" + std::to_string(aClientPid));
                 reply = {kInternalErrorReply, true};
             }
+            if (m_readerEndpoint)
+                m_readerBackoff.Observe(GetTickCount64(), reply.backoffMs, reply.rejected || reply.throttled);
             reply.line.push_back('\n');
             if (!WriteAll(reply.line))
             {
@@ -449,7 +479,7 @@ PipeServer::EndReason PipeServer::ServeClient(uint32_t aClientPid)
                 endClient = true;
                 break;
             }
-            if (reply.rejected && ++rejected >= kMaxRejectedPerConnection)
+            if ((reply.rejected || reply.throttled) && ++rejected >= kMaxRejectedPerConnection)
             {
                 log::Warn("bridge.client_dropped", "reason=too_many_rejected rejected=" + std::to_string(rejected) +
                                                        " client_pid=" + std::to_string(aClientPid));

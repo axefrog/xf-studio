@@ -81,7 +81,7 @@ bool Bridge::Start(std::string& aError)
         if (!reader->Start(name, m_config.idleDisconnectSeconds,
             [this](const std::string& line, uint32_t pid) {
                 auto reply = m_dispatcher.Handle(line, pid, false, true);
-                return PipeReply{std::move(reply.line), reply.rejected};
+                return PipeReply{std::move(reply.line), reply.rejected, reply.backoffMs, reply.throttled};
             }, aError)) {
             for (auto& started : m_readers) started->Stop();
             m_server.Stop(); m_control.Stop();

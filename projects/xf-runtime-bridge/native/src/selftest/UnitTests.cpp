@@ -5378,13 +5378,13 @@ int RunUnitTests()
         dispatcher.Register({"fixture.write", Access::Write, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
         dispatcher.Register({"fixture.notify", Access::Notify, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
         dispatcher.Register({"test.record.start", Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
-        for (const auto method : {"game.saves", "game.options.read"})
+        for (const auto method : {"game.saves", "game.options.read", "npc.pick"})
             dispatcher.Register({method, Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
         dispatcher.Register({"bridge.kill", Access::Control, RunOn::BridgeThread, "", [](const MethodContext&) { return json::object(); }});
         auto request = [&](const char* method, bool reader) {
             return json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", method}}.dump(), 1, false, reader).line);
         };
-        for (const auto method : {"fixture.write", "fixture.notify", "test.record.start", "game.saves", "game.options.read"})
+        for (const auto method : {"fixture.write", "fixture.notify", "test.record.start", "game.saves", "game.options.read", "npc.pick"})
             Check("multiclient: native reader refuses mutation/lease", request(method, true)["error"]["code"] == "read_only_connection");
         const auto stims = json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", "test.events"}, {"params", {{"stims", true}}}}.dump(), 1, false, true).line);
         Check("multiclient: read-class stim mutation refused", stims["error"]["code"] == "read_only_connection");
@@ -5446,7 +5446,21 @@ int RunUnitTests()
                     std::this_thread::sleep_for(1ms); replacement = open(readerName);
                 }
                 Check("multiclient: reader disconnect releases only its slot", replacement != INVALID_HANDLE_VALUE && bridge.HasClient() && bridge.ConnectionsAccepted() == generation && !bridge.TakeIdleDisconnect());
-                if (replacement != INVALID_HANDLE_VALUE) CloseHandle(replacement);
+                if (replacement != INVALID_HANDLE_VALUE) {
+                    DWORD written = 0;
+                    const auto floodBegan = std::chrono::steady_clock::now();
+                    const bool sent = WriteFile(replacement, "\n\n\n\n\n", 5, &written, nullptr) && written == 5;
+                    bool connected = true;
+                    const auto floodDeadline = floodBegan + 3s;
+                    while (connected && std::chrono::steady_clock::now() < floodDeadline) {
+                        DWORD available = 0;
+                        connected = PeekNamedPipe(replacement, nullptr, 0, nullptr, &available, nullptr) != FALSE;
+                        if (connected) std::this_thread::sleep_for(1ms);
+                    }
+                    Check("reader flood: blank lines incur backoff and disconnect", sent && !connected && MsSince(floodBegan) >= 500);
+                    Check("reader flood: blank-line abuse never releases writer ownership", bridge.HasClient() && bridge.ConnectionsAccepted() == generation);
+                    CloseHandle(replacement);
+                }
                 if (writer != INVALID_HANDLE_VALUE) CloseHandle(writer);
                 const auto closedDeadline = std::chrono::steady_clock::now() + 1s;
                 while (bridge.HasClient() && std::chrono::steady_clock::now() < closedDeadline) std::this_thread::sleep_for(1ms);
@@ -5456,6 +5470,83 @@ int RunUnitTests()
             std::filesystem::remove(dir / "session.json");
             std::filesystem::remove(dir);
         }
+    }
+    {
+        using namespace xfb;
+        ReaderBackoff penalty;
+        penalty.Observe(10000, 0, true);
+        Check("reader flood: first strike backs off 50 ms", penalty.Remaining(10000) == 50);
+        penalty.Reconnect(10010);
+        Check("reader flood: reconnect does not clear pending penalty", penalty.Remaining(10010) == 100);
+        penalty.Observe(11000, 0, true);
+        Check("reader flood: strike history survives reconnect and elapsed cooldown", penalty.Remaining(11000) == 100);
+        for (int i = 0; i < 20; ++i) penalty.Observe(12000 + i, 0, true);
+        Check("reader flood: escalating delay caps at one second", penalty.Remaining(12019) == 1000);
+        penalty.Observe(20000, 0, true);
+        Check("reader flood: quiet period resets strikes", penalty.Remaining(20000) == 50);
+
+        struct Sink : ILogSink {
+            std::atomic<int> rateWarnings{0};
+            void Write(Level, const std::string& line) override {
+                if (line.find("evt=bridge.rate_limited") != std::string::npos) ++rateWarnings;
+            }
+        } sink;
+        Config config; config.maxRequestsPerSecond = 1;
+        Session session; session.token = "reader-flood";
+        GameThreadQueue queue;
+        Dispatcher dispatcher(config, session, queue);
+        std::atomic<int> limited{0}, badMetadata{0};
+        log::SetSink(&sink);
+        const auto began = std::chrono::steady_clock::now();
+        std::vector<std::thread> readers;
+        for (int i = 0; i < 8; ++i) readers.emplace_back([&] {
+            for (int j = 0; j < 100; ++j) {
+                const auto result = dispatcher.Handle(R"({"token":"reader-flood","method":"ping"})", 1, false, true);
+                const auto response = json::parse(result.line);
+                if (!response.value("ok", false) && response["error"]["code"] == "rate_limited") {
+                    ++limited;
+                    if (!result.rejected || !result.throttled || result.backoffMs < 50) ++badMetadata;
+                }
+            }
+        });
+        for (auto& reader : readers) reader.join();
+        const auto elapsed = MsSince(began);
+        log::SetSink(nullptr);
+        Check("reader flood: authenticated pacing refusals incur endpoint strikes", limited > 700 && badMetadata == 0);
+        Check("reader flood: eight readers share sampled refusal logging", sink.rateWarnings > 0 && sink.rateWarnings <= 1 + elapsed / 1000);
+        Check("reader flood: writer pacing reserve survives abuse", json::parse(dispatcher.Handle(R"({"token":"reader-flood","method":"ping"})", 2).line)["ok"] == true);
+
+        const auto badVersion = dispatcher.Handle(R"({"v":2,"token":"reader-flood","method":"bridge.kill"})", 1, false, true);
+        const auto missingRoute = dispatcher.Handle(R"({"token":"reader-flood","method":"bridge.kill"})", 1, false, true);
+        Check("reader flood: invalid emergency envelopes cannot bypass backoff", badVersion.backoffMs >= 50 && badVersion.throttled &&
+              json::parse(badVersion.line)["error"]["code"] == "bad_version");
+        Check("reader flood: unavailable emergency routes cannot bypass backoff", missingRoute.backoffMs >= 50 && missingRoute.throttled &&
+              json::parse(missingRoute.line)["error"]["code"] == "unknown_method");
+
+        int stops = 0;
+        dispatcher.Register({"behave.stop", Access::Control, RunOn::BridgeThread, "", [&](const MethodContext&) { ++stops; return json{{"stopping", 1}}; }});
+        auto cancel = [&](bool reader, bool control = false) {
+            return dispatcher.Handle(R"({"token":"reader-flood","method":"behave.stop","params":{"all":true}})", 1, control, reader);
+        };
+        const auto first = cancel(true), repeated = cancel(true);
+        Check("reader flood: first emergency bypasses exhausted ordinary pacing", json::parse(first.line)["ok"] == true && stops == 1);
+        Check("reader flood: matching emergency coalesces without executing twice", json::parse(repeated.line)["result"]["coalesced"] == true && repeated.throttled && repeated.backoffMs == 100);
+        const auto control = cancel(false, true);
+        Check("reader flood: control cancellation is independent and never backs off", json::parse(control.line)["ok"] == true && control.backoffMs == 0 && !control.throttled && stops == 2);
+        cancel(true);
+        Check("reader flood: intervening control invalidates stale reader receipts", stops == 3);
+        // New sessions must invalidate receipts even when ordinary credit is exhausted.
+        dispatcher.Revive();
+        cancel(true);
+        Check("reader flood: rearm invalidates stale emergency receipts", stops == 4);
+        int failed = 0;
+        dispatcher.Register({"player.stop", Access::Control, RunOn::BridgeThread, "", [&](const MethodContext&) -> json {
+            if (++failed == 1) throw MethodError("failed", "fixture"); return json();
+        }});
+        const auto retry = R"({"token":"reader-flood","method":"player.stop"})";
+        dispatcher.Handle(retry, 1, false, true);
+        dispatcher.Handle(retry, 1, false, true);
+        Check("reader flood: failed emergency remains retryable", failed == 2);
     }
     SanitizeTests();
     NestingTests();

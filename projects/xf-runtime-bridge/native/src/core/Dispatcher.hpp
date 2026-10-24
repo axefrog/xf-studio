@@ -15,6 +15,7 @@
 // transport can drop a connection that sends too many of them.
 
 #include <atomic>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -100,7 +101,9 @@ struct MethodSpec
 struct DispatchResult
 {
     std::string line;      // response JSON, without the newline
-    bool rejected = false; // malformed or unauthenticated
+    bool rejected = false; // malformed, unauthenticated or reader pacing abuse
+    uint32_t backoffMs = 0; // transport-only; never supplied by request data
+    bool throttled = false;
 };
 
 // Deepest array/object nesting allowed in a request. nlohmann/json parses iteratively, but
@@ -192,6 +195,7 @@ public:
 private:
     DispatchResult HandleUnchecked(const std::string& aLine, uint32_t aClientPid, bool aControlRoute);
     bool TakeRateToken(bool aReadOnly);
+    static bool TakeReaderLogToken(std::atomic<int64_t>& next, int64_t now);
     std::string NextCid();
 
     const Config& m_config;
@@ -210,6 +214,17 @@ private:
     std::atomic<uint64_t> m_requests{0};
     std::atomic<int64_t> m_lastRequestMs{-1}; // steady clock, milliseconds since its epoch
     std::atomic<uint64_t> m_cidCounter{0};
+
+    // Fixed-size reader flood controls. No game thread ever acquires this mutex.
+    struct ReaderEmergency {
+        std::string key;
+        std::chrono::steady_clock::time_point until{};
+        uint64_t epoch = 0;
+    };
+    std::mutex m_readerEmergencyMutex;
+    std::array<ReaderEmergency, 6> m_readerEmergencies;
+    std::atomic<uint64_t> m_commandEpoch{0};
+    std::atomic<int64_t> m_nextReaderRefusalLogMs{0}, m_nextReaderEmergencyLogMs{0};
 
     // Token bucket: capacity = 2 s of the configured rate.
     double m_tokens = 0.0;
