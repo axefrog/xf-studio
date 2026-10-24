@@ -52,6 +52,14 @@ describe("input session evidence", () => {
     expect(check("save_delta", { baseline, actual: { ...actual, ready: false } }).verdict).toBe("INCONCLUSIVE");
     expect(check("save_delta", { baseline, actual: { ready: true, names: ["fixture-old", "fixture-new", "fixture-new"] } }).verdict).toBe("INCONCLUSIVE");
   });
+  test("save window rollover does not invent deletions; total count measures additions", () => {
+    const baseline = { ready: true, count: 50, names: ["c", "b", "a"] };
+    const actual = { ready: true, count: 51, names: ["new", "c", "b"] };
+    expect(check("save_delta", { baseline, actual }).verdict).toBe("PASS");
+    expect(check("save_delta", { baseline, actual: { ...actual, count: 52 } }).verdict).toBe("FAIL");
+    expect(check("save_delta", { baseline, actual: { ...actual, names: ["new", "c", "a"] } }).verdict).toBe("FAIL");
+    expect(check("save_delta", { baseline, actual: { ...actual, names: ["x", "y", "z"] } }).verdict).toBe("INCONCLUSIVE");
+  });
   test("R1 rejects status flags, a missing capture and a changed capture hash", () => {
     expect(check("r1_trace", { sid: "fixture-sid", actual: { available: false } }).verdict).toBe("INCONCLUSIVE");
     expect(check("r1_trace", { sid: "fixture-sid", actual: readR1Trace({ path: "absent", sha256: "0".repeat(64) }) }).verdict).toBe("INCONCLUSIVE");

@@ -2694,7 +2694,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             {
                 toStartAct.push_back(who);
             }
-            // 0.8.11: a held face is sent again on a schedule (an actor not yet prepared is still loading).
+            // 0.8.11: a held face is sent again on a schedule after attitude preparation; this does not test animation readiness.
             if (!npc.face.empty() && !npc.handedBack && exists && (npc.kind != "actor" || entry.value("prepared", true)))
             {
                 const double due = npc.faceSends == 0 ? kFaceFirstS : npc.faceSends == 1 ? kFaceSecondS : kFaceSteadyS;

@@ -78,6 +78,17 @@ int RecordingUnitTests()
     Service capped; capped.Start({{"channels", {"voice"}}, {"byte_cap", 8192}}, 800, 8, 4, "tap-test");
     for (int i = 0; i < 20; ++i) capped.Ingress("voice", R"({"event":"voice.requested"})", 800.1, 8, 4, i);
     Check(capped.Read({{"run", 1}}, 801)["reason"] == "byte_cap", "event byte cap stops run");
+    Service fu; fu.Start({{"channels", {"face", "ui"}}}, 900, 8, 4, "fu-test");
+    int faceHeartbeats = 0, uiSamples = 0;
+    ops.sample = [&](const std::string& channel, const std::vector<std::string>&) {
+        if (channel == "face") ++faceHeartbeats; else if (channel == "ui") ++uiSamples;
+        return json{{"valid", true}};
+    };
+    for (int i = 0; i < 10; ++i) fu.Tick(900 + i * 0.1, 8, 4, true, i, ops);
+    Check(faceHeartbeats == 1 && uiSamples == 10, "F coverage at 1 Hz, U fresh consumer reads at 10 Hz");
+    Check(fu.Ingress("face", R"({"event":"face.bridge_resend","attitude_prepared":true})", 900.91, 8, 4, 11), "F submission ingress uses same bounded recorder");
+    fu.RequestStop("cancelled");
+    Check(!fu.Wants("face") && !fu.Wants("ui"), "F/U ingress stops immediately");
     // File writer is the single off-thread drain, independent of a killed/disconnected pipe.
     const std::string sid = "fixture";
     const auto dir = std::filesystem::temp_directory_path() / ("xfb-record-" + std::to_string(Now()));

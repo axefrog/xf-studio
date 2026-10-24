@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { clock as defaultClock, read, type Clock, type Json, type TestApi } from "./windows.ts";
 
 export type RecordingOptions = {
-  directory: string; channels?: ("v" | "actors" | "camera" | "subtitles" | "voice")[]; actors?: string[];
+  directory: string; channels?: ("v" | "actors" | "camera" | "subtitles" | "voice" | "face" | "ui")[]; actors?: string[];
   duration_s?: number; byte_cap?: number; signal?: AbortSignal; clock?: Clock;
 };
 

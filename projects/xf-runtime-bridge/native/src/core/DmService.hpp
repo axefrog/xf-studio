@@ -134,7 +134,7 @@ struct Ops
     std::function<void(const std::vector<Quest>& aQuests)> tracker;
     std::function<void(const std::string& aEntity, double aIntensity)> lightIntensity;
     // Everything the script holds, in one step (the kill switch, a pause, a handover): {released: n, ...}. Idempotent.
-    std::function<json(const std::string& aReason)> releaseAll;
+    std::function<json(const std::string& aReason, int32_t aRemovedBefore)> releaseAll;
     // game.digest's game part: {v: {...}, world: {...}}.
     std::function<json(bool aSky)> digest;
     // The watchers' micro-actions (the host's runner), and the check of one action's method.
@@ -285,6 +285,7 @@ private:
     bool m_cleanupPending = false;
     bool m_releaseRequested = false;
     CleanupRetry m_releaseRetry;
+    std::map<std::string, json> m_releaseReceipts; // bounded reasons; consumed by explicit handover/kill, cleared by new work/load
     EventLog* m_events = nullptr;
     int32_t m_nextHandle = 1;
     int32_t m_nextSound = 1;

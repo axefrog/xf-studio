@@ -103,7 +103,18 @@ describe("ui.message and the session runner's echo", () => {
     const paused = await runScript(script, { api, outDir: tempDir("xfb-b5-pause-"), log: () => {} });
     expect(paused.outcome).toBe("paused");
     const afterPause = await texts(api);
-    expect(afterPause.filter((t) => t.includes("Press Confirm"))).toEqual(['ask:XF session paused at "a1": Press Confirm in the creator.']);
+    expect(afterPause.filter((t) => t.includes("Press Confirm"))).toEqual([]);
+  });
+
+  test("private setup asks stay in coordinator output and leave no paused game question", async () => {
+    await api.run("ui.message", { clear: true });
+    const lines: string[] = [];
+    const result = await runScript({ schema: SCRIPT_SCHEMA, name: "private-asks", steps: [{ do: "ask", label: "setup", text: "Coordinator setup only" }] },
+      { api, outDir: tempDir("xfb-private-asks-"), setupAsksPrivate: true, log: text => lines.push(text) });
+    expect(result.outcome).toBe("paused");
+    expect(result.records.find(r => r.label === "setup")?.echoed).toBe(false);
+    expect(lines.join("\n")).toContain("Coordinator setup only");
+    expect(await texts(api)).toEqual([]);
   });
 
   test("--no-echo (echo: false) shows nothing", async () => {

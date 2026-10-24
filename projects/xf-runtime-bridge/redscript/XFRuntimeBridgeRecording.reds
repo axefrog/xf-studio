@@ -6,6 +6,8 @@ public abstract class XFRecording {
   public static func Sample(cid: String, channel: String, whos: String) -> String {
     if !XFBridge_Live() { return XFJson.Fail("game_loading", "Recorder live gate closed"); }
     if Equals(channel, "subtitles") || Equals(channel, "voice") { return XFRecordingTap.Status(channel); }
+    if Equals(channel, "face") { return XFRecordingFace.Status(); }
+    if Equals(channel, "ui") { return XFRecordingUi.Sample(); }
     if Equals(channel, "camera") {
       let camera = XFPlayer.CameraJson();
       return "{\"ok\":true,\"valid\":" + XFJson.Flag(NotEquals(camera, "null")) + ",\"camera\":" + camera + "}";
@@ -72,7 +74,6 @@ public abstract class XFRecordingActors {
   }
 }
 
-
 // Only the autonomous package carries this file. No timer, per-frame widget walk or second event ring.
 // The source listener uses immediate notifications. Consumer delayed callbacks are independently tapped.
 @if(ModuleExists("Codeware"))
@@ -110,11 +111,10 @@ public abstract class XFRecordingTap {
       visible = visible && parent.IsVisible(); opacity *= parent.GetOpacity();
       parent = parent.parentWidget; depth += 1;
     }
-    let a = WidgetUtils.LocalToGlobal(widget, new Vector2(0.0, 0.0));
-    let b = WidgetUtils.LocalToGlobal(widget, widget.GetSize());
+    let bounds = GetScreenPosition(widget);
     return XFRecordingTap.WidgetIdentity(widget) + ",\"widget_defined\":true,\"effective_visible\":" + XFJson.Flag(visible && opacity > 0.0)
       + ",\"opacity\":" + XFJson.Num(opacity) + ",\"ancestor_limit\":" + XFJson.Flag(IsDefined(parent))
-      + ",\"rect\":[" + XFJson.Num(a.X) + "," + XFJson.Num(a.Y) + "," + XFJson.Num(b.X) + "," + XFJson.Num(b.Y) + "],\"geometry_phase\":\"callback_not_settled\"";
+      + ",\"rect\":[" + XFJson.Num(bounds.Left) + "," + XFJson.Num(bounds.Top) + "," + XFJson.Num(bounds.Right) + "," + XFJson.Num(bounds.Bottom) + "],\"geometry_phase\":\"callback_not_settled\",\"context_found\":null,\"pixel_rect\":null,\"coordinate_space\":\"owning_ink_window\"";
   }
   public static func WidgetIdentity(widget: wref<inkWidget>) -> String {
     let controller = IsDefined(widget) ? widget.GetController() as BaseSubtitleLineLogicController : null;
@@ -405,3 +405,85 @@ public let xfbRecordingConsumer: String;
 @if(ModuleExists("Codeware"))
 @addMethod(BaseSubtitlesGameController)
 public func XFRecordingWidgetCount() -> Int32 { return ArraySize(this.m_lineMap); }
+
+// F: script producers only. Native controller receipt/applied graph input remains R3 commissioning work.
+@if(ModuleExists("Codeware"))
+public abstract class XFRecordingFace {
+  public static func Status() -> String { return "{\"valid\":true,\"coverage\":\"script_ApplyFeature_and_bridge_face; native_writers_and_evaluated_output_unavailable\",\"prepared_meaning\":\"attitude_and_immortality_only\"}"; }
+  public static func Body(obj: ref<GameObject>) -> String {
+    let registry = XFNpcRegistry.Get();
+    let who = "";
+    let prepared = "null";
+    if IsDefined(registry) && IsDefined(obj) {
+      for entry in registry.Entries() {
+        if Equals(entry.id, obj.GetEntityID()) {
+          who = entry.who;
+          prepared = Equals(entry.kind, "actor") ? XFJson.Flag(entry.prepared) : "null";
+        }
+      }
+    }
+    return "\"entity\":" + XFJson.Str(XFRecordingTap.Entity(obj)) + ",\"who\":" + XFJson.Str(who)
+      + ",\"attitude_prepared\":" + prepared + ",\"prepared_meaning\":\"attitude_and_immortality_only\",\"evaluated_face\":null";
+  }
+}
+
+@if(ModuleExists("Codeware"))
+@wrapMethod(AnimationControllerComponent)
+public final static func ApplyFeature(obj: ref<GameObject>, inputName: CName, value: ref<AnimFeature>, opt delay: Float) -> Void {
+  if XFRecordingTap.On("face") && Equals(inputName, n"FacialReaction") {
+    let face = value as AnimFeature_FacialReaction;
+    if IsDefined(face) {
+      XFRecordingTap.Emit("face", face.category == 0 ? "face.reset_submitted" : "face.submitted",
+        XFRecordingFace.Body(obj) + ",\"source\":\"script.AnimationControllerComponent.ApplyFeature\",\"category\":" + IntToString(face.category)
+        + ",\"idle\":" + IntToString(face.idle) + ",\"delay_s\":" + XFJson.Num(delay));
+    }
+  }
+  wrappedMethod(obj, inputName, value, delay);
+}
+
+// U: read the current widgets through their existing owners, without refreshing HUD frames or changing layout.
+@if(ModuleExists("Codeware"))
+public abstract class XFRecordingUi {
+  public static func Rect(widget: ref<inkWidget>) -> String {
+    if !IsDefined(widget) { return "null"; }
+    let rect = GetScreenPosition(widget);
+    return "[" + XFJson.Num(rect.Left) + "," + XFJson.Num(rect.Top) + "," + XFJson.Num(rect.Right) + "," + XFJson.Num(rect.Bottom) + "]";
+  }
+  public static func Text(widget: ref<inkText>) -> String {
+    if !IsDefined(widget) { return "null"; }
+    let text = widget.GetText();
+    let letterCase = widget.GetLetterCase();
+    let display = Equals(letterCase, textLetterCase.UpperCase) ? StrUpper(text) : Equals(letterCase, textLetterCase.LowerCase) ? StrLower(text) : text;
+    return "{\"text\":" + XFJson.Str(text) + ",\"display_text\":" + XFJson.Str(display)
+      + ",\"letter_case\":" + XFJson.Str(EnumValueToString("textLetterCase", Cast<Int64>(EnumInt(letterCase))))
+      + ",\"visible\":" + XFJson.Flag(widget.IsVisible()) + ",\"rect\":" + XFRecordingUi.Rect(widget) + "}";
+  }
+  public static func Sample() -> String {
+    let overlay = XFInkOverlay.Get();
+    let photo = XFPhotoMenuPanel.Current();
+    return "{\"valid\":true,\"geometry\":\"GetScreenPosition_draw_bounds_candidate\",\"context_found\":null,\"pixel_rect\":null,\"window_to_output_valid\":false,\"coordinate_space\":\"owning_ink_window\",\"clip_rect\":null,\"pointer_hit_target\":null,\"hud\":"
+      + (IsDefined(overlay) ? overlay.XFRecordingUi() : "null") + ",\"photo\":" + (IsDefined(photo) ? photo.XFRecordingUi() : "null")
+      + ",\"outfits\":" + XFRecordingUi.Outfits() + "}";
+  }
+  public static func Outfits() -> String {
+    let player = XFInventory.Player();
+    let data = IsDefined(player) ? XFWardrobe.Data(player) : null;
+    if !IsDefined(data) { return "null"; }
+    let out = "";
+    for area in XFWardrobe.Areas() {
+      let item = XFWardrobe.OutfitItem(data, area);
+      out += (StrLen(out) > 0 ? "," : "") + "{\"area\":" + XFJson.Str(XFInventory.AreaName(area)) + ",\"shows\":" + XFJson.Str(XFWardrobe.Shows(data, area))
+        + ",\"record\":" + XFJson.Str(XFInventory.ItemName(item)) + XFInventory.IdField(item) + "}";
+    }
+    return "[" + out + "]";
+  }
+}
+@if(!ModuleExists("Codeware"))
+public abstract class XFRecordingUi {
+  public static func Sample() -> String { return "{\"valid\":false,\"reason\":\"codeware_missing\"}"; }
+}
+
+@if(!ModuleExists("Codeware"))
+public abstract class XFRecordingFace {
+  public static func Status() -> String { return "{\"valid\":false,\"reason\":\"codeware_missing\"}"; }
+}

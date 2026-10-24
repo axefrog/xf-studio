@@ -218,6 +218,15 @@ bool TargetOk(const std::string& aText, std::initializer_list<const char*> aAllo
         const auto rest = aText.substr(6);
         return IsDigits(rest) && rest.size() <= 6 && rest != "0";
     }
+    for (const auto* prefix : {"dynamic: '", "static: '"})
+    {
+        const std::string start(prefix);
+        if (aText.rfind(start, 0) == 0 && aText.back() == '\'')
+        {
+            const auto digits = aText.substr(start.size(), aText.size() - start.size() - 1);
+            return IsDigits(digits) && digits.size() <= 20;
+        }
+    }
     // An entity id as the bridge answers it (player.state, scene.read: EntityID(123)), or its digits alone.
     if (aText.rfind("EntityID(", 0) == 0 && aText.size() > 10 && aText.back() == ')')
     {
@@ -239,7 +248,7 @@ int32_t SpawnHandleOf(const std::string& aTarget)
 
 std::string ParseTarget(const json& aParams, const char* aKey, bool aRequired, std::initializer_list<const char*> aAllowed)
 {
-    const auto text = p::CheckText(aParams, aKey, 32);
+    const auto text = p::CheckText(aParams, aKey, 40);
     if (!text)
     {
         if (aRequired)

@@ -726,7 +726,7 @@ Explicit autonomous -writes candidate only. Bounded source sampling and private 
 
 ### `test_record_start`
 
-**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
+**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
 
 - **Command:** `test.record.start`, the bridge method `test.record.start`
 - **Permission:** Look (`read`)
@@ -736,7 +736,7 @@ Explicit autonomous -writes candidate only. Bounded source sampling and private 
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `channels` | array of string | 1 to 5 items; each `v`, `actors`, `camera`, `subtitles`, `voice` | Source channels to sample |
+| `channels` | array of string | 1 to 7 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui` | Source channels to sample |
 | `actors` | array of string | at most 16 items; each matches `^[ap][0-9]{1,15}$` | Selected returned actor or pick handles |
 | `rate_hz` | integer | exactly 10 | Source target (10 only) |
 | `duration_s` | integer | 1 to 1800 | Maximum recording lifetime |
@@ -922,7 +922,7 @@ No parameters.
 
 ### `player_teleport`
 
-**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
+**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (settled); teleport does not apply a movement hold (held: false). WARNING before moving: the existing human-navmesh check cannot classify roads or traffic lanes; choose a destination clear of traffic. Existing behaviours must be stopped first. Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
 
 - **Command:** `player.teleport`, the bridge method `player.teleport`
 - **Permission:** Move V (`write-player`)
@@ -1212,7 +1212,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `target` (required) | string | at most 40 characters; matches `^(look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The door: look_at (what V looks at), spawn:&lt;n> (something the bridge spawned) or an entity id such as EntityID(123). |
+| `target` (required) | string | at most 40 characters; matches `^(look_at\|(?:dynamic\|static): '[0-9]{1,20}'\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The door: look_at (what V looks at), spawn:&lt;n> (something the bridge spawned) or an entity id such as EntityID(123). |
 | `open` | boolean | `true`, `false` | Open (true) or close (false) it. |
 | `locked` | boolean | `true`, `false` | Lock (true) or unlock (false) it. |
 | `sealed` | boolean | `true`, `false` | Seal (true) or unseal (false) it. |
@@ -1229,7 +1229,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `target` (required) | string | at most 40 characters; matches `^(mounted\|look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The vehicle: mounted, look_at, spawn:&lt;n> or an entity id such as EntityID(123). |
+| `target` (required) | string | at most 40 characters; matches `^(mounted\|look_at\|(?:dynamic\|static): '[0-9]{1,20}'\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The vehicle: mounted, look_at, spawn:&lt;n> or an entity id such as EntityID(123). |
 | `lights` | boolean | `true`, `false` | Switch the lights on or off. |
 | `engine` | boolean | `true`, `false` | Switch the engine on or off. |
 | `door` | string | `all`, `seat_front_left`, `seat_front_right`, `seat_back_left`, `seat_back_right`, `trunk`, `hood` | Which door: all, seat_front_left, seat_front_right, seat_back_left, seat_back_right, trunk or hood. |
@@ -1248,7 +1248,7 @@ No parameters.
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `event` (required) | string | matches `^[A-Za-z0-9_]{1,96}$` | The sound event's name: letters, digits and _. |
-| `on` | string | at most 40 characters; matches `^(v\|global\|look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | Where it plays: v (the default), global, look_at, spawn:&lt;n> or an entity id. |
+| `on` | string | at most 40 characters; matches `^(v\|global\|look_at\|(?:dynamic\|static): '[0-9]{1,20}'\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | Where it plays: v (the default), global, look_at, spawn:&lt;n> or an entity id. |
 | `emitter` | string | matches `^[A-Za-z0-9_]{1,64}$` | An emitter name on that entity (optional). |
 | `loop` | boolean | `true`, `false` | Keep it playing until audio_stop. |
 | `seconds` | number | 0.5 to 3600 | How long a one-shot is tracked, 0.5 to 3600. Default 10. |
@@ -1280,7 +1280,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `target` (required) | string | at most 40 characters; matches `^(mounted\|look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The vehicle: mounted, look_at, spawn:&lt;n> or an entity id. |
+| `target` (required) | string | at most 40 characters; matches `^(mounted\|look_at\|(?:dynamic\|static): '[0-9]{1,20}'\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The vehicle: mounted, look_at, spawn:&lt;n> or an entity id. |
 | `station` | integer or string | 0 to 13; or `aggro_industrial`, `electro_industrial`, `hip_hop`, `aggro_techno`, `downtempo`, `attitude_rock`, `pop`, `latino`, `metal`, `minimal_techno`, `jazz`, `growl`, `dark_star`, `impulse_fm` | A station number 0 to 13 or its name. |
 | `on` | boolean | `true`, `false` | Turn the radio on (true) or off (false). |
 
@@ -1296,7 +1296,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `target` (required) | string | at most 40 characters; matches `^(look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The NPC: look_at, spawn:&lt;n> or an entity id. |
+| `target` (required) | string | at most 40 characters; matches `^(look_at\|(?:dynamic\|static): '[0-9]{1,20}'\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The NPC: look_at, spawn:&lt;n> or an entity id. |
 | `context` (required) | string | matches `^[A-Za-z0-9_]{1,96}$` | The voiceset context: letters, digits and _. |
 
 ### `phone_text`
@@ -1432,12 +1432,12 @@ No parameters.
 
 ### `notify_show`
 
-**Show a message the game's way.** Shows words on one of the game's own message surfaces: warning (the banner at the top), onscreen (the centred message), quest_new, quest_update, quest_done or quest_failed (the quest toasts; text is the line they show, title replaces the heading), or subtitle (a line in the dialogue subtitle area with speaker's name, shown for seconds). Plain text; nothing is saved. Banners and toasts need the HUD up (a menu or a loading screen refuses hud_missing).
+**Show a message the game's way.** Shows words on one of the game's own message surfaces: warning (the banner at the top), onscreen (the game's cinematic on-screen message, at its HUD-defined position), quest_new, quest_update, quest_done or quest_failed (the quest toasts; text is the line they show, title replaces the heading), or subtitle (a line in the dialogue subtitle area with speaker's name, shown for seconds). Plain text; nothing is saved. Banners and toasts need the HUD up (a menu or a loading screen refuses hud_missing).
 
 - **Command:** `notify.show`, the bridge method `notify.show`
 - **Permission:** Direct the scene (`write-dm`)
 - **Changes the game:** Yes
-- **Undo:** The result's undo takes a banner, a centred message or the subtitle lines down; a quest toast fades by itself.
+- **Undo:** The result's undo takes a banner, an on-screen message or the subtitle lines down; a quest toast fades by itself.
 - **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `hud_missing`, [`codeware_missing`](#refusal-codeware-missing)
 
 | Parameter | Type | Allowed | Description |
@@ -1450,7 +1450,7 @@ No parameters.
 
 ### `notify_hide`
 
-**Take messages down.** Takes down the banner, the centred message and the bridge's subtitle lines (or only those of the given style).
+**Take messages down.** Takes down the banner, the on-screen message and the bridge's subtitle lines (or only those of the given style).
 
 - **Command:** `notify.hide`, the bridge method `notify.hide`
 - **Permission:** Direct the scene (`write-dm`)
@@ -1541,7 +1541,7 @@ No parameters.
 | `id` | string | matches `^[A-Za-z0-9_.-]{1,48}$` | A short id (default w1, w2, ...); an armed id is replaced. |
 | `kind` (required) | string | `enter`, `leave`, `gaze`, `weapon`, `combat`, `vehicle`, `interact`, `choice`, `timer`, `clock` | What it watches. |
 | `at` | array of number | exactly 3 items | A world point (enter, leave). |
-| `target` | string | at most 40 characters; matches `^(any\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | An entity (spawn:&lt;n> or an entity id) for enter, leave, gaze and interact; any for interact. |
+| `target` | string | at most 40 characters; matches `^(any\|(?:dynamic\|static): '[0-9]{1,20}'\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | An entity (spawn:&lt;n> or an entity id) for enter, leave, gaze and interact; any for interact. |
 | `radius_m` | number | 0.5 to 500 | Enter and leave: the radius, 0.5 to 500. Default 5. |
 | `seconds` | number | 0 to 3600 | Gaze: the dwell; timer: the delay (0.1 to 3600). |
 | `cone_deg` | number | 1 to 60 | Gaze: the half-angle of the cone, 1 to 60. Default 12. |
@@ -2484,7 +2484,7 @@ List, make and load saves. Only `game_save` ever saves the game, and never over 
 
 ### `game_load`
 
-**Load a save.** Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or waits on its press-any-key screen (continued.reached press_any_key: ask the player to press a key; the bridge never sends one). continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.
+**Load a save.** Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or reaches its timeout. Puppet attachment cannot identify a press-any-key prompt; prompt_state is unobserved until a UI consumer reader is commissioned. The bridge never sends a key. continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.
 
 - **Command:** `game.load`, run by the tools (it may call the bridge several times)
 - **Permission:** Save and load the game (`write-save`)
@@ -2662,7 +2662,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-bad-version"></a>`bad_version` | The game bridge speaks a different protocol version. Update XF Runtime Bridge and the XF tools together. |
 | <a id="refusal-behaviour-limit"></a>`behaviour_limit` | Too many behaviours are running already (at most 4), so this one didn't start. Stop one with behave_stop first. |
 | <a id="refusal-bridge-busy"></a>`bridge_busy` | Another XF tool is connected to the game bridge right now. Close it (or wait a few seconds) and try again. |
-| <a id="refusal-bridge-effects-active"></a>`bridge_effects_active` | The bridge still holds something that a save would keep (a glide's movement hold, a forced crouch, a running behaviour, an outfit it took off, a weather it holds, or cyberware it changed or added), so nothing was saved. player_stop lifts the effects and stops behaviours, wardrobe_equip with resume: true puts a suspended outfit back, and the undos of world_weather_set and cyberware_equip or cyberware_unequip put those back; then save again. |
+| <a id="refusal-bridge-effects-active"></a>`bridge_effects_active` | Saving is refused while the bridge holds changes. Release the holders named in detail, then save again. |
 | <a id="refusal-bridge-save-lock"></a>`bridge_save_lock` | The bridge has changed the game since the last load, so it keeps saving locked (a save now would keep those changes). Nothing was saved. Load a save first, or ask again with override_lock if the save should keep them. |
 | <a id="refusal-busy"></a>`busy` | The game has too many requests waiting. Wait a moment and try again. |
 | <a id="refusal-call-failed"></a>`call_failed` | The game refused the call, and nothing is known to have changed. |

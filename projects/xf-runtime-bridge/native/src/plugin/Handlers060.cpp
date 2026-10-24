@@ -291,6 +291,7 @@ json PlayerState(const MethodContext& aContext)
 json PlayerTeleport(const MethodContext& aContext)
 {
     const auto request = player::ParseTeleport(aContext.params);
+    if (Get().behaviours.Active()) throw MethodError("bridge_effects_active", "the bridge still holds something that a save would keep (behaviours running); player_stop before teleporting");
     Get().teleports.Take();
     const auto cid = aContext.cid;
     const auto seen = Get().playerStops.Current(); // 0.8.2: a player.stop from here on ends the teleport before it moves V
@@ -320,7 +321,8 @@ json PlayerTeleport(const MethodContext& aContext)
     const double off = std::hypot(now[0] - target[0], now[1] - target[1], now[2] - target[2]);
     return json{{"before", done.value("before", json())}, {"target", done.at("target")}, {"yaw", done.value("yaw", yawBefore)},
                 {"snapped", done.value("snapped", false)}, {"now", after.at("position")}, {"off_m", std::round(off * 1000.0) / 1000.0},
-                {"held", off < 0.3},
+                {"held", false}, {"settled", off < 0.3}, {"traffic_check", "unavailable"},
+                {"warnings", json::array({"The destination may be a road or traffic lane; human navmesh does not classify traffic safety."})},
                 {"undo", player::TeleportUndo(from, yawBefore, now)},
                 {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
 }

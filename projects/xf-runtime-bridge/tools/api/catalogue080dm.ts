@@ -35,7 +35,7 @@ export const DM_LIGHT_PATTERNS = ["steady", "flicker", "pulse", "strobe", "broke
 export const DM_WATCH_KINDS = ["enter", "leave", "gaze", "weapon", "combat", "vehicle", "interact", "choice", "timer", "clock"] as const;
 
 const ID = "^[A-Za-z0-9_.-]{1,48}$";
-const ENTITY = "EntityID\\([0-9]{1,20}\\)|[0-9]{1,20}|spawn:[1-9][0-9]{0,5}";
+const ENTITY = "(?:dynamic|static): '[0-9]{1,20}'|EntityID\\([0-9]{1,20}\\)|[0-9]{1,20}|spawn:[1-9][0-9]{0,5}";
 const targetOf = (words: string[]) => `^(${[...words, ENTITY].join("|")})$`;
 const target = (description: string, words: string[]) => str(description, { pattern: targetOf(words), maxLength: 40 });
 const handle = (description: string) => int(description, 1, 1000000);
@@ -405,7 +405,7 @@ const DEFINITIONS: CommandDef[] = [
     name: "notify.show",
     title: "Show a message the game's way",
     description:
-      "Shows words on one of the game's own message surfaces: warning (the banner at the top), onscreen (the centred message), quest_new, quest_update, quest_done or quest_failed (the quest toasts; text is the line they show, title replaces the heading), or subtitle (a line in the dialogue subtitle area with speaker's name, shown for seconds). Plain text; nothing is saved. Banners and toasts need the HUD up (a menu or a loading screen refuses hud_missing).",
+      "Shows words on one of the game's own message surfaces: warning (the banner at the top), onscreen (the game's cinematic on-screen message, at its HUD-defined position), quest_new, quest_update, quest_done or quest_failed (the quest toasts; text is the line they show, title replaces the heading), or subtitle (a line in the dialogue subtitle area with speaker's name, shown for seconds). Plain text; nothing is saved. Banners and toasts need the HUD up (a menu or a loading screen refuses hud_missing).",
     permission: "write-dm",
     input: obj(
       {
@@ -417,13 +417,13 @@ const DEFINITIONS: CommandDef[] = [
       },
       ["style", "text"],
     ),
-    undo: "The result's undo takes a banner, a centred message or the subtitle lines down; a quest toast fades by itself.",
+    undo: "The result's undo takes a banner, an on-screen message or the subtitle lines down; a quest toast fades by itself.",
     bridge: { method: "notify.show" },
   },
   {
     name: "notify.hide",
     title: "Take messages down",
-    description: "Takes down the banner, the centred message and the bridge's subtitle lines (or only those of the given style).",
+    description: "Takes down the banner, the on-screen message and the bridge's subtitle lines (or only those of the given style).",
     permission: "write-dm",
     input: obj({ style: oneOf("Only this style: warning, onscreen or subtitle (default all).", ["warning", "onscreen", "subtitle", "quest_new", "quest_update", "quest_done", "quest_failed"]) }),
     undo: "Show it again with notify_show.",

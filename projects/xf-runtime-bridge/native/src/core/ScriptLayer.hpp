@@ -44,9 +44,8 @@ public:
     };
 
     // "attach", "player_attach", "detach", and (0.8.2) "puppet": the loaded session's player puppet joined the world
-    // (PlayerPuppet.OnGameAttached). Between a puppet and the player's attach the game waits on its "press any key" screen
-    // after a load [hypothesis: session 9's load logged the puppet 9 s after the attach and the player 83 s later, when the
-    // maintainer pressed a key]; Describe's waiting_for_input says so. Anything else is ignored (returns false). Any thread.
+    // (PlayerPuppet.OnGameAttached). This is lifecycle evidence only, not evidence of a loading-screen prompt.
+    // Describe reports prompt_state unobserved; a future UI consumer tap must commission prompt detection. Any thread.
     bool OnEvent(const std::string& aEvent, Clock::time_point aNow = Clock::now());
     void OnAttach(Clock::time_point aNow = Clock::now());
     void OnPlayerAttach(Clock::time_point aNow = Clock::now());

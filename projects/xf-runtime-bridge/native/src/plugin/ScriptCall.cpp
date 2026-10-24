@@ -236,9 +236,10 @@ void CallFunction(RED4ext::CBaseFunction* aFn, RED4ext::IScriptable* aContext, c
     const auto execute = reinterpret_cast<InternalExecute_t>(gInternalExecute.load());
 
     // Flushed as written, so after a crash the last script.call line names the call.
-    log::Debug("script.call", "fn=" + aWhat + (aContext ? " on=instance" : " on=static"), aCid);
+    const bool tickSuccess = aWhat == "XFRuntimeBridge.XFDmLight.Intensity" || aWhat == "XFDmLight.Intensity";
+    if (!tickSuccess) log::Debug("script.call", "fn=" + aWhat + (aContext ? " on=instance" : " on=static"), aCid);
     const bool ok = execute(aFn, context, &caller, resultType ? aOut : nullptr, resultType);
-    log::Debug("script.returned", "fn=" + aWhat + " ok=" + (ok ? "true" : "false"), aCid);
+    if (!tickSuccess || !ok) log::Debug("script.returned", "fn=" + aWhat + " ok=" + (ok ? "true" : "false"), aCid);
     if (!ok)
     {
         throw MethodError("call_failed", "the game refused the call: " + aWhat);

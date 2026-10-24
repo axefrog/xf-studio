@@ -332,6 +332,9 @@ public abstract class XFDmIds {
     if StrBeginsWith(digits, "EntityID(") {
       digits = StrMid(digits, 9, StrLen(digits) - 10);
     }
+    if StrBeginsWith(digits, "dynamic: '") || StrBeginsWith(digits, "static: '") {
+      digits = StrBeforeFirst(StrAfterFirst(digits, "'"), "'");
+    }
     let hash = StringToUint64(digits);
     if hash == 0ul {
       return null;
@@ -948,7 +951,10 @@ public abstract class XFDmWorld {
       XFDmWorld.VehicleDoorEvent(vehicle, door, doorState);
     }
     XFBridgeLog.Info(cid, "dm vehicle " + id + " lights=" + IntToString(lights) + " engine=" + IntToString(engine) + " door=" + door + ":" + doorState);
-    return "{\"ok\":true,\"target_id\":" + XFJson.Str(id) + ",\"before\":" + before + "}";
+    let engineAfter = vehicle.IsEngineTurnedOn();
+    let doorsAfter = XFDmWorld.VehicleDoors(vehicle);
+    let after = "{\"engine\":" + XFJson.Flag(engineAfter) + ",\"doors\":" + doorsAfter + ",\"lights\":null}";
+    return "{\"ok\":true,\"target_id\":" + XFJson.Str(id) + ",\"before\":" + before + ",\"after\":" + after + ",\"readback_phase\":\"events_queued\"}";
   }
 
   // A vehicle's radio: station -1 unchanged (0-13 the game's numbers), on -1 unchanged. The vehicle radio is the only one with
@@ -1142,7 +1148,7 @@ public abstract class XFDmPhone {
     for entry in entries {
       let contact = entry as JournalContact;
       if IsDefined(contact) {
-        out += (count > 0 ? "," : "") + "{\"id\":" + XFJson.Str(contact.GetId()) + ",\"name\":" + XFJson.Str(contact.GetLocalizedName(journal)) + "}";
+        out += (count > 0 ? "," : "") + "{\"id\":" + XFJson.Str(contact.GetId()) + ",\"name\":" + XFJson.Str(GetLocalizedText(contact.GetLocalizedName(journal))) + ",\"name_key\":" + XFJson.Str(contact.GetLocalizedName(journal)) + "}";
         count += 1;
       }
     }
@@ -1451,12 +1457,23 @@ protected cb func OnTrackedMappinSpawned(newItem: ref<inkWidget>, userData: ref<
   return wrappedMethod(newItem, userData);
 }
 
+@addField(QuestTrackerGameController)
+private let xfbDmOrderOwned: Bool;
+@addField(QuestTrackerGameController)
+private let xfbDmChildOrder: inkEChildOrder;
+
 // spec: the quest's title, then one line per objective: state (active, done, failed), a tab, "o" for optional or "-", a tab,
 // the words. Drawn in the tracked-mappin container the way OnTrackedMappinSpawned fills it.
 @addMethod(QuestTrackerGameController)
 public func XFDmDraw(spec: String) -> Void {
   if IsDefined(this.m_trackedMappinSpawnRequest) { this.m_trackedMappinSpawnRequest.Cancel(); }
   let lines = StrSplit(spec, "\n");
+  let container = inkWidgetRef.Get(this.m_TrackedMappinObjectiveContainer) as inkCompoundWidget;
+  if !this.xfbDmOrderOwned {
+    this.xfbDmChildOrder = container.GetChildOrder();
+    this.xfbDmOrderOwned = true;
+  }
+  container.SetChildOrder(inkEChildOrder.Forward);
   inkCompoundRef.RemoveAllChildren(this.m_TrackedMappinObjectiveContainer);
   inkWidgetRef.SetVisible(this.m_TrackedMappinContainer, true);
   inkTextRef.SetText(this.m_TrackedMappinTitle, lines[0]);
@@ -1465,6 +1482,8 @@ public func XFDmDraw(spec: String) -> Void {
     let parts = StrSplit(lines[i], "\t");
     if ArraySize(parts) >= 3 {
       let widget = this.SpawnFromLocal(inkWidgetRef.Get(this.m_TrackedMappinObjectiveContainer), n"Objective");
+      // Explicit child index and forward layout preserve the caller's sequence.
+      container.ReorderChild(widget, i - 1);
       let controller = widget.GetController() as QuestTrackerObjectiveLogicController;
       if IsDefined(controller) {
         let optional = Equals(parts[1], "o");
@@ -1486,6 +1505,11 @@ public func XFDmDraw(spec: String) -> Void {
 // Hands the container back to the game: its own tracked pin, if any, is drawn again.
 @addMethod(QuestTrackerGameController)
 public func XFDmClear() -> Void {
+  if this.xfbDmOrderOwned {
+    let container = inkWidgetRef.Get(this.m_TrackedMappinObjectiveContainer) as inkCompoundWidget;
+    container.SetChildOrder(this.xfbDmChildOrder);
+    this.xfbDmOrderOwned = false;
+  }
   inkCompoundRef.RemoveAllChildren(this.m_TrackedMappinObjectiveContainer);
   inkWidgetRef.SetVisible(this.m_TrackedMappinContainer, IsDefined(this.m_currentMappin));
   this.blackboard.SignalVariant(this.uiSystemBB.TrackedMappin);
@@ -1701,7 +1725,7 @@ public abstract class XFDmSense {
 
   // Everything the script holds: the call ended, lines hidden, the tracker down, banners down, sounds are the plugin's to stop
   // (it tracks them), the entities deleted. Idempotent.
-  public static func ReleaseAll(cid: String, reason: String) -> String {
+  public static func ReleaseAll(cid: String, reason: String, removedBefore: Int32) -> String {
     let registry = XFDmRegistry.Get();
     if !IsDefined(registry) { return XFJson.Fail("not_ready", "the toolkit registry is unavailable; cleanup must be retried"); }
     let lines = XFDmLines.HideAll(cid);
@@ -1723,6 +1747,7 @@ public abstract class XFDmSense {
     if StrContains(ended, "\"ok\":false") { return ended; }
     if StrContains(ended, "\"ended\":false") { return XFJson.Fail("not_ready", "the owned call end is awaiting acknowledgment"); }
     if lines < 0 || removed < 0 { return XFJson.Fail("not_ready", "some toolkit cleanup could not be confirmed; ownership is retained for retry"); }
+    removed += removedBefore;
     XFBridgeLog.Info(cid, "dm released everything (" + reason + "): lines=" + IntToString(lines) + " entities=" + IntToString(removed));
     return "{\"ok\":true,\"lines_hidden\":" + IntToString(lines) + ",\"entities_removed\":" + IntToString(removed) + ",\"call_ended\":" + XFJson.Flag(StrLen(call) > 0) + "}";
   }

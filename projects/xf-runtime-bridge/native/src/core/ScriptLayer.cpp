@@ -34,7 +34,7 @@ bool ScriptLayer::OnEvent(const std::string& aEvent, Clock::time_point aNow)
         {
             m_puppet = true;
             m_puppetAt = aNow;
-            log::Info("script_layer.puppet", "the player's puppet is in; waiting for the player (after a load: the press-any-key screen)");
+            log::Info("script_layer.puppet", "the player's puppet is in; waiting for player attachment (prompt state unknown)");
         }
     }
     else
@@ -158,11 +158,12 @@ nlohmann::json ScriptLayer::Describe(Clock::time_point aNow)
 {
     std::scoped_lock _(m_mutex);
     ExpireLoad(aNow);
-    const bool waiting = m_state == State::Attached && m_puppet;
+    const bool waiting = false; // Puppet attachment is not evidence of a press-any-key UI (Borg session 1).
     return nlohmann::json{{"state", StateName(m_state)},
                           {"ready", m_state == State::Ready && !m_loadPending},
                           {"load_pending", m_loadPending},
                           {"waiting_for_input", waiting},
+                          {"prompt_state", "unobserved"}, {"puppet_attached", m_puppet},
                           {"waiting_ms", waiting ? MsBetween(m_puppetAt, aNow) : 0},
                           {"attaches", m_attaches},
                           {"detaches", m_detaches},

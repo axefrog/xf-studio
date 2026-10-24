@@ -123,6 +123,20 @@ void ParseTests()
               Code([] { d::ParseCall(json{{"contact", "bad id"}, {"lines", json::array({json{{"text", "a"}}})}}); }) == "bad_params" &&
               Code([] { d::ParseCall(json{{"contact", "test_fixer"}, {"lines", json::array({json{{"words", "a"}}})}}); }) == "bad_params");
     {
+        for (const auto& id : {"dynamic: '10230711'", "static: '18446744073709551615'"}) {
+            const json step{{"target_id", id}, {"before", {{"engine", false}, {"lights", false}, {"on", false}, {"station", 1}, {"open", false}, {"locked", false}}}};
+            const auto vehicle = d::VehicleUndo(step, d::ParseVehicle(json{{"target", "look_at"}, {"engine", true}, {"lights", true}}));
+            const auto radio = d::RadioUndo(step, d::ParseRadio(json{{"target", "look_at"}, {"station", 2}, {"on", true}}));
+            const auto door = d::DoorUndo(step, d::ParseDoor(json{{"target", "look_at"}, {"open", true}}));
+            Check("Round 3a: emitted engine IDs replay verbatim through all target-bearing undo parsers",
+                !vehicle.is_null() && !radio.is_null() && !door.is_null() &&
+                Code([&] { d::ParseVehicle(vehicle.at("params")); d::ParseRadio(radio.at("params")); d::ParseDoor(door.at("params")); }) == "ok");
+        }
+        for (const auto& id : {"dynamic: '1';x", "dynamic: '-1'", "dynamic: ''", "dynamic: '123456789012345678901'"})
+            Check("Round 3a: debug ID admission remains bounded and digits-only", Code([&] { d::ParseVehicle(json{{"target", id}, {"engine", true}}); }) == "bad_params");
+    }
+
+    {
         json lines = json::array();
         for (int i = 0; i < 17; ++i)
         {
@@ -813,7 +827,7 @@ d::Ops FakeOps(FakeWorld& aWorld)
         aWorld.calls.push_back("light_set:" + aStep.entity + (aStep.flickerStrength ? ":flicker=" + std::to_string(*aStep.flickerStrength) : std::string()));
         return json{{"before", {{"colour", {255, 255, 255}}, {"intensity", 100.0}, {"radius", 8.0}, {"on", true}}}};
     };
-    ops.releaseAll = [&aWorld](const std::string& aReason) {
+    ops.releaseAll = [&aWorld](const std::string& aReason, int32_t) {
         aWorld.calls.push_back("release_all:" + aReason);
         return json{{"entities_removed", 0}};
     };
@@ -856,6 +870,18 @@ struct Rig
 
 void ServiceTests()
 {
+    {
+        Rig rig;
+        rig.service.Spawn(json{{"template", "base\\box.ent"}}, rig.Ops());
+        d::TickInput input; input.handedOver = true;
+        rig.service.Tick(0.1, input);
+        const auto first = rig.service.ReleaseAllNow("handover", rig.Ops());
+        const auto second = rig.service.ReleaseAllNow("handover", rig.Ops());
+        Check("Round 3a: handover includes the tick's prior removal once", first.value("spawned_removed", 0) == 1 && second.value("spawned_removed", 0) == 0);
+        rig.service.Spawn(json{{"template", "base\\box.ent"}}, rig.Ops());
+        Check("Round 3a: kill includes per-item removal", rig.service.RestoreAfterKill(rig.Ops()).value("spawned_removed", 0) == 1);
+    }
+
     {
         Rig rig;
         const auto out = rig.service.Spawn(json{{"template", "base\\gameplay\\x\\prop.ent"}, {"offset", {{"forward", 3.0}, {"right", 1.0}}}, {"label", "box"}}, rig.Ops());
@@ -1150,7 +1176,7 @@ void ReviewTests()
         ops.hideLine = [&](uint64_t) { probe(); };
         ops.callEnd = [&](const std::string&) { probe(); return true; };
         ops.tracker = [&](const std::vector<d::Quest>&) { probe(); };
-        ops.releaseAll = [&](const std::string&) { probe(); return json::object(); };
+        ops.releaseAll = [&](const std::string&, int32_t) { probe(); return json::object(); };
         auto sample = ops.sample;
         ops.sample = [&](const d::SampleWants& wants, const std::map<std::string, std::string>& entities) { probe(); return sample(wants, entities); };
         rig.service.SetOpsFor([&](const std::string&) { probe(); return ops; });
@@ -1170,7 +1196,7 @@ void ReviewTests()
         Rig rig;
         auto ops = rig.Ops();
         unsigned attempts = 0;
-        ops.releaseAll = [&](const std::string&) -> json { ++attempts; throw xfb::MethodError("failed", "permanent cleanup failure"); };
+        ops.releaseAll = [&](const std::string&, int32_t) -> json { ++attempts; throw xfb::MethodError("failed", "permanent cleanup failure"); };
         rig.service.SetOpsFor([&](const std::string&) { return ops; });
         rig.service.NotifyShow(json{{"style", "warning"}, {"text", "retry"}}, ops);
         d::TickInput paused;
@@ -1284,7 +1310,7 @@ void ReviewTests()
         Rig rig;
         rig.service.NotifyShow(json{{"style", "warning"}, {"text", "retry"}}, rig.Ops());
         auto ops = rig.Ops();
-        ops.releaseAll = [](const std::string&) -> json { throw xfb::MethodError("failed", "HUD cleanup failed"); };
+        ops.releaseAll = [](const std::string&, int32_t) -> json { throw xfb::MethodError("failed", "HUD cleanup failed"); };
         const auto failed = rig.service.ReleaseAllNow("handover", ops);
         Check("dm review 5/11: failed script cleanup retains activity and save hold", failed["released"] == false && rig.service.Active() && !rig.service.Holds().empty());
         Check("dm review 5/11: confirmed script cleanup clears the hold", rig.service.ReleaseAllNow("retry", rig.Ops())["released"] == true && rig.service.Holds().empty());

@@ -207,6 +207,7 @@ Session& Service::SessionForTest(const Ops& aOps)
 json Service::RequireWorld(const Ops& aOps)
 {
     NoteOps(aOps);
+    { std::scoped_lock _(m_mutex); m_releaseReceipts.clear(); }
     auto v = aOps.v();
     const auto phase = v.value("phase", std::string("gameplay"));
     if (phase != "gameplay")
@@ -1060,7 +1061,8 @@ json Service::LightSpawn(const json& aParams, const Ops& aOps)
     }
     Emit("light", "info", "light spawned", json{{"what", "spawned"}, {"handle", handle}, {"entity", item.entity}});
     json out = ItemJson(item);
-    out["components"] = done.value("components", 0);
+    out["components"] = item.pending ? json(nullptr) : done.value("components", json(nullptr));
+    out["components_state"] = item.pending ? "pending" : "resolved";
     out["pattern"] = patternNote;
     out["undo"] = json{{"method", "light.remove"}, {"params", {{"id", handle}}}};
     out["undo_note"] = "the result's undo removes it; the kill switch, a pause, a handover and loading a save remove every light, and a save is refused while one exists";
@@ -1563,7 +1565,7 @@ json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, boo
     {
         if (aOps.releaseAll)
         {
-            out["script"] = aOps.releaseAll(aReason);
+            out["script"] = aOps.releaseAll(aReason, static_cast<int32_t>(removed));
             // The script confirms every remaining line, call and tracker resource was cleaned up.
             if (session) { session->Reset(false); }
             { std::scoped_lock _(m_mutex); m_notifications = false; m_cleanupPending = false; }
@@ -1575,7 +1577,7 @@ json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, boo
         out["script_error"] = e.what();
         { std::scoped_lock _(m_mutex); m_cleanupPending = true; }
     }
-    out["spawned_removed"] = removed;
+    out["spawned_removed"] = std::max(removed, out.contains("script") ? out["script"].value("entities_removed", size_t{0}) : size_t{0});
     out["sounds_stopped"] = stopped;
     const bool pending = NeedsCleanup();
     {
@@ -1590,14 +1592,22 @@ json Service::ReleaseEverything(const std::string& aReason, const Ops& aOps, boo
 
 json Service::ReleaseAllNow(const std::string& aReason, const Ops& aOps)
 {
+    json receipt;
+    { std::scoped_lock _(m_mutex); const auto it = m_releaseReceipts.find(aReason);
+      if (it != m_releaseReceipts.end()) { receipt = it->second; m_releaseReceipts.erase(it); } }
     const bool wasActive = Active();
     if (aOps.microCancel) { aOps.microCancel(aReason); }
     if (!wasActive && !Active())
     {
-        return json{{"released", false}, {"nothing_held", true}};
+        return receipt.is_object() ? receipt : json{{"released", false}, {"nothing_held", true}};
     }
     { std::scoped_lock _(m_mutex); m_releaseRetry = {}; }
     auto out = ReleaseEverything(aReason, aOps, true);
+    if (receipt.is_object()) {
+        out["spawned_removed"] = out.value("spawned_removed", size_t{0}) + receipt.value("spawned_removed", size_t{0});
+        out["sounds_stopped"] = out.value("sounds_stopped", size_t{0}) + receipt.value("sounds_stopped", size_t{0});
+        out["earlier_cleanup"] = receipt;
+    }
     out["released"] = !Active();
     Emit("released", "warn", Active() ? "toolkit cleanup still holds resources (" + aReason + ")" : "everything the toolkit holds was released (" + aReason + ")", json{{"reason", aReason}, {"auto", true}});
     return out;
@@ -1605,14 +1615,22 @@ json Service::ReleaseAllNow(const std::string& aReason, const Ops& aOps)
 
 json Service::RestoreAfterKill(const Ops& aOps)
 {
+    json receipt;
+    { std::scoped_lock _(m_mutex); const auto it = m_releaseReceipts.find("kill");
+      if (it != m_releaseReceipts.end()) { receipt = it->second; m_releaseReceipts.erase(it); } }
     const bool wasActive = Active();
     if (aOps.microCancel) { aOps.microCancel("kill"); }
     if (!wasActive && !Active())
     {
-        return json{{"released", false}, {"nothing_held", true}};
+        return receipt.is_object() ? receipt : json{{"released", false}, {"nothing_held", true}};
     }
     { std::scoped_lock _(m_mutex); m_releaseRetry = {}; }
     auto out = ReleaseEverything("kill", aOps, true);
+    if (receipt.is_object()) {
+        out["spawned_removed"] = out.value("spawned_removed", size_t{0}) + receipt.value("spawned_removed", size_t{0});
+        out["sounds_stopped"] = out.value("sounds_stopped", size_t{0}) + receipt.value("sounds_stopped", size_t{0});
+        out["earlier_cleanup"] = receipt;
+    }
     out["released"] = !Active();
     return out;
 }
@@ -1628,7 +1646,7 @@ void Service::DropAll(const std::string& aReason)
         if (m_session) { m_session->Reset(false); } // plain bookkeeping, no adapters
         cancel = m_tickOps.microCancel;
         m_items.clear(); m_sounds.clear(); m_changes.clear();
-        m_notifications = false; m_cleanupPending = false; m_releaseRequested = false; m_releaseRetry = {};
+        m_notifications = false; m_cleanupPending = false; m_releaseRequested = false; m_releaseRetry = {}; m_releaseReceipts.clear();
     }
     if (cancel) { cancel(aReason); }
     if (had) { Emit("released", "info", "the toolkit's state was forgotten (" + aReason + "): the world took what it had brought in", json{{"reason", aReason}}); }
@@ -1678,7 +1696,13 @@ void Service::Tick(double aDt, const TickInput& aInput)
             ops = m_tickOps;
         }
         RestoreScope restoring;
-        const auto out = ReleaseEverything(reason, ops, true);
+        auto out = ReleaseEverything(reason, ops, true);
+        { std::scoped_lock _(m_mutex);
+          auto& receipt = m_releaseReceipts.try_emplace(reason, json::object()).first->second;
+          out["spawned_removed"] = out.value("spawned_removed", size_t{0}) + receipt.value("spawned_removed", size_t{0});
+          out["sounds_stopped"] = out.value("sounds_stopped", size_t{0}) + receipt.value("sounds_stopped", size_t{0});
+          out["released"] = !Active();
+          receipt = out; }
         Emit("released", "warn", Active() ? "toolkit cleanup still holds resources (" + reason + ")" : "everything the toolkit holds was released (" + reason + ")", json{{"reason", reason}, {"auto", true}, {"result", out}});
         return;
     }

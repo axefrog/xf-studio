@@ -587,6 +587,7 @@ void Sim060::Register()
     static player::TeleportPacer pacer;
     m_dispatcher.Register(marked("player.teleport", Access::WritePlayer, RunOn::BridgeThread, "Teleports V (simulated).", [self, busyNow](const MethodContext& aContext) {
         const auto request = player::ParseTeleport(aContext.params);
+        if (self->m_behaviours.Active()) throw MethodError("bridge_effects_active", "the bridge still holds something that a save would keep (behaviours running); player_stop before teleporting");
         pacer.Take();
         // As the plugin: a changing step passes the write gate on the game thread (RB-122).
         return self->m_dispatcher.RunWrite(
@@ -599,6 +600,7 @@ void Sim060::Register()
                 {
                     throw MethodError(busy, "simulated: V can't be moved now (" + busy + ")");
                 }
+                if (std::find(s.effects.begin(), s.effects.end(), "GameplayRestriction.NoMovement") != s.effects.end()) throw MethodError("bridge_effects_active", "the bridge still holds something that a save would keep (GameplayRestriction.NoMovement); player_stop before teleporting");
                 const auto before = s.position;
                 const double yawBefore = s.yaw;
                 auto [to, yaw] = player::Destination(request, before, yawBefore);
@@ -633,7 +635,8 @@ void Sim060::Register()
                     s.yaw = *yaw;
                 }
                 return json{{"before", {{"position", Arr(before)}, {"yaw", yawBefore}}}, {"target", Arr(to)}, {"yaw", s.yaw}, {"snapped", snapped}, {"now", Arr(s.position)},
-                            {"off_m", 0.0}, {"held", true},
+                            {"off_m", 0.0}, {"held", false}, {"settled", true}, {"traffic_check", "unavailable"},
+                            {"warnings", json::array({"The destination may be a road or traffic lane; human navmesh does not classify traffic safety."})},
                             {"undo", player::TeleportUndo(before, yawBefore, s.position)},
                             {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
             },

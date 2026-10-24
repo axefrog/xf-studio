@@ -449,6 +449,7 @@ local function followPending()
 end
 
 registerForEvent("onUpdate", function(deltaTime)
+  if state.testInput and state.testInput.advance then state.testInput.advance(deltaTime) end
   while #state.actions > 0 do
     runAction(table.remove(state.actions, 1))
   end
@@ -593,6 +594,11 @@ end
 -- muted); then, while the ink panel shows the question, only how to answer it; otherwise the messages, the question in the
 -- text colour, and how to answer it.
 local function drawLabelBody(which)
+  local drawnTexts = {}
+  local function draw(colour, text)
+    drawnTexts[#drawnTexts + 1] = tostring(text)
+    colouredWrapped(colour, text)
+  end
   local status = bridgeStatus()
   local muted = themeColour(which, "XfTextMuted", MUTED)
   local tone = themeColour(which, TONE_TOKENS[status.tone] or "TextDisabled", TONE_COLORS[status.tone] or TONE_COLORS.off)
@@ -609,31 +615,34 @@ local function drawLabelBody(which)
     ImGui.SameLine()
     hang = ImGui.GetCursorPosX() - startX
   end
-  colouredWrapped(muted, status.label)
+  draw(muted, status.label)
   if hang > 0 then ImGui.Indent(hang) end
   local ask = state.pendingAsk
   local answered = state.answeredAsk
   local inkShows = (ask and state.inkAsk == ask.id) or (not ask and answered and state.inkAsk == answered.id)
   if inkShows then
-    colouredWrapped(muted, ask and answerHint(ask) or ("Answered: " .. tostring(answered.label) .. "."))
+    draw(muted, ask and answerHint(ask) or ("Answered: " .. tostring(answered.label) .. "."))
   else
     for _, message in ipairs(state.messages) do
       local isQuestion = ask and message.id == ask.id
       local token = isQuestion and "Text" or MESSAGE_TOKENS[message.level] or "Text"
-      colouredWrapped(themeColour(which, token, MESSAGE_COLORS[message.level] or MESSAGE_COLORS.info), message.text)
+      draw(themeColour(which, token, MESSAGE_COLORS[message.level] or MESSAGE_COLORS.info), message.text)
     end
     if ask then
-      colouredWrapped(muted, answerHint(ask))
+      draw(muted, answerHint(ask))
     elseif answered then
-      colouredWrapped(muted, "Answered: " .. tostring(answered.label) .. ".")
+      draw(muted, "Answered: " .. tostring(answered.label) .. ".")
     end
   end
   -- 0.8 (the UI review): why the XF box isn't there.
   if state.info and type(state.info.overlay) == "table" and state.info.overlay.off_for_frame_generation then
-    colouredWrapped(muted, "XF overlay is off while frame generation is on.")
+    draw(muted, "XF overlay is off while frame generation is on.")
   end
   if hang > 0 then ImGui.Unindent(hang) end
   ImGui.PopTextWrapPos()
+  if state.testInput and state.testInput.ui then
+    state.testInput.ui("cet_line", { drawn = true, texts = drawnTexts, rect = state.testInput.windowRect(), heading = status.label })
+  end
 end
 
 local function drawLabel()
@@ -657,6 +666,11 @@ end
 
 registerForEvent("onDraw", function()
   local enabled = state.info and state.info.bridge and state.info.bridge.enabled
+
+  if state.testInput and state.testInput.ui then
+    if not (enabled and state.cetLabel and not state.overlayOpen and state.surface == "cet_line") then state.testInput.ui("cet_line", { drawn = false }) end
+    if not state.overlayOpen then state.testInput.ui("cet_window", { drawn = false, save_button_drawn = false }) end
+  end
 
   -- The CET line whenever the bridge is enabled and it is the status surface (0.8.2: the fallback, when neither the
   -- ink panel nor the XF box can show); while CET's overlay is open the XF Runtime Bridge window shows the status.

@@ -184,6 +184,16 @@ describe("0.8.2 session 9 (offline)", () => {
     expect(problems.join(" ")).toContain("button label");
   });
 
+  test("game.load does not infer an input prompt from an attached puppet", async () => {
+    let now = 0;
+    const context = { cid: "t", api: { callBridge: async () => ({ ok: true, result: now < 4000
+      ? { phase: "loading", waiting_for_input: false, prompt_state: "unobserved", script_layer: { puppet_attached: true } }
+      : { phase: "gameplay" } }) } } as unknown as CommandContext;
+    const result = await waitForLoadEnd(context, { waitMs: 10000, now: () => now, sleep: async ms => void (now += ms) });
+    expect(result.reached).toBe("gameplay");
+    expect(result.waiting_for_input).not.toBe(true);
+  });
+
   test("game.load's wait answers when the press-any-key screen waits, and never sends a key (review: no synthetic key)", async () => {
     let now = 0;
     let keys = 0;

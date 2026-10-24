@@ -1723,8 +1723,9 @@ json StatusWhileLoading(const std::string& aPhase, const json& aLayer)
     return json{{"phase", aPhase},
                 {"answered_by", "plugin"},
                 {"script_layer", aLayer},
-                // 0.8.2: the loaded world is in and the game waits for a key (the press-any-key screen) [hypothesis].
+                // Only a commissioned UI observer may assert waiting_for_input; lifecycle gaps cannot.
                 {"waiting_for_input", aLayer.value("waiting_for_input", false)},
+                {"prompt_state", aLayer.value("prompt_state", "unobserved")},
                 {"player_present", false},
                 {"photo_mode_active", false},
                 {"photo_mode_can_open", false},

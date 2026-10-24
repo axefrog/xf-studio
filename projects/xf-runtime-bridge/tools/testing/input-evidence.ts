@@ -42,9 +42,22 @@ export function evaluateInputEvidence(spec: Json, report: AssertionResult): Asse
   if (spec.check === "save_delta") {
     const after = spec.actual, before = spec.baseline;
     const valid = (v: Json) => v?.ready === true && Array.isArray(v.names) && v.names.every(text) && new Set(v.names).size === v.names.length;
-    if (!valid(before) || !valid(after)) return finish("INCONCLUSIVE", null, "One settled new slot; all baseline slots retained", ["Both settled save lists are required"]);
-    const added = after.names.filter((n: string) => !before.names.includes(n)), removed = before.names.filter((n: string) => !after.names.includes(n));
-    return finish(added.length === 1 && removed.length === 0 ? "PASS" : "FAIL", { added, removed }, { added: 1, removed: 0 });
+    if (!valid(before) || !valid(after)) return finish("INCONCLUSIVE", null, "One added total; no removals in the overlapping save window", ["Both settled save lists are required"]);
+    const full = (v: Json) => v.count === undefined ? v.names.length : v.count;
+    if (![before, after].every(v => Number.isSafeInteger(full(v)) && full(v) >= v.names.length))
+      return finish("INCONCLUSIVE", null, "One new save", ["Invalid total save count"]);
+    const shared = before.names.filter((n: string) => after.names.includes(n));
+    const oldest = shared.at(-1);
+    if (!oldest && before.names.length && (full(before) > before.names.length || full(after) > after.names.length))
+      return finish("INCONCLUSIVE", null, "Overlapping save windows", ["No overlapping window"]);
+    const beforeOverlap = oldest ? before.names.slice(0, before.names.indexOf(oldest) + 1) : before.names;
+    const afterOverlap = oldest ? after.names.slice(0, after.names.indexOf(oldest) + 1) : after.names;
+    const removed = beforeOverlap.filter((n: string) => !after.names.includes(n));
+    // Complete lists also prove removals beyond the shared interval.
+    if (full(after) === after.names.length) for (const n of before.names) if (!after.names.includes(n) && !removed.includes(n)) removed.push(n);
+    const added = afterOverlap.filter((n: string) => !before.names.includes(n));
+    const addedTotal = full(after) - full(before);
+    return finish(addedTotal === 1 && removed.length === 0 ? "PASS" : "FAIL", { added, added_total: addedTotal, removed }, { added_total: 1, removed: 0 });
   }
   const capture = spec.actual, t = capture?.trace;
   report.evidence = capture?.file ? [capture.file] : [];

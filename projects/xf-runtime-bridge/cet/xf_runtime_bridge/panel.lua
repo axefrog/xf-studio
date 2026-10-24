@@ -646,10 +646,12 @@ function panel.body(state, queue, theme, which)
   ImGui.SetNextWindowBgAlpha(1.0)
   panel.anchorBefore(state)
   if not ImGui.Begin("XF Runtime Bridge", ImGuiWindowFlags.AlwaysAutoResize) then
+    if state.testInput and state.testInput.ui then state.testInput.ui("cet_window", { drawn = false, collapsed = true, save_button_drawn = false, rect = state.testInput.windowRect() }) end
     ImGui.End()
     return
   end
   panel.anchorAfter(state)
+  local recordSaveDrawn = false
   local drew, err = pcall(function()
     local info = state.info
     local bridge = info and info.bridge
@@ -715,6 +717,7 @@ function panel.body(state, queue, theme, which)
         if lock and lock.save_anyway then
           ImGui.Spacing()
           coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Saves are held: a test change would go into them.")
+          recordSaveDrawn = true
           local activated, token, physical = button("Save anyway", "save_anyway", state)
           if activated then
             -- A simultaneous human click keeps its ordinary path, but consumes the token once.
@@ -781,6 +784,13 @@ function panel.body(state, queue, theme, which)
       ImGui.TextDisabled("Version " .. tostring(info.plugin_version)) -- 0.8.4 (the UI review's fix 10): the title already names it
     end
   end)
+  if state.testInput and state.testInput.ui then
+    local lock = state.info and state.info.save_lock or nil
+    state.testInput.ui("cet_window", { drawn = drew, heading = "XF Runtime Bridge", rect = state.testInput.windowRect(),
+      save_button_drawn = recordSaveDrawn, save_button_text = recordSaveDrawn and "Save anyway" or nil,
+      save_reason_text = recordSaveDrawn and "Saves are held: a test change would go into them." or nil,
+      save_outcome_text = state.message, save_lock = lock })
+  end
   ImGui.End()
   if not drew then error(err) end
 end

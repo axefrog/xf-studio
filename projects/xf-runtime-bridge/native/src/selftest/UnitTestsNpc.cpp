@@ -963,7 +963,7 @@ void FacingAndFaceTests()
         service.Face(json{{"who", "a1"}, {"expression", "smile"}}, ops);
         fake.calls.clear();
         service.Tick(2.0, {}, ops);
-        Check("0.8.11 an actor not yet prepared (still loading) has its face held back until it is", !fake.Called("face a1 3"));
+        Check("0.8.11 an actor awaiting attitude preparation has its face held back until it is", !fake.Called("face a1 3"));
         fake.npcs["a1"]["prepared"] = true;
         service.Tick(n::kPollSeconds + 0.01, {}, ops);
         Check("0.8.11 ... and sent once it is", fake.Called("face a1 3/6"));

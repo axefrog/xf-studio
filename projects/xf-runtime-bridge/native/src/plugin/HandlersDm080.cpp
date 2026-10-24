@@ -244,9 +244,9 @@ dm::Ops OpsFor(const std::string& aCid)
         RED4ext::CString text(spec.c_str());
         ScriptCall("XFDmHud", "Tracker", {"String"}, {&text}, aCid);
     };
-    ops.releaseAll = [aCid](const std::string& aReason) {
+    ops.releaseAll = [aCid](const std::string& aReason, int32_t aRemovedBefore) {
         RED4ext::CString reason(aReason.c_str());
-        return ScriptCall("XFDmSense", "ReleaseAll", {"String"}, {&reason}, aCid);
+        return ScriptCall("XFDmSense", "ReleaseAll", {"String", "Int32"}, {&reason, &aRemovedBefore}, aCid);
     };
     ops.digest = [aCid](bool aSky) {
         bool sky = aSky;

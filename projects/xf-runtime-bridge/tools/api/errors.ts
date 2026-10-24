@@ -126,8 +126,7 @@ export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
     "V isn't wearing a wardrobe outfit, so what is equipped already shows. Nothing was changed. Use inventory_equip, or wardrobe_equip with set to put an outfit on first.",
   outfit_managed_elsewhere:
     "V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back.",
-  bridge_effects_active:
-    "The bridge still holds something that a save would keep (a glide's movement hold, a forced crouch, a running behaviour, an outfit it took off, a weather it holds, or cyberware it changed or added), so nothing was saved. player_stop lifts the effects and stops behaviours, wardrobe_equip with resume: true puts a suspended outfit back, and the undos of world_weather_set and cyberware_equip or cyberware_unequip put those back; then save again.",
+  bridge_effects_active: "Saving is refused while the bridge holds changes. Release the holders named in detail, then save again.",
   script_outfit_api_changed:
     "The installed Equipment-EX doesn't offer the outfit functions the bridge calls (a different version changed them), so the bridge won't drive its outfit; nothing was changed. wardrobe_equip with suspend: true still takes the outfit off (the story's own request); wardrobe_state names the version and what differs.",
   handed_over:
@@ -202,7 +201,11 @@ export function plainBridgeError(code: string | undefined, detail?: string, meth
   // 0.8.12: the live-direction toolkit's methods have their own wording too (a code like limit or busy means something else there).
   const known = code && ((method?.startsWith("npc.") ? NPC_MESSAGES[code] : method && DM_METHODS.has(method) ? DM_MESSAGES[code] : undefined) ?? BRIDGE_MESSAGES[code]);
   const state = code === "player_busy" ? busyState(detail) : null;
-  const message = state
+  const holders = code === "bridge_effects_active" ? detail?.match(/(?:keep|prepared) \((.*)\);/)?.[1] : undefined;
+  const release = holders && /NoMovement|ForceCrouch|behaviours running/.test(holders) ? "Use player_stop to release these holders" : "Release these holders";
+  const action = method === "player.teleport" ? "Teleporting" : "Saving";
+  const retry = method === "player.teleport" ? "try the teleport again" : "save again";
+  const message = holders ? `${action} refused while the bridge holds: ${holders}. ${release}, then ${retry}.` : state
     ? `V is busy (${BUSY_WORDS[state] ?? state}; the game's state ${state}), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play.`
     : known || "The game bridge reported a problem it didn't explain.";
   return {

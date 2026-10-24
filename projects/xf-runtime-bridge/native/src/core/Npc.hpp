@@ -288,7 +288,7 @@ struct Ops
     // look-ats removed, faces reset, gestures stopped, actors deleted: {released: n, ...}.
     std::function<json(const std::string& aReason)> releaseAll;
     // The tick's reading, for the handles in aWhos (comma list), changing nothing: {v: {position, busy}, camera: {position,
-    //  forward, fov, aspect}, npcs: [{who, exists, spawned, dead, position, yaw, command_state, prepared (actors), gesture_ready,
+    //  forward, fov, aspect}, npcs: [{who, exists, spawned, dead, position, yaw, command_state, prepared (actors: attitude/immortality only, never animation readiness), gesture_ready,
     //  busy and protected (picks)}], hub: {id, answer (-1 none), shown, withdrawn ("busy": the game's own prompt or dialogue
     //  came up)}}.
     std::function<json(const std::string& aWhos)> poll;

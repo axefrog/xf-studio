@@ -4486,9 +4486,9 @@ void Session9Tests()
         const auto ready = layer.Describe();
         layer.OnEvent("detach");
         layer.OnEvent("puppet"); // detached: no screen to wait on
-        Check("0.8.2 load: the puppet in and the player not yet is the press-any-key screen (waiting_for_input), cleared by the player",
-              !before && waiting["waiting_for_input"] == true && ready["waiting_for_input"] == false && layer.Describe()["waiting_for_input"] == false &&
-                  xfb::writes::StatusWhileLoading("loading", waiting)["waiting_for_input"] == true,
+        Check("0.8.2 load: puppet attachment never invents a press-any-key prompt during an in-game load",
+              !before && waiting["waiting_for_input"] == false && waiting["puppet_attached"] == true && waiting["prompt_state"] == "unobserved" && ready["waiting_for_input"] == false && layer.Describe()["waiting_for_input"] == false &&
+                  xfb::writes::StatusWhileLoading("loading", waiting)["waiting_for_input"] == false,
               waiting.dump());
     }
 

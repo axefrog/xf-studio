@@ -880,6 +880,13 @@ public class XFPhotoMenuPanel {
     out += "}";
     XFBridge_InkEvent("ink_tree", (laidOut ? "photo mode's menu laid out" : (created ? "photo-menu layer created" : "photo-menu layer reused")) + ", serial " + IntToString(this.m_serial), out);
   }
+
+  // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+  @if(ModuleExists("Codeware"))
+  public func XFRecordingUi() -> String {
+    return IsDefined(this.m_view) ? this.m_view.XFRecordingUi("photo_menu") : "null";
+  }
+  // END XFB_AUTONOMOUS_TEST_HOOKS
 }
 
 // ---- The controller's side --------------------------------------------------------------------------------------------------

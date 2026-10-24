@@ -1019,6 +1019,30 @@ public class XFInkPanel {
   public func Hovered() -> Int32 {
     return this.m_hovered;
   }
+
+  // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+  @if(ModuleExists("Codeware"))
+  public func XFRecordingUi(surface: String) -> String {
+    let header = this.m_body.GetWidgetByPathName(n"header") as inkCompoundWidget;
+    let title = IsDefined(header) ? header.GetWidgetByPathName(n"title") as inkText : null;
+    let visible = true;
+    let opacity = 1.0;
+    let parent: ref<inkWidget> = this.canvas;
+    let depth = 0;
+    while IsDefined(parent) && depth < 32 {
+      visible = visible && parent.IsVisible(); opacity *= parent.GetOpacity();
+      parent = parent.parentWidget; depth += 1;
+    }
+    let answers = "";
+    for chip in this.m_chips { answers += (StrLen(answers) > 0 ? "," : "") + XFRecordingUi.Text(chip); }
+    let controller = this.canvas.GetController();
+    let controllerName = IsDefined(controller) ? NameToString(controller.GetClassName()) : "";
+    return "{\"surface\":" + XFJson.Str(surface) + ",\"view_owner\":\"XFInkPanel\",\"ink_controller\":" + (StrLen(controllerName) > 0 ? XFJson.Str(controllerName) : "null") + ",\"rect\":" + XFRecordingUi.Rect(this.canvas)
+      + ",\"effective_visible\":" + XFJson.Flag(visible && opacity > 0.0) + ",\"opacity\":" + XFJson.Num(opacity) + ",\"ancestor_limit\":" + XFJson.Flag(IsDefined(parent))
+      + ",\"heading\":" + XFRecordingUi.Text(title) + ",\"tag\":" + XFRecordingUi.Text(this.m_tag) + ",\"status\":" + XFRecordingUi.Text(this.m_status)
+      + ",\"help\":" + XFRecordingUi.Text(this.m_hint) + ",\"answered\":" + XFRecordingUi.Text(this.m_answered) + ",\"answers\":[" + answers + "]}";
+  }
+  // END XFB_AUTONOMOUS_TEST_HOOKS
 }
 
 // ---- The overlay --------------------------------------------------------------------------------------------------------
@@ -1618,6 +1642,13 @@ public class XFInkOverlay extends ScriptableSystem {
     XFInkPins.NoteDrawn(entry, "xf_overlay");
     return true;
   }
+
+  // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+  @if(ModuleExists("Codeware"))
+  public func XFRecordingUi() -> String {
+    return IsDefined(this.m_view) ? this.m_view.XFRecordingUi(this.m_layer) : "null";
+  }
+  // END XFB_AUTONOMOUS_TEST_HOOKS
 }
 
 // ---- 0.7: answering XF Studio's questions from the game (session 7, in-game driving) ------------------------------------

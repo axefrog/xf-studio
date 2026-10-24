@@ -31,7 +31,7 @@
 // running "restore", and prints the --from label that continues after it; the report folder
 // (--out) collects every part's run in one manifest.json.
 //
-// Notes and asks are also shown to the player in the game (ui.message, on the bridge's status surface),
+// Unless --setup-asks-private keeps asks in coordinator output, notes and asks are also shown to the player in the game (ui.message, on the bridge's status surface),
 // so the maintainer can follow the session without leaving the game: a note for 20 s, an ask until it is
 // answered (then the messages are cleared), plus a line when the run starts and ends. Best effort: a
 // bridge that isn't there, or a build without ui.message, changes nothing (the record says echoed: false).
@@ -207,6 +207,8 @@ export type SessionRunOptions = {
   signal?: AbortSignal;
   /** Show notes and asks in the game through ui.message (default true). */
   echo?: boolean;
+  /** Setup asks belong only to the coordinator output in autonomous harness runs. */
+  setupAsksPrivate?: boolean;
   /** Test-only clock injection for deterministic observation replays. */
   clock?: Clock;
 };
@@ -317,7 +319,7 @@ export async function runScript(
       record.result = planned.text;
       if (planned.step.replaced_by) record.replaced_by = planned.step.replaced_by;
       log(`     ASK: ${planned.text}`);
-      record.echoed = await echo({ text: planned.text!.slice(0, 500), level: "ask", seconds: ECHO_ASK_SECONDS });
+      record.echoed = options.setupAsksPrivate ? false : await echo({ text: planned.text!.slice(0, 500), level: "ask", seconds: ECHO_ASK_SECONDS });
       askShown = askShown || record.echoed === true;
       if (options.ask) {
         await untilAborted(options.ask(planned.text!, planned.label), stepSignal);
@@ -433,9 +435,9 @@ export async function runScript(
       if (!health.complete || health.errors.length) failed = true;
     } catch (error) { diagnostics = { missing: [String(error)] }; failed = true; }
   }
-  // The closing line, always (RB-64): a paused run says where it waits and what it waits for.
+  // A pause leaves no game question behind. The coordinator output and manifest carry the continuation.
   if (paused) {
-    await echo({ text: `XF session paused at "${paused.at}"${paused.text ? `: ${paused.text}` : ""}`.slice(0, 500), level: "ask", seconds: ECHO_ASK_SECONDS });
+    await echo({ clear: true });
   } else {
     await echo({ text: `XF session ${interrupted ? "stopped" : failed ? "stopped early" : "complete"}: ${script.title ?? script.name}`, level: failed ? "warn" : "done", seconds: 15 });
   }
@@ -505,7 +507,7 @@ if (import.meta.main) {
   };
   const scriptPath = args.find((a, i) => !a.startsWith("--") && !valued.includes(args[i - 1]));
   if (!scriptPath || !existsSync(scriptPath)) {
-    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--fixtures <private.json>] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo]");
+    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--fixtures <private.json>] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo] [--setup-asks-private]");
     process.exit(2);
   }
   const script = JSON.parse(readFileSync(scriptPath, "utf8")) as SessionScript;
@@ -556,6 +558,7 @@ if (import.meta.main) {
     until: option("--until"),
     ask: interactive ? askOnTerminal : undefined,
     echo: !args.includes("--no-echo"),
+    setupAsksPrivate: args.includes("--setup-asks-private"),
     scriptPath: basename(scriptPath),
   });
   lock.release();

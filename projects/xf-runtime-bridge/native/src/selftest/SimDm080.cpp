@@ -293,7 +293,7 @@ dm::Ops MakeOps(SimDm::State* aState)
                 }
             }
         }
-        return json{{"target_id", id}, {"before", before}};
+        return json{{"target_id", id}, {"before", before}, {"after", {{"engine", vehicle.engine}, {"doors", VehicleDoorsJson(vehicle)}, {"lights", nullptr}}}, {"readback_phase", "simulated_applied"}};
     };
     ops.audioPlay = [s](const std::string& aEvent, const std::string& aOn, const std::string& aEmitter) -> json {
         std::scoped_lock _(s->mutex);
@@ -472,7 +472,7 @@ dm::Ops MakeOps(SimDm::State* aState)
         json list = json::array();
         for (const auto& id : s->contacts)
         {
-            list.push_back({{"id", id}, {"name", "Simulated " + id}});
+            list.push_back({{"id", id}, {"name", "Simulated " + id}, {"name_key", "fixture:" + id}});
         }
         return json{{"contacts", list}, {"calling", s->calling}};
     };
@@ -585,9 +585,9 @@ dm::Ops MakeOps(SimDm::State* aState)
         s->tracker = spec;
         ++s->trackerDraws;
     };
-    ops.releaseAll = [s](const std::string& aReason) -> json {
+    ops.releaseAll = [s](const std::string& aReason, int32_t aRemovedBefore) -> json {
         std::scoped_lock _(s->mutex);
-        const auto removed = s->ents.size();
+        const auto removed = s->ents.size() + aRemovedBefore;
         s->ents.clear();
         s->lines.clear();
         s->tracker.clear();

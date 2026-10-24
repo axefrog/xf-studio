@@ -103,8 +103,7 @@ public func XFBridgeDescribe() -> String {
 protected cb func OnGameAttached() -> Bool {
   let result = wrappedMethod();
   XFBridgeLog.Info("rs-player", s"PlayerPuppet.OnGameAttached \(this.XFBridgeDescribe())");
-  // 0.8.2: after a load the game shows its press-any-key screen from here until the player attaches; the plugin tells
-  // game.load (and game.continue) so they can press past it.
+  // Lifecycle only: this can precede player attachment during in-game loads with no press-any-key screen.
   XFBridge_ScriptLayer("puppet");
   return result;
 }

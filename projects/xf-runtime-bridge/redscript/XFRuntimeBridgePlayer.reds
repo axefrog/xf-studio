@@ -208,6 +208,11 @@ public abstract class XFPlayer {
     if StrLen(busy) > 0 {
       return XFJson.Fail(busy, "V can't be moved now (" + XFPlayer.BusyText(player, busy) + ")");
     }
+    let registry = XFBridgeRegistry.Get();
+    if IsDefined(registry) && registry.HasPlayerEffect(TDBID.Create("GameplayRestriction.NoMovement")) {
+      return XFJson.Fail("bridge_effects_active", "the bridge still holds something that a save would keep (GameplayRestriction.NoMovement); player_stop before teleporting");
+    }
+    XFBridgeLog.Warn(cid, "teleport traffic pre-check unavailable: human navmesh does not classify roads or traffic lanes; no movement hold is applied");
     let game = GetGameInstance();
     let before = player.GetWorldPosition();
     let beforeYaw = player.GetWorldYaw();

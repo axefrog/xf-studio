@@ -15,7 +15,7 @@ double Now()
 }
 namespace
 {
-unsigned EventBit(const std::string& channel) { return channel == "subtitles" ? 1 : channel == "voice" ? 2 : 0; }
+unsigned EventBit(const std::string& channel) { return channel == "subtitles" ? 1 : channel == "voice" ? 2 : channel == "face" ? 4 : channel == "ui" ? 8 : 0; }
 void Keys(const json& p, const std::set<std::string>& keys)
 {
     if (!p.is_object()) throw MethodError("bad_params", "Expected an object.");
@@ -111,7 +111,7 @@ json Service::Status(double now) const
         {"largest_gap_s", m_gap}, {"age_s", m_samples ? json(std::max(0.0, now - m_last)) : json(nullptr)},
         {"latest", m_latest}, {"channels", m_channels}, {"actors", m_actors}, {"capacity", kCapacity},
         {"output", m_output.string()}, {"writer_pending", m_writerBusy}, {"file_error", m_fileError},
-        {"coverage", "source_snapshots + subtitle/controller + script_voice_requests; not rendered or audible proof"}};
+        {"coverage", "source_snapshots + subtitle/controller + script_voice_requests + facial_submissions + UI_consumers; not rendered, evaluated face or audible proof"}};
 }
 json Service::Start(const json& p, double now, uint64_t world, uint64_t connection, const std::string& session)
 {
@@ -124,12 +124,12 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     if (!duration || cap < kPayload) throw MethodError("bad_params", "duration_s must be positive; byte_cap at least 8192.");
     auto channels = p.value("channels", json::array({"v", "actors", "camera"}));
     auto actors = p.value("actors", json::array());
-    if (!channels.is_array() || channels.empty() || channels.size() > 5 || !actors.is_array() || actors.size() > 16)
-        throw MethodError("bad_params", "Choose 1 to 5 channels and at most 16 actor handles.");
+    if (!channels.is_array() || channels.empty() || channels.size() > 7 || !actors.is_array() || actors.size() > 16)
+        throw MethodError("bad_params", "Choose 1 to 7 channels and at most 16 actor handles.");
     std::vector<std::string> selected, whos;
     for (const auto& c : channels)
     {
-        if (!c.is_string() || (c != "v" && c != "actors" && c != "camera" && c != "subtitles" && c != "voice")) throw MethodError("bad_params", "Unknown recorder channel.");
+        if (!c.is_string() || (c != "v" && c != "actors" && c != "camera" && c != "subtitles" && c != "voice" && c != "face" && c != "ui")) throw MethodError("bad_params", "Unknown recorder channel.");
         const auto s = c.get<std::string>();
         if (std::find(selected.begin(), selected.end(), s) != selected.end()) throw MethodError("bad_params", "Duplicate channel.");
         selected.push_back(s);
@@ -183,7 +183,7 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
     if (heartbeat) m_nextHeartbeat = now + 1.0;
     for (const auto& channel : m_channels)
     {
-        if (EventBit(channel) && !heartbeat) continue; // event channels have a 1 Hz coverage heartbeat only
+        if (EventBit(channel) && channel != "ui" && !heartbeat) continue; // event channels have a 1 Hz coverage heartbeat only
         if (const auto reason = m_requested.load()) { Stop(reason, Now()); break; }
         const double at = Now();
         json payload; bool valid = false;

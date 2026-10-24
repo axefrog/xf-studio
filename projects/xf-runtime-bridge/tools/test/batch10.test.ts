@@ -437,7 +437,7 @@ describe("0.6 player control, phase 1", () => {
     const state = await ok(api, "player.state");
     expect(state).toMatchObject({ position: [100, 200, 10], yaw: 0, busy: "", perspective: "fpp" });
     const moved = await ok(api, "player.teleport", { offset: { forward: 2 }, turn: 90 });
-    expect(moved).toMatchObject({ target: [100, 202, 10], yaw: 90, held: true, snapped: true });
+    expect(moved).toMatchObject({ target: [100, 202, 10], yaw: 90, held: false, settled: true, traffic_check: "unavailable", snapped: true });
     await sleep(600);
     await ok(api, "player.teleport", moved.undo.params);
     expect((await ok(api, "player.state")).position).toEqual([100, 200, 10]);

@@ -13,6 +13,7 @@ import { CommandApi } from "../api/command-api.ts";
 import { CATALOGUE, findCommand, PERMISSIONS } from "../api/catalogue.ts";
 import { DM_LIGHT_PATTERNS, DM_NOTIFY_STYLES, DM_RADIO_STATIONS, DM_REFUSALS, DM_VEHICLE_DOORS, DM_WAIT_KINDS, DM_WATCH_KINDS } from "../api/catalogue080dm.ts";
 import { DM_MESSAGES, DM_METHODS } from "../api/errors080dm.ts";
+import { validate } from "../api/schema.ts";
 import { plainBridgeError } from "../api/errors.ts";
 import { WAIT_KINDS } from "../api/catalogue070.ts";
 import { HOOK_TIMEOUT_MS, projectDir, sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
@@ -59,6 +60,15 @@ const apiFor = (host: Host) =>
 async function ok(api: CommandApi, name: string, input: Record<string, unknown> = {}): Promise<Any> {
   const out = await api.run(name, input);
   expect(out.ok, `${name} ${JSON.stringify(out)}`).toBe(true);
+  if (out.ok && DM_METHODS.has(name)) {
+    const result = out.result as Any;
+    const undos = [result.undo, ...(Array.isArray(result.undo_list) ? result.undo_list : [])].filter(Boolean);
+    for (const undo of undos) {
+      const definition = findCommand(undo.method);
+      expect(definition, `Unknown undo from ${name}`).toBeDefined();
+      expect(validate(definition!.input, undo.params), `Unreplayable undo from ${name}: ${JSON.stringify(undo)}`).toEqual([]);
+    }
+  }
   return out.ok ? (out.result as Any) : null;
 }
 
@@ -407,6 +417,7 @@ describe("0.8.12 dm against the self-test host's world", () => {
     await world(api, { mounted: true });
     const set = await ok(api, "vehicle.set", { target: "mounted", engine: true, lights: true, door: "trunk", door_state: "open" });
     expect(set.target_id).toBe("EntityID(8201)");
+    expect(set.after).toMatchObject({ engine: true, doors: { trunk: "open" }, lights: null });
     expect(set.undo.params).toMatchObject({ engine: false, lights: false, door: "trunk", door_state: "closed" });
     expect(((await world(api)).vehicles as Any)["EntityID(8201)"]).toMatchObject({ engine: true, lights: true, doors: { trunk: "open" } });
     await ok(api, set.undo.method, set.undo.params);

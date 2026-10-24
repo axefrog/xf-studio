@@ -135,7 +135,7 @@ describe("autonomous package isolation", () => {
     for (const variant of VARIANTS) expect(() => stage(variant)).toThrow("explicit autonomous");
     expect(() => stage("diagnostic", true)).toThrow();
     const m = stage("writes", true);
-    expect(m.native_count).toBe(29);
+    expect(m.native_count).toBe(31);
     expect(m.files.map(f => f.path)).toContain(`${PLUGIN_DIR}/Scripts/XFRuntimeBridgeRecording.reds`);
     expect(m.files.map(f => f.path)).toContain(`${PLUGIN_DIR}/Scripts/XFRuntimeBridgeTestUi.reds`);
     expect(m.files.some(f => f.path.endsWith("/test-input.lua"))).toBe(true);

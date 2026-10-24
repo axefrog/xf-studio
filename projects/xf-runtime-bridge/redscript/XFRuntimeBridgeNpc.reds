@@ -46,6 +46,19 @@ public class XFNpcEntry {
   public let hasCarrier: Bool;
   public let clip: String;      // the gesture waiting for its carrier, or playing
   public let playing: Bool;
+
+  // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+  private let xfbRecordedCategory: Int32;
+  private let xfbRecordedIdle: Int32;
+  private let xfbRecordedFace: Bool;
+  public func XFRecordingFaceKind(category: Int32, idle: Int32) -> String {
+    let resend = this.faced && this.xfbRecordedFace && this.xfbRecordedCategory == category && this.xfbRecordedIdle == idle;
+    this.xfbRecordedFace = category != 0;
+    this.xfbRecordedCategory = category;
+    this.xfbRecordedIdle = idle;
+    return category == 0 ? "face.bridge_reset" : resend ? "face.bridge_resend" : "face.bridge_submit";
+  }
+  // END XFB_AUTONOMOUS_TEST_HOOKS
 }
 
 // One per game session: what the bridge holds on NPCs, and the dialogue hub it shows. A load starts a new one.
@@ -1182,13 +1195,20 @@ public abstract class XFNpc {
     if category != 0 {
       XFBridgeActions.EnsureSaveLock(cid);
     }
+
+  // BEGIN XFB_AUTONOMOUS_TEST_HOOKS
+    if XFRecordingTap.On("face") {
+      XFRecordingTap.Emit("face", entry.XFRecordingFaceKind(category, idle), XFRecordingFace.Body(npc)
+        + ",\"source\":\"bridge.XFNpc.Face\",\"cid\":" + XFJson.Str(cid) + ",\"category\":" + IntToString(category) + ",\"idle\":" + IntToString(idle));
+    }
+  // END XFB_AUTONOMOUS_TEST_HOOKS
     let feature = new AnimFeature_FacialReaction();
     feature.category = category;
     feature.idle = idle;
     AnimationControllerComponent.ApplyFeatureToReplicate(npc, n"FacialReaction", feature);
     entry.faced = category != 0;
     // 0.8.11: the plugin sends a held face again on a schedule; the first few sends per actor are logged with whether the actor
-    // was prepared, so the log shows whether an early send was lost.
+    // had attitude/immortality preparation. This cannot show whether an early send reached a graph.
     if category != 0 && entry.faceLogged < 6 {
       entry.faceLogged += 1;
       XFBridgeLog.Info(cid, "npc " + entry.who + " face " + IntToString(category) + "/" + IntToString(idle) + " sent (" + IntToString(entry.faceLogged) + "), prepared " + XFJson.Flag(entry.prepared));
