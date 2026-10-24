@@ -185,7 +185,7 @@ describe("substitution as data (0, 1 and 2 candidates; M2's share or new)", () =
   test("no candidate: every slot is left empty and the tab is one click; its scene shows nothing", () => {
     const made = ok(substitutionOf(eye, context({})));
     expect(made).toMatchObject({ subjects: [{ key: "v1", candidates: [] }], looks: [{ key: "look1", candidates: [], needed: true }],
-      scenes: [{ key: "scene1", shares: [] }], oneClick: true });
+      scenes: [{ key: "scene1", viewTitles: ["3D view"], shares: [] }], oneClick: true });
     expect(made.subjects[0]!.chosen).toBeUndefined();
     expect(fillOf(made)).toEqual({ subjects: { v1: null }, looks: { look1: null }, share: {} });
   });

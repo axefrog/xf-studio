@@ -513,7 +513,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     rt.anchors.register(anchor, control);
   const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels in this tab", onClick: event => {
     openMenu(panelMenuItems(rt, view.research()), event.currentTarget as Element,
-      { label: "Panels", invoker: event.currentTarget as Element });
+      { label: "Panels", invoker: event.currentTarget as Element, placement: "below" });
   } });
   const themeButton = button({ label: "View preferences", icon: "monitor", iconOnly: true, variant: "ghost", menu: true, onClick: event =>
     openMenu([...themeItems(theme), { kind: "separator" }, ...view.items(), { kind: "separator" },

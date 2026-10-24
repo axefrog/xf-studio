@@ -14,6 +14,11 @@ import type { ProfileSessions } from "../src/app/profiles/profile-sessions";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { viewTitles } from "../src/platform/api/view-graph";
+import { previewSetupCard } from "../src/studio-ui/preview-setup-card";
+import { statusActivity, panelMenuItems } from "../src/studio-ui/app";
+import { Feedback } from "../src/studio-ui/feedback";
+import type { PreviewSetupSnapshot } from "../src/preview/preview-setup";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
@@ -94,6 +99,71 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
 }
 
 describe("a pane per view", () => {
+  test("a ready head, a tab switch and a pane change never dismiss a closed setup card or leave a status refusal", async () => {
+    const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A", character: "c-1" }, seededRandom(51)));
+    const a = session.tabId(), b = session.duplicate(a), current = session.graph.snapshot().views.find(view => view.tab === b)!;
+    const side = session.addView(current.id, {}, { tab: b });
+    const h = await harness([], { drawn: current.id, onCanvas: current.id }, undefined, session);
+    const feedback = new Feedback(), actions: string[] = [];
+    const setup: PreviewSetupSnapshot = { card: { open: false, canDismiss: true, title: "", body: "", progress: null, step: null,
+      notice: null, primary: null, secondary: null, links: [], busy: false, route: null }, consent: null,
+      head: { phase: "ready", code: null, message: "", progress: null, next: null }, setupRequests: 0, showRequests: 0, autostart: true, wolvenKitStep: null };
+    const rt = { feedback, changed() {}, port: { previewSetup: { snapshot: () => setup, capability: () => ({ available: false }),
+      dispatch: async (action: { kind: string }) => {
+        actions.push(action.kind);
+        if (!setup.card.open) return { ok: false, message: "The 3D view setup isn't showing." };
+        setup.card.open = false; return { ok: true };
+      } } } };
+    const card = previewSetupCard(rt as never), later = (card.element as unknown as LightElement).querySelectorAll("button").find(button => button.textContent === "Not now")!;
+    const frame = { previewSetup: setup, viewport: { head: { phase: "ready" } }, library: { busy: false }, status: {} };
+    const paint = async () => {
+      card.update(frame as never);
+      // The old capture startup clicked this button through its hidden ancestor.
+      later.click(); await Promise.resolve(); await Promise.resolve();
+      expect(later.hidden).toBe(true);
+      expect(actions).toEqual([]); expect(feedback.log).toEqual([]);
+      expect(statusActivity(frame as never, feedback.log.at(-1))).toMatchObject({ text: "Ready", tone: "info" });
+    };
+    await paint();
+    session.show(a); h.panes.sync(); await paint();
+    session.show(b); h.panes.sync();
+    h.state.drawn = { drawn: side, onCanvas: side }; h.panes.sync();
+    h.panes.pane(session.graph.snapshot().views.find(view => view.id === side)!.panel)!.spec.element.append(card.element);
+    await paint();
+    // A stale event after readiness changes, before the next paint, is quiet too.
+    setup.card.open = true; card.update(frame as never); setup.card.open = false;
+    later.click(); await Promise.resolve(); await Promise.resolve();
+    expect(actions).toEqual([]); expect(feedback.log).toEqual([]);
+    setup.card.open = true; setup.card.canDismiss = false; card.update(frame as never);
+    later.click(); expect(actions).toEqual([]);
+    // When setup really is open and dismissible, Not now still works.
+    setup.card.canDismiss = true; card.update(frame as never); later.click();
+    await Promise.resolve(); await Promise.resolve();
+    expect(actions).toEqual(["previewSetup.dismiss"]); expect(setup.card.open).toBe(false); expect(feedback.log).toEqual([]);
+  });
+
+  test("pane tabs and Panels use each tab's local view names, including renamed views", async () => {
+    const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A", character: "c-1" }, seededRandom(53)));
+    const a = session.tabId(), b = session.duplicate(a);
+    const h = await harness([], {}, undefined, session);
+    const paint = () => {
+      h.panes.sync();
+      const views = session.graph.snapshot().views, titles = viewTitles(views);
+      const entries = views.map((view, index) => ({ panel: view.panel, title: titles[index]! }));
+      for (const entry of entries) h.dock.retitle(entry.panel, entry.title, "");
+      const rt = { dock: h.dock, views: h.catalogue, port: { views: { titles: () => entries, modules: () => [], plannedModules: () => [] } } };
+      return { entries, rows: panelMenuItems(rt as never, false).filter(item => item.kind === "action" && (item.label.startsWith("3D view") || item.label === "Side view")) };
+    };
+    expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view"]);
+    expect((h.dock.element as unknown as LightElement).querySelectorAll(".dock-tab").some(tab => tab.textContent === "3D view")).toBe(true);
+    session.show(a); expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view"]);
+    const first = session.graph.snapshot().views.find(view => view.tab === a)!;
+    session.addView(first.id, {}, { tab: a, title: "Side view" });
+    expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view 1", "Side view"]);
+    const paneTabs = (h.dock.element as unknown as LightElement).querySelectorAll(".dock-tab").map(tab => tab.textContent);
+    expect(paneTabs).toContain("3D view 1"); expect(paneTabs).toContain("Side view");
+    session.show(b); expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view"]);
+  });
   test("a dock save between showing B and syncing belongs to rendered A and keeps B's floating pane", async () => {
     const session = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A", character: "c-1" }, seededRandom(43)));
     const a = session.tabId(), b = session.duplicate(a), bPanel = session.graph.snapshot().views.find(view => view.tab === b)!.panel;
@@ -293,10 +363,11 @@ describe("the not-drawn state (U7)", () => {
         views: { tools: () => [], shows: (view: string) => view === "v2" ? { v: "Valerie", look: "Smoky" } : { v: "Valerie" } },
         focus: { view: (view: string) => focused.push(view) } } };
     const context = { view: { summaries: () => [], badge: () => undefined } };
+    let records: { id: string; panel: string; tab?: string; title?: string }[] = [{ id: "main", panel: "head", tab: "a" }, { id: "v2", panel: "view.v2", tab: "a" }];
     const frame = (head: DrawnViews) => ({
       viewport: { head: { phase: "ready", width: 300, height: 200, captured: false, ...head } },
-      views: { views: [{ id: "main", panel: "head" }, { id: "v2", panel: "view.v2" }] },
-      viewTitles: [{ view: "main", panel: "head", title: "3D view 1", subject: "" }, { view: "v2", panel: "view.v2", title: "3D view 2", subject: "" }],
+      views: { views: records },
+      viewTitles: viewTitles(records).map((title, index) => ({ view: records[index]!.id, panel: records[index]!.panel, title, subject: "" })),
       previewSetup: { head: { next: null }, wolvenKitStep: null }, preferences: { inputHints: true }, layer: undefined, viewTools: [], locked: undefined,
       status: { assets: {} }, library: { draft: null } });
     const main = headPanel(rt as never, context as never, "head"), side = headPanel(rt as never, context as never, "view.v2");
@@ -323,6 +394,14 @@ describe("the not-drawn state (U7)", () => {
     expect(el(main).querySelector(".viewport-idle-shows")!.textContent).toBe("Valerie · No look");
     expect(rt.anchors.element("head.view")).toBe(side.spec.element);
     expect(viewShowsLine({})).toBe("No look");
+    records = [{ id: "main", panel: "head", tab: "a" }, { id: "v2", panel: "view.v2", tab: "b" }];
+    side.update(frame({ drawn: "main", onCanvas: "main" }) as never);
+    expect(el(side).querySelector(".viewport-idle-title")!.textContent).toBe("3D view");
+    expect(el(side).getAttribute("aria-label")).toBe("3D view, not shown. Press Enter to show it here.");
+    records[1]!.title = "Portrait";
+    side.update(frame({ drawn: "main", onCanvas: "main" }) as never);
+    expect(el(side).querySelector(".viewport-idle-title")!.textContent).toBe("Portrait");
+    expect(el(side).getAttribute("aria-label")).toBe("Portrait, not shown. Press Enter to show it here.");
     side.dispose?.(); main.dispose?.();
   });
 });

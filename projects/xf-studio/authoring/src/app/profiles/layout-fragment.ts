@@ -24,7 +24,7 @@
 import { LAYOUT_FRAGMENT_SCHEMA, type DefaultLayoutContribution, type FragmentBinding, type FragmentDock, type FragmentNode, type FragmentPanel, type FragmentView,
   type LayoutFragment } from "../../platform/api/layout-fragment";
 import { sameSubject, type SubjectRef } from "../../platform/api/subjects";
-import { SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, type StoredNode, type ViewGraphRules, type ViewRecord, type ViewSlot } from "../../platform/api/view-graph";
+import { SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, viewTitles, type StoredNode, type ViewGraphRules, type ViewRecord, type ViewSlot } from "../../platform/api/view-graph";
 import { parseViewGraph, VIEW_TITLE_LIMIT } from "../../platform/core/view-graph";
 import type { LookRef } from "../../library/collection-documents";
 import type { DockLayout } from "../ui-preferences";
@@ -350,7 +350,7 @@ export type SubstitutionChoice = {
 export type Substitution = {
   readonly subjects: readonly { readonly key: string; readonly kinds: readonly string[]; readonly candidates: readonly SubjectRef[]; readonly chosen?: SubjectRef }[];
   readonly looks: readonly { readonly key: string; readonly candidates: readonly LookRef[]; readonly chosen?: LookRef; readonly needed: boolean }[];
-  readonly scenes: readonly { readonly key: string; readonly subject?: string; readonly look?: string; readonly shares: readonly SceneCandidate[];
+  readonly scenes: readonly { readonly key: string; readonly viewTitles: readonly string[]; readonly subject?: string; readonly look?: string; readonly shares: readonly SceneCandidate[];
     readonly chosen?: string }[];
   readonly oneClick: boolean;
 };
@@ -370,13 +370,16 @@ export function substitutionOf(fragment: LayoutFragment, context: SubstitutionCo
     subjects.push({ key: slot.key, kinds: [...slot.kinds], candidates: candidates.map(item => ({ ...item })), ...(chosen ? { chosen: { ...chosen } } : {}) });
   }
   const sceneChoices: Substitution["scenes"][number][] = [];
+  // A default makes one tab; these are the same local names its panes will show after instantiation.
+  const titles = viewTitles(fragment.views.map(view => ({ id: view.key, title: view.title })));
   for (const node of scenes) {
     const subject = node.subject ? subjects.find(slot => slot.key === node.subject)?.chosen : undefined;
     const shares = subject ? context.scenes.filter(item => item.kind === node.kind && item.subject && sameSubject(item.subject, subject)) : [];
     const named = choice.scenes?.[node.key];
     if (named && !shares.some(item => item.scene === named)) return { issue: "That scene doesn't show this V any more." };
     const chosen = named !== undefined ? named ?? undefined : shares[0]?.scene;
-    sceneChoices.push({ key: node.key, ...(node.subject ? { subject: node.subject } : {}), ...(node.look ? { look: node.look } : {}),
+    sceneChoices.push({ key: node.key, viewTitles: fragment.views.flatMap((view, index) => view.scene === node.key ? [titles[index]!] : []),
+      ...(node.subject ? { subject: node.subject } : {}), ...(node.look ? { look: node.look } : {}),
       shares: shares.map(item => clone(item)), ...(chosen ? { chosen } : {}) });
   }
   const pinned = new Set(fragment.panels.flatMap(panel => panel.binding?.policy === "pinned" && panel.binding.look !== undefined ? [panel.binding.look] : []));

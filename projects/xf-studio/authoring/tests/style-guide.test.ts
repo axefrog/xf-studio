@@ -22,6 +22,16 @@ test("c-setup uses the library's resting state and the app's game-folder next st
   expect(setup).not.toContain("V · Valerie");
 });
 
+test("d-summon groups early-access panels with their stages and documents the fixed anchor", () => {
+  const summon = guide.split('id="d-summon"')[1]!.split("</article>")[0]!;
+  for (const name of ["Save Explorer", "Expressions", "Poses"]) {
+    expect(summon).toContain(`<div class="menu-heading"><span>${name}</span></div>`);
+    expect(summon).toContain(`<span class="menu-label">${name}<span class="stage-tag menu-tag" data-stage="preview">Early access</span></span>`);
+  }
+  expect(summon).toContain("stays under its button");
+  expect(summon).toContain("scrolls inside");
+});
+
 test("the committed style guide embeds the current design system verbatim", () => {
   // Regenerate with: bun tools/build-style-guide.ts
   expect(has(css)).toBe(true);

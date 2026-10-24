@@ -605,7 +605,7 @@ export class StudioApplication {
   views() { return this.services.viewActions?.snapshot() ?? null; }
   /**
    * Each view's title and what it shows, for its panel's tab (view-graph.ts `viewTitles`): the view's own name, else "3D view",
-   * numbered when there are several; its scene's subject (for the character scene, which V: "V (your saved V)") as context.
+   * numbered within its tab when there are several; its scene's subject (for the character scene, which V: "V (your saved V)") as context.
    */
   viewTitles(): { view: string; panel: string; title: string; subject: string }[] {
     const snapshot = this.services.viewActions?.snapshot();

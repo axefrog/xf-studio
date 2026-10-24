@@ -190,7 +190,9 @@ export function layoutTabs(deps: TabsDeps) {
       const fields: ChoicePopoverField[] = [];
       for (const slot of plan.subjects) fields.push({ key: `subject:${slot.key}`, label: "Show which V?", name: `V ${slot.key} for ${view.name}`,
         value: subjectKey(slot.chosen), options: [...slot.candidates.map(ref => ({ value: subjectKey(ref), label: tabs.subject(ref) })), { value: "", label: "Leave empty" }] });
-      for (const scene of plan.scenes) fields.push({ key: `scene:${scene.key}`, label: "Scene", name: `Scene ${scene.key} for ${view.name}`,
+      for (const scene of plan.scenes) fields.push({ key: `scene:${scene.key}`,
+        label: scene.viewTitles.length ? `Scene · ${scene.viewTitles.join(", ")}` : "Scene",
+        name: `Scene ${scene.key} for ${view.name}`,
         value: scene.chosen ?? "", options: [...scene.shares.map(item => ({ value: item.scene, label: `Share the scene of ${tabs.snapshot().tabs.find(tab => tab.id === item.tab)?.name ?? "tab"} · ${item.subject ? tabs.subject(item.subject) : "Leave empty"} · ${item.look ? tabs.look(item.look) : "Leave empty"}` })), { value: "", label: "New scene" }] });
       for (const slot of plan.looks.filter(slot => slot.needed)) fields.push({ key: `look:${slot.key}`, label: "Show which look?", name: `Look ${slot.key} for ${view.name}`,
         value: lookKey(slot.chosen), search: slot.candidates.length > 8,

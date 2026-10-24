@@ -47,9 +47,10 @@ const MARKUP = new RegExp(String.raw`<(?:${TAGS})[\s>/]|\brole\s*=\s*\\?["'](?:$
  * when you move a control into the library; never raise one. The plan for each is in research/authoring/ui-component-library.md.
  */
 const ALLOWANCE: Readonly<Record<string, number>> = {
+  "features/eye-makeup/view/collection.ts": 1, // the collection name field, moved from panels/collection.ts in P2-v (same debt, not a new control)
   "features/eye-makeup/view/inspector.ts": 4,
   "features/save-explorer/view/panel.ts": 20,
-  "studio-ui/app.ts": 2,
+  "studio-ui/app.ts": 1,
   "studio-ui/commands.ts": 6,
   "studio-ui/diagnostics/report-dialog.ts": 7,
   "studio-ui/dock/dock-view.ts": 1,
@@ -58,7 +59,7 @@ const ALLOWANCE: Readonly<Record<string, number>> = {
   "studio-ui/guidance/overlay.ts": 1,
   "studio-ui/panels/character-choices.ts": 1,
   "studio-ui/panels/character.ts": 4,
-  "studio-ui/panels/collection.ts": 2,
+  "studio-ui/panels/collection.ts": 1,
   "studio-ui/panels/game-setup.ts": 3,
   "studio-ui/panels/history.ts": 1,
   "studio-ui/panels/mod-install-sheet.ts": 1,

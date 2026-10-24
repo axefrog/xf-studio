@@ -66,7 +66,7 @@ function menuLayer() {
   if (!layer?.isConnected) { layer = h("div", { class: "menu-layer" }); document.body.append(layer); }
   return layer;
 }
-export function place(element: HTMLElement, anchor: MenuAnchor, submenu = false) {
+export function place(element: HTMLElement, anchor: MenuAnchor, submenu = false, placement?: "below") {
   const margin = 6, { innerWidth: vw, innerHeight: vh } = window;
   element.style.left = "0px"; element.style.top = "0px";
   const rect = element.getBoundingClientRect();
@@ -74,10 +74,17 @@ export function place(element: HTMLElement, anchor: MenuAnchor, submenu = false)
   if (anchor instanceof Element) {
     const a = anchor.getBoundingClientRect();
     if (submenu) { x = a.right - 2; y = a.top - 5; if (x + rect.width > vw - margin) x = a.left - rect.width + 2; }
-    else { x = a.left; y = a.bottom + 4; if (y + rect.height > vh - margin) y = a.top - rect.height - 4; }
+    else {
+      x = a.left; y = a.bottom + 4;
+      if (placement === "below") {
+        // Keep the button's anchor as rows change; the menu scrolls inside the space below it.
+        y = clamp(y, margin, Math.max(margin, vh - margin));
+        element.style.maxHeight = `${Math.max(0, vh - margin - y)}px`;
+      } else if (y + rect.height > vh - margin) y = a.top - rect.height - 4;
+    }
   } else { x = anchor.x; y = anchor.y; if (x + rect.width > vw - margin) x = anchor.x - rect.width; if (y + rect.height > vh - margin) y = anchor.y - rect.height; }
   element.style.left = `${clamp(x, margin, Math.max(margin, vw - rect.width - margin))}px`;
-  element.style.top = `${clamp(y, margin, Math.max(margin, vh - rect.height - margin))}px`;
+  element.style.top = `${placement === "below" && anchor instanceof Element && !submenu ? y : clamp(y, margin, Math.max(margin, vh - rect.height - margin))}px`;
 }
 
 export function closeMenus(restoreFocus = true) { root?.close(restoreFocus); }
@@ -98,11 +105,11 @@ export const menuCapability = (items: readonly MenuItem[], reason: string): Capa
  * actionable, never informational, so the owner disables its trigger with the reason instead (`hasCommands` asks first). Returns the
  * open menu, or undefined when it didn't open.
  */
-export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label: string; invoker?: Element | null; onClose?(): void; focusLabel?: string } = { label: "Menu" }) {
+export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label: string; invoker?: Element | null; onClose?(): void; focusLabel?: string; placement?: "below" } = { label: "Menu" }) {
   if (!hasCommands(items)) return undefined;
   closeMenus(false);
   const invoker = options.invoker ?? (document.activeElement instanceof Element ? document.activeElement : null);
-  root = build(items, anchor, options.label, undefined, invoker, options.onClose, options.focusLabel);
+  root = build(items, anchor, options.label, undefined, invoker, options.onClose, options.focusLabel, options.placement);
   const outside = (event: PointerEvent) => {
     if (!root) return;
     const path = event.composedPath();
@@ -118,7 +125,7 @@ export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label
 }
 
 function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: OpenMenu | undefined,
-  invoker: Element | null, onClose?: () => void, focusLabel?: string): OpenMenu {
+  invoker: Element | null, onClose?: () => void, focusLabel?: string, placement?: "below"): OpenMenu {
   const element = h("div", { class: "menu", role: "menu", "aria-label": label, tabindex: "-1" });
   const entries: HTMLElement[] = [];
   const self: OpenMenu = { element, parent, invoker, close(restore) {
@@ -206,7 +213,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     event.stopPropagation();
   });
   menuLayer().append(element);
-  place(element, anchor, !!parent);
+  place(element, anchor, !!parent, placement);
   if (!parent) requestAnimationFrame(() => {
     if (!element.isConnected) return;
     const target = focusLabel ? entries.find(entry => entry.querySelector(".menu-label")?.textContent === focusLabel) : undefined;

@@ -1,5 +1,6 @@
 import { iconMarkup, type IconName } from "../icons";
 import { GUIDANCE } from "./guidance";
+import { stageLabel, type Stage } from "../components/stage-tag";
 
 /** String builders for the self-contained style guide. Static specimens use the app's real classes. */
 export const i = (name: IconName) => iconMarkup(name);
@@ -75,10 +76,10 @@ export function row(name: string, meta: string, options: { selected?: boolean; h
   return `<li class="item-row${options.selected ? " selected" : ""}${options.hidden ? " hidden-layer" : ""}"><span class="item-grip">${i("grip")}</span>${lead}<button type="button" class="item-main"><span class="item-name">${name}</span><span class="item-meta">${meta}</span></button><span class="item-trailing">${options.warn ? `<span class="finish-flag" data-reason="export" title="Preview-study finish">${i("warning")}</span>` : options.edge ? `<span class="finish-flag" data-reason="edge" title="Cut off at the plate's edge in game: pull the shape in or make its edge less soft.">${i("warning")}</span>` : ""}${btn("More actions", { icon: "more", iconOnly: true, small: true, variant: "ghost" })}</span></li>`;
 }
 export function menu(items: string, style = "") { return `<div class="menu static-menu" role="menu"${style ? ` style="${style}"` : ""}>${items}</div>`; }
-export function menuItem(label: string, options: { icon?: IconName; hint?: string; reason?: string; checked?: boolean; danger?: boolean; kbd?: string; sub?: boolean; focus?: boolean } = {}) {
+export function menuItem(label: string, options: { icon?: IconName; hint?: string; reason?: string; checked?: boolean; danger?: boolean; kbd?: string; sub?: boolean; focus?: boolean; stage?: Stage } = {}) {
   return `<div class="menu-item${options.danger ? " danger" : ""}${options.focus ? " demo-focus" : ""}" role="${options.checked !== undefined ? "menuitemcheckbox" : "menuitem"}"${options.reason ? ' aria-disabled="true"' : ""}${options.checked !== undefined ? ` aria-checked="${options.checked}"` : ""}>
     <span class="menu-icon">${options.checked ? i("check") : options.icon ? i(options.icon) : ""}</span>
-    <span class="menu-text"><span class="menu-label">${label}</span>${options.reason ? `<small class="menu-reason">${options.reason}</small>` : options.hint ? `<small class="menu-hint">${options.hint}</small>` : ""}</span>
+    <span class="menu-text"><span class="menu-label">${label}${stageLabel(options.stage) ? `<span class="stage-tag menu-tag" data-stage="${options.stage}">${stageLabel(options.stage)}</span>` : ""}</span>${options.reason ? `<small class="menu-reason">${options.reason}</small>` : options.hint ? `<small class="menu-hint">${options.hint}</small>` : ""}</span>
     ${options.kbd ? `<kbd>${options.kbd}</kbd>` : ""}${options.sub ? `<span class="menu-sub">${i("chevronRight")}</span>` : ""}</div>`;
 }
 export const menuHeading = (label: string, detail?: string) => `<div class="menu-heading"><span>${label}</span>${detail ? `<small>${detail}</small>` : ""}</div>`;

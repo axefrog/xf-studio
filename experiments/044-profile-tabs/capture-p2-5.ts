@@ -96,7 +96,7 @@ async function openSub(page: Session, label: string) {
 const headReady = `${P}.viewport.snapshot().head.phase === "ready"`;
 const studio = async (page: Session) => {
   await page.waitFor(READY, 120_000); await page.wait(1_500);
-  await press(page, `[...document.querySelectorAll("button")].find(b => b.textContent.trim() === "Not now")`);
+  await press(page, `[...document.querySelectorAll("#preview-card .setup-card-actions button")].find(b => b.textContent.trim() === "Not now" && !b.closest("[hidden]") && b.getAttribute("aria-disabled") !== "true" && !b.disabled)`);
   await page.wait(300);
 };
 /** The 3D head prepared from the game's files in this throwaway workspace (about a minute the first time), then a short settle. */

@@ -246,7 +246,7 @@ const MOUNTS: Record<string, Mount> = {
     openChoicePopover(event.currentTarget as HTMLElement, { title: "New tab: Eye makeup", apply: "Create", snapshot: () => ({ fields: [
       { key: "v", label: "Show which V?", name: "V v1 for Eye makeup", value: selected.v,
         options: [{ value: "v1", label: "ManualSave-12" }, { value: "v2", label: "Streetkid" }, { value: "", label: "Leave empty" }] },
-      { key: "scene", label: "Scene", name: "Scene for Eye makeup", value: selected.scene,
+      { key: "scene", label: "Scene · 3D view", name: "Scene for Eye makeup", value: selected.scene,
         options: [...(selected.v === "v1" ? [{ value: "shared", label: "Share the scene of Eye makeup · ManualSave-12 · Look 3" }] : []), { value: "", label: "New scene" }] },
       ...(!selected.scene || selected.v !== "v1" ? [{ key: "look", label: "Show which look?", name: "Look for Eye makeup", value: selected.look, search: true,
         options: [...Array.from({ length: 10 }, (_, index) => ({ value: `look${index + 1}`, label: `Look ${index + 1}`, group: "Night market" })), { value: "", label: "Leave empty" }] }] : [])],

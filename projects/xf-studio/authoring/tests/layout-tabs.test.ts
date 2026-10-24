@@ -276,6 +276,28 @@ test("Review A finding 4: Enter on Cancel keeps native activation and creates no
   expect(lightDocument.activeElement).toBe(el(h.view.add));
 });
 
+test("U4: substitution names the default's views locally, preserving saved view names", async () => {
+  const h = await harness(); h.candidates.subjects.push(V2);
+  // Several existing tabs must not number the new tab's sole view.
+  h.actions.dispatch({ kind: "tabs.new", default: EYE });
+  h.view.newMenu(); h.row("Eye makeup").click(); await tick();
+  let form = lightDocument.body.querySelector(".choice-popover")!;
+  expect(form.textContent).toContain("Scene · 3D view");
+  expect(form.textContent).not.toContain("3D view 2");
+  form.dispatchEvent(lightEvent("keydown", { key: "Escape" }));
+
+  const fragment = structuredClone(STUDIO_LAYOUT_DEFAULTS[0]!.fragment), first = fragment.views[0]!;
+  const multiple = { ...fragment, views: [first, { ...first, key: "side" }, { ...first, key: "named", title: "Close-up" }] };
+  expect(h.defaults.dispatch({ kind: "create", name: "Several views", fragment: multiple }).ok).toBe(true);
+  h.view.newMenu(); h.row("Several views").click(); await tick();
+  form = lightDocument.body.querySelector(".choice-popover")!;
+  expect(form.textContent).toContain("Scene · 3D view 1, 3D view 2, Close-up");
+  form.dispatchEvent(lightEvent("keydown", { key: "Escape" }));
+  expect(h.defaults.dispatch({ kind: "create", name: "Named view", fragment: { ...fragment, views: [{ ...first, title: "Front portrait" }] } }).ok).toBe(true);
+  h.view.newMenu(); h.row("Named view").click(); await tick();
+  expect(lightDocument.body.querySelector(".choice-popover")!.textContent).toContain("Scene · Front portrait");
+});
+
 test("Review B 5/13: same-named defaults use the Library date and minute, never their IDs", async () => {
   const h = await harness();
   for (let n = 0; n < 2; n++) h.defaults.dispatch({ kind: "create", name: "My lighting", fragment: STUDIO_LAYOUT_DEFAULTS[0]!.fragment });
@@ -314,7 +336,7 @@ test("Review B 8: a single scene separates the label from its value", async () =
   const h = await harness(); h.candidates.subjects.push(V2);
   h.view.newMenu(); h.row("Eye makeup").click();
   const scene = lightDocument.body.querySelectorAll(".choice-popover-field").find(field => field.dataset.slot === "scene:scene1")!;
-  expect(scene.querySelector(".popover-choice-text")!.textContent).toBe("Scene: New scene");
+  expect(scene.querySelector(".popover-choice-text")!.textContent).toBe("Scene · 3D view: New scene");
 });
 
 test("Review B 15: menu, key and palette closes give an info toast whose Undo restores that exact tab", async () => {
