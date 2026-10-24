@@ -502,7 +502,7 @@ export class DockView {
   openView(id: PanelId, arrangement: unknown) {
     if (!this.panels.has(id)) return;
     this.state = openViewDockState(this.state, arrangement,
-      { wide: this.options.defaults("wide"), compact: this.options.defaults("compact") }, id);
+      { wide: this.options.defaults("wide"), compact: this.options.defaults("compact") }, id, this.area().w);
     this.render(); this.options.save(this.dockState); this.focusTab(id);
   }
   /** Move focus to a panel's tab once the layout it just got has rendered. */

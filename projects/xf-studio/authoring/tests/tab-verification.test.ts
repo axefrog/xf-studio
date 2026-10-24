@@ -45,7 +45,7 @@ test("verification fixtures drive the real substitution and default readers, and
   expect(services.defaults.get(newer)?.unavailable).toContain("newer version");
   expect(actions.capability({ kind: "tabs.new", default: newer }).available).toBe(false);
   const resolver = createTargetResolver({ state: session, services, history: createHistoryService(), contexts: type => STUDIO_CATALOGUE.context(type) });
-  const scenes = sceneCommands(session, services), choices = emptyChoicesPort({ session, resolver, services, access: hooks.choiceAccess,
+  const scenes = sceneCommands(session, services), choices = emptyChoicesPort({ session, resolver, services, createLookCapability: () => ({ available: true }), access: hooks.choiceAccess,
     starter: () => starterParts(STUDIO_DOCUMENTS),
     baseline: () => defaultViewGraph(freshWorkspace().preview), dispatch: action => { scenes.dispatch(action); return { ok: true }; } });
   for (const route of ["subject", "look", "view"] as const) for (const count of [0, 1, 8]) {

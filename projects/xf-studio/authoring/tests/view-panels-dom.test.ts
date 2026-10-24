@@ -93,6 +93,7 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
     .map(panel => ({ id: panel.id, title: panel.title, icon: panel.icon, description: panel.description, element: document.createElement("div") }));
   dock = new DockView({ panels: [...others, ...panes.controllers().map(pane => pane.spec)], state: restored.state, sizeClass: () => "wide",
     defaults: size => defaultDockStateFor(catalogue)[size], save: next => panes.save(next), announce: () => {} });
+  dock.element.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1600, height: 900 }) as DOMRect;
   dock.render();
   panes.sync();
   const group = (panel: string) => { const found = [dock.tree.root, ...dock.tree.floating.map(window => window.node)];
@@ -104,11 +105,14 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
 }
 
 describe("a pane per view", () => {
-  test("a first view's history restores its head slot, drawing and focus through the real session and dock", async () => {
+  for (const slot of ["missing", "narrow", "collapsed", "wide"] as const) test(`a first view's history restores its ${slot} head slot, drawing and focus through the real session and dock`, async () => {
     const workspace = freshWorkspace(), session = openSession(sessionOfWorkspace(workspace, { tab: "A", character: "c-1" }, seededRandom(57)));
     const tab = session.tabId(); session.closeView("main");
     const tree: DockTree = { root: split("row", [{ ...group(["presets"], "presets", "g-collection"), collapsed: true },
       group(["lighting"], "lighting", "g-inspect")]), floating: [], closed: [] };
+    if (slot !== "missing") tree.root = split("row", [group(["presets"], "presets", "g-collection"),
+      { ...group(["head", "lighting"], "lighting", "custom-head"), collapsed: slot === "collapsed" },
+      group(["history"], "history", "g-layers")], [.2, slot === "narrow" ? .12 : .4, slot === "narrow" ? .68 : .4]);
     session.arrange(tab, serializeDockState({ wide: tree, compact: tree }));
     const h = await harness([], {}, tree, session, STUDIO_CATALOGUE), depth = session.graph.history().depth;
     const view = session.openView(tab, defaultViewGraph(workspace.preview), { kind: "character", id: "c-1" }), panel = panelOf(view);
@@ -119,7 +123,12 @@ describe("a pane per view", () => {
       expect(session.focus.focusedPanel()).toBe(session.instance(panel, tab));
       for (const size of ["wide", "compact"] as const) {
         const at = locate(h.dock.dockState[size], panel)!;
-        expect(at?.group.id).toBe("g-head"); expect(at.windowId).toBeUndefined();
+        expect(at?.group.id).toBe(slot === "missing" ? "g-head" : "custom-head"); expect(at.windowId).toBeUndefined();
+        if (slot !== "missing") {
+          const root = h.dock.dockState[size].root!;
+          expect(root.kind).toBe("split");
+          if (root.kind === "split") expect(root.sizes[1]).toBeCloseTo(slot === "wide" ? .4 : size === "wide" ? .37 : .38);
+        }
         expect(at.group.active).toBe(panel); expect(at.group.collapsed).not.toBe(true);
       }
       expect(h.panes.canvasPanel()).toBe(panel); expect(h.attached.at(-1)).toBe(panel);

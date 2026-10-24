@@ -27,6 +27,7 @@ export type EmptyChoicesPort = {
 type Deps = { readonly session: ProfileSessions; readonly resolver: TargetResolver;
   readonly services: Pick<ProfileServices, "profiles" | "characters" | "collections">;
   starter(): LookInput["parts"];
+  createLookCapability(collection: string): Capability;
   access(): Capability; baseline(): ViewGraphData; dispatch(action: SceneAction): StudioDispatchResult };
 const failed = (allowed: Capability): StudioDispatchResult => ({ ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "That choice is unavailable." });
 
@@ -60,7 +61,10 @@ export function emptyChoicesPort(deps: Deps): EmptyChoicesPort {
     if ("look" in choice) return destination.route === "look" && looks().some(ref => ref.collection === choice.look.collection && ref.look === choice.look.look)
       ? { available: true } : refusal("missing_target", "That look is no longer in this profile. Choose another look.");
     if ("defaultV" in choice && destination.route !== "look" && (choice.defaultV === "female" || choice.defaultV === "male")) return { available: true };
-    if ("createLook" in choice && destination.route === "look") return { available: true };
+    if ("createLook" in choice && destination.route === "look") {
+      const existing = (profile()?.collections ?? []).map(id => services.collections.collection(id)).find(Boolean);
+      return existing ? deps.createLookCapability(existing.id) : { available: true };
+    }
     return refusal("invalid_value", "Choose one of the available options.");
   }
   function snapshot(panel: string): EmptyChoiceSnapshot | null {
@@ -89,7 +93,7 @@ export function emptyChoicesPort(deps: Deps): EmptyChoicesPort {
       if (!empty || route === "subject") add("default-male", "Default V (masculine)",
         route === "view" ? "Open a 3D view showing the default masculine V in this tab" : "Show the default masculine V in this 3D view", { defaultV: "male" });
     }
-    return { title: route === "view" ? "Open a 3D view" : route === "look" ? "Show which look?" : "Show which V?", body, choices, capability: deps.access(),
+    return { title: route === "view" ? "Open a 3D view" : route === "look" ? "Show which look?" : "Show which V?", body, choices, capability: choices.length === 1 && "createLook" in choices[0]!.action.choice ? capability(choices[0]!.action) : deps.access(),
       ...(route === "look" ? { owner: { panel: "presets", label: "Presets", prompt: "No look in this scene. Choose one in" } } : {}) };
   }
   async function execute(action: EmptyChoiceRequest): Promise<StudioDispatchResult> {

@@ -45,15 +45,16 @@ async function fixture(count: number) {
   const session = openSession(sessionOfWorkspace(workspace, { tab: "U6" }), { profile: p.profile, history });
   const resolver = createTargetResolver({ state: session, history, services, contexts: type => STUDIO_CATALOGUE.context(type) });
   const scenes = sceneCommands(session, services), dispatched: string[] = [];
-  let writable = true;
+  let writable = true, createAllowed: import("../src/platform/api/capability").Capability = { available: true };
   const port = emptyChoicesPort({ session, resolver, services, baseline: () => defaultViewGraph(workspace.preview),
     starter: () => starterParts(STUDIO_DOCUMENTS),
+    createLookCapability: () => createAllowed,
     access: () => writable ? { available: true } : { available: false, code: "unavailable", reason: "This workspace is read-only." },
     dispatch: action => { dispatched.push(action.kind); const allowed = resolver.check(action);
       if (!allowed.available) return { ok: false, code: allowed.code!, message: allowed.reason! };
       scenes.dispatch(action); return { ok: true }; } });
   const scene = session.graph.node("main", "scene").id;
-  return { port, session, services, outbox, subjects, scene, dispatched, readonly: () => { writable = false; } };
+  return { port, session, services, outbox, subjects, scene, dispatched, blockCreate: (reason: string) => { createAllowed = { available: false, code: "stale", reason }; }, readonly: () => { writable = false; } };
 }
 
 describe.each([0, 1, 8])("U6 with %i profile candidates", count => {
@@ -224,4 +225,36 @@ test("a default fills synchronously, and a captured choice refuses after its tab
   expect(f.session.scene(f.scene).subject!.id).toBe(f.subjects[0]);
   const lookState = f.port.snapshot("layers")!; f.session.close(f.session.tabId());
   expect(await f.port.execute(lookState.choices[0]!.action)).toMatchObject({ ok: false, code: "missing_target" }); await f.outbox.settle();
+});
+
+
+test("Create a look uses the collection Add preset capability, including the conflict reason", async () => {
+  const f = await fixture(1), collection = f.services.profiles.profile(f.session.profile)!.collections[0]!;
+  const document = f.services.collections.collection(collection)!;
+  f.services.collections.dispatch({ kind: "collection.removeLook", collection, base: document.revision, look: document.looks[0]! });
+  const reason = "This collection changed in another window too. Choose which version to keep first.";
+  f.blockCreate(reason);
+  const state = f.port.snapshot("presets")!;
+  expect(state.choices.map(choice => choice.label)).toEqual(["Create a look"]);
+  expect(state.capability).toMatchObject({ available: false, reason });
+  expect(await f.port.execute(state.choices[0]!.action)).toMatchObject({ ok: false, message: reason });
+  expect(f.services.collections.collection(collection)!.looks).toEqual([]);
+  await f.outbox.settle();
+});
+
+for (const count of [0, 1, 8]) test(`a view-less tab gives the declared primary panel one chooser (${count} Vs)`, async () => {
+  const f = await fixture(count); f.session.closeView("main"); installLightDom();
+  const rt = { port: { emptyChoices: f.port }, views: STUDIO_CATALOGUE } as unknown as StudioRuntime;
+  const panels = ["layers", "uv", "finish", "presets", "library"].map(id => withEmptyChoices(rt, {
+    spec: { id, title: id, icon: "head", description: "", element: h("div") }, update() {},
+  }));
+  try {
+    for (const panel of panels) {
+      panel.update({} as Frame);
+      const root = panel.spec.element as unknown as LightElement;
+      expect(root.querySelector(".empty-choices")!.hidden).toBe(panel.spec.id !== "layers");
+      expect(root.querySelector(".empty-target-pointer")!.hidden).toBe(panel.spec.id === "layers");
+      if (panel.spec.id !== "layers") expect(root.querySelector(".empty-target-pointer")!.textContent).toBe("No 3D view in this tab. Open one in Layers.");
+    }
+  } finally { panels.forEach(panel => panel.dispose?.()); uninstallLightDom(); await f.outbox.settle(); }
 });

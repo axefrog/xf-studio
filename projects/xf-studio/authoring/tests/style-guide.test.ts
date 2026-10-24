@@ -97,3 +97,12 @@ test("Review A design 3: entry text never opens a raw-text title or script eleme
   expect(entries.length).toBeGreaterThan(60);
   expect(entries.filter(([html]) => /<(?:title|script)(?:\s|>)/i.test(html)).map(([html]) => /id="([^"]+)"/.exec(html)?.[1])).toEqual([]);
 });
+
+
+test("U6 round 2 documents primary ownership, one gated creation action, ordering, width and choice focus", () => {
+  const empty = guide.split('id="c-empty"')[1]!.split("</article>")[0]!;
+  for (const rule of ["primary panel in its view contribution", "chooser first", "no duplicate Add preset", "same capability and conflict reason", "focuses its first choice", "narrower than 320 px", "every Redo"])
+    expect(empty).toContain(rule);
+  expect(empty).toContain("No 3D view in this tab. Open one in");
+  expect(empty).toContain("This collection changed in another window too. Choose which version to keep first.");
+});

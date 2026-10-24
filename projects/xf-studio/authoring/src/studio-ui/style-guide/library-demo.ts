@@ -271,21 +271,23 @@ const MOUNTS: Record<string, Mount> = {
   },
   "lib-panel-header": () => header(260),
   "lib-status": () => { const bar = progressBar({ label: "Building the package", fraction: .42 }); const sweep = progressBar({ label: "Working" });
-    const pointer = new EmptyTargetPointer(() => document.getElementById("c-empty")?.scrollIntoView());
-    pointer.update({ panel: "presets", label: "Presets", prompt: "No look in this scene. Choose one in" });
     const subject = new EmptyChoices("viewport");
     subject.update({ title: "Show which V?", body: "This 3D view has no V yet.", choices:
       ["ManualSave-12", "Default V (feminine)", "Default V (masculine)", "Valerie", "Vincent", "Street kid", "Nomad"].map(label =>
         ({ id: label, label, name: `Show ${label} in this 3D view`, choose: () => {} })) });
-    const choices = (names: string[], unavailable = false) => { const sample = new EmptyChoices();
+    const choices = (names: string[], unavailable = false, conflict = false) => { const sample = new EmptyChoices();
       sample.update({ title: "Show which look?", body: names.length ? "This scene has no look yet." : "There are no looks in this profile yet.",
-        ...(unavailable ? { capability: { available: false, reason: "This workspace is open in another window." } } : {}),
+        ...(unavailable || conflict ? { capability: { available: false, reason: conflict ? "This collection changed in another window too. Choose which version to keep first." : "This workspace is open in another window." } } : {}),
         choices: (names.length ? names : ["Create a look"]).map(label => ({ id: label, label, name: `Show ${label} in this scene`, choose: () => {
           sample.update({ title: `Showing ${label}`, body: "The choice acts immediately.", choices: [] }); } })) }); return sample.element; };
+    const first = choices([]), pointer = new EmptyTargetPointer(() => {
+      first.scrollIntoView({ block: "nearest" }); first.querySelector<HTMLButtonElement>("button")?.focus();
+    });
+    pointer.update({ panel: "presets", label: "Presets", prompt: "No look in this scene. Choose one in" });
     return stack({ gap: "normal" }, h("div", { class: "row wrap gap-s" }, badge("Can be built", "success"), badge("Preview only", "warning"), badge("Blocked", "error")),
       note("Built and checked; not tested in game."), note("Sharing a scene means lighting and look changes show in both tabs."), bar.element, sweep.element,
       new EmptyState({ title: "No layers in this preset", body: "Layers stack like makeup: the top of the list is applied last.", actions: [button({ label: "Add layer", icon: "plus", onClick: () => {} })] }).element,
-      choices([]), choices(["Smoky"]), choices(["Smoky", "Chrome dusk", "Soft plum", "Copper", "Graphite", "Gold", "Midnight", "Rose"]), choices(["Smoky"], true),
+      first, choices([], false, true), choices(["Smoky"]), choices(["Smoky", "Chrome dusk", "Soft plum", "Copper", "Graphite", "Gold", "Midnight", "Rose"]), choices(["Smoky"], true),
       pointer.element, h("div", { class: "viewport-panel", style: "height:400px" }, subject.element)); },
   "lib-layout": () => { const head = new PageHeader({ title: "QuickSave-0", back: { label: "All saves", onClick: () => {} }, meta: "Quick save · game 2.31 · save version 269 · 336 nodes · 2.12 MB",
       actions: [new Segmented({ label: "Show", options: [{ value: "n", label: "Nodes" }, { value: "m", label: "Mod data" }], onSelect: () => {}, compact: true, showLabel: false }).element] });

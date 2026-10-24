@@ -37,6 +37,7 @@ for (const count of [0, 1, 4, 8]) test(`U6's ${count}-candidate specimen compose
 test("after the last preset is removed, real collection panels keep recovery and imports beside the owner state", () => {
   const { shell } = trustedFixture(), snapshot = { title: "Show which look?", body: "There are no looks in this profile yet.", capability: { available: true }, choices: [],
     owner: { panel: "presets", label: "Presets", prompt: "No look in this scene. Choose one in" } };
+  snapshot.choices = [{ id: "create", label: "Create a look", name: "Create a look and show it in this scene", action: { destination: { route: "look" } } }] as never;
   const port = { ...shell, emptyChoices: { snapshot: () => snapshot } } as unknown as ConstructorParameters<typeof StudioRuntime>[0];
   const rt = new StudioRuntime(port, { toast: () => {}, record: () => {}, announce: () => {} } as unknown as Feedback, STUDIO_CATALOGUE);
   const ctx = featureViewContext(rt, "eye-makeup"), panels = [presetsPanel(ctx), libraryPanel(ctx)].map(panel => withEmptyChoices(rt, panel));
@@ -46,6 +47,9 @@ test("after the last preset is removed, real collection panels keep recovery and
   try {
     for (const panel of panels) { lightDocument.body.append(el(panel.spec.element)); panel.update(new Frame(port, STUDIO_CATALOGUE)); }
     const presets = el(panels[0]!.spec.element), library = el(panels[1]!.spec.element);
+    expect(presets.children[0]).toBe(presets.querySelector(".panel-empty-target")!);
+    expect(presets.querySelectorAll("button").filter(button => visible(button) && ["Add preset", "Create a look"].some(label => button.textContent === label))).toHaveLength(1);
+    expect(presets.querySelector(".empty-actions")!.querySelector("button")!.textContent).toBe("Create a look");
     const restore = presets.querySelectorAll("button").find(button => button.textContent.includes("Restore “"))!;
     expect(restore).toBeDefined(); expect(visible(restore)).toBe(true);
     for (const [root, label] of [[presets, "Import recipe as preset…"], [library, "Import collection…"]] as const) {
@@ -133,25 +137,29 @@ test("head-pane choices use the centred c-setup state and retain searchable Choo
   component.dispose(); component.element.remove();
 });
 
-for (const closed of [false, true]) test(`the read-only pointer reveals and focuses Presets (closed: ${closed})`, async () => {
-  const presets = h("div"), layers = h("div"), tree: DockTree = { root: split("row", [group(["layers"]),
-    { ...group(["presets"]), collapsed: true }]), floating: [], closed: [] };
+for (const ownerId of ["presets", "layers"]) for (const readonly of [false, true]) for (const closed of [false, true])
+  test(`the pointer focuses ${ownerId}’s first choice (closed: ${closed}, read-only: ${readonly})`, async () => {
+  const presets = h("div"), layers = h("div"), tree: DockTree = { root: split("row", [group(["uv"]),
+    { ...group([ownerId]), collapsed: true }]), floating: [], closed: [] };
   const dock = new DockView({ panels: [
-    { id: "presets", title: "Presets", description: "", icon: "layers", element: presets },
-    { id: "layers", title: "Layers", description: "", icon: "layers", element: layers },
+    { id: ownerId, title: ownerId, description: "", icon: "layers", element: presets },
+    { id: "uv", title: "UV map", description: "", icon: "layers", element: layers },
   ], state: { wide: tree, compact: tree }, sizeClass: () => "wide", defaults: () => tree, save() {}, announce() {} });
-  dock.render(); if (closed) dock.close("presets");
-  const snapshot = { title: "Show which look?", body: "This scene has no look yet.", choices: [],
-    capability: { available: false, reason: "This workspace is read-only." },
-    owner: { panel: "presets", label: "Presets", prompt: "No look in this scene. Choose one in" } };
+  dock.render(); if (closed) dock.close(ownerId);
+  const snapshot = { title: "Show which look?", body: "This scene has no look yet.", choices: [{ id: "look", label: "Smoky", name: "Show Smoky in this scene", action: { destination: { route: "look" } } }],
+    capability: readonly ? { available: false, reason: "This workspace is read-only." } : { available: true },
+    owner: { panel: ownerId, label: ownerId, prompt: "No look in this scene. Choose one in" } };
   const rt = { port: { emptyChoices: { snapshot: () => snapshot } }, dock } as unknown as StudioRuntime;
-  const panel = withEmptyChoices(rt, { spec: { id: "layers", title: "Layers", description: "", icon: "layers", element: layers }, update() {} });
+  const owner = withEmptyChoices(rt, { spec: { id: ownerId, title: ownerId, description: "", icon: "layers", element: presets }, update() {} });
+  const panel = withEmptyChoices(rt, { spec: { id: "uv", title: "UV map", description: "", icon: "layers", element: layers }, update() {} });
+  lightDocument.body.append(el(dock.element)); owner.update({} as Frame);
   try {
     panel.update({} as Frame); el(layers).querySelector(".empty-target-pointer")!.querySelector("button")!.click();
-    const at = locate(dock.tree, "presets")!;
-    expect(at.group.active).toBe("presets"); expect(at.group.collapsed).not.toBe(true);
-    await Bun.sleep(5); expect(lightDocument.activeElement?.getAttribute("id")).toBe("dock-tab-presets");
-  } finally { panel.dispose?.(); }
+    const at = locate(dock.tree, ownerId)!;
+    expect(at.group.active).toBe(ownerId); expect(at.group.collapsed).not.toBe(true);
+    await Bun.sleep(5); expect(lightDocument.activeElement).toBe(el(presets).querySelector(".empty-actions")!.querySelector("button"));
+    expect(lightDocument.activeElement?.getAttribute("aria-disabled")).toBe(readonly ? "true" : null);
+  } finally { panel.dispose?.(); owner.dispose?.(); dock.element.remove(); }
 });
 
 test("Open a 3D view reports the application outcome; session reconciliation owns placement", async () => {
@@ -168,5 +176,28 @@ test("Open a 3D view reports the application outcome; session reconciliation own
     await Promise.resolve(); expect(reported).toEqual([{ kind: "empty.choose", result: { ok: true } }]);
     ok = false; el(panel.spec.element).querySelector(".empty-actions")!.querySelector("button")!.click(); await Promise.resolve();
     expect(reported).toEqual([{ kind: "empty.choose", result: { ok: true } }, { kind: "empty.choose", result: { ok: false } }]);
+  } finally { panel.dispose?.(); }
+});
+
+
+test("the sole empty collection create choice is unavailable with Add preset’s conflict reason", () => {
+  const { shell } = trustedFixture(), reason = "This collection changed in another window too. Choose which version to keep first.";
+  const selected = shell.library.summary().draft!.selected!;
+  shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "remove", id: selected } });
+  const denied = { available: false, code: "stale", reason };
+  const port = { ...shell, library: { ...shell.library, capability: () => denied }, emptyChoices: { snapshot: () => ({
+    title: "Show which look?", body: "There are no looks in this profile yet.", capability: denied,
+    choices: [{ id: "create", label: "Create a look", name: "Create a look and show it in this scene", action: { destination: { route: "look" } } }],
+    owner: { panel: "presets", label: "Presets", prompt: "Choose one in" },
+  }) } } as unknown as ConstructorParameters<typeof StudioRuntime>[0];
+  const rt = new StudioRuntime(port, {} as Feedback, STUDIO_CATALOGUE), panel = withEmptyChoices(rt, presetsPanel(featureViewContext(rt, "eye-makeup")));
+  try {
+    panel.update(new Frame(port, STUDIO_CATALOGUE));
+    const root = el(panel.spec.element), create = root.querySelector(".empty-actions")!.querySelector("button")!;
+    const add = root.querySelectorAll("button").find(button => button.textContent === "Add preset")!;
+    expect(create.getAttribute("aria-disabled")).toBe("true");
+    expect(create.getAttribute("title")).toBe(add.getAttribute("title"));
+    expect(create.getAttribute("title")).toContain(reason);
+    expect(root.querySelector(".empty-choices")!.textContent).toContain(reason);
   } finally { panel.dispose?.(); }
 });

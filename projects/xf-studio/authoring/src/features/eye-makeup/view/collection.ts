@@ -74,8 +74,6 @@ export function presetsPanel(ctx: EyeMakeupViewContext): PanelController {
     onClick: () => void collection.file({ kind: "recipe.import" }) });
   const failed = emptyState("Library unavailable", "Your library couldn't be read. The look you have open still works. Try again, or restart XF Studio.",
     button({ label: "Retry", icon: "refresh", onClick: () => void collection.request({ kind: "initialize" }) }));
-  const empty = emptyState("No presets yet", "A preset is one complete look — one choice in the in-game selector.",
-    button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => ctx.platform({ kind: "preset.edit", command: { kind: "add" } }) }));
   // Changed in another window (t-conflict): one notice per conflict on the collection or a preset, under its name, while it waits.
   const conflicts = h("div", { class: "stack-s doc-conflicts" });
   let conflictsKey = "";
@@ -86,12 +84,12 @@ export function presetsPanel(ctx: EyeMakeupViewContext): PanelController {
     conflicts,
     h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, "Presets ", count),
       helpTip("presets", "Each preset becomes one choice in the game's single eye-makeup selector, alongside Off.")), addButton),
-    failed, empty, list.element,
+    failed, list.element,
     h("div", { class: "row wrap gap-s panel-foot" }, restore, importRecipe));
   ctx.anchors.register("presets.list", list.element);
   return {
     spec: { id: "presets", ...EYE_MAKEUP_PANEL_META["presets"], element },
-    emptyChoices: "alongside",
+    emptyChoices: "first",
     update(frame) {
       const library = frame.library, draft = library.draft, busy = library.busy;
       if (draft) setValue(nameInput, draft.name);
@@ -116,7 +114,7 @@ export function presetsPanel(ctx: EyeMakeupViewContext): PanelController {
       const presets = draft?.presets ?? [];
       setText(count, String(presets.length));
       failed.hidden = !!draft || library.busy || library.progress?.phase !== "error";
-      empty.hidden = !draft || presets.length > 0;
+      addButton.hidden = !!draft && !presets.length;
       list.update(presets.map(preset => ({ id: preset.id, name: preset.name,
         meta: preset.locked ? "Made with a newer XF Studio · kept as it is" : plural(preset.layers, "layer") })), draft?.selected, busy);
       applyCapability(addButton, collection.capability({ kind: "preset.edit", command: { kind: "add" } }));

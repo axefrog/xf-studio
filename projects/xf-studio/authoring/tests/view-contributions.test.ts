@@ -135,3 +135,15 @@ test("the shell names no feature's panels: panel modules are bound only by the v
     if (name !== "app.ts") for (const id of EYE_MAKEUP_GRANDFATHERED_PANELS) expect(code, `${name} names ${id}`).not.toMatch(new RegExp(`["']${id}["']`));
   }
 });
+
+
+test("features declare the primary panel for the missing-view chooser", () => {
+  expect(STUDIO_CATALOGUE.primary("uv")?.id).toBe("layers");
+  expect(STUDIO_CATALOGUE.primary("finish")?.title).toBe("Layers");
+  const view: ViewContribution = { owner: "other", primary: "other.main", activity: [], panels: [
+    { id: "other.main", title: "Main", icon: "layers", description: "", order: 1, slot: "stack" },
+    { id: "other.side", title: "Side", icon: "layers", description: "", order: 2, slot: "inspect" },
+  ] };
+  expect(viewCatalogue([view]).primary("other.side")?.id).toBe("other.main");
+  expect(() => viewCatalogue([{ ...view, primary: "missing" }])).toThrow("not contributed");
+});

@@ -53,13 +53,13 @@ function namedPanels(tree: unknown): { named: Set<string>; parked: Set<string> }
 }
 
 /** Read the tab's former view slot before stale view IDs are pruned by normal recovery. */
-export function openViewDockState(state: DockState, saved: unknown, defaults: DockState, panel: PanelId): DockState {
+export function openViewDockState(state: DockState, saved: unknown, defaults: DockState, panel: PanelId, width: number): DockState {
   const layout = saved as DockLayout | null | undefined;
   const source = layout?.format === DOCK_FORMAT && layout.version === DOCK_VERSION ? layout.state as Record<string, unknown> : undefined;
   const tree = (size: "wide" | "compact") => {
     const value = source?.[size], known = [...namedPanels(value).named];
     const arrangement = parseTree(value, known, { root: null, floating: [], closed: [] });
-    return openViewPanel(state[size], panel, defaults[size], arrangement);
+    return openViewPanel(state[size], panel, defaults[size], arrangement, width);
   };
   return { wide: tree("wide"), compact: tree("compact") };
 }

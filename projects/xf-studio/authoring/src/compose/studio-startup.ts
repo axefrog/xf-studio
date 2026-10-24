@@ -492,6 +492,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     panelInstance: panel => sessionState.instance(panel),
     tabs: layoutTabsPort(sessionState, layoutTabs, services),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
+      createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),
       starter: () => starterParts(core.documents), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
     targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
