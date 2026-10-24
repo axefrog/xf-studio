@@ -140,9 +140,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const paneAnchors = new Map<PanelController, () => void>();
   const viewPanes = new ViewPanels({
     instances: { controllers: () => panels, instance: panel => port.panels.instance(panel) },
-    arrangement: () => ({ tab: port.focus.targets().tab, layout: port.tabs?.dock() ?? null }),
+    arrangement: () => ({ tab: port.focus.targets().tab || undefined, layout: port.tabs?.dock() ?? null }),
     save: (tab, state) => {
-      if (tab === undefined) return;
+      if (!tab) return;
       const action = { kind: "tabs.arrange" as const, tab, layout: serializeDockState(state) }, allowed = port.authoring.capability(action);
       if (allowed.available) {
         const result = port.authoring.dispatch(action);
@@ -187,6 +187,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     },
     save: state => viewPanes.save(state),
     announce: message => feedback.announce(message),
+    emptyState: () => port.tabs && !port.tabs.snapshot().tabs.length ? h("div", { class: "dock-empty" },
+      h("p", { text: "No tabs are open." }), h("p", { class: "muted", text: "Use New tab above to choose a layout." })) : undefined,
     beforeLayout: () => port.viewport.cancelInput(),
     // A layout change (a tab switched, a pane hidden or resized) may leave the setup card in a pane that is no longer shown or roomy:
     // it is placed again then, not only on the next paint (UI-164).

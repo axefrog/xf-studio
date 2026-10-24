@@ -1,10 +1,11 @@
 import { h, setUnavailable } from "../dom";
+import { icon, type IconName } from "../icons";
 
 /** A menu's primary row and separate trailing action (lib-menu-secondary). No nested interactive targets. */
-export function menuSecondaryRow(main: HTMLElement, secondary: { label: string; name: string; capability?: { available: boolean; reason?: string };
+export function menuSecondaryRow(main: HTMLElement, secondary: { icon: IconName; name: string; capability?: { available: boolean; reason?: string };
   run(): void }): { element: HTMLElement; action: HTMLElement } {
-  const action = h("div", { class: "menu-item menu-secondary danger", role: "menuitem", tabindex: "-1", "aria-label": secondary.name },
-    h("span", { class: "menu-label", text: secondary.label }));
+  const action = h("div", { class: "menu-item menu-secondary", role: "menuitem", tabindex: "-1", "aria-label": secondary.name, "data-title": secondary.name },
+    h("span", { class: "menu-icon", "aria-hidden": "true" }, icon(secondary.icon)));
   setUnavailable(action, secondary.capability?.available === false, secondary.capability?.reason);
   const activate = () => { if (secondary.capability?.available !== false) secondary.run(); };
   action.addEventListener("click", activate);

@@ -25,7 +25,7 @@ export function layoutTabsPort(session: ProfileSessions, defaults: TabDefaults,
     snapshot: () => ({ tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault() }),
     dock: () => session.dock(), defaults: () => services.defaults.list(),
     substitution: (id: string, choice?: SubstitutionChoice) => defaults.substitution(id, choice),
-    subject: (ref: SubjectRef) => ref.kind === "character" ? `V · ${services.characters.character(ref.id)?.label ?? "Unnamed V"}` : ref.kind,
+    subject: (ref: SubjectRef) => ref.kind === "character" ? services.characters.character(ref.id)?.label ?? "Unnamed V" : ref.kind,
     look: (ref: LookRef) => services.collections.look(ref)?.name ?? "Unnamed look",
     collection: (id: string) => services.collections.collection(id)?.name ?? "Collection",
     subscribe: (listener: () => void) => {

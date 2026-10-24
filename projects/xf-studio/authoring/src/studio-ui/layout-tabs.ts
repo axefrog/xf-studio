@@ -8,7 +8,7 @@ import { keyBinding } from "../app/input-bindings";
 import { h, isTextInput, setAttr } from "./dom";
 import { isIconName, type IconName } from "./icons";
 import { applyCapability, button, setButtonLabel, TabStrip, openMenu, openValuePopover, openChoicePopover, type ChoicePopoverField,
-  type MenuItem, type Capability } from "./components";
+  recordTime, type MenuItem, type Capability } from "./components";
 import type { Feedback } from "./feedback";
 import type { Command } from "./commands";
 
@@ -28,9 +28,16 @@ export function layoutTabs(deps: TabsDeps) {
   const run = (action: LayoutTabAction) => {
     const capability = cap(action);
     if (!capability.available) { feedback.announce(capability.reason ?? "That can't be done right now."); return false; }
+    const closing = action.kind === "tabs.close" ? tabs.snapshot().tabs.find(tab => tab.id === action.tab) : undefined;
     const result = deps.dispatch(action);
     if (!result.ok) { feedback.toast("warning", "Layout tabs", result.message); return false; }
-    sync(); deps.changed(); return true;
+    sync(); deps.changed();
+    if (closing) {
+      const closed = tabs.snapshot().closed.at(-1);
+      feedback.toast("info", "Layout tabs", `Closed “${closing.name}”.`, closed ? [{ label: "Undo",
+        run: () => { run({ kind: "tabs.reopen", closed: closed.id ?? closed.tab.id }); } }] : []);
+    }
+    return true;
   };
   function show(id: string, focus = false) {
     if (suppressClick) { suppressClick = false; return; }
@@ -70,7 +77,7 @@ export function layoutTabs(deps: TabsDeps) {
     if (first && defaults.some(view => cap({ kind: "tabs.new", default: view.id }).available)) applyCapability(add, allowed);
     setButtonLabel(add, "New tab");
     add.classList.toggle("icon-only", !!state.tabs.length);
-    element.classList.toggle("empty", !state.tabs.length);
+    element.classList.toggle("is-empty", !state.tabs.length);
     setAttr(deps.dock, "aria-labelledby", state.shown ? `layout-tab-${state.shown}` : undefined);
     choiceForm?.refresh();
   }
@@ -119,12 +126,12 @@ export function layoutTabs(deps: TabsDeps) {
       const plan = tabs.substitution(view.id), one = "subjects" in plan && plan.oneClick;
       const names = one ? summary(plan) : "";
       const duplicate = view.owner.kind === "user" && defaults.some(other => other.id !== view.id && other.owner.kind === "user" && other.name === view.name);
-      const saved = view.owner.kind === "user" ? new Date(view.owner.savedAt).toLocaleString() : "";
+      const saved = view.owner.kind === "user" ? recordTime(view.owner.savedAt) : "";
       return { kind: "action", label: `${view.name}${names ? ` — ${names}` : ""}${!one ? "…" : ""}`, icon: iconOf(view),
         capability: cap(defaultAction(view, reset)), stage: view.owner.kind === "module" && view.owner.earlyAccess ? "preview" : undefined,
-        hint: duplicate ? `Saved ${saved} · ${view.id}` : undefined,
+        hint: duplicate ? `Saved ${saved}` : undefined,
         run: () => choose(view, invoker, reset),
-        ...(!reset && view.owner.kind === "user" ? { secondary: { label: "Delete", name: `Delete default ${view.name}`,
+        ...(!reset && view.owner.kind === "user" ? { secondary: { icon: "trash" as const, name: `Delete default ${view.name}`,
           capability: cap({ kind: "defaults.delete", default: view.id }), run: () => deleteDefault(view) } } : {}) };
     };
     const origin = reset ? tabs.snapshot().tabs.find(tab => tab.id === reset)?.origin : undefined;
@@ -225,7 +232,7 @@ export function layoutTabs(deps: TabsDeps) {
     const clear = () => { strip.tabs.forEach(tab => { tab.classList.remove("drop-before", "drop-after"); }); };
     const move = (event: PointerEvent) => {
       if (!dragging && Math.abs(event.clientX - start) < 5) return;
-      dragging = true; element.classList.add("dragging"); clear();
+      dragging = true; element.classList.add("dragging"); strip.tab(id)?.classList.add("dragging"); clear();
       const rect = element.getBoundingClientRect(); to = -1;
       if (event.clientY < rect.top || event.clientY > rect.bottom || event.clientX < rect.left || event.clientX > rect.right) return;
       const ids = tabs.snapshot().tabs.map(tab => tab.id), others = ids.filter(item => item !== id);
@@ -235,7 +242,7 @@ export function layoutTabs(deps: TabsDeps) {
     };
     const end = (event: PointerEvent) => {
       document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", end); document.removeEventListener("pointercancel", end);
-      clear(); element.classList.remove("dragging");
+      clear(); element.classList.remove("dragging"); strip.tab(id)?.classList.remove("dragging");
       if (dragging) { suppressClick = true; setTimeout(() => { suppressClick = false; }); if (event.type !== "pointercancel" && to >= 0 && run({ kind: "tabs.move", tab: id, to })) feedback.announce("Tab reordered"); }
     };
     document.addEventListener("pointermove", move); document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);

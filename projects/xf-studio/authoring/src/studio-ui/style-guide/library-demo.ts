@@ -197,6 +197,8 @@ const MOUNTS: Record<string, Mount> = {
   "lib-reason-tip": () => { const b = button({ label: "Build mod files", icon: "package", onClick: () => {} }); applyCapability(b, { available: false, reason: "Choose your game folder first." }); return b; },
   "lib-menu": () => h("div", { class: "row wrap gap-s" }, button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },
     { kind: "action", label: "Duplicate", icon: "duplicate", shortcut: "Ctrl+D", run: () => {} }, { kind: "action", label: "Merge down", icon: "layers", capability: { available: false, reason: "The bottom layer has nothing below it." }, run: () => {} },
+    { kind: "submenu", label: "Reset to default", icon: "reset", items: () => [
+      { kind: "action", label: "Eye makeup — Default feminine V · Preset 1 for the night market", icon: "layouts", run: () => {} }] },
     { kind: "action", label: "Save as new layout…", icon: "plus", run: () => openValuePopover({ kind: "text", label: "Name", value: "Layout 2", maxLength: 48 },
       { x: 120, y: 120 }, { title: "Save layout", apply: "Save", options: [{ label: "Remember shown modules", checked: true }, { label: "Switch to it in wide windows", checked: false }],
         commit: () => {} }) },
@@ -229,23 +231,48 @@ const MOUNTS: Record<string, Mount> = {
       onRename: (id, name) => { items = items.map(i => i.id === id ? { ...i, name } : i); list.update(items, selected); }, onMenu: () => {} });
     list.update(items, selected); return h("div", { style: "max-width:360px" }, list.element); },
   "lib-menu-secondary": () => {
-    const main = h("div", { class: "menu-item", role: "menuitem", tabindex: "0" }, h("span", { class: "menu-label", text: "My lighting — V · ManualSave-12 · Look 3" }));
-    const row = menuSecondaryRow(main, { label: "Delete", name: "Delete default My lighting", run: () => { row.element.remove(); } });
-    return h("div", { class: "menu static-menu", role: "menu", "aria-label": "Yours" }, row.element);
+    const rows = [0, 1, 2].map(index => {
+      const label = "My lighting — ManualSave-12 · Look 3";
+      const main = h("div", { class: "menu-item", role: "menuitem", tabindex: "0", title: label },
+        h("span", { class: "menu-text" }, h("span", { class: "menu-label", text: label }),
+          h("small", { class: "menu-hint", text: `Saved ${recordTime(new Date(2026, 9, 24, 13, 43 + index))}` })));
+      const row = menuSecondaryRow(main, { icon: "trash", name: "Delete default My lighting", run: () => { row.element.remove(); } });
+      return row.element;
+    });
+    return h("div", { class: "menu static-menu", role: "menu", "aria-label": "Yours" }, ...rows);
   },
   "lib-choice-popover": () => button({ label: "New tab: Eye makeup…", onClick: event => {
-    let selected = "";
+    const selected = { v: "v1", scene: "shared", look: "look1" };
     openChoicePopover(event.currentTarget as HTMLElement, { title: "New tab: Eye makeup", apply: "Create", snapshot: () => ({ fields: [
-      { key: "v1", label: "Show which V?", name: "V v1 for Eye makeup", value: selected,
-        options: [{ value: "v1", label: "V · ManualSave-12" }, { value: "v2", label: "V · Streetkid" }, { value: "", label: "Leave empty" }] },
-      { key: "scene", label: "Scene", name: "Scene for Eye makeup", value: "shared", options: [{ value: "shared", label: "Share the scene of Eye makeup · V · ManualSave-12 · Look 3" }, { value: "", label: "New scene" }] }],
-      note: "Sharing a scene means lighting and look changes show in both tabs." }), select: (_key, value) => { selected = value; }, commit: () => {} });
+      { key: "v", label: "Show which V?", name: "V v1 for Eye makeup", value: selected.v,
+        options: [{ value: "v1", label: "ManualSave-12" }, { value: "v2", label: "Streetkid" }, { value: "", label: "Leave empty" }] },
+      { key: "scene", label: "Scene", name: "Scene for Eye makeup", value: selected.scene,
+        options: [...(selected.v === "v1" ? [{ value: "shared", label: "Share the scene of Eye makeup · ManualSave-12 · Look 3" }] : []), { value: "", label: "New scene" }] },
+      ...(!selected.scene || selected.v !== "v1" ? [{ key: "look", label: "Show which look?", name: "Look for Eye makeup", value: selected.look, search: true,
+        options: [...Array.from({ length: 10 }, (_, index) => ({ value: `look${index + 1}`, label: `Look ${index + 1}`, group: "Night market" })), { value: "", label: "Leave empty" }] }] : [])],
+      note: selected.scene === "shared" && selected.v === "v1" ? "Sharing a scene means lighting and look changes show in both tabs." : "" }),
+      select: (key, value) => { selected[key as keyof typeof selected] = value; if (key === "v") selected.scene = value === "v1" ? "shared" : ""; }, commit: () => {} });
   } }),
-  "lib-tab-strip": () => header(560),
+  "lib-tab-strip": () => {
+    const row = (state: "normal" | "dragging" | "empty") => {
+      const items: TabItem[] = state === "empty" ? [] : [{ id: "makeup", label: "Eye makeup", icon: "layouts" }, { id: "poses", label: "Poses", icon: "character" }];
+      let active = "makeup";
+      const strip: TabStrip = new TabStrip({ label: "Sample layout tabs", onSelect: id => { active = id; strip.update(items, active); strip.fit(strip.element.clientWidth); } });
+      strip.update(items, active);
+      const element = h("div", { class: `layout-tabs${state === "empty" ? " is-empty" : state === "dragging" ? " dragging" : ""}` }, strip.element,
+        button({ label: "New tab", icon: "plus", iconOnly: state !== "empty", variant: "ghost", menu: true, onClick: event => openMenu([
+          { kind: "action", label: "Eye makeup — Default feminine V · Preset 1", icon: "layouts", run: () => {} }], event.currentTarget as Element, { label: "New tab" }) }));
+      if (state === "dragging") { strip.tab("makeup")?.classList.add("dragging"); strip.tab("poses")?.classList.add("drop-before"); }
+      requestAnimationFrame(() => strip.fit(strip.element.clientWidth));
+      return element;
+    };
+    return stack({ gap: "normal" }, header(560), h("div", { style: "width:100%;max-width:560px" },
+      row("normal"), row("dragging"), row("empty")));
+  },
   "lib-panel-header": () => header(260),
   "lib-status": () => { const bar = progressBar({ label: "Building the package", fraction: .42 }); const sweep = progressBar({ label: "Working" });
     return stack({ gap: "normal" }, h("div", { class: "row wrap gap-s" }, badge("Can be built", "success"), badge("Preview only", "warning"), badge("Blocked", "error")),
-      note("Built and checked; not tested in game."), bar.element, sweep.element,
+      note("Built and checked; not tested in game."), note("Sharing a scene means lighting and look changes show in both tabs."), bar.element, sweep.element,
       new EmptyState({ title: "No layers in this preset", body: "Layers stack like makeup: the top of the list is applied last.", actions: [button({ label: "Add layer", icon: "plus", onClick: () => {} })] }).element); },
   "lib-layout": () => { const head = new PageHeader({ title: "QuickSave-0", back: { label: "All saves", onClick: () => {} }, meta: "Quick save · game 2.31 · save version 269 · 336 nodes · 2.12 MB",
       actions: [new Segmented({ label: "Show", options: [{ value: "n", label: "Nodes" }, { value: "m", label: "Mod data" }], onSelect: () => {}, compact: true, showLabel: false }).element] });

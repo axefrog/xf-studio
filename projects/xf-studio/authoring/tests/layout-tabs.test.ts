@@ -15,6 +15,7 @@ import { freshWorkspace } from "./fixtures/eye-region";
 import { restoreDockPreference } from "../src/studio-ui/dock/persist";
 import { viewCatalogue } from "../src/studio-ui/views/contribution";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
+import { recordTime } from "../src/studio-ui/components/record-list";
 
 const V1 = { kind: "character", id: "c-one" }, V2 = { kind: "character", id: "c-two" };
 const LOOK = { collection: "11111111-1111-4111-8111-111111111111", look: "22222222-2222-4222-8222-222222222222" };
@@ -27,7 +28,11 @@ beforeEach(() => {
   installLightDom(); previousWindow = (globalThis as Record<string, unknown>).window;
   (globalThis as Record<string, unknown>).window = { innerWidth: 1400, innerHeight: 1000, addEventListener() {} };
 });
-afterEach(() => { closeMenus(false); uninstallLightDom(); if (previousWindow === undefined) delete (globalThis as Record<string, unknown>).window; else (globalThis as Record<string, unknown>).window = previousWindow; });
+afterEach(() => {
+  for (const form of lightDocument.body.querySelectorAll(".popover")) form.dispatchEvent(lightEvent("keydown", { key: "Escape" }));
+  closeMenus(false); uninstallLightDom();
+  if (previousWindow === undefined) delete (globalThis as Record<string, unknown>).window; else (globalThis as Record<string, unknown>).window = previousWindow;
+});
 
 async function harness() {
   const outbox = new DocumentOutbox(storeDocuments(), memoryOutboxStorage()); outbox.open();
@@ -39,15 +44,15 @@ async function harness() {
   const listeners = new Set<() => void>();
   const port: LayoutTabsPort = { snapshot: () => ({ tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault() }),
     dock: () => session.dock(), defaults: () => defaults.list(), substitution: (id, choice) => actions.substitution(id, choice),
-    subject: ref => `V · ${ref.id === V1.id ? "ManualSave-12" : "Streetkid"}`, look: ref => ref.look === LOOK.look ? "Look 3" : `Look ${ref.look}`,
+    subject: ref => ref.id === V1.id ? "ManualSave-12" : "Streetkid", look: ref => ref.look === LOOK.look ? "Look 3" : `Look ${ref.look}`,
     collection: () => "Night market", subscribe: listener => { listeners.add(listener); session.subscribe(listener); defaults.subscribe(listener); return () => { listeners.delete(listener); }; } };
   let readOnly = false;
-  const announcements: string[] = [], toasts: { message: string; actions?: { label: string; run(): void }[] }[] = [], dispatched: LayoutTabAction[] = [];
+  const announcements: string[] = [], toasts: { tone: string; message: string; actions?: { label: string; run(): void }[] }[] = [], dispatched: LayoutTabAction[] = [];
   const dock = document.createElement("main"); dock.id = "layout-dock";
   const dockButton = document.createElement("button"); dock.append(dockButton);
   const view = layoutTabs({ tabs: port, capability: action => readOnly && action.kind !== "tabs.show" ? { available: false, reason: "This workspace is open in another window." } : actions.capability(action),
     dispatch: action => { dispatched.push(action); actions.dispatch(action); return { ok: true }; }, dock, changed() {}, moduleIcon: () => "eye",
-    feedback: { announce: text => announcements.push(text), toast: (_tone, _source, message, actions) => { toasts.push({ message, actions }); return () => {}; } } });
+    feedback: { announce: text => announcements.push(text), toast: (tone, _source, message, actions) => { toasts.push({ tone, message, actions }); return () => {}; } } });
   lightDocument.body.append(el(view.element), el(dock));
   const changed = () => listeners.forEach(listener => listener());
   const row = (label: string) => lightDocument.body.querySelectorAll(".menu-item").find(item => item.querySelector(".menu-label")?.textContent?.startsWith(label))!;
@@ -107,7 +112,8 @@ test("U2/U5: rename validates, Save creates an own origin, Update applies; Close
   const reopen = h.view.menuItems(id, h.view.add).find(item => item.kind === "submenu" && item.label === "Reopen closed tab")!;
   if (reopen.kind !== "submenu") throw Error("Reopen missing");
   expect(reopen.items()[0]).toMatchObject({ label: "My tab before reset" });
-  h.action("Close tab"); expect(h.session.tabList()).toHaveLength(0); expect(h.view.element.classList.contains("empty")).toBe(true);
+  h.action("Close tab"); expect(h.session.tabList()).toHaveLength(0); expect(h.view.element.classList.contains("is-empty")).toBe(true);
+  expect(h.view.element.classList.contains("empty")).toBe(false); // The generic empty card adds padding and stacks its children.
   expect(h.view.add.textContent).toContain("New tab");
   h.view.commands().find(command => command.id === "tab.reopen")!.run(); expect(h.session.tabList()).toHaveLength(1);
 });
@@ -123,6 +129,9 @@ test("U3: defaults are grouped, tagged, one click when unique, last used focused
   h.view.newMenu(); await tick();
   const remove = lightDocument.body.querySelectorAll(".menu-secondary")[0]!;
   expect(remove.getAttribute("aria-label")).toBe("Delete default Eye makeup");
+  expect(remove.title).toBe("Delete default Eye makeup");
+  expect(remove.querySelector(".menu-icon")).not.toBeNull(); expect(remove.querySelector(".menu-label")).toBeNull();
+  expect(remove.classList.contains("danger")).toBe(false);
   remove.click(); expect(h.defaults.get(own)).toBeUndefined(); expect(h.toasts.at(-1)!.message).toContain("Undo");
   h.toasts.at(-1)!.actions![0]!.run(); expect(h.defaults.get(own)).toBeDefined();
   h.view.newMenu(); await tick(); const ownMain = h.row("Eye makeup");
@@ -141,11 +150,18 @@ test("U4: ambiguous slots open visible radio choices; M2 shares the chosen V's s
   const form = lightDocument.body.querySelector(".choice-popover")!;
   expect(h.session.tabList()).toHaveLength(1);
   expect(form.querySelectorAll("[role=radiogroup]").some(group => group.getAttribute("aria-label")!.includes("v1"))).toBe(true);
-  form.querySelectorAll("[role=radio]").find(item => item.getAttribute("aria-label") === "V · ManualSave-12")!.click();
+  form.querySelectorAll("[role=radio]").find(item => item.getAttribute("aria-label") === "ManualSave-12")!.click();
   expect(form.textContent).toContain("lighting and look changes show in both tabs");
+  expect(form.textContent).toContain("Share the scene of Eye makeup · ManualSave-12 · Look 3");
+  expect(form.textContent).not.toContain("V ·");
+  expect(form.querySelector(".popover-note")!.classList.contains("hint")).toBe(true);
   const looks = form.querySelectorAll(".choice-popover-field").find(field => field.dataset.slot === "look:look1"); expect(looks).toBeUndefined();
   form.querySelectorAll("[role=radio]").find(item => item.getAttribute("aria-label") === "New scene")!.click();
-  expect(form.querySelectorAll(".choice-popover-field").find(field => field.dataset.slot === "look:look1")!.querySelector(".search-field")!.hidden).toBe(false);
+  const lookField = form.querySelectorAll(".choice-popover-field").find(field => field.dataset.slot === "look:look1")!;
+  expect(lookField.querySelector(".search-field")!.hidden).toBe(false);
+  const control = lookField.querySelector(".choice-list")!;
+  expect(control.children.indexOf(control.querySelector(".control-line")!)).toBeLessThan(control.children.indexOf(control.querySelector(".search-field")!));
+  expect(control.children.indexOf(control.querySelector(".search-field")!)).toBeLessThan(control.children.indexOf(control.querySelector(".choices")!));
   const look = form.querySelectorAll("[role=radio]").find(item => item.getAttribute("aria-label") === "Look 3")!; look.click();
   form.dispatchEvent(lightEvent("keydown", { key: "Enter" })); expect(h.session.tabList()).toHaveLength(2);
   const made = h.session.graph.viewIds().find(view => h.session.viewTab(view) === h.session.tabId())!;
@@ -156,9 +172,9 @@ test("U4: ambiguous slots open visible radio choices; M2 shares the chosen V's s
 test("U4: a removed candidate falls back with a note; Escape creates nothing and restores focus; arrows select radio choices", async () => {
   const h = await harness(); h.candidates.subjects.push(V2); h.view.newMenu(); h.row("Eye makeup").click(); await tick();
   let form = lightDocument.body.querySelector(".choice-popover")!;
-  const v = form.querySelectorAll("[role=radio]").find(item => item.getAttribute("aria-label") === "V · ManualSave-12")!;
+  const v = form.querySelectorAll("[role=radio]").find(item => item.getAttribute("aria-label") === "ManualSave-12")!;
   v.focus(); key(v as unknown as HTMLElement, "ArrowDown");
-  expect(form.querySelectorAll("[aria-checked=true]").some(item => item.getAttribute("aria-label") === "V · Streetkid")).toBe(true);
+  expect(form.querySelectorAll("[aria-checked=true]").some(item => item.getAttribute("aria-label") === "Streetkid")).toBe(true);
   h.candidates.subjects.splice(1, 1); h.changed();
   expect(form.textContent).toContain("no longer available");
   expect(form.querySelectorAll("[aria-checked=true]").some(item => item.getAttribute("aria-label") === "Leave empty")).toBe(true);
@@ -255,4 +271,61 @@ test("Review A finding 4: Enter on Cancel keeps native activation and creates no
   cancel.click(); expect(form.isConnected).toBe(false);
   expect(h.session.tabList()).toHaveLength(1);
   expect(lightDocument.activeElement).toBe(el(h.view.add));
+});
+
+test("Review B 5/13: same-named defaults use the Library date and minute, never their IDs", async () => {
+  const h = await harness();
+  for (let n = 0; n < 2; n++) h.defaults.dispatch({ kind: "create", name: "My lighting", fragment: STUDIO_LAYOUT_DEFAULTS[0]!.fragment });
+  const own = h.defaults.list().filter(view => view.name === "My lighting");
+  h.view.newMenu();
+  const hints = lightDocument.body.querySelectorAll(".menu-hint").map(element => element.textContent);
+  expect(hints).toEqual(own.map(view => `Saved ${recordTime(view.owner.kind === "user" ? view.owner.savedAt : 0)}`));
+  for (const view of own) expect(lightDocument.body.textContent).not.toContain(view.id);
+});
+
+test("Review B 6: Reset submenu rows keep their complete names in tooltips", async () => {
+  const h = await harness();
+  h.view.menu(h.session.tabId(), h.view.add);
+  key(h.row("Reset to default") as unknown as HTMLElement, "ArrowRight");
+  const row = lightDocument.body.querySelectorAll(".menu-item").find(item => item.querySelector(".menu-label")?.textContent?.includes("— ManualSave-12 · Look 3"))!;
+  expect(row.title).toBe("Eye makeup — ManualSave-12 · Look 3");
+});
+
+test("Review B 7: dragging dims only its source and clears on cancellation", async () => {
+  const h = await harness(), source = h.session.tabId(); h.actions.dispatch({ kind: "tabs.new", default: EYE });
+  const rect = (left: number, width: number) => ({ x: left, y: 0, left, top: 0, right: left + width, bottom: 32, width, height: 32 });
+  el(h.view.element).getBoundingClientRect = () => rect(0, 500);
+  h.view.strip.tabs.forEach((tab, index) => { el(tab).getBoundingClientRect = () => rect(index * 100, 100); });
+  el(h.view.strip.tab(source)!).dispatchEvent(lightEvent("pointerdown", { button: 0, clientX: 20, clientY: 12 }));
+  lightDocument.dispatchEvent(lightEvent("pointermove", { clientX: 120, clientY: 12 }));
+  expect(h.view.strip.tab(source)!.classList.contains("dragging")).toBe(true);
+  expect(h.view.strip.tabs.filter(tab => tab.classList.contains("dragging"))).toHaveLength(1);
+  expect(h.view.strip.tabs.some(tab => tab.classList.contains("drop-before"))).toBe(true);
+  const before = h.session.tabList().map(tab => tab.id);
+  lightDocument.dispatchEvent(lightEvent("pointercancel", { clientX: 120, clientY: 12 }));
+  expect(h.session.tabList().map(tab => tab.id)).toEqual(before);
+  expect(h.view.strip.tabs.some(tab => tab.classList.contains("dragging") || tab.classList.contains("drop-before"))).toBe(false);
+});
+
+test("Review B 8: a single scene separates the label from its value", async () => {
+  const h = await harness(); h.candidates.subjects.push(V2);
+  h.view.newMenu(); h.row("Eye makeup").click();
+  const scene = lightDocument.body.querySelectorAll(".choice-popover-field").find(field => field.dataset.slot === "scene:scene1")!;
+  expect(scene.querySelector(".popover-choice-text")!.textContent).toBe("Scene: New scene");
+});
+
+test("Review B 15: menu, key and palette closes give an info toast whose Undo restores that exact tab", async () => {
+  const h = await harness(), first = h.session.tabId();
+  h.session.rename(first, "First tab"); h.actions.dispatch({ kind: "tabs.new", default: EYE });
+  const second = h.session.tabId(); h.session.rename(second, "Second tab");
+  h.action("Close tab"); const secondNotice = h.toasts.at(-1)!;
+  expect(secondNotice).toMatchObject({ tone: "info", message: "Closed “Second tab”." });
+  key(h.view.strip.tab(first)!, "Delete");
+  expect(h.toasts.at(-1)).toMatchObject({ tone: "info", message: "Closed “First tab”." });
+  expect(h.session.tabList()).toHaveLength(0);
+  secondNotice.actions![0]!.run();
+  expect(h.session.tabList().map(tab => tab.id)).toEqual([second]);
+  h.view.commands().find(command => command.id === "tab.close")!.run();
+  expect(h.toasts.at(-1)).toMatchObject({ tone: "info", message: "Closed “Second tab”." });
+  h.toasts.at(-1)!.actions![0]!.run(); expect(h.session.tabId()).toBe(second);
 });

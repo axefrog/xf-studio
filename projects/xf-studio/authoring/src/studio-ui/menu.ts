@@ -22,7 +22,7 @@ export type MenuItem =
        * like entries stays one row each (G2: what a thing is goes in a tip; C-32). A visible `hint` or reason still shows as usual.
        */
       tip?: string;
-      secondary?: { label: string; name: string; capability?: Capability; run(): void } }
+      secondary?: { icon: IconName; name: string; capability?: Capability; run(): void } }
   | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[] }
   | { kind: "separator" }
   | { kind: "heading"; label: string; detail?: string };
@@ -142,7 +142,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
       tabindex: "-1", "aria-disabled": available ? undefined : "true",
       "aria-checked": item.kind === "action" && item.checked !== undefined ? String(item.checked) : undefined,
       "aria-haspopup": item.kind === "submenu" ? "menu" : undefined,
-      "aria-describedby": reason || item.hint || tip ? descId : undefined, title: tip },
+      "aria-describedby": reason || item.hint || tip ? descId : undefined, title: tip ?? item.label },
       h("span", { class: "menu-icon" }, item.kind === "action" && item.checked ? icon("check") : item.icon ? icon(item.icon) : null),
       h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, item.label, item.kind === "action" && item.tag ? h("span", { class: "menu-tag", text: item.tag }) : null,
         item.kind === "action" ? stageTag(item.stage, "menu-tag") : null),
@@ -200,7 +200,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     else if (event.key.length === 1 && /\S/.test(event.key)) {
       const start = index + 1, key = event.key.toLowerCase();
       const match = [...entries.slice(start), ...entries.slice(0, start)].find(entry =>
-        entry.querySelector(".menu-label")?.textContent?.toLowerCase().startsWith(key));
+        (entry.querySelector(".menu-label")?.textContent ?? entry.getAttribute("aria-label"))?.toLowerCase().startsWith(key));
       match?.focus();
     }
     event.stopPropagation();

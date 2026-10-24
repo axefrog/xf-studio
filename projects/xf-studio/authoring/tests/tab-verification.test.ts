@@ -11,6 +11,7 @@ import { fixtureHost } from "./fixtures/creator-host";
 import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
 import { openSession } from "./fixtures/profile-sessions";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { layoutTabsPort } from "../src/app/profiles/tab-presentation";
 
 test("verification fixtures drive the real substitution and default readers, and refuse writes in a read-only page", async () => {
   const documents = storeDocuments(), outbox = new DocumentOutbox(documents, memoryOutboxStorage()); outbox.open();
@@ -25,6 +26,9 @@ test("verification fixtures drive the real substitution and default readers, and
   let writable = true;
   const hooks = tabVerification(session, services, outbox, () => writable);
   const made = await hooks.seed();
+  const port = layoutTabsPort(session, actions, services);
+  const character = services.characters.character(made.subjects[0]!);
+  expect(port.subject({ kind: "character", id: made.subjects[0]! })).toBe(character!.label);
   let plan = actions.substitution("eye-makeup/default");
   if (!("subjects" in plan)) throw Error(plan.reason);
   expect(plan.oneClick).toBe(false); expect(plan.subjects[0]!.candidates).toHaveLength(2); expect(plan.looks[0]!.candidates).toHaveLength(10);

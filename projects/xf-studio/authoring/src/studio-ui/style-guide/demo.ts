@@ -184,6 +184,7 @@ attach("c-context", "Open live menu", button => openMenu([
 ], button, { label: "Demo menu", invoker: button }));
 attach("c-toasts", "Show live toasts", () => {
   feedback.toast("success", "Library", "Saved “Night market set” · version 4.");
+  feedback.toast("info", "Layout tabs", "Closed “Eye makeup”.", [{ label: "Undo", run: () => feedback.announce("Eye makeup reopened (demo).") }]);
   feedback.toast("warning", "Library", "Your latest changes are still on their way to the library. Try Save version again in a moment.");
 });
 attach("s-palette", "Open live palette", () => openPalette(() => [

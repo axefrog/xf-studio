@@ -38,6 +38,8 @@ export type DockViewOptions = {
   announce(message: string): void;
   beforeLayout?(): void;
   afterLayout?(): void;
+  /** The shell may supply its own empty state when there is no layout to reset. */
+  emptyState?(): HTMLElement | undefined;
   /** Someone asked to open a panel this dock doesn't hold now (its module is hidden): the shell offers to show it. */
   withdrawn?(id: PanelId): void;
 };
@@ -214,7 +216,7 @@ export class DockView {
     const maximized = tree.maximized ? findGroup(tree, tree.maximized)?.group : undefined;
     if (maximized) this.surface.append(this.renderGroup(maximized, false, shown, true));
     else if (tree.root) this.surface.append(this.renderNode(tree.root, false, shown));
-    else this.surface.append(h("div", { class: "dock-empty" },
+    else this.surface.append(this.options.emptyState?.() ?? h("div", { class: "dock-empty" },
       h("p", { text: "Every panel is floating or closed." }),
       h("p", { class: "muted", text: "Drag a panel onto an edge guide, or reset the layout." }),
       button({ label: "Reset layout", onClick: () => this.reset() })));

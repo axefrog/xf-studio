@@ -31,19 +31,22 @@ export function openChoicePopover(anchor: MenuAnchor, options: { title: string; 
         list.list.setAttribute("aria-label", field.name); list.list.removeAttribute("aria-labelledby");
         const text = h("p", { class: "popover-choice-text" });
         const search = new SearchField({ label: `Search ${field.label.toLowerCase()}`, placeholder: "Search looks…", onFilter: value => { controls.get(field.key)!.query = value; refresh(); } });
-        const host = h("div", { class: "choice-popover-field", "data-slot": field.key }, search.element, list.element, text);
+        // Keep the field's label before its search, with both above the choices.
+        list.element.insertBefore(search.element, list.list);
+        const host = h("div", { class: "choice-popover-field", "data-slot": field.key }, list.element, text);
         control = { host, list, text, search, query: "" }; controls.set(field.key, control);
       }
       if (control.host.parentElement !== fields) fields.append(control.host);
       const single = field.options.length === 1;
       control.list.element.hidden = single; control.text.hidden = !single; control.search.element.hidden = !field.search || single;
-      setText(control.text, `${field.label} ${field.options[0]?.label ?? "Leave empty"}`);
+      setText(control.text, `${field.label}: ${field.options[0]?.label ?? "Leave empty"}`);
       const query = control.query.trim().toLowerCase();
       control.list.setOptions(field.options.filter(option => !query || `${option.label} ${option.group ?? ""}`.toLowerCase().includes(query)));
       control.list.update(field.value);
     }
     apply.disabled = state.capability?.available === false;
     setText(note, state.capability?.available === false ? state.capability.reason ?? "That can't be done yet." : state.note ?? "");
+    note.classList.toggle("hint", state.capability?.available !== false);
     place(form, anchor);
   }
   function commit() { if (options.snapshot().capability?.available === false) { refresh(); return; } close(true); options.commit(); }

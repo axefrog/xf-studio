@@ -390,14 +390,14 @@ async function substitution(page: Session) {
     async () => { await form(); await typeSearch("zzz"); await page.wait(350); }, { paired: "lib-choice-popover" });
   // A V no tab shows yet: nothing to share, so a new scene.
   await sized(page, "subst-other-v", "U4 a V no tab shows yet (Capture V A): there is nothing to share, so Scene is New scene (plain text, one choice) and the look field is shown", area,
-    async () => { await form(); await choose("V · Capture V A", "V "); await page.wait(350); }, { paired: "lib-choice-popover" });
+    async () => { await form(); await choose("Capture V A", "V "); await page.wait(350); }, { paired: "lib-choice-popover" });
   // Escape creates nothing, Create makes the tab.
   const before = (await tabsOf(page)).tabs.length;
   await form();
   const focusOnOpen = await page.evaluate(`({ inPopover: !!document.activeElement?.closest(".popover"), active: (document.activeElement?.tagName ?? "") + " " + (document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.textContent ?? "").slice(0, 40) })`);
   await page.key("Escape"); await page.wait(300);
   texts["subst-escape"] = { focusOnOpen, before, after: (await tabsOf(page)).tabs.length, popover: await page.evaluate(`document.querySelector(".popover")?.outerHTML.slice(0, 200) ?? null`), focusReturnedToPlus: await page.evaluate(`document.activeElement === ${T}.add`) };
-  await form(); await choose("V · Capture V B", "V "); await choose("Capture look 2", "Look "); await page.wait(250);
+  await form(); await choose("Capture V B", "V "); await choose("Capture look 2", "Look "); await page.wait(250);
   await press(page, `[...document.querySelectorAll(".popover .btn")].find(b => b.textContent.trim() === "Create")`); await page.wait(700);
   texts["subst-created"] = (await tabsOf(page)).tabs.map(tab => tab.name);
   await capture(page, "subst-after-create", [...STRIP, ".viewport-panel", ".dock"], "U4 after Create (Capture V B, Capture look 2): the new tab is in the strip and selected, its arrangement loaded", { paired: "lib-tab-strip", whole: true });
@@ -416,7 +416,7 @@ async function substitution(page: Session) {
   for (const size of SIZES) {
     await view(page, size, 450);
     const target = size === WIDE ? 0 : 1, letter = size === WIDE ? "A" : "B";
-    await form(); await choose(`V · Capture V ${letter}`, "V "); await page.wait(300);
+    await form(); await choose(`Capture V ${letter}`, "V "); await page.wait(300);
     const subject = await page.evaluate(`window.__fixture.subjects[${target}]`);
     await page.evaluate(`Promise.resolve(${F}.removeSubject(${JSON.stringify(subject)})).then(r => { window.__removed = JSON.stringify(r); })`); await page.wait(900);
     texts[`subst-dropped-v-${size}`] = { subject, result: await page.evaluate(`window.__removed`), popups: await popupText(page) };

@@ -1608,18 +1608,21 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 /* The tree's height is its size bar's (20 rows by default). */
 
 /* Layout tabs (U1) and the default/substitution patterns (U3–U4). */
-.layout-tabs { display:flex; min-width:0; align-items:stretch; background:var(--bg-panel); border-bottom:1px solid var(--line); }
+.layout-tabs { display:flex; height:var(--tab-h); min-width:0; align-items:stretch; background:var(--bg-panel); border-bottom:1px solid var(--line); }
 .layout-tabs > .tab-strip { flex:1; min-width:0; }
-.layout-tabs > .btn { flex:none; border-radius:0; }
-.layout-tabs:not(.empty) > .btn > span { display:none; }
+.layout-tabs.is-empty > .tab-strip { display:none; }
+.layout-tabs > .btn { flex:none; align-self:center; border-radius:0; }
+.layout-tabs:not(.is-empty) > .btn > span { display:none; }
 .layout-tabs .dock-tab { position:relative; }
 .layout-tabs .dock-tab.naming { background:var(--bg-hover); }
+.layout-tabs .dock-tab.dragging { opacity:.45; }
 .layout-tabs .drop-before::before, .layout-tabs .drop-after::after { content:""; position:absolute; top:2px; bottom:2px; width:2px; background:var(--accent); z-index:2; }
 .layout-tabs .drop-before::before { left:0; } .layout-tabs .drop-after::after { right:0; }
-.layout-tabs.dragging { cursor:grabbing; }
+.layout-tabs.dragging { cursor:grabbing; user-select:none; }
 .menu-secondary-row { display:flex; align-items:stretch; }
 .menu-secondary-row > .menu-item:first-child { flex:1; min-width:0; }
 .menu-secondary { flex:none; padding-inline:var(--sp-3); }
+.menu-secondary:is(:hover, :focus):not([aria-disabled="true"]) .menu-icon { color:var(--danger); }
 .menu-secondary-row .menu-label { white-space:normal; }
 .choice-popover { position:fixed; z-index:1000; width:420px; max-width:calc(100vw - 12px); max-height:calc(100vh - 12px); overflow:auto; }
 .choice-popover-fields { display:grid; gap:var(--sp-4); }
