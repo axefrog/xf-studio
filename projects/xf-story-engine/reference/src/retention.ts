@@ -197,6 +197,7 @@ export class Retention {
     const store = this.k.store;
     const marked = new Set<Id>();
     const stack = [...this.rootIds()];
+    const eventRoots = new Set([...this.seeds.values()].flatMap(s => s.nodes));
     while (stack.length > 0) {
       const id = stack.pop()!;
       if (marked.has(id)) continue;
@@ -205,6 +206,20 @@ export class Retention {
       if (!h) continue;
       if (h.origin.by === 'value' || h.origin.by === 'member') stack.push(h.origin.owner);
       else if (h.origin.by === 'minted') stack.push(h.origin.creator, h.origin.cause);
+      // A retained non-canon event keeps its described people, place and causes too (S3-I-22).
+      // Its fields are simulation constants, so they need not have canon pins. Read the stored
+      // constants directly: resolution here would recursively ask retention about member counts.
+      if (eventRoots.has(id) && this.k.schema.isKind(h.kind, 'core:event')) {
+        const fields = [id], seenFields = new Set<Id>();
+        for (let n = 0; n < fields.length; n++) {
+          const field = fields[n]; if (seenFields.has(field)) continue; seenFields.add(field);
+          stack.push(field);
+          fields.push(...store.ownedOf(field));
+          for (const c of store.contributionsNaming(field)) if (c.form.f === 'const') {
+            const refs: Id[] = []; this.idsIn(c.form.value, refs); stack.push(...refs); for (const ref of refs) eventRoots.add(ref);
+          }
+        }
+      }
       for (const o of store.ownedOf(id)) {
         if (store.header(o)?.origin.by === 'value') stack.push(o);
       }

@@ -26,7 +26,7 @@ export type CompileOutcome = CompiledResult | { ok: false; findings: Finding[] }
 
 export interface CompileOptions {
   /** Draws a choice among weighted options (S2 section 3.4). Without one, modes and variants are not drawn. */
-  draw?: (choice: string, options: Array<{ id: string; weight: number }>) => { value: string; attempt: number; raw?: number; clamped?: number };
+  draw?: (choice: string, options: Array<{ id: string; weight: number }>, document?: SeedInput) => { value: string; attempt: number; raw?: number; clamped?: number };
   /** Evaluates a predicate at sowing (a rare variant's gate). Without one, a rare variant is not eligible. */
   evalPred?: (p: Pred) => 'yes' | 'no' | 'maybe';
   /** Applied to the expanded, merged document before the lint (S2 section 1.3: how a sowing request's overlay applies). */
@@ -149,7 +149,7 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
   if (v && opts.draw) {
     let mode: string | undefined;
     if (v.modes && v.modes.length > 0) {
-      const d = opts.draw('mode', v.modes.map((m) => ({ id: m.id, weight: m.weight })));
+      const d = opts.draw('mode', v.modes.map((m) => ({ id: m.id, weight: m.weight })), seed);
       draws.mode = d;
       mode = d.value;
     }
@@ -159,7 +159,7 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
       return opts.evalPred ? opts.evalPred(typeof x.rare === 'string' && x.rare !== 'yes' && x.rare !== 'no' ? (resolvePreds({ ...seed, context: x.rare, windows: [], beats: {} } as SeedInput).context) : (x.rare as Pred)) === 'yes' : false;
     });
     if (eligible.length > 0) {
-      const d = opts.draw('variant', eligible.map((x) => ({ id: x.id, weight: x.weight })));
+      const d = opts.draw('variant', eligible.map((x) => ({ id: x.id, weight: x.weight })), seed);
       draws.variant = d;
       const chosen = eligible.find((x) => x.id === d.value);
       if (chosen) seed = mergeParts(seed, chosen.parts);

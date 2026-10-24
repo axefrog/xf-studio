@@ -205,6 +205,10 @@ export class Schema {
       for (const a of p.ancestors) if (!ancestors.includes(a)) ancestors.push(a);
     }
     for (const s of def.slots) put(s);
+    for (const parentId of def.classifiesAs ?? []) {
+      const p = this.resolveKind(parentId);
+      for (const a of p?.ancestors ?? []) if (!ancestors.includes(a)) ancestors.push(a);
+    }
     for (const f of def.facets ?? []) facets.add(f);
     for (const t of def.tags ?? []) tags.add(t);
     const rk: ResolvedKind = { id, slots, index, facets, tags, ancestors };
@@ -322,6 +326,7 @@ export class Schema {
     const kindIds = new Set(defs.kinds.map((k) => k.id));
     for (const k of defs.kinds) {
       for (const p of k.extends ?? []) if (!kindIds.has(p)) problems.push(`kind ${k.id}: extends unknown kind ${p}`);
+      for (const p of k.classifiesAs ?? []) if (!kindIds.has(p)) problems.push(`kind ${k.id}: classifies as unknown kind ${p}`);
     }
     const visiting = new Set<string>();
     const done = new Set<string>();
@@ -332,7 +337,8 @@ export class Schema {
         return;
       }
       visiting.add(id);
-      for (const p of this.kindDefs.get(id)?.extends ?? []) if (this.kindDefs.has(p)) walk(p, [...trail, id]);
+      const def = this.kindDefs.get(id);
+      for (const p of [...def?.extends ?? [],...def?.classifiesAs ?? []]) if (this.kindDefs.has(p)) walk(p, [...trail, id]);
       visiting.delete(id);
       done.add(id);
     };

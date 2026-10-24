@@ -7,7 +7,7 @@
 import { canonicalKey } from '../canon.ts';
 import type { Id } from '../types.ts';
 import { Arbiter } from './arbiter.ts';
-import { atoms, fragmentSites, predSites } from './doc.ts';
+import { atoms, bound, fragmentSites, predSites } from './doc.ts';
 import { PLAN_RESTART_KEY, planPlayFrom, sincePlayFrom, sinceRestartKey } from './eval.ts';
 import { emptyGlobal } from './state.ts';
 import { runMaintenance } from './effects.ts';
@@ -23,6 +23,10 @@ export function instanceNodes(l2: Layer2, inst: Instance): Id[] {
   const out = new Set<Id>([inst.id]);
   for (const k of Object.keys(st.facts)) out.add(ids.seedFactNode(inst.id, k));
   for (const rs of Object.values(st.roles)) if (rs.cast !== undefined) out.add(rs.cast);
+  for (const role of Object.values(st.document.roles)) {
+    const identity = bound(role.identity);
+    if (identity.status === 'fixed' && typeof identity.value === 'string') out.add(l2.k.expandId(identity.value));
+  }
   void l2;
   return [...out].sort();
 }

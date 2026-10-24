@@ -5,6 +5,8 @@ import type { ChannelId, ClassId, FactRead, Verdict } from './types.ts';
 
 export interface ContentClassDef {
   id: ClassId;
+  /** Omitted from S3's local evidence log and exports. */
+  sensitive?: boolean;
   /** Source material for this class comes only from human-written packs (S2 section 2.19, D-23). */
   authoredSource?: boolean;
   /** A sexual class: its beats bind only adults and are reached only through an accepted action. */
@@ -86,6 +88,16 @@ export interface SimReadPort {
 }
 
 export class L2Registry {
+  /** S4 may replace this deterministic structural classifier. Missing facets stay absent. */
+  skeleton(seed: import('./types.ts').CompiledSeed | import('./types.ts').Seed, fragment: import('./types.ts').Fragment | undefined, channel: string): Record<string,string> {
+    const out: Record<string,string> = {...fragment?.features,channel};
+    if (fragment?.tone !== undefined) out.tone = fragment.tone;
+    else if (out.tone === undefined && seed.intent.tone.length) out.tone = seed.intent.tone.join('|');
+    if (out.outcome === undefined && seed.effect !== undefined) out.outcome = seed.effect;
+    const stakes = [...new Set(fragment?.offer?.stakes.map(s => s.what) ?? [])];
+    if (out.stake === undefined && stakes.length === 1) out.stake = stakes[0];
+    return out;
+  }
   /** The simulation layer's reads, once it is attached (S1 9.1). Without it every `city` and `social` atom is a later capability. */
   sim?: SimReadPort;
   readonly classes = new Map<ClassId, ContentClassDef>();

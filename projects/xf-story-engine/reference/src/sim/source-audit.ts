@@ -1,17 +1,12 @@
 // Syntax-aware source audits. TypeScript owns lexical context, including regex literals and nested template expressions.
 import ts from 'ts-parser';
+import { withSourceTrees as parsed } from '../source-trees.ts';
 import type { Finding, SourceFile } from './audit.ts';
 
 export type StringMode = 'blank' | 'keep' | 'mark';
 export const MARK_OPEN = '';
 export const MARK_CLOSE = '';
 const isStringLiteralLike = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral => ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
-// The audit needs a parser only: TypeScript 5's in-process `createSourceFile` (package alias `ts-parser`) owns lexical
-// context, including regex literals and nested template expressions. TypeScript 7's compiler service runs a separate
-// process over stdio, which Bun on Linux CI cannot drive.
-function parsed<T>(files: SourceFile[], fn: (trees: ts.SourceFile[]) => T): T {
-  return fn(files.map((f, n) => ts.createSourceFile('f' + n + '.ts', f.text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)));
-}
 
 /** A syntax view for diagnostics/tests only. The lint walks AST nodes, never this text. */
 export function codeOf(text: string, strings: boolean | StringMode = 'blank'): string {

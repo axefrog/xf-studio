@@ -202,8 +202,9 @@ export function claimWins(a: Holder, b: Holder): boolean {
 }
 
 /** The claim conflict `claimConflict(node, span, share)` read for layer 3 (S2 section 10.1a). */
-export function claimConflictRead(l2: Layer2, node: Id, span: 'seed' | 'beats', share: 'none' | 'background' | 'any'): boolean {
+export function claimConflictRead(l2: Layer2, node: Id, span: 'seed' | 'beats', share: 'none' | 'background' | 'any', except?: Id): boolean {
   for (const other of l2.live()) {
+    if (other.id === except) continue;
     for (const [role, rs] of Object.entries(other.st.roles)) {
       if (rs.cast !== node || rs.shrunk) continue;
       const c = claimOf(other, role);
@@ -345,7 +346,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
   let node: Id;
   if (prior && prior.attempt === rs.attempt && candidates.includes(prior.value)) node = prior.value;
   else {
-    const fit = l2.hooks.fit ? (o: string): number => l2.hooks.fit!(choice, o, { id: inst.id, template: inst.st.template.id }) : undefined;
+    const fit = l2.fitWeights({id: inst.id,template: inst.st.template.id,pack: inst.st.template.pack,sowSeq: inst.st.sowSeq,document: inst.st.document,choice,options: candidates.map(id => ({id,node: id})),report: inst.fitSample});
     const d = l2.draw(inst.id, choice, options, rs.attempt, fit);
     node = d.value;
     const rec: { value: string; attempt: number; raw?: number; clamped?: number } = { value: d.value, attempt: rs.attempt };

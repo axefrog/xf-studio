@@ -1142,3 +1142,89 @@ The ones that need a decision, worst first. The six questions of the first build
 - **117 (queries).** S0 8.3 step 9 enumerates every item of every summary in scope for a query. A world that has run a week made the
   mirror's and the norms process's queries the dearest thing in a window. The pruning keeps the result: it is used only where it is
   proved equal to resolution (review R1 made it so; the independent review found a span resolved under a window).
+
+## S3 core implementation
+
+### Spec findings for the coordinator
+
+Priority order below; finding numbers remain stable. These choices need specification reconciliation, not a maintainer
+decision before completing this branch.
+
+**180. S1 residents were not people to S2 or S3.** `xf:resident` extended `core:thing`, so its events could not start a
+human-centred pattern or satisfy a person overlay. Inheriting `core:person`'s slots would put `name` and `age` before
+`profile` and break their dependency order. `KindDef.classifiesAs` supplies nominal kind compatibility without inheriting
+slots; residents classify as `core:person`. Unknown targets and classification cycles fail validation. This is an S0/S1
+contract addition for explicit coordinator review. Existing slot order, generated values and frozen digests are unchanged.
+
+**175. The chronological buffer is saved state.** S3 v0.3 §6.1 overrides §9.4's older claim that no emission is pending at
+a save, but §9.2 omits the buffer's fields. `Layer3State.buffer` copies events, pattern ids and versions; its events are
+retention roots. Release is at or before `boundary - maxProducerLag × W`, ordered by occurrence time, occurrence Id and
+pattern id. Incomplete expiry and tombstone pruning follow that horizon, so late-published valid stages survive. Completed
+candidate deadlines use current game time. Off drops buffered emissions as well as closing frames. Sifting runs in the
+kernel's shared budget after dispatch, with at most one emission's atomic overshoot.
+
+**176. Retained event addresses do not reload their fields.** Replay drops simulation contributions. The reference saves
+`Layer3State.evidence` descriptors for pool/buffer events and events handed to S2 while casts or closing deliveries need
+them, restoring silently after S1. Summary-item provenance is preserved: time/place remain live summary dependencies.
+These mechanical event facts are unrelated to the local player-response evidence log. Arbitrary ancestors outside the
+pool/buffer or S2 handover remain their producing layer's regeneration responsibility; S3 does not copy the world's history.
+
+**181. Non-canon event retention did not follow participants or causes.** The marker followed headers and owned values,
+not event simulation constants. SeedRecord event roots now retain owned fields and their Id references transitively,
+without recursive resolution. Restricting this traversal to SeedRecord event roots preserves the frozen control arms.
+S2 also roots fixed overlay identities before first casting. Pool `nodes` remains its stage/story events plus buffered
+occurrences, with no extra person roots.
+
+**182. SF3-37's narration conflicts with its algorithms.** For `H("fixture", "SF3-37")`, defaults and empty salt, slots
+0/1 are `(770, 0.8343770799768483)` and `(4514, 0.9847611045769517)`: neither is live at steady. First live times are
+11333 and 21175, so both incidents complete before the first sow. Completing incident 2 at 2500 also extends the same
+once tombstone to 3700; redelivery at 2600 cannot start another entry. `script.test.ts` runs the literal script and checks
+the actual slots and two distinct sowings. Separate tests check redelivery after expiry. §6/§7's algorithms win over the
+fixture prose; no hash, default or deadline was changed to fit it.
+
+**177. S2's fit seam lacked S3's inputs.** The scalar callback lacked document, sow order, node and fragment metadata;
+alternates bypassed it. `WorldFitInput` reaches all four draws and collects report terms locally from the same fitter.
+The legacy scalar seam retains its existing single-option calls; S3's richer seam only runs with multiple options.
+Release hooks keep S2's original closed input shape; S3 gets its play clock from its own sense frames.
+
+**188. Play-clock transitions must precede the director, not just release.** S2 formerly discovered play wakeups in
+the arbiter's release step. S3's host now runs S2 expiry/wakeup preparation, drains the kernel and reevaluations, then
+ticks the director and resolves a slot before release. Preparation runs once. The old two-argument `advancePlay` path
+keeps its existing order when S3 is absent. A fixture checks a one-second window is already cast when S3 ticks at 1.
+
+**178. Typed exclusions need a recorded home.** S0 holds NPC Ids, class exclusions and class/level soft exclusions.
+Optional `SettingsEntry.storyExclusions` records the verb/class/tag/NPC list in SettingsSet. Its absence preserves old
+settings and frozen digests. Both vocabularies are hard filters, never scores.
+
+**183. S2 promises a skeleton classifier but specifies no implementation.** `L2Registry.skeleton` is the pure seam.
+Its default reads explicit fragment `features`, declared tone/outcome, an unambiguous offer stake and actual channel;
+unknown facets remain absent. Nothing is inferred from V or prose. S4 still owes the full classifier. Evidence fixtures
+provide facets as pack metadata and check exact display/response play stamps, sensitivity, exclusions and inertness.
+
+**179. Ambiguous first classes are not certified.** Every possible first channel must agree with `firstClass`; variants
+are checked too. A variant cannot change the sowable declaration, escape gig/block caps or fix a spine character. Mixed
+classes receive K-4. The six telling forms come from P5 §4.2; follow-up and unknown forms are refused plainly.
+
+**184. Thread merging alone cannot bound pending.** Several released-but-unshown seeds can commit the same anchor and
+join one thread. Openings also require `pending.length < maxLive`, preserving §9.2's bound. Closing-only terminal members
+reserve neither an unseen opening nor a live slot. No budget withdraws anything V has seen.
+
+**185. SF3-9's quiet rule wins over §5.5's narrower wording.** The fixture forbids every joint while engaged, driving or
+speaking; the core applies that guard globally and reports none on a load/first frame. S2 owns the latch. An episode pays
+for one rest only: later N-driven peaks do not reuse its long rest. Hold clears are logged on release, expiry and withdrawal.
+
+**186. Meta participants inherit S0's bound.** L-2 refuses patterns that could bind more variables than the kernel's
+participant bound (32). Otherwise a valid five-stage chain could mint an unrepresentable story. Pattern activation extends
+only this kernel's participant vocabulary and `meta:story` kind, from copied enum data.
+
+**187. Max-wait normalisation has no game-speed input.** S2 supplies duration seconds, not a future game/play conversion.
+The reference uses the numeric seconds at its unit clock rate; S2's game-clock hard expiry remains authoritative across
+jumps. A variable-speed port needs an explicit conversion contract. Phase logs cite the copied timestamped sense frame
+in `inputs`; no kernel event Id is invented for a sense frame.
+
+The project README and fixture index record validation. The coordinator owns the guarded complete suite, its timing and
+independent pre-merge review. Git staging/committing was attempted with the required Assisted-by trailer, but the sandbox
+denied the worktree `index.lock`; all changes remain uncommitted.
+
+Final footprint report: 328.3 GB free on C; no task-owned output above 5 GB, no scratch payloads to keep. New S3 sources
+and tests occupy about 177 KB. No existing tests or golden digests were edited.

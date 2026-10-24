@@ -180,7 +180,7 @@ export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
         ...Array.from({ length: 6 }, (_, j) => slot(`m${j}`, `xf:resident-node-${j}`)),
       ],
     },
-    { id: 'xf:resident', extends: ['core:thing'], facets: ['actor'], slots: RESIDENT_SLOTS(0) },
+    { id: 'xf:resident', extends: ['core:thing'], classifiesAs: ['core:person'], facets: ['actor'], slots: RESIDENT_SLOTS(0) },
     ...Array.from({ length: 6 }, (_, j): KindDef => ({ id: `xf:resident-${j}`, extends: ['xf:resident'], slots: [RESIDENT_SLOTS(j)[0]!] })),
     {
       id: 'xf:person', extends: ['core:person'],

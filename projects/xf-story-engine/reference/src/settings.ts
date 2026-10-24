@@ -20,6 +20,8 @@ export interface ContentSettings {
 }
 
 export interface SettingsEntry {
+  /** S3's explicit verb/class/tag/NPC filters. Optional so pre-S3 settings replay unchanged. */
+  storyExclusions?: Array<{kind: 'verb'|'class'|'tag'|'npc'; value: string}>;
   memoryScale: number;
   resetScale: number;
   noticing: NoticingMode;

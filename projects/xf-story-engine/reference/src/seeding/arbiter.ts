@@ -210,7 +210,7 @@ export function hookInputs(l2: Layer2, inst: Instance, d: Delivery, channelClass
   const out: import('./layer2.ts').HookInputs = {
     delivery: {
       id: d.id, class: channelClass, purpose: d.timing.purpose, authored: d.authored, pull: d.pull,
-      features: { channel: d.provenance.channel, form: d.provenance.form, kind: d.timing.kind },
+      features: l2.reg.skeleton(doc,d.fragment ? inst.st.closure.fragments.find(f=>f.id===d.fragment) : undefined,d.provenance.channel),
       maxWait: d.timing.maxWait.s, submitted: d.submitted,
     },
     aspects: [...l2.port.aspects()].sort(), session: l2.arbiter.session, tempo: s.tempo, playTotal: l2.playTotal(),
@@ -229,12 +229,17 @@ export function hookInputs(l2: Layer2, inst: Instance, d: Delivery, channelClass
 }
 
 /** The arbiter's step, once a second of play (S2 section 8.3). */
-export function arbiterStep(l2: Layer2, s: number): void {
+export function preparePlaySecond(l2: Layer2, s: number): void {
+  l2.arbiter.play = s;
+  expirations(l2, s);
+}
+
+export function arbiterStep(l2: Layer2, s: number, prepared = false): void {
   const A = l2.arbiter;
   A.play = s;
   A.lastStep = s;
   updateSession(l2, s);
-  expirations(l2, s);
+  if (!prepared) expirations(l2, s);
 
   // Candidate deliveries.
   type Cand = { inst: Instance; d: Delivery; frag: Fragment | undefined; channel: ChannelId; cls: number; score: number; tie: Id };
@@ -839,7 +844,7 @@ function offerDisplayed(l2: Layer2, inst: Instance, d: Delivery, r: DisplayRepor
     if (frag.offer.lapse.after.clock === 'game') d.lapseGameAt = k.now + frag.offer.lapse.after.s;
     else d.lapseAt = l2.arbiter.play + frag.offer.lapse.after.s;
   }
-  l2.record(inst, 'display', { offer: ev, class: d.timing.class, purpose: d.timing.purpose, pull: d.pull, authored: d.authored, features: { channel: d.provenance.channel }, atPlay: r.atPlay });
+  l2.record(inst, 'display', { offer: ev, class: d.timing.class, purpose: d.timing.purpose, pull: d.pull, authored: d.authored, features: l2.reg.skeleton(inst.st.document,frag,d.provenance.channel), atPlay: r.atPlay });
 }
 
 // ---- V's responses (S2 section 7.4) ----

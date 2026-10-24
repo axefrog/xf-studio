@@ -54,6 +54,9 @@ export interface Layer2Hook {
   onLoad(): void;
 }
 
+/** The procedural sifter's bounded work, after dispatch and S2, before forgetting. */
+export interface Layer3KernelHook {readonly pending: number; run(budget: Budget): number}
+
 export interface KernelOptions {
   schema: Schema;
   worldSeed: Id;
@@ -167,6 +170,7 @@ export class Kernel {
   batchWriting = false;
   /** The seeding layer, attached by S2 (spec 10.5, v4: relevance and dilemmas routed to layer 2). */
   layer2: Layer2Hook | null = null;
+  layer3: Layer3KernelHook | null = null;
   /** Layers that keep their own records run these before a save writes them (S1's record, flushed to the seed table). */
   readonly saveHooks: Array<() => void> = [];
   /** ... and these after a load has replayed, once the packs are back (a layer rebuilds from the records and checks its pins). */
@@ -733,7 +737,16 @@ export class Kernel {
               continue;
             }
           }
-          if (this.beliefs.pendingTicks === 0) return true;
+          if (this.beliefs.pendingTicks === 0) {
+            if (this.layer3 && this.layer3.pending > 0) {
+              budget.spend(this.layer3.run(budget));
+              if (this.layer3.pending > 0 || !this.frames.worklist.isEmpty || !this.dispatcher.idle) {
+                if (budget.exhausted) return false;
+                continue;
+              }
+            }
+            return true;
+          }
         }
         this.beliefs.runTicks(budget);
         if (this.beliefs.pendingTicks > 0) return false;

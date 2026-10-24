@@ -57,6 +57,13 @@ Studied by reading the mods' scripts (technique only; [Sources](#sources)).
 
 ## 3. What happens to mod state
 
+**Reference-model check [offline].** The Story Engine's S3 core now carries its chronological event buffer, pool,
+occurrence identities, tombstones, cooldowns, pending lifetimes, recent choices, schedule position and arc lock in one
+branch-local record. Its [reload tests](../projects/xf-story-engine/reference/test/s3/reload.test.ts) verify selected-save
+inheritance and atomic sowing; the [Kabuki fixture](../projects/xf-story-engine/reference/test/s3/e2e.test.ts) agrees with
+uninterrupted play after fresh-process reloads at each of five simulation boundaries, including reloading at every boundary.
+This checks the external ledger's reference semantics. It does not validate the proposed five-fact key or a game save hook.
+
 | Event | State inside the save (fields, facts, entity state) | An external store | Grade |
 |---|---|---|---|
 | **New game** | A fresh facts table and default fields: GameSession mints a key because the fact reads 0; the AI NPC mod treats a detach with no restore after it as a new game | Untouched: Codeware services and CET files carry on, so a store without a key mixes playthroughs | [source] [community]; the facts reset itself is [hypothesis], session card 6 |
