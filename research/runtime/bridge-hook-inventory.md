@@ -97,6 +97,25 @@ Session 8 (write-up: `experiments/036-session-8` on `main`) proved most of 0.7 i
 | 600-character cap | Checked whole on every surface (unit test) | B5 |
 | The UI review's 14 items | Status wording, colours, themed label, one question, diagnostics setting, window layout, answered line, stopped text, truncation, frame-generation line, F-keys (F9 is quick load, so F11 stays) | A1-A2, B, C |
 
+## 0.8.12 live-direction toolkit
+
+Built offline on 24 October 2026 ([design §3.21](runtime-bridge-design.md#321-bridge-0812-the-live-direction-toolkit)); the `write-dm` class (`dm`), the -writes package only. Every hook below is a script call or a wrap in `redscript-dm/XFRuntimeBridgeDm.reds`; no new native (27). Grades: **[source]** read in the 2.31 scripts or Codeware; **[offline]** exercised by the self-test host's simulated world. None has run in game ([card](runtime-bridge-test-card.md#dm-toolkit-stacked-onto-session-18)).
+
+| Hook | Game side | Risk | Status |
+|---|---|---|---|
+| Props, vehicles, lights brought in | Codeware `DynamicEntitySystem`, both persist flags off, tag `xfs_dm`; a vehicle from its record, a prop from a template path | Medium: entity lifetime; never saved; removed at the release and on a load | [source], [offline] |
+| Doors | `DoorControllerPS` quest actions (`ForceOpen`, `ForceClose`, `ForceLock`, `ForceUnlock`, `ForceSeal`, `ForceUnseal`) built as `GetQuestActionByName` builds them, queued through the persistency system | Medium: the state is saved with the world, so the change is held under the save lock until it is put back or undone by hand | [source], [offline] |
+| Vehicle state and radio | `VehicleQuestChangeDoorStateEvent` on the vehicle's PS; `VehicleQuestToggleEngineEvent`, `VehicleLightQuestToggleEvent`, `VehicleRadioEvent` on the entity | Medium: a door's lock cannot be read back (kept held) | [source], [offline] |
+| Sound | `AudioSystem.Play` and `Stop`; `GameObject.PlayVoiceOver` | Low | [source], [offline] |
+| A real call | `questTriggerCallRequest` through `PhoneSystem.QueueRequest` for an active journal contact; state polled from the fact `phonecall_<contact>_with_player`; words as timed subtitle lines | High if misused: an unknown contact runs the HUD's null-contact calls (session 7), so it is refused | [source], [offline] |
+| A message toast | `PhoneMessageNotificationViewData` on the HUD phone controller (`AddNewNotificationData`) | Low | [source], [offline] |
+| A tracker with our words | A wrap of `QuestTrackerGameController` and its tracked-mappin container; `QuestTrackerObjectiveLogicController.SetData` with plain strings; never the journal | Medium: the game redraws the row after a pin change, so ours is drawn again | [source], [offline] |
+| Banners, toasts, subtitles | `UI_Notifications` blackboard (warning, onscreen); `JournalNotificationQueue` toasts; `UIGameData.ShowDialogLine` | Low | [source], [offline] |
+| Light steering | `LightComponent.SetColor`, `SetIntensity`, `SetRadius`, `SetFlickerParams`; `gameLightComponent.SetAngles`, `ToggleLight`, found with `Entity.GetComponents` (Codeware) | Low | [source], [offline] |
+| Watchers | Polled on the game thread's tick: position, `TargetingSystem` look-at, weapon and combat state, vehicle, the clock; the `UIInteractions` blackboard (`LastAttemptedChoice`, `SelectedIndex`, `DialogChoiceHubs`) listened to only while a watcher wants it and unregistered at detach | Medium: a listener left on a blackboard a load destroyed is a crash risk | [source], [offline] |
+
+Left out, with the mechanism each would need: a dedicated light carrier (a WolvenKit-built empty entity holding a light component, or Codeware reflection adding one); an exact radio station on a radio device (only the vehicle radio has an exact-station event); a journal-free caller or reading card (a new ink widget, and the UI review); the shard popup (a native call with a null entry); the experience toast (a wrap of one more HUD controller); a sound at a world point (an empty emitter entity template). The dialogue pick is inferred, not read [hypothesis].
+
 ## Related
 
 [Runtime bridge design](runtime-bridge-design.md) · [test card](runtime-bridge-test-card.md) · [overlay feasibility](imgui-overlay-feasibility.md) · [next sessions plan](next-sessions-plan.md) · [bridge autonomy](../backlog/bridge-autonomy.md) · [runtime access](../../knowledge/runtime-access.md)
