@@ -245,6 +245,15 @@ async function runHandover(input: Json, context: CommandContext): Promise<Comman
       ...(npcs.released === false ? { why: npcs.why } : { released: npcs.released ?? [] }),
     });
   }
+  // 0.8.12 (the live-direction toolkit): what it holds is released in the same step; an older bridge answers nothing here.
+  const dm = handed.dm_released as Json | null | undefined;
+  if (dm) {
+    steps.push({
+      step: "release the live-direction toolkit's props, doors and calls",
+      ok: dm.released !== false || dm.nothing_held === true,
+      ...(dm.released === false && dm.nothing_held !== true ? { why: dm.why } : { spawned_removed: dm.spawned_removed ?? 0 }),
+    });
+  }
   await attempt(context, "ui.message", { text: "Handed over: the game is yours. XF automation is paused until the session resumes.", level: "ask", seconds: 15 });
   return { value: { handed_over: true, was: handed.was, steps, note: input.note ?? null, undo: { method: "session.resume", params: {} } } };
 }

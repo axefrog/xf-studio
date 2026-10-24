@@ -16,6 +16,7 @@
 //   write-player     moves and turns V, turns her view, crouches, draws or holsters, opens menus (0.6; the test profile only)
 //   act-player       irreversible actions in the world: using devices, dialogue, consuming (0.6; reserved, no command yet)
 //   write-npc        brings in XF actors and directs NPCs near V: walking, lines, gaze, face, gestures, dialogue choices (0.8; the test profile only)
+//   write-dm         the live-direction toolkit: props, vehicles and lights brought in, doors and vehicles changed, sounds, the phone, the quest tracker, messages, in-game watchers (0.8.12; the test profile only)
 //   control          changes only the bridge itself (the kill switch)
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
@@ -36,6 +37,7 @@ import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroo
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
 import { COMMANDS_080_NPC } from "./catalogue080npc.ts";
+import { COMMANDS_080_DM } from "./catalogue080dm.ts";
 import { SENSES_COMMANDS } from "./catalogueSenses.ts";
 import { applyCatalogue080 } from "./catalogue080.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
@@ -51,7 +53,7 @@ const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_no
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
 
-export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "write-npc" | "control";
+export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "write-npc" | "write-dm" | "control";
 
 export const PERMISSIONS: Record<Permission, { label: string; description: string }> = {
   read: { label: "Look", description: "Reads what the game is doing, or takes a screenshot of its window. Changes nothing." },
@@ -96,6 +98,11 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
     label: "Direct NPCs",
     description:
       "Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile.",
+  },
+  "write-dm": {
+    label: "Direct the scene",
+    description:
+      "Brings props, vehicles and lights into the world near V and changes doors and vehicles; plays sounds and a vehicle's radio; shows message toasts and a real incoming call from a contact the player has, with subtitle lines; puts an XF quest in the HUD's tracker; shows the game's own banners and quest toasts; and arms watchers that run micro-actions inside the game without the agent. Nothing is saved: the answers' undos, the kill switch, the pause, a handover or loading a save take it all back, and saving waits until the spawned things and changed doors are gone. Off in the bridge's settings except in the XF test profile.",
   },
   "act-player": {
     label: "Act for V",
@@ -1761,6 +1768,8 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   ...COMMANDS_070,
   // Bridge 0.8: NPC direction (research/runtime/npc-direction-design.md).
   ...COMMANDS_080_NPC,
+  // Bridge 0.8.12: the live-direction toolkit (research/runtime/runtime-bridge-design.md §3.21).
+  ...COMMANDS_080_DM,
   // The senses for the Story Engine (read-only): quest facts in a batch, V's district, V's status.
   ...SENSES_COMMANDS,
 ]);

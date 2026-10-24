@@ -71,6 +71,8 @@ std::string_view AccessName(Access aAccess)
         return "act-player";
     case Access::WriteNpc:
         return "write-npc";
+    case Access::WriteDm:
+        return "write-dm";
     case Access::Notify:
         return "notify";
     case Access::Control:
@@ -106,6 +108,8 @@ uint32_t WriteClassBit(Access aAccess)
         return kActPlayer;
     case Access::WriteNpc:
         return kWriteNpc;
+    case Access::WriteDm:
+        return kWriteDm;
     default:
         return 0;
     }
@@ -133,6 +137,8 @@ std::string_view ConfigClassName(Access aAccess)
         return "act";
     case Access::WriteNpc:
         return "npc";
+    case Access::WriteDm:
+        return "dm";
     default:
         return {};
     }
@@ -387,6 +393,16 @@ void Dispatcher::Register(MethodSpec aSpec)
 {
     auto name = aSpec.name;
     m_methods[name] = std::move(aSpec);
+}
+
+std::optional<Access> Dispatcher::AccessOf(const std::string& aMethod) const
+{
+    const auto it = m_methods.find(aMethod);
+    if (it == m_methods.end())
+    {
+        return std::nullopt;
+    }
+    return it->second.access;
 }
 
 void Dispatcher::Kill(const std::string& aReason)

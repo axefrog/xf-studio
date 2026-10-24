@@ -1097,6 +1097,10 @@ json SaveWith(const params::GameSaveRequest& aRequest, const std::string& aCid, 
                 {
                     held.push_back("behaviours running (behave_list)");
                 }
+                for (const auto& hold : DmHolds()) // 0.8.12: props, vehicles, lights and changed doors from the live-direction toolkit
+                {
+                    held.push_back(hold);
+                }
                 if (!held.empty())
                 {
                     throw MethodError("bridge_effects_active", "something the bridge holds on V started while the save was being prepared (" + held.dump() +
@@ -1150,6 +1154,10 @@ json SaveWith(const params::GameSaveRequest& aRequest, const std::string& aCid, 
                 if (Get().behaviours.Active())
                 {
                     held.push_back("behaviours running (behave_list)");
+                }
+                for (const auto& hold : DmHolds()) // 0.8.12: props, vehicles, lights and changed doors from the live-direction toolkit
+                {
+                    held.push_back(hold);
                 }
                 return held;
             },
@@ -2109,6 +2117,16 @@ void RestoreAfterKill()
     {
         log::Warn("bridge.kill_release_npcs_failed", std::string("what=") + e.what(), "kill-restore");
     }
+    // 0.8.12: everything the live-direction toolkit holds (props, vehicles and lights deleted; doors, vehicles and radios put back;
+    // the call ended, lines and the tracker taken down); nothing to do when nothing is held.
+    try
+    {
+        RestoreDmAfterKill();
+    }
+    catch (const std::exception& e)
+    {
+        log::Warn("bridge.kill_release_dm_failed", std::string("what=") + e.what(), "kill-restore");
+    }
     // photo.camera.preset's TweakDB rewrites (RB-90): they outlive loads until the game restarts, so the kill switch writes
     // the first values it saw back.
     try
@@ -2142,6 +2160,7 @@ void RegisterMethods(Dispatcher& aDispatcher)
     RegisterMethods060(aDispatcher);
     RegisterMethods070(aDispatcher);
     RegisterMethodsNpc(aDispatcher);
+    RegisterMethodsDm(aDispatcher);
     RegisterMethodsSenses(aDispatcher);
     auto& state = Get();
 

@@ -52,7 +52,7 @@ export function lintRedscriptSources(dir = resolve(import.meta.dir, "..", "redsc
 }
 
 if (import.meta.main) {
-  const findings = lintRedscriptSources();
+  const findings = [...lintRedscriptSources(), ...lintRedscriptSources(resolve(import.meta.dir, "..", "redscript-dm"))]; // 0.8.12: the toolkit's script too
   for (const f of findings) console.log(`${f.file}:${f.line}: '${f.variable}' is a world object; keep its native's answer in a local before building text: ${f.text}`);
   console.log(findings.length ? `\n${findings.length} finding(s)` : "world-object rule: no native results inline in string building");
   process.exit(findings.length ? 1 : 0);

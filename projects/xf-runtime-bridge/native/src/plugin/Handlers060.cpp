@@ -149,6 +149,20 @@ json BridgeHandover(const MethodContext& aContext)
             npcsReleased = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
         }
     }
+    // 0.8.12: and everything the live-direction toolkit holds (props and lights removed, doors put back, the call ended).
+    json dmReleased = nullptr;
+    if (*on)
+    {
+        try
+        {
+            RestoreScope restoring;
+            dmReleased = ReleaseDmForHandover(aContext.cid);
+        }
+        catch (const MethodError& e)
+        {
+            dmReleased = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
+        }
+    }
     json lightsCleared = nullptr;
     if (lights == "clear")
     {
@@ -165,7 +179,7 @@ json BridgeHandover(const MethodContext& aContext)
             lightsCleared = json{{"error", e.code}, {"message", e.what()}};
         }
     }
-    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released}, {"npcs_released", npcsReleased}, {"lights_cleared", lightsCleared},
+    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released}, {"npcs_released", npcsReleased}, {"dm_released", dmReleased}, {"lights_cleared", lightsCleared},
                 {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}},
                 {"undo_note", *on ? "bridge.handover {on: false} (session.resume) gives the bridge its writes back; what the handover lifted from V stays lifted" : "bridge.handover {on: true} hands over again"}};
 }

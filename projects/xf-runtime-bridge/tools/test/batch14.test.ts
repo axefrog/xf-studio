@@ -12,6 +12,7 @@ import { CommandApi } from "../api/command-api.ts";
 import { CATALOGUE, findCommand, loadClientTimeoutMs, SAVE_DETAILS_WAIT_MS, type CommandContext } from "../api/catalogue.ts";
 import { BRIDGE_MESSAGES, busyState, plainBridgeError } from "../api/errors.ts";
 import { NPC_MESSAGES } from "../api/errors080npc.ts";
+import { DM_MESSAGES, DM_METHODS } from "../api/errors080dm.ts";
 import { OUTFIT_SLOT_AREAS, reconcileWardrobe, REFUSALS } from "../api/catalogue080.ts";
 import { SERVER_VERSION } from "../mcp/server.ts";
 import { modelForRead, poseOf, projectionConsistency } from "../scene/camera.ts";
@@ -58,7 +59,7 @@ describe("0.8 offline", () => {
   test("the MCP server says the tools' own version (package.json), not 0.3.0", () => {
     const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8"));
     expect(SERVER_VERSION).toBe(pkg.version);
-    expect(pkg.version).toBe("0.8.11");
+    expect(pkg.version).toBe("0.8.12");
   });
 
   test("every command lists its own refusal codes, and every listed code has plain words or is a tools code", () => {
@@ -69,7 +70,7 @@ describe("0.8 offline", () => {
       expect(Array.isArray(command.refusals), command.name).toBe(true);
       for (const code of command.refusals ?? []) {
         // npc.* codes read first in their own words (errors080npc.ts), as plainBridgeError reads them.
-        const words = (command.name.startsWith("npc.") ? NPC_MESSAGES[code] : undefined) ?? BRIDGE_MESSAGES[code];
+        const words = (command.name.startsWith("npc.") ? NPC_MESSAGES[code] : undefined) ?? (DM_METHODS.has(command.name) ? DM_MESSAGES[code] : undefined) ?? BRIDGE_MESSAGES[code];
         expect(tools.has(code) || words !== undefined, `${command.name}: ${code}`).toBe(true);
       }
     }

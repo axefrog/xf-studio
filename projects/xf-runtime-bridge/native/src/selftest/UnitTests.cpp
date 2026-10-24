@@ -5328,6 +5328,8 @@ void Bridge0811Tests()
 
 // UnitTestsSenses.cpp: the senses' parameter checks and merge helpers; answers the number of failed checks.
 int SensesUnitTests();
+// UnitTestsDm.cpp: the live-direction toolkit (parameter checks, undos, watchers, the session and the service); answers the number of failed checks.
+int DmUnitTests();
 
 int RunUnitTests()
 {
@@ -5369,6 +5371,7 @@ int RunUnitTests()
     Bridge0811Tests();
     gFailures += RunNpcUnitTests();
     gFailures += SensesUnitTests();
+    gFailures += DmUnitTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

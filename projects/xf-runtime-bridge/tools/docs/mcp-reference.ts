@@ -63,6 +63,13 @@ export const AREAS: readonly Area[] = [
     match: prefix("behave"),
   },
   {
+    id: "live-direction",
+    title: "Live direction",
+    intro:
+      "The DM toolkit: bring props, vehicles and lights in, change doors and vehicles, play sounds and a radio, send a message toast or a real incoming call, put an XF quest in the HUD's tracker, show the game's own banners and quest toasts, and arm watchers that fire micro-actions inside the game without the agent. All of it is in the `dm` class, never saved, and given back by each answer's undo, the kill switch, the pause, a handover or loading a save.",
+    match: (n) => prefix("audio", "phone", "quest", "notify", "light", "watch", "vehicle")(n) || is("world.spawn", "world.despawn", "world.spawned", "world.door", "game.digest")(n),
+  },
+  {
     id: "world",
     title: "World",
     intro: "Read the world's state, probe the ground and streaming around V, and set the clock, the weather, a freeze or XF map pins.",
@@ -138,6 +145,7 @@ const GATES: Record<Permission, string> = {
   "write-player": "`allow_writes = true` and `player` listed by name (the test profile's build lists it).",
   "act-player": "`allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet.",
   "write-npc": "`allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL).",
+  "write-dm": "`allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only.",
 };
 
 // --- refusal codes -----------------------------------------------------------------------------------
@@ -181,6 +189,7 @@ const CLASS_CODES: Partial<Record<Permission, string[]>> = {
   "write-showroom": ["codeware_missing", "showroom_missing", "not_in_world", "too_far", "no_such_piece", "not_spawned_yet", "spawn_refused", "not_ready"],
   "write-player": ["in_combat", "in_vehicle", "in_scene", "player_busy", "user_took_over", "no_ground", "not_streamed", "no_path"],
   "write-npc": ["codeware_missing", "not_in_world", "in_combat", "in_vehicle", "in_scene", "npc_unknown", "npc_lost", "not_ours", "too_far", "limit"],
+  "write-dm": ["codeware_missing", "not_in_world", "not_v", "limit", "too_far", "target_unknown", "target_missing", "hud_missing"],
 };
 
 /** Plain wording for codes the tools answer themselves (the rest come from errors.ts). */

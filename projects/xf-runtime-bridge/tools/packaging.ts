@@ -21,6 +21,7 @@
 //   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
 //   red4ext/plugins/XFRuntimeBridge/Scripts/XFRuntimeBridgeProbe*.reds  (0.8.7, test probes from redscript-probes/; writes only)
 //   red4ext/plugins/XFRuntimeBridge/xfb_companion_probe.exe              (0.8.7, the companion probe; writes only)
+//   red4ext/plugins/XFRuntimeBridge/Scripts/XFRuntimeBridgeDm.reds       (0.8.12, the live-direction toolkit's game side from redscript-dm/; writes only)
 
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -110,14 +111,15 @@ function listFiles(dir: string): string[] {
 /** The variant's config.ini, from the project's (which must keep every switch off). */
 /**
  * The -writes package's write classes: inventory only with --allow-inventory (the maintainer's approval); showroom (XF Finish
- * Showroom's test heads and lights, bridge 0.5), player (0.6: teleport, look, crouch, weapons, menus, glides) and npc (0.8: XF
- * actors and NPC direction) in every -writes build, which only the dedicated test profile stages. act (irreversible actions
+ * Showroom's test heads and lights, bridge 0.5), player (0.6: teleport, look, crouch, weapons, menus, glides), npc (0.8: XF
+ * actors and NPC direction) and dm (0.8.12: the live-direction toolkit) in every -writes build, which only the dedicated test
+ * profile stages. act (irreversible actions
  * for V) stays off: no command uses it yet.
  */
 export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
   options.allowInventory
-    ? ["photo", "world", "character", "inventory", "save", "showroom", "player", "npc"]
-    : ["photo", "world", "character", "save", "showroom", "player", "npc"];
+    ? ["photo", "world", "character", "inventory", "save", "showroom", "player", "npc", "dm"]
+    : ["photo", "world", "character", "save", "showroom", "player", "npc", "dm"];
 
 /** The [bridge] section's enabled line (after the section's comment lines). */
 const BRIDGE_ENABLED = (on: boolean) => new RegExp(`^\\[bridge\\]\\n(?:;.*\\n)*enabled = ${on}$`, "m");
@@ -211,6 +213,8 @@ export type Manifest = {
   overlay_host: boolean;
   /** 0.8: whether the XF actor records (npc.spawn) are in the package: the -writes package only. */
   npc_actors: boolean;
+  /** 0.8.12: whether the live-direction toolkit's scripts (redscript-dm/) are in the package: the -writes package only. */
+  dm_toolkit: boolean;
   /** 0.8: whether the XF gesture carrier (npc.act) is in the package; without it gestures are refused carrier_missing. */
   npc_gesture_carrier: boolean;
   /** 0.8: whether the XF box shows its diagnostic lines ([overlay] diagnostics): the diagnostic package only. */
@@ -258,6 +262,13 @@ export function stageVariant(options: StageOptions): Manifest {
     }
     put(options.companion ?? join(dirname(dll), COMPANION_FILE), `${PLUGIN_DIR}/${COMPANION_FILE}`);
   }
+  // 0.8.12: the live-direction toolkit's scripts (the wraps on three HUD controllers must not ship in the distribution package):
+  // the -writes package only, beside the probes.
+  if (variant === "writes") {
+    for (const name of readdirSync(join(projectDir, "redscript-dm"))) {
+      if (name.endsWith(".reds")) put(join(projectDir, "redscript-dm", name), `${PLUGIN_DIR}/Scripts/${name}`);
+    }
+  }
   // 0.8: the XF actor records and (when built) the gesture carrier: the test profile's -writes package only.
   if (variant === "writes") put(join(projectDir, "tweaks", "test-profile", "xf_npc_actors.yaml"), NPC_ACTORS_FILE);
   const carrier = variant === "writes" && options.npcCarrier ? options.npcCarrier : undefined;
@@ -285,6 +296,7 @@ export function stageVariant(options: StageOptions): Manifest {
     cet_panel: variant !== "default",
     overlay_host: variant !== "default",
     npc_actors: variant === "writes",
+    dm_toolkit: variant === "writes",
     npc_gesture_carrier: carrier !== undefined,
     overlay_diagnostics: variant === "diagnostic",
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
@@ -295,7 +307,7 @@ export function stageVariant(options: StageOptions): Manifest {
       redscript: "0.5.31",
       cet: "1.37.1",
       tweakxl: "1.11.4 (optional; the data marker and the test profile's camera presets need it)",
-      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather, Equipment-EX's route and NPC direction need it)",
+      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather, Equipment-EX's route, NPC direction and the live-direction toolkit's spawns and lines need it)",
     },
     files,
   };

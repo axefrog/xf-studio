@@ -38,6 +38,7 @@
 #include "core/Writes.hpp"
 #include "selftest/Sim060.hpp"
 #include "selftest/Sim070.hpp"
+#include "selftest/SimDm080.hpp"
 #include "selftest/SimNpc.hpp"
 #include "selftest/SimSenses.hpp"
 
@@ -449,6 +450,8 @@ int wmain(int argc, wchar_t** argv)
     static std::unique_ptr<xfb::selftest::Sim060> sim060;
     // Bridge 0.8's simulated street for npc.* (selftest/SimNpc.cpp).
     static std::unique_ptr<xfb::selftest::SimNpc> simNpc;
+    // Bridge 0.8.12's simulated world for the live-direction toolkit (selftest/SimDm080.cpp).
+    static std::unique_ptr<xfb::selftest::SimDm> simDm;
     static xfb::writes::RestoreOnce restore;
     // 0.8.4: test.save.delay's one-shot hold of the next simulated save.
     static std::atomic<int32_t> simSaveHoldMs{0};
@@ -2129,6 +2132,10 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              held.push_back(hold); // 0.8: XF actors (XFGame.BridgeHolds' NPC line)
                                          }
+                                         for (const auto& hold : simDm ? simDm->Holds() : json::array())
+                                         {
+                                             held.push_back(hold); // 0.8.12: the live-direction toolkit's spawns and changed doors
+                                         }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
                                          {
@@ -2174,6 +2181,10 @@ int wmain(int argc, wchar_t** argv)
                                          for (const auto& hold : simNpc ? simNpc->Holds() : json::array())
                                          {
                                              held.push_back(hold); // 0.8: XF actors (XFGame.BridgeHolds' NPC line)
+                                         }
+                                         for (const auto& hold : simDm ? simDm->Holds() : json::array())
+                                         {
+                                             held.push_back(hold); // 0.8.12: the live-direction toolkit's spawns and changed doors
                                          }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
@@ -2577,6 +2588,10 @@ int wmain(int argc, wchar_t** argv)
         {
             simNpc->RestoreAfterKill(out); // 0.8: every NPC the bridge directs
         }
+        if (simDm)
+        {
+            simDm->RestoreAfterKill(out); // 0.8.12: everything the live-direction toolkit holds
+        }
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
         sim.hudHidden = false;
@@ -2646,6 +2661,7 @@ int wmain(int argc, wchar_t** argv)
         };
         // 0.8: the handover releases every NPC the bridge directs (simNpc is made below, before the bridge starts).
         hooks.releaseNpcs = [] { return simNpc ? simNpc->ReleaseForHandover() : json(nullptr); };
+        hooks.releaseDm = [] { return simDm ? simDm->ReleaseForHandover() : json(nullptr); };
         sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
         sim060->Register();
     }
@@ -2708,6 +2724,39 @@ int wmain(int argc, wchar_t** argv)
         hooksNpc.events = &sim060->Events();
         simNpc = std::make_unique<xfb::selftest::SimNpc>(dispatcher, std::move(hooksNpc));
     }
+    {
+        // Bridge 0.8.12's live-direction toolkit against a simulated world (selftest/SimDm080.cpp), with the plugin's shared service.
+        xfb::selftest::SimDmHooks hooksDm;
+        hooksDm.phase = [] {
+            std::scoped_lock _(sim.mutex);
+            return sim.phase;
+        };
+        hooksDm.player = [] { return sim060->PlayerNow(); };
+        hooksDm.markWrite = [] { restore.MarkWrite(); };
+        hooksDm.takeSaveLock = [] {
+            std::scoped_lock _(sim.mutex);
+            sim.gameSaveLock = true;
+        };
+        hooksDm.scriptsReady = [] { return simLayer.Ready(); };
+        hooksDm.detaches = [] { return simLayer.Describe().value("detaches", uint64_t{0}); };
+        hooksDm.killed = [&dispatcher] { return dispatcher.IsKilled(); };
+        hooksDm.paused = [&dispatcher] { return dispatcher.WritesPaused(); };
+        hooksDm.handedOver = [&dispatcher] { return dispatcher.HandedOver(); };
+        hooksDm.writesOpen = [&dispatcher] {
+            try
+            {
+                dispatcher.RequireWritesOpen();
+                return true;
+            }
+            catch (const xfb::MethodError&)
+            {
+                return false;
+            }
+        };
+        hooksDm.token = [&session] { return session.token; };
+        hooksDm.events = &sim060->Events();
+        simDm = std::make_unique<xfb::selftest::SimDm>(dispatcher, std::move(hooksDm));
+    }
 
     if (!bridge.Start(error))
     {
@@ -2768,6 +2817,7 @@ int wmain(int argc, wchar_t** argv)
                 const auto now = std::chrono::steady_clock::now();
                 sim060->Tick(std::chrono::duration<double>(now - last).count());
                 simNpc->Tick(std::chrono::duration<double>(now - last).count()); // 0.8: the plugin's TickNpc
+                simDm->Tick(std::chrono::duration<double>(now - last).count());  // 0.8.12: the plugin's TickDm
                 last = now;
             }
             {
@@ -2821,6 +2871,7 @@ int wmain(int argc, wchar_t** argv)
                     simLayer.OnDetach();
                     sim060->OnDetach();
                     simNpc->OnDetach(); // Codeware drops non-persistent entities with the world
+                    simDm->OnDetach();
                 }
                 else if (sim.loadTicks == 2)
                 {
@@ -2908,6 +2959,7 @@ int wmain(int argc, wchar_t** argv)
     }
 
     queue.Close();
+    simDm->Stop(); // the watchers' micro-action worker ends before the dispatcher goes
     bridge.Stop("selftest_exit");
     xfb::log::Info("selftest.exit", "requests=" + std::to_string(dispatcher.RequestCount()) +
                                         " late_game_tasks=" + std::to_string(queue.LateCompletions()));

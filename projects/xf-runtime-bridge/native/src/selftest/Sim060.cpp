@@ -413,6 +413,21 @@ void Sim060::Register()
                                        npcsReleased = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
                                    }
                                }
+                               // 0.8.12: and everything the live-direction toolkit holds.
+                               json dmReleased = nullptr;
+                               if (*on && self->m_hooks.releaseDm)
+                               {
+                                   try
+                                   {
+                                       RestoreScope restoring;
+                                       dmReleased = RunGameTask(self->m_queue, std::chrono::milliseconds(1000), [self] { return self->m_hooks.releaseDm(); },
+                                                                "bridge.handover.dm_release");
+                                   }
+                                   catch (const MethodError& e)
+                                   {
+                                       dmReleased = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
+                                   }
+                               }
                                // 0.8.2: as the plugin, the rigs go after the write gate closed, in this same request.
                                json lightsCleared = nullptr;
                                if (lights == "clear" && self->m_hooks.clearShowroom)
@@ -421,7 +436,7 @@ void Sim060::Register()
                                    lightsCleared = self->m_hooks.clearShowroom("lights");
                                }
                                return json{{"simulated", true}, {"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released},
-                                           {"npcs_released", npcsReleased}, {"lights_cleared", lightsCleared},
+                                           {"npcs_released", npcsReleased}, {"dm_released", dmReleased}, {"lights_cleared", lightsCleared},
                                            {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}}};
                            }});
 

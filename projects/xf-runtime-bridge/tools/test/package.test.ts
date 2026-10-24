@@ -3,7 +3,7 @@
 // helpers.ts, so the first test proves bunfig.toml's preload ran (RB-41); its scratch folder comes from temp-dir.ts.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tempDir } from "./temp-dir.ts";
 import { join, resolve } from "node:path";
 import { OLD_PRESETS_FILE, PANEL_FILE, PLUGIN_DIR, PRESETS_FILE, stageVariant, variantConfig, VARIANTS, type Variant } from "../packaging.ts";
@@ -101,16 +101,16 @@ describe("packages", () => {
     expect(config).toContain("THIS COPY ALLOWS WRITES");
     expect(existsSync(join(stageDir, PANEL_FILE))).toBe(true);
     expect(manifest.files.some((f) => /\.archive/.test(f.path))).toBe(false); // the carrier is its own test package
-    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, allow_test_hooks: true, cet_panel: true, write_classes: ["photo", "world", "character", "save", "showroom", "player", "npc"], inventory_writes: false });
+    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, allow_test_hooks: true, cet_panel: true, write_classes: ["photo", "world", "character", "save", "showroom", "player", "npc", "dm"], inventory_writes: false, dm_toolkit: true });
     // Bridge 0.4: saves and loading are allowed; V's inventory is not, until the maintainer approves it.
-    expect(config).toMatch(/^allow_write_classes = photo, world, character, save, showroom, player, npc$/m);
+    expect(config).toMatch(/^allow_write_classes = photo, world, character, save, showroom, player, npc, dm$/m);
   });
 
   test("only --allow-inventory adds the inventory class to the writes package, and the manifest records it", () => {
     const stageDir = join(work, "writes-inventory");
     const manifest = stageVariant({ projectDir, variant: "writes", dll, stageDir, version: "0.0.0", commit: "0".repeat(40), allowInventory: true });
-    expect(readFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), "utf8")).toMatch(/^allow_write_classes = photo, world, character, inventory, save, showroom, player, npc$/m);
-    expect(manifest).toMatchObject({ inventory_writes: true, write_classes: ["photo", "world", "character", "inventory", "save", "showroom", "player", "npc"] });
+    expect(readFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), "utf8")).toMatch(/^allow_write_classes = photo, world, character, inventory, save, showroom, player, npc, dm$/m);
+    expect(manifest).toMatchObject({ inventory_writes: true, write_classes: ["photo", "world", "character", "inventory", "save", "showroom", "player", "npc", "dm"] });
     const diagnostic = stageVariant({ projectDir, variant: "diagnostic", dll, stageDir: join(work, "diag-inventory"), version: "0.0.0", commit: "0".repeat(40), allowInventory: true });
     expect(diagnostic).toMatchObject({ allow_writes: false, inventory_writes: false, write_classes: [] });
   });
@@ -138,6 +138,25 @@ describe("packages", () => {
         expect(paths, `${variant} ${needed}`).toContain(needed);
       }
       expect(JSON.parse(readFileSync(join(stageDir, PLUGIN_DIR, "manifest.json"), "utf8")).files).toEqual(manifest.files);
+    }
+  });
+
+  test("0.8.12: the live-direction toolkit's scripts ship in the -writes package only, never beside the distribution package's HUD", () => {
+    const script = `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeDm.reds`;
+    expect(staged.writes.manifest.files.map((f) => f.path)).toContain(script);
+    expect(existsSync(join(staged.writes.stageDir, script))).toBe(true);
+    for (const variant of ["default", "diagnostic"] as const) {
+      expect(staged[variant].manifest.files.map((f) => f.path)).not.toContain(script);
+      expect(staged[variant].manifest.dm_toolkit).toBe(false);
+      expect(staged[variant].manifest.write_classes).not.toContain("dm");
+    }
+    const source = readFileSync(join(projectDir, "redscript-dm", "XFRuntimeBridgeDm.reds"), "utf8");
+    // The three wraps live there, not in the main scripts every package carries.
+    for (const wrap of ["QuestTrackerGameController", "JournalNotificationQueue", "NewHudPhoneGameController"]) {
+      expect(source).toContain(`@wrapMethod(${wrap})`);
+      for (const name of readdirSync(join(projectDir, "redscript"))) {
+        if (name.endsWith(".reds")) expect(readFileSync(join(projectDir, "redscript", name), "utf8"), name).not.toContain(`@wrapMethod(${wrap})`);
+      }
     }
   });
 

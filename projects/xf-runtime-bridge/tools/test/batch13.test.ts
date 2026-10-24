@@ -82,6 +82,7 @@ describe("0.7 review, offline: the theme generator, the world-object lint, free-
     const found = inlineNativeResults(old, "fixture.reds");
     expect(found.map((f) => [f.line, f.variable])).toEqual([[3, "object"], [4, "object"], [11, "light"]]);
     expect(lintRedscriptSources()).toEqual([]);
+    expect(lintRedscriptSources(join(projectDir, "redscript-dm"))).toEqual([]); // 0.8.12: the live-direction toolkit's script
   });
 
   test("RB-117: a failed probe is reported for that head as not checked; an older bridge checks nothing", async () => {

@@ -42,6 +42,8 @@ struct SimHooks
     std::function<json(const std::string& aWhat)> clearShowroom;
     // 0.8: bridge.handover's release of every NPC the bridge directs (selftest/SimNpc.cpp), on the game thread.
     std::function<json()> releaseNpcs;
+    // 0.8.12: and of everything the live-direction toolkit holds (selftest/SimDm080.cpp).
+    std::function<json()> releaseDm;
 };
 
 class Sim060

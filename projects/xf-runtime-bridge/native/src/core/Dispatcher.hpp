@@ -20,6 +20,7 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -47,6 +48,7 @@ enum class Access
     WritePlayer,    // 0.6: reversible player changes (teleport, look, crouch, weapons, menus, behaviours that move V); "player"
     ActPlayer,      // 0.6: irreversible actions in the world (using devices, dialogue, consuming); "act"
     WriteNpc,       // 0.8: NPC direction (npc.*: XF actors, commands, lines, gestures, dialogue choices); "npc"
+    WriteDm,        // 0.8.12: the live-direction toolkit (props, vehicles, doors, sounds, phone, tracker, lights, watchers); "dm"
     Notify,         // shows a message in the bridge's own in-game label (ui.message); not a write, never changes the game
     Control         // changes only the bridge itself (bridge.kill); always allowed, never touches the game
 };
@@ -117,6 +119,8 @@ public:
     Dispatcher(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue);
 
     void Register(MethodSpec aSpec);
+    // 0.8.12: the access class a registered method has (the watchers' micro-actions check it), or nothing for an unknown name.
+    std::optional<Access> AccessOf(const std::string& aMethod) const;
 
     // Never throws: an unexpected failure is logged and answered with code "failed". aControlRoute (0.8.1, RB-121): the
     // request came on the control pipe, which answers only IsControlRouteMethod's methods (refused not_on_control_route).

@@ -277,6 +277,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             last = now;
             TickBehaviours(dt, scriptsReady);
             TickNpc(dt, scriptsReady); // 0.8: NPC direction's timers, poll and automatic release (plugin/HandlersNpc.cpp)
+            TickDm(dt, scriptsReady);  // 0.8.12: the live-direction toolkit's watchers, phone call, lines and light patterns (plugin/HandlersDm080.cpp)
         }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
         // write can run after this undo; RestoreOnce runs it here directly, once, after a write,
@@ -402,6 +403,7 @@ bool OnShutdownEnter(RED4ext::CGameApplication*)
         OnStateEvent(3, "enter");
         auto& state = Get();
         state.queue.Close();
+        StopDm(); // the watchers' micro-action worker ends before the dispatcher goes
         if (state.bridge)
         {
             state.bridge->Stop("game_shutdown");
@@ -587,6 +589,7 @@ void Unload()
     {
         state.saveAnywayThread.join();
     }
+    StopDm();
     if (state.bridge)
     {
         state.bridge->Stop("plugin_unload");

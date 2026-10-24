@@ -33,6 +33,18 @@ void RestoreNpcAfterKill();
 // handover flag is set (npc.auto_released with reason handover): {released, hub_withdrawn, voice_lines_hidden}.
 nlohmann::json ReleaseNpcsForHandover(const std::string& aCid);
 
+// Bridge 0.8.12 (HandlersDm080.cpp): the live-direction toolkit's dm.* methods, its game-thread tick (watchers, the phone call,
+// timed lines, light patterns, the release on a pause or a handover), the kill switch's release of everything it holds, its
+// holds for game.save, and the watchers' micro-action worker, stopped before the dispatcher goes.
+void RegisterMethodsDm(Dispatcher& aDispatcher);
+void TickDm(double aDt, bool aScriptsReady);
+void RestoreDmAfterKill();
+// bridge.handover's release of everything the toolkit holds, one game-thread step after the handover flag is set.
+nlohmann::json ReleaseDmForHandover(const std::string& aCid);
+// What a save would keep from the toolkit, as plain names (an array of strings; empty when nothing).
+nlohmann::json DmHolds();
+void StopDm();
+
 // Shared with Handlers060.cpp: a redscript layer call (XFRuntimeBridge.<class>.<function>(cid, ...) -> JSON), the game-thread
 // step timeout, and a write method marked for the kill switch's restore.
 nlohmann::json ScriptCall(const std::string& aClass, const char* aFunction, std::initializer_list<const char*> aTypes,

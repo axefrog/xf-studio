@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 107 tools, 60 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 133 tools, 81 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -15,6 +15,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Appearance screen (character creator)](#appearance-screen-character-creator) (6)
 - [Player](#player) (8)
 - [Behaviours](#behaviours) (6)
+- [Live direction](#live-direction) (26)
 - [World](#world) (9)
 - [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (8)
 - [XF Finish Showroom](#xf-finish-showroom) (5)
@@ -31,7 +32,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 39 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 44 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 15 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -41,6 +42,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | `write-showroom` | Set up the finish showroom | 5 | Yes | Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `showroom` listed by name (the test profile's build lists it). |
 | `write-player` | Move V | 6 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
 | `write-npc` | Direct NPCs | 13 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
+| `write-dm` | Direct the scene | 21 | Yes | Brings props, vehicles and lights into the world near V and changes doors and vehicles; plays sounds and a vehicle's radio; shows message toasts and a real incoming call from a contact the player has, with subtitle lines; puts an XF quest in the HUD's tracker; shows the game's own banners and quest toasts; and arms watchers that run micro-actions inside the game without the agent. Nothing is saved: the answers' undos, the kill switch, the pause, a handover or loading a save take it all back, and saving waits until the spawned things and changed doors are gone. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only. |
 | `act-player` | Act for V | 0 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
 | `control` | Stop the bridge | 5 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
 
@@ -62,6 +64,7 @@ Each class's tools also refuse at moments that class cares about:
 - **`write-showroom`:** [`codeware_missing`](#refusal-codeware-missing), [`showroom_missing`](#refusal-showroom-missing), [`not_in_world`](#refusal-not-in-world), [`too_far`](#refusal-too-far), [`no_such_piece`](#refusal-no-such-piece), [`not_spawned_yet`](#refusal-not-spawned-yet), [`spawn_refused`](#refusal-spawn-refused), [`not_ready`](#refusal-not-ready).
 - **`write-player`:** [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`user_took_over`](#refusal-user-took-over), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`no_path`](#refusal-no-path).
 - **`write-npc`:** [`codeware_missing`](#refusal-codeware-missing), [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), `npc_unknown`, `npc_lost`, `not_ours`, [`too_far`](#refusal-too-far), `limit`.
+- **`write-dm`:** [`codeware_missing`](#refusal-codeware-missing), [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `limit`, [`too_far`](#refusal-too-far), `target_unknown`, `target_missing`, `hud_missing`.
 
 ## Connection, session and answers
 
@@ -260,7 +263,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `kinds` | array of string | 1 to 24 items; each `answer`, `comment`, `note`, `behaviour`, `kill`, `handover`, `resume`, `write`, `refused`, `npc.spawned`, `npc.arrived`, `npc.blocked`, `npc.move_failed`, `npc.follow_ended`, `npc.turned`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.dissolved`, `npc.handed_back`, `npc.lost`, `npc.died`, `npc.auto_released` | Event kinds that end the wait (default answer and comment). |
+| `kinds` | array of string | 1 to 33 items; each `answer`, `comment`, `note`, `behaviour`, `kill`, `handover`, `resume`, `write`, `refused`, `npc.spawned`, `npc.arrived`, `npc.blocked`, `npc.move_failed`, `npc.follow_ended`, `npc.turned`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.dissolved`, `npc.handed_back`, `npc.lost`, `npc.died`, `npc.auto_released`, `dm.watch`, `dm.micro`, `dm.phone`, `dm.quest`, `dm.world`, `dm.audio`, `dm.light`, `dm.notify`, `dm.released` | Event kinds that end the wait (default answer and comment). |
 | `message_id` | integer | 1 to 1000000000 | Only the answer to this question (ui_message's id) ends the wait, even one given before the call; other kinds still count. |
 | `after` | integer | 0 to 1000000000000 | Wait for events after this sequence number (session_events' next); default: the newest when the call starts. |
 | `timeout_s` | number | 1 to 600 | Give up after this many seconds, 1 to 600. Default 120. |
@@ -954,6 +957,465 @@ Routines that run inside the game at frame rate: a turntable, a smooth look, a g
 - **Undo:** nothing to undo
 
 No parameters.
+
+## Live direction
+
+The DM toolkit: bring props, vehicles and lights in, change doors and vehicles, play sounds and a radio, send a message toast or a real incoming call, put an XF quest in the HUD's tracker, show the game's own banners and quest toasts, and arm watchers that fire micro-actions inside the game without the agent. All of it is in the `dm` class, never saved, and given back by each answer's undo, the kill switch, the pause, a handover or loading a save.
+
+### `world_spawn`
+
+**Bring in a prop or a vehicle.** Brings a prop or a vehicle into the world near V: a prop from an entity template (the depot path of a .ent file) or a record, a vehicle from its record (such as Vehicle.v_standard2_archer_hella_player), placed offset metres from V along her facing (default two metres ahead) or at a world point within 60 m, snapped to the ground below unless ground is false, facing yaw, or V with face_v. It is never saved: world_despawn, the kill switch, a pause, a handover or loading a save removes it, and game_save refuses while one exists. At most 24 spawned things (props, vehicles and lights together). Answers its handle (use spawn:&lt;n> as a target in other commands) and its entity id at once; the thing appears a moment later. Needs Codeware and the -writes package's toolkit scripts.
+
+- **Command:** `world.spawn`, the bridge method `world.spawn`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo is world_despawn of its handle; the kill switch, a pause, a handover and loading a save remove everything the bridge spawned.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `limit`, [`too_far`](#refusal-too-far), [`codeware_missing`](#refusal-codeware-missing), [`not_ready`](#refusal-not-ready), `record_missing`, `template_missing`, [`spawn_refused`](#refusal-spawn-refused), [`script_layer_missing`](#refusal-script-layer-missing)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `kind` | string | `prop`, `vehicle` | prop (the default) or vehicle. |
+| `template` | string | at most 200 characters | A prop's entity template: its depot path ending in .ent. |
+| `record` | string | at most 128 characters | A TweakDB record to spawn (a vehicle's, or a prop's), such as Vehicle.v_standard2_archer_hella_player. |
+| `appearance` | string | at most 64 characters | An appearance by name (default: the template's or record's own). |
+| `at` | array of number | exactly 3 items | A world point [x, y, z] (within 60 m of V) instead of offset. |
+| `offset` | object | the fields below | A place relative to V: forward, right and up in metres from her feet (default two metres ahead). |
+| `offset.forward` | number | -60 to 60 | Metres along V's facing (negative: behind her), -60 to 60. Default 2. |
+| `offset.right` | number | -60 to 60 | Metres to V's right (negative: left), -60 to 60. Default 0. |
+| `offset.up` | number | -20 to 20 | Metres up from her feet (negative: down), -20 to 20. Default 0. |
+| `yaw` | number | -360 to 360 | Its facing in degrees (the game's yaw: 0 faces north, 90 faces west). |
+| `face_v` | boolean | `true`, `false` | Face V. |
+| `label` | string | 1 to 48 characters | A name for it in answers and events. |
+| `ground` | boolean | `true`, `false` | Snap to the ground below the place (default true); false puts it exactly where asked. |
+
+### `world_despawn`
+
+**Remove spawned props and vehicles.** Removes a prop or vehicle the bridge brought in (its handle, from world_spawn), or every one with all (lights are removed with light_remove). The answer's undo (or undo_all, one per thing) spawns each again where it stood, under a new handle.
+
+- **Command:** `world.despawn`, the bridge method `world.despawn`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo spawns it again where it stood (a new handle); undo_all does so for each when several were removed.
+- **Refusals:** `target_unknown`, `use_light_remove`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` | integer | 1 to 1000000 | The handle world_spawn answered. |
+| `all` | boolean | `true`, `false` | Remove every spawned prop and vehicle. |
+
+### `world_spawned`
+
+**What the bridge brought in.** The props, vehicles and lights the bridge has brought in this session: each one's handle, entity id, kind, label and where it stands now, and the sounds it tracks. Changes nothing.
+
+- **Command:** `world.spawned`, the bridge method `world.spawned`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+
+No parameters.
+
+### `world_door`
+
+**Open, close, lock or seal a door.** Opens, closes, locks, unlocks, seals or unseals the door V is looking at (target look_at), a door by its entity id, or one the bridge spawned: open true unlocks and unseals it first (as the game's own quest actions do), and an open door can't be locked or sealed in the same call. The first state each door had is remembered: the kill switch, a pause and a handover put every door back, and game_save refuses while one is changed.
+
+- **Command:** `world.door`, the bridge method `world.door`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo puts the door back as it was; the kill switch, a pause and a handover put every changed door back.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_a_door`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `target` (required) | string | at most 40 characters; matches `^(look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The door: look_at (what V looks at), spawn:&lt;n> (something the bridge spawned) or an entity id such as EntityID(123). |
+| `open` | boolean | `true`, `false` | Open (true) or close (false) it. |
+| `locked` | boolean | `true`, `false` | Lock (true) or unlock (false) it. |
+| `sealed` | boolean | `true`, `false` | Seal (true) or unseal (false) it. |
+
+### `vehicle_set`
+
+**Change a vehicle's lights, engine or doors.** Switches a vehicle's lights or engine, or opens, closes, locks or unlocks one of its doors (or all of them). The vehicle is mounted (the one V sits in), look_at (the one she looks at), a spawned one (spawn:&lt;n>) or an entity id. The game offers no read of the headlights, so the lights' undo switches them the other way. The first engine and door states are remembered: the kill switch, a pause and a handover put them back.
+
+- **Command:** `vehicle.set`, the bridge method `vehicle.set`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo puts back the engine and the doors it could read and switches the lights the other way; the kill switch, a pause and a handover put the vehicle back.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_a_vehicle`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `target` (required) | string | at most 40 characters; matches `^(mounted\|look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The vehicle: mounted, look_at, spawn:&lt;n> or an entity id such as EntityID(123). |
+| `lights` | boolean | `true`, `false` | Switch the lights on or off. |
+| `engine` | boolean | `true`, `false` | Switch the engine on or off. |
+| `door` | string | `all`, `seat_front_left`, `seat_front_right`, `seat_back_left`, `seat_back_right`, `trunk`, `hood` | Which door: all, seat_front_left, seat_front_right, seat_back_left, seat_back_right, trunk or hood. |
+| `door_state` | string | `open`, `closed`, `locked`, `unlocked` | What to do to it: open, closed, locked or unlocked. Needs door. |
+
+### `audio_play`
+
+**Play a sound event.** Plays one of the game's sound events (by its event name, such as ui_phone_sms) on V (the default), in the world with no place (on global), on what V looks at, or on something the bridge spawned. loop keeps it playing until audio_stop (and the kill switch, a pause, a handover or a load stop it); other sounds are tracked for seconds (default 10). At most 16 tracked sounds. Answers the sound's id.
+
+- **Command:** `audio.play`, the bridge method `audio.play`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo stops the sound; a sound already played can't be unheard.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `limit`, [`not_ready`](#refusal-not-ready)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `event` (required) | string | matches `^[A-Za-z0-9_]{1,96}$` | The sound event's name: letters, digits and _. |
+| `on` | string | at most 40 characters; matches `^(v\|global\|look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | Where it plays: v (the default), global, look_at, spawn:&lt;n> or an entity id. |
+| `emitter` | string | matches `^[A-Za-z0-9_]{1,64}$` | An emitter name on that entity (optional). |
+| `loop` | boolean | `true`, `false` | Keep it playing until audio_stop. |
+| `seconds` | number | 0.5 to 3600 | How long a one-shot is tracked, 0.5 to 3600. Default 10. |
+
+### `audio_stop`
+
+**Stop a sound.** Stops a sound the bridge started (its id from audio_play), or every one it tracks with all.
+
+- **Command:** `audio.stop`, the bridge method `audio.stop`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** A sound can't be resumed; the answer's undo_list plays each again from the start.
+- **Refusals:** `not_found`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` | integer | 1 to 1000000 | The id audio_play answered. |
+| `all` | boolean | `true`, `false` | Stop every tracked sound. |
+
+### `audio_radio`
+
+**Set a vehicle's radio.** Turns a vehicle's radio on or off and tunes it to one of the game's fourteen stations (0 to 13, or by name: aggro_industrial, electro_industrial, hip_hop, aggro_techno, downtempo, attitude_rock, pop, latino, metal, minimal_techno, jazz, growl, dark_star, impulse_fm). Only a vehicle's radio takes an exact station; a radio device in the world only steps to its next station, which this does not drive. The first station and state are remembered and put back by the kill switch, a pause and a handover.
+
+- **Command:** `audio.radio`, the bridge method `audio.radio`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo puts the earlier station and state back (the station only when the game's name for it matches one of the fourteen).
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `no_radio`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `target` (required) | string | at most 40 characters; matches `^(mounted\|look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The vehicle: mounted, look_at, spawn:&lt;n> or an entity id. |
+| `station` | integer or string | 0 to 13; or `aggro_industrial`, `electro_industrial`, `hip_hop`, `aggro_techno`, `downtempo`, `attitude_rock`, `pop`, `latino`, `metal`, `minimal_techno`, `jazz`, `growl`, `dark_star`, `impulse_fm` | A station number 0 to 13 or its name. |
+| `on` | boolean | `true`, `false` | Turn the radio on (true) or off (false). |
+
+### `audio_voice`
+
+**Have an NPC say a line of its own voice.** Plays a line from an NPC's own voiceset by its context (such as greeting): the NPC V looks at (look_at), one the bridge spawned or an entity id. The game picks the line, the voice and the lip movement; a context the voice lacks plays nothing. Only someone with a voice of their own takes it.
+
+- **Command:** `audio.voice`, the bridge method `audio.voice`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** A spoken line can't be taken back.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `not_an_npc`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `target` (required) | string | at most 40 characters; matches `^(look_at\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | The NPC: look_at, spawn:&lt;n> or an entity id. |
+| `context` (required) | string | matches `^[A-Za-z0-9_]{1,96}$` | The voiceset context: letters, digits and _. |
+
+### `phone_text`
+
+**Show a message toast.** Shows a message toast on the HUD's phone from a name, with the text in it (up to 500 characters; the toast shows for about seven seconds and carries the whole text). It is not a message in the phone's inbox and nothing is saved: the player can't open or answer it. The messages shown are listed by phone_state.
+
+- **Command:** `phone.text`, the bridge method `phone.text`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** A toast can't be taken back; it fades by itself.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `hud_missing`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `contact` (required) | string | 1 to 48 characters | The sender's name as the toast shows it. |
+| `text` (required) | string | 1 to 500 characters | The message. |
+
+### `phone_call`
+
+**Ring V with a call.** Rings V's phone with a real incoming call from a contact the player has (ids from phone_state {contacts: true}; the game's own ring, name and picture). When the player answers it, the bridge starts the call and shows the lines one after another as subtitles in the call's style, then ends the call; a rejected call, a missed one and a hang-up are events (dm.phone). mode audio (the default) shows the contact's picture; video asks for the holocall frame, which the game fills only with a camera feed it stages for its own calls. A caller the journal doesn't hold is refused: the phone's code would run on a missing contact. Refused while the phone is blocked (combat, a story scene). One call at a time.
+
+- **Command:** `phone.call`, the bridge method `phone.call`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo is phone_end, which ends the ring or the call; an unanswered call ends by itself.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), [`busy`](#refusal-busy), `contact_unknown`, `phone_blocked`, [`not_ready`](#refusal-not-ready)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `contact` (required) | string | matches `^[A-Za-z0-9_.-]{1,64}$` | The contact's id as the player's journal has it (phone_state {contacts: true} lists them). |
+| `lines` (required) | array of object | 1 to 16 items | What is said once the call is answered, 1 to 16 lines in order. |
+| `lines[].text` (required) | string | 1 to 300 characters | The words, up to 300 characters. |
+| `lines[].speaker` | string | 1 to 48 characters | The name shown (default the contact's id). |
+| `lines[].seconds` | number | 0.5 to 20 | How long the line shows, 0.5 to 20 (default from its length). |
+| `ring_s` | number | 3 to 120 | How long it rings before it is missed, 3 to 120. Default 20. |
+| `mode` | string | `audio`, `video` | audio (the default) or video. |
+| `rejectable` | boolean | `true`, `false` | Whether the player can reject it (default true). |
+
+### `phone_end`
+
+**End the call.** Ends the call that is ringing or running (the ring stops, the lines go, the phone is free). Nothing happens when there is none.
+
+- **Command:** `phone.end`, the bridge method `phone.end`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** A call can't be resumed; start another with phone_call.
+
+No parameters.
+
+### `phone_state`
+
+**The call and the messages.** The call (ringing, answered, declined, missed, ended, cancelled, hung_up or failed, with the contact) and the messages shown. With contacts true, also the journal contacts the player has (their ids and names), and whether the phone can take a call now. Locked contacts are never listed. Changes nothing.
+
+- **Command:** `phone.state`, the bridge method `phone.state`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `contacts` | boolean | `true`, `false` | Also list the player's journal contacts. |
+
+### `quest_set`
+
+**Put an XF quest in the tracker.** Puts a quest of the bridge's own in the HUD's quest tracker (the area under the minimap): a title and up to 8 objectives, each active, done, failed or hidden, optionally with an area on the map (radius_m metres round a point) and complete_on_enter, which arms a watcher that marks the objective done when V walks in. It is not in the journal and not in a save: the tracker shows one quest at a time, the one set or changed last. notify new or update raises the game's own quest toast with the title. At most 4 quests at once. A save is not refused (nothing is kept), but a load, the kill switch, a pause and a handover take it down.
+
+- **Command:** `quest.set`, the bridge method `quest.set`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo puts the earlier quest back (or clears a new one).
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `too_many`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` (required) | string | matches `^[A-Za-z0-9_.-]{1,48}$` | The quest's id. |
+| `title` (required) | string | 1 to 80 characters | The quest's name as the tracker shows it. |
+| `text` | string | at most 300 characters | A line about the quest, kept for quest_state (the tracker shows the title and the objectives). |
+| `objectives` | array of object | at most 8 items | Up to 8 objectives. |
+| `objectives[].id` (required) | string | matches `^[A-Za-z0-9_.-]{1,48}$` | The objective's id. |
+| `objectives[].text` (required) | string | 1 to 120 characters | The objective as the tracker shows it. |
+| `objectives[].state` | string | `active`, `done`, `failed`, `hidden` | active (the default), done, failed or hidden. |
+| `objectives[].optional` | boolean | `true`, `false` | Mark it optional. |
+| `objectives[].area` | object | the fields below | A place on the map for the objective. |
+| `objectives[].area.at` (required) | array of number | exactly 3 items | The world point [x, y, z]. |
+| `objectives[].area.radius_m` | number | 0.5 to 200 | The radius in metres, 0.5 to 200. Default 5. |
+| `objectives[].area.complete_on_enter` | boolean | `true`, `false` | Mark the objective done when V enters the radius. |
+| `show` | boolean | `true`, `false` | Show it in the tracker (default true). |
+| `notify` | string | `none`, `new`, `update` | Raise the game's quest toast: new, update, or none (the default). |
+
+### `quest_objective`
+
+**Change an XF quest's objective.** Sets one objective of an XF quest to active, done, failed or hidden and/or changes its words, and redraws the tracker (a finished objective is drawn once with its tick or cross). notify (default true) raises the game's quest toast: update for a change, done when the last non-optional objective is done, failed for a failed one. The answer says whether the whole quest is complete.
+
+- **Command:** `quest.objective`, the bridge method `quest.objective`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo puts the objective's earlier state and words back.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `not_found`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `quest` (required) | string | matches `^[A-Za-z0-9_.-]{1,48}$` | The quest's id. |
+| `objective` (required) | string | matches `^[A-Za-z0-9_.-]{1,48}$` | The objective's id. |
+| `state` | string | `active`, `done`, `failed`, `hidden` | active, done, failed or hidden. |
+| `text` | string | 1 to 120 characters | New words for the objective. |
+| `notify` | boolean | `true`, `false` | Raise the quest toast (default true). |
+
+### `quest_clear`
+
+**Remove an XF quest.** Removes an XF quest from the tracker (its id), or every one with all. The answer's undo sets a removed quest again.
+
+- **Command:** `quest.clear`, the bridge method `quest.clear`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo sets the quest again (undo_list for several).
+- **Refusals:** `not_found`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` | string | matches `^[A-Za-z0-9_.-]{1,48}$` | The quest's id. |
+| `all` | boolean | `true`, `false` | Remove every XF quest. |
+
+### `quest_state`
+
+**The XF quests.** The XF quests the bridge holds and each objective's state. Changes nothing.
+
+- **Command:** `quest.state`, the bridge method `quest.state`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+
+No parameters.
+
+### `notify_show`
+
+**Show a message the game's way.** Shows words on one of the game's own message surfaces: warning (the banner at the top), onscreen (the centred message), quest_new, quest_update, quest_done or quest_failed (the quest toasts; text is the line they show, title replaces the heading), or subtitle (a line in the dialogue subtitle area with speaker's name, shown for seconds). Plain text; nothing is saved. Banners and toasts need the HUD up (a menu or a loading screen refuses hud_missing).
+
+- **Command:** `notify.show`, the bridge method `notify.show`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo takes a banner, a centred message or the subtitle lines down; a quest toast fades by itself.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `hud_missing`, [`codeware_missing`](#refusal-codeware-missing)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `style` (required) | string | `quest_new`, `quest_update`, `quest_done`, `quest_failed`, `onscreen`, `warning`, `subtitle` | warning, onscreen, quest_new, quest_update, quest_done, quest_failed or subtitle. |
+| `text` (required) | string | 1 to 300 characters | The words, up to 300 characters. |
+| `title` | string | at most 80 characters | A heading for a quest toast (default the game's own). |
+| `speaker` | string | 1 to 48 characters | The name a subtitle shows (required for a subtitle). |
+| `seconds` | number | 0.5 to 30 | How long it shows, 0.5 to 30. Default 5 (4 for a subtitle). |
+
+### `notify_hide`
+
+**Take messages down.** Takes down the banner, the centred message and the bridge's subtitle lines (or only those of the given style).
+
+- **Command:** `notify.hide`, the bridge method `notify.hide`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** Show it again with notify_show.
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `style` | string | `warning`, `onscreen`, `subtitle`, `quest_new`, `quest_update`, `quest_done`, `quest_failed` | Only this style: warning, onscreen or subtitle (default all). |
+
+### `light_spawn`
+
+**Bring in a light.** Brings in a light: an entity whose template holds a light component, set to the colour, intensity (in the component's own units), radius and, for a spot, the cone (inner and outer, full angles in degrees), placed like a prop. With no template it uses the XF light carrier, which is not built yet (carrier_missing); name a template that holds a light component (for example a lamp's), or bring a lamp in with world_spawn and steer it with light_set. pattern sets the engine's flicker or one the tick drives (pulse, strobe, broken, candle; at most 4 at once). Never saved; counts among the 24 spawned things, at most 8 lights.
+
+- **Command:** `light.spawn`, the bridge method `light.spawn`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo is light_remove of its handle; the kill switch, a pause, a handover and loading a save remove every light.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `limit`, [`too_far`](#refusal-too-far), [`codeware_missing`](#refusal-codeware-missing), `carrier_missing`, `template_missing`, [`spawn_refused`](#refusal-spawn-refused), [`not_ready`](#refusal-not-ready)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `template` | string | at most 200 characters | An entity template with a light component: its depot path ending in .ent. |
+| `at` | array of number | exactly 3 items | A world point [x, y, z] (within 60 m of V) instead of offset. |
+| `offset` | object | the fields below | A place relative to V: forward, right and up in metres from her feet (default two metres ahead). |
+| `offset.forward` | number | -60 to 60 | Metres along V's facing (negative: behind her), -60 to 60. Default 2. |
+| `offset.right` | number | -60 to 60 | Metres to V's right (negative: left), -60 to 60. Default 0. |
+| `offset.up` | number | -20 to 20 | Metres up from her feet (negative: down), -20 to 20. Default 0. |
+| `yaw` | number | -360 to 360 | Its facing in degrees (the game's yaw: 0 faces north, 90 faces west). |
+| `face_v` | boolean | `true`, `false` | Face V. |
+| `colour` | string or array of integer | matches `^#[0-9A-Fa-f]{6}$`; or exactly 3 items; each 0 to 255 | A colour: #rrggbb or [red, green, blue] (0 to 255). |
+| `intensity` | number | 0 to 100000 | The component's intensity, 0 to 100000. Default 100. |
+| `radius` | number | 0.1 to 50 | The reach in metres, 0.1 to 50. Default 8. |
+| `inner` | number | 1 to 179 | A spot's inner cone angle, 1 to 179. |
+| `outer` | number | 1 to 179 | A spot's outer cone angle, 1 to 179 (at least inner). |
+| `pattern` | string or object | `steady`, `flicker`, `pulse`, `strobe`, `broken`, `candle`; or the fields below | How the light behaves over time: a name, or {kind, period, low, strength, seed}. |
+| `label` | string | 1 to 48 characters | A name for it in answers and events. |
+
+### `light_set`
+
+**Change a light.** Changes the colour, intensity, radius, cone, on/off state or pattern of a light (the handle from light_spawn or world_spawn: any thing the bridge spawned whose entity holds a light component takes it). fade_s fades the change in (0 to 10 s). The answer carries the earlier values and an undo that puts them and the earlier pattern back.
+
+- **Command:** `light.set`, the bridge method `light.set`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo puts the earlier values and pattern back.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `target_unknown`, `target_missing`, `no_light_component`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` (required) | integer | 1 to 1000000 | The handle (spawn:&lt;n>'s n). |
+| `colour` | string or array of integer | matches `^#[0-9A-Fa-f]{6}$`; or exactly 3 items; each 0 to 255 | A colour: #rrggbb or [red, green, blue] (0 to 255). |
+| `intensity` | number | 0 to 100000 | The component's intensity, 0 to 100000. |
+| `radius` | number | 0.1 to 50 | The reach in metres, 0.1 to 50. |
+| `inner` | number | 1 to 179 | The inner cone angle, 1 to 179 (with outer). |
+| `outer` | number | 1 to 179 | The outer cone angle, 1 to 179 (with inner). |
+| `on` | boolean | `true`, `false` | Switch it on or off. |
+| `pattern` | string or object | `steady`, `flicker`, `pulse`, `strobe`, `broken`, `candle`; or the fields below | How the light behaves over time: a name, or {kind, period, low, strength, seed}. |
+| `fade_s` | number | 0 to 10 | Fade the change in over this many seconds, 0 to 10. |
+
+### `light_remove`
+
+**Remove a light.** Removes a light (its handle), or every light with all. The answer's undo brings a removed light back (a new handle; its pattern is not restored).
+
+- **Command:** `light.remove`, the bridge method `light.remove`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo brings the light back under a new handle.
+- **Refusals:** `target_unknown`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` | integer | 1 to 1000000 | The handle light_spawn answered. |
+| `all` | boolean | `true`, `false` | Remove every light. |
+
+### `watch_arm`
+
+**Arm an in-game watcher.** Arms a watcher that runs inside the game and, when its condition holds, logs an event (dm.watch) and runs up to 8 micro-actions (bridge commands, each with its own delay_s) without the agent: enter or leave (V inside or outside radius_m of a point or an entity), gaze (V looks at an entity for seconds, by a cone or by the game's look-at), weapon, combat or vehicle (the edge on or off), interact (V uses something; caption part, target), choice (V picks a dialogue choice; caption part, index), timer (seconds after arming) or clock (the game's time of day passes a mark). repeat keeps it armed with a cooldown; it ends at expires_s (default 600, at most 3600), when it fires (unless repeat), by watch_disarm, the kill switch, a pause, a handover and a load. At most 16 at once. A micro-action goes through the bridge's own gates like any request; saving, loading, the kill switch, handing over and the creator's buttons are never allowed, and a watcher armed by an action carries no actions of its own. The pick of a dialogue choice is inferred from the game's choice list going away [unverified].
+
+- **Command:** `watch.arm`, the bridge method `watch.arm`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo is watch_disarm; a watcher also ends when it fires (unless repeat), expires, by the kill switch and when a save loads.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_v`](#refusal-not-v), `too_many`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` | string | matches `^[A-Za-z0-9_.-]{1,48}$` | A short id (default w1, w2, ...); an armed id is replaced. |
+| `kind` (required) | string | `enter`, `leave`, `gaze`, `weapon`, `combat`, `vehicle`, `interact`, `choice`, `timer`, `clock` | What it watches. |
+| `at` | array of number | exactly 3 items | A world point (enter, leave). |
+| `target` | string | at most 40 characters; matches `^(any\|EntityID\([0-9]{1,20}\)\|[0-9]{1,20}\|spawn:[1-9][0-9]{0,5})$` | An entity (spawn:&lt;n> or an entity id) for enter, leave, gaze and interact; any for interact. |
+| `radius_m` | number | 0.5 to 500 | Enter and leave: the radius, 0.5 to 500. Default 5. |
+| `seconds` | number | 0 to 3600 | Gaze: the dwell; timer: the delay (0.1 to 3600). |
+| `cone_deg` | number | 1 to 60 | Gaze: the half-angle of the cone, 1 to 60. Default 12. |
+| `max_m` | number | 1 to 300 | Gaze: the farthest distance, 1 to 300. Default 30. |
+| `look_at` | boolean | `true`, `false` | Gaze: use the game's look-at instead of the cone. |
+| `edge` | string | `on`, `off` | Weapon, combat, vehicle: on (the default) or off. |
+| `now` | boolean | `true`, `false` | Fire at once when it already holds on the first sample (default true except for leave). |
+| `caption` | string | at most 64 characters | Interact and choice: part of the caption (case does not matter). |
+| `index` | integer | 0 to 9 | Choice: the index of the choice, 0 to 9. |
+| `clock` | string | matches `^[0-2][0-9]:[0-5][0-9]$` | Clock: the time of day as HH:MM. |
+| `expires_s` | number | 1 to 3600 | Seconds until it ends, 1 to 3600. Default 600. |
+| `repeat` | boolean | `true`, `false` | Keep it armed after it fires. |
+| `cooldown_s` | number | 0 to 600 | The least seconds between two firings, 0 to 600. Default 2. |
+| `hz` | number | 1 to 30 | How often it is sampled, 1 to 30 a second. |
+| `actions` | array of object | at most 8 items | Up to 8 micro-actions, run in order when it fires. |
+| `actions[].method` (required) | string | at most 64 characters; matches `^[a-z]+(\.[a-z]+)+$` | A bridge method such as notify.show or audio.play. |
+| `actions[].params` | any | any | Its parameters, an object (under 4 KiB). |
+| `actions[].delay_s` | number | 0 to 30 | Wait this long first, 0 to 30. |
+
+### `watch_disarm`
+
+**Disarm watchers.** Disarms a watcher (its id) or every one with all, and drops the micro-actions of it still waiting.
+
+- **Command:** `watch.disarm`, the bridge method `watch.disarm`
+- **Permission:** Direct the scene (`write-dm`)
+- **Changes the game:** Yes
+- **Undo:** Arm it again with watch_arm.
+- **Refusals:** `not_found`
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` | string | matches `^[A-Za-z0-9_.-]{1,48}$` | The watcher's id. |
+| `all` | boolean | `true`, `false` | Disarm every watcher. |
+
+### `watch_list`
+
+**The armed watchers.** The watchers armed now: each one's condition, time left, how many times it fired and its actions. Changes nothing.
+
+- **Command:** `watch.list`, the bridge method `watch.list`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+
+No parameters.
+
+### `game_digest`
+
+**One compact read of the game.** One compact read for an agent: V (place, facing, whether she is busy, health, the vehicle she is in, what she looks at), the world (the clock, and with sky the rain and the weather), the police heat, what the bridge has placed and changed, the watchers armed, the XF quests, the phone call, and the most recent events that happened without the agent's own command (watchers fired, micro-actions run, the player's side of the phone, quests moved by an area, releases, answers, comments, notes, a kill or a handover; events from the last kinds you ask for). Changes nothing.
+
+- **Command:** `game.digest`, the bridge method `game.digest`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`not_in_world`](#refusal-not-in-world)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `events` | integer | 0 to 32 | How many recent events, 0 to 32. Default 8. |
+| `kinds` | array of string | at most 16 items; each matches `^[a-z.]{1,32}$` | Which event kinds (default the ones above). |
+| `sky` | boolean | `true`, `false` | Include the rain and the weather (default true). |
 
 ## World
 
@@ -2097,7 +2559,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-unsupported"></a>`unsupported` | This game doesn't offer a safe way to do that yet. |
 | <a id="refusal-unverified-index"></a>`unverified_index` | That face table index matches an expression only by its place in the list, which isn't reliable with an expression pack installed, so nothing was applied. Use an index photo_state found by name (table_index_verified), or pass force: true to apply it anyway. |
 | <a id="refusal-user-took-over"></a>`user_took_over` | The player took over (their own movement, jump, crouch, sprint, dodge, mouse or stick), so the glide or look stopped and gave V back. Nothing more was changed. Start it again once the player has let go. |
-| <a id="refusal-write-class-disabled"></a>`write_class_disabled` | This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act, npc; inventory stays off until the maintainer allows it, and showroom, player, act and npc are listed only by the XF test profile's build). Nothing was changed. |
+| <a id="refusal-write-class-disabled"></a>`write_class_disabled` | This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act, npc, dm; inventory stays off until the maintainer allows it, and showroom, player, act, npc and dm are listed only by the XF test profile's build). Nothing was changed. |
 | <a id="refusal-write-mismatch"></a>`write_mismatch` | The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again. |
 | <a id="refusal-writes-disabled"></a>`writes_disabled` | Changing the game is switched off in this setup. It is allowed only in the dedicated test profile, where the bridge's config.ini has allow_writes = true. |
 | <a id="refusal-writes-paused"></a>`writes_paused` | Changes are paused in the game's XF Runtime Bridge window (Cyber Engine Tweaks overlay). Nothing was changed. Resume them there to continue. |
@@ -2105,4 +2567,4 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 
 Codes the tools above name that have no shared wording yet; the answer's own message (from the tools) or its `detail` (from the game) explains each in context:
 
-`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_projection`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `wait_timeout`.
+`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.
