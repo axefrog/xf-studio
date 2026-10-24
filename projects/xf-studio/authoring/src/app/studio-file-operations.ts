@@ -141,9 +141,13 @@ export class StudioFileOperations {
       : "Nothing with that ID is running." };
   }
   capability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
-    if (action.kind === "package.stop") return this.activity().some(entry => entry.kind === "package.build" && entry.cancellable)
-      ? { available: true } : { available: false, reason: "No stoppable Build is running." };
-    if (this.busy) return { available: false, reason: "Another file operation is in progress." };
+    if (action.kind === "package.stop") {
+      const build = this.activity().find(entry => entry.kind === "package.build");
+      return build?.cancellable ? { available: true } : { available: false, reason: build
+        ? "Waiting for the host to finish stopping or completing the Build." : "No Build is running." };
+    }
+    if (this.busy) return { available: false, reason: this.busy.kind === "package.build" && this.collection?.activity()?.cancellable === false
+      ? "The Build is stopping. Wait for the host to finish cleanup." : "Another file operation is in progress." };
     // What a picker's file goes to is named when it is asked (profiles design §3.3), never decided when the file arrives.
     if (action.kind === "recipe.import" && !action.collection) return refusal("missing_target", "Open a collection first.");
     if ((action.kind === "savedV.import" || action.kind === "characterPreset.import") && !action.character) return refusal("missing_target", "Choose a V first.");

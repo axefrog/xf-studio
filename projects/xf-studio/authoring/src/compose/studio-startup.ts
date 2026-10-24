@@ -548,7 +548,11 @@ async function start(host: StudioHost, root: HTMLElement) {
         polish5!.arm();
         void bootstrap.files.executeCollection({ kind: "package", action: "build" });
       },
-      stopped: () => port!.files.execute({ kind: "package.stop" }),
+      stopping: () => port!.files.execute({ kind: "package.stop" }),
+      stopped: async () => {
+        if (port!.files.capability({ kind: "package.stop" }).available) await port!.files.execute({ kind: "package.stop" });
+        polish5!.stopped();
+      },
     },
     xfStudioPolish4: {
       state: (state: Polish4State) => polishFixture!.state(state),

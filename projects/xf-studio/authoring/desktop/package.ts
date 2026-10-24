@@ -6,7 +6,7 @@ import { defaultLocalSettings } from "../src/setup/local-settings";
 import { DesktopWorkActivity } from "./work-activity";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
-import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, type HostPrerequisite, type PackageAction } from "../src/platform/export/product-host";
+import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, validBuildId, type HostPrerequisite, type PackageAction } from "../src/platform/export/product-host";
 
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 /** One Check and one Build at a time for this desktop host (the shared package host service, PIPE-03). */
@@ -20,10 +20,10 @@ export type DesktopBuildHost = { dataRoot: string; toolsRoot: string; settings: 
   managedWolvenKit?: () => string | null };
 /** `GET /api/package/progress`: the running Build's stage (PIPE-131); codes and counts only, no paths. */
 export function desktopPackageProgress(request: Request): Response {
-  return request.method !== "GET" ? json({ error: "Method not allowed." }, 405) : json({ build: service.buildProgress() });
+  return request.method !== "GET" ? json({ error: "Method not allowed." }, 405) : json({ build: service.buildProgress(), ...(new URL(request.url).searchParams.get("buildId") ? { status: service.buildStatus(new URL(request.url).searchParams.get("buildId")!) } : {}) });
 }
 
-/** Browser requests contain only action and collection; all build paths are host owned. */
+/** Browser requests name Check/Build with a collection and optional Build ID, or Stop by ID; all build paths are host owned. */
 export async function desktopPackageRequest(request: Request, workerPath = resolve(import.meta.dir, "check-worker.ts"),
   timeoutMs?: number, buildHost?: DesktopBuildHost, activity?: DesktopWorkActivity): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
@@ -35,17 +35,19 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
   try { body = await request.text(); }
   catch { return json({ error: "Could not read collection snapshot." }, 400); }
   if (Buffer.byteLength(body) > MAX_PACKAGE_REQUEST_BYTES) return json({ error: "Collection exceeds 16 MB." }, 413);
-  let input: { action?: unknown; collection?: unknown };
+  let input: { action?: unknown; collection?: unknown; buildId?: unknown };
   try { input = JSON.parse(body); }
   catch { return json({ error: "Expected a package action and collection only." }, 400); }
+  if (input?.action === "stop" && validBuildId(input.buildId) && Object.keys(input).every(key => key === "action" || key === "buildId"))
+    return json(service.stopBuild(input.buildId));
   if (!input || typeof input !== "object" || Array.isArray(input) ||
       (input.action !== "check" && input.action !== "build") ||
-      Object.keys(input).some(key => key !== "action" && key !== "collection") || !("collection" in input))
+      Object.keys(input).some(key => key !== "action" && key !== "collection" && key !== "buildId") || !("collection" in input) || (input.buildId !== undefined && (input.action !== "build" || !validBuildId(input.buildId))))
     return json({ error: "Expected a package action and collection only." }, 400);
   const action = input.action as PackageAction;
   if (action === "build" && !buildHost) return json({ code: "package_build_host_unavailable", error: "Desktop package tools are unavailable." }, 503);
-  if (service.busy(action)) return json({ code: `package_${action}_busy`, error: action === "build"
-    ? "A package Build is already running." : "A package Check is already running. Wait for its result before starting another." }, 409);
+  if (service.busy(action) && !(typeof input.buildId === "string" && service.buildStatus(input.buildId).phase !== "unknown")) return json({ code: `package_${action}_busy`, error: action === "build"
+    ? "A Build is still running or stopping. Wait for it to finish before starting another." : "A package Check is already running. Wait for its result before starting another." }, 409);
   const end = activity?.begin("package");
   if (activity && !end) return json({ code: "package_restart_pending",
     error: "An update restart is being prepared. Finish it before starting package work." }, 409);
@@ -63,8 +65,9 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
       prerequisites: (current): Record<string, HostPrerequisite> => buildHost ? { [EYE_PLATE_PREREQUISITE]: desktopEyePlate(current, dataRoot),
         [EYE_PLATE_MASCULINE_PREREQUISITE]: desktopMasculineEyePlate(current, dataRoot),
         [EXPRESSIONS_GAME_PREREQUISITE]: desktopExpressionsGame(current, dataRoot) } : {} });
-    const signal = buildHost?.shutdownSignal ? AbortSignal.any([request.signal, buildHost.shutdownSignal]) : request.signal;
-    const outcome = await service.run(adapter, action, input.collection, signal, action === "check" ? timeoutMs : buildHost?.deadlineMs);
+    const connection = input.buildId ? new AbortController().signal : request.signal;
+    const signal = buildHost?.shutdownSignal ? AbortSignal.any([connection, buildHost.shutdownSignal]) : connection;
+    const outcome = await service.run(adapter, action, input.collection, signal, action === "check" ? timeoutMs : buildHost?.deadlineMs, input.buildId as string | undefined);
     return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message, ...(outcome.omissions ? { omissions: outcome.omissions } : {}) }, outcome.status);
   } finally { end?.(); }
 }

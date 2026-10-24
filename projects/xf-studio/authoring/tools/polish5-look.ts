@@ -29,9 +29,10 @@ try {
   await guide.waitFor("!!document.getElementById('c-progress')");
   for (const width of [300, 620]) {
     await app.evaluate(`window.xfStudioShell.dock.moveTo('package', {kind:'float',x:24,y:24,w:${width},h:680}, 'Capture Build Stop')`);
-    for (const state of ["running", "stopped"] as const) {
+    for (const state of ["running", "stopping", "stopped"] as const) {
       await app.evaluate(`window.xfStudioPolish5.${state}()`);
       await app.waitFor(state === "running" ? "window.xfStudioPresentation.files.activity().some(e => e.kind === 'package.build' && e.cancellable)"
+        : state === "stopping" ? "window.xfStudioPresentation.library.summary().busy && window.xfStudioPresentation.library.summary().progress?.message === 'Stopping…'"
         : "window.xfStudioPresentation.files.snapshot().last?.code === 'package_build_cancelled'");
       await app.wait(400);
       for (const theme of ["light", "dark"] as const) {

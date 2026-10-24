@@ -13,7 +13,8 @@ import { ExportRefusal, PACKAGE_PLAN_1, PrerequisiteStale, type FeatureExporterE
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { packagePlateRecord, type EyePlateManifest } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
-import { localCheckWorker } from "../src/host/package-server";
+import { requestIdentifiedBuild, PackageRequestError } from "../src/legacy/eye-makeup/export/package-action";
+import { createPackageHandler, localCheckWorker } from "../src/host/package-server";
 import { eyeEntry, fakeTools, fakeVerifierTools, FOOTPRINT, LIPS, LIPS_ENTRY, writePlate } from "./fixtures/product-fixture";
 import { tempDir } from "./temp-dir";
 
@@ -207,3 +208,94 @@ test("several products move into the store all or nothing (PIPE-92)", async () =
   expect(await runProductBuild(blocked, collection, new AbortController().signal)).toMatchObject({ ok: false, code: "package_build_failed" });
   expect(readdirSync(join(clash.dir, "candidates"))).toHaveLength(1);
 }, 120_000);
+
+
+const latch = () => { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; };
+/** The real shared host and localhost route, with only HTTP delivery under test control. */
+function buildConnection(adapter: PackageHostAdapter) {
+  const handler = createPackageHandler(() => adapter);
+  return async (path: string, init: RequestInit): Promise<Response> => {
+    const headers = new Headers(init.headers); headers.set("Origin", "http://127.0.0.1:4565");
+    const request = new Request(`http://127.0.0.1:4565${path}`, { ...init, headers });
+    return path.startsWith("/api/package/progress") ? handler.progress(request) : handler(request);
+  };
+}
+const buildPost = (action: string, buildId: string, collection?: unknown): RequestInit => ({ method: "POST",
+  headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, buildId, ...(collection ? { collection } : {}) }) });
+
+for (const loseReplies of [false, true]) test(`Stop waits for real host cleanup, double Stop is idempotent, and rebuild waits${loseReplies ? "; lost replies reconcile" : ""}`, async () => {
+  const h = host(), staged = latch(), cleanup = latch();
+  const run = h.adapter.runBuilder;
+  let first = true;
+  h.adapter.runBuilder = async (args, options) => {
+    const built = await run(args, options);
+    if (first) { first = false; staged.release(); await cleanup.promise; }
+    return built;
+  };
+  const send = buildConnection(h.adapter), id = crypto.randomUUID(), abort = new AbortController();
+  let settled = false, statusReads = 0;
+  const client = requestIdentifiedBuild(fixture, abort.signal, { id: () => id, pause: () => Bun.sleep(2), send: async (path, init) => {
+    const response = await send(path, init);
+    if (loseReplies && path === "/api/package") throw Error("Response lost after host processed it");
+    if (path.includes("progress")) { statusReads++; if (loseReplies && statusReads === 1) throw Error("Connection lost"); }
+    return response;
+  } }).then(result => { settled = true; return result; }, error => { settled = true; return error; });
+  await staged.promise;
+  abort.abort();
+  expect((await (await send("/api/package", buildPost("stop", id))).json()).phase).toBe("stopping");
+  expect((await (await send("/api/package", buildPost("stop", id))).json()).phase).toBe("stopping");
+  expect(settled).toBe(false);
+  const during = await send("/api/package", buildPost("build", crypto.randomUUID(), fixture));
+  expect(during.status).toBe(409);
+  expect((await during.json()).error).toContain("Wait for it to finish");
+  expect(readdirSync(join(h.dir, "stage"))).toHaveLength(1);
+  cleanup.release();
+  const result = await client;
+  expect(result).toBeInstanceOf(PackageRequestError);
+  expect(result.code).toBe("package_build_cancelled");
+  for (const folder of ["snap", "work", "stage", "candidates"])
+    expect(existsSync(join(h.dir, folder)) ? readdirSync(join(h.dir, folder)) : []).toEqual([]);
+  expect((await (await send(`/api/package/progress?buildId=${id}`, { method: "GET" })).json()).status)
+    .toMatchObject({ phase: "finished", outcome: { ok: false, code: "package_build_cancelled" } });
+  expect((await send("/api/package", buildPost("build", crypto.randomUUID(), fixture))).status).toBe(200);
+  if (loseReplies) expect(statusReads).toBeGreaterThan(1);
+}, 60_000);
+
+for (const stopLate of [true, false]) test(stopLate ? "Stop after host promotion wins completion despite delayed POST delivery" : "a lost completed response reconciles without building twice", async () => {
+  const h = host(), send = buildConnection(h.adapter), promoted = latch(), deliver = latch(), abort = new AbortController(), id = crypto.randomUUID();
+  let posts = 0;
+  const client = requestIdentifiedBuild(fixture, abort.signal, { id: () => id, pause: () => Bun.sleep(2), send: async (path, init) => {
+    const response = await send(path, init);
+    if (path === "/api/package" && JSON.parse(init.body as string).action === "build") {
+      posts++; promoted.release();
+      if (stopLate) await deliver.promise; else throw Error("Completed response lost");
+    }
+    return response;
+  } });
+  await promoted.promise;
+  expect(readdirSync(join(h.dir, "candidates"))).toHaveLength(1);
+  if (stopLate) abort.abort();
+  const result = await client;
+  expect(result.schema).toBe("xfs/package-build-2");
+  expect(existsSync(result.products[0].package)).toBe(true);
+  expect(posts).toBe(1);
+  expect((await (await send("/api/package", buildPost("stop", id))).json()).outcome.ok).toBe(true);
+  deliver.release();
+}, 60_000);
+
+
+test("an unknown or evicted Build ID never claims stopped and cannot start work later", async () => {
+  const service = new PackageHostService(), h = host(), id = crypto.randomUUID();
+  const answer = service.stopBuild(id);
+  expect(answer).toMatchObject({ phase: "finished", outcome: { ok: false, code: "package_build_unknown" } });
+  expect(JSON.stringify(answer)).not.toContain("Nothing was promoted");
+  expect(await service.run(h.adapter, "build", fixture, new AbortController().signal, undefined, id))
+    .toMatchObject({ ok: false, code: "package_build_unknown" });
+  expect(h.runs).toHaveLength(0);
+  const complete = crypto.randomUUID();
+  expect(await service.run(h.adapter, "build", fixture, new AbortController().signal, undefined, complete)).toMatchObject({ ok: true });
+  for (let i = 0; i < 65; i++) service.stopBuild(crypto.randomUUID());
+  expect(service.buildStatus(complete).phase).toBe("unknown");
+  expect(service.stopBuild(complete)).toMatchObject({ phase: "finished", outcome: { ok: false, code: "package_build_unknown" } });
+  expect(readdirSync(join(h.dir, "candidates"))).toHaveLength(1); // the completed candidate is never labelled as removed
+}, 60_000);

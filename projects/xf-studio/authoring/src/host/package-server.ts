@@ -14,7 +14,7 @@ import { eyePlatePrerequisite, eyePlateRouteKeyFor, masculineEyePlatePrerequisit
 import { expressionsGamePrerequisite } from "../animation/host/expressions-game-prerequisite";
 import { runProcessTree } from "./process-tree";
 import { hostFailure } from "../diagnostics/host/host-log";
-import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, type HostPrerequisite, type PackageAction, type PackageHostAdapter } from "../platform/export/product-host";
+import { MAX_PACKAGE_REQUEST_BYTES, PackageHostService, validBuildId, type HostPrerequisite, type PackageAction, type PackageHostAdapter } from "../platform/export/product-host";
 import type { FeatureExporterEntry } from "../platform/api";
 
 /** The authoring app folder (this module sits in `src/host/`). */
@@ -197,14 +197,16 @@ export function createPackageHandler(adapter: (action: PackageAction) => Package
     let body: string;
     try { body = await request.text(); } catch { return json({ error: "Could not read collection snapshot." }, 400); }
     if (Buffer.byteLength(body) > MAX_PACKAGE_REQUEST_BYTES) return json({ error: "Collection exceeds 16 MB." }, 413);
-    let input: { action?: unknown; collection?: unknown };
+    let input: { action?: unknown; collection?: unknown; buildId?: unknown };
     try { input = JSON.parse(body); } catch { return json({ error: "Expected a package action and collection only." }, 400); }
+    if (input?.action === "stop" && validBuildId(input.buildId) && Object.keys(input).every(key => key === "action" || key === "buildId"))
+      return json(service.stopBuild(input.buildId));
     if (!input || typeof input !== "object" || Array.isArray(input) || (input.action !== "check" && input.action !== "build") ||
-        Object.keys(input).some(key => key !== "action" && key !== "collection") || !("collection" in input))
+        Object.keys(input).some(key => key !== "action" && key !== "collection" && key !== "buildId") || !("collection" in input) || (input.buildId !== undefined && (input.action !== "build" || !validBuildId(input.buildId))))
       return json({ error: "Expected a package action and collection only." }, 400);
     const action = input.action as PackageAction;
-    if (service.busy(action)) return json({ code: `package_${action}_busy`, error: action === "build"
-      ? "A local package build is already running. Wait for its result before starting another."
+    if (service.busy(action) && !(typeof input.buildId === "string" && service.buildStatus(input.buildId).phase !== "unknown")) return json({ code: `package_${action}_busy`, error: action === "build"
+      ? "A Build is still running or stopping. Wait for it to finish before starting another."
       : "A package Check is already running. Wait for its result before starting another." }, 409);
     let host: PackageHostAdapter;
     try { host = adapter(action); }
@@ -214,11 +216,11 @@ export function createPackageHandler(adapter: (action: PackageAction) => Package
       return json({ code, error: code === "package_setup_unreadable" ? SETUP_UNREADABLE_MESSAGE
         : "XF Studio couldn't prepare mod files right now. Restart XF Studio and try again. Your collection is unchanged." }, 503);
     }
-    const outcome = await service.run(host, action, input.collection, request.signal);
+    const outcome = await service.run(host, action, input.collection, input.buildId ? new AbortController().signal : request.signal, undefined, input.buildId as string | undefined);
     return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message, ...(outcome.omissions ? { omissions: outcome.omissions } : {}) }, outcome.status);
   }, {
     /** `GET /api/package/progress`: the running Build's stage (PIPE-131); codes and counts only, no paths. */
     progress: (request: Request): Response => new URL(request.url).hostname !== "127.0.0.1" ? json({ error: "Use the local studio." }, 403)
-      : request.method !== "GET" ? json({ error: "Method not allowed." }, 405) : json({ build: service.buildProgress() }),
+      : request.method !== "GET" ? json({ error: "Method not allowed." }, 405) : json({ build: service.buildProgress(), ...(new URL(request.url).searchParams.get("buildId") ? { status: service.buildStatus(new URL(request.url).searchParams.get("buildId")!) } : {}) }),
   });
 }

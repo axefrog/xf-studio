@@ -1,7 +1,7 @@
 import type { EyePlateHeadRecord } from "../plate/eye-plate-head-source";
 import type { ExportRoute } from "../../../engines/layered-makeup/finish-export";
 import type { PresetDiagnostics } from "./export-diagnostics";
-import { PACKAGE_BUILD_STAGES, type PackageBuildProgress, type PackageBuildResult, type PackageCheckResult } from "../../../platform/api";
+import { PACKAGE_BUILD_STAGES, type PackageBuildStatus, type PackageBuildProgress, type PackageBuildResult, type PackageCheckResult } from "../../../platform/api";
 
 export type PackageAction = "check" | "build";
 /**
@@ -54,6 +54,7 @@ export function packageBuildStageLine(progress: PackageBuildProgress): string {
 const packageRequest = (path: string, init: RequestInit) => fetch(path, init);
 
 export async function requestPackage(action: PackageAction, collection: unknown, signal?: AbortSignal): Promise<PackageCheckResult | PackageBuildResult> {
+  if (action === "build") return requestIdentifiedBuild(collection, signal);
   const response = await packageRequest("/api/package", { method: "POST", headers: { "Content-Type": "application/json" },
     signal, body: JSON.stringify({ action, collection }) });
   if (!(response.headers.get("Content-Type") ?? "").includes("application/json"))
@@ -61,4 +62,63 @@ export async function requestPackage(action: PackageAction, collection: unknown,
   const result = await response.json();
   if (!response.ok) throw new PackageRequestError(result.code ?? "package_failed", result.error ?? "Package request failed.");
   return result;
+}
+
+/** Build cancellation is a host command, not a fetch abort. The host's retained receipt is the only terminal authority. */
+export function requestIdentifiedBuild(collection: unknown, signal?: AbortSignal, device: {
+  send?: (path: string, init: RequestInit) => Promise<Response>; id?: () => string; pause?: () => Promise<void>;
+} = {}): Promise<PackageBuildResult> {
+  const send = device.send ?? packageRequest, id = (device.id ?? (() => crypto.randomUUID()))();
+  let finished = false, starting = false, stopInFlight = false, stopping = signal?.aborted ?? false;
+  let timer: ReturnType<typeof setTimeout> | undefined, wake: (() => void) | undefined;
+  const pause = device.pause ?? (() => new Promise<void>(resolve => { wake = resolve; timer = setTimeout(resolve, 500); }));
+  return new Promise<PackageBuildResult>((resolve, reject) => {
+    const finish = (outcome: Extract<PackageBuildStatus, { phase: "finished" }>["outcome"]) => {
+      if (finished) return;
+      finished = true; signal?.removeEventListener("abort", stop);
+      clearTimeout(timer); wake?.();
+      if (outcome.ok) resolve(outcome.result);
+      else reject(new PackageRequestError(outcome.code, outcome.message));
+    };
+    const observe = (status: PackageBuildStatus | undefined) => {
+      if (status?.phase === "finished") finish(status.outcome);
+    };
+    const post = (body: unknown) => send("/api/package", { method: "POST", signal: AbortSignal.timeout(10_000), headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const askStop = async () => {
+      if (finished || stopInFlight) return;
+      stopInFlight = true;
+      try { const response = await post({ action: "stop", buildId: id }); if (response.ok) observe(await response.json()); }
+      catch { /* The next status read retries the same idempotent Stop. */ }
+      finally { stopInFlight = false; }
+    };
+    const stop = () => { stopping = true; void askStop(); };
+    const start = async () => {
+      starting = true;
+      try {
+        const response = await post({ action: "build", buildId: id, collection });
+        const body = await response.json();
+        if (response.ok) finish({ ok: true, result: body });
+        else if (typeof body.code === "string") finish({ ok: false, code: body.code,
+          message: body.error ?? "Package request failed.", status: response.status });
+      } catch { /* Keep busy and reconcile a lost POST or response through the retained Build ID. */ }
+      finally { starting = false; }
+    };
+    signal?.addEventListener("abort", stop, { once: true });
+    if (stopping) void askStop(); else void start();
+    void (async () => {
+      while (!finished) {
+        await pause();
+        if (finished) break;
+        if (stopping) void askStop();
+        try {
+          const response = await send(`/api/package/progress?buildId=${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
+          if (!response.ok) continue;
+          const status = (await response.json() as { status?: PackageBuildStatus }).status;
+          observe(status);
+          // If the original POST never arrived, sending it with the same ID is safe. A retained terminal is never rebuilt.
+          if (!finished && status?.phase === "unknown" && !starting && !stopping) void start();
+        } catch { /* Offline: no terminal claim and no new Build until the host answers. */ }
+      }
+    })();
+  });
 }

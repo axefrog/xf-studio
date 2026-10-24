@@ -366,6 +366,10 @@ export const PACKAGE_BUILD_STAGES = ["prepare", "compose", "convert", "pack", "v
 export type PackageBuildStage = typeof PACKAGE_BUILD_STAGES[number];
 /** A running Build's progress: its stage, that stage's place among `steps` (1-based), and how many looks it builds. */
 export type PackageBuildProgress = { readonly stage: PackageBuildStage; readonly step: number; readonly steps: number; readonly looks?: number };
+/** A host-owned Build receipt. Terminal answers are retained so a lost HTTP response can be reconciled. */
+export type PackageBuildStatus = { readonly phase: "unknown" | "running" | "stopping" } |
+  { readonly phase: "finished"; readonly outcome: { readonly ok: true; readonly result: PackageBuildResult } |
+    { readonly ok: false; readonly code: string; readonly message: string; readonly status: number } };
 /** The builder's stdout line announcing a stage: this prefix, then `{"stage": …}`. */
 export const PACKAGE_PROGRESS_PREFIX = "XFS_PACKAGE_PROGRESS=";
 

@@ -332,7 +332,9 @@ export class CollectionService {
   /** Only Build is cancellable; library writes finish once accepted. */
   cancel(requestId: number): CancelResult {
     if (this.running?.requestId === requestId && this.buildAbort && !this.buildAbort.signal.aborted) {
-      this.buildAbort.abort(); this.running.cancellable = false; this.notify();
+      this.running.cancellable = false;
+      this.setProgress({ phase: "working", code: "package", requestId, message: "Stopping…" });
+      this.buildAbort.abort(); this.notify();
       return { accepted: true };
     }
     return this.running?.requestId === requestId
@@ -609,7 +611,7 @@ export class CollectionService {
     const poll = async () => {
       try {
         const stage = await ask();
-        if (!stop.signal.aborted && stage && this.running?.requestId === requestId && this.progress?.requestId === requestId &&
+        if (!stop.signal.aborted && !this.buildAbort?.signal.aborted && stage && this.running?.requestId === requestId && this.progress?.requestId === requestId &&
             this.progress.phase === "working") {
           const message = packageBuildStageLine(stage), fraction = (stage.step - .5) / stage.steps;
           if (message !== this.progress.message || fraction !== this.progress.fraction)
@@ -822,7 +824,6 @@ export class CollectionService {
           const stopFollowing = request.action === "build" ? this.followBuild(requestId) : () => {};
           let response: PackageCheckResult | PackageBuildResult;
           try {
-            this.buildAbort?.signal.throwIfAborted();
             response = await this.deps.transport.package(request.action, this.deps.model.parts.writeMinimal(collection), this.buildAbort?.signal);
           } finally { stopFollowing(); }
           this.packageKey = key;
@@ -861,9 +862,8 @@ export class CollectionService {
       this.setProgress({ phase: "success", code: result.kind, message, requestId });
       return { ok: true, result, requestId };
     } catch (error) {
-      const stopped = this.buildAbort?.signal.aborted;
-      const code = stopped ? "package_build_cancelled" : error instanceof CollectionServiceError ? error.code : error instanceof SyntaxError ? "invalid_json" : "request_failed";
-      const message = stopped ? "Build stopped. Nothing was promoted. Your collection is unchanged." : (error as Error).message;
+      const code = error instanceof CollectionServiceError ? error.code : error instanceof SyntaxError ? "invalid_json" : "request_failed";
+      const message = (error as Error).message;
       this.setProgress({ phase: "error", code, message, requestId });
       return { ok: false, code, message, requestId };
     } finally { this.buildAbort = undefined; this.busy = false; this.running = undefined; this.notify(); }

@@ -60,14 +60,14 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
     loadedBytes: () => loadedBytes, loadedFor: () => loadedFor };
 }
 
-test("Stop aborts the current Build request and leaves no package result; a later Build is independent", async () => {
+test("Stop asks for cancellation and the host cancellation answer leaves no result; a later Build is independent", async () => {
   const f = await fixture();
   let sent!: AbortSignal;
   let began!: () => void;
   const ready = new Promise<void>(resolve => { began = resolve; });
   f.transport.package = (_action, _input, signal) => new Promise((_, reject) => {
     sent = signal!; began();
-    signal!.addEventListener("abort", () => reject(new DOMException("Stopped", "AbortError")), { once: true });
+    signal!.addEventListener("abort", () => reject(new CollectionServiceError("package_build_cancelled", "Build stopped. Nothing was promoted. Your collection is unchanged.")), { once: true });
   });
   expect(f.files.capability({ kind: "package.stop" }).available).toBe(false);
   const build = f.files.execute({ kind: "package.build" });
@@ -84,15 +84,21 @@ test("Stop aborts the current Build request and leaves no package result; a late
   expect(await f.files.execute({ kind: "package.build" })).toMatchObject({ ok: true });
 });
 
-test("Stop during the Build's collection snapshot never sends a package request", async () => {
+test("Stopping keeps Build busy until its host answer; an abort does not override a completed result", async () => {
   const f = await fixture();
-  let sent = false;
-  f.transport.package = async () => { sent = true; throw Error("Must not start"); };
+  let finish!: () => void, began!: () => void;
+  const ready = new Promise<void>(resolve => { began = resolve; });
+  f.transport.package = async (_action, input) => { began(); await new Promise<void>(resolve => { finish = resolve; });
+    return eyeBuild(eyeCheck(input as { id: string }, { presets: [] })); };
   const build = f.files.execute({ kind: "package.build" });
+  await ready;
   expect(await f.files.execute({ kind: "package.stop" })).toMatchObject({ ok: true });
-  expect(await build).toMatchObject({ ok: false, code: "package_build_cancelled" });
-  expect(sent).toBe(false);
-  expect(f.files.snapshot().package).toBeUndefined();
+  expect(f.files.snapshot()).toMatchObject({ collectionBusy: true, progress: { phase: "working", message: "Stopping…" } });
+  expect(f.files.capability({ kind: "package.build" })).toMatchObject({ available: false, reason: expect.stringContaining("host") });
+  expect(f.files.capability({ kind: "package.stop" })).toMatchObject({ available: false, reason: expect.stringContaining("host") });
+  finish();
+  expect(await build).toMatchObject({ ok: true });
+  expect(f.files.snapshot()).toMatchObject({ collectionBusy: false, package: { kind: "packageBuild" }, last: { ok: true } });
 });
 
 test("recipe and mask workflows use typed file ports with the original names, limits and detached layer", async () => {

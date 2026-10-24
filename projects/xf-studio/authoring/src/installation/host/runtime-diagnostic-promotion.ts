@@ -108,7 +108,9 @@ function validate(options: PromotionOptions) {
   requireValue(saved.namespace === candidate.manifest.namespace &&
     JSON.stringify(saved.candidateFiles) === JSON.stringify(candidate.manifest.files) &&
     saved.stageReceipt.namespace === candidate.manifest.namespace &&
-    JSON.stringify(saved.stageReceipt.files) === JSON.stringify(candidate.manifest.files),
+    // Fingerprints are optional receipt metadata, not part of the candidate's payload identity.
+    JSON.stringify(saved.stageReceipt.files.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 }))) ===
+      JSON.stringify(candidate.manifest.files.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 }))),
   "Stage and source candidate identities or hashes differ.");
   const present = metadata.filter(name => existsSync(join(sourceProfile, name)));
   requireValue(present.includes("modlist.txt"), "Source modlist missing.");

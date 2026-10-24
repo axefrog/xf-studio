@@ -129,10 +129,10 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   }, () => [{ product: "p1", candidateId: "c1", modName: "XF Eye Artistry" }]);
   const listeners = new Set<() => void>();
   const updates = options.updateActions ?? new UpdateCheckActions(options.updates ?? null);
-  const files = options.files ?? { package: BUILD };
+  const files: Record<string, unknown> & { activity: { kind: string; cancellable: boolean }[] } = { activity: [], ...options.files ?? { package: BUILD } };
   const port = {
-    files: { capability: () => ({ available: true }), snapshot: () => files },
-    library: { capability: () => ({ available: true }), summary: () => ({ busy: false, products: [], draft: { presets: [{ id: "look1", name: "Night market" }] } }) },
+    files: { capability: (action?: { kind: string }) => ({ available: action?.kind !== "package.stop" || files.activity.some(entry => entry.kind === "package.build" && entry.cancellable) }), snapshot: () => files },
+    library: { capability: () => ({ available: true }), summary: () => ({ busy: files.collectionBusy ?? false, progress: files.progress, products: [], draft: { presets: [{ id: "look1", name: "Night market" }] } }) },
     authoring: { capability: () => ({ available: true }), requestCapability: () => ({ available: true }),
       previewState: () => (options.prepared ? { character: { prepared: options.prepared } } : {}) },
     // WolvenKit's next step beside a setup line that needs it (release-readiness-audit.md item 14).
@@ -173,6 +173,23 @@ async function settingsHarness(options: HarnessOptions = {}) {
   const h = await panelHarness(options, rt => settingsPanel(rt as never, { appearance } as never));
   return { ...h, appearance: () => ({ theme, hints, research }) };
 }
+
+test("Build Stop becomes unavailable Stopping… while busy, then the host's result decides what the panel says", async () => {
+  const files: Record<string, unknown> = { activity: [{ kind: "package.build", cancellable: false }], collectionBusy: true,
+    progress: { phase: "working", code: "package", message: "Stopping…" } };
+  const h = await packageHarness({ files });
+  const stop = buttonNamed(h.root, "Stopping…")!;
+  expect(stop).toBeTruthy();
+  expect(stop.getAttribute("aria-disabled")).toBe("true");
+  expect(text(h.root)).not.toContain("Build stopped.");
+  Object.assign(files, { activity: [], collectionBusy: false, package: BUILD });
+  // The harness reads the supplied snapshot; repaint with a completed host result in a fresh panel.
+  h.panel.spec.element.remove();
+  const completed = await packageHarness({ files });
+  expect(buttonNamed(completed.root, "Add to Mod Organizer 2…")).toBeTruthy();
+  expect(text(completed.root)).not.toContain("Build stopped.");
+  completed.panel.spec.element.remove();
+});
 
 describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => {
   test("each built mod offers both; its folder path is only in Details", async () => {

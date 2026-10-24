@@ -13,7 +13,7 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, re
   statSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import {
-  ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, PACKAGE_PROGRESS_PREFIX, type ExportOmission, type PackageBuildProgress, type PackageBuildStage, type FeatureCheck, type FeatureExporterEntry, type PackageBuildResult, type PackageCheckResult, type ProductBuild,
+  ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, PACKAGE_PROGRESS_PREFIX, type ExportOmission, type PackageBuildStatus, type PackageBuildProgress, type PackageBuildStage, type FeatureCheck, type FeatureExporterEntry, type PackageBuildResult, type PackageCheckResult, type ProductBuild,
 } from "../api/export";
 import { checkProducts, type ProductsCheck } from "./product-check";
 import { runWorkerCheck, type CheckOutcome, type CheckRequest } from "./check-runner";
@@ -187,9 +187,37 @@ export function verifyProductBuildResult(built: PackageBuildResult, planned: Pro
 
 /**
  * The package host service: one Check and one Build at a time per host. Both hosts' HTTP handlers call it with the
- * parsed request (`{ action, collection }` only); the adapter supplies what differs between them.
+ * parsed request (Check/Build with a collection and optional Build ID, or Stop by ID); the adapter supplies what differs between them.
  */
+type BuildJob = { controller: AbortController; phase: "running" | "stopping"; input?: string;
+  promise?: Promise<PackageHostOutcome>; outcome?: PackageHostOutcome };
+export const validBuildId = (value: unknown): value is string => typeof value === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(value);
 export class PackageHostService {
+  private builds = new Map<string, BuildJob>();
+  buildStatus(id: string): PackageBuildStatus {
+    const job = this.builds.get(id);
+    if (!job) return { phase: "unknown" };
+    if (!job.outcome) return { phase: job.phase };
+    return { phase: "finished", outcome: job.outcome as Extract<PackageBuildStatus, { phase: "finished" }>["outcome"] };
+  }
+  /** Idempotent. An unknown ID blocks any later POST for that ID but never claims proof of cancellation. */
+  stopBuild(id: string): PackageBuildStatus {
+    const job = this.builds.get(id);
+    if (job) {
+      if (!job.outcome) { job.phase = "stopping"; job.controller.abort(); }
+    } else {
+      this.builds.set(id, { controller: new AbortController(), phase: "stopping",
+        outcome: failure("package_build_unknown", "The host has no record of this Build, so its outcome could not be confirmed. This Build ID will not start any more work.") });
+      this.trimBuilds();
+    }
+    return this.buildStatus(id);
+  }
+  private trimBuilds() {
+    for (const [id, job] of this.builds) {
+      if (this.builds.size <= 64) break;
+      if (job.outcome) this.builds.delete(id);
+    }
+  }
   private checking = false;
   private building = false;
   private progress: PackageBuildProgress | null = null;
@@ -200,17 +228,45 @@ export class PackageHostService {
   /** Run one request with the host's adapter for it (made per request, so setup changes apply to the next one). */
   async run(adapter: PackageHostAdapter, action: PackageAction, value: unknown, signal: AbortSignal,
     /** The request's deadline; defaults to `PACKAGE_CHECK_DEADLINE_MS` or `PACKAGE_BUILD_DEADLINE_MS`. */
-    timeoutMs?: number): Promise<PackageHostOutcome> {
+    timeoutMs?: number, buildId?: string): Promise<PackageHostOutcome> {
     if (action === "check") {
       if (this.checking) return failure("package_check_busy", "A package Check is already running. Wait for its result before starting another.");
       this.checking = true;
       try { return await this.check(adapter, value, signal, timeoutMs ?? PACKAGE_CHECK_DEADLINE_MS); } finally { this.checking = false; }
     }
-    if (this.building) return failure("package_build_busy", "A package Build is already running. Wait for its result before starting another.");
+    let input: string;
+    try { input = sha256(JSON.stringify(value) ?? ""); }
+    catch { return failure("invalid_collection", "This collection could not be read. Nothing was built."); }
+    const existing = buildId ? this.builds.get(buildId) : undefined;
+    if (existing) {
+      if (existing.input !== undefined && existing.input !== input)
+        return failure("package_build_identity_conflict", "This Build ID already belongs to another request.");
+      return existing.outcome ?? existing.promise!;
+    }
+    if (this.building) return failure("package_build_busy", "A Build is still running or stopping. Wait for it to finish before starting another.");
     this.building = true;
     this.progress = null;
-    try { return await runProductBuild(adapter, value, signal, timeoutMs ?? PACKAGE_BUILD_DEADLINE_MS, progress => { this.progress = progress; }); }
-    finally { this.building = false; this.progress = null; }
+    const job: BuildJob = { controller: new AbortController(), phase: "running", input };
+    if (buildId) this.builds.set(buildId, job);
+    // For identified requests this signal is host lifetime only: losing the HTTP connection is not Stop.
+    const disconnected = () => { job.phase = "stopping"; job.controller.abort(); };
+    signal.addEventListener("abort", disconnected, { once: true });
+    if (signal.aborted) disconnected();
+    job.promise = (async () => {
+      let outcome: PackageHostOutcome;
+      try { outcome = await runProductBuild(adapter, value, job.controller.signal, timeoutMs ?? PACKAGE_BUILD_DEADLINE_MS,
+        progress => { this.progress = progress; }); }
+      catch (error) {
+        adapter.log("build", "package_build_cleanup_failed", "Build cleanup could not be confirmed.", error);
+        outcome = failure("package_build_cleanup_failed", "Build cleanup could not be confirmed. Restart XF Studio before building again.");
+      }
+      // runProductBuild has completed cleanup before any terminal receipt is published or the host becomes available.
+      job.outcome = outcome;
+      this.building = !outcome.ok && outcome.code === "package_build_cleanup_failed"; this.progress = null;
+      signal.removeEventListener("abort", disconnected); this.trimBuilds();
+      return outcome;
+    })();
+    return job.promise;
   }
 
   private async check(adapter: PackageHostAdapter, value: unknown, signal: AbortSignal, timeoutMs: number): Promise<PackageHostOutcome> {
@@ -292,7 +348,7 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
   const stop = () => deadline.abort();
   signal.addEventListener("abort", stop, { once: true });
   if (signal.aborted) deadline.abort();
-  const stopped = () => signal.aborted ? failure("package_build_cancelled", "Package Build was cancelled. Your draft is unchanged; nothing was installed.")
+  const stopped = () => signal.aborted ? failure("package_build_cancelled", "Build stopped. Nothing was promoted. Your collection is unchanged.")
     : failure("package_build_timeout", "Package Build exceeded its time limit and was stopped. Your draft is unchanged; nothing was installed.");
   const prepared: Record<string, PreparedPrerequisite> = {};
   let setup: ReturnType<PackageHostAdapter["buildSetup"]> | undefined;
@@ -394,6 +450,9 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
       const targets = built.products.map(product => resolve(setup!.candidates, basename(product.package)));
       if (new Set(targets.map(target => target.toLowerCase())).size !== targets.length || targets.some(target => existsSync(target)))
         throw Error("A candidate with this name already exists.");
+      // Stop and promotion serialize on this host's event loop. There is no await between this check,
+      // the moves, the final verifier and the completed answer. Once this block wins, a late Stop gets success.
+      if (deadline.signal.aborted) return stopped();
       const moved: string[] = [];
       try {
         const products: ProductBuild[] = built.products.map((product, index) => {

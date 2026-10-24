@@ -210,6 +210,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const buildRunning = files.activity.some(entry => entry.kind === "package.build");
       if (!buildRunning && stop.contains(document.activeElement)) (builtCurrent ? rebuild : build).focus();
       stop.hidden = !buildRunning;
+      setButtonLabel(stop, buildRunning && !stopCapability.available ? "Stopping…" : "Stop");
       applyCapability(stop, stopCapability);
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? library.progress!.message : "");
