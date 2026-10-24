@@ -1526,7 +1526,20 @@ std::vector<Fired> WatcherEngine::Advance(double aNow)
     std::vector<std::string> done;
     for (auto& armed : m_armed)
     {
-        if (armed.spec.kind == WatchKind::Timer && aNow - armed.armedAt >= armed.spec.seconds && armed.fires == 0)
+        // Expiry is a fixed deadline from arming, including after a hitch and for repeat timers.
+        if (aNow - armed.armedAt >= armed.spec.expiresS)
+        {
+            Fired expired;
+            expired.id = armed.spec.id;
+            expired.kind = armed.spec.kind;
+            expired.expired = true;
+            expired.detail = {{"fired", armed.fires}};
+            out.push_back(expired);
+            done.push_back(armed.spec.id);
+            continue;
+        }
+        if (armed.spec.kind == WatchKind::Timer && aNow - armed.armedAt >= armed.spec.seconds &&
+            (armed.fires == 0 || (armed.spec.repeat && aNow - armed.lastFired >= std::max(armed.spec.seconds, armed.spec.cooldownS))))
         {
             Fired fired;
             fired.id = armed.spec.id;
@@ -1540,22 +1553,7 @@ std::vector<Fired> WatcherEngine::Advance(double aNow)
             {
                 done.push_back(armed.spec.id);
             }
-            else
-            {
-                armed.armedAt = aNow; // a repeating timer runs again
-                armed.fires = 0;
-            }
             continue;
-        }
-        if (aNow - armed.armedAt >= armed.spec.expiresS)
-        {
-            Fired expired;
-            expired.id = armed.spec.id;
-            expired.kind = armed.spec.kind;
-            expired.expired = true;
-            expired.detail = {{"fired", armed.fires}};
-            out.push_back(expired);
-            done.push_back(armed.spec.id);
         }
     }
     for (const auto& id : done)
@@ -2045,14 +2043,17 @@ void Session::Tick(double aNow)
         }
         if (aNow >= it->end)
         {
-            if (it->shown && m_ops.hideLine)
+            if (it->shown)
             {
                 try
                 {
+                    if (!m_ops.hideLine) { throw MethodError("not_ready", "subtitle hide unavailable"); }
                     m_ops.hideLine(it->id);
                 }
                 catch (...)
                 {
+                    ++it;
+                    continue; // retry the expired line on the next tick
                 }
             }
             it = m_lines.erase(it);
@@ -2136,14 +2137,18 @@ bool Session::HideLines(const std::string& aOwner)
     {
         if (it->owner == aOwner || aOwner.empty())
         {
-            if (it->shown && m_ops.hideLine)
+            if (it->shown)
             {
                 try
                 {
+                    if (!m_ops.hideLine) { throw MethodError("not_ready", "subtitle hide unavailable"); }
                     m_ops.hideLine(it->id);
                 }
                 catch (...)
                 {
+                    it->end = m_now; // no further display; retry hiding on the next tick
+                    ++it;
+                    continue;
                 }
             }
             any = true;
@@ -2162,14 +2167,18 @@ bool Session::HideLinesPrefix(const std::string& aPrefix)
     {
         if (it->owner.rfind(aPrefix, 0) == 0)
         {
-            if (it->shown && m_ops.hideLine)
+            if (it->shown)
             {
                 try
                 {
+                    if (!m_ops.hideLine) { throw MethodError("not_ready", "subtitle hide unavailable"); }
                     m_ops.hideLine(it->id);
                 }
                 catch (...)
                 {
+                    it->end = m_now;
+                    ++it;
+                    continue;
                 }
             }
             any = true;
@@ -2185,7 +2194,7 @@ size_t Session::HideAllLines()
 {
     const auto count = m_lines.size();
     HideLines({});
-    return count;
+    return count - m_lines.size();
 }
 
 json Session::Call(const CallRequest& aRequest, double aNow)
@@ -2579,38 +2588,48 @@ json Session::Reset(bool aUi)
 {
     json out{{"watchers", m_watchers.DisarmAll()}, {"lines", m_lines.size()}, {"quests", m_quests.size()}, {"lights_animated", m_animated.size()}};
     const bool callLive = CallLive();
+    bool callFailed = false;
+    bool trackerFailed = false;
     if (aUi)
     {
         HideLines({});
-        if (callLive && m_ops.callEnd)
+        if (callLive)
         {
             try
             {
+                if (!m_ops.callEnd) { throw MethodError("not_ready", "call end unavailable"); }
                 m_ops.callEnd(m_call.contact);
             }
             catch (...)
             {
+                callFailed = true;
             }
         }
-        if (!m_quests.empty() && m_ops.tracker)
+        if (!m_quests.empty())
         {
             try
             {
+                if (!m_ops.tracker) { throw MethodError("not_ready", "tracker cleanup unavailable"); }
                 m_ops.tracker({});
             }
             catch (...)
             {
+                trackerFailed = true;
             }
         }
     }
     out["call"] = callLive ? m_call.state : "none";
-    m_lines.clear();
-    m_quests.clear();
-    m_questOrder.clear();
+    if (!aUi) { m_lines.clear(); }
+    if (!trackerFailed)
+    {
+        m_quests.clear();
+        m_questOrder.clear();
+        m_drawnFinal.clear();
+    }
     m_animated.clear();
-    m_drawnFinal.clear();
-    m_call = PhoneCall{};
+    if (!callFailed) { m_call = PhoneCall{}; }
     m_texts.clear();
+    out["cleanup_pending"] = !m_lines.empty() || callFailed || trackerFailed;
     return out;
 }
 

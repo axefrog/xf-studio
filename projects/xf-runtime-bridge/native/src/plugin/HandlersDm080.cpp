@@ -43,13 +43,13 @@ dm::MicroRunner& Micro()
     if (!slot)
     {
         slot = std::make_unique<dm::MicroRunner>(
-            [](const std::string& aMethod, const json& aParams, const std::string& aCid) -> json {
+            [](const std::string& aMethod, const json& aParams, const std::string& aCid, const std::string& aToken) -> json {
                 auto& state = Get();
                 if (!state.bridge)
                 {
                     return json{{"ok", false}, {"error", {{"code", "no_bridge"}, {"message", "the bridge is not running"}}}};
                 }
-                const json request{{"v", kProtocolVersion}, {"id", aCid}, {"token", state.session.token}, {"method", aMethod}, {"params", aParams}, {"cid", aCid}};
+                const json request{{"v", kProtocolVersion}, {"id", aCid}, {"token", aToken}, {"method", aMethod}, {"params", aParams}, {"cid", aCid}};
                 const auto handled = state.bridge->GetDispatcher().Handle(request.dump(), GetCurrentProcessId());
                 return json::parse(handled.line, nullptr, false);
             },
@@ -252,8 +252,13 @@ dm::Ops OpsFor(const std::string& aCid)
         bool sky = aSky;
         return ScriptCall("XFDmSense", "Digest", {"Bool"}, {&sky}, aCid);
     };
-    ops.micro = [](dm::MicroBatch aBatch) { Micro().Enqueue(std::move(aBatch)); };
+    ops.micro = [](dm::MicroBatch aBatch) {
+        aBatch.sessionToken = Get().session.token;
+        Micro().Enqueue(std::move(aBatch));
+    };
     ops.microCancel = [](const std::string& aWhy) { return MicroSlot() ? MicroSlot()->Cancel(aWhy) : size_t{0}; };
+    ops.microCancelWatch = [](const std::string& aWatch) { return MicroSlot() ? MicroSlot()->CancelWatch(aWatch) : size_t{0}; };
+    ops.microPending = [] { return MicroSlot() ? MicroSlot()->Pending() : size_t{0}; };
     ops.actionCheck = [](const std::string& aMethod) -> std::string {
         auto& state = Get();
         if (!state.bridge)
@@ -320,10 +325,6 @@ json ReleaseDmForHandover(const std::string& aCid)
 
 void RestoreDmAfterKill()
 {
-    if (!Service().Active())
-    {
-        return;
-    }
     log::Info("bridge.kill_released_dm", SerializeJson(Service().RestoreAfterKill(OpsFor("kill-restore"))), "kill-restore");
 }
 

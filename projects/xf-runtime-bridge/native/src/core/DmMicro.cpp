@@ -53,6 +53,8 @@ size_t MicroRunner::Cancel(const std::string& aWhy)
             dropped += batch.actions.size();
         }
         m_queue.clear();
+        dropped += m_runningCancelled ? 0 : m_remaining;
+        m_runningCancelled = true;
         ++m_generation;
     }
     m_cv.notify_all();
@@ -60,6 +62,30 @@ size_t MicroRunner::Cancel(const std::string& aWhy)
     {
         m_report("micro", "info", "queued micro-actions dropped (" + aWhy + ")", json{{"dropped", dropped}, {"why", aWhy}});
     }
+    return dropped;
+}
+
+size_t MicroRunner::CancelWatch(const std::string& aWatch)
+{
+    size_t dropped = 0;
+    {
+        std::scoped_lock _(m_mutex);
+        for (auto it = m_queue.begin(); it != m_queue.end();)
+        {
+            if (it->watch == aWatch)
+            {
+                dropped += it->actions.size();
+                it = m_queue.erase(it);
+            }
+            else { ++it; }
+        }
+        if (m_runningWatch == aWatch && !m_runningCancelled)
+        {
+            dropped += m_remaining;
+            m_runningCancelled = true;
+        }
+    }
+    m_cv.notify_all();
     return dropped;
 }
 
@@ -81,7 +107,7 @@ void MicroRunner::Stop()
 size_t MicroRunner::Pending() const
 {
     std::scoped_lock _(m_mutex);
-    size_t count = 0;
+    size_t count = m_runningCancelled ? 0 : m_remaining;
     for (const auto& batch : m_queue)
     {
         count += batch.actions.size();
@@ -110,6 +136,9 @@ void MicroRunner::Run()
             batch = std::move(m_queue.front());
             m_queue.pop_front();
             generation = m_generation;
+            m_runningWatch = batch.watch;
+            m_remaining = batch.actions.size();
+            m_runningCancelled = false;
         }
         for (size_t i = 0; i < batch.actions.size(); ++i)
         {
@@ -118,11 +147,11 @@ void MicroRunner::Run()
             {
                 std::unique_lock lock(m_mutex);
                 const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(action.delayS * 1000.0));
-                m_cv.wait_until(lock, until, [&] { return m_stopping || m_generation != generation; });
+                m_cv.wait_until(lock, until, [&] { return m_stopping || m_generation != generation || m_runningCancelled; });
             }
             {
                 std::scoped_lock _(m_mutex);
-                if (m_stopping || m_generation != generation)
+                if (m_stopping || m_generation != generation || m_runningCancelled)
                 {
                     break;
                 }
@@ -133,7 +162,7 @@ void MicroRunner::Run()
             std::string text;
             try
             {
-                const auto response = m_execute(action.method, action.params, cid);
+                const auto response = m_execute(action.method, action.params, cid, batch.sessionToken);
                 const bool ok = response.value("ok", false);
                 data["ok"] = ok;
                 if (ok)
@@ -163,10 +192,19 @@ void MicroRunner::Run()
                 text = "watcher " + batch.watch + "'s " + action.method + " failed";
             }
             m_ran.fetch_add(1);
+            {
+                std::scoped_lock _(m_mutex);
+                m_remaining = batch.actions.size() - i - 1;
+            }
             if (m_report)
             {
                 m_report("micro", level, text, data);
             }
+        }
+        {
+            std::scoped_lock _(m_mutex);
+            m_remaining = 0;
+            m_runningWatch.clear();
         }
     }
 }

@@ -10,7 +10,7 @@
 // Every command is in the dm class (write-dm), listed only by the test profile's -writes build; the reads (world.spawned,
 // quest.state, phone.state, watch.list, game.digest) change nothing.
 //
-// Threads: every method and the tick run on the game thread (RunOn::GameThread, except the bookkeeping-only reads), so the
+// Threads: every method and the tick run on the game thread (RunOn::GameThread), so the
 // game steps (Ops) are direct calls. The write gate (bridge 0.8.1, RB-122): each write is one game-thread step the dispatcher
 // checks against the kill switch, the pause and a handover right before it runs. The tick's forward steps (lines shown, the
 // call started, the tracker drawn, a light's pattern) check TickInput::writesOpen first; its put-back steps (everything
@@ -140,6 +140,8 @@ struct Ops
     // The watchers' micro-actions (the host's runner), and the check of one action's method.
     std::function<void(MicroBatch)> micro;
     std::function<size_t(const std::string& aWhy)> microCancel;
+    std::function<size_t(const std::string& aWatch)> microCancelWatch;
+    std::function<size_t()> microPending;
     std::function<std::string(const std::string& aMethod)> actionCheck;
 };
 
@@ -228,6 +230,9 @@ private:
         double intensity = 0.0, radius = 0.0;
         std::optional<double> inner, outer;
         bool on = true;
+        bool pending = false;
+        double configureUntil = 0.0;
+        std::string error;
         LightPattern pattern; // what runs now (steady, the engine's flicker or one the tick drives), for the undo
     };
     struct Sound
@@ -244,7 +249,7 @@ private:
         std::string targetId;
         json original = json::object();
         json current = json::object(); // what the asked changes have made of it, as far as the bridge can tell
-        bool sticky = false;           // a change the bridge cannot read back (a vehicle door's lock): kept until the release
+        bool sticky = false;           // a change the bridge cannot read back (a vehicle door's lock): kept until a load
     };
 
     void Emit(const std::string& aKind, const std::string& aLevel, const std::string& aText, json aData);
@@ -274,6 +279,8 @@ private:
     std::map<int32_t, Item> m_items;
     std::map<int32_t, Sound> m_sounds;
     std::map<std::string, Change> m_changes;
+    bool m_notifications = false;
+    bool m_cleanupPending = false;
     EventLog* m_events = nullptr;
     int32_t m_nextHandle = 1;
     int32_t m_nextSound = 1;

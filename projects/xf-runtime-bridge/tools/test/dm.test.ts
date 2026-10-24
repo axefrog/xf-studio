@@ -177,7 +177,7 @@ describe("0.8.12 dm offline: the catalogue, its tables against the plugin's, the
     expect(attempt.indexOf("XFBridge_Live()")).toBeLessThan(attempt.indexOf("FromVariant"));
     const wrap = script.slice(script.indexOf("@wrapMethod(QuestTrackerGameController)\nprotected cb func OnTrackedMappinUpdated"));
     expect(wrap.indexOf("XFBridge_Live()")).toBeGreaterThan(0);
-    expect(wrap.indexOf("let result = wrappedMethod(value);")).toBeLessThan(wrap.indexOf("XFBridge_Live()")); // the game's own code runs first, unchanged
+    expect(wrap.indexOf("XFBridge_Live()")).toBeLessThan(wrap.indexOf("return wrappedMethod(value);")); // ownership suppresses vanilla's async spawn
   });
 
   test("a spawned thing is never saved and everything is taken down by the registry and by tag", () => {
@@ -190,6 +190,49 @@ describe("0.8.12 dm offline: the catalogue, its tables against the plugin's, the
       const body = script.slice(script.indexOf(`public static func ${fn}(`));
       expect(body.slice(0, 2600), fn).toContain("XFBridgeActions.EnsureSaveLock(cid)");
     }
+  });
+
+  test("review 1: mutable session reads are marshalled to the game thread", () => {
+    for (const name of ["quest.state", "watch.list"]) expect(service).toContain(`{"${name}", Access::Read, true,`);
+  });
+
+  test("review 2/11: journal-free phone data bypasses vanilla's unsafe lookups and owned queues are removable", () => {
+    const draw = script.slice(script.indexOf("@wrapMethod(MessengerNotification)"), script.indexOf("@addMethod(NewHudPhoneGameController)\npublic func XFDmRemove"));
+    expect(draw).toContain("as XFDmMessageData");
+    expect(draw).toContain("if !IsDefined(owned) { wrappedMethod(notificationData); return; }");
+    expect(draw).not.toContain("GetAvatarID");
+    expect(draw).not.toContain("GetAttachmentPathHash");
+    expect(draw).toContain("super.SetNotificationData(notificationData)");
+    expect(script).toContain("if IsDefined(data as XFDmNotificationRemove) { return false; }");
+    expect(script).toContain("new XFDmMessageData()");
+    expect(script).toContain("new XFDmQuestData()");
+    expect(script.match(/this.RemoveNotification\(request\)/g)?.length).toBe(2);
+    expect(script).toContain("phone.XFDmRemove(style)");
+    expect(script).toContain("quests.XFDmRemove(style)");
+  });
+
+  test("review 6: external phone completion revokes ownership and a queued end checks contact and phase again", () => {
+    const phone = script.slice(script.indexOf("@wrapMethod(PhoneSystem)"), script.indexOf("// --- messages and the quest tracker"));
+    expect(phone).toContain('!owned { registry.SetCallContact(""); }');
+    expect(script).toContain("@addField(questTriggerCallRequest)");
+    expect(phone).toContain("let owned = request.xfsDmOwned;");
+    expect(phone).toContain("NotEquals(this.m_LastCallInformation.contactName, request.caller)");
+    expect(phone).toContain("this.m_LastCallInformation.callPhase, questPhoneCallPhase.StartCall");
+    expect(phone).toContain('Equals(callPhase, questPhoneCallPhase.EndCall)');
+    expect(phone).toContain("NotEquals(current.contactName, StringToName(contact))");
+    expect(phone).toContain("private final func SetPhoneFact");
+    expect(phone).toContain("questPhoneTalkingState.Rejected");
+  });
+
+  test("review 12/13/14: tracker completions honour ownership, radio-on is idempotent, completed registry entries are erased", () => {
+    expect(script).toContain("OnTrackedMappinSpawned(newItem: ref<inkWidget>, userData: ref<IScriptable>)");
+    expect(script).toContain("this.m_trackedMappinSpawnRequest.Cancel()");
+    expect(script).toContain("if on >= 0 && !Equals(on == 1, wasOn)");
+    expect(script).toContain("registry.ForgetEntry(entry.id)");
+    expect(script).toContain("registry.ForgetLine(n)");
+    expect(script).toContain("ArrayErase(this.m_entries, i)");
+    expect(script).toContain("ArrayErase(this.m_lines, i)");
+    expect(script).toContain("!system.IsManaged(entry.id) || system.DeleteEntity(entry.id)");
   });
 
   test("the toolkit's scripts are a separate folder (the -writes package only) and the plugin's calls name functions the script defines", () => {
@@ -503,13 +546,14 @@ describe("0.8.12 dm against the self-test host's world", () => {
     expect(await refused(api, "light.spawn", { template: "base\\x_missing.ent" })).toBe("template_missing");
     await world(api, { carrier: true });
     const carrier = await ok(api, "light.spawn", { colour: "#ff8800", intensity: 40, radius: 6, offset: { forward: 2, up: 2 } });
-    expect(carrier.components).toBe(1);
+    expect(carrier.pending).toBe(true);
     await ok(api, "light.remove", { id: carrier.handle });
     await world(api, { carrier: false });
     const lamp = await ok(api, "light.spawn", { template: "base\\gameplay\\devices\\lamp_01.ent", colour: [255, 200, 120], intensity: 50, inner: 15, outer: 40, pattern: { kind: "flicker", strength: 0.3 }, label: "lamp" });
-    expect(lamp).toMatchObject({ kind: "light", components: 1, label: "lamp" });
+    expect(lamp).toMatchObject({ kind: "light", pending: true, label: "lamp" });
+    await until(async () => (await ok(api, "world.spawned")).spawned.find((e: Any) => e.handle === lamp.handle)?.pending === false);
     let entity = ((await world(api)).entities as Any[]).find((e) => e.id === lamp.entity);
-    expect(entity.light).toMatchObject({ colour: [255, 200, 120], intensity: 50, radius: 8, flicker: 0.3 });
+    expect(entity.light).toMatchObject({ colour: [255, 200, 120], intensity: 50, radius: 8, inner: 15, outer: 40, flicker: 0.3 });
     const set = await ok(api, "light.set", { id: lamp.handle, intensity: 20, colour: "#00ff00", pattern: "pulse" });
     expect(set.before).toMatchObject({ intensity: 50 });
     expect(set.undo.params).toMatchObject({ intensity: 50 });
@@ -592,7 +636,7 @@ describe("0.8.12 dm against the self-test host's world", () => {
     expect((await ok(api, "watch.list")).watchers[0]).toMatchObject({ id: "near", repeat: true });
     const gone = await ok(api, "watch.disarm", { id: "near" });
     expect(gone.disarmed).toBe(1);
-    expect(await refused(api, "watch.disarm", { id: "near" })).toBe("not_found");
+    expect((await ok(api, "watch.disarm", { id: "near" })).disarmed).toBe(0);
     for (let i = 0; i < 16; i++) await ok(api, "watch.arm", { id: `w${i}`, kind: "weapon" });
     expect(await refused(api, "watch.arm", { id: "extra", kind: "weapon" })).toBe("too_many");
     expect((await ok(api, "watch.disarm", { all: true })).disarmed).toBe(16);
@@ -644,6 +688,9 @@ describe("0.8.12 dm against the self-test host's world", () => {
     await ok(api, "world.door", { target: "EntityID(8102)", open: true });
     await ok(api, "quest.set", { id: "qp", title: "Paused quest" });
     await ok(api, "phone.call", { contact: "test_fixer", lines: [{ text: "x" }] });
+    await ok(api, "audio.play", { event: "pause_loop", loop: true });
+    await ok(api, "phone.text", { contact: "XF", text: "queued" });
+    await ok(api, "notify.show", { style: "quest_new", text: "queued" });
     await bridge(api, "selftest.pause_writes", { paused: true });
     const released = await event(api, "dm.released", since, (e) => e.data?.reason === "paused");
     expect(released.data.auto).toBe(true);
@@ -652,6 +699,9 @@ describe("0.8.12 dm against the self-test host's world", () => {
     expect(snapshot.doors["EntityID(8102)"]).toMatchObject({ open: false, locked: true });
     expect(snapshot.tracker).toBe("");
     expect(snapshot.call.state).toBe("ended");
+    expect(snapshot.sounds.find((s: Any) => s.event === "pause_loop").stopped).toBe(true);
+    expect(snapshot.banners).toEqual([]);
+    expect(snapshot.toasts).toEqual([]);
     expect(snapshot.released_all).toBeGreaterThan(0);
     expect(await refused(api, "world.spawn", { template: "base\\x.ent" })).toBe("writes_paused");
     await bridge(api, "selftest.pause_writes", { paused: false });

@@ -59,6 +59,8 @@ public class XFDmRegistry extends ScriptableSystem {
   private let m_phoneHost: wref<NewHudPhoneGameController>;
   private let m_lines: array<Int32>;
   private let m_callContact: String;
+  private let m_warning: String;
+  private let m_onscreen: String;
 
   public static func Get() -> ref<XFDmRegistry> {
     let game = GetGameInstance();
@@ -83,6 +85,14 @@ public class XFDmRegistry extends ScriptableSystem {
 
   public func Entries() -> array<ref<XFDmEntry>> {
     return this.m_entries;
+  }
+
+  public func ForgetEntry(id: EntityID) -> Void {
+    let i = ArraySize(this.m_entries) - 1;
+    while i >= 0 {
+      if Equals(this.m_entries[i].id, id) { ArrayErase(this.m_entries, i); }
+      i -= 1;
+    }
   }
 
   public func ForgetEntries() -> Void {
@@ -150,11 +160,19 @@ public class XFDmRegistry extends ScriptableSystem {
   }
 
   public func AddLine(n: Int32) -> Void {
-    ArrayPush(this.m_lines, n);
+    if !ArrayContains(this.m_lines, n) { ArrayPush(this.m_lines, n); }
   }
 
   public func Lines() -> array<Int32> {
     return this.m_lines;
+  }
+
+  public func ForgetLine(n: Int32) -> Void {
+    let i = ArraySize(this.m_lines) - 1;
+    while i >= 0 {
+      if this.m_lines[i] == n { ArrayErase(this.m_lines, i); }
+      i -= 1;
+    }
   }
 
   public func ForgetLines() -> Void {
@@ -167,6 +185,14 @@ public class XFDmRegistry extends ScriptableSystem {
 
   public func CallContact() -> String {
     return this.m_callContact;
+  }
+
+  public func SetBanner(style: String, text: String) -> Void {
+    if Equals(style, "warning") { this.m_warning = text; } else { this.m_onscreen = text; }
+  }
+
+  public func BannerText(style: String) -> String {
+    return Equals(style, "warning") ? this.m_warning : this.m_onscreen;
   }
 
   // The events the listeners collected since the last sample (JSON objects), at most 16.
@@ -483,12 +509,14 @@ public abstract class XFDmSpawn {
     let system = GameInstance.GetDynamicEntitySystem();
     let registry = XFDmRegistry.Get();
     if !IsDefined(system) || !IsDefined(registry) {
-      return "{\"ok\":true,\"despawned\":false}";
+      return XFJson.Fail("not_ready", "the entity system is unavailable; deletion must be retried");
     }
-    let removed = false;
+    let removed = true; // no owned record means it was already removed
     for entry in registry.Entries() {
       if Equals(EntityID.ToDebugString(entry.id), entity) {
-        removed = system.DeleteEntity(entry.id);
+        // DeleteEntity confirms removal of the dynamic record, including a not-yet-streamed entity.
+        removed = !system.IsManaged(entry.id) || system.DeleteEntity(entry.id);
+        if removed { registry.ForgetEntry(entry.id); }
       }
     }
     XFBridgeLog.Info(cid, "dm despawned " + entity + " " + (removed ? "true" : "false"));
@@ -502,8 +530,14 @@ public abstract class XFDmSpawn {
     let count = 0;
     if IsDefined(registry) {
       let entries = registry.Entries();
-      count = ArraySize(entries);
-      registry.ForgetEntries();
+      for entry in entries {
+        if IsDefined(system) && (!system.IsManaged(entry.id) || system.DeleteEntity(entry.id)) {
+          registry.ForgetEntry(entry.id);
+          count += 1;
+        }
+      }
+      let remaining = registry.Entries();
+      if ArraySize(remaining) > 0 { return -1; }
     }
     if IsDefined(system) {
       system.DeleteTagged(n"xfs_dm");
@@ -567,6 +601,9 @@ public abstract class XFDmLight {
     }
     XFBridgeActions.EnsureSaveLock(cid);
     let game = light as gameLightComponent;
+    if inner >= 0.0 && !IsDefined(game) {
+      return XFJson.Fail("no_light_component", "this light component cannot take cone angles");
+    }
     let before = "{";
     let wrote = false;
     if IsDefined(game) {
@@ -673,7 +710,10 @@ public abstract class XFDmLines {
     let ids: array<CRUID>;
     ArrayPush(ids, XFDmLines.LineId(n));
     let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(GetAllBlackboardDefs().UIGameData);
+    if !IsDefined(board) { return XFJson.Fail("not_ready", "the subtitle board is unavailable; hiding must be retried"); }
     board.SetVariant(GetAllBlackboardDefs().UIGameData.HideDialogLine, ToVariant(ids), true);
+    let registry = XFDmRegistry.Get();
+    if IsDefined(registry) { registry.ForgetLine(n); }
     return "{\"ok\":true,\"hidden\":true}";
   }
 
@@ -689,6 +729,7 @@ public abstract class XFDmLines {
     let count = ArraySize(ids);
     if count > 0 {
       let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(GetAllBlackboardDefs().UIGameData);
+      if !IsDefined(board) { return -1; }
       board.SetVariant(GetAllBlackboardDefs().UIGameData.HideDialogLine, ToVariant(ids), true);
     }
     registry.ForgetLines();
@@ -927,7 +968,7 @@ public abstract class XFDmWorld {
       evt.station = station;
       vehicle.QueueEvent(evt);
     } else {
-      if on >= 0 {
+      if on >= 0 && !Equals(on == 1, wasOn) {
         let evt = new VehicleRadioEvent();
         evt.toggle = on == 1;
         vehicle.QueueEvent(evt);
@@ -977,7 +1018,7 @@ public abstract class XFDmWorld {
   public static func Stop(cid: String, event: String, on: String, emitter: String) -> String {
     let audio = GameInstance.GetAudioSystem(GetGameInstance());
     if !IsDefined(audio) {
-      return "{\"ok\":true}";
+      return XFJson.Fail("not_ready", "the audio system is unavailable; stopping must be retried");
     }
     if Equals(on, "global") {
       audio.Stop(StringToName(event));
@@ -1013,6 +1054,56 @@ public abstract class XFDmWorld {
 }
 
 // --- the phone -----------------------------------------------------------------------------------------------------------------
+
+// Keep the game's request type for native dispatch; only tag the instances XF creates.
+@addField(questTriggerCallRequest)
+public let xfsDmOwned: Bool;
+
+@wrapMethod(PhoneSystem)
+private final func OnTriggerCall(request: ref<questTriggerCallRequest>) -> Void {
+  if !XFBridge_Live() {
+    if !request.xfsDmOwned { wrappedMethod(request); }
+    return;
+  }
+  let registry = XFDmRegistry.Get();
+  let owned = request.xfsDmOwned;
+  // A ring/start still queued when teardown revoked ownership is cancelled too.
+  if owned && (!IsDefined(registry) || !Equals(registry.CallContact(), NameToString(request.caller))) { return; }
+  if owned && Equals(request.callPhase, questPhoneCallPhase.EndCall) {
+    if !IsDefined(registry) || !Equals(registry.CallContact(), NameToString(request.caller)) ||
+       NotEquals(this.m_LastCallInformation.contactName, request.caller) ||
+       (!Equals(this.m_LastCallInformation.callPhase, questPhoneCallPhase.IncomingCall) && !Equals(this.m_LastCallInformation.callPhase, questPhoneCallPhase.StartCall)) {
+      return;
+    }
+  }
+  // A vanilla quest request supersedes bridge ownership, even for the same contact.
+  if IsDefined(registry) && !owned { registry.SetCallContact(""); }
+  wrappedMethod(request);
+  if IsDefined(registry) && Equals(request.callPhase, questPhoneCallPhase.EndCall) { registry.SetCallContact(""); }
+}
+
+@wrapMethod(PhoneSystem)
+private final func TriggerCall(callMode: questPhoneCallMode, isAudio: Bool, contactName: CName, isPlayerCalling: Bool, callPhase: questPhoneCallPhase, isPlayerTriggered: Bool, opt isRejectable: Bool, showAvatar: Bool, callVisuals: questPhoneCallVisuals) -> Void {
+  if !XFBridge_Live() {
+    wrappedMethod(callMode, isAudio, contactName, isPlayerCalling, callPhase, isPlayerTriggered, isRejectable, showAvatar, callVisuals);
+    return;
+  }
+  let registry = XFDmRegistry.Get();
+  if IsDefined(registry) && (Equals(callPhase, questPhoneCallPhase.EndCall) || !Equals(registry.CallContact(), NameToString(contactName))) {
+    registry.SetCallContact("");
+  }
+  wrappedMethod(callMode, isAudio, contactName, isPlayerCalling, callPhase, isPlayerTriggered, isRejectable, showAvatar, callVisuals);
+}
+
+// Hang-up/rejection can write only the fact (OnTalkingTriggerRequest/OnPickupPhone), without TriggerCall.
+@wrapMethod(PhoneSystem)
+private final func SetPhoneFact(isPlayerCalling: Bool, contactName: CName, state: questPhoneTalkingState) -> Void {
+  if XFBridge_Live() && (Equals(state, questPhoneTalkingState.Ended) || Equals(state, questPhoneTalkingState.Rejected)) {
+    let registry = XFDmRegistry.Get();
+    if IsDefined(registry) && Equals(registry.CallContact(), NameToString(contactName)) { registry.SetCallContact(""); }
+  }
+  wrappedMethod(isPlayerCalling, contactName, state);
+}
 
 public abstract class XFDmPhone {
   public static func System() -> ref<PhoneSystem> {
@@ -1064,6 +1155,7 @@ public abstract class XFDmPhone {
 
   public static func Request(contact: String, phase: questPhoneCallPhase, mode: String, rejectable: Bool) -> ref<questTriggerCallRequest> {
     let request = new questTriggerCallRequest();
+    request.xfsDmOwned = true;
     request.caller = StringToName(contact);
     request.addressee = n"Player";
     request.callPhase = phase;
@@ -1120,21 +1212,25 @@ public abstract class XFDmPhone {
   }
 
   public static func End(cid: String, contact: String) -> String {
+    let registry = XFDmRegistry.Get();
+    if !IsDefined(registry) || !Equals(registry.CallContact(), contact) { return "{\"ok\":true}"; }
     let phone = XFDmPhone.System();
     if !IsDefined(phone) {
+      return XFJson.Fail("not_ready", "the phone system is unavailable; ending the owned call must be retried");
+    }
+    let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(GetAllBlackboardDefs().UI_ComDevice);
+    if !IsDefined(board) { return XFJson.Fail("not_ready", "the phone state is unavailable; ending the owned call must be retried"); }
+    let current = FromVariant<PhoneCallInformation>(board.GetVariant(GetAllBlackboardDefs().UI_ComDevice.PhoneCallInformation));
+    if NotEquals(current.contactName, StringToName(contact)) || (!Equals(current.callPhase, questPhoneCallPhase.IncomingCall) && !Equals(current.callPhase, questPhoneCallPhase.StartCall)) {
+      registry.SetCallContact("");
       return "{\"ok\":true}";
     }
     phone.QueueRequest(XFDmPhone.Request(contact, questPhoneCallPhase.EndCall, "audio", false));
-    let registry = XFDmRegistry.Get();
-    if IsDefined(registry) {
-      registry.SetCallContact("");
-    }
     XFBridgeLog.Info(cid, "dm call ended with " + contact);
     return "{\"ok\":true}";
   }
 
-  // The message toast of a name. The toast widget takes plain text when it has no localisation key (messengerNotification:
-  // SMSText), and a contact hash the journal doesn't know, as Night City Allies pushes its own.
+  // Our message view data takes plain text and bypasses the vanilla journal lookups and click action.
   public static func Text(cid: String, contact: String, text: String) -> String {
     let registry = XFDmRegistry.Get();
     let host = IsDefined(registry) ? registry.PhoneHost() : null;
@@ -1158,10 +1254,77 @@ protected cb func OnInitialize() -> Bool {
   return result;
 }
 
+public class XFDmNotificationRemove extends IScriptable {
+  public let style: String;
+}
+
+// The vanilla removal handler reads a journal-request field before checking its cast.
+// Only our subclasses consume XF requests; unrelated queued notifications must stay untouched.
+@wrapMethod(QuestUpdateNotificationViewData)
+public func OnRemoveNotification(data: ref<IScriptable>) -> Bool {
+  if IsDefined(data as XFDmNotificationRemove) { return false; }
+  return wrappedMethod(data);
+}
+
+public class XFDmMessageData extends PhoneMessageNotificationViewData {
+  public func CanMerge(data: ref<GenericNotificationViewData>) -> Bool { return false; }
+  public func OnRemoveNotification(data: ref<IScriptable>) -> Bool {
+    let request = data as XFDmNotificationRemove;
+    return IsDefined(request) && (StrLen(request.style) == 0 || Equals(request.style, "phone"));
+  }
+}
+
+public class XFDmQuestData extends QuestUpdateNotificationViewData {
+  public let style: String;
+  public func OnRemoveNotification(data: ref<IScriptable>) -> Bool {
+    let request = data as XFDmNotificationRemove;
+    return IsDefined(request) && (StrLen(request.style) == 0 || Equals(request.style, this.style));
+  }
+}
+
+// 2.31 MessengerNotification.SetNotificationData calls GetAvatarID and GetAttachmentPathHash without
+// checking the journal lookups. Handle only our journal-free data before those native calls.
+// Its native-base override is stored under the bare name; cb selects that symbol in redscript 0.5.31.
+// Parameter/return types checked against the decompiled 2.31 method (lint alone cannot check cb signatures).
+@wrapMethod(MessengerNotification)
+public cb func SetNotificationData(notificationData: ref<GenericNotificationViewData>) -> Void {
+  let owned = notificationData as XFDmMessageData;
+  if !IsDefined(owned) { wrappedMethod(notificationData); return; }
+  if !XFBridge_Live() { return; }
+  if IsDefined(this.m_animProxy) { this.m_animProxy.Stop(); }
+  this.m_messageData = owned;
+  this.m_customInputActionName = n"None";
+  inkTextRef.SetText(this.m_messageText, owned.SMSText);
+  inkWidgetRef.SetFitToContent(this.m_messageText, StrLen(owned.SMSText) < this.m_textSizeLimit);
+  InkImageUtils.RequestAvatarOrUnknown(this, this.m_avatar, t"");
+  inkWidgetRef.SetVisible(this.m_mappinIcon, false);
+  inkWidgetRef.SetVisible(this.m_envelopIcon, true);
+  inkTextRef.SetLocalizedTextScript(this.m_descriptionText, n"Story-base-gameplay-gui-widgets-notifications-quest_update-_localizationString9");
+  let playbackOptions: inkAnimOptions;
+  playbackOptions.toMarker = n"OutroStart";
+  this.m_animProxy = this.PlayLibraryAnimation(owned.animation, playbackOptions);
+  this.m_animProxy.RegisterToCallback(inkanimEventType.OnFinish, this, n"OnNotificationShown");
+  super.SetNotificationData(notificationData); // action is null: no journal-opening input action
+}
+
+@addMethod(NewHudPhoneGameController)
+public func XFDmRemove(style: String) -> Void {
+  let request = new XFDmNotificationRemove();
+  request.style = style;
+  this.RemoveNotification(request);
+}
+
+@addMethod(JournalNotificationQueue)
+public func XFDmRemove(style: String) -> Void {
+  let request = new XFDmNotificationRemove();
+  request.style = style;
+  this.RemoveNotification(request);
+}
+
 @addMethod(NewHudPhoneGameController)
 public func XFDmToast(contact: String, text: String) -> Void {
   let notificationData: gameuiGenericNotificationData;
-  let userData: ref<PhoneMessageNotificationViewData> = new PhoneMessageNotificationViewData();
+  let userData = new XFDmMessageData();
   userData.title = contact;
   userData.SMSText = text;
   userData.animation = n"notification_phone_MSG";
@@ -1216,7 +1379,8 @@ public func XFDmToast(style: String, title: String, text: String, seconds: Float
     heading = title;
   };
   let notificationData: gameuiGenericNotificationData;
-  let userData = new QuestUpdateNotificationViewData();
+  let userData = new XFDmQuestData();
+  userData.style = style;
   userData.title = heading;
   userData.text = text;
   userData.canBeMerged = false;
@@ -1245,20 +1409,36 @@ protected cb func OnInitialize() -> Bool {
 // The game sets its tracked-mappin row after every change of the tracked pin and would wipe ours: ours is drawn again after.
 @wrapMethod(QuestTrackerGameController)
 protected cb func OnTrackedMappinUpdated(value: Variant) -> Bool {
-  let result = wrappedMethod(value);
+  if XFBridge_Live() {
+    let registry = XFDmRegistry.Get();
+    if IsDefined(registry) && StrLen(registry.TrackerSpec()) > 0 {
+      this.m_currentMappin = FromVariant<ref<IScriptable>>(value) as IMappin;
+      if IsDefined(this.m_trackedMappinSpawnRequest) { this.m_trackedMappinSpawnRequest.Cancel(); }
+      this.XFDmDraw(registry.TrackerSpec());
+      return false;
+    }
+  }
+  return wrappedMethod(value);
+}
+
+// A completion already queued before XF took the container must not redraw over it.
+@wrapMethod(QuestTrackerGameController)
+protected cb func OnTrackedMappinSpawned(newItem: ref<inkWidget>, userData: ref<IScriptable>) -> Bool {
   if XFBridge_Live() {
     let registry = XFDmRegistry.Get();
     if IsDefined(registry) && StrLen(registry.TrackerSpec()) > 0 {
       this.XFDmDraw(registry.TrackerSpec());
+      return false;
     }
   }
-  return result;
+  return wrappedMethod(newItem, userData);
 }
 
 // spec: the quest's title, then one line per objective: state (active, done, failed), a tab, "o" for optional or "-", a tab,
 // the words. Drawn in the tracked-mappin container the way OnTrackedMappinSpawned fills it.
 @addMethod(QuestTrackerGameController)
 public func XFDmDraw(spec: String) -> Void {
+  if IsDefined(this.m_trackedMappinSpawnRequest) { this.m_trackedMappinSpawnRequest.Cancel(); }
   let lines = StrSplit(spec, "\n");
   inkCompoundRef.RemoveAllChildren(this.m_TrackedMappinObjectiveContainer);
   inkWidgetRef.SetVisible(this.m_TrackedMappinContainer, true);
@@ -1317,12 +1497,15 @@ public abstract class XFDmHud {
 
   public static func Notify(cid: String, style: String, title: String, text: String, seconds: Float) -> String {
     let game = GetGameInstance();
+    let registry = XFDmRegistry.Get();
+    if !IsDefined(registry) { return XFJson.Fail("not_ready", "the toolkit's registry is unavailable"); }
     if Equals(style, "warning") || Equals(style, "onscreen") {
       let board = GameInstance.GetBlackboardSystem(game).Get(GetAllBlackboardDefs().UI_Notifications);
       if !IsDefined(board) {
         return XFJson.Fail("hud_missing", "the HUD's message board isn't there yet");
       }
       let message: SimpleScreenMessage;
+      registry.SetBanner(style, text);
       message.isShown = true;
       message.duration = seconds;
       message.message = text;
@@ -1336,7 +1519,6 @@ public abstract class XFDmHud {
       XFBridgeLog.Info(cid, "dm " + style + " message shown");
       return "{\"ok\":true,\"shown\":true}";
     }
-    let registry = XFDmRegistry.Get();
     let host = IsDefined(registry) ? registry.ToastHost() : null;
     if !IsDefined(host) {
       return XFJson.Fail("hud_missing", "the HUD's quest notifications aren't up (a menu or a loading screen); try again in normal play");
@@ -1347,17 +1529,35 @@ public abstract class XFDmHud {
   }
 
   public static func NotifyHide(cid: String, style: String) -> String {
+    let registry = XFDmRegistry.Get();
+    if IsDefined(registry) {
+      let phone = registry.PhoneHost();
+      let quests = registry.ToastHost();
+      if IsDefined(phone) { phone.XFDmRemove(style); }
+      if IsDefined(quests) { quests.XFDmRemove(style); }
+    }
     let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(GetAllBlackboardDefs().UI_Notifications);
     if !IsDefined(board) {
+      if IsDefined(registry) && (StrLen(registry.BannerText("warning")) > 0 || StrLen(registry.BannerText("onscreen")) > 0) {
+        return XFJson.Fail("not_ready", "the message board is unavailable; hiding must be retried");
+      }
       return "{\"ok\":true,\"banners_hidden\":false}";
     }
     let message: SimpleScreenMessage;
     message.isShown = false;
-    if StrLen(style) == 0 || Equals(style, "warning") {
-      board.SetVariant(GetAllBlackboardDefs().UI_Notifications.WarningMessage, ToVariant(message), true);
+    if IsDefined(registry) && (StrLen(style) == 0 || Equals(style, "warning")) {
+      let current = FromVariant<SimpleScreenMessage>(board.GetVariant(GetAllBlackboardDefs().UI_Notifications.WarningMessage));
+      if StrLen(registry.BannerText("warning")) > 0 && Equals(current.message, registry.BannerText("warning")) {
+        board.SetVariant(GetAllBlackboardDefs().UI_Notifications.WarningMessage, ToVariant(message), true);
+      }
+      registry.SetBanner("warning", "");
     }
-    if StrLen(style) == 0 || Equals(style, "onscreen") {
-      board.SetVariant(GetAllBlackboardDefs().UI_Notifications.OnscreenMessage, ToVariant(message), true);
+    if IsDefined(registry) && (StrLen(style) == 0 || Equals(style, "onscreen")) {
+      let current = FromVariant<SimpleScreenMessage>(board.GetVariant(GetAllBlackboardDefs().UI_Notifications.OnscreenMessage));
+      if StrLen(registry.BannerText("onscreen")) > 0 && Equals(current.message, registry.BannerText("onscreen")) {
+        board.SetVariant(GetAllBlackboardDefs().UI_Notifications.OnscreenMessage, ToVariant(message), true);
+      }
+      registry.SetBanner("onscreen", "");
     }
     return "{\"ok\":true,\"banners_hidden\":true}";
   }
@@ -1499,9 +1699,12 @@ public abstract class XFDmSense {
       }
     }
     if StrLen(call) > 0 {
-      XFDmPhone.End(cid, call);
+      let ended = XFDmPhone.End(cid, call);
+      if StrContains(ended, "\"ok\":false") { return ended; }
     }
-    XFDmHud.NotifyHide(cid, "");
+    let hidden = XFDmHud.NotifyHide(cid, "");
+    if StrContains(hidden, "\"ok\":false") { return hidden; }
+    if lines < 0 || removed < 0 { return XFJson.Fail("not_ready", "some toolkit cleanup could not be confirmed; ownership is retained for retry"); }
     XFBridgeLog.Info(cid, "dm released everything (" + reason + "): lines=" + IntToString(lines) + " entities=" + IntToString(removed));
     return "{\"ok\":true,\"lines_hidden\":" + IntToString(lines) + ",\"entities_removed\":" + IntToString(removed) + ",\"call_ended\":" + XFJson.Flag(StrLen(call) > 0) + "}";
   }

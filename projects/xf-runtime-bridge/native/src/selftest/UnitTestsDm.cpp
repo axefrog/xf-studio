@@ -12,6 +12,10 @@
 
 #include "core/Dispatcher.hpp"
 #include "core/DmService.hpp"
+#include "core/DmMicro.hpp"
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include "core/Events.hpp"
 
 namespace
@@ -818,6 +822,10 @@ d::Ops FakeOps(FakeWorld& aWorld)
         aWorld.calls.push_back("micro_cancel:" + aWhy);
         return size_t{0};
     };
+    ops.microCancelWatch = [&aWorld](const std::string& aId) {
+        aWorld.calls.push_back("micro_cancel:watch_disarm " + aId);
+        return size_t{0};
+    };
     ops.actionCheck = [](const std::string&) -> std::string { return ""; };
     return ops;
 }
@@ -901,8 +909,10 @@ void ServiceTests()
         rig.service.Spawn(json{{"template", "base\\b.ent"}}, rig.Ops());
         rig.world.failDespawn = true;
         const auto both = rig.service.Despawn(json{{"all", true}}, rig.Ops());
-        Check("dm: a despawn the game fails is still forgotten, with the failure reported and undo_all for both",
-              both["removed"] == 2 && both.contains("failure") && both["undo_all"].size() == 2 && rig.service.Holds().empty());
+        Check("dm: failed despawns keep ownership and save protection without a false undo",
+              both["removed"] == 0 && both.contains("failure") && !both.contains("undo_all") && !rig.service.Holds().empty());
+        rig.world.failDespawn = false;
+        Check("dm: failed despawns can be retried", rig.service.Despawn(json{{"all", true}}, rig.Ops())["removed"] == 2 && rig.service.Holds().empty());
     }
     {
         Rig rig;
@@ -1014,7 +1024,7 @@ void ServiceTests()
         Check("dm: a watcher arms and lists with an undo that disarms it", armed["undo"]["method"] == "watch.disarm" && rig.service.WatchList(json::object(), rig.Ops())["count"] == 1);
         const auto gone = rig.service.WatchDisarm(json{{"id", "g"}}, rig.Ops());
         Check("dm: disarming drops the watcher and the micro-actions waiting; an unknown id is refused",
-              gone["disarmed"] == 1 && Called(rig.world, "micro_cancel:watch_disarm g") && Code([&] { rig.service.WatchDisarm(json{{"id", "g"}}, rig.Ops()); }) == "not_found" &&
+              gone["disarmed"] == 1 && Called(rig.world, "micro_cancel:watch_disarm g") && rig.service.WatchDisarm(json{{"id", "g"}}, rig.Ops())["disarmed"] == 0 &&
                   Code([&] { rig.service.WatchDisarm(json::object(), rig.Ops()); }) == "bad_params");
     }
     {
@@ -1032,7 +1042,7 @@ void ServiceTests()
               Called(rig.world, "door:EntityID(8102):0:1") && Called(rig.world, "release_all:paused") && !rig.service.Active() && rig.service.Holds().empty());
         rig.world.calls.clear();
         rig.service.Tick(0.1, input);
-        Check("dm: and nothing again once it is released", rig.world.calls.empty());
+        Check("dm: after release only unconditional micro cancellation runs", rig.world.calls.size() == 1 && Called(rig.world, "micro_cancel:"));
     }
     {
         Rig rig;
@@ -1070,7 +1080,7 @@ void ServiceTests()
         rig.service.Spawn(json{{"template", "base\\x.ent"}}, rig.Ops());
         rig.world.calls.clear();
         rig.service.Tick(0.1, input);
-        Check("dm: with the script gate closed the tick calls nothing", rig.world.calls.empty());
+        Check("dm: with the script gate closed the tick only cancels micro-actions", rig.world.calls.size() == 1 && Called(rig.world, "micro_cancel:"));
     }
     {
         Rig rig;
@@ -1106,10 +1116,170 @@ void ServiceTests()
         Check("dm: the digest keeps only the asked number and kinds of events", few["events"].size() == 1 && few["events"][0]["kind"] == "dm.world");
     }
 }
+void ReviewTests()
+{
+    {
+        FakeGame game;
+        auto ops = OpsOf(game);
+        bool fail = true;
+        ops.hideLine = [&](uint64_t id) {
+            if (fail) { throw xfb::MethodError("failed", "hide failed"); }
+            game.hidden.push_back(id);
+        };
+        d::Session session(ops);
+        session.ShowLine("notify:1", "XF", "retry", 1, 2.0, 0.0);
+        session.Tick(0.1);
+        Check("dm review 5/14: failed explicit subtitle hide stays owned", !session.HideLinesPrefix("notify:") && session.Busy());
+        session.Tick(3.0);
+        Check("dm review 5/14: failed expired subtitle hide stays owned", session.Busy() && game.hidden.empty());
+        Check("dm review 5/14: failed reset retains subtitle cleanup", session.Reset(true)["cleanup_pending"] == true && session.Busy());
+        fail = false;
+        session.Tick(3.1);
+        Check("dm review 5/14: subtitle retry forgets only confirmed hides", !session.Busy() && game.hidden.size() == 1);
+    }
+    {
+        Rig rig;
+        rig.service.NotifyShow(json{{"style", "warning"}, {"text", "retry"}}, rig.Ops());
+        auto ops = rig.Ops();
+        ops.releaseAll = [](const std::string&) -> json { throw xfb::MethodError("failed", "HUD cleanup failed"); };
+        const auto failed = rig.service.ReleaseAllNow("handover", ops);
+        Check("dm review 5/11: failed script cleanup retains activity and save hold", failed["released"] == false && rig.service.Active() && !rig.service.Holds().empty());
+        Check("dm review 5/11: confirmed script cleanup clears the hold", rig.service.ReleaseAllNow("retry", rig.Ops())["released"] == true && rig.service.Holds().empty());
+    }
+    {
+        d::WatcherEngine engine;
+        engine.Arm(Watch(json{{"id", "repeat"}, {"kind", "timer"}, {"seconds", 1}, {"repeat", true}, {"cooldown_s", 3}, {"expires_s", 5}}), 0);
+        const auto first = engine.Advance(1.1);
+        const auto early = engine.Advance(2.2);
+        const auto second = engine.Advance(4.2);
+        const auto expired = engine.Advance(5.1);
+        Check("dm review 8: repeat timers respect cooldown and fixed expiry", first.size() == 1 && early.empty() && second.size() == 1 && expired.size() == 1 && expired[0].expired && engine.Empty());
+        engine.Arm(Watch(json{{"id", "late"}, {"kind", "timer"}, {"seconds", 1}, {"expires_s", 2}}), 0);
+        const auto late = engine.Advance(3);
+        Check("dm review 8: expiry precedes an overdue first tick", late.size() == 1 && late[0].expired);
+    }
+    {
+        Rig rig;
+        rig.service.Vehicle(json{{"target", "mounted"}, {"door", "trunk"}, {"door_state", "locked"}}, rig.Ops());
+        rig.service.ReleaseAllNow("handover", rig.Ops());
+        Check("dm review 4: unknown vehicle lock baseline retains save hold after release", !rig.service.Holds().empty());
+        rig.world.calls.clear();
+        rig.service.ReleaseAllNow("handover", rig.Ops());
+        Check("dm review 4: retaining a lock hold does not repeatedly restore the vehicle", !Called(rig.world, "vehicle:"));
+        rig.service.DropAll("load");
+        Check("dm review 4: only load clears the unknown lock hold", rig.service.Holds().empty());
+    }
+    {
+        Rig rig;
+        rig.service.Door(json{{"target", "EntityID(8102)"}, {"open", true}}, rig.Ops());
+        auto ops = rig.Ops();
+        ops.door = [](const d::DoorStep&) -> json { throw xfb::MethodError("failed", "restore failed"); };
+        rig.service.ReleaseAllNow("handover", ops);
+        Check("dm review 5: failed restoration retains its hold", !rig.service.Holds().empty());
+        rig.service.ReleaseAllNow("handover", rig.Ops());
+        Check("dm review 5: successful retry clears restoration hold", rig.service.Holds().empty());
+        rig.service.LightSpawn(json{{"template", "base\\lamp.ent"}}, rig.Ops());
+        rig.world.failDespawn = true;
+        Check("dm review 5: failed light removal retains ownership", rig.service.LightRemove(json{{"all", true}}, rig.Ops())["removed"] == 0 && !rig.service.Holds().empty());
+        rig.service.ReleaseAllNow("handover", rig.Ops());
+        Check("dm review 5: failed release deletion retains ownership", !rig.service.Holds().empty());
+        rig.world.failDespawn = false;
+        rig.service.ReleaseAllNow("handover", rig.Ops());
+        Check("dm review 5: release deletion retries successfully", rig.service.Holds().empty());
+    }
+    for (const auto& reason : {"kill", "paused", "handover"})
+    {
+        Rig rig;
+        rig.service.AudioPlay(json{{"event", "loop"}, {"loop", true}}, rig.Ops());
+        const auto out = rig.service.ReleaseAllNow(reason, rig.Ops());
+        Check("dm review 7: every teardown stops tracked audio", out["sounds_stopped"] == 1 && Called(rig.world, "stop:loop:") && !rig.service.Active());
+    }
+    {
+        Rig rig;
+        rig.service.NotifyShow(json{{"style", "warning"}, {"text", "owned"}}, rig.Ops());
+        Check("dm review 11: banner-only use is active", rig.service.Active());
+        rig.service.ReleaseAllNow("handover", rig.Ops());
+        Check("dm review 11: banner-only use reaches script teardown", Called(rig.world, "release_all:handover") && !rig.service.Active());
+    }
+    {
+        Rig rig;
+        auto ops = rig.Ops();
+        size_t pending = 1;
+        ops.microPending = [&] { return pending; };
+        ops.microCancel = [&](const std::string&) { auto old = pending; pending = 0; return old; };
+        rig.service.SetOpsFor([&](const std::string&) { return ops; });
+        rig.service.SessionForTest(ops);
+        Check("dm review 3: a delayed micro-action alone is active", rig.service.Active());
+        rig.service.RestoreAfterKill(ops);
+        Check("dm review 3: teardown cancels a delayed action without other resources", pending == 0 && !rig.service.Active());
+        ops.microCancelWatch = [&](const std::string& id) { return id == "fired" ? size_t{1} : size_t{0}; };
+        Check("dm review 9: disarm cancels a fired one-shot's batch", rig.service.WatchDisarm(json{{"id", "fired"}}, ops)["micro_dropped"] == 1);
+        Check("dm review 9: disarm stays idempotent after a batch finishes", rig.service.WatchDisarm(json{{"id", "finished"}}, ops)["disarmed"] == 0);
+    }
+    {
+        Rig rig;
+        auto ops = rig.Ops();
+        ops.lightSpawn = [](const d::LightStep&) { return json{{"entity", "EntityID(7001)"}, {"pending", true}}; };
+        int attempts = 0;
+        bool configured = false;
+        ops.lightSet = [&](const d::LightSetStep& step) -> json {
+            if (++attempts == 1) { throw xfb::MethodError("target_missing", "streaming"); }
+            configured = step.colour == std::array<int32_t,3>{1,2,3} && step.intensity == 42 && step.radius == 7 && step.inner == 10 && step.outer == 30;
+            return json::object();
+        };
+        rig.service.SetOpsFor([&](const std::string&) { return ops; });
+        rig.service.LightSpawn(json{{"template", "base\\lamp.ent"}, {"colour", {1,2,3}}, {"intensity", 42}, {"radius", 7}, {"inner", 10}, {"outer", 30}}, ops);
+        rig.service.Tick(0.1, {});
+        rig.service.Tick(0.1, {});
+        Check("dm review 10: asynchronous light applies all settings after streaming", configured && rig.service.Spawned(json::object(), ops)["spawned"][0]["pending"] == false);
+        ops.lightSet = [](const d::LightSetStep&) -> json { throw xfb::MethodError("target_missing", "streaming"); };
+        ops.despawn = [](const std::string&) -> json { throw xfb::MethodError("failed", "delete failed"); };
+        Rig late;
+        late.service.SetOpsFor([&](const std::string&) { return ops; });
+        late.service.LightSpawn(json{{"template", "base\\lamp.ent"}}, ops);
+        for (int i=0; i<12; ++i) { late.service.Tick(0.5, {}); }
+        Check("dm review 10: light streaming has a bounded failure", late.service.Spawned(json::object(), ops)["spawned"][0]["error"] == "not_streamed");
+        ops.despawn = [](const std::string&) { return json{{"despawned", true}}; };
+        late.service.ReleaseAllNow("retry", ops);
+        Check("dm review 10/14: a failed light can be removed and forgotten", late.service.Spawned(json::object(), ops)["spawned"].empty());
+    }
+    {
+        std::mutex mutex;
+        std::condition_variable cv;
+        std::vector<std::string> ran;
+        d::MicroRunner runner([&](const std::string& method, const json&, const std::string&, const std::string& token) {
+            std::scoped_lock lock(mutex);
+            ran.push_back(method + ":" + token);
+            cv.notify_all();
+            return json{{"ok", true}};
+        }, {});
+        d::MicroBatch a;
+        a.watch = "a";
+        a.sessionToken = "old-session";
+        d::MicroAction action;
+        action.method = "a";
+        action.delayS = 0.1;
+        a.actions.push_back(action);
+        runner.Enqueue(a);
+        auto b = a;
+        b.watch = "b";
+        b.actions[0].method = "b";
+        runner.Enqueue(b);
+        const auto pending = runner.Pending();
+        const auto cancelled = runner.CancelWatch("a");
+        std::unique_lock lock(mutex);
+        const bool completed = cv.wait_for(lock, std::chrono::seconds(2), [&] { return !ran.empty(); });
+        Check("dm review 3/9: running delays count, cancellation is per watcher and execution uses originating token", pending == 2 && cancelled == 1 && completed && ran == std::vector<std::string>{"b:old-session"});
+        lock.unlock();
+        runner.Stop();
+    }
+}
+
 } // namespace
 
 int DmUnitTests()
 {
+    ReviewTests();
     ParseTests();
     UndoTests();
     PatternTests();

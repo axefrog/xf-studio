@@ -212,9 +212,9 @@ dm::Ops MakeOps(SimDm::State* aState)
     };
     ops.despawn = [s](const std::string& aEntity) -> json {
         std::scoped_lock _(s->mutex);
-        const bool had = s->ents.erase(aEntity) > 0;
+        s->ents.erase(aEntity);
         s->vehicles.erase(aEntity);
-        return json{{"despawned", had}};
+        return json{{"despawned", true}}; // confirmed absent is idempotent success
     };
     ops.door = [s](const dm::DoorStep& aStep) -> json {
         std::scoped_lock _(s->mutex);
@@ -383,16 +383,9 @@ dm::Ops MakeOps(SimDm::State* aState)
         e.position = aStep.at;
         e.yaw = aStep.yaw;
         e.hasLight = aStep.templatePath.empty() || aStep.templatePath.find("lamp") != std::string::npos;
-        e.light.colour = aStep.colour;
-        e.light.intensity = aStep.intensity;
-        e.light.radius = aStep.radius;
-        if (aStep.inner)
-        {
-            e.light.inner = *aStep.inner;
-            e.light.outer = *aStep.outer;
-        }
+        // Initial settings are applied asynchronously by the same service tick as the real adapter.
         s->ents[e.id] = e;
-        return json{{"entity", e.id}, {"components", e.hasLight ? 1 : 0}};
+        return json{{"entity", e.id}, {"components", 0}, {"pending", true}};
     };
     ops.lightSet = [s](const dm::LightSetStep& aStep) -> json {
         std::scoped_lock _(s->mutex);
@@ -598,6 +591,9 @@ dm::Ops MakeOps(SimDm::State* aState)
         s->lines.clear();
         s->tracker.clear();
         s->listening = false;
+        s->banners.clear();
+        s->toasts.clear();
+        ++s->bannersHidden;
         ++s->releasedAll;
         const bool call = s->callState == "ringing" || s->callState == "talking";
         if (call)
@@ -620,8 +616,13 @@ dm::Ops MakeOps(SimDm::State* aState)
                            {"vitals", {{"health_percent", 62.0}}}}},
                     {"world", world}};
     };
-    ops.micro = [s](dm::MicroBatch aBatch) { s->micro->Enqueue(std::move(aBatch)); };
+    ops.micro = [s](dm::MicroBatch aBatch) {
+        aBatch.sessionToken = s->hooks.token();
+        s->micro->Enqueue(std::move(aBatch));
+    };
     ops.microCancel = [s](const std::string& aWhy) { return s->micro->Cancel(aWhy); };
+    ops.microCancelWatch = [s](const std::string& aWatch) { return s->micro->CancelWatch(aWatch); };
+    ops.microPending = [s] { return s->micro->Pending(); };
     ops.actionCheck = [s](const std::string& aMethod) -> std::string {
         const auto access = s->dispatcher->AccessOf(aMethod);
         if (!access)
@@ -648,6 +649,7 @@ json Snapshot(SimDm::State* s)
             entry["light"] = json{{"colour", json::array({e.light.colour[0], e.light.colour[1], e.light.colour[2]})},
                                   {"intensity", e.light.intensity},
                                   {"radius", e.light.radius},
+                                  {"inner", e.light.inner}, {"outer", e.light.outer},
                                   {"on", e.light.on},
                                   {"flicker", e.light.flicker},
                                   {"intensity_calls", e.light.intensityCalls},
@@ -704,8 +706,8 @@ SimDm::SimDm(Dispatcher& aDispatcher, SimDmHooks aHooks)
     s->service = std::make_unique<dm::Service>([s](const std::string&) { return MakeOps(s); });
     s->service->SetEvents(s->hooks.events);
     s->micro = std::make_unique<dm::MicroRunner>(
-        [s](const std::string& aMethod, const json& aParams, const std::string& aCid) -> json {
-            const json request{{"v", kProtocolVersion}, {"id", aCid}, {"token", s->hooks.token()}, {"method", aMethod}, {"params", aParams}, {"cid", aCid}};
+        [s](const std::string& aMethod, const json& aParams, const std::string& aCid, const std::string& aToken) -> json {
+            const json request{{"v", kProtocolVersion}, {"id", aCid}, {"token", aToken}, {"method", aMethod}, {"params", aParams}, {"cid", aCid}};
             const auto handled = s->dispatcher->Handle(request.dump(), 4242);
             return json::parse(handled.line, nullptr, false);
         },
@@ -832,10 +834,6 @@ void SimDm::OnDetach()
 
 void SimDm::RestoreAfterKill(json& aOut)
 {
-    if (!m_state->service->Active())
-    {
-        return;
-    }
     aOut["dm_released"] = m_state->service->RestoreAfterKill(MakeOps(m_state.get()));
 }
 

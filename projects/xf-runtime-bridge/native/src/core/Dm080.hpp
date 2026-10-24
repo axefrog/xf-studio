@@ -434,6 +434,7 @@ bool MicroAccessAllowed(const std::string& aAccessName);
 struct MicroBatch
 {
     std::string watch;
+    std::string sessionToken; // captured when enqueued, never borrowed from a later session
     uint64_t seq = 0;
     std::vector<MicroAction> actions;
 };

@@ -28,7 +28,7 @@ class MicroRunner
 {
 public:
     // Sends one command through the dispatcher and answers its response object ({ok, result} or {ok: false, error}).
-    using Execute = std::function<json(const std::string& aMethod, const json& aParams, const std::string& aCid)>;
+    using Execute = std::function<json(const std::string& aMethod, const json& aParams, const std::string& aCid, const std::string& aToken)>;
     using Report = std::function<void(const std::string& aKind, const std::string& aLevel, const std::string& aText, const json& aData)>;
 
     MicroRunner(Execute aExecute, Report aReport);
@@ -41,6 +41,7 @@ public:
     // Drops every queued batch and ends the running one before its next action (a delay is cut short). Answers how many
     // actions were dropped.
     size_t Cancel(const std::string& aWhy);
+    size_t CancelWatch(const std::string& aWatch);
     // Cancels and joins the worker; later batches are refused.
     void Stop();
     size_t Pending() const;
@@ -58,6 +59,9 @@ private:
     bool m_started = false;
     bool m_stopping = false;
     uint64_t m_generation = 0;
+    std::string m_runningWatch;
+    size_t m_remaining = 0;
+    bool m_runningCancelled = false;
     std::atomic<uint64_t> m_ran{0};
 };
 } // namespace xfb::dm
