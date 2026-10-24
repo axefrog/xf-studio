@@ -161,10 +161,12 @@ export class Beliefs {
   // ---- reads ----
 
   get(believer: Id, subject: Id, path: SlotPath, at?: GameTime): Belief | undefined {
+    this.k.persistence.recoverIfSaved(believer, subject);
     return this.byBeliever.get(believer)?.get(qkey(subject, path, at));
   }
 
   activeOf(believer: Id): Belief[] {
+    this.k.persistence.recoverIfSaved(believer);
     return [...(this.byBeliever.get(believer)?.values() ?? [])].sort((a, b) => cmpId(a.id, b.id));
   }
 
@@ -200,6 +202,7 @@ export class Beliefs {
    */
   set(incoming: Omit<Belief, 'id'> & { id?: Id }): SetOutcome {
     this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(incoming);
     const b: Belief = { ...incoming, id: incoming.id ?? this.idFor(incoming), evidence: [...incoming.evidence].sort(cmpId) };
     if (!(b.confidence > 0 && b.confidence <= 1)) throw new Error('belief confidence is in (0, 1]');
     if ((b.value === undefined) === (b.region === undefined)) throw new Error('a belief has exactly one of value and region');
@@ -249,6 +252,7 @@ export class Beliefs {
 
   drop(believer: Id, beliefId: Id): boolean {
     this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(believer);
     const m = this.byBeliever.get(believer);
     if (!m) return false;
     for (const [key, b] of m) {
@@ -294,6 +298,7 @@ export class Beliefs {
 
   /** An observer witnesses an event: the policy's beliefs are set (spec 11.2). */
   observe(observer: Id, event: Id): SetOutcome[] {
+    this.k.persistence.recoverIfSaved(observer, event);
     const now = this.k.now;
     return this.policy.onWitness(this.k, event, observer).map((p) =>
       this.set({ ...p, believer: observer, formed: now, refreshed: now }),
@@ -305,6 +310,7 @@ export class Beliefs {
    * from one origin never corroborates itself (spec 11.2).
    */
   tell(teller: Id, listener: Id, beliefId: Id): SetOutcome | undefined {
+    this.k.persistence.recoverIfSaved(teller, listener);
     return this.tellWith(teller, listener, beliefId, undefined, null);
   }
 
@@ -313,6 +319,7 @@ export class Beliefs {
    * sourced to that event; its evidence is the teller's, unchanged.
    */
   tellAs(teller: Id, listener: Id, beliefId: Id, event: Id, operator: TellOperator | null): SetOutcome | undefined {
+    this.k.persistence.recoverIfSaved(teller, listener, event);
     return this.tellWith(teller, listener, beliefId, event, operator);
   }
 
@@ -348,6 +355,7 @@ export class Beliefs {
 
   /** Whether the observer witnessed the subject at `t`: some event at `t` lists it as a witness and involves the subject (SPEC-NOTES 21). */
   witnessed(observer: Id, subject: Id, t: GameTime): boolean {
+    this.k.persistence.recoverIfSaved(observer, subject);
     const k = this.k;
     for (const ev of k.events.eventsAtTime(t)) {
       const wc = k.value(ev, 'witnesses#count', t);
@@ -374,6 +382,7 @@ export class Beliefs {
    * witnessed the subject; else `unknown`. Never falls back to world truth.
    */
   knows(observer: Id, subject: Id, path: SlotPath, t: GameTime): Known {
+    this.k.persistence.recoverIfSaved(observer, subject);
     const b = this.get(observer, subject, path, t) ?? this.get(observer, subject, path);
     if (b) return { k: 'belief', belief: b };
     if (!this.witnessed(observer, subject, t)) return { k: 'unknown' };
@@ -397,6 +406,7 @@ export class Beliefs {
   }
 
   aggregate(audience: Id[], subject: Id, path: SlotPath): { value?: Value; confidence: number; mass?: number; items?: number } | undefined {
+    this.k.persistence.recoverIfSaved(audience, subject);
     return this.policy.aggregate(this.k, audience, subject, path);
   }
 }

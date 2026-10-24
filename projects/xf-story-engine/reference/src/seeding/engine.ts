@@ -50,7 +50,7 @@ function applyOverlay(l2: Layer2, input: SeedInput, overlay: NonNullable<SowOpts
       findings.push({ code: 'overlay', level: 'error', engine: true, message: `The overlay names the role "${key}", which the template does not have.` });
       continue;
     }
-    const h = l2.k.store.header(o.identity);
+    const h = l2.k.persistence.restoreReferencedHeader(o.identity);
     if (!h || !l2.k.schema.isCompatibleKind(h.kind, role.kind)) {
       findings.push({ code: 'overlay', level: 'error', engine: true, message: `The node the overlay names for "${key}" is not a ${role.kind}.` });
       continue;
@@ -94,13 +94,13 @@ export function sowTemplate(l2: Layer2, packId: string, templateId: string, opts
     layer = index.pack.source === 'procedural' ? 'procedural' : 'authored';
   } else if (by === 'director') {
     creator = rootId(l2.worldSeed, 'director');
-    if (!k.store.header(creator)) k.root('director', 'core:seed');
+    if (!k.persistence.restoreReferencedHeader(creator)) k.root('director', 'core:seed');
     cause = opts.decision ?? ids.sowCause(packId, templateId);
     name = ids.instanceName(templateId, undefined, opts.localName ?? 'sown');
     layer = 'procedural';
   } else {
     creator = rootId(l2.worldSeed, `plugin:${opts.pluginId ?? 'unknown'}`);
-    if (!k.store.header(creator)) k.root(`plugin:${opts.pluginId ?? 'unknown'}`, 'core:seed');
+    if (!k.persistence.restoreReferencedHeader(creator)) k.root(`plugin:${opts.pluginId ?? 'unknown'}`, 'core:seed');
     cause = opts.decision ?? ids.sowCause(packId, templateId);
     name = ids.instanceName(templateId, undefined, opts.localName ?? 'sown');
     layer = opts.authoringSource ? 'authored' : 'procedural';

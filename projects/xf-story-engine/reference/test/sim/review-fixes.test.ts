@@ -361,8 +361,11 @@ describe('SIM-04: the protected set of a past time survives a save, so a regener
     expect((cast as Array<{ role: string; who?: Id }>).find((e) => e.role === 'victim')?.who).not.toBe(victim);
     sim.k.persistence.save('A');
     sim.k.persistence.load('A');
-    // the load dropped the ended edge; the record kept the span
-    expect(sim.k.store.edgesTo(victim).filter((e) => e.type === 'core:cast')).toEqual([]);
+    // S3J persists explicit ends even before an edge's first save. Replay keeps the exact interval;
+    // S1's protection-span record must agree with it, independently of physical edge residency.
+    const ended = { from: d.time - 1, to: d.time + 300 };
+    expect(sim.k.store.edgesTo(victim).filter((e) => e.type === 'core:cast').map((e) => e.valid)).toEqual([ended]);
+    expect(sim.record.protect[victim]?.some((s) => s.from <= ended.from && s.to !== undefined && s.to >= ended.to)).toBe(true);
     expect(sim.people.protectedAt(victim, d.time)).toBe(true);
     expect(sim.people.protectedAt(victim, d.time + 400)).toBe(false);
     expect(sim.casting.cast(d)).toEqual(cast);
@@ -637,8 +640,11 @@ describe('SIM-07 and SIM-11: a materialised tie that ended opens again under its
     sim.advance(2);
     sim.k.persistence.save('A');
     sim.k.persistence.load('A');
-    // the load dropped the ended edge
-    expect(sim.k.store.edges.get(first.id)).toBeUndefined();
+    // S3J persists this explicit first-save end. The replayed edge and S1's bounded interval record
+    // must describe the same closed interval, without adding a duplicate or reopening it.
+    expect(sim.k.store.edges.get(first.id)?.valid).toEqual({ from: 1200, to: 2400 });
+    expect(sim.record.tieHistory[first.id]?.spans).toEqual([{ from: 1200, to: 2400 }]);
+    expect(sim.tiePolicy.intervalsOf(...loose)).toEqual([{ from: 1200, to: 2400 }]);
     pairs(sim); // the people are addressed again, as whatever asks about them does
     expect(at(sim, loose, 1500)).toBe('yes');
     expect(at(sim, loose, 3000)).toBe('no');

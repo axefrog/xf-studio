@@ -58,12 +58,14 @@ export class Retention {
 
   streamIn(ids: Id[]): void {
     this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(ids);
     for (const i of ids) this.streamed.add(i);
     this.k.bump();
   }
 
   streamOut(ids: Id[]): void {
     this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(ids);
     for (const i of ids) this.streamed.delete(i);
     this.k.bump();
   }

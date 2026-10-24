@@ -525,7 +525,7 @@ export class Layer3 {
     this.k.root('director', 'core:seed');
     this.k.frames.demandRoots.add(this.keys.director);
     for (const e of this.state.evidence)
-      if (!this.kv.event(e.id) && this.k.store.header(e.id)) this.k.events.restoreEvent(e, e.provenance);
+      if (!this.kv.event(e.id) && this.k.persistence.restoreReferencedHeader(e.id)) this.k.events.restoreEvent(e, e.provenance);
     this.sifter.reconcile();
     this.sifter.active = this.k.settings.current().tempo !== 'off';
     this.sifter.syncFrames();

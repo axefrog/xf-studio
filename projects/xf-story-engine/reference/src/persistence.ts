@@ -260,6 +260,8 @@ export class Persistence {
   private baseKey: string | null = null;
   readonly packs = new Map<string, Pack>();
   private installed = new Map<string, string>();
+  private recovering = false;
+  private recovered: { base: PersistedView; revision: number; membership: number; ids: Set<Id> } | undefined;
 
   constructor(private readonly k: Kernel) {}
 
@@ -272,6 +274,36 @@ export class Persistence {
     return this.base.headers.get(id);
   }
 
+  /** The one semantic reference boundary. Raw stores/replay/sweep never call this implicitly.
+   * Only the selected save is searched; missing live facts are replayed, never replaced.
+   */
+  recoverIfSaved(...references: unknown[]): void {
+    if (this.recovering || (this.base.headers.size === 0 && this.base.contributions.size === 0 &&
+      this.base.edges.size === 0 && this.base.pins.size === 0)) return;
+    if (this.recovered?.base !== this.base || this.recovered.revision !== this.k.revision ||
+      this.recovered.membership !== this.k.store.referencesVersion)
+      this.recovered = { base: this.base, revision: this.k.revision, membership: this.k.store.referencesVersion, ids: new Set() };
+    this.recovering = true;
+    try {
+      for (const id of new Set(idsIn(references, (s) => this.k.expandId(s)))) {
+        if (this.recovered.ids.has(id)) continue;
+        const c = this.base.contributions.get(id), e = this.base.edges.get(id), p = this.base.pins.get(id);
+        if (c) this.recoverContribution(id);
+        else if (e) this.recoverEdge(id);
+        else if (p) {
+          this.recoverHeader(p.pin.node);
+          const view = new PersistedView(); view.pins.set(id, p);
+          if (this.replay(view)) this.k.bump();
+        } else this.recoverHeader(id);
+        this.recovered.ids.add(id);
+      }
+    } finally {
+      this.recovered.revision = this.k.revision;
+      this.recovered.membership = this.k.store.referencesVersion;
+      this.recovering = false;
+    }
+  }
+
   /** An owned edge may leave memory only if its complete interval and endpoints are recoverable. */
   canSweepEdge(e: Edge): boolean {
     const saved = this.base.edges.get(e.id);
@@ -280,11 +312,16 @@ export class Persistence {
 
   /** Public writes can reach a saved record directly, without first reaching its node. */
   restoreContribution(id: Id): Contribution | undefined {
+    this.recoverIfSaved(id);
+    return this.k.store.contribution(id);
+  }
+
+  private recoverContribution(id: Id): Contribution | undefined {
     const store = this.k.store, live = store.contribution(id);
     if (live) return live;
     const saved = this.base.contributions.get(id);
     if (!saved) return undefined;
-    for (const ref of idsIn(saved)) this.restoreReferencedHeader(ref);
+    for (const ref of idsIn(saved)) this.recoverHeader(ref);
     const view = new PersistedView();
     view.contributions.set(id, saved);
     if (this.replay(view)) this.k.bump();
@@ -292,11 +329,16 @@ export class Persistence {
   }
 
   restoreEdge(id: Id): Edge | undefined {
+    this.recoverIfSaved(id);
+    return this.k.store.edges.get(id);
+  }
+
+  private recoverEdge(id: Id): Edge | undefined {
     const store = this.k.store, live = store.edges.get(id);
     if (live) return live;
     const saved = this.base.edges.get(id);
     if (!saved) return undefined;
-    for (const ref of [saved.from, saved.to, saved.cause]) this.restoreReferencedHeader(ref);
+    for (const ref of [saved.from, saved.to, saved.cause]) this.recoverHeader(ref);
     const view = new PersistedView();
     view.edges.set(id, saved);
     if (this.replay(view)) this.k.bump();
@@ -332,6 +374,11 @@ export class Persistence {
 
   /** Select only reached saved records, then use the same header-first replay as a load. */
   restoreReferencedHeader(id: Id): NodeHeader | undefined {
+    this.recoverIfSaved(id);
+    return this.k.store.header(id);
+  }
+
+  private recoverHeader(id: Id): NodeHeader | undefined {
     const store = this.k.store;
     const h = store.header(id) ?? this.base.headers.get(id);
     // A summary query can recreate the header alone. Complete every reached saved reference,
@@ -531,6 +578,41 @@ export class Persistence {
       const pin = store.pin(id), w = store.withdrawn.get(id);
       return pin && (w ? { pin, withdrawn: { by: w.by, at: w.at } } : { pin });
     });
+    // A regeneration recipe cannot reproduce a later mutation, even before its first save.
+    // These records and their identity headers are history, never retention roots.
+    for (const id of store.changedEdges) {
+      const e = store.edges.get(id);
+      if (e && !this.base.edges.has(id) && !cur.edges.has(id)) {
+        cur.edges.set(id, clone(e));
+        this.includeChangeHeaders(cur, e);
+      }
+    }
+    for (const id of store.changedContributions) {
+      const c = store.contribution(id);
+      if (c && !this.base.contributions.has(id) && !cur.contributions.has(id)) {
+        cur.contributions.set(id, clone(c));
+        this.includeChangeHeaders(cur, c);
+      }
+    }
+    // Only events admitted by a real edit (or retention) bring their supporting payload. A record's
+    // already-saved authored source alone must not admit unrelated never-saved event history.
+    for (const h of cur.headers.values()) for (const id of store.changeDependencies.get(h.id) ?? []) {
+      const c = store.contribution(id), e = store.edges.get(id);
+      if (c) { cur.contributions.set(id, clone(c)); this.includeChangeHeaders(cur, c); }
+      if (e) { cur.edges.set(id, clone(e)); this.includeChangeHeaders(cur, e); }
+    }
+    for (const [id, m] of store.changeMaterialisations) if (cur.headers.has(id))
+      cur.materialisations.set(id, clone(m));
+  }
+
+  private includeChangeHeaders(cur: PersistedView, record: Edge | Contribution): void {
+    const todo = idsIn(record), seen = new Set<Id>();
+    for (let n = 0; n < todo.length; n++) {
+      const id = todo[n]; if (seen.has(id)) continue; seen.add(id);
+      const h = this.k.store.header(id) ?? this.k.store.changeHeaders.get(id) ?? this.base.headers.get(id);
+      if (!h) continue;
+      cur.headers.set(id, clone(h)); todo.push(...idsIn(h.origin));
+    }
   }
 
   /** Write a save record for the current state, as a child of the save last written or loaded (spec 14.2). */

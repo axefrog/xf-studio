@@ -275,7 +275,6 @@ export class Kernel {
 
   /** Every re-creation completes saved replay before a caller can synthesise defaults. */
   private recoverOrAddHeader(header: NodeHeader): boolean {
-    if (this.store.header(header.id)) return false;
     if (this.persistence.restoreReferencedHeader(header.id)) return false;
     const added = this.store.addHeader(header);
     // The header may never have been saved, while authored contributions naming it were.
@@ -326,6 +325,7 @@ export class Kernel {
    * identity only (SPEC-NOTES 9).
    */
   address(owner: Id, path: SlotPath): Id {
+    this.persistence.recoverIfSaved(owner);
     const h = this.store.header(owner);
     if (!h) throw new Error(`unknown node: ${owner}`);
     const info = this.schema.slotInfo(h.kind, path);
@@ -353,6 +353,7 @@ export class Kernel {
    * lazily, when first addressed.
    */
   open(node: Id, path: SlotPath, t: GameTime = this.now): void {
+    this.persistence.recoverIfSaved(node);
     const h = this.store.header(node);
     if (!h) throw new Error(`unknown node: ${node}`);
     const parsed = parseSlotPath(path);
@@ -369,6 +370,7 @@ export class Kernel {
 
   /** Drop the resolved caches of a node and of its unretained owned values and members. Pins, edges and headers stay. */
   close(node: Id): void {
+    this.persistence.recoverIfSaved(node);
     const drop = (id: Id, root: boolean): void => {
       if (!root && this.retention.isRetained(id)) return;
       this.store.dropNode(id);
@@ -382,20 +384,24 @@ export class Kernel {
 
   /** Resolve a slot (spec 5). `t` defaults to the engine time. */
   resolve(node: Id, path: SlotPath, t: GameTime = this.now): ResolveResult {
+    this.persistence.recoverIfSaved(node);
     return this.resolver.resolve(node, path, t);
   }
 
   /** The value of a slot, or undefined unless it resolved ok or contradicted. */
   value(node: Id, path: SlotPath, t: GameTime = this.now): Value | undefined {
+    this.persistence.recoverIfSaved(node);
     const r = this.resolve(node, path, t);
     return r.status === 'ok' || r.status === 'contradiction' ? r.value : undefined;
   }
 
   trace(node: Id, path: SlotPath, t: GameTime = this.now): Trace {
+    this.persistence.recoverIfSaved(node);
     return this.resolver.trace(node, path, t);
   }
 
   query(q: Query): QueryOutcome {
+    this.persistence.recoverIfSaved(q);
     return this.queries.run(q);
   }
 
@@ -408,6 +414,7 @@ export class Kernel {
 
   /** Whether (node, slot) is part of V's drives: nothing pins or sets those (I-12). */
   isVDrive(node: Id, slot: SlotPath = ''): boolean {
+    this.persistence.recoverIfSaved(node);
     const v = this.vId;
     if (node === v) return slot.startsWith('drives');
     let cur: Id | undefined = node;
@@ -429,6 +436,7 @@ export class Kernel {
   /** Add a pin (spec 6.1). Idempotent for the same Id. Emits a `pin` change unless silent. */
   pin(spec: PinSpec): Pin {
     this.assertWritable();
+    this.persistence.recoverIfSaved(spec.node);
     if (this.isVDrive(spec.node, spec.slot)) throw new Error("V is never owned: nothing pins or sets V's drives (I-12)");
     const h = this.store.header(spec.node);
     if (!h) throw new Error(`pin on an unknown node: ${spec.node}`);
@@ -494,6 +502,7 @@ export class Kernel {
    */
   withdrawPin(pinId: Id, by: Id, at: GameTime = this.now): boolean {
     this.assertWritable();
+    this.persistence.recoverIfSaved(pinId);
     const p = this.store.pin(pinId);
     if (!p) throw new Error(`unknown pin: ${pinId}`);
     if (p.reason === 'observed' || p.reason === 'game') throw new Error(`a ${p.reason} pin is never withdrawn`);
@@ -512,6 +521,7 @@ export class Kernel {
   /** A game reading of a mirrored slot of a mirrored node. Emits a `reading` change when the value changes. */
   reading(node: Id, slot: SlotPath, value: Value, time: GameTime = this.now, silent = false): Pin {
     this.assertWritable();
+    this.persistence.recoverIfSaved(node);
     const h = this.store.header(node);
     if (!h) throw new Error(`reading of an unknown node: ${node}`);
     if (h.origin.by !== 'mirrored') throw new Error('only a mirrored node has readings');
@@ -538,6 +548,7 @@ export class Kernel {
 
   /** The reading in effect at a time, or undefined. */
   readingAt(node: Id, slot: SlotPath, t: GameTime): Pin | undefined {
+    this.persistence.recoverIfSaved(node);
     const live = this.store.livePinsOn(node, slot).filter((p) => p.reason === 'game' && p.valid.from <= t && (p.valid.to === undefined || t < p.valid.to));
     return live.sort((a, b) => (a.id < b.id ? -1 : 1))[live.length - 1];
   }
@@ -547,6 +558,7 @@ export class Kernel {
    * saw (spec 6.3). Returns undefined when there is no reading in effect at `t`.
    */
   observeReading(node: Id, slot: SlotPath, t: GameTime, cause: Id, evidence?: Id): Pin | undefined {
+    this.persistence.recoverIfSaved(node);
     const r = this.readingAt(node, slot, t);
     if (!r || r.value === undefined) return undefined;
     const spec: PinSpec = { node, slot, value: r.value, reason: 'observed', valid: { from: r.valid.from }, at: this.now, cause };
@@ -561,6 +573,7 @@ export class Kernel {
    */
   observeAs(observer: Id, node: Id, slot: SlotPath, at: GameTime, evidence?: Id): Pin | undefined {
     this.assertWritable();
+    this.persistence.recoverIfSaved(node);
     const h = this.store.header(node);
     if (!h) return undefined;
     if (h.origin.by === 'mirrored') return this.observeReading(node, slot, at, observer, evidence);
@@ -575,10 +588,46 @@ export class Kernel {
 
   /** The greatest relevance a change has against an actor's eligible frames, optionally for some interest types only (S0 10.5, V4-44). */
   matchStrength(actor: Id, change: Change, types?: readonly InterestType[], time: GameTime = this.now): number {
+    this.persistence.recoverIfSaved(actor, change);
     return this.dispatcher.matchStrength(actor, change, types, time);
   }
 
   // ---- writes: contributions ----
+
+  private rememberRecordChange(record: Edge | Contribution): void {
+    const headers = [...this.store.recordChanged(record)], seen = new Set<Id>();
+    for (let n = 0; n < headers.length; n++) {
+      const h = headers[n];
+      if (seen.has(h.id) || !this.schema.hasFacet(h.kind, 'event')) continue;
+      seen.add(h.id);
+      const materialisation = this.store.changeMaterialisations.get(h.id)?.provenance.materialisation;
+      // A newly saved event header must be usable by every reference operation, without an author
+      // re-supplying its recipe. Remember its own payload and transitive event dependencies too.
+      for (const c of this.store.allContributions()) {
+        if (c.source.layer !== 'simulation' || (c.source.origin !== h.id && c.source.origin !== materialisation)) continue;
+        const scope = c.target.scope;
+        if (!scope || !('nodes' in scope)) continue;
+        // Identity metadata is needed even if a sweep already removed a member header.
+        const identity = this.store.recordChanged(c, h.id);
+        const byId = new Map(identity.map(h => [h.id, h]));
+        const belongs = scope.nodes.some(node => {
+          const visited = new Set<Id>();
+          while (!visited.has(node)) {
+            if (node === h.id) return true;
+            visited.add(node);
+            const header = this.store.header(node) ?? byId.get(node);
+            if (!header || (header.origin.by !== 'member' && header.origin.by !== 'value')) return false;
+            node = header.origin.owner;
+          }
+          return false;
+        });
+        if (belongs) headers.push(...identity);
+        else this.store.changeDependencies.get(h.id)?.delete(c.id);
+      }
+      for (const e of this.store.allEdges()) if (e.from === h.id && this.retention.isOwnEventLocation(e, h))
+        headers.push(...this.store.recordChanged(e, h.id));
+    }
+  }
 
   contribute(spec: ContributionSpec): Contribution {
     this.assertWritable();
@@ -604,6 +653,7 @@ export class Kernel {
     const c = this.persistence.restoreContribution(id);
     if (!c) throw new Error(`unknown contribution: ${id}`);
     if (c.valid.to !== undefined && c.valid.to <= at) return;
+    this.rememberRecordChange(c);
     c.valid = { ...c.valid, to: at };
     this.bump();
     if (!silent) this.emit({ c: 'contribution', contribution: c, ended: true });
@@ -647,6 +697,7 @@ export class Kernel {
     const e = this.persistence.restoreEdge(id);
     if (!e) throw new Error(`unknown edge: ${id}`);
     if (e.valid.to !== undefined && e.valid.to <= at) return;
+    this.rememberRecordChange(e);
     e.valid = { from: e.valid.from, to: at };
     this.bump();
     this.emit({ c: 'edge', edge: e, ended: true });
@@ -670,6 +721,7 @@ export class Kernel {
       const bad = checkValue(this.schema.dim(dimId).value, v);
       if (bad) throw new Error(`${e.type} attribute "${key}": ${bad}`);
     }
+    this.rememberRecordChange(e);
     e.valid = { from: at };
     if (attrs) e.attrs = { ...e.attrs, ...attrs };
     this.bump();
@@ -690,6 +742,7 @@ export class Kernel {
       const bad = checkValue(this.schema.dim(dimId).value, v);
       if (bad) throw new Error(`${e.type} attribute "${k}": ${bad}`);
     }
+    this.rememberRecordChange(e);
     if (patch.attrs) e.attrs = { ...e.attrs, ...patch.attrs };
     if (patch.data) e.data = { ...(e.data ?? {}), ...patch.data };
     this.bump();

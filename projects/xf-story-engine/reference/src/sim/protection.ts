@@ -1,7 +1,7 @@
 // The protected set over time (S1 4.4, 5.4). An occurrence is cast from recorded history as of its own time, and an occurrence within the
 // ring regenerates from that history: the protected set it read when it was first cast must be the one it reads again. The kernel holds
-// the causes of protection while they are live (a `core:cast` edge of a live seed, an `observed` pin, a quest link), and drops the ended
-// edge and the old reading when it saves. This module keeps their spans in the S1 record from each save, for as long as an occurrence can
+// the live causes of protection (a `core:cast` edge of a live seed, an `observed` pin, a quest link) and persists explicit edge ends too.
+// Exactly saved facts may leave memory. This module keeps their spans in the S1 record from each save, for as long as an occurrence can
 // still regenerate, and answers "protected at `t`" for a time before now from the kernel's state and the spans together.
 //
 // The spans of a node are kept as their union, in order: a game that restates a quest link after a load makes a new reading inside a span
@@ -49,6 +49,7 @@ export class Protection {
    * the interval it was live in: what is protected as of `t` does not change when the cause later ends, or when the game is saved and loaded.
    */
   protectedBefore(n: Id, t: GameTime): boolean {
+    this.k.persistence.recoverIfSaved(n);
     const k = this.k;
     for (const e of k.store.edgesTo(n)) if (e.type === 'core:cast' && edgeActive(e, t)) return true;
     for (const p of k.store.pinsOfNode(n)) {

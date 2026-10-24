@@ -148,7 +148,10 @@ export function closeSeed(l2: Layer2, inst: Instance, to: SeedStateName, row: st
   for (const f of Object.values(st.frames.roles)) closeFrame(f);
   closeFrame(st.frames.watch);
   // Cast edges and contributions end; pending requests are withdrawn.
-  for (const e of Object.values(st.edges)) if (k.store.edges.get(e) && k.store.edges.get(e)!.valid.to === undefined) k.endEdge(e, now);
+  for (const id of Object.values(st.edges)) {
+    const e = k.persistence.restoreEdge(id);
+    if (e && e.valid.to === undefined) k.endEdge(id, now);
+  }
   doc.world?.forEach((_, i) => endRequirement(l2, inst, i));
   withdrawPending(l2, inst, true);
   for (const d of st.deliveries) if (d.state === 'released' || d.state === 'displayed') { d.state = 'withdrawn'; l2.record(inst, 'expired', { delivery: d.id, why: 'the seed ended' }); }

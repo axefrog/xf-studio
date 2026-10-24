@@ -58,6 +58,7 @@ export class Events {
    * may restate either, and then the resolved value is the one a query must test (S0 8.3).
    */
   mintedFacts(id: Id): { kind: string; time: number } | undefined {
+    this.k.persistence.recoverIfSaved(id);
     const f = this.minted.get(id);
     return f !== undefined && this.k.store.localState(id) === f.local ? f : undefined;
   }
@@ -66,6 +67,7 @@ export class Events {
 
   /** Explicit ownership of an opened item's facts, shared by views and retention (S0 14.1). */
   materialisationOf(event: Id): EventProvenance | undefined {
+    this.k.persistence.recoverIfSaved(event);
     const provenance = this.materialisations.get(event);
     return provenance && { ...provenance };
   }
@@ -87,11 +89,13 @@ export class Events {
       throw new Error(`materialisation owner already declared: ${event}`);
     if (have) return;
     this.materialisations.set(event, { ...provenance });
+    this.k.store.changeMaterialisations.set(event, { event, provenance: { ...provenance } });
     this.k.retention.invalidate();
   }
 
   forgetMaterialisation(event: Id): void {
     this.materialisations.delete(event);
+    this.k.store.referencesVersion++;
   }
 
   /**
@@ -100,6 +104,7 @@ export class Events {
    * Minting the same (creator, cause, name) again returns the same node and does nothing.
    */
   mintEvent(spec: EventSpec): Id {
+    this.k.persistence.recoverIfSaved(spec);
     return this.put(spec, false);
   }
 
@@ -109,6 +114,7 @@ export class Events {
    * here, whether or not the header survived. An event whose fields are already there is left alone.
    */
   restoreEvent(spec: EventSpec, provenance?: EventProvenance): Id {
+    this.k.persistence.recoverIfSaved(spec, provenance);
     return this.put(spec, true, provenance);
   }
 
@@ -118,6 +124,7 @@ export class Events {
    * what it was minted with. Undefined for a node that is not a minted event, or whose own fields are not there.
    */
   mintedSpec(id: Id, item?: { descriptor: Pick<EventSpec, 'time' | 'kind' | 'place'>; provenance: EventProvenance }): EventSpec | undefined {
+    this.k.persistence.recoverIfSaved(id);
     const k = this.k;
     const h = k.store.header(id);
     if (!h || h.origin.by !== 'minted' || !k.schema.isKind(h.kind, 'core:event')) return undefined;
@@ -255,6 +262,7 @@ export class Events {
   publishItem(item: Id): boolean {
     const k = this.k;
     k.assertWritable();
+    this.k.persistence.recoverIfSaved(item);
     const h = k.store.header(item);
     if (!h || h.origin.by !== 'minted' || h.origin.creator !== h.origin.cause || !/^item:\d+$/.test(h.origin.name)) {
       throw new Error(`not a summary item: ${item}`);
@@ -342,6 +350,7 @@ export class Events {
   makeCanon(event: Id, reason: 'observed' | 'committed', cause: Id, fields?: readonly EventField[]): Id[] {
     const k = this.k;
     k.assertWritable();
+    this.k.persistence.recoverIfSaved(event);
     fields ??= this.defaultFields(event);
     const h = k.store.header(event);
     if (!h || !k.schema.isKind(h.kind, 'core:event')) throw new Error(`not an event: ${event}`);
@@ -364,6 +373,7 @@ export class Events {
 
   /** Every field the event has: the seven of spec 9.2, and `outcome` and `served` when the event carries them (v4). */
   defaultFields(event: Id): EventField[] {
+    this.k.persistence.recoverIfSaved(event);
     const out: EventField[] = [...EVENT_FIELDS];
     const h = this.k.store.header(event);
     if (h && this.k.schema.slotInfo(h.kind, 'outcome')) {
@@ -375,6 +385,7 @@ export class Events {
   }
 
   isCanon(event: Id): boolean {
+    this.k.persistence.recoverIfSaved(event);
     return this.canonRecords.has(event);
   }
 
@@ -383,6 +394,7 @@ export class Events {
   }
 
   canonRecord(event: Id): EventCanonRecord | undefined {
+    this.k.persistence.recoverIfSaved(event);
     const e = this.canonRecords.get(event);
     return e ? { event, entries: e.map((x) => ({ ...x, fields: [...x.fields], pins: [...x.pins] })) } : undefined;
   }

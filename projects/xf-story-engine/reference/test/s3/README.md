@@ -49,8 +49,10 @@ and literal computed accesses; they are conservative syntax checks, not general 
 
 Deferred: S3 §0.3's capabilities, S4's complete skeleton classifier/starter pack, P7's city-scale pool/closure cost and
 save-size work, and P9's large generated corpus with automatic shrinking. The generated regressions here are bounded,
-seeded scripts, not a claim that the later evaluation harness is built. The full suite's two-minute target is the
-guarded full-suite timing check. Existing frozen digests are checked without changing their expected values.
+seeded scripts, not a claim that the later evaluation harness is built. The guarded S3J full suite passes
+1,340 tests in 256.96 seconds; the two-minute timing target remains unmet. The default sweep property
+takes 17.32 seconds standalone. The S3J kernel digest migration is documented in SPEC-NOTES 195;
+no semantic-output transcript entries change.
 
 `review-fixes.test.ts` covers S3-01–07: fresh loads after hand-over/reclamation with multiple consumers, root-order
 monotonicity, pending closure consumption, real unbound-role casting/recasting/preparation, shared settings/registry
@@ -92,22 +94,21 @@ absent. All 18 S3G test bodies reproduced the prior defects. `sweep-replay.test.
 S3H-02's four variants and S3H-03's two variants, with no-sweep, reference-first, saved/unsaved-header and
 general/named-rule controls. Re-mints recover saved ends before defaults, known live headers can recover saved
 contributions without a saved header, and authored general rules survive their origin's sweep. Silent header
-recovery and selected-branch reconciliation have separate fixtures. The bounded property test checks unswept control, swept live execution and swept execution with random fresh
-loads after every one of 768 generated operations (eight seeds, both snapshot modes). Its 17 operations include
-original contribution re-submissions, post-release/sweep contribution/edge ends, edge reopening/updating,
-header-first event regeneration and summary-item recovery with explicit provenance. Observation reads the complete
-consumer/owned closure and spatial-query results without calling retention traversal, address creation or recovery;
-table-size, revision and provenance assertions reject observation that repairs state. Every random save compares
-complete records. Never-saved unreferenced simulation payloads require their author's original specification.
-`sweep-operations.test.ts` adds S3I-01 re-submission/direct-end and S3I-02 unsaved spatial-link/ended-interval
-regressions, all four edge operations on swept saved edges, and partial-owned-tree completion. The source-loader
-mutation probes reverse both record-recovery routes, edge disposal and the completeness test, alongside earlier
-S3C-H defects. All 60 probes reject their intended semantic mutations; `bun run check` passes.
-The extended hunt passed 2,048 seeds in both snapshot modes, 196,608 generated steps in three executions,
-49,052 random saves and 24,556 random fresh loads, with no further divergence (987.42 seconds, 0.3 GB peak
-under the 4 GB guard). The default 768-step property took 3.62 seconds. The guarded full suite passes:
-1,315 tests across 80 files, zero failures, 208.55 seconds, 1.1 GB peak (shared-machine run overlapping
-the hunt's tail). Frozen kernel digests and the S1 transcript are unchanged.
+recovery and selected-branch reconciliation have separate fixtures. The current property compares unswept, swept and fresh-replayed executions across 912 default operations
+(eight seeds, both snapshot modes): 17 random operations plus stratified lifecycle episodes. It includes every
+retention-root category, saved and never-saved events, own simulation constants, partial cache regeneration,
+resolved values, `readEvent()`, withdrawals and pending changes. Its raw observer cannot populate the source
+execution: lazy reads use a disposable projection, and complete source snapshots must remain byte-identical.
+Spatial results include saved history outside seed descendants. Deliberately ephemeral overlays are not facts;
+expired overlays still participate in the provenance-view checks. The public API guard inventories 415 operations
+and rejects a new ungated id-taking API, including ids nested inside a new record type.
+`sweep-operations.test.ts` keeps the earlier S3I regressions and adds S3J's first-save mutations and direct
+pin/observe/canon recovery, complete changed-event identities (ordinary and summary, swept and unswept),
+transitive dependencies, staged rollback and changed pack contributions. All saved edit dependencies stay non-rooting.
+The default property rejects 28/28 historical S3C-I probes; its subsequent hunt passes 2,048 seeds in both
+snapshot modes (4,096 scenarios, 102,400 operations) with no divergence. Final validation and the authorized
+digest migration are in SPEC-NOTES 195.
+The preceding narrower S3I property rejected only 14/28 historical probes; its hunt is superseded as closure evidence.
 The S1 generated partition/reload comparison remains unchanged and checks that saved updates do not leak into the
 retention-selected live-state view.
 

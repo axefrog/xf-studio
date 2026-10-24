@@ -18,7 +18,7 @@ export interface Rejection {
 
 function checkNode(l2: Layer2, inst: Instance, batch: StagedBatch | undefined, ins: { contribution: Id; slot: string; form: Installed['form'] }, node: Id): string | undefined {
   const k = l2.k;
-  const h = k.store.header(node);
+  const h = k.persistence.restoreReferencedHeader(node);
   if (!h) return undefined;
   const slot = ins.slot;
   const info = slot === '*' ? null : k.schema.slotInfo(h.kind, slot);

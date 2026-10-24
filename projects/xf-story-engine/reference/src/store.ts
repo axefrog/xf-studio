@@ -4,6 +4,8 @@
 import type {
   Contribution, Edge, GameTime, Id, KindId, Node, NodeHeader, Pin, SlotKey, SlotState,
 } from './types.ts';
+import { idsIn } from './canon.ts';
+import type { EventMaterialisation } from './events.ts';
 
 export interface Withdrawal {
   pin: Id;
@@ -14,6 +16,37 @@ export interface Withdrawal {
 const slotKeyOf = (node: Id, slot: string): string => `${node}|${slot}`;
 
 export class Store {
+  /** Physical record membership, for the recovery gate's no-op cache (not domain state). */
+  referencesVersion = 0;
+  /** Non-regenerable edits and their identity metadata. Neither is a retention root. */
+  readonly changedEdges = new Set<Id>();
+  readonly changedContributions = new Set<Id>();
+  readonly changeHeaders = new Map<Id, NodeHeader>();
+  readonly changeMaterialisations = new Map<Id, EventMaterialisation>();
+  readonly changeDependencies = new Map<Id, Set<Id>>();
+  private readonly recordHeaders = new Map<Id, NodeHeader[]>();
+
+  private rememberIdentity(record: Edge | Contribution): void {
+    const headers: NodeHeader[] = [], seen = new Set<Id>(), todo = idsIn(record);
+    for (let n = 0; n < todo.length; n++) {
+      const id = todo[n]; if (seen.has(id)) continue; seen.add(id);
+      const h = this.header(id); if (!h) continue;
+      headers.push(structuredClone(h)); todo.push(...idsIn(h.origin));
+    }
+    this.recordHeaders.set(record.id, headers);
+  }
+
+  recordChanged(record: Edge | Contribution, dependencyOf?: Id): readonly NodeHeader[] {
+    if (dependencyOf !== undefined) {
+      let refs = this.changeDependencies.get(dependencyOf);
+      if (!refs) this.changeDependencies.set(dependencyOf, refs = new Set());
+      refs.add(record.id);
+    } else if ('type' in record) this.changedEdges.add(record.id);
+    else this.changedContributions.add(record.id);
+    const headers = this.recordHeaders.get(record.id) ?? [];
+    for (const h of headers) this.changeHeaders.set(h.id, h);
+    return headers;
+  }
   /** Every known node header. Persisted only for the retained closure (spec 7.3). */
   readonly headers = new Map<Id, NodeHeader>();
   /** Materialised nodes (slot caches). Dropping one never loses a fact. */
@@ -50,11 +83,16 @@ export class Store {
       pinsById: this.pinsById, pinIndex: this.pinIndex, pinsByNode: this.pinsByNode, withdrawn: this.withdrawn, contribs: this.contribs,
       contribByNode: this.contribByNode, contribGeneral: this.contribGeneral, edges: this.edges,
       edgesFromIdx: this.edgesFromIdx, edgesToIdx: this.edgesToIdx,
+      changedEdges: this.changedEdges, changedContributions: this.changedContributions,
+      changeHeaders: this.changeHeaders, recordHeaders: this.recordHeaders,
+      changeMaterialisations: this.changeMaterialisations,
+      changeDependencies: this.changeDependencies,
     });
   }
 
   /** Put the tables back as `capture` found them. */
   restoreFrom(cap: unknown): void {
+    this.referencesVersion++;
     const c = structuredClone(cap) as Record<string, any>;
     const swap = <T>(into: Map<string, T> | Set<string>, from: Map<string, T> | Set<string>): void => {
       into.clear();
@@ -78,10 +116,18 @@ export class Store {
     swap(this.edges, c.edges);
     swap(this.edgesFromIdx, c.edgesFromIdx);
     swap(this.edgesToIdx, c.edgesToIdx);
+    swap(this.changedEdges, c.changedEdges); swap(this.changedContributions, c.changedContributions);
+    swap(this.changeHeaders, c.changeHeaders); swap(this.recordHeaders, c.recordHeaders);
+    swap(this.changeMaterialisations, c.changeMaterialisations);
+    swap(this.changeDependencies, c.changeDependencies);
   }
 
   /** Drop every record (a load replaces all branch-local state, spec 14.3). */
   clear(): void {
+    this.referencesVersion++;
+    this.changedEdges.clear(); this.changedContributions.clear(); this.changeHeaders.clear(); this.recordHeaders.clear();
+    this.changeMaterialisations.clear();
+    this.changeDependencies.clear();
     this.headers.clear();
     this.nodes.clear();
     this.headersByKind.clear();
@@ -105,6 +151,7 @@ export class Store {
   /** Add a header. Returns false (and changes nothing) if the Id is already known. */
   addHeader(h: NodeHeader): boolean {
     if (this.headers.has(h.id)) return false;
+    this.referencesVersion++;
     this.headers.set(h.id, h);
     let set = this.headersByKind.get(h.kind);
     if (!set) this.headersByKind.set(h.kind, (set = new Set()));
@@ -126,6 +173,7 @@ export class Store {
   removeHeader(id: Id): void {
     const h = this.headers.get(id);
     if (!h) return;
+    this.referencesVersion++;
     this.headers.delete(id);
     this.nodes.delete(id);
     this.headersByKind.get(h.kind)?.delete(id);
@@ -169,6 +217,7 @@ export class Store {
 
   addPin(p: Pin): boolean {
     if (this.pinsById.has(p.id)) return false;
+    this.referencesVersion++;
     this.pinsById.set(p.id, p);
     const k = slotKeyOf(p.node, p.slot);
     let list = this.pinIndex.get(k);
@@ -277,6 +326,7 @@ export class Store {
   deletePin(id: Id): void {
     const p = this.pinsById.get(id);
     if (!p) return;
+    this.referencesVersion++;
     this.pinsById.delete(id);
     this.withdrawn.delete(id);
     const k = slotKeyOf(p.node, p.slot);
@@ -327,6 +377,8 @@ export class Store {
 
   addContribution(c: Contribution): boolean {
     if (this.contribs.has(c.id)) return false;
+    this.referencesVersion++;
+    this.rememberIdentity(c);
     this.contribs.set(c.id, c);
     const named = c.target.scope && 'nodes' in c.target.scope ? c.target.scope.nodes : null;
     if (named) {
@@ -349,6 +401,7 @@ export class Store {
   removeContribution(id: Id): void {
     const c = this.contribs.get(id);
     if (!c) return;
+    this.referencesVersion++;
     this.contribs.delete(id);
     const named = c.target.scope && 'nodes' in c.target.scope ? c.target.scope.nodes : null;
     const drop = (list: Id[] | undefined) => {
@@ -425,6 +478,8 @@ export class Store {
 
   addEdge(e: Edge): boolean {
     if (this.edges.has(e.id)) return false;
+    this.referencesVersion++;
+    this.rememberIdentity(e);
     this.edges.set(e.id, e);
     const push = (idx: Map<Id, Id[]>, k: Id) => {
       let list = idx.get(k);
@@ -439,6 +494,7 @@ export class Store {
   removeEdge(id: Id): void {
     const e = this.edges.get(id);
     if (!e) return;
+    this.referencesVersion++;
     this.edges.delete(id);
     for (const [idx, k] of [[this.edgesFromIdx, e.from], [this.edgesToIdx, e.to]] as const) {
       const list = idx.get(k);

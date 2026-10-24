@@ -1345,24 +1345,11 @@ optional A reload and current/future ends), each with no-sweep and reference-fir
 four variants, with twelve controls, explicit known-live-header recovery and later record equality;
 and S3H-03's two variants, with named, unsaved and no-sweep controls and repeated fresh loads. Additional
 fixtures check silent header re-mints and selection of the loaded branch before reconciliation.
-The bounded property test runs eight deterministic seeds in both snapshot modes, 48 operations each
-(768 total), against three independent executions: unswept control, swept live state and swept state
-with random fresh loads. Its 17 operation kinds include original contribution re-submissions without
-Ids, contribution and edge ends immediately after release/sweep, edge reopening and updates, and
-header-first regeneration through both event APIs. It also releases, sweeps and regenerates a saved
-summary item with explicit materialisation provenance. There are no preparatory recovery calls.
-Before every save can traverse retention, a read-only observer walks consumer roots, every owned
-header and member, origin links and Id-valued constants; it compares all headers, contributions and
-validity, edges and intervals/data, pins, causes, provenance and authored general rules. Spatial queries
-at four times compare every result in that consumer closure. Observation asserts that table sizes,
-revision and provenance do not change; it calls neither `marked()`, `address()` nor resolution.
-Unreferenced physical residency is excluded: a fresh load may hold saved history that a sweep removed,
-and never-saved unreferenced simulation facts require their author to regenerate the original payload.
-Whole records agree at every random save and after the final fresh load. Extended bounds use
-`SWEEP_SEEDS`, `SWEEP_FIRST_SEED` and `SWEEP_STEPS`; the default remains under about ten seconds.
-The earlier S3C-G regressions, monotonicity, root order and non-rooting history remain in
-`test/process-evidence.test.ts`. Mutation probes target the current disposal predicate and remove both
-header and direct-record recovery when reversing the earlier S3H regeneration fix.
+The current property is specified in 195. It compares an unswept control, a swept execution and a
+swept execution with fresh loads after each operation, including complete records at saves. Its raw
+root observation includes every retention category; lazy resolution/event/spatial reads use a
+separate projection and cannot repair the observed execution. The earlier seed-only observer and
+its 14/28 mutation coverage are superseded. S3C-I's named regression assertions remain unchanged.
 
 **194. Recovery belongs inside record operations; event regeneration checks completeness (S3I).**
 `contribute` computes the original identity before replaying an absent saved contribution; identical
@@ -1384,7 +1371,7 @@ APIs and both snapshot modes. Extra regressions cover all four edge operations o
 saved edges, and regeneration with one missing member field and a missing edge. The unsaved-event
 retention fixture now checks that intervals stay live without rooting the missing header.
 
-The extended hunt passed 2,048 distinct seeds in both snapshot modes (4,096 scenarios), 196,608
+The historical S3I hunt passed 2,048 distinct seeds in both snapshot modes (4,096 scenarios), 196,608
 generated steps executed in all three runs, 49,052 random saves and 24,556 random fresh loads, plus
 initial/final loads. No additional divergence was found after S3I-01/02. It took 987.42 seconds and
 peaked at 0.3 GB under the 4 GB guard; the default property took 3.62 seconds. All 60 source-loader
@@ -1398,3 +1385,533 @@ post-sweep direct-record writes or incomplete unsaved-event regeneration fixed h
 link/privacy checks and `git diff --check` pass. No logs or scratch payloads were written in the worktree;
 its scoped final footprint is 0.110 GB. This is deterministic offline oracle evidence; no game session is
 needed. All changes remain uncommitted for the coordinator.
+
+
+**195. One reference gate and first-save edits (S3J).** `Persistence.recoverIfSaved` is the semantic
+boundary for saved node, event, contribution, edge and pin references. It selects only the current
+save, replays headers before facts and provenance, and preserves authoritative live records. Direct
+pinning, observation and canonisation enter before inspecting headers or selecting default fields.
+The record/header restoration methods are typed return-value adapters over that gate. Predicate
+and procedural read facades use it too. Pure identity functions and raw physical storage, replay,
+notification and collector hooks do not acquire semantic references. Their explicit inventory below
+makes that distinction reviewable: a collector must not resurrect the records it is collecting.
+The AST inventory test enumerates 415 public operations, resolves nested record types and checks reference methods, including
+future methods, against the gate/delegation boundary and this list. Raw Store and PersistedView APIs
+are listed individually; adding one also requires an inventory update.
+The sibling checks include computed edge identities and withdrawal reads, and reject recovery placed
+after a lookup. S1 tie/regard reads, S2 fact reset/closure reads and queued item materialisation use the
+same typed gate adapters before inspecting those records.
+
+Non-regenerable first-save edits are independent of retention: edge ends, reopened intervals,
+attribute/data patches and own simulation-contribution ends persist even if the record was never
+saved. Store metadata remembers each edited record's original identity headers and origin closure,
+including after a pre-save sweep. The writer adds these exact records and required headers; none is
+a retention root. A new event identity also brings its complete own payload, spatial link, transitive
+event dependencies and materialisation provenance, so every saved-reference API can use it without
+an author re-supplying a recipe. Dependencies are admitted only alongside a retained or edited event
+header; changing an already-saved authored source does not admit unrelated event history. Staged
+discard rolls the edit metadata back; replacement load clears it. Unchanged
+regenerable facts remain omitted. Previously saved records still merge through the unconditional
+saved-update writer, and `currentView()` remains a retention-selected live view.
+
+The default property has eight seeds in both snapshot modes, 48 random operations per scenario and
+eight stratified lifecycle templates: 912 generated operations across 16 three-way scenarios. Every
+retention-root category participates. Raw retained headers, facts, edge intervals/data, withdrawals,
+provenance and pending semantic changes are compared before any lazy reads. Resolution, `readEvent()`
+and all spatial results run on a disposable projection with an empty recovery baseline; serialization
+checks that observation leaves every source table, worklist, queue and revision untouched. Expired
+unpersisted overlays remain available to challenge event-view provenance, while deliberately ephemeral
+overlays are excluded from factual and resolved-value equality. Random targets independently include
+never-saved events and their own simulation constants, alongside authored facts.
+
+`test/check-sweep-mutations.ts` runs only this default property against each of the 28 historical S3C-I
+source mutations. Import/setup failures and timeouts do not count as detections. Two source-loader
+probes also bypass the new recovery route for their original defect: S3F's partial-header probe bypasses
+the provenance-read gate, and S3I's contribution re-submission probe bypasses target-validation recovery.
+Neither adds an independent data corruption; the original dedicated semantic assertions are unchanged.
+The final default-property check rejects **28/28**, with zero missed or invalid probes (guard peak
+0.3 GB). Its unmutated standalone run passes in 17.32 seconds; the default remains bounded.
+All 60 dedicated source-loader probes also reach their intended semantic assertion failures (guard
+peak 0.2 GB). S3J's 22 new operation regressions and the three API guard tests pass.
+
+The first full-suite run exposed two incidental physical-absence expectations in SIM-04 and SIM-07:
+each expected an explicitly ended `core:cast` or `xf:tie` edge to disappear after its first save/load.
+The new first-save persistence contract instead replays its exact interval. With coordinator and
+maintainer approval, only those two residency assertions and their comments were updated. Every later
+protection-history, casting and tie-reopening assertion runs unchanged and passes. Added consistency
+assertions require the S1 protection union to cover the replayed cast interval and the bounded tie
+record to contain exactly the replayed interval, with no duplicate. All nine targeted SIM-04/07/11
+tests pass (2.14 seconds); no runtime policy was changed to hide saved records.
+
+After the default property reached the mutation bar, the guarded hunt passed 2,048 distinct seeds in
+both snapshot modes (4,096 scenarios): 102,400 generated operations executed in all three runs,
+34,740 generated saves and 26,570 counted fresh loads, plus the random sequence's initial/final loads.
+It found no further divergence, took 1,363.01 seconds and peaked at 0.4 GB under `--limit 4`. The hunt
+used 16 random operations per scenario alongside the same stratified lifecycle grammar; the default
+keeps 48. Its one property assertion body made 1,009,135 assertions.
+
+Final validation passes: `bun run check`, the 415-operation API audit, 28/28 default-property probes,
+all 60 dedicated mutation probes and the guarded full suite. The suite has **1,340 tests across 81
+files, zero failures, 187,950 assertions**, taking **256.96 seconds** with a **1.1 GB** peak under
+`--limit 4`. Earlier semantic regressions pass, including the unchanged later SIM-04/07 assertions
+and S1 history/edge consistency checks. The default property remains eight seeds, 912 operations
+and 17.32 seconds standalone; the multi-seed hunt is opt-in. Both digest tests pass at the authorized
+new values below. Changes remain uncommitted for the coordinator; no game session is needed.
+
+**Obsolete S1 probe, confirmed against HEAD.** The legacy S1 mutation runner stops at R3-01 because
+removing `Sim.restoreEvidence()` no longer makes its regression fail. The same counterfactual passes
+all seven assertions against unmodified HEAD `3b2f9cae`, with every source/test module loaded from
+HEAD in memory and the mutation explicitly installed (9.45 seconds, guard peak 0.2 GB). This is
+pre-existing overlap, not a new S3J regression: S0 v4.15 and v4.16's saved kernel event facts now
+guarantee the fields/provenance that S1 evidence materialisation restored. The ordinary R3-01 test
+still passes. With maintainer approval, the S1 mutation suite is not migrated in this round; the
+28/28 S3C-I bar and all 60 S3 probes above are separate checks. Possible later simplification: S1's
+own evidence capture/materialisation may now be redundant. No defence is removed here. The temporary
+HEAD loader was deleted; no logs or baseline source copies remain in the worktree.
+Changed-file link/privacy checks and `git diff --check` pass. The scoped worktree footprint is
+0.110 GB, with no new scratch payloads; no task-owned logs are retained.
+
+The coordinator authorized new digest goldens after an entry-by-entry comparison against the
+pre-S3J source. Both transcripts differ only in saves/loads/record hashes and their counters,
+snapshots and inherited headers for three formerly lost ended `core:located-in` edges:
+
+| Save | Newly preserved record | Header effect (both v3 and v4) |
+|---|---|---|
+| s75 | `d846a8a70604f8fb0b7704b19a95b536` | Adds `c0062ee2c1bf1cbca6645c473f049f8b` (syn:agent); 50 -> 52 ops |
+| s185 | `22e6ccf9e427928e829782a8dae15c88` | Adds `b396bed469492493f3b14e565d0f6e3d` (syn:site), inherits c006... instead of adding it again; 103 -> 104 ops |
+| s824 | `780b8ccd5e5fd15ae49f30f0d83f0e0c` | Endpoints already saved; 72 -> 73 ops |
+| s875 | Inherited c006... header | No repeated HeaderAdded; 27 -> 26 ops |
+
+The other affected save/record hashes are s563, s650 and s865; affected loads select s75, s185,
+s563 and s650. Exactly 15 operation transcript entries change in either mode (zero-based v3 indices
+50, 59, 144, 165, 286, 299, 537, 540, 543, 632, 724, 812, 832, 854, 860;
+v4 indices 51, 60, 145, 166, 287, 300, 539, 542, 545, 634, 726, 814, 834, 856, 862),
+plus the seven final save-record entries. No resolution, query, event, belief or frame output moves.
+The v3 digest changes `f924d2c9d1159bca85bbfa4cf18dba6c` -> `746601727380a3fdff647f873c91c971`;
+v4 changes `42d5a84e16dde21cc0bca7fe50c01d72` -> `8fce55b19462a1e02f03ca5336bd8c16`.
+There is no historical data-loss compatibility mode. Both frozen scripts and their entry counts remain
+unchanged; only their expected digests and explanatory comments change.
+
+Public reference API inventory (raw entries explicitly identify the physical/data boundary).
+S1/S2/S3 retain their own records across sweeps; their data lookups either need no live node state
+or delegate to the gated kernel. Their live header reads use `restoreReferencedHeader`. Pure
+predicate helpers use the supplied environment; the kernel's environment gates every node accessor.
+Schema, hashing and identity arithmetic never inspect live state.
+
+| Public operation | Recovery route |
+|---|---|
+| `addPredInterests` | pure data, supplied predicate environment or gated kernel delegation |
+| `applyEffects` | pure data, supplied predicate environment or gated kernel delegation |
+| `applyRejection` | pure data, supplied predicate environment or gated kernel delegation |
+| `attachLayer2` | pure data, supplied predicate environment or gated kernel delegation |
+| `barredOf` | pure data, supplied predicate environment or gated kernel delegation |
+| `Beliefs.activeOf` | recoverIfSaved |
+| `Beliefs.aggregate` | recoverIfSaved |
+| `Beliefs.drop` | recoverIfSaved |
+| `Beliefs.get` | recoverIfSaved |
+| `Beliefs.knows` | recoverIfSaved |
+| `Beliefs.observe` | recoverIfSaved |
+| `Beliefs.restore` | raw: replay hook |
+| `Beliefs.set` | recoverIfSaved |
+| `Beliefs.tell` | recoverIfSaved |
+| `Beliefs.tellAs` | recoverIfSaved |
+| `Beliefs.witnessed` | recoverIfSaved |
+| `castRole` | via restoreReferencedHeader |
+| `chooseFragment` | pure data, supplied predicate environment or gated kernel delegation |
+| `claimConflictRead` | pure data, supplied predicate environment or gated kernel delegation |
+| `claimsConflict` | pure data, supplied predicate environment or gated kernel delegation |
+| `closeSeed` | via restoreEdge |
+| `collectInterests` | pure data, supplied predicate environment or gated kernel delegation |
+| `commitRoles` | pure data, supplied predicate environment or gated kernel delegation |
+| `completeBeat` | pure data, supplied predicate environment or gated kernel delegation |
+| `computeWakeups` | pure data, supplied predicate environment or gated kernel delegation |
+| `consumeEvent` | pure data, supplied predicate environment or gated kernel delegation |
+| `detectIntersections` | pure data, supplied predicate environment or gated kernel delegation |
+| `Dispatcher.matchStrength` | recoverIfSaved |
+| `Divergence.current` | via restoreReferencedHeader |
+| `Divergence.evaluate` | layer-owned data or gated kernel delegation |
+| `Divergence.noteBelief` | via restoreReferencedHeader |
+| `Divergence.noteReading` | layer-owned data or gated kernel delegation |
+| `Divergence.onTick` | layer-owned data or gated kernel delegation |
+| `Divergence.transitions` | layer-owned data or gated kernel delegation |
+| `dropEndedScenes` | pure data, supplied predicate environment or gated kernel delegation |
+| `endRequirement` | pure data, supplied predicate environment or gated kernel delegation |
+| `evalAll` | pure data, supplied predicate environment or gated kernel delegation |
+| `evalPred` | pure data, supplied predicate environment or gated kernel delegation |
+| `evalPredicate` | pure data, supplied predicate environment or gated kernel delegation |
+| `eventFacts` | via restoreReferencedHeader |
+| `Events.canonRecord` | recoverIfSaved |
+| `Events.defaultFields` | recoverIfSaved |
+| `Events.forgetMaterialisation` | raw: collector hook |
+| `Events.isCanon` | recoverIfSaved |
+| `Events.makeCanon` | recoverIfSaved |
+| `Events.materialisationOf` | recoverIfSaved |
+| `Events.mintedFacts` | recoverIfSaved |
+| `Events.mintedSpec` | recoverIfSaved |
+| `Events.mintEvent` | recoverIfSaved |
+| `Events.publishItem` | recoverIfSaved |
+| `Events.restoreEvent` | recoverIfSaved |
+| `Events.setCanonRecord` | raw: replay hook |
+| `Events.setMaterialisation` | raw: header-first replay hook |
+| `Evolution.restore` | raw: replacement replay hook |
+| `Evolution.submit` | raw: queues an operation; application uses gated writes |
+| `explainPred` | pure data, supplied predicate environment or gated kernel delegation |
+| `failBeat` | pure data, supplied predicate environment or gated kernel delegation |
+| `fearOf` | pure data, supplied predicate environment or gated kernel delegation |
+| `findDelivery` | pure data, supplied predicate environment or gated kernel delegation |
+| `Frames.addParent` | raw: frame table is not swept |
+| `Frames.ancestorsOrSelf` | raw: frame table is not swept |
+| `Frames.checkDilemmas` | raw: frame table is not swept; node reads use resolver environment |
+| `Frames.childrenOf` | raw: frame table is not swept |
+| `Frames.claim` | recoverIfSaved |
+| `Frames.deliveryTargets` | raw: frame table is not swept |
+| `Frames.demandTier` | recoverIfSaved |
+| `Frames.eligible` | raw: pure frame predicate |
+| `Frames.frame` | raw: frame table is not swept |
+| `Frames.framesOf` | raw: frame table is not swept |
+| `Frames.insert` | raw: replay hook |
+| `Frames.isAncestorOrSelf` | raw: frame table is not swept |
+| `Frames.isGroupActor` | recoverIfSaved |
+| `Frames.open` | recoverIfSaved |
+| `Frames.pull` | raw: frame table is not swept |
+| `Frames.pullVia` | raw: frame table is not swept |
+| `Frames.remove` | raw: frame table is not swept |
+| `Frames.setFocus` | recoverIfSaved |
+| `Frames.setInterests` | raw: frame table is not swept; selectors are evaluated through the resolver environment |
+| `Frames.setParents` | raw: frame table is not swept |
+| `Frames.setStatus` | raw: frame table is not swept |
+| `Frames.setWeight` | raw: frame table is not swept |
+| `Frames.shouldOpen` | recoverIfSaved |
+| `Frames.version` | raw: frame table is not swept |
+| `Gate.ageClassOf` | layer-owned data or gated kernel delegation |
+| `Gate.produce` | layer-owned data or gated kernel delegation |
+| `gateFragment` | pure data, supplied predicate environment or gated kernel delegation |
+| `Groups.decide` | recoverIfSaved |
+| `Groups.isLeader` | recoverIfSaved |
+| `Groups.issueOrder` | recoverIfSaved |
+| `Groups.memberships` | recoverIfSaved |
+| `Groups.membersOf` | recoverIfSaved |
+| `Groups.onEdgeChange` | raw: notification hook |
+| `Groups.onFrameChange` | raw: notification hook |
+| `Groups.strengthOf` | raw: pure edge attribute predicate |
+| `Groups.syncMember` | recoverIfSaved |
+| `handleDilemma` | pure data, supplied predicate environment or gated kernel delegation |
+| `heatOf` | pure data, supplied predicate environment or gated kernel delegation |
+| `hookInputs` | pure data, supplied predicate environment or gated kernel delegation |
+| `identityNode` | via restoreReferencedHeader |
+| `installRequirement` | pure data, supplied predicate environment or gated kernel delegation |
+| `instanceNodes` | pure data, supplied predicate environment or gated kernel delegation |
+| `isStuck` | pure data, supplied predicate environment or gated kernel delegation |
+| `isUnder` | pure data, supplied predicate environment or gated kernel delegation |
+| `itemDescriptor` | pure data, supplied predicate environment or gated kernel delegation |
+| `itemFieldOps` | pure data, supplied predicate environment or gated kernel delegation |
+| `Kernel.addEdge` | via restoreReferencedHeader, restoreEdge |
+| `Kernel.address` | recoverIfSaved |
+| `Kernel.close` | recoverIfSaved |
+| `Kernel.contribute` | via restoreContribution |
+| `Kernel.create` | raw: factory, no live state |
+| `Kernel.emit` | raw: notification snapshot, no lookup |
+| `Kernel.endContribution` | via restoreContribution |
+| `Kernel.endEdge` | via restoreEdge |
+| `Kernel.isVDrive` | recoverIfSaved |
+| `Kernel.matchStrength` | recoverIfSaved |
+| `Kernel.mint` | via recoverOrAddHeader |
+| `Kernel.mintSilent` | via recoverOrAddHeader |
+| `Kernel.mirrored` | via recoverOrAddHeader |
+| `Kernel.observeAs` | recoverIfSaved |
+| `Kernel.observeReading` | recoverIfSaved |
+| `Kernel.open` | recoverIfSaved |
+| `Kernel.pin` | recoverIfSaved |
+| `Kernel.query` | recoverIfSaved |
+| `Kernel.reading` | recoverIfSaved |
+| `Kernel.readingAt` | recoverIfSaved |
+| `Kernel.reopenEdge` | via restoreEdge |
+| `Kernel.resolve` | recoverIfSaved |
+| `Kernel.root` | via recoverOrAddHeader |
+| `Kernel.submit` | raw: queues an operation; application uses gated writes |
+| `Kernel.trace` | recoverIfSaved |
+| `Kernel.updateEdge` | via restoreEdge |
+| `Kernel.value` | recoverIfSaved |
+| `Kernel.withdrawPin` | recoverIfSaved |
+| `kernelView` | recoverIfSaved |
+| `Layer2.applyMigration` | layer-owned data or gated kernel delegation |
+| `Layer2.atomicSow` | layer-owned data or gated kernel delegation |
+| `Layer2.claimConflict` | layer-owned data or gated kernel delegation |
+| `Layer2.compile` | layer-owned data or gated kernel delegation |
+| `Layer2.completeNow` | layer-owned data or gated kernel delegation |
+| `Layer2.contentCompleted` | layer-owned data or gated kernel delegation |
+| `Layer2.detectIntersections` | layer-owned data or gated kernel delegation |
+| `Layer2.directorExcludes` | layer-owned data or gated kernel delegation |
+| `Layer2.draw` | layer-owned data or gated kernel delegation |
+| `Layer2.evaluate` | layer-owned data or gated kernel delegation |
+| `Layer2.explain` | layer-owned data or gated kernel delegation |
+| `Layer2.exposedNode` | layer-owned data or gated kernel delegation |
+| `Layer2.fitWeights` | layer-owned data or gated kernel delegation |
+| `Layer2.installPack` | layer-owned data or gated kernel delegation |
+| `Layer2.instance` | layer-owned data or gated kernel delegation |
+| `Layer2.isSpine` | layer-owned data or gated kernel delegation |
+| `Layer2.layerOf` | layer-owned data or gated kernel delegation |
+| `Layer2.marksAt` | layer-owned data or gated kernel delegation |
+| `Layer2.notifyReaders` | layer-owned data or gated kernel delegation |
+| `Layer2.onDilemma` | layer-owned data or gated kernel delegation |
+| `Layer2.onRelevance` | layer-owned data or gated kernel delegation |
+| `Layer2.pull` | layer-owned data or gated kernel delegation |
+| `Layer2.queueReeval` | layer-owned data or gated kernel delegation |
+| `Layer2.readsOf` | layer-owned data or gated kernel delegation |
+| `Layer2.record` | layer-owned data or gated kernel delegation |
+| `Layer2.registerActor` | layer-owned data or gated kernel delegation |
+| `Layer2.renderWords` | via restoreReferencedHeader |
+| `Layer2.reply` | layer-owned data or gated kernel delegation |
+| `Layer2.respond` | layer-owned data or gated kernel delegation |
+| `Layer2.sourceWithdraw` | layer-owned data or gated kernel delegation |
+| `Layer2.sow` | layer-owned data or gated kernel delegation |
+| `Layer2.sownBy` | layer-owned data or gated kernel delegation |
+| `Layer2.sowRequest` | layer-owned data or gated kernel delegation |
+| `Layer2.startDirect` | layer-owned data or gated kernel delegation |
+| `Layer2.syncRecord` | layer-owned data or gated kernel delegation |
+| `Layer2.timingOf` | layer-owned data or gated kernel delegation |
+| `Layer2.unregisterActor` | layer-owned data or gated kernel delegation |
+| `Layer2.withdraw` | layer-owned data or gated kernel delegation |
+| `Layer3.installPatterns` | layer-owned data or gated kernel delegation |
+| `Layer3.tick` | layer-owned data or gated kernel delegation |
+| `Ledger.aggregate` | layer-owned data or gated kernel delegation |
+| `Ledger.carrierNode` | layer-owned data or gated kernel delegation |
+| `Ledger.itemsOf` | layer-owned data or gated kernel delegation |
+| `linkState` | pure data, supplied predicate environment or gated kernel delegation |
+| `marksAt` | pure data, supplied predicate environment or gated kernel delegation |
+| `matchPattern` | pure data, supplied predicate environment or gated kernel delegation |
+| `namesNode` | pure data, supplied predicate environment or gated kernel delegation |
+| `nodeEdgesFrom` | pure data, supplied predicate environment or gated kernel delegation |
+| `normsProcess` | via restoreReferencedHeader |
+| `onRelevance` | pure data, supplied predicate environment or gated kernel delegation |
+| `onRoleLost` | pure data, supplied predicate environment or gated kernel delegation |
+| `ownerChain` | pure data, supplied predicate environment or gated kernel delegation |
+| `patternFindings` | pure data, supplied predicate environment or gated kernel delegation |
+| `People.alive` | layer-owned data or gated kernel delegation |
+| `People.blockInfo` | layer-owned data or gated kernel delegation |
+| `People.blockOf` | layer-owned data or gated kernel delegation |
+| `People.cellOf` | layer-owned data or gated kernel delegation |
+| `People.householdId` | layer-owned data or gated kernel delegation |
+| `People.isResident` | layer-owned data or gated kernel delegation |
+| `People.locate` | layer-owned data or gated kernel delegation |
+| `People.neighbourBlocks` | layer-owned data or gated kernel delegation |
+| `People.placeOf` | layer-owned data or gated kernel delegation |
+| `People.presentAt` | layer-owned data or gated kernel delegation |
+| `People.protectedAt` | recoverIfSaved |
+| `People.protectedSet` | layer-owned data or gated kernel delegation |
+| `People.refOf` | via restoreReferencedHeader |
+| `People.residentAt` | layer-owned data or gated kernel delegation |
+| `People.residentCount` | layer-owned data or gated kernel delegation |
+| `People.residentId` | layer-owned data or gated kernel delegation |
+| `People.residentsOfBlock` | layer-owned data or gated kernel delegation |
+| `People.spellLen` | layer-owned data or gated kernel delegation |
+| `People.stateAt` | layer-owned data or gated kernel delegation |
+| `People.view` | via restoreReferencedHeader |
+| `People.where` | layer-owned data or gated kernel delegation |
+| `PersistedView.apply` | raw: physical storage or saved data, never a semantic reference |
+| `PersistedView.fromData` | raw: physical storage or saved data, never a semantic reference |
+| `Persistence.canSweepContribution` | raw: exact recoverability predicate |
+| `Persistence.canSweepEdge` | raw: exact recoverability predicate |
+| `Persistence.currentView` | via marked, eventFacts |
+| `Persistence.installPack` | via contribute |
+| `Persistence.restoreContribution` | recoverIfSaved |
+| `Persistence.restoreEdge` | recoverIfSaved |
+| `Persistence.restoreReferencedHeader` | recoverIfSaved |
+| `Persistence.save` | via currentView |
+| `Persistence.savedHeader` | raw: saved identity lookup used by collector, no live lookup |
+| `pickChannel` | pure data, supplied predicate environment or gated kernel delegation |
+| `Policies.absorb` | layer-owned data or gated kernel delegation |
+| `Policies.attitudeTilt` | layer-owned data or gated kernel delegation |
+| `Policies.attribution` | layer-owned data or gated kernel delegation |
+| `Policies.belongsToCarrier` | layer-owned data or gated kernel delegation |
+| `Policies.changeOf` | layer-owned data or gated kernel delegation |
+| `Policies.classNameOf` | layer-owned data or gated kernel delegation |
+| `Policies.closeness` | layer-owned data or gated kernel delegation |
+| `Policies.defaultReasons` | layer-owned data or gated kernel delegation |
+| `Policies.districtOfPlace` | layer-owned data or gated kernel delegation |
+| `Policies.encounter` | layer-owned data or gated kernel delegation |
+| `Policies.fade` | layer-owned data or gated kernel delegation |
+| `Policies.focal` | layer-owned data or gated kernel delegation |
+| `Policies.groupOfAffiliation` | layer-owned data or gated kernel delegation |
+| `Policies.hear` | layer-owned data or gated kernel delegation |
+| `Policies.memorableByRule` | layer-owned data or gated kernel delegation |
+| `Policies.observedByV` | recoverIfSaved |
+| `Policies.origin` | layer-owned data or gated kernel delegation |
+| `Policies.reconcile` | recoverIfSaved |
+| `Policies.salienceOf` | layer-owned data or gated kernel delegation |
+| `Policies.tellScore` | layer-owned data or gated kernel delegation |
+| `Policies.tiedTo` | layer-owned data or gated kernel delegation |
+| `Policies.toldBelief` | layer-owned data or gated kernel delegation |
+| `Policies.viewEvent` | via restoreReferencedHeader |
+| `Policies.witness` | layer-owned data or gated kernel delegation |
+| `pressures` | pure data, supplied predicate environment or gated kernel delegation |
+| `Protection.capture` | raw: save hook records physically held protection intervals without resurrecting history |
+| `Protection.protectedBefore` | recoverIfSaved |
+| `Protection.recordedAt` | layer-owned data or gated kernel delegation |
+| `Provenance.causeChain` | recoverIfSaved |
+| `Provenance.causeOf` | recoverIfSaved |
+| `Provenance.explain` | recoverIfSaved |
+| `Queries.candidateSet` | recoverIfSaved |
+| `Queries.run` | recoverIfSaved |
+| `queueClosing` | pure data, supplied predicate environment or gated kernel delegation |
+| `readEvent` | recoverIfSaved |
+| `Reads.aesthetic` | layer-owned data or gated kernel delegation |
+| `Reads.isSpine` | layer-owned data or gated kernel delegation |
+| `Reads.tied` | layer-owned data or gated kernel delegation |
+| `Reads.tiedAt` | layer-owned data or gated kernel delegation |
+| `readSeedFact` | recoverIfSaved |
+| `recordClaim` | pure data, supplied predicate environment or gated kernel delegation |
+| `reevaluate` | pure data, supplied predicate environment or gated kernel delegation |
+| `refreshInterests` | pure data, supplied predicate environment or gated kernel delegation |
+| `replyTo` | pure data, supplied predicate environment or gated kernel delegation |
+| `requirementNodes` | pure data, supplied predicate environment or gated kernel delegation |
+| `Resolver.childOf` | recoverIfSaved |
+| `Resolver.effectiveMode` | raw: pure schema/header predicate |
+| `Resolver.makeEnv` | recoverIfSaved |
+| `Resolver.ownerOf` | recoverIfSaved |
+| `Resolver.pinRegion` | raw: pure pin value conversion |
+| `Resolver.resolve` | recoverIfSaved |
+| `Resolver.resolveWithin` | recoverIfSaved |
+| `Resolver.trace` | recoverIfSaved |
+| `respondTo` | pure data, supplied predicate environment or gated kernel delegation |
+| `Retention.endSeed` | raw: seed table is not swept |
+| `Retention.isOwnEventLocation` | raw: collector predicate |
+| `Retention.isRetained` | via marked |
+| `Retention.isRootEdge` | raw: collector predicate |
+| `Retention.maxRetainedMember` | via compute |
+| `Retention.pinInEffectNow` | raw: collector predicate |
+| `Retention.rootIds` | raw: physical root discovery; marked traversal recovers their dependencies |
+| `Retention.setSeed` | via marked |
+| `Retention.streamIn` | recoverIfSaved |
+| `Retention.streamOut` | recoverIfSaved |
+| `Retention.sweepNode` | raw: collector operation |
+| `roleVerdict` | pure data, supplied predicate environment or gated kernel delegation |
+| `runLadder` | pure data, supplied predicate environment or gated kernel delegation |
+| `runMaintenance` | recoverIfSaved |
+| `selectorMatches` | pure data, supplied predicate environment or gated kernel delegation |
+| `Settings.restore` | raw: replacement replay hook |
+| `Settings.set` | recoverIfSaved |
+| `Sifter.drop` | layer-owned data or gated kernel delegation |
+| `Sifter.hear` | layer-owned data or gated kernel delegation |
+| `Sifter.install` | layer-owned data or gated kernel delegation |
+| `Sifter.matchClause` | layer-owned data or gated kernel delegation |
+| `Sifter.onEvent` | layer-owned data or gated kernel delegation |
+| `Sifter.tombstone` | layer-owned data or gated kernel delegation |
+| `Sifter.within` | layer-owned data or gated kernel delegation |
+| `Sim.childCell` | layer-owned data or gated kernel delegation |
+| `Sim.completeDescriptor` | layer-owned data or gated kernel delegation |
+| `Sim.eventSpecOf` | layer-owned data or gated kernel delegation |
+| `Sim.inheritFor` | layer-owned data or gated kernel delegation |
+| `Sim.kindAllowed` | layer-owned data or gated kernel delegation |
+| `Sim.logNow` | layer-owned data or gated kernel delegation |
+| `Sim.occurrenceOf` | layer-owned data or gated kernel delegation |
+| `Sim.remint` | layer-owned data or gated kernel delegation |
+| `Sim.reportChance` | layer-owned data or gated kernel delegation |
+| `Sim.ringEntry` | layer-owned data or gated kernel delegation |
+| `Sim.summaryOfItem` | via restoreReferencedHeader |
+| `Sim.why` | layer-owned data or gated kernel delegation |
+| `skipBeat` | pure data, supplied predicate environment or gated kernel delegation |
+| `sowableFindings` | pure data, supplied predicate environment or gated kernel delegation |
+| `sowTemplate` | via restoreReferencedHeader |
+| `StagedBatch.query` | recoverIfSaved |
+| `StagedBatch.resolve` | recoverIfSaved |
+| `StagedBatch.trace` | recoverIfSaved |
+| `StagedBatch.value` | recoverIfSaved |
+| `standInRecipe` | pure data, supplied predicate environment or gated kernel delegation |
+| `startDirect` | pure data, supplied predicate environment or gated kernel delegation |
+| `stockRows` | pure data, supplied predicate environment or gated kernel delegation |
+| `Store.addContribution` | raw: physical storage or saved data, never a semantic reference |
+| `Store.addEdge` | raw: physical storage or saved data, never a semantic reference |
+| `Store.addHeader` | raw: physical storage or saved data, never a semantic reference |
+| `Store.addPin` | raw: physical storage or saved data, never a semantic reference |
+| `Store.contribution` | raw: physical storage or saved data, never a semantic reference |
+| `Store.contributionCandidates` | raw: physical storage or saved data, never a semantic reference |
+| `Store.contributionsNaming` | raw: physical storage or saved data, never a semantic reference |
+| `Store.contributionsOrigin` | raw: physical storage or saved data, never a semantic reference |
+| `Store.deletePin` | raw: physical storage or saved data, never a semantic reference |
+| `Store.dropNode` | raw: physical storage or saved data, never a semantic reference |
+| `Store.edgesFrom` | raw: physical storage or saved data, never a semantic reference |
+| `Store.edgesTo` | raw: physical storage or saved data, never a semantic reference |
+| `Store.ensureNode` | raw: physical storage or saved data, never a semantic reference |
+| `Store.header` | raw: physical storage or saved data, never a semantic reference |
+| `Store.isWithdrawn` | raw: physical storage or saved data, never a semantic reference |
+| `Store.livePinsOn` | raw: physical storage or saved data, never a semantic reference |
+| `Store.localState` | raw: physical storage or saved data, never a semantic reference |
+| `Store.membersOfSlot` | raw: physical storage or saved data, never a semantic reference |
+| `Store.namedContributions` | raw: physical storage or saved data, never a semantic reference |
+| `Store.ownedOf` | raw: physical storage or saved data, never a semantic reference |
+| `Store.pin` | raw: physical storage or saved data, never a semantic reference |
+| `Store.pinnedSlots` | raw: physical storage or saved data, never a semantic reference |
+| `Store.pinsOfNode` | raw: physical storage or saved data, never a semantic reference |
+| `Store.pinsOn` | raw: physical storage or saved data, never a semantic reference |
+| `Store.recomputeTimeline` | raw: physical storage or saved data, never a semantic reference |
+| `Store.recordChanged` | raw: physical storage or saved data, never a semantic reference |
+| `Store.removeContribution` | raw: physical storage or saved data, never a semantic reference |
+| `Store.removeEdge` | raw: physical storage or saved data, never a semantic reference |
+| `Store.removeHeader` | raw: physical storage or saved data, never a semantic reference |
+| `submitDelivery` | pure data, supplied predicate environment or gated kernel delegation |
+| `Summaries.canonOf` | recoverIfSaved |
+| `Summaries.descriptor` | recoverIfSaved |
+| `Summaries.itemCandidates` | recoverIfSaved |
+| `Summaries.itemConstraint` | recoverIfSaved |
+| `Summaries.itemId` | raw: pure identity derivation |
+| `Summaries.makeItemCanon` | recoverIfSaved |
+| `Summaries.materialise` | recoverIfSaved |
+| `Summaries.mintSummary` | recoverIfSaved |
+| `Summaries.queueMaterialise` | recoverIfSaved |
+| `Summaries.setRecord` | raw: replay hook |
+| `Summaries.spanOf` | recoverIfSaved |
+| `syncRecord` | pure data, supplied predicate environment or gated kernel delegation |
+| `TiePolicy.accepts` | layer-owned data or gated kernel delegation |
+| `TiePolicy.applyInteraction` | layer-owned data or gated kernel delegation |
+| `TiePolicy.attributionMultiplier` | layer-owned data or gated kernel delegation |
+| `TiePolicy.bid` | layer-owned data or gated kernel delegation |
+| `TiePolicy.boundaryAt` | layer-owned data or gated kernel delegation |
+| `TiePolicy.coverageFloor` | layer-owned data or gated kernel delegation |
+| `TiePolicy.edge` | via restoreEdge |
+| `TiePolicy.excluded` | layer-owned data or gated kernel delegation |
+| `TiePolicy.fall` | layer-owned data or gated kernel delegation |
+| `TiePolicy.hasEdge` | layer-owned data or gated kernel delegation |
+| `TiePolicy.hear` | layer-owned data or gated kernel delegation |
+| `TiePolicy.intervalsOf` | via restoreEdge |
+| `TiePolicy.materialise` | via restoreEdge |
+| `TiePolicy.noteEdge` | layer-owned data or gated kernel delegation |
+| `TiePolicy.record` | layer-owned data or gated kernel delegation |
+| `TiePolicy.regardOf` | via restoreEdge |
+| `TiePolicy.repair` | layer-owned data or gated kernel delegation |
+| `TiePolicy.sociabilityOf` | layer-owned data or gated kernel delegation |
+| `TiePolicy.statusOf` | layer-owned data or gated kernel delegation |
+| `TiePolicy.strengthOf` | layer-owned data or gated kernel delegation |
+| `TiePolicy.transitionsOf` | layer-owned data or gated kernel delegation |
+| `Ties.bridge` | layer-owned data or gated kernel delegation |
+| `Ties.bridgeBand` | layer-owned data or gated kernel delegation |
+| `Ties.fociOf` | layer-owned data or gated kernel delegation |
+| `Ties.neighbours` | layer-owned data or gated kernel delegation |
+| `Ties.ordinalOf` | layer-owned data or gated kernel delegation |
+| `Ties.pFocus` | layer-owned data or gated kernel delegation |
+| `Ties.pGeoOfRank` | layer-owned data or gated kernel delegation |
+| `Ties.populationOf` | layer-owned data or gated kernel delegation |
+| `Ties.rankOf` | layer-owned data or gated kernel delegation |
+| `Ties.sharedFoci` | layer-owned data or gated kernel delegation |
+| `Ties.tie` | layer-owned data or gated kernel delegation |
+| `Ties.tieP` | layer-owned data or gated kernel delegation |
+| `Ties.walkingBlocks` | layer-owned data or gated kernel delegation |
+| `timingFor` | pure data, supplied predicate environment or gated kernel delegation |
+| `transition` | pure data, supplied predicate environment or gated kernel delegation |
+| `updateBeats` | pure data, supplied predicate environment or gated kernel delegation |
+| `verdictOnNode` | pure data, supplied predicate environment or gated kernel delegation |
+| `VFrames.goalId` | layer-owned data or gated kernel delegation |
+| `VFrames.journalChanged` | layer-owned data or gated kernel delegation |
+| `VFrames.situationId` | layer-owned data or gated kernel delegation |
+| `watchFixed` | pure data, supplied predicate environment or gated kernel delegation |
+| `weekLines` | via restoreReferencedHeader |
+| `windowStates` | pure data, supplied predicate environment or gated kernel delegation |
+| `withdrawPending` | pure data, supplied predicate environment or gated kernel delegation |
+| `World.cell` | layer-owned data or gated kernel delegation |
+| `World.circle` | layer-owned data or gated kernel delegation |
+| `World.create` | layer-owned data or gated kernel delegation |
+| `World.district` | layer-owned data or gated kernel delegation |
+| `World.group` | layer-owned data or gated kernel delegation |
+| `World.standingOfCarrier` | layer-owned data or gated kernel delegation |
+| `writeKeys` | raw: physical audit classification; never repairs the audited store |
+| `writeSeedFact` | recoverIfSaved |

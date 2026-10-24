@@ -91,9 +91,11 @@ bun x tsc --noEmit
 ```
 
 The review regressions include six A2 checks for same-second tie reopening and atomic regime/price publication, with and without reloads.
-All 26 mutation probes must reach their intended semantic assertions;
-the guarded full run and timing remain the coordinator's check.
-The preceding measured baseline was 1,058 tests in about 83 seconds. Run the full suite under the repository memory guard
+The legacy 26-probe simulation runner stops at obsolete R3-01: saved kernel event facts already mask
+that counterfactual at HEAD, as confirmed in SPEC-NOTES 195; its migration is deferred. S3's 60 dedicated
+probes and the default sweep property's 28 historical probes pass. The final S3J guarded suite passes
+1,340 tests across 81 files in 256.96 seconds, peaking at 1.1 GB; the two-minute timing target remains
+unmet. The default sweep property takes 17.32 seconds standalone. Run the full suite under the repository memory guard
 with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
 
 ```powershell
@@ -120,16 +122,26 @@ Sweeps and post-save cleanup drop only exactly recoverable contributions; event-
 Unsaved intervals and pending updates survive without becoming roots. Contribution re-submission/end and edge
 add/end/reopen/update recover saved identities inside their public APIs. Event regeneration checks its complete
 owned payload and spatial link, preserving saved terminations and current live updates.
-The bounded sweep/replay property now runs three executions (unswept, swept, swept with fresh loads), with 17
-operation kinds, complete consumer/owned closure and provenance comparisons, side-effect checks on observation,
-and spatial queries. Its default eight seeds in both snapshot modes run 768 generated operations in under about
-10 seconds. The extended hunt passed 2,048 seeds in both modes (196,608 steps in three executions), with
-49,052 random saves and 24,556 random fresh loads, finding no further divergence (987.42 seconds, 0.3 GB peak).
-All 60 source-loader mutation probes reject their intended semantic mutations and `bun run check` passes.
-The guarded full suite passes: **1,315 tests across 80 files, zero failures, 208.55 seconds, 1.1 GB peak** under
-`--limit 4` (overlapping the hunt's tail on the shared machine), including earlier S3C-H regressions. The additional S3I reproductions live in `test/sweep-operations.test.ts`.
-Kernel digests stay at v3 `f924d2c9d1159bca85bbfa4cf18dba6c` and v4
-`42d5a84e16dde21cc0bca7fe50c01d72`; the S1 frozen transcript is unchanged. The S3 transcript checks independently encoded identities and draws, plus explicit
+The bounded sweep/replay property runs three executions (unswept, swept and swept with fresh loads).
+Its default eight seeds in both snapshot modes execute **912 operations**, combining 17 random operation
+kinds with stratified release/save/end/reopen/re-reference and partial-regeneration episodes. Every retention-root
+category participates. The observer compares raw closure, resolved values, event views, withdrawals and pending
+changes; lazy reads run in a disposable projection and cannot repair the observed execution. It compares all logical
+spatial results, including saved history outside seed descendants, and excludes deliberately ephemeral overlays.
+The public reference API inventory enumerates **415 operations** across `src/`, records their common-gate or raw-data
+routes in SPEC-NOTES 195, and rejects future ungated reference operations, including ids nested in new record types.
+S3J-01 preserves first-save edge/contribution edits with full changed-event payload and identity dependencies;
+S3J-02 routes pinning, observation and canonisation through recovery before header/default-field inspection.
+Saved edit dependencies do not become retention roots. Targeted checks also cover ordinary and summary events,
+pre-edit sweeps, transitive event identities, staged discard and modified pack contributions.
+The default property rejects all **28/28** historical S3C-I probes. Its post-bar hunt passes 2,048 seeds
+in both snapshot modes (4,096 scenarios, 102,400 operations), with no divergence; details and final
+validation are recorded in SPEC-NOTES 195. The preceding S3I hunt covered its narrower generator;
+its default property detected only 14/28 historical mutations, so that hunt did not establish class closure.
+The authorized S3J digest migration is v3 `f924d2c9d1159bca85bbfa4cf18dba6c` to
+`746601727380a3fdff647f873c91c971`, and v4 `42d5a84e16dde21cc0bca7fe50c01d72` to
+`8fce55b19462a1e02f03ca5336bd8c16`: three previously lost first-save ended location edges now persist.
+SPEC-NOTES 195 records the complete entry-by-entry comparison; semantic output entries are unchanged. The S3 transcript checks independently encoded identities and draws, plus explicit
 persisted records. Hand-over facts, pending closure consumption and output-batch event facts survive replacement loads;
 NPC/spine filtering has one authority across casting and preparation. The coordinator owns independent review before
 integration. No game session is needed. All review fixes remain uncommitted for the coordinator.

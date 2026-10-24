@@ -194,7 +194,7 @@ function reinstall(l2: Layer2, inst: Instance): void {
             : { f: 'set' as const, region: { r: 'set' as const, values: (Array.isArray(arg) ? arg : [arg]) as string[] }, allow: true })
           : { f: 'set' as const, region: { r: 'ivl' as const, ivls: [[(arg as number[])[0]!, (arg as number[])[1]!] as [number, number]] }, allow: true };
         // The stand-in's own header is a minted node nothing else regenerates; it is a root through the cast edge.
-        if (!k.store.header(rs.cast)) k.store.addHeader({ id: rs.cast, kind: rs.minted.kind, origin: { by: 'minted', creator: inst.id, cause: inst.id, name: `role:${rk}` } });
+        if (!k.persistence.restoreReferencedHeader(rs.cast)) k.store.addHeader({ id: rs.cast, kind: rs.minted.kind, origin: { by: 'minted', creator: inst.id, cause: inst.id, name: `role:${rk}` } });
         k.contribute({ source: { layer: layerOfInstance(inst), origin: originOf(inst) }, target: { slot: c.path, scope: { nodes: [rs.cast] } }, form, mode: 'constrain', valid: { from: rs.committedAt ?? k.now }, silent: true });
       }
     }

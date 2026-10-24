@@ -54,7 +54,7 @@ export class TiePolicy {
   // ---- the materialised tie ----
 
   edge(a: Id, b: Id): Edge | undefined {
-    const e = this.k.store.edges.get(tieEdgeId(a, b));
+    const e = this.k.persistence.restoreEdge(tieEdgeId(a, b));
     return e && (e.valid.to === undefined || e.valid.to > this.k.now) ? e : undefined;
   }
   hasEdge(a: Id, b: Id): boolean {
@@ -117,7 +117,7 @@ export class TiePolicy {
     for (const e of drops) this.k.endEdge(e.id, this.k.now);
     const id = tieEdgeId(a, b);
     const attrs = { kind: t?.kind ?? 'neighbour', status: 'acquainted', strength: 0, lastContact: -1 };
-    const ended = this.k.store.edges.get(id);
+    const ended = this.k.persistence.restoreEdge(id);
     if (ended) {
       this.addSpan(this.record(a, b), ended.valid.from, ended.valid.to!);
       return this.k.reopenEdge(id, this.k.now, attrs);
@@ -179,7 +179,7 @@ export class TiePolicy {
       e.value === 'no' && e.t === floor || spans.some((s) => (e.value === 'yes' ? s.from : s.to) === e.t));
   }
 
-  /** A save is about to drop the ended ties: their intervals go into the record first. */
+  /** Keep ended intervals in S1's bounded history, independently of saved edges' physical residency. */
   captureSpans(): void {
     for (const e of this.k.store.allEdges()) {
       if (e.type !== 'xf:tie' || e.valid.to === undefined || e.valid.to > this.k.now) continue;
@@ -192,7 +192,7 @@ export class TiePolicy {
   intervalsOf(a: Id, b: Id): Array<{ from: GameTime; to?: GameTime }> {
     const id = tieEdgeId(a, b);
     const out: Array<{ from: GameTime; to?: GameTime }> = [...(this.sim.record.tieHistory[id]?.spans ?? [])];
-    const e = this.k.store.edges.get(id);
+    const e = this.k.persistence.restoreEdge(id);
     if (e && !out.some((s) => s.from === e.valid.from && s.to === e.valid.to)) out.push(e.valid.to === undefined ? { from: e.valid.from } : { from: e.valid.from, to: e.valid.to });
     return out;
   }
@@ -231,7 +231,7 @@ export class TiePolicy {
   // ---- the NPC's regard of V ----
 
   regardOf(npc: Id, toward: Id): Regard {
-    const e = this.k.store.edges.get(regardEdgeId(npc, toward));
+    const e = this.k.persistence.restoreEdge(regardEdgeId(npc, toward));
     if (!e) return { warmth: 0, respect: 0, trustA: 0.5, trustB: 0.5, trustI: 0.5, evN: 0 };
     const a = e.attrs;
     return { warmth: a.warmth as number, respect: a.respect as number, trustA: a.trustA as number, trustB: a.trustB as number, trustI: a.trustI as number, evN: a.evN as number };
@@ -243,7 +243,7 @@ export class TiePolicy {
       trustI: q64(clip01(r.trustI)), evN: r.evN,
     };
     const id = regardEdgeId(npc, toward);
-    if (this.k.store.edges.get(id)) this.k.updateEdge(id, { attrs });
+    if (this.k.persistence.restoreEdge(id)) this.k.updateEdge(id, { attrs });
     else this.k.addEdge({ id, type: 'xf:regard', from: npc, to: toward, cause: SAMPLED, valid: { from: this.k.now }, attrs });
   }
 
@@ -362,7 +362,7 @@ export class TiePolicy {
 
   private npcOf(ev: EventView): Id | undefined {
     const v = this.sim.w.v;
-    for (const p of ev.participants) if (p.who !== v && (this.sim.people.isResident(p.who) || this.k.store.header(p.who)?.kind === 'xf:person')) return p.who;
+    for (const p of ev.participants) if (p.who !== v && (this.sim.people.isResident(p.who) || this.k.persistence.restoreReferencedHeader(p.who)?.kind === 'xf:person')) return p.who;
     return undefined;
   }
 

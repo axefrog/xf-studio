@@ -76,7 +76,7 @@ export interface WorldRegistry {
 }
 export function kernelView(k: Kernel, l2: Layer2, registry: WorldRegistry): KernelView {
   return {
-    kind: (n) => k.store.header(n)?.kind,
+    kind: (n) => { k.persistence.recoverIfSaved(n); return k.store.header(n)?.kind; },
     isKind: (a, b) => k.schema.hasKind(a) && k.schema.hasKind(b) && k.schema.isCompatibleKind(a, b),
     isSpine: (n) => l2.isSpine(n),
     aesthetic: (n, f) => registry.aesthetic?.(n, f),
@@ -90,6 +90,7 @@ export function kernelView(k: Kernel, l2: Layer2, registry: WorldRegistry): Kern
   };
 }
 export function readEvent(k: Kernel, id: string): EventView | undefined {
+  k.persistence.recoverIfSaved(id);
   const h = k.store.header(id);
   if (!h || h.origin.by !== 'minted') return undefined;
   const time = k.value(id, 'time'),

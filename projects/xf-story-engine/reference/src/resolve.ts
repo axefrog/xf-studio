@@ -169,6 +169,7 @@ export class Resolver {
 
   /** An outer resolution (spec 5). Hard limits turn into `failed` plus a defect. */
   resolve(node: Id, path: SlotPath, t: GameTime, ctx: OpCtx = newOpCtx(this.k.config.allowance)): ResolveResult {
+    this.k.persistence.recoverIfSaved(node);
     try {
       return this.resolveWithin(ctx, node, path, t);
     } catch (e) {
@@ -182,6 +183,7 @@ export class Resolver {
 
   /** The complete, deterministic account of a resolution (spec 13). Bypasses the cache for the slot itself. */
   trace(node: Id, path: SlotPath, t: GameTime, ctx: OpCtx = newOpCtx(this.k.config.allowance)): Trace {
+    this.k.persistence.recoverIfSaved(node);
     const { path: plain, window: explicitK } = splitWindow(path);
     const header = this.k.store.header(node);
     const tr = emptyTrace(node, plain, t, 0);
@@ -209,6 +211,7 @@ export class Resolver {
 
   /** Resolution inside another outer operation (a query, a matcher): shares its allowance. */
   resolveWithin(ctx: OpCtx, node: Id, rawPath: SlotPath, t: GameTime): Res {
+    this.k.persistence.recoverIfSaved(node);
     // A cached result is valid for the same revision and the same engine time: retention, and through it the
     // structural constraints, depends on the time (SPEC-NOTES 53).
     if (this.cacheRevision !== this.k.revision || this.cacheNow !== this.k.now) {
@@ -272,6 +275,7 @@ export class Resolver {
    * Pass `own` when matching a change: reading that one slot gives the change's own value (spec 10.5).
    */
   makeEnv(ctx: OpCtx, t: GameTime, restrict?: { node: Id; order: number }, binding?: Binding, own?: OwnValue): PredicateEnv {
+    this.k.persistence.recoverIfSaved(restrict, binding, own);
     const store = this.k.store;
     /**
      * Whether a read of (n, p) at `t` is a read of the slot the change carried a value for. A read names the
@@ -292,11 +296,11 @@ export class Resolver {
       schema: this.schema,
       t,
       read: (n, p) => (own && readsOwn(n, p) ? { value: own.value, status: 'ok' } : this.resolveWithin(ctx, n, p, t)),
-      kindOf: (n) => store.header(n)?.kind,
+      kindOf: (n) => { this.k.persistence.recoverIfSaved(n); return store.header(n)?.kind; },
       ownerOf: (n) => this.ownerOf(n),
       child: (n, seg) => this.childOf(ctx, n, seg, t),
-      edgesFrom: (n) => store.edgesFrom(n),
-      edgesTo: (n) => store.edgesTo(n),
+      edgesFrom: (n) => { this.k.persistence.recoverIfSaved(n); return store.edgesFrom(n); },
+      edgesTo: (n) => { this.k.persistence.recoverIfSaved(n); return store.edgesTo(n); },
       charge: (n = 1) => ctx.allowance.spend(n),
       expandId: (idStr) => this.k.expandId(idStr),
     };
@@ -306,6 +310,7 @@ export class Resolver {
   }
 
   ownerOf(node: Id): Id | undefined {
+    this.k.persistence.recoverIfSaved(node);
     const h = this.k.store.header(node);
     if (!h) return undefined;
     return h.origin.by === 'value' || h.origin.by === 'member' ? h.origin.owner : undefined;
@@ -313,6 +318,7 @@ export class Resolver {
 
   /** The node held by a node slot path of `node` ("name", "traits[2]"), or undefined if it does not exist. */
   childOf(ctx: OpCtx, node: Id, seg: SlotPath, t: GameTime): Id | undefined {
+    this.k.persistence.recoverIfSaved(node);
     const h = this.k.store.header(node);
     if (!h) return undefined;
     const info = this.schema.slotInfo(h.kind, seg);

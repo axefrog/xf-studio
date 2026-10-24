@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { EventSpec } from '../src/events.ts';
 import { H, s } from '../src/id.ts';
 import type { ContributionSpec, Kernel } from '../src/kernel.ts';
+import { readEvent } from '../src/procedural/views.ts';
 import { coreKernel } from './helpers.ts';
 
 function replacement(k: Kernel, name: string, key: string): Kernel {
@@ -141,4 +142,86 @@ test('S3I completeness: regeneration fills a missing owned field and edge despit
   k.events.restoreEvent(spec);
   expect(k.store.contribution(role.id), 'S3I completeness semantic: one own constant is not a complete event').toEqual(role);
   expect(k.store.edges.get(edge.id)).toEqual(edge);
+});
+
+for (const snapshot of [false, true]) for (const change of ['edge-end', 'edge-data', 'own-end'] as const)
+test(`S3J-01-${change}${snapshot ? '-snapshot' : ''}: never-saved mutations survive replay without rooting their event`, () => {
+  const name = 'never-saved-edits', k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 }),
+    creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
+    spec: EventSpec = { creator, cause: creator, name: 'event', time: 0, kind: 'arrival', place },
+    event = k.events.mintEvent(spec), edge = k.store.edgesFrom(event)[0].id,
+    own = k.store.contributionsNaming(event).find(c => c.target.slot === 'time')!.id;
+  if (change === 'edge-end') k.endEdge(edge, 10);
+  if (change === 'edge-data') k.updateEdge(edge, { data: { proof: 1 } });
+  if (change === 'own-end') k.endContribution(own, 10);
+  k.settle(); k.persistence.save('A'); const loaded = replacement(k, name, 'A');
+  const swept = replacement(k, name, 'A'); sweep(swept); sweep(k);
+  for (const target of [k, swept, loaded]) {
+    expect(target.retention.isRetained(event), 'saved changes never become roots').toBe(false);
+    target.root('producer', 'core:person'); target.root('place', 'core:place');
+    target.events.restoreEvent(spec);
+    target.retention.setSeed({ id: H(s('consumer')), state: {}, nodes: [event] });
+    if (change === 'edge-end') expect(target.store.edges.get(edge)?.valid).toEqual({ from: 0, to: 10 });
+    if (change === 'edge-data') expect(target.store.edges.get(edge)?.data).toEqual({ proof: 1 });
+    if (change === 'own-end') expect(target.resolve(event, 'time', 20).status).toBe('unavailable');
+  }
+  expect(k.persistence.save('B')).toEqual(loaded.persistence.save('B'));
+});
+
+for (const snapshot of [false, true]) for (const operation of ['pin', 'observeAs', 'makeCanon'] as const)
+test(`S3J-02-${operation}${snapshot ? '-snapshot' : ''}: direct reference recovers before looking at live headers`, () => {
+  const name = 'public-reference-gate', k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 }),
+    creator = k.root('producer', 'core:person'), event = k.events.mintEvent({ creator, cause: creator, name: 'event', time: 0, kind: 'arrival' }),
+    consumer = H(s('consumer'));
+  k.retention.setSeed({ id: consumer, state: {}, nodes: [event] }); k.settle(); k.persistence.save('A');
+  const control = replacement(k, name, 'A');
+  for (const target of [k, control]) target.retention.endSeed(consumer);
+  sweep(k); expect(k.store.header(event)).toBeUndefined();
+  const apply = (target: Kernel) => operation === 'pin' ? target.pin({ node: event, slot: 'time', value: 0, reason: 'authored', cause: creator }) :
+    operation === 'observeAs' ? target.observeAs(creator, event, 'time', 0) : target.events.makeCanon(event, 'committed', creator);
+  expect(apply(k)).toEqual(apply(control)); expect(k.persistence.save('B')).toEqual(control.persistence.save('B'));
+});
+
+for (const snapshot of [false, true]) for (const item of [false, true]) for (const swept of [false, true])
+test(`S3J complete saved identity${snapshot ? '-snapshot' : ''}${item ? '-item' : ''}${swept ? '-swept' : ''}: an edited event needs no author recipe to recover`, () => {
+  const name = 'changed-event-reference', k = coreKernel(name, undefined, { snapshotEvery: snapshot ? 1 : 10000 }),
+    creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
+    earlier = k.events.mintEvent({ creator, cause: creator, name: 'earlier', time: 0, kind: 'arrival' }),
+    person = k.mint(earlier, earlier, 'person', 'core:person');
+  const descriptor = item ? k.summaries.mintSummary({ creator, cause: creator, name: 'summary', kind: 'arrival', from: 0, length: 10, scope: place, count: 1 }) : undefined;
+  const event = k.events.restoreEvent({ creator: descriptor ?? creator, cause: descriptor ?? creator,
+    name: item ? 'item:0' : 'event', time: 0, kind: 'arrival', ...(item ? {} : { place }),
+    participants: [{ who: person, role: 'actor' }], effects: [{ on: person, effect: 'harm' }] },
+    descriptor ? { descriptor, materialisation: 'scene.acts' } : undefined);
+  const own = k.store.contributionsNaming(event).find(c => c.target.slot === 'participants#count')!.id;
+  const original = readEvent(k, event);
+  if (swept) sweep(k);
+  k.endContribution(own, 10); k.settle(); k.persistence.save('A');
+  const loaded = replacement(k, name, 'A');
+  for (const target of [k, loaded]) {
+    expect(target.retention.isRetained(event), 'saved edit and supporting payload are not roots').toBe(false);
+    expect(readEvent(target, event), 'first-save recovery includes the complete original own payload').toEqual(original);
+    expect(readEvent(target, earlier), 'transitive event identities include their own payload').toBeDefined();
+  }
+  expect(k.events.makeCanon(event, 'committed', creator)).toEqual(loaded.events.makeCanon(event, 'committed', creator));
+  expect(k.persistence.save('B')).toEqual(loaded.persistence.save('B'));
+});
+
+test('S3J edit metadata: staged discard does not persist an abandoned first-save mutation', () => {
+  const k = coreKernel('discard-edit-identity'), creator = k.root('producer', 'core:person'), place = k.root('place', 'core:place'),
+    event = k.events.mintEvent({ creator, cause: creator, name: 'event', time: 0, kind: 'arrival', place }),
+    edge = k.store.edgesFrom(event)[0].id, batch = k.stage();
+  batch.write(k => k.updateEdge(edge, { data: { abandoned: true } })); batch.discard();
+  const a = k.persistence.save('A');
+  expect(k.persistence.rebuild(a.saveKey).view.headers.has(event)).toBe(false);
+  expect(a.ops.some(op => op.op === 'EdgeAdded' && op.edge.id === edge)).toBe(false);
+});
+
+test('S3J pack edits: a changed regenerated contribution keeps its end across pack reload', () => {
+  const k = coreKernel('pack-edit'), pack = { id: 'pack', version: '1', contributions: [{ layer: 'simulation' as const,
+    target: { kind: 'core:event', slot: 'time' }, form: { f: 'const' as const, value: 42 }, mode: 'constrain' as const }] };
+  k.persistence.installPack(pack); const c = k.store.allContributions()[0]; k.endContribution(c.id, 10); k.persistence.save('A');
+  const fresh = coreKernel('pack-edit'); fresh.persistence.packs.set(pack.id, pack);
+  for (const [id, record] of k.persistence.chain) fresh.persistence.chain.set(id, structuredClone(record)); fresh.persistence.load('A');
+  expect(fresh.store.contribution(c.id)?.valid).toEqual({ to: 10 });
 });

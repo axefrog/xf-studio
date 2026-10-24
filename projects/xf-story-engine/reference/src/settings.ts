@@ -99,6 +99,7 @@ export class Settings {
   /** Record a change, in force from `at` (default: now). Unmentioned settings keep the values in force. */
   set(patch: SettingsPatch, at: GameTime = this.k.now): SettingsEntry {
     this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(patch);
     const base = this.at(at);
     const { content, exclusions, ...rest } = clone(patch);
     const next = fromWire(base);

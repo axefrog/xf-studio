@@ -669,7 +669,7 @@ export class Layer2 implements Layer2Hook {
       const node = d.bindings[role] ?? inst.st.roles[role]?.cast;
       const a = attr ?? 'name';
       if (node === undefined) return `[${role}.${a}]`;
-      const kind = this.k.store.header(node)?.kind ?? '';
+      const kind = this.k.persistence.restoreReferencedHeader(node)?.kind ?? '';
       if (a === 'name' && kind && this.k.schema.slotInfo(kind, 'name')?.isNode) {
         const nm = this.k.value(this.k.address(node, 'name'), 'display');
         if (typeof nm === 'string') return nm;

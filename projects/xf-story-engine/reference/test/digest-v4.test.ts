@@ -1,3 +1,5 @@
+// S3J: first-save ended edges at s75/s185/s824 now survive. See SPEC-NOTES 195
+// for the authorized old/new digest comparison; semantic outputs are unchanged.
 // The determinism digest of the v4 kernel: the same 1,000-operation script as test/digest.test.ts, with the
 // v4 core schema and the frame change switched on (the defaults). The frozen v3 digest runs with both off and
 // uses those older options; both save referenced event facts under S0 v4.15 (SPEC-NOTES 58, 191).
@@ -23,7 +25,7 @@ describe('the v4 determinism digest', () => {
     // 1,067 entries in v3; the frame change adds two relevance emissions (a `wants` on a site matches a frame
     // focused on it when the frame's status changes).
     expect(entries).toBe(1069);
-    expect(digest).toBe('42d5a84e16dde21cc0bca7fe50c01d72');
+    expect(digest).toBe('8fce55b19462a1e02f03ca5336bd8c16');
   });
 
   test('each v4 switch moves the digest on its own, so the v3 digest is a deliberate mode', () => {
@@ -35,6 +37,6 @@ describe('the v4 determinism digest', () => {
       id: 'demo', version: '1.0.0',
       contributions: [{ layer: 'authored', target: { kind: 'syn:agent', slot: 'size' }, mode: 'weight', form: { f: 'table', weights: { '2': 3 } } }],
     });
-    expect(digestOf(w3, 1000, 'script-1').digest).toBe('f924d2c9d1159bca85bbfa4cf18dba6c');
+    expect(digestOf(w3, 1000, 'script-1').digest).toBe('746601727380a3fdff647f873c91c971');
   });
 });

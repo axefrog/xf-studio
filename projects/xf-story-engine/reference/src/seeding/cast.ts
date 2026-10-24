@@ -37,12 +37,12 @@ export function identityNode(l2: Layer2, role: Role): { status: 'fixed' | 'prefe
   let node: Id | undefined;
   if (raw.startsWith(GAME_PREFIX)) {
     const id = mirroredId(raw.slice(GAME_PREFIX.length));
-    node = l2.k.store.header(id) ? id : undefined;
+    node = l2.k.persistence.restoreReferencedHeader(id) ? id : undefined;
   } else if (raw.startsWith('root:')) node = l2.k.expandId(raw);
   else node = raw;
   const out: { status: 'fixed' | 'prefer' | 'none'; node?: Id; strength?: 1 | 2 | 3; reason?: string } = { status: b.status === 'fixed' ? 'fixed' : 'prefer' };
   if (b.strength !== undefined) out.strength = b.strength;
-  if (node === undefined || !l2.k.store.header(node)) out.reason = `the game does not know "${raw}" yet`;
+  if (node === undefined || !l2.k.persistence.restoreReferencedHeader(node)) out.reason = `the game does not know "${raw}" yet`;
   else out.node = node;
   return out;
 }
@@ -233,6 +233,7 @@ function scopeOf(l2: Layer2, inst: Instance, role: Role): QueryScope | { missing
     if (sc === undefined) {
       for (const [k2, r2] of Object.entries(inst.st.document.roles)) {
         if (l2.k.schema.hasKind(r2.kind) && l2.k.schema.hasFacet(r2.kind, 'place') && inst.st.roles[k2]?.cast !== undefined && r2 !== role) {
+          l2.k.persistence.recoverIfSaved(inst.st.roles[k2]!.cast!);
           const district = l2.k.store.edgesFrom(inst.st.roles[k2]!.cast!).find((e) => e.type === 'core:located-in' && e.valid.to === undefined);
           if (district) return { under: district.to };
         }
@@ -277,7 +278,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
 
   if (ident.status === 'fixed') {
     if (!ident.node) return fail(ident.reason ?? 'its identity is not known');
-    const hdr = l2.k.store.header(ident.node)!;
+    const hdr = l2.k.persistence.restoreReferencedHeader(ident.node)!;
     if (!l2.k.schema.isCompatibleKind(hdr.kind, role.kind)) return fail(`${ident.node} is not a ${role.kind}`);
     const v = allMust(l2, inst, ident.node, must, t);
     if (v.v === 'maybe') return fail(v.missing ? `waiting for the role "${v.missing}"` : 'a requirement of the role cannot be read yet', { maybe: true });
@@ -297,7 +298,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
     if (out.status === 'failed') return fail(`the search was too broad (${out.reason})`, { tooBroad: true });
     candidates = out.items.map((x) => x.id);
     if (ident.status === 'prefer' && ident.node && !candidates.includes(ident.node)) {
-      const hdr = l2.k.store.header(ident.node);
+      const hdr = l2.k.persistence.restoreReferencedHeader(ident.node);
       if (hdr && l2.k.schema.isCompatibleKind(hdr.kind, role.kind) && allMust(l2, inst, ident.node, must, t).v === 'yes') candidates.push(ident.node);
     }
   }

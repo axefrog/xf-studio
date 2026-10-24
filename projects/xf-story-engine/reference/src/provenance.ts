@@ -47,6 +47,7 @@ export class Provenance {
    * constraints that produced it.
    */
   explain(node: Id, path: SlotPath, t: GameTime = this.k.now): Explanation {
+    this.k.persistence.recoverIfSaved(node);
     const tr = this.k.trace(node, path, t);
     if (tr.value === undefined) return { mode: 'none', reason: `the slot is ${tr.status}` };
     if (tr.mode === 'derived' || tr.mode === 'mirrored') return { mode: 'none', reason: `a ${tr.mode} slot has no draw to explain` };
@@ -68,6 +69,7 @@ export class Provenance {
 
   /** The cause a record names, or undefined. A belief's cause is the event that supports it. */
   causeOf(id: Id): Id | string | undefined {
+    this.k.persistence.recoverIfSaved(id);
     const k = this.k;
     const pin = k.store.pin(id);
     if (pin) return pin.cause;
@@ -88,6 +90,7 @@ export class Provenance {
 
   /** The chain of causes from a record, following each cause that is itself a record (bounded). */
   causeChain(id: Id, limit = 16): Array<Id | string> {
+    this.k.persistence.recoverIfSaved(id);
     const out: Array<Id | string> = [];
     let cur: Id | string | undefined = this.causeOf(id);
     while (cur !== undefined && out.length < limit && !out.includes(cur)) {

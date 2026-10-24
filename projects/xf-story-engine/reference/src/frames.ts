@@ -130,6 +130,7 @@ export class Frames {
   }
 
   isGroupActor(actor: Id): boolean {
+    this.k.persistence.recoverIfSaved(actor);
     const h = this.k.store.header(actor);
     return !!h && this.k.schema.hasFacet(h.kind, 'group');
   }
@@ -251,6 +252,7 @@ export class Frames {
   /** Open a frame. Refuses cycles and unauthorised group frames. */
   open(spec: FrameSpec): ContextFrame {
     this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(spec);
     this.checkWritable(spec.actor, spec.level);
     const opened = this.k.now;
     const payload = spec.payload ?? {};
@@ -376,6 +378,7 @@ export class Frames {
   }
 
   setFocus(id: Id, focus: { nodes?: Id[]; tier?: Tier }, cause: Id): ContextFrame {
+    this.k.persistence.recoverIfSaved(focus);
     return this.mutate(id, (f) => {
       f.focus = { nodes: focus.nodes ?? f.focus.nodes, tier: focus.tier ?? f.focus.tier };
       f.cause = cause;
@@ -503,6 +506,7 @@ export class Frames {
 
   /** A node's demand tier: the highest focus tier among eligible frames focusing on it or its owner chain. */
   demandTier(node: Id): number {
+    this.k.persistence.recoverIfSaved(node);
     const chain = new Set(this.ownerChainOf(node));
     let m = -1;
     for (const f of this.frames.values()) {
@@ -514,6 +518,7 @@ export class Frames {
 
   /** A node's claim: the sum over eligible focusing frames of pull * w_actor (4.0 for demand roots, else 1). */
   claim(node: Id): number {
+    this.k.persistence.recoverIfSaved(node);
     const chain = new Set(this.ownerChainOf(node));
     let total = 0;
     const memo = new Map<Id, number>();
@@ -536,6 +541,7 @@ export class Frames {
 
   /** Whether a slot normally opens now: the node's demand tier reaches the slot's tier (spec 10.6). */
   shouldOpen(node: Id, slotTier: Tier): boolean {
+    this.k.persistence.recoverIfSaved(node);
     return this.demandTier(node) >= slotTier;
   }
 

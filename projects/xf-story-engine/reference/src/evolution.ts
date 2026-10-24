@@ -447,7 +447,7 @@ export class Evolution {
         k.summaries.mintSummary({ ...op.spec, creator: op.spec.creator ?? cause, cause: op.spec.cause ?? cause });
         break;
       case 'materialise-item': {
-        const h = k.store.header(op.item);
+        const h = k.persistence.restoreReferencedHeader(op.item);
         if (!h || h.origin.by !== 'minted') throw new Error(`unknown summary item: ${op.item}`);
         k.events.setMaterialisation(op.item, { descriptor: h.origin.creator, materialisation: processId });
         break;
