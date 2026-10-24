@@ -849,7 +849,9 @@ protected cb func OnHide() -> Bool {
     registry.SetCursorHidden(false);
     registry.ClearPhotoController(this);
   }
-  return wrappedMethod();
+  let result = wrappedMethod();
+  this.XFBridgeInputPhotoObserve("hidden");
+  return result;
 }
 
 @wrapMethod(gameuiPhotoModeMenuController)

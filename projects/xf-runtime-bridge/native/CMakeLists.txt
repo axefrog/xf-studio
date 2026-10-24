@@ -6,9 +6,15 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.8.12
+  VERSION 0.8.13
   LANGUAGES CXX RC
 )
+
+option(XFB_AUTONOMOUS_TEST_HOOKS "Input/choice/CET activation candidate (autonomous -writes only)" OFF)
+option(XFB_ENGINE_INPUT_TESTS "R1 commissioning gate (requires autonomous hooks and act permission)" OFF)
+if(XFB_ENGINE_INPUT_TESTS AND NOT XFB_AUTONOMOUS_TEST_HOOKS)
+  message(FATAL_ERROR "XFB_ENGINE_INPUT_TESTS requires XFB_AUTONOMOUS_TEST_HOOKS")
+endif()
 
 if(NOT MSVC)
   message(FATAL_ERROR "XF Runtime Bridge is built with MSVC (Visual Studio 2022) only.")
@@ -135,6 +141,7 @@ add_library(xfb_core STATIC
   src/core/overlay/Host.cpp
   src/core/overlay/Theme.cpp
   src/core/InkUi.cpp
+  src/core/InputChoices.cpp
   src/core/KillKey.cpp
   src/core/LivePose.cpp
   src/core/Log.cpp
@@ -157,6 +164,12 @@ add_library(xfb_core STATIC
 target_include_directories(xfb_core PUBLIC src "${XFB_GENERATED_DIR}")
 add_dependencies(xfb_core xfb_build_info xfb_header_stamp)
 target_compile_definitions(xfb_core PUBLIC ${XFB_DEFINITIONS})
+if(XFB_AUTONOMOUS_TEST_HOOKS)
+  target_compile_definitions(xfb_core PUBLIC XFB_AUTONOMOUS_TEST_HOOKS)
+endif()
+if(XFB_ENGINE_INPUT_TESTS)
+  target_compile_definitions(xfb_core PUBLIC XFB_ENGINE_INPUT_TESTS)
+endif()
 target_compile_options(xfb_core PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_core PUBLIC nlohmann_json::nlohmann_json bcrypt advapi32 version)
 
@@ -171,6 +184,8 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/Handlers070.cpp
   src/plugin/HandlersDm080.cpp
   src/plugin/HandlersNpc.cpp
+  src/plugin/HandlersInputChoices.cpp
+  src/plugin/InputDispatch.cpp
   src/plugin/HandlersSenses.cpp
   src/plugin/LivePoseMemory.cpp
   src/plugin/Overlay.cpp
@@ -198,7 +213,7 @@ target_compile_options(xfb_companion_probe PRIVATE ${XFB_OPTIONS} /WX)
 # -----------------------------------------------------------------------------
 # Offline self-test host: runs the same bridge core with a simulated game thread.
 # -----------------------------------------------------------------------------
-add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/SimDm080.cpp src/selftest/SimNpc.cpp src/selftest/SimSenses.cpp src/selftest/UnitTests.cpp src/selftest/UnitTestsDm.cpp src/selftest/UnitTestsNpc.cpp src/selftest/UnitTestsSenses.cpp)
+add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/SimDm080.cpp src/selftest/SimNpc.cpp src/selftest/SimInput.cpp src/selftest/SimSenses.cpp src/selftest/UnitTests.cpp src/selftest/UnitTestsDm.cpp src/selftest/UnitTestsInput.cpp src/selftest/UnitTestsNpc.cpp src/selftest/UnitTestsSenses.cpp)
 target_compile_options(xfb_selftest PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_selftest PRIVATE xfb_core)
 add_dependencies(xfb_selftest xfb_header_stamp xfb_companion_probe)

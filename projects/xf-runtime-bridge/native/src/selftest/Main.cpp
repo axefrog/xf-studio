@@ -40,6 +40,7 @@
 #include "selftest/Sim070.hpp"
 #include "selftest/SimDm080.hpp"
 #include "selftest/SimNpc.hpp"
+#include "selftest/SimInput.hpp"
 #include "selftest/SimSenses.hpp"
 
 #include <functional>
@@ -450,6 +451,7 @@ int wmain(int argc, wchar_t** argv)
     static std::unique_ptr<xfb::selftest::Sim060> sim060;
     // Bridge 0.8's simulated street for npc.* (selftest/SimNpc.cpp).
     static std::unique_ptr<xfb::selftest::SimNpc> simNpc;
+    static std::unique_ptr<xfb::selftest::SimInput> simInput;
     // Bridge 0.8.12's simulated world for the live-direction toolkit (selftest/SimDm080.cpp).
     static std::unique_ptr<xfb::selftest::SimDm> simDm;
     static xfb::writes::RestoreOnce restore;
@@ -2723,6 +2725,9 @@ int wmain(int argc, wchar_t** argv)
         };
         hooksNpc.events = &sim060->Events();
         simNpc = std::make_unique<xfb::selftest::SimNpc>(dispatcher, std::move(hooksNpc));
+        simInput = std::make_unique<xfb::selftest::SimInput>(dispatcher, *simNpc, sim060->Events(), config.allowTestHooks,
+            [] { std::scoped_lock lock(sim.mutex); return sim.phase; },
+            [] { return simLayer.Describe().value("detaches", uint64_t{0}); }, [&bridge] { return simLayer.Ready() && bridge.HasClient(); }, [&bridge] { return bridge.ConnectionsAccepted(); });
     }
     {
         // Bridge 0.8.12's live-direction toolkit against a simulated world (selftest/SimDm080.cpp), with the plugin's shared service.
@@ -2817,6 +2822,7 @@ int wmain(int argc, wchar_t** argv)
                 const auto now = std::chrono::steady_clock::now();
                 sim060->Tick(std::chrono::duration<double>(now - last).count());
                 simNpc->Tick(std::chrono::duration<double>(now - last).count()); // 0.8: the plugin's TickNpc
+                simInput->Tick();
                 simDm->Tick(std::chrono::duration<double>(now - last).count());  // 0.8.12: the plugin's TickDm
                 last = now;
             }

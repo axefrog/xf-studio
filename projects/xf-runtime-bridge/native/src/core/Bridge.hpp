@@ -61,6 +61,7 @@ public:
     bool IsListening() const;
     // Whether a client holds the pipe now (the ink HUD panel's status line, bridge 0.5.3).
     bool HasClient() const;
+    uint64_t ConnectionsAccepted() const;
     // 0.8.2 (session 9: "XF Studio not connected" flickered between the coordinator's calls, each its own connection): the
     // status follows the session, not each connection: a client on either pipe now, a request in the last kSessionQuietMs,
     // or a session runner holding the session lock (checked at most once a second).

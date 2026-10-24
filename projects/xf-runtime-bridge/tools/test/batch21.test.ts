@@ -209,7 +209,10 @@ describe("0.8.7 the photo-menu panel (P5 clicks, P8/P9 modal, P11 safe zones), r
   });
 
   test("P8/P9: modal holds photo mode's exit at its script callback and takes nothing from the game; the camera keys are said to be out of reach", () => {
-    expect(panel).toMatch(/@wrapMethod\(gameuiPhotoModeMenuController\)\s+protected cb func OnTryExitPhotomode\(\) -> Bool \{\s+if IsDefined\(this\.m_xfPhotoPanel\) && this\.m_xfPhotoPanel\.HoldExit\(\) \{\s+return false;\s+\}\s+return wrappedMethod\(\);/);
+    const attempt = panel.slice(panel.indexOf("protected cb func OnTryExitPhotomode()"), panel.indexOf("// The vanilla menu area's hover:"));
+    expect(attempt).toContain("let held = IsDefined(this.m_xfPhotoPanel) && this.m_xfPhotoPanel.HoldExit();");
+    expect(attempt).toMatch(/if held \{[\s\S]*?return false;\s+\}\s+let result = wrappedMethod\(\);/);
+    expect(attempt.match(/wrappedMethod\(\)/g)).toHaveLength(1);
     const hold = panel.slice(panel.indexOf("public func HoldExit() -> Bool {"), panel.indexOf("// ---- Opening and closing"));
     expect(hold).toContain("!XFBridge_Live()");
     // The Sol review of 0.8.7, finding 3: a frame read at the moment of Esc; an unreadable one, or a stopped bridge, lets the exit work.
@@ -302,7 +305,7 @@ describe("0.8.7 the pin mark, the save lock's notice, the probes", () => {
 
   test("the probes: their scripts live apart from the main ones (staged only in the -writes package), every native is declared as registered, and each test method is refused without the test hooks", () => {
     expect(readdirSync(join(projectDir, "redscript")).some((f) => /Probe/.test(f))).toBe(false);
-    expect(readdirSync(join(projectDir, "redscript-probes")).sort()).toEqual(["XFRuntimeBridgeProbeEvents.reds", "XFRuntimeBridgeProbePersist.reds", "XFRuntimeBridgeProbeSave.reds"]);
+    expect(readdirSync(join(projectDir, "redscript-probes")).filter(f => f.endsWith(".reds")).sort()).toEqual(["XFRuntimeBridgeProbeEvents.reds", "XFRuntimeBridgeProbePersist.reds", "XFRuntimeBridgeProbeSave.reds"]);
     const declared = read("redscript", "Natives.reds");
     for (const line of [
       "public static native func XFBridge_SaveRefused(ours: Bool) -> Bool",

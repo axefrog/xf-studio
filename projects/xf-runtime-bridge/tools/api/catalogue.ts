@@ -37,6 +37,7 @@ import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroo
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
 import { COMMANDS_080_NPC } from "./catalogue080npc.ts";
+import { INPUT_CHOICE_COMMANDS } from "./catalogueInputChoices.ts";
 import { COMMANDS_080_DM } from "./catalogue080dm.ts";
 import { SENSES_COMMANDS } from "./catalogueSenses.ts";
 import { applyCatalogue080 } from "./catalogue080.ts";
@@ -1770,6 +1771,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   ...COMMANDS_080_NPC,
   // Bridge 0.8.12: the live-direction toolkit (research/runtime/runtime-bridge-design.md §3.21).
   ...COMMANDS_080_DM,
+  ...INPUT_CHOICE_COMMANDS,
   // The senses for the Story Engine (read-only): quest facts in a batch, V's district, V's status.
   ...SENSES_COMMANDS,
 ]);

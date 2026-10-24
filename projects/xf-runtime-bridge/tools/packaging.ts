@@ -174,6 +174,8 @@ export function variantConfig(base: string, variant: Variant, options: { allowIn
 }
 
 export type StageOptions = {
+  /** Separate candidate mode; requires a test-hook DLL and writes variant. */
+  autonomousTests?: boolean;
   projectDir: string;
   variant: Variant;
   /** The DLL to package (build/Release/XFRuntimeBridge.dll; tests pass a stand-in). */
@@ -192,6 +194,8 @@ export type StageOptions = {
 
 export type StagedFile = { path: string; bytes: number; sha256: string };
 export type Manifest = {
+  autonomous_test_hooks: boolean;
+  native_count: number;
   name: string;
   version: string;
   variant: Variant;
@@ -228,6 +232,9 @@ export type Manifest = {
 /** Writes one variant's install layout into stageDir (emptied first) and returns its manifest. */
 export function stageVariant(options: StageOptions): Manifest {
   const { projectDir, variant, dll, stageDir } = options;
+  const testDll = readFileSync(dll).toString("latin1").includes("XFB_AUTONOMOUS_TEST_HOOKS=1");
+  if (options.autonomousTests && (variant !== "writes" || !testDll)) throw new Error("Autonomous tests require the writes variant and XFB_AUTONOMOUS_TEST_HOOKS DLL.");
+  if (testDll && !options.autonomousTests) throw new Error("A test-hook DLL can only enter an explicit autonomous -writes candidate.");
   rmSync(stageDir, { recursive: true, force: true });
   const put = (from: string, to: string) => {
     const target = join(stageDir, to);
@@ -262,6 +269,14 @@ export function stageVariant(options: StageOptions): Manifest {
     }
     put(options.companion ?? join(dirname(dll), COMPANION_FILE), `${PLUGIN_DIR}/${COMPANION_FILE}`);
   }
+  if (options.autonomousTests) {
+    for (const folder of ["redscript-input", "redscript-probes/autonomous"]) {
+      for (const name of readdirSync(join(projectDir, folder))) {
+        if (name.endsWith(".reds")) put(join(projectDir, folder, name), `${PLUGIN_DIR}/Scripts/${name}`);
+      }
+    }
+    put(join(projectDir, "cet", "xf_runtime_bridge", "test-input.lua"), `${CET_DIR}/test-input.lua`);
+  }
   // 0.8.12: the live-direction toolkit's scripts (the wraps on three HUD controllers must not ship in the distribution package):
   // the -writes package only, beside the probes.
   if (variant === "writes") {
@@ -290,6 +305,8 @@ export function stageVariant(options: StageOptions): Manifest {
     allow_creator_leave: variant === "writes",
     allow_live_pose: variant === "writes",
     allow_test_hooks: variant === "writes",
+    autonomous_test_hooks: options.autonomousTests === true,
+    native_count: options.autonomousTests ? 29 : 27,
     test_probes: variant === "writes" ? [...TEST_PROBES] : [],
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],

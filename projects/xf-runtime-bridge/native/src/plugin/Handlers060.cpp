@@ -5,6 +5,7 @@
 // import table and calls nothing.
 
 #include <RED4ext/RED4ext.hpp>
+#include "plugin/InputDispatch.hpp"
 #include <RED4ext/Detail/AddressHashes.hpp>
 
 #include <Windows.h>
@@ -825,6 +826,7 @@ json InputProbe(const MethodContext& aContext)
     }
     out["game_in_front"] = pid == GetCurrentProcessId();
     out["xinput_imports"] = ProbeXInput();
+    out["engine_dispatch"] = InputDispatchStatus();
     return out;
 }
 } // namespace

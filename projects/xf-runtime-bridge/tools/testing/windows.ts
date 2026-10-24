@@ -195,7 +195,7 @@ export async function observeActor(api: TestApi, subject: string, action: "npc.m
 export type TimedValue = { t_ms: number; value: unknown };
 export type ValueWindow = { started_ms: number; ended_ms: number; samples: TimedValue[]; complete: boolean; aborted: boolean; missing: string[] };
 /** Only the existing inexpensive read endpoints may be sampled. */
-export const WINDOW_READS = ["bridge.info", "npc.status", "game.saves"] as const;
+export const WINDOW_READS = ["bridge.info", "npc.status", "game.saves", "test.input.state", "player.choice.state"] as const;
 export async function observeValues(api: TestApi, command: string, input: Json, duration_s: number, interval_ms: number,
   signal?: AbortSignal, time: Clock = clock): Promise<ValueWindow> {
   if (!(WINDOW_READS as readonly string[]).includes(command) || duration_s < 0.25 || duration_s > 120 || interval_ms < (command === "game.saves" ? 3500 : 250) || interval_ms > 10000) throw new Error("Read window outside observation budget");

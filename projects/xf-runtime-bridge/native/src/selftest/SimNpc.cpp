@@ -107,6 +107,8 @@ struct SimNpc::State
         int32_t answer = -1;
         std::string withdrawn; // "busy": the game's own prompt came up (selftest.npc {game_prompt: true})
     } hub;
+    int32_t hubGeneration = 0;
+    int32_t hubIndex = 0;
     bool codeware = true;
     bool recordsMissing = false;
     bool hubBusy = false;
@@ -421,6 +423,8 @@ npc::Ops MakeOps(SimNpc::State* aState)
             throw MethodError("too_far", "simulated: V is more than 4 m from " + aHub.who);
         }
         s->hub.shown = true;
+        ++s->hubGeneration;
+        s->hubIndex = 0;
         s->hub.id = aHub.id;
         s->hub.who = aHub.who;
         s->hub.title = aHub.title;
@@ -769,5 +773,25 @@ json SimNpc::Holds()
         out.push_back(std::to_string(count) + " XF actor(s) spawned by the bridge (npc_release all)");
     }
     return out;
+}
+json SimNpc::InputHub()
+{
+    std::scoped_lock lock(m_state->mutex);
+    const auto& s = *m_state;
+    return {{"id", s.hub.id}, {"generation", s.hubGeneration}, {"index", s.hubIndex}, {"count", s.hub.choices.size()}, {"shown", s.hub.shown}, {"busy", s.hubBusy}};
+}
+json SimNpc::InputStep(int32_t hub, int32_t generation, int32_t index, bool apply)
+{
+    std::scoped_lock lock(m_state->mutex);
+    auto& s = *m_state;
+    if (!s.hub.shown || s.hubBusy || s.hub.id != hub || s.hubGeneration != generation || index < 0 || static_cast<size_t>(index) >= s.hub.choices.size())
+        throw MethodError("stale_context", "The simulated XF hub changed.");
+    if (apply)
+    {
+        if (s.hubIndex != index) throw MethodError("choice_changed", "The simulated highlight changed.");
+        s.hub.answer = index; s.hub.shown = false;
+    }
+    else s.hubIndex = (s.hubIndex + 1) % static_cast<int32_t>(s.hub.choices.size());
+    return {{"applied", apply}, {"handled", true}};
 }
 } // namespace xfb::selftest

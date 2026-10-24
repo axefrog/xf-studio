@@ -239,6 +239,7 @@ bool Bridge::HasClient() const
 {
     return m_server.HasClient();
 }
+uint64_t Bridge::ConnectionsAccepted() const { return m_server.ConnectionsAccepted(); }
 
 bool Bridge::InSession() const
 {

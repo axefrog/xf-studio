@@ -61,6 +61,39 @@ private let m_xfPhotoPanel: ref<XFPhotoMenuPanel>;
 @addField(gameuiPhotoModeMenuController)
 private let m_xfPhotoSerial: Int32;
 
+@addField(gameuiPhotoModeMenuController)
+private let m_xfInputGeneration: Int32;
+
+@addField(gameuiPhotoModeMenuController)
+private let m_xfInputShown: Bool;
+
+@addField(gameuiPhotoModeMenuController)
+private let m_xfInputConfirmation: Bool;
+
+// Read-only observations from the existing controller owner. No token is created or cleared here.
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeInputPhotoObserve(stage: String) -> Void {
+  if !XFBridge_Live() || (XFBridge_ProbeFlags() & 8) == 0 { return; }
+  let confirmation = IsDefined(this.m_exitConfirmationToken);
+  if NotEquals(stage, "update") {
+    XFBridge_Event("input.photo." + stage, "{\"generation\":" + IntToString(this.m_xfInputGeneration) + ",\"shown\":" + XFJson.Flag(this.m_xfInputShown) + ",\"changed\":" + XFJson.Flag(this.m_anyOptionChanged) + ",\"confirmation\":" + XFJson.Flag(confirmation) + "}");
+  }
+  if (confirmation && !this.m_xfInputConfirmation) || (!confirmation && this.m_xfInputConfirmation) {
+    this.m_xfInputConfirmation = confirmation;
+    XFBridge_Event("input.photo.confirmation", "{\"generation\":" + IntToString(this.m_xfInputGeneration) + ",\"confirmation\":" + XFJson.Flag(confirmation) + ",\"observed_at\":" + XFJson.Str(stage) + "}");
+  }
+}
+
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeInputPhotoReady(generation: Int32) -> Bool {
+  return XFBridge_Live() && this.m_xfInputShown && this.m_xfInputGeneration == generation;
+}
+
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeInputPhotoState() -> String {
+  return "{\"ok\":true,\"shown\":" + XFJson.Flag(this.m_xfInputShown) + ",\"generation\":" + IntToString(this.m_xfInputGeneration) + ",\"changed\":" + XFJson.Flag(this.m_anyOptionChanged) + ",\"confirmation\":" + XFJson.Flag(IsDefined(this.m_exitConfirmationToken)) + "}";
+}
+
 public class XFPhotoMenuPanel {
   private let m_controller: wref<gameuiPhotoModeMenuController>;
   private let m_layer: ref<inkCanvas>;
@@ -859,6 +892,10 @@ public func XFBridgePhotoPanel() -> ref<XFPhotoMenuPanel> {
 // From the OnShow wrap (XFRuntimeBridgeActions.reds), after the game's own OnShow.
 @addMethod(gameuiPhotoModeMenuController)
 public func XFBridgePhotoPanelShow() -> Void {
+  if this.m_xfInputGeneration == 0 { this.m_xfInputGeneration = RandRange(100000, 999999); }
+  this.m_xfInputGeneration += 1;
+  this.m_xfInputShown = true;
+  this.XFBridgeInputPhotoObserve("show");
   if this.m_xfPhotoSerial == 0 {
     this.m_xfPhotoSerial = RandRange(100000, 999999);
   }
@@ -871,6 +908,8 @@ public func XFBridgePhotoPanelShow() -> Void {
 // From the OnHide wrap, before the game's own OnHide.
 @addMethod(gameuiPhotoModeMenuController)
 public func XFBridgePhotoPanelHide() -> Void {
+  this.m_xfInputShown = false;
+  this.XFBridgeInputPhotoObserve("hide");
   if IsDefined(this.m_xfPhotoPanel) {
     this.m_xfPhotoPanel.Hide("photo_mode_closing");
   }
@@ -936,6 +975,7 @@ public func XFBridgeHoverBlock(on: Bool) -> Void {
 @wrapMethod(gameuiPhotoModeMenuController)
 protected cb func OnUpdate(timeDelta: Float) -> Bool {
   let result = wrappedMethod(timeDelta);
+  this.XFBridgeInputPhotoObserve("update");
   if IsDefined(this.m_xfPhotoPanel) {
     this.m_xfPhotoPanel.Update(timeDelta);
   }
@@ -946,10 +986,21 @@ protected cb func OnUpdate(timeDelta: Float) -> Bool {
 // otherwise the game's own handling runs unchanged.
 @wrapMethod(gameuiPhotoModeMenuController)
 protected cb func OnTryExitPhotomode() -> Bool {
-  if IsDefined(this.m_xfPhotoPanel) && this.m_xfPhotoPanel.HoldExit() {
+  this.XFBridgeInputPhotoObserve("entry");
+  let held = IsDefined(this.m_xfPhotoPanel) && this.m_xfPhotoPanel.HoldExit();
+  if held {
+    this.XFBridgeInputPhotoObserve("held");
+    if XFBridge_Live() && (XFBridge_ProbeFlags() & 8) != 0 {
+      XFBridge_Event("input.photo.callback", "{\"generation\":" + IntToString(this.m_xfInputGeneration) + ",\"held\":true,\"changed\":" + XFJson.Flag(this.m_anyOptionChanged) + ",\"confirmation\":" + XFJson.Flag(IsDefined(this.m_exitConfirmationToken)) + "}");
+    }
     return false;
   }
-  return wrappedMethod();
+  let result = wrappedMethod();
+  this.XFBridgeInputPhotoObserve("return");
+  if XFBridge_Live() && (XFBridge_ProbeFlags() & 8) != 0 {
+    XFBridge_Event("input.photo.callback", "{\"generation\":" + IntToString(this.m_xfInputGeneration) + ",\"held\":false,\"changed\":" + XFJson.Flag(this.m_anyOptionChanged) + ",\"confirmation\":" + XFJson.Flag(IsDefined(this.m_exitConfirmationToken)) + "}");
+  }
+  return result;
 }
 
 // The vanilla menu area's hover: noted, so the panel never clears a block the menu set; the game's own handling is unchanged.

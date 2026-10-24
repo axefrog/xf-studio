@@ -20,6 +20,7 @@
 #include <set>
 #include <mutex>
 #include <RED4ext/RED4ext.hpp>
+#include "plugin/HandlersInputChoices.hpp"
 #include <RED4ext/Scripting/Natives/ScriptGameInstance.hpp>
 #include <RED4ext/Scripting/Natives/Vector4.hpp>
 #include <RED4ext/Scripting/Natives/Generated/red/ResourceReferenceScriptToken.hpp>
@@ -2160,6 +2161,7 @@ void RegisterMethods(Dispatcher& aDispatcher)
     RegisterMethods060(aDispatcher);
     RegisterMethods070(aDispatcher);
     RegisterMethodsNpc(aDispatcher);
+    RegisterInputChoices(aDispatcher);
     RegisterMethodsDm(aDispatcher);
     RegisterMethodsSenses(aDispatcher);
     auto& state = Get();

@@ -71,6 +71,7 @@ if (stale) {
 // --allow-inventory: the -writes package also allows the inventory write class (inventory.equip/unequip).
 // Only once the maintainer has approved writes to V's inventory; the manifest records it (inventory_writes).
 const allowInventory = process.argv.includes("--allow-inventory");
+const autonomousTests = process.argv.includes("--autonomous-tests");
 // --npc-carrier <archive> (0.8): the XF gesture carrier for npc.act, in the -writes zip only.
 const carrierIndex = process.argv.indexOf("--npc-carrier");
 const npcCarrier = carrierIndex >= 0 ? resolve(process.argv[carrierIndex + 1] ?? "") : undefined;
@@ -81,8 +82,8 @@ if (npcCarrier && !existsSync(npcCarrier)) {
 
 function build(variant: Variant) {
   const stageDir = join(projectDir, "dist", "stage", variant);
-  const manifest = stageVariant({ projectDir, variant, dll, stageDir, version: version!, commit: builtCommit, allowInventory, npcCarrier });
-  const zip = join(projectDir, "dist", `xf-runtime-bridge-${version}${SUFFIX[variant]}.zip`);
+  const manifest = stageVariant({ projectDir, variant, dll, stageDir, version: version!, commit: builtCommit, allowInventory, npcCarrier, autonomousTests });
+  const zip = join(projectDir, "dist", `xf-runtime-bridge-${version}${SUFFIX[variant]}${autonomousTests ? "-autonomous" : ""}.zip`);
   rmSync(zip, { force: true });
   // Windows' own bsdtar (not Git's GNU tar) writes a zip when the name ends in .zip and -a is given.
   const tarExe = join(process.env.SystemRoot ?? "C:/Windows", "System32", "tar.exe");
@@ -94,5 +95,5 @@ function build(variant: Variant) {
   for (const file of manifest.files) console.log(`  ${file.sha256.slice(0, 16)}  ${file.path}`);
 }
 
-for (const variant of VARIANTS) build(variant);
+for (const variant of autonomousTests ? ["writes" as const] : VARIANTS) build(variant);
 console.log("\nNothing was installed. Stage a zip into a dedicated MO2 profile only when a session is prepared; the -writes zip only into the XF test profile.");

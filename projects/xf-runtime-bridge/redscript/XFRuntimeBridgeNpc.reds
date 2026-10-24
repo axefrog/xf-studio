@@ -58,6 +58,7 @@ public class XFNpcRegistry extends ScriptableSystem {
   private let m_hubAnswer: Int32;
   private let m_hubWithdrawn: String; // "busy": the game's own prompt or dialogue came up while ours showed
   private let m_lastInputAt: Float;
+  private let m_hubGeneration: Int32;
   private let m_voiceLines: array<Int32>; // lines from a voice with no body (npc.say without who)
 
   public static func Get() -> ref<XFNpcRegistry> {
@@ -163,6 +164,7 @@ public class XFNpcRegistry extends ScriptableSystem {
   }
 
   public func ShowHub(hub: ListChoiceHubData, who: String) -> Void {
+    this.m_hubGeneration += 1;
     this.m_hub = hub;
     this.m_hubWho = who;
     this.m_hubShown = true;
@@ -199,6 +201,10 @@ public class XFNpcRegistry extends ScriptableSystem {
 
   public func HubIndex() -> Int32 {
     return this.m_hubIndex;
+  }
+
+  public func HubGeneration() -> Int32 {
+    return this.m_hubGeneration;
   }
 
   public func SetHubIndex(index: Int32) -> Void {

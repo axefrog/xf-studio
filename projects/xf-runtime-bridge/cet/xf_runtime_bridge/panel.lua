@@ -155,9 +155,13 @@ function panel.opened(state)
 end
 
 -- A button that ignores a click while the layout settles.
-local function button(label)
+local function button(label, target, state)
   local pressed = ImGui.Button(label)
-  return pressed and not settling
+  local activated = false
+  if target and state and state.testInput then
+    activated = state.testInput.activate(target, not settling, state)
+  end
+  return (pressed or activated) and not settling, activated or nil, pressed and not settling
 end
 
 -- The style's horizontal frame padding and item spacing in pixels (the theme's metrics, as pushTheme scaled them).
@@ -711,8 +715,11 @@ function panel.body(state, queue, theme, which)
         if lock and lock.save_anyway then
           ImGui.Spacing()
           coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Saves are held: a test change would go into them.")
-          if button("Save anyway") then
-            queue("saveanyway")
+          local activated, token, physical = button("Save anyway", "save_anyway", state)
+          if activated then
+            -- A simultaneous human click keeps its ordinary path, but consumes the token once.
+            local accepted = token and state.testInput.stage("queued", token)
+            if physical or accepted then queue("saveanyway", { test_token = token or nil, physical = physical }) end
           end
           if ImGui.IsItemHovered() then
             ImGui.SetTooltip("Makes a manual save now, past the XF Runtime Bridge's save lock. The test change goes into that save.")

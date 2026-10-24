@@ -48,6 +48,8 @@ public:
     nlohmann::json Holds();
     // bridge.handover's release (the plugin's ReleaseNpcsForHandover), on the game thread: {released, hub_withdrawn, ...}.
     nlohmann::json ReleaseForHandover();
+    nlohmann::json InputHub();
+    nlohmann::json InputStep(int32_t aHub, int32_t aGeneration, int32_t aIndex, bool aApply);
 
     struct State; // public for the file's own helpers
 

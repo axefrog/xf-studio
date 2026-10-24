@@ -23,10 +23,10 @@ import { validate, type JsonSchema } from "../api/schema.ts";
 import { toolsFor } from "../mcp/server.ts";
 import { projectDir, tempDir } from "./helpers.ts";
 
-const pluginSource = ["native/src/plugin/GameHandlers.cpp", "native/src/plugin/Handlers060.cpp", "native/src/plugin/Handlers070.cpp", "native/src/plugin/HandlersSenses.cpp", "native/src/core/Dispatcher.cpp", "native/src/core/Bridge.cpp", "native/src/core/Events.cpp", "native/src/core/Npc.cpp", "native/src/core/DmService.cpp"]
+const pluginSource = ["native/src/plugin/GameHandlers.cpp", "native/src/plugin/Handlers060.cpp", "native/src/plugin/Handlers070.cpp", "native/src/plugin/HandlersSenses.cpp", "native/src/core/Dispatcher.cpp", "native/src/core/Bridge.cpp", "native/src/core/Events.cpp", "native/src/core/Npc.cpp", "native/src/core/DmService.cpp", "native/src/core/InputChoices.cpp"]
   .map((file) => readFileSync(join(projectDir, file), "utf8"))
   .join("\n");
-const selftestSource = ["native/src/selftest/Main.cpp", "native/src/selftest/Sim060.cpp", "native/src/selftest/Sim070.cpp", "native/src/selftest/SimSenses.cpp", "native/src/core/Events.cpp", "native/src/core/Npc.cpp", "native/src/core/DmService.cpp"]
+const selftestSource = ["native/src/selftest/Main.cpp", "native/src/selftest/Sim060.cpp", "native/src/selftest/Sim070.cpp", "native/src/selftest/SimSenses.cpp", "native/src/core/Events.cpp", "native/src/core/Npc.cpp", "native/src/core/DmService.cpp", "native/src/core/InputChoices.cpp"]
   .map((file) => readFileSync(join(projectDir, file), "utf8"))
   .join("\n");
 
@@ -36,6 +36,7 @@ function nativeAccess(source: string, method: string): string | null {
   const match =
     new RegExp(`(?:WriteMethod|MarkedWrite|marked)\\("${name}",\\s*Access::(\\w+)`).exec(source) ??
     new RegExp(`simWrite\\("${name}",\\s*xfb::Access::(\\w+)`).exec(source) ??
+    new RegExp(`add\\("${name}",\\s*"[a-z]+",\\s*Access::(\\w+)`).exec(source) ??
     new RegExp(`\\{"${name}",\\s*(?:xfb::)?Access::(\\w+)`).exec(source);
   return match ? match[1].replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase() : null;
 }
@@ -53,7 +54,8 @@ describe("catalogue", () => {
     const tools = CATALOGUE.map(toolName);
     expect(new Set(tools).size).toBe(tools.length);
     for (const command of CATALOGUE) {
-      expect(command.name).toMatch(/^[a-z]+(\.[a-z]+)+$/);
+      // Test-route segments such as exit_attempt retain the brief's public names.
+      expect(command.name).toMatch(/^[a-z]+(?:_[a-z]+)*(\.[a-z]+(?:_[a-z]+)*)+$/);
       expect(toolName(command)).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
       expect(findCommand(command.name)).toBe(command);
       expect(findCommand(toolName(command))).toBe(command);

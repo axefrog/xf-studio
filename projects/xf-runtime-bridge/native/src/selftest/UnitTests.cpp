@@ -5331,6 +5331,8 @@ int SensesUnitTests();
 // UnitTestsDm.cpp: the live-direction toolkit (parameter checks, undos, watchers, the session and the service); answers the number of failed checks.
 int DmUnitTests();
 
+int InputUnitTests();
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -5372,6 +5374,7 @@ int RunUnitTests()
     gFailures += RunNpcUnitTests();
     gFailures += SensesUnitTests();
     gFailures += DmUnitTests();
+    gFailures += InputUnitTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

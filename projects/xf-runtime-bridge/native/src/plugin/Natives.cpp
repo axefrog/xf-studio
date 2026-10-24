@@ -12,6 +12,7 @@
 // a catch-all: an exception must never unwind into the game's script VM.
 
 #include <RED4ext/RED4ext.hpp>
+#include "plugin/HandlersInputChoices.hpp"
 
 #include <Windows.h>
 
@@ -703,6 +704,7 @@ void SaveAnyway(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CS
     json answer{{"started", false}, {"why", "the bridge couldn't start the save"}};
     Guarded("XFBridge_SaveAnyway", [&] {
         auto& state = Get();
+        const auto correlation = TestUiSaveRequest(ToStd(source));
         if (!SaveAnywayOffered())
         {
             answer["why"] = state.config.allowWrites && (state.config.writeClasses & kWriteSave) != 0 ? "the bridge isn't holding saves now"
@@ -720,10 +722,11 @@ void SaveAnyway(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CS
         }
         const auto from = Sanitize(ToStd(source), 32);
         log::Warn("save.anyway_requested", "by=" + from);
-        state.saveAnywayThread = std::thread([] {
+        state.saveAnywayThread = std::thread([correlation] {
             auto& s = Get();
             std::string text;
             json data{{"via", "save_anyway"}};
+            data.update(correlation);
             try
             {
                 const auto result = PlayerSaveAnyway("save-anyway");
@@ -797,6 +800,10 @@ void ProbeEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut,
         {
             parsed = json{{"bad_json", Sanitize(raw, 200)}};
         }
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+        if (state.scriptLayer.Ready() && (what.starts_with("choice.") || what.starts_with("input.photo.")))
+            InputService().Observe(what, parsed);
+#endif
         const bool kept = state.probeEvents.Push(what, std::move(parsed), static_cast<int64_t>(win32::MonotonicMs()));
         if (aOut)
         {
@@ -842,6 +849,9 @@ void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aO
         if (state.config.allowTestHooks)
         {
             flags = 1 | (state.probeSwitches.load() & 6);
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+            flags |= 8;
+#endif
         }
     });
     if (aOut)
@@ -849,6 +859,34 @@ void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aO
         *aOut = flags;
     }
 }
+
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+// Test-only ingress: arming/taking cannot invoke SaveAnyway or enqueue any CET action.
+void TestUiTake(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, RED4ext::CString* out, int64_t)
+{
+    RED4ext::CString raw; RED4ext::GetParameter(frame, &raw); frame->code++;
+    json answer = nullptr;
+    Guarded("XFBridge_TestUiTake", [&] {
+        const auto text = ToStd(raw);
+        if (text.size() > 2048 || JsonNestingDepth(text, 8) > 8) return;
+        const auto draw = json::parse(text, nullptr, false);
+        if (draw.is_object()) answer = TakeTestUi(draw);
+    });
+    if (out) *out = RED4ext::CString(SerializeJson(answer).c_str());
+}
+void TestUiReport(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, RED4ext::CString* out, int64_t)
+{
+    RED4ext::CString raw; RED4ext::GetParameter(frame, &raw); frame->code++;
+    json answer{{"accepted", false}};
+    Guarded("XFBridge_TestUiReport", [&] {
+        const auto text = ToStd(raw);
+        if (!Get().config.allowTestHooks || text.size() > 2048 || JsonNestingDepth(text, 8) > 8) return;
+        const auto report = json::parse(text, nullptr, false);
+        if (report.is_object()) answer = ReportTestUi(report);
+    });
+    if (out) *out = RED4ext::CString(SerializeJson(answer).c_str());
+}
+#endif
 
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
@@ -924,11 +962,19 @@ void PostRegisterTypes()
         // 0.8.7: the player's refused saves and the window's Save anyway; the test probes' ring and switches.
         RegisterGlobal(rtti, "XFBridge_SaveRefused", &SaveRefused, "Bool", {"ours"}, "Bool");
         RegisterGlobal(rtti, "XFBridge_SaveAnyway", &SaveAnyway, "String", {"source"});
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+        RegisterGlobal(rtti, "XFBridge_TestUiTake", &TestUiTake, "String", {"draw"});
+        RegisterGlobal(rtti, "XFBridge_TestUiReport", &TestUiReport, "String", {"receipt"});
+#endif
         RegisterGlobal(rtti, "XFBridge_Event", &ProbeEvent, "Bool", {"kind", "data"});
         RegisterGlobal(rtti, "XFBridge_ProbeFlags", &ProbeFlags, "Int32", {});
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
+        #ifdef XFB_AUTONOMOUS_TEST_HOOKS
+        log::Info("rtti.register_types", "phase=post_register natives=29");
+#else
         log::Info("rtti.register_types", "phase=post_register natives=27");
+#endif
     }
     catch (const std::exception& e)
     {

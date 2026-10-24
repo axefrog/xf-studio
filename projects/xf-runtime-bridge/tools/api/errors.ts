@@ -10,6 +10,16 @@ export type PlainError = { code: string; message: string; detail?: string; cause
 
 /** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
+  test_build_required: "This action needs the separate autonomous test candidate. Stage that candidate in the dedicated test profile.",
+  test_run_required: "Arm a bounded test fixture before submitting this input.",
+  stale_context: "The expected game screen or choices changed. Read the current state and prepare a fresh fixture.",
+  choice_changed: "The dialogue offer changed before the requested line was confirmed. Read it again before choosing.",
+  input_unavailable: "The native input adapter has not been commissioned for this game build. No input was sent.",
+  input_busy: "An input test is already pending. Wait for its receipt before starting another.",
+  input_overlap: "A real held control overlaps this test. Release it before preparing another pulse.",
+  activation_expired: "The test activation expired. Check the current screen before arming a fresh fixture.",
+  ui_target_unavailable: "Save anyway is not currently offered. Wait for a real save-lock offer in the open CET window.",
+  ui_target_not_drawn: "The target button was not drawn and available. Open the CET window and let its layout settle.",
   bad_request: "The game bridge didn't understand the request. This is a bug in the tool that sent it.",
   bad_params: "Some of the values given aren't valid for this action.",
   test_hooks_off: "Test hooks are off in this build. Only the -writes package for the dedicated XF test profile has them ([bridge] allow_test_hooks in its config.ini).",

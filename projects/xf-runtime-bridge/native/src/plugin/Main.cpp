@@ -19,6 +19,7 @@
 
 // RED4ext.hpp first: it includes Common.hpp, which switches the SDK to header-only mode.
 #include <RED4ext/RED4ext.hpp>
+#include "plugin/HandlersInputChoices.hpp"
 
 #include <RED4ext/Api/ApiVersion.hpp>
 #include <RED4ext/Api/v1/EMainReason.hpp>
@@ -277,6 +278,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             last = now;
             TickBehaviours(dt, scriptsReady);
             TickNpc(dt, scriptsReady); // 0.8: NPC direction's timers, poll and automatic release (plugin/HandlersNpc.cpp)
+            TickInputChoices(scriptsReady);
             TickDm(dt, scriptsReady);  // 0.8.12: the live-direction toolkit's watchers, phone call, lines and light patterns (plugin/HandlersDm080.cpp)
         }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
@@ -366,7 +368,9 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         // A client dropped for idleness can't be driving photo mode any more: give the cursor back
         // (RB-34). Only after a write, since only a write hides it. Between sessions there is no cursor flag to
         // release (the registry holding it goes with the session).
-        if (state.bridge && state.bridge->TakeIdleDisconnect() && state.restore.WritesUsed() && !state.restore.Done())
+        const bool inputIdleDisconnect = state.bridge && state.bridge->TakeIdleDisconnect();
+        if (inputIdleDisconnect) StopInputChoices("idle_disconnect");
+        if (inputIdleDisconnect && state.restore.WritesUsed() && !state.restore.Done())
         {
             if (!scriptsReady)
             {
@@ -579,6 +583,7 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
 void Unload()
 {
     auto& state = Get();
+    StopInputChoices("plugin_unload");
     // RB-107: the overlay's detours stay attached until RED4ext detaches them at exit; from here they only pass through.
     state.overlayHost.SetPassThrough(true);
     log::Info("plugin.unload", "requests_served=" +

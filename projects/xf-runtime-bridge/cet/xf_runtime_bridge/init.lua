@@ -90,6 +90,9 @@ local state = {
   messageOk = true,
 }
 
+local hasTestInput, testInput = pcall(require, "test-input")
+if hasTestInput and type(testInput) == "table" then state.testInput = testInput end
+
 local function nextCid()
   state.cidCounter = state.cidCounter + 1
   return "cet-" .. tostring(state.cidCounter)
@@ -397,9 +400,15 @@ local function runAction(action)
     end
     log("warn", cid, "panel: stop key " .. tostring(arg.action) .. " " .. tostring(arg.key) .. " ok=" .. tostring(answer and answer.ok))
   elseif action.name == "saveanyway" then
+    local arg = action.argument or {}
+    local token = arg.test_token
+    local accepted = token and state.testInput and state.testInput.stage("dequeued", token)
+    if token and not accepted and not arg.physical then return end
     -- 0.8.7: the window's Save anyway, the player's own say-so to save past the bridge's save lock. The plugin makes one manual
     -- save as game.save {override_lock: true} would, on its own thread, and the outcome comes back on the status surface.
-    local answer = decodeAnswer(callNative("XFBridge_SaveAnyway", "cet-panel"))
+    local source = token and accepted and ("cet-panel-test:" .. tostring(token.request_id)) or "cet-panel"
+    local answer = decodeAnswer(callNative("XFBridge_SaveAnyway", source))
+    if token and accepted then state.testInput.stage("native", token, answer) end
     if answer and answer.started then
       state.message = "Saving... The XF Runtime Bridge window says when it's done."
       state.messageOk = true
