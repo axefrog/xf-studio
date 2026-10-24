@@ -139,7 +139,7 @@ export interface Layer2Options {
   lab?: boolean;
   tunables?: Partial<Tunables>;
   /** Main-story (spine) characters: the director never casts them (S2 section 5.2). */
-  spine?: ReadonlySet<Id>;
+  worldRegistry?: { isSpine?(node: Id): boolean };
   /** Names of facts that record a relationship's status elsewhere (L-16). */
   relationshipFacts?: ReadonlySet<string>;
 }
@@ -172,6 +172,8 @@ export interface SowRequest {
 export const isTerminal = (s: string): boolean => s === 'resolved' || s === 'withered' || s === 'withdrawn';
 
 export class Layer2 implements Layer2Hook {
+  /** Shared world authority, also used by S3. Attaching S3 supplies its registry here. */
+  worldRegistry: NonNullable<Layer2Options['worldRegistry']>;
   readonly reg: L2Registry;
   readonly tun: Tunables;
   readonly hooks: Layer3Hooks;
@@ -197,6 +199,7 @@ export class Layer2 implements Layer2Hook {
   private parsed = new Map<string, Pred>();
 
   constructor(readonly k: Kernel, readonly opts: Layer2Options) {
+    this.worldRegistry = opts.worldRegistry ?? {};
     this.reg = opts.reg ?? new L2Registry();
     this.tun = { ...DEFAULT_TUNABLES, ...(opts.tunables ?? {}) };
     this.hooks = opts.hooks ?? {};
@@ -211,6 +214,11 @@ export class Layer2 implements Layer2Hook {
 
   get port(): Layer2Port {
     return this.opts.port;
+  }
+
+  isSpine(node: Id): boolean { return this.worldRegistry.isSpine?.(node) ?? false; }
+  directorExcludes(node: Id, at = this.k.now): boolean {
+    return this.isSpine(node) || (this.k.settings.at(at).storyExclusions ?? []).some((e) => e.kind === 'npc' && e.value === node);
   }
 
   get worldSeed(): Id {
@@ -440,12 +448,16 @@ export class Layer2 implements Layer2Hook {
   }
 
   /** S3's bounded sow: kernel tables and the layer's own mutations commit together. */
-  atomicSow(req: SowRequest, accepted: (instance: Id) => void): ReturnType<Layer2['sowRequest']> {
+  atomicSow(req: SowRequest, accepted: (instance: Id) => void, validate?: (inst: Instance) => Finding[]): ReturnType<Layer2['sowRequest']> {
     const batch = this.k.stage();
     const mark = {global: structuredClone(this.global),ids: new Set(this.insts.keys()),queue: structuredClone(this.queue),actors: new Set(this.actorSet),refusals: this.sowRefusals.length};
     let committed = false;
     try {
       const result = batch.write(() => this.sowRequest(req));
+      if (result.ok && validate) {
+        const findings = batch.write(() => validate(this.instance(result.instance)!));
+        if (findings.length) return { ok: false, findings };
+      }
       if (result.ok) {batch.write(() => {accepted(result.instance);this.flush();});batch.commit();committed = true;}
       return result;
     } finally {

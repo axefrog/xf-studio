@@ -1,6 +1,8 @@
 import { id, i, s } from '../id.ts';
 import { ln } from '../fdlibm-log.ts';
-import type { Layer2, SowRequest } from '../seeding/layer2.ts';
+import type { Instance, Layer2, SowRequest } from '../seeding/layer2.ts';
+import type { Finding, CompiledSeed } from '../seeding/types.ts';
+import { bound } from '../seeding/doc.ts';
 import type { Seed } from '../seeding/types.ts';
 import type {
   Candidate,
@@ -77,7 +79,7 @@ export class Sower {
     readonly state: () => Layer3State,
     readonly sifter: Sifter,
     readonly log: Log,
-    readonly atomic: (req: SowRequest, apply: (instance: string) => void) => ReturnType<Layer2['sowRequest']>,
+    readonly atomic: (req: SowRequest, apply: (instance: string) => void, validate?: (inst: Instance) => Finding[]) => ReturnType<Layer2['sowRequest']>,
   ) {}
   private gate(n: number, e: PoolEntry, extra: Record<string, unknown> = {}): void {
     this.log(
@@ -88,8 +90,7 @@ export class Sower {
     );
   }
   kits(p: SiftPattern, e: PoolEntry, c: Counts): Kit[] {
-    const settings = this.l2.k.settings.current(),
-      now = this.lv.playTotal(),
+    const now = this.lv.playTotal(),
       nodes = Object.values(this.overlay(p, e)).map((r) => r.identity);
     const out: Kit[] = [];
     for (const [pack, index] of [...this.l2.packs.entries()].sort((a, b) => cmp(a[0], b[0])))
@@ -110,23 +111,7 @@ export class Sower {
           (now < this.data.schedule.gentleHour && sowable.firstClass > 1)
         )
           failed = 6;
-        const tags = [...(template.purpose.tags ?? []), ...(sowable.tags ?? [])];
-        const typed = settings.storyExclusions ?? [];
-        if (
-          !failed &&
-          (nodes.some((n) => settings.exclusions.includes(n)) ||
-            Object.keys(template.content?.envelope ?? {}).some((cl) => settings.classExclusions.includes(cl)) ||
-            settings.content.softExclusions.some((ex) => (template.content?.envelope[ex.class] ?? 0) >= ex.level) ||
-            typed.some((ex) =>
-              ex.kind === 'npc'
-                ? nodes.includes(ex.value)
-                : ex.kind === 'class'
-                  ? ex.value in (template.content?.envelope ?? {})
-                  : ex.kind === 'tag'
-                    ? tags.includes(ex.value)
-                    : this.verbs(template, pack).includes(ex.value),
-            ))
-        )
+        if (!failed && this.excluded(template, pack, nodes))
           failed = 7;
         if (!failed && sowable.climactic && c.C >= this.data.threads.maxClimactic) failed = 8;
         if (failed) {
@@ -137,16 +122,16 @@ export class Sower {
       }
     return out;
   }
-  private verbs(t: Seed, pack: string): string[] {
-    return (
-      this.l2.packs
-        .get(pack)
-        ?.pack.fragments.filter((f) => Object.values(t.beats ?? {}).some((b) => JSON.stringify(b.play).includes(f.id)))
-        .flatMap((f) => {
-          const verb = this.l2.reg.skeleton(t, f, f.channels[0] ?? '').verb;
-          return verb ? [verb] : [];
-        }) ?? []
-    );
+  private excluded(t: Seed | CompiledSeed, pack: string, nodes: string[]): boolean {
+    const settings = this.l2.k.settings.current(),
+      tags = [...(t.purpose.tags ?? []), ...((t.sowable as Sowable | undefined)?.tags ?? [])],
+      envelope = t.content?.envelope ?? {},
+      fragments = this.l2.packs.get(pack)?.closure(t as CompiledSeed).fragments ?? [],
+      verbs = fragments.flatMap((f) => f.channels.map((ch) => this.l2.reg.skeleton(t, f, ch).verb));
+    return Object.keys(envelope).some((cl) => settings.classExclusions.includes(cl)) ||
+      settings.content.softExclusions.some((ex) => (envelope[ex.class] ?? 0) >= ex.level) ||
+      (settings.storyExclusions ?? []).some((ex) => ex.kind === 'npc' ? nodes.includes(ex.value) :
+        ex.kind === 'class' ? ex.value in envelope : ex.kind === 'tag' ? tags.includes(ex.value) : verbs.includes(ex.value));
   }
   overlay(p: SiftPattern, e: PoolEntry): Record<string, { identity: string }> {
     return Object.fromEntries(
@@ -322,6 +307,14 @@ export class Sower {
           st.recent.push({ pattern: p.id, kit: kit.template.id, place: candidate.place, at: this.lv.playTotal() });
           st.recent = st.recent.slice(-this.data.sower.recentSown);
           st.slots.open.next = k + 1;
+        }, (inst) => {
+          const nodes = Object.values(inst.st.document.roles).flatMap((role) => {
+            const identity = bound(role.identity).value;
+            return identity ? [this.l2.k.expandId(identity)] : [];
+          });
+          return this.excluded(inst.st.document, kit.pack, nodes)
+            ? [{ code: 'S3-gate-7', level: 'error', message: 'The effective variant-expanded kit matches an exclusion.' }]
+            : [];
         });
         this.log(
           'sow',

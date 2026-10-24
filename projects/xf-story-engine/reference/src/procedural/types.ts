@@ -58,6 +58,8 @@ export interface Layer3State {
   slots: { open: { next: number } };
   nextSeq: number;
   openLockUntil: number;
+  /** Closures already consumed by a director tick; later closures remain pending across loads. */
+  consumedOutcomes: Id[];
   pool: PoolEntry[];
   tombstones: Array<{ pattern: string; key: Id; until: GameTime }>;
   pending: Array<{ instance: Id; sownAt: number }>;

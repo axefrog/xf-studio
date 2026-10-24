@@ -29,7 +29,7 @@ const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 export class Retention {
   readonly seeds = new Map<Id, SeedRecord>();
   readonly streamed = new Set<Id>();
-  private cache: { revision: number; now: GameTime; marked: Set<Id>; maxMember: Map<string, number> } | null = null;
+  private cache: { revision: number; now: GameTime; marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id> } | null = null;
   private sweepList = new Worklist<{ id: Id }>();
 
   constructor(private readonly k: Kernel) {}
@@ -192,30 +192,42 @@ export class Retention {
     return this.compute().marked;
   }
 
-  private compute(): { marked: Set<Id>; maxMember: Map<string, number> } {
+  /** Own event constants that persisted consumers cannot regenerate after replay. */
+  eventFacts(): ReadonlySet<Id> { return this.compute().eventFacts; }
+
+  private compute(): { marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id> } {
     if (this.cache && this.cache.revision === this.k.revision && this.cache.now === this.k.now) return this.cache;
     const store = this.k.store;
     const marked = new Set<Id>();
     const stack = [...this.rootIds()];
     const eventRoots = new Set([...this.seeds.values()].flatMap(s => s.nodes));
+    for (const st of this.k.evolution.states.values())
+      for (const batch of st.outstanding)
+        for (const ref of idFields(batch.ops, (id) => this.k.expandId(id))) eventRoots.add(ref);
+    const traversedEvents = new Set<Id>();
+    const eventFacts = new Set<Id>();
     while (stack.length > 0) {
       const id = stack.pop()!;
-      if (marked.has(id)) continue;
+      const firstVisit = !marked.has(id);
+      const traverseEvent = eventRoots.has(id) && !traversedEvents.has(id);
+      if (!firstVisit && !traverseEvent) continue;
       marked.add(id);
       const h = store.header(id);
       if (!h) continue;
+      if (traverseEvent) traversedEvents.add(id);
       if (h.origin.by === 'value' || h.origin.by === 'member') stack.push(h.origin.owner);
       else if (h.origin.by === 'minted') stack.push(h.origin.creator, h.origin.cause);
       // A retained non-canon event keeps its described people, place and causes too (S3-I-22).
       // Its fields are simulation constants, so they need not have canon pins. Read the stored
       // constants directly: resolution here would recursively ask retention about member counts.
-      if (eventRoots.has(id) && this.k.schema.isKind(h.kind, 'core:event')) {
+      if (traverseEvent && this.k.schema.isKind(h.kind, 'core:event')) {
         const fields = [id], seenFields = new Set<Id>();
         for (let n = 0; n < fields.length; n++) {
           const field = fields[n]; if (seenFields.has(field)) continue; seenFields.add(field);
           stack.push(field);
           fields.push(...store.ownedOf(field));
           for (const c of store.contributionsNaming(field)) if (c.form.f === 'const') {
+            if (c.source.layer === 'simulation' && c.source.origin === id) eventFacts.add(c.id);
             const refs: Id[] = []; this.idsIn(c.form.value, refs); stack.push(...refs); for (const ref of refs) eventRoots.add(ref);
           }
         }
@@ -233,7 +245,7 @@ export class Retention {
         if (cur === undefined || h.origin.index > cur) maxMember.set(key, h.origin.index);
       }
     }
-    this.cache = { revision: this.k.revision, now: this.k.now, marked, maxMember };
+    this.cache = { revision: this.k.revision, now: this.k.now, marked, maxMember, eventFacts };
     return this.cache;
   }
 

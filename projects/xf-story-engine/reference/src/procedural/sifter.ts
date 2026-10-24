@@ -285,6 +285,10 @@ export class Sifter {
           );
       }
     }
+    // Reclaim before admission, after advancement: a historical emission may just have
+    // completed an entry whose TTL is already past at current game time.
+    // Open entries use the chronological input horizon, like the advancement check above.
+    this.sweep(Math.max(this.k.now, now), now);
     const bindings = this.matchClause(p, p.stages[0], event, {});
     if (!bindings) return;
     const bindingKey = this.keys.bindings('bind', p.id, bindings),

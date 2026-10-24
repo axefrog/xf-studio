@@ -9,8 +9,8 @@ project holds the engine's code. Research and design live in [`research/story-en
 specification [S0 v3](../../research/story-engine/spec/kernel.md), written as the oracle that a later
 native core must agree with. It implements everything in S0 except the items deferred in the
 specification's section 0.2 (the memory machinery and implicit edges among them), with the process
-additions of S0 v4.13 (a process's own state and digest, `demanded(tier)`, window-keyed draws, backdated
-events, silent restatement), the cores of S1 v0.5 and S2 v1.10, and the procedural core of S3 v0.3.
+additions of S0 v4.14 (a process's own state and digest, `demanded(tier)`, window-keyed draws, backdated
+events, silent restatement, nominal kind compatibility), the cores of S1 v0.5 and S2 v1.10, and the procedural core of S3 v0.4.
 
 - The kernel: identity and BLAKE3 hashing, fdlibm `ln`, the schema and function registry, nodes, edges,
   resolution (constraint arbitration, weights, the flat Gumbel-max draw), pins and time, queries, events
@@ -69,14 +69,14 @@ events, silent restatement), the cores of S1 v0.5 and S2 v1.10, and the procedur
     are refused plainly. `S1_FULL=1` runs the long fixtures at the specification's scale.
 
 - The **procedural layer** ([`reference/src/procedural/`](reference/src/procedural/)): the core of
-  [S3 v0.3](../../research/story-engine/spec/procedural.md). World-only fitting and its report; senses, pacing,
+  [S3 v0.4](../../research/story-engine/spec/procedural.md). World-only fitting and its report; senses, pacing,
   bounded holds and joints; derived threads and budgets; the nested schedule; completed-pattern sifting with
   a saved chronological buffer; frozen candidate/kit scores; atomic sowing, quiet pending expiry and a local
   response-evidence log. Pool entries, event descriptors, tombstones, lifetimes, recent history, slot position
   and the arc lock survive replacement loads. Later capabilities receive plain "not supported yet" findings.
   [The fixture index](reference/test/s3/README.md) records coverage and limits, including R1, the literal SF3-37
   script, and Kabuki with S1/S2 attached and fresh-process crashes at each tested window boundary.
-  Findings 175–188 in SPEC-NOTES identify contract additions and fixture contradictions for the coordinator.
+  Findings 175–191 in SPEC-NOTES identify contract additions and fixture contradictions for the coordinator.
 
 The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits use the pinned TypeScript dev dependency's compiler AST API.
 
@@ -105,11 +105,13 @@ with a 4 GB limit, using the full Python interpreter path as the repository rule
 `bun run test/sim/check-review-mutations.ts` (optionally followed by one probe name, such as `R3-06`): it changes only the targeted
 behaviour in memory and requires failure at the named semantic assertion. Setup and import failures are rejected as evidence.
 
-S3 has 75 tests (about seven seconds locally), including a regression that keeps nominal resident classification out of
-generic person queries. The unchanged A1-01c ordering regression, the S3 suite and `bun run check` pass. The guarded full
-suite passes **1,163 tests across 75 files in 102.88 seconds**, peaking at **1.1 GB** under the 4 GB limit; all three frozen
-digests remain unchanged. The coordinator owns independent review before integration. No game session is needed for
-this oracle change. The classification fix is left uncommitted for the coordinator.
+S3 has 92 tests (about six seconds locally), including nominal-query boundaries and the S3-01–07 review regressions.
+All 18 source-loader mutation probes reach their intended semantic assertions; `bun run check` passes. The guarded full
+suite passes **1,181 tests across 78 files in 109.66 seconds**, peaking at **1.1 GB** under the 4 GB limit; all three existing
+frozen digests remain unchanged. A new S3 transcript checks independently encoded identities and draws, plus explicit
+persisted records. Hand-over facts, pending closure consumption and output-batch event facts survive replacement loads;
+NPC/spine filtering has one authority across casting and preparation. The coordinator owns independent review before
+integration. No game session is needed. All review fixes remain uncommitted for the coordinator.
 
 ## Layout
 

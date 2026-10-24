@@ -22,6 +22,8 @@ export function sowableFindings(t: Seed, l2: Layer2, view: KernelView, data: Lay
   const out: Finding[] = [],
     sow = t.sowable as Sowable | undefined;
   if (!sow) return [finding('S3-K-0', 'No sowable declaration.')];
+  if (Object.keys(sow).some((key) => !['serves', 'firstClass', 'weight', 'climactic', 'tags'].includes(key)))
+    out.push(finding('S3-K-0', 'This sowable capability is not supported yet.'));
   if (!Array.isArray(sow.serves) || !sow.serves.length || sow.serves.some((f) => !forms.includes(f)))
     return [finding('S3-K-0', 'This form is not supported yet.')];
   if (!(sow.weight === undefined || (Number.isFinite(sow.weight) && sow.weight > 0)))
@@ -117,6 +119,7 @@ export function patternFindings(p: SiftPattern, l2: Layer2, view: KernelView, da
     Object.keys(extra).some(
       (k) => !['id', 'version', 'roles', 'stages', 'unless', 'within', 'once', 'tags', 'telling'].includes(k),
     ) ||
+    Object.keys(p.telling).some((key) => !['form', 'kit', 'binds'].includes(key)) ||
     all.some(
       (c) =>
         Object.keys(c).some((k) => !['kind', 'who', 'effects', 'where'].includes(k)) ||

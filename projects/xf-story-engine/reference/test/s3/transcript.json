@@ -1,0 +1,22 @@
+{
+  "world": "9bac73e3d517a5c242a3793b01504c38",
+  "director": "a5d430e2e6384fa14298bd9f4dd66cd5",
+  "a": "4541174d95fac3e256939a09a8289235",
+  "b": "1be48d47f1e5cc9c0b934ae19a6cdf96",
+  "first": "68df62da4d12b754495b36a28fbd899a",
+  "last": "d646306ea404d61dbd03390a9acc62d3",
+  "binding": "5f18f2f6bf40af39a0f4670542d874cd",
+  "match": "0b9339aa02555efc4c9525976979f306",
+  "candidate": "4ab95156428cd7fbde847f2793238a44",
+  "decision": "c21aaed15a5f246a4b59d3c4ce34295c",
+  "story": "4478a908718a075483a51466df86478a",
+  "instance": "969cfc17d6ddd30cb6a9cf98d3530002",
+  "record": "7bf84df620f083102f9f484bfa5af8d7",
+  "tombstone": "6a4e2cc05e37f20b5636cc2b4f2dd998",
+  "slot": {
+    "time": 4959,
+    "u": 0.06984772383058202
+  },
+  "pick": 0.9352553680149797,
+  "kitDraw": 0.6589638301982171
+}

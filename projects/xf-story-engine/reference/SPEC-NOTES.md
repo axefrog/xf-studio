@@ -1172,15 +1172,19 @@ pattern id. Incomplete expiry and tombstone pruning follow that horizon, so late
 candidate deadlines use current game time. Off drops buffered emissions as well as closing frames. Sifting runs in the
 kernel's shared budget after dispatch, with at most one emission's atomic overshoot.
 
-**176. Retained event addresses do not reload their fields.** Replay drops simulation contributions. The reference saves
-`Layer3State.evidence` descriptors for pool/buffer events and events handed to S2 while casts or closing deliveries need
-them, restoring silently after S1. Summary-item provenance is preserved: time/place remain live summary dependencies.
-These mechanical event facts are unrelated to the local player-response evidence log. Arbitrary ancestors outside the
-pool/buffer or S2 handover remain their producing layer's regeneration responsibility; S3 does not copy the world's history.
+**176. Retained event addresses do not reload their fields.** The reconstruction boundary includes the complete event
+closure of pool/buffer roots and S2 hand-overs: a `?story` retains its constituent events and their causes after the pool
+entry is reclaimed, until the last live or closing consumer finishes. `Layer3State.evidence` keeps those copied descriptors
+and restores silently after S1. Summary-item provenance is preserved: time/place remain live summary dependencies.
+There is no cut at the story event that delegates its constituent facts back to an unspecified producer. Unreachable
+history is released. These mechanical facts are unrelated to the local player-response evidence log. The kernel also
+preserves own event constants for explicit persisted consumer roots (191).
 
 **181. Non-canon event retention did not follow participants or causes.** The marker followed headers and owned values,
-not event simulation constants. SeedRecord event roots now retain owned fields and their Id references transitively,
-without recursive resolution. Restricting this traversal to SeedRecord event roots preserves the frozen control arms.
+not event simulation constants. SeedRecord and outstanding-output event roots retain owned fields and Id references
+transitively, without recursive resolution. Ordinary marking and event-field traversal have separate visited sets:
+an event first reached through a frame is revisited when another event needs its fields. Adding roots is monotone,
+and either root order has the same closure. The frozen control arms remain checked independently.
 S2 also roots fixed overlay identities before first casting. Pool `nodes` remains its stage/story events plus buffered
 occurrences, with no extra person roots.
 
@@ -1201,9 +1205,14 @@ the arbiter's release step. S3's host now runs S2 expiry/wakeup preparation, dra
 ticks the director and resolves a slot before release. Preparation runs once. The old two-argument `advancePlay` path
 keeps its existing order when S3 is absent. A fixture checks a one-second window is already cast when S3 ticks at 1.
 
-**178. Typed exclusions need a recorded home.** S0 holds NPC Ids, class exclusions and class/level soft exclusions.
-Optional `SettingsEntry.storyExclusions` records the verb/class/tag/NPC list in SettingsSet. Its absence preserves old
-settings and frozen digests. Both vocabularies are hard filters, never scores.
+**178. One exclusion and spine authority.** Settings keeps one canonical typed verb/class/tag/NPC list. The legacy
+`SettingsEntry.exclusions` view and SettingsSet wire field are derived from its NPC entries; old writes are translated
+at the Settings boundary, and conflicting simultaneous alias writes are refused. Non-NPC typed entries use the optional
+`storyExclusions` wire field. This preserves pre-S3 wire encoding and frozen digests without independently writable NPC
+lists. S2 casting, cached tentative recasting and preparation of every director-sown role use the same typed NPC source
+as S3. S2 and S3 read spine membership through one shared `worldRegistry` port, supplied by S1's reads or replaced by
+S3's registry when it explicitly supplies `isSpine`. Attaching only an event-kind registry preserves S1's authority;
+`opts.spine` is removed. Exclusions are hard filters, never scores.
 
 **183. S2 promises a skeleton classifier but specifies no implementation.** `L2Registry.skeleton` is the pure seam.
 Its default reads explicit fragment `features`, declared tone/outcome, an unambiguous offer stake and actual channel;
@@ -1231,9 +1240,29 @@ The reference uses the numeric seconds at its unit clock rate; S2's game-clock h
 jumps. A variable-speed port needs an explicit conversion contract. Phase logs cite the copied timestamped sense frame
 in `inputs`; no kernel event Id is invented for a sense frame.
 
-The project README and fixture index record validation. The coordinator owns the guarded complete suite, its timing and
-independent pre-merge review. Git staging/committing was attempted with the required Assisted-by trailer, but the sandbox
-denied the worktree `index.lock`; all changes remain uncommitted.
+**189. Outcome consumption is branch state.** S3 §5.2 consumes witnessed closures since the previous tick, but §9.2
+omits that position. `Layer3State.consumedOutcomes` saves the sorted closure event ids already consumed. A save between
+a closure and its next director tick preserves that pending closure; a save after consumption cannot apply it twice.
+Absent fields read as empty, rather than treating every loaded closure as consumed. Session pacing still resets.
 
-Final footprint report: 328.3 GB free on C; no task-owned output above 5 GB, no scratch payloads to keep. New S3 sources
-and tests occupy about 177 KB. No existing tests or golden digests were edited.
+**190. Exclusions and lifetimes are checked at use.** Admission first reclaims expired completed entries and reclaimable
+sown entries, across both capacity limits, after advancement and before admission. This includes a late emission
+that both completes an already-expired candidate and starts a new occurrence. Incomplete expiry uses the chronological
+input horizon and its original tombstone formula. Sweeps change storage, never admission decisions. Gate 7 pre-checks the base kit and checks the
+actual selected, expanded document inside the sow transaction before commit, including the full fragment closure's
+skeleton verbs, tags, envelope classes and soft levels. A refused variant rolls back the seed and bookkeeping. An
+unselected excluded alternative does not veto a safe selected document. `telling` and `sowable` have closed core field
+sets; `atStage`, `from`, `subject` and unknown additions receive explicit "not supported yet" findings.
+
+**191. Persisted output references need event facts (S0 §14.1 clarification).** SF3-38 has an outstanding S1 mirror batch
+that cites a raw non-canon event before a pool entry exists. Saving only its retained header loses the raw facts before
+the batch applies. The kernel now preserves the own simulation constants of events reached from SeedRecord nodes and
+outstanding output operations, with transitive causes/fields, using ordinary `ContributionAdded` records. Resolved
+overlays are never substituted for the minted facts; other simulation contributions remain regenerable. This lives at
+retention/persistence, shared by every layer, not in S3's evidence boundary. `process-evidence.test.ts` checks a pending
+batch, replacement replay, application and transitive raw facts against uninterrupted execution. The coordinator owns
+the corresponding S0 wording. SF3-38's strict state comparison is unchanged.
+
+The project README and fixture index record validation. The review regressions also have a source-loader mutation
+runner that rejects setup errors and requires the intended semantic assertion for each reversed fix. Changes remain
+uncommitted for the coordinator's independent review and integration.

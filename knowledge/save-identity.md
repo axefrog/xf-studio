@@ -58,11 +58,20 @@ Studied by reading the mods' scripts (technique only; [Sources](#sources)).
 ## 3. What happens to mod state
 
 **Reference-model check [offline].** The Story Engine's S3 core now carries its chronological event buffer, pool,
-occurrence identities, tombstones, cooldowns, pending lifetimes, recent choices, schedule position and arc lock in one
+occurrence identities, tombstones, cooldowns, pending lifetimes, recent choices, schedule position, outcome-consumption
+position and arc lock in one
 branch-local record. Its [reload tests](../projects/xf-story-engine/reference/test/s3/reload.test.ts) verify selected-save
 inheritance and atomic sowing; the [Kabuki fixture](../projects/xf-story-engine/reference/test/s3/e2e.test.ts) agrees with
 uninterrupted play after fresh-process reloads at each of five simulation boundaries, including reloading at every boundary.
 This checks the external ledger's reference semantics. It does not validate the proposed five-fact key or a game save hook.
+
+**Event facts are part of the saved dependency [offline].** Keeping an event's id/header alone does not keep its fields
+readable after replay. The [review regressions](../projects/xf-story-engine/reference/test/s3/review-fixes.test.ts) verify
+that a story handed to S2 retains its constituent events and transitive causes across fresh loads after pool reclamation,
+and releases them only after the last consumer finishes. The [kernel regression](../projects/xf-story-engine/reference/test/process-evidence.test.ts)
+also checks a non-canon raw event referenced by an outstanding output batch: its own facts survive the save before the
+batch applies. A closure saved before the next director tick remains unconsumed, so the next tick establishes the arc
+opening lock; saving after consumption cannot extend it again. These are reference-model checks, not game-save evidence.
 
 | Event | State inside the save (fields, facts, entity state) | An external store | Grade |
 |---|---|---|---|

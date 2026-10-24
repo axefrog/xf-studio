@@ -52,7 +52,6 @@ export class Layer3 {
   counts: Counts = { A: 0, L: 0, C: 0, S: 0 };
   private boundarySeen = -1;
   private inTick = false;
-  private outcomeSeen = new Set<string>();
   private evidenceSeen = new Set<string>();
   private pullSeen = new Set<string>();
   private asked = false;
@@ -73,6 +72,8 @@ export class Layer3 {
     this.director = new Director(this.data, this.writeLog);
     if (this.k.layer3 || l2.hooks.fit || l2.hooks.weigh || l2.hooks.hold || l2.hooks.joint || l2.hooks.onRelease)
       throw new Error('Layer 3 hooks already have an owner');
+    // An event-kind-only registry does not replace an attached world's spine authority.
+    if (opts.registry.isSpine) l2.worldRegistry = opts.registry;
     this.k.root('director', 'core:seed');
     this.k.frames.demandRoots.add(this.keys.director);
     this.sifter = new Sifter(
@@ -94,13 +95,13 @@ export class Layer3 {
       () => this.state,
       this.sifter,
       this.writeLog,
-      (req, apply) => {
+      (req, apply, validate) => {
         const before = structuredClone(this.state);
         try {
           return this.l2.atomicSow(req, (id) => {
             apply(id);
             this.flush();
-          });
+          }, validate);
         } catch (e) {
           this.state = before;
           throw e;
@@ -122,7 +123,7 @@ export class Layer3 {
     this.sifter.active = this.k.settings.current().tempo !== 'off';
     this.registerVocabulary(opts.patterns ?? []);
     this.findings.push(...this.sifter.install(opts.patterns ?? []));
-    for (const inst of this.l2.all()) if (inst.st.closed) this.outcomeSeen.add(inst.st.closed.event);
+    this.state.consumedOutcomes = this.l2.all().flatMap((inst) => inst.st.closed ? [inst.st.closed.event] : []);
     this.flush();
   }
   private writeLog: Log = (kind, rule, data, chain = [], cls = 0, inputs = {}) => {
@@ -315,8 +316,9 @@ export class Layer3 {
     this.syncTempo();
     const outcomes: Array<{ level: string }> = [];
     for (const inst of this.l2.all())
-      if (inst.st.closed?.witnessed && !this.outcomeSeen.has(inst.st.closed.event)) {
-        this.outcomeSeen.add(inst.st.closed.event);
+      if (inst.st.closed?.witnessed && !this.state.consumedOutcomes.includes(inst.st.closed.event)) {
+        this.state.consumedOutcomes.push(inst.st.closed.event);
+        this.state.consumedOutcomes.sort(cmp);
         outcomes.push({ level: inst.st.document.level });
       }
     if (this.director.tick({ ...f, at: this.l2.arbiter.play }, outcomes))
@@ -403,7 +405,7 @@ export class Layer3 {
               exclusions.some((e) => e.kind === 'class' && e.value === c.class),
           ) ||
           Object.values(d.bindings).some(
-            (n) => settings.exclusions.includes(n) || exclusions.some((e) => e.kind === 'npc' && e.value === n),
+            (n) => exclusions.some((e) => e.kind === 'npc' && e.value === n),
           )
         )
           continue;
@@ -469,7 +471,8 @@ export class Layer3 {
     }
     for (const b of this.state.buffer) nodes.add(b.event.id);
     const evidence = new Map(this.state.evidence.map((e) => [e.id, e]));
-    // Once handed over, S2's overlay/cast owns retention, but its event still needs silent reconstruction.
+    // S2 owns the handed-over roots. S3 keeps their entire event closure reconstructible until
+    // the last live/closing consumer releases it, even after the pool entry has been reclaimed.
     const held = new Set(nodes);
     for (const inst of this.l2.all().filter((i) => !terminal(i.st.state) || instanceView(i).closingPending))
       for (const [key, r] of Object.entries(inst.st.roles)) {
@@ -478,7 +481,7 @@ export class Layer3 {
         if (n && this.kv.kind(n) && this.k.schema.isKind(this.kv.kind(n)!, 'core:event')) held.add(n);
       }
     for (const n of held) {
-      const e = this.kv.event(n);
+      const e = this.kv.event(n) ?? evidence.get(n);
       if (e) {
         const own = this.k.events.mintedSpec(n, e.provenance ? { descriptor: e, provenance: e.provenance } : undefined);
         const facts = own
@@ -492,6 +495,10 @@ export class Layer3 {
             }
           : e;
         evidence.set(n, facts);
+        for (const ref of [facts.creator, facts.cause, facts.place, facts.served, ...facts.causes,
+          ...facts.witnesses, ...facts.participants.map((p) => p.who), ...facts.effects.map((ef) => ef.on)]) {
+          if (ref && this.kv.kind(ref) && this.k.schema.isKind(this.kv.kind(ref)!, 'core:event')) held.add(ref);
+        }
       }
     }
     this.state.evidence = [...evidence.values()].filter((e) => held.has(e.id)).sort((a, b) => cmp(a.id, b.id));
@@ -503,6 +510,7 @@ export class Layer3 {
     this.state = saved ? structuredClone(saved) : emptyState(this.l2.playTotal(), this.data.schedule.slotGap);
     this.state.buffer ??= [];
     this.state.evidence ??= [];
+    this.state.consumedOutcomes ??= [];
     if (this.k.readOnly) {
       this.threadView = threads(this.lv.instances(), this.l2.playTotal(), this.data);
       this.counts = counts(this.threadView);
@@ -512,7 +520,6 @@ export class Layer3 {
     this.sower.rivals.length = 0;
     this.evidenceSeen.clear();
     this.pullSeen.clear();
-    this.outcomeSeen.clear();
     this.director = new Director(this.data, this.writeLog);
     this.boundarySeen = this.k.evolution.cursor;
     this.k.root('director', 'core:seed');
@@ -539,7 +546,6 @@ export class Layer3 {
         }
       }
     }
-    for (const inst of this.l2.all()) if (inst.st.closed) this.outcomeSeen.add(inst.st.closed.event);
     this.refresh();
     this.flush();
   }

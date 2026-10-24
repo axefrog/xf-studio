@@ -307,8 +307,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
   candidates = candidates.filter((c) => !ROOT_ACTORS.some((r) => rootId(l2.worldSeed, r) === c));
   // Source filters: a seed the director sowed excludes main-story characters and the player's excluded NPCs (S2 section 5.2).
   if (inst.st.source.by === 'director') {
-    const excl = new Set<Id>([...(l2.opts.spine ?? []), ...l2.k.settings.at(t).exclusions]);
-    candidates = candidates.filter((c) => !excl.has(c));
+    candidates = candidates.filter((c) => !l2.directorExcludes(c, t));
   }
   // The minors floor: casting removes non-adults from barred roles (S2 section 2.19).
   if (barredOf(l2, inst).has(key)) candidates = candidates.filter((c) => isAdultNode(l2, c, t));

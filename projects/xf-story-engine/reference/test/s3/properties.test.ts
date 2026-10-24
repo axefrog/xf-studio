@@ -14,13 +14,20 @@ function rng(seed: number) {
 }
 test('S3-I-1/5/13/18/19/22 generated incidents are deterministic under reloads and arbitrary sweeps', () => {
   const run = (reload: boolean, sweeps: boolean) => {
+    const data = defaultData();
+    data.sifter.candidateTtl = 900;
+    data.sifter.poolPerPattern = data.sifter.poolTotal = 2;
     const p = pattern({ once: undefined }),
-      w = world('generated-incidents', { patterns: [p] });
+      w = world('generated-incidents', { patterns: [p], data });
     const random = rng(2718);
+    const admissions: string[] = [];
+    let sawExpiry = false;
     for (let i = 0; i < 50; i++) {
-      const at = i * 800,
-        a = event(w, 'insult' + i, 'insult', at);
+      const at = i * 800;
+      w.k.now = at;
+      const a = event(w, 'insult' + i, 'insult', at);
       w.l3.sifter.onEvent(p, a);
+      if (w.l3.state.pool.some((e) => e.stages[0].event === a.id)) admissions.push(a.id);
       if (random() < 0.5) w.l3.sifter.onEvent(p, a);
       w.l3.flush();
       if (reload && i % 7 === 0) {
@@ -32,15 +39,21 @@ test('S3-I-1/5/13/18/19/22 generated incidents are deterministic under reloads a
         causes: [a.id],
         effects: [{ on: w.b, effect: 'harm' }],
       });
+      w.k.now = b.time;
       w.l3.sifter.onEvent(p, b);
       // Sweeps use the same game time at use; neither branch relies on sweeping for eligibility.
-      if (sweeps) w.l3.sifter.sweep(at + 700);
+      w.k.now = at + 700;
+      if (sweeps) w.l3.sifter.sweep(w.k.now);
+      sawExpiry ||= w.l3.log.some((e) => e.rule === 'match-expired');
       w.l3.flush();
       expect(auditState(w.l3)).toEqual([]);
     }
-    return w.l3.state.pool
+    expect(w.k.now).toBeGreaterThan(data.sifter.candidateTtl);
+    expect(sawExpiry).toBe(true);
+    w.l3.sifter.sweep(w.k.now); // Compare reclaimed storage only after comparing admission decisions.
+    return { admissions, pool: w.l3.state.pool
       .filter((e) => e.complete)
-      .map((e) => ({ id: e.id, key: w.l3.keys.candidate(e.id, e.stages.length - 1), story: e.story }));
+      .map((e) => ({ id: e.id, key: w.l3.keys.candidate(e.id, e.stages.length - 1), story: e.story })) };
   };
   expect(run(true, true)).toEqual(run(false, true));
   expect(run(false, false)).toEqual(run(false, true));
@@ -48,14 +61,27 @@ test('S3-I-1/5/13/18/19/22 generated incidents are deterministic under reloads a
 test('S3-I-7 arbitrary tempo walks always thin the same slot schedule', () => {
   const w = world('tempo-walk'),
     random = rng(42);
-  for (let k = 0; k < 128; k++) {
+  w.l3.data.schedule.gentleFirst = 0;
+  const tempos = ['off', 'calm', 'steady', 'restless'] as const;
+  const resolve = (k: number, tempo: typeof tempos[number]) => {
     const slot = w.l3.keys.slot(k, 4500);
-    for (const tempo of ['off', 'calm', 'steady', 'restless'] as const) {
-      w.k.settings.set({ tempo });
-      expect(w.l3.keys.slot(k, 4500)).toEqual(slot);
-    }
-    const t = random();
-    expect(!(t < 0.3125) || t < 0.625).toBe(true);
+    w.k.settings.set({ tempo });
+    w.l2.baseTotal = slot.time;
+    w.l3.state.slots.open.next = k;
+    w.l3.sower.resolve({ A: 0, L: 0, C: 0, S: 0 });
+    expect(w.l3.state.slots.open.next).toBe(k + 1);
+    expect(w.l3.keys.slot(k, 4500)).toEqual(slot);
+    const rule = w.l3.log.at(-1)?.rule;
+    expect(rule).toBe(slot.u < w.l3.data.schedule.theta[tempo] ? 'slot-empty' : 'slot-passed');
+    return rule === 'slot-empty';
+  };
+  for (let k = 0; k < 128; k++) {
+    const chosen = tempos[Math.floor(random() * tempos.length)];
+    const walked = resolve(k, chosen), live = tempos.map((tempo) => resolve(k, tempo));
+    expect(walked).toBe(live[tempos.indexOf(chosen)]);
+    expect(live[0]).toBe(false);
+    expect(live[3]).toBe(true);
+    expect(!live[1] || live[2]).toBe(true);
   }
 });
 test('S3-I-3/5 phase arithmetic stays bounded under generated senses and release inputs', () => {

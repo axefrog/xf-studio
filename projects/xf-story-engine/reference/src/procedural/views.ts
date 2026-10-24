@@ -78,7 +78,7 @@ export function kernelView(k: Kernel, l2: Layer2, registry: WorldRegistry): Kern
   return {
     kind: (n) => k.store.header(n)?.kind,
     isKind: (a, b) => k.schema.hasKind(a) && k.schema.hasKind(b) && k.schema.isCompatibleKind(a, b),
-    isSpine: (n) => registry.isSpine?.(n) ?? l2.opts.spine?.has(n) ?? false,
+    isSpine: (n) => l2.isSpine(n),
     aesthetic: (n, f) => registry.aesthetic?.(n, f),
     eventKind: (n) => {
       const r = registry.eventKind(n);

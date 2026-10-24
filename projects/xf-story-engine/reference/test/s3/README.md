@@ -1,7 +1,7 @@
 # S3 core fixture index
 
-S3 v0.3's core runs in `src/procedural/`. The tests use Bun and explicit world seeds. No game is launched.
-The coordinator runs the guarded complete suite and independent review; this branch's checks are targeted.
+S3 v0.4's core runs in `src/procedural/`. The tests use Bun and explicit world seeds. No game is launched.
+The coordinator owns independent pre-merge review; the project README records guarded full-suite validation.
 
 | Fixture   | Executable coverage                                                                                                                       |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -50,7 +50,19 @@ and literal computed accesses; they are conservative syntax checks, not general 
 Deferred: S3 §0.3's capabilities, S4's complete skeleton classifier/starter pack, P7's city-scale pool/closure cost and
 save-size work, and P9's large generated corpus with automatic shrinking. The generated regressions here are bounded,
 seeded scripts, not a claim that the later evaluation harness is built. The full suite's two-minute target is the
-coordinator's remaining timing check. No existing test or frozen digest was changed.
+guarded full-suite timing check. Existing frozen digests are checked without changing their expected values.
+
+`review-fixes.test.ts` covers S3-01–07: fresh loads after hand-over/reclamation with multiple consumers, root-order
+monotonicity, pending closure consumption, real unbound-role casting/recasting/preparation, shared settings/registry
+authority, per-pattern/total/sown capacity, selected variant exclusions and nested later-capability refusals.
+`properties.test.ts` advances game time beyond a short candidate TTL and compares admission with/without sweeps;
+its tempo walk resolves actual slots under all tempos. `transcript.test.ts` freezes identities and uniforms in
+`transcript.json`, checks them with a separate byte encoder over BLAKE3 (`transcript-oracle.ts`), and asserts the pool,
+decision, instance, tombstone, pending/recent records and handed-over event facts against explicit expected values.
+The independent host logarithm checks Gumbel noise within binary64 tolerance; uniform values and identities are exact.
+Run `bun run test/s3/check-review-mutations.ts` to reverse each reviewed behavior in memory and require its named
+semantic assertion to fail. The kernel's pending-output regression is `test/process-evidence.test.ts`; SF3-38 retains
+its strict uninterrupted/reloaded state comparison.
 
 Host entry: attach `new Layer3(l2, { registry: sim.w.kinds, patterns })`, then drive unpaused seconds through
 `layer3.advancePlay(portClock, senseFrame, beforeSecond)`. That boundary runs earlier kernel/S2 work, the director,

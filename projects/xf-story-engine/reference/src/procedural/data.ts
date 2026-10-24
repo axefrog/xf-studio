@@ -110,6 +110,7 @@ export function emptyState(playTotal: number, gap: number): Layer3State {
     slots: { open: { next: Math.floor(playTotal / gap) } },
     nextSeq: 0,
     openLockUntil: 0,
+    consumedOutcomes: [],
     pool: [],
     tombstones: [],
     pending: [],

@@ -289,9 +289,12 @@ export class Persistence {
     // Edges that are retention roots.
     // (An edge or pin the chain already holds stays in the view, so its end or withdrawal is recorded even when it is no longer a root.)
     for (const e of k.store.allEdges()) if (k.retention.isRootEdge(e) || base.edges.has(e.id)) v.edges.set(e.id, clone(e));
-    // Contributions packs cannot reproduce: not simulation-layer, not from a pack.
+    // Event facts referenced by persisted consumers (including outstanding output batches)
+    // cannot be regenerated from a header. Preserve their own constants, never a resolved overlay.
+    const eventFacts = k.retention.eventFacts();
+    // Other simulation contributions and reproducible pack contributions remain omitted.
     for (const c of k.store.allContributions()) {
-      if (c.source.layer === 'simulation' || Persistence.isPackContribution(c)) continue;
+      if ((c.source.layer === 'simulation' && !eventFacts.has(c.id)) || Persistence.isPackContribution(c)) continue;
       v.contributions.set(c.id, clone(c));
     }
     for (const e of k.beliefs.memorable()) v.beliefs.set(e.belief.id, clone(e));

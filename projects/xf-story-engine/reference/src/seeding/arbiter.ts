@@ -666,11 +666,16 @@ function prepare(l2: Layer2, inst: Instance, d: Delivery): PrepareResult {
   }
   // 2. Re-check the casts the delivery binds.
   const bindRoles = Object.keys(d.bindings);
-  for (const r of bindRoles) {
+  for (const r of st.source.by === 'director' ? Object.keys(st.roles) : bindRoles) {
     const rs = st.roles[r];
     if (!rs || rs.shrunk) continue;
     if (rs.cast === undefined && rs.standIn === undefined) return { ok: false, reason: `the role "${r}" is not cast`, hard: true };
     if (rs.cast === undefined) continue;
+    if (st.source.by === 'director' && l2.directorExcludes(rs.cast, t)) {
+      l2.record(inst, 'lost', { role: r, excluded: true });
+      onRoleLost(l2, inst, r);
+      return { ok: false, reason: `the role "${r}" is excluded`, hard: true };
+    }
     const role = doc.roles[r]!;
     const { must } = effective(role, rs);
     let verdict: 'yes' | 'no' | 'maybe' = 'yes';

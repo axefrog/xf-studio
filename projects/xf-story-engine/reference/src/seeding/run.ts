@@ -401,7 +401,7 @@ function castAll(l2: Layer2, inst: Instance): { ok: boolean; withdraw?: string }
     // A tentative cast is re-checked against its effective requirements; a lost one is cast again.
     if (rs.cast !== undefined) {
       const { must } = effective(role, rs);
-      let bad = false;
+      let bad = st.source.by === 'director' && l2.directorExcludes(rs.cast);
       for (const m of must) if (roleVerdict(l2, { inst, t: l2.k.now }, key, m).v === 'no') bad = true;
       if (!bad) continue;
       l2.record(inst, 'lost', { role: key, tentative: true });
