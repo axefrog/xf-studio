@@ -297,6 +297,9 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     // Each feature renderer brings its own GPU state up to date (eye makeup: the plate's composite, only after a change).
     features?.beforeDraw();
     lighting.render(camera);
+    // A completed shown frame has already used its meshes, uploads and programs. An edit made while shown must not leave the
+    // warm-readiness record at the topology from the earlier preparation. Hidden warm-up pieces never establish readiness.
+    if (drawn.shown) rememberPrepared();
   }
   // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or Play blink runs. The runtime's own
   // mutators, the feature renderers' changes, the lighting device, the idle, the controls (every orbit and damping step), frame listeners
@@ -344,7 +347,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   }) ?? (() => {}));
   /**
    * What the programs of the meshes drawn now depend on besides the lighting (each visible mesh and its materials), recorded when a
-   * preparation ends: while it is unchanged, the lighting program states prepared since still hold (`prepared`).
+   * preparation or a full shown draw ends: while it is unchanged, the lighting program states readied since still hold (`prepared`).
    */
   const drawnKey = () => {
     const parts: string[] = [];
@@ -355,11 +358,17 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     return parts.join("|");
   };
   /**
-   * The meshes drawn when a preparation last ended (`drawnKey`), and every lighting program state a preparation readied them for since, in
+   * The meshes drawn when a preparation or full shown draw last ended (`drawnKey`), and every lighting program state readied since, in
    * the context generation they were readied in (context-generation.ts): a restored context has none of their programs (Three drops its
    * program cache with the context), so a record from an ended generation readies nothing.
    */
   let preparedFor: { drawn: string; lighting: Set<string>; generation: AbortSignal } | null = null;
+  const rememberPrepared = () => {
+    const now = drawnKey(), generation = device.contextSignal();
+    if (generation.aborted) return;
+    if (preparedFor?.drawn !== now || preparedFor.generation !== generation) preparedFor = { drawn: now, lighting: new Set(), generation };
+    preparedFor.lighting.add(lighting.programState());
+  };
   /**
    * Whether `generation` is the context's generation now, and live: the device's signal is read again (a loss whose event is still queued
    * ends it then), never trusted as kept.
@@ -408,9 +417,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
       throw error;
     }
     if (drawn.shown) adoptPending();
-    const now = drawnKey(), generation = device.contextSignal();
-    if (preparedFor?.drawn !== now || preparedFor.generation !== generation) preparedFor = { drawn: now, lighting: new Set(), generation };
-    preparedFor.lighting.add(lighting.programState());
+    rememberPrepared();
     return result;
   }
   /** The visible drawables now (the warm-up's pieces hide all but some of them). */
@@ -470,7 +477,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
      */
     prepare,
     /**
-     * Whether a preparation readied what is drawn now for the lighting asked for (the setup staged, else the one drawn): nothing that decides
+     * Whether a preparation or shown draw readied what is drawn now for the lighting asked for (the setup staged, else the one drawn): nothing that decides
      * programs changed since, so its next show, or the staged setup, needs none.
      */
     prepared: () => lightingPrepared(pendingLighting ?? lighting.source),

@@ -57,6 +57,9 @@ describe("G4 fail-closed gate analysis (no GPU)", () => {
     r.sent = [{ tab: "a", at: 1 }, { tab: "b", at: 91 }, { tab: "c", at: 181 }, { tab: "a", at: 271 }];
     r.draws = []; expect(analyse("T-f", r).pass).toBe(true);
     r.draws.push({ at: 200, view: "vb" }); expect(analyse("T-f", r)).toMatchObject({ pass: false, supersededDraws: 1 });
+    r.draws = []; r.ticks.at(-1)!.hash = 11;
+    expect(analyse("T-f", r)).toMatchObject({ pass: false, canvasChangeSamples: 1 });
+    r.ticks.at(-1)!.hash = r.before.hash;
     r.draws = []; r.ticks.at(-1)!.key = "late"; expect(analyse("T-f", r).pass).toBe(false);
   });
   test("close requires baseline, runtime disposal, GL return and available OS counters", () => {

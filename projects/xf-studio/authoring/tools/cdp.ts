@@ -141,9 +141,11 @@ async function startChrome(options: { width?: number; height?: number; debugPort
     const temp = join(resolve(profile), "temp");
     mkdirSync(temp, { recursive: true });
     if (options.profile) rmSync(join(profile, "DevToolsActivePort"), { force: true });
+    // Chrome's nested sandbox can stall inside a restricted test host. This opt-in is for isolated loopback probe pages.
     const chrome: Subprocess = Bun.spawn([CHROME, "--headless=new", `--remote-debugging-port=${options.debugPort ?? 0}`, `--user-data-dir=${profile}`,
       `--window-size=${options.width ?? 1600},${options.height ?? 1000}`, "--no-first-run", "--no-default-browser-check",
-      "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars", ...(options.args ?? []), "about:blank"],
+      "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars",
+      ...(process.env.XFS_CHROME_NO_SANDBOX === "1" ? ["--no-sandbox"] : []), ...(options.args ?? []), "about:blank"],
       { env: { ...process.env, TEMP: temp, TMP: temp }, stdout: "ignore", stderr: "ignore" });
     try {
       const page = await waitForPageTarget(async () => {

@@ -3,15 +3,15 @@ export const TAB_PROBE = String.raw`(() => {
   const g = window.__g4 = { long: [], rasters: [], draws: [], creates: [], live: {}, active: false };
   const observer = new PerformanceObserver(list => g.long.push(...list.getEntries().map(e => [e.startTime, e.duration])));
   observer.observe({ type: 'longtask', buffered: true });
-  const proto = WebGL2RenderingContext.prototype, alive = new WeakSet();
+  const proto = WebGL2RenderingContext.prototype, alive = new WeakSet(), tracked = new Map();
   for (const [kind, make, drop] of [['texture','createTexture','deleteTexture'], ['buffer','createBuffer','deleteBuffer'],
     ['framebuffer','createFramebuffer','deleteFramebuffer'], ['renderbuffer','createRenderbuffer','deleteRenderbuffer'],
     ['program','createProgram','deleteProgram'], ['vertexArray','createVertexArray','deleteVertexArray'],
     ['sampler','createSampler','deleteSampler'], ['shader','createShader','deleteShader']]) {
     g.live[kind] = 0;
     const made = proto[make], removed = proto[drop];
-    proto[make] = function(...args) { const o = made.apply(this,args); if(o) { alive.add(o); g.live[kind]++; if(kind==='program') g.creates.push(performance.now()); } return o; };
-    proto[drop] = function(o) { if(o && alive.has(o)) { alive.delete(o); g.live[kind]--; } return removed.call(this,o); };
+    proto[make] = function(...args) { const o = made.apply(this,args); if(o) { alive.add(o); g.live[kind]++; if(g.trackObjects) tracked.set(o,{kind,stack:new Error().stack}); if(kind==='program') g.creates.push(performance.now()); } return o; };
+    proto[drop] = function(o) { if(o && alive.has(o)) { alive.delete(o); tracked.delete(o); g.live[kind]--; } return removed.call(this,o); };
   }
   // Track only draws to the presented drawing buffer, excluding hidden preparation's render targets.
   const targets = new WeakMap(), bind = proto.bindFramebuffer;
@@ -53,7 +53,7 @@ export const TAB_PROBE = String.raw`(() => {
       phase:h.phase, frames:e?.frames.frames ?? null, detailComponents:e?.characterDetails.components.length ?? 0,
       key:resident?.key ?? null, scene:resident?.scene ?? null,
       preparation:e?.residency.preparation ?? h.preparation ?? null, residents:e?.residency.residents ?? [],
-      progress:lines.join(' | '), canvasVisible:visible(canvas), hash:watchHash ? hash() : null };
+      progress:lines.join(' | '), canvasVisible:visible(canvas), canvasSize:canvas ? [canvas.width,canvas.height] : null, hash:watchHash ? hash() : null };
   };
   g.act = action => {
     const answer = window.xfStudioShell.runtime.dispatch(action);
@@ -100,7 +100,8 @@ export const TAB_PROBE = String.raw`(() => {
   };
   g.memory = async () => {
     window.gc?.(); await new Promise(r=>setTimeout(r,100)); window.gc?.();
-    return { live:{...g.live}, heapMB: performance.memory ? performance.memory.usedJSHeapSize/1048576 : null,
+    g.trackObjects = true;
+    return { live:{...g.live}, objects:[...tracked.values()], heapMB: performance.memory ? performance.memory.usedJSHeapSize/1048576 : null,
       residents:window.xfStudioSceneEvidence?.()?.residency.residents ?? [] };
   };
 })();`;

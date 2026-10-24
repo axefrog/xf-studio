@@ -138,7 +138,7 @@ export type SceneRuntimesProbe = {
     /** Diagnostics: the long tasks from the first step to our draw, each against when the steps began (`at`), and each step's start. */
     tasks: { at: number; ms: number }[]; stepsAt: number[] };
   /** 6d: switches between warm runtimes showing different looks, and the kept makeup released on eviction. */
-  lookSwitch: { cold: { adopted: boolean; ms: number }; switches: { look: string; adopted: boolean; ms: number; links: number; programs: number; rasters: number;
+  lookSwitch: { editedShownPrepared: boolean; cold: { adopted: boolean; ms: number }; switches: { look: string; adopted: boolean; ms: number; links: number; programs: number; rasters: number;
     compositeDraws: number; firstFrame: { links: number; programs: number } }[];
     evicted: string; evictedLookKept: boolean; before: Counts; after: Counts };
   /** 6e: the canvas moved between two panes of different sizes while one runtime is shown and another is warm. */
@@ -868,6 +868,15 @@ try {
     if (!layers.coordinator.publish({ i: 0, size: 512, version: ++version, ms: 1, data: mask512() })) throw Error("Look B's mask wasn't taken.");
     await switchTo(sceneB); await settle();
     const cold = { adopted: coldAdopted, ms: performance.now() - coldStart };
+    // G4 T-d: add a layer after B's preparation and let it finish drawing while shown. Its next warm visit must use that completed
+    // topology, rather than prepare the old record again. The earlier probe only edited the look before its first preparation.
+    const previous = authoring.recipe;
+    lookB.layers.push({ ...structuredClone(lookB.layers[0]!), id: "b-added", enabled: true });
+    authoring.replaceRecipe(structuredClone(lookB), lookB.layers.length - 1);
+    layers.coordinator.syncStack(previous);
+    layers.coordinator.publish({ i: lookB.layers.length - 1, size: 512, version: ++version, ms: 1, data: mask512() });
+    await settle();
+    const editedShownPrepared = runtimeOf(sceneB.key)!.prepared();
     const switches: SceneRuntimesProbe["lookSwitch"]["switches"] = [];
     for (let i = 0; i < 4; i++) for (const [target, look] of [[sceneA, "A"], [sceneB, "B"]] as const) {
       const runtime = runtimeOf(target.key)!, drawsBefore = draws(runtime), rasters = rasterRequests;
@@ -887,7 +896,7 @@ try {
     residency.dispose();
     showLook("A");
     await sleep(100);
-    probe.lookSwitch = { cold, switches, evicted, evictedLookKept, before, after: counts() };
+    probe.lookSwitch = { editedShownPrepared, cold, switches, evicted, evictedLookKept, before, after: counts() };
   }
 
   // 6e. The canvas moved between panels (see the header).

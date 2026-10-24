@@ -85,6 +85,10 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
+  test("G4 T-d: a look edited and fully drawn while shown stays prepared on its first warm visit", () => {
+    for (const probe of [parallel, fallback]) expect(probe.lookSwitch.editedShownPrepared).toBe(true);
+  });
+
   test("the morph-target texture is made ahead in steps under 50 ms each, the first on a renderer too, byte for byte Three's, and the draw that follows builds none (4a-vi)", () => {
     for (const probe of [parallel, fallback]) {
       const { morph } = probe;

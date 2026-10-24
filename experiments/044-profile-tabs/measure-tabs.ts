@@ -16,11 +16,12 @@ export type Row = typeof ROWS[number];
 type Tab = { tab: string; view: string; scene: string; unchanged?: boolean };
 type Resident = { scene: string; key: string; state: string };
 type Tick = { at: number; tab: string; drawn: string | null; onCanvas: string | null; phase: string; frames: number | null;
-  detailComponents: number; key: string | null; scene: string | null; preparation: unknown; residents: Resident[]; progress: string; canvasVisible: boolean; hash: number | null };
+  detailComponents: number; key: string | null; scene: string | null; preparation: unknown; residents: Resident[]; progress: string; canvasVisible: boolean;
+  canvasSize?: [number, number] | null; hash: number | null };
 export type Run = { t0: number; before: Tick; ticks: Tick[]; sent: { tab: string; at: number }[]; errors: string[];
   shown: number | null; presented: number | null; target: Tab; links: { linkAt: number; name: string }[]; creates: number[];
   long: [number, number][]; rasters: { at: number }[]; draws: { at: number; view: string | null }[] };
-type Memory = { live: Record<string, number>; heapMB: number | null; residents: Resident[] };
+type Memory = { live: Record<string, number>; heapMB: number | null; residents: Resident[]; objects?: { kind: string; stack: string }[] };
 type OSMemory = { privateMB: number; dedicatedMB: number | null; sharedMB: number | null; processes: number; error?: string };
 type Closure = { before: Memory; after: Memory; osBefore: OSMemory; osAfter: OSMemory; scene: string };
 const round = (n: number) => Math.round(n * 10) / 10;
@@ -82,14 +83,30 @@ export function analyse(row: Row, run: Run, noGame = false, closure?: Closure) {
     failures, ...(closure ? { closure } : {}) };
 }
 
-/** G3's OS counters, scoped by exact user-data-dir rather than every Chrome on the machine. Never sampled during a timing. */
-function chromeMemory(profile: string): OSMemory {
-  const encodedProfile = Buffer.from(profile).toString("base64");
+/** G3's OS counters, scoped to this profile's browser process tree. Never sampled during a timing. */
+async function chromeMemory(profile: string): Promise<OSMemory> {
+  // Ask this browser for its own process IDs. WMI process enumeration may be unavailable in a restricted host, and matching a
+  // command-line substring is unnecessary when Chrome can supply the exact tree, including its GPU and renderer processes.
+  let ids: number[];
+  try {
+    const [port, path] = readFileSync(join(profile, "DevToolsActivePort"), "utf8").trim().split(/\r?\n/);
+    ids = await new Promise<number[]>((resolve, reject) => {
+      const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+      const done = (error?: unknown, result?: number[]) => { clearTimeout(timer); socket.close(); error ? reject(error) : resolve(result!); };
+      const timer = setTimeout(() => done(Error("Chrome process query timed out")), 5000);
+      socket.onopen = () => socket.send(JSON.stringify({ id: 1, method: "SystemInfo.getProcessInfo" }));
+      socket.onerror = () => done(Error("Chrome process query failed"));
+      socket.onmessage = event => {
+        const answer = JSON.parse(String(event.data));
+        if (answer.id !== 1) return;
+        if (answer.error) done(Error(JSON.stringify(answer.error)));
+        else done(undefined, answer.result.processInfo.map((p: { id: number }) => p.id));
+      };
+    });
+    if (!ids.length || ids.some(id => !Number.isInteger(id) || id <= 0)) throw Error("Chrome returned no valid process IDs");
+  } catch (e) { return { privateMB: 0, dedicatedMB: null, sharedMB: null, processes: 0, error: String(e) }; }
   const script = String.raw`$ErrorActionPreference='Stop'
-$profilePath=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedProfile}'))
-$needle='--user-data-dir='+$profilePath
-$procs=@(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine.Contains($needle) -or $_.CommandLine.Contains('--user-data-dir="'+$profilePath+'"') })
-$ids=@($procs | ForEach-Object {$_.ProcessId})
+$ids=@(${ids.join(",")})
 $private=0; foreach($idValue in $ids) { $p=Get-Process -Id $idValue -ErrorAction SilentlyContinue; if($p) {$private+=$p.PrivateMemorySize64} }
 function Counter($name) { try { $values=@((Get-Counter "\GPU Process Memory(*)\$name" -ErrorAction Stop).CounterSamples | Where-Object { $_.InstanceName -match 'pid_(\d+)_' -and $ids -contains [int]$Matches[1] }); if(!$values.Count){return $null}; return (($values | Measure-Object CookedValue -Sum).Sum / 1MB) } catch {return $null} }
 [pscustomobject]@{privateMB=$private/1MB;dedicatedMB=(Counter 'Dedicated Usage');sharedMB=(Counter 'Shared Usage');processes=$ids.Count} | ConvertTo-Json -Compress`;
@@ -137,10 +154,23 @@ async function measure(page: Session, row: Row, noGame: boolean, quick: boolean,
   if (!noGame) {
     await act(page, { kind: "preview.setBody", enabled: false });
     await act(page, { kind: "motion.setIdle", enabled: false });
+    // T-f compares the scene's pixels. The on-head editing guides intentionally leave and remount on a tab change; they are not
+    // superseded scene content. Keep that optional overlay off, and retain the exact hash and every default-framebuffer draw gate.
+    if (row === "T-f") await act(page, { kind: "preview.setSurfaceControls", enabled: false });
     await act(page, { kind: "layer.edit", command: { kind: "add" } });
     await settle(page, a, false);
   }
-  const baseline = row === "T-h" ? { page: await page.evaluate(`${G}.memory()`) as Memory, os: chromeMemory(profile) } : undefined;
+  // Like T2's renderer baseline, exercise a disposable runtime before sampling the surviving scene. The first second-runtime
+  // preparation populates renderer-shared maps/programs and the driver's allocation pools; those outlive that runtime. A new
+  // independent runtime is still opened and closed below, so a per-runtime leak continues to exceed this baseline.
+  if (row === "T-h") {
+    const calibration = await makeTab(page, subject, lookA, null, noGame);
+    await settle(page, calibration, noGame);
+    await show(page, a, noGame);
+    await act(page, { kind: "tabs.close", tab: calibration.tab });
+    await page.wait(5000);
+  }
+  const baseline = row === "T-h" ? { page: await page.evaluate(`${G}.memory()`) as Memory, os: await chromeMemory(profile) } : undefined;
   const shared = row === "T-a" || row === "T-g";
   const b = await makeTab(page, row === "T-c" ? { kind: "character", id: seeded.subjects[0]! } : subject,
     row === "T-d" ? { collection: seeded.collection, look: seeded.looks[1]! } : lookA, shared ? a.scene : null, noGame);
@@ -194,7 +224,7 @@ async function measure(page: Session, row: Row, noGame: boolean, quick: boolean,
     if (baseline) {
       await page.wait(5000);
       closure = { before: baseline.page, after: await page.evaluate(`${G}.memory()`) as Memory,
-        osBefore: baseline.os, osAfter: chromeMemory(profile), scene: b.scene };
+        osBefore: baseline.os, osAfter: await chromeMemory(profile), scene: b.scene };
     }
     runs.push({ result: analyse(row, raw, noGame, closure), raw });
   }
