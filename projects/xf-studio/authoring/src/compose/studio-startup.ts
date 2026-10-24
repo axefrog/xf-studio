@@ -188,7 +188,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   let defaultNote: (text: string) => void = text => { defaultNotes.push(text); };
   const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
     layouts: { contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE,
-      writable: () => restored.writable && (lease?.writable() ?? true), note: text => defaultNote(text) },
+      // The library's own write authority (the lease), not the workspace file's protection: a protected workspace still edits defaults.
+      writable: () => lease?.writable() ?? true, note: text => defaultNote(text) },
     catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
     report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
   // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
