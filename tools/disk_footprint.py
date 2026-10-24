@@ -78,7 +78,9 @@ def main() -> int:
             print(f"  {show(gb)}  {name}  (last changed {when})")
         print()
     print("Other folders agents' tools fill:")
-    for p in [HOME / ".codex/sessions", HOME / ".codex/archived_sessions", HOME / "AppData/Local/Claude-Data",
+    # The Claude app is a packaged app: AppData writes from its chats land in its package's LocalCache.
+    redirected = sorted((HOME / "AppData/Local/Packages").glob("Claude_*/LocalCache"))
+    for p in redirected + [HOME / ".codex/sessions", HOME / ".codex/archived_sessions", HOME / "AppData/Local/Claude-Data",
               HOME / ".cache", HOME / ".bun/install/cache", TEMP]:
         if p.exists():
             print(f"  {show(size(p))}  {p}")
