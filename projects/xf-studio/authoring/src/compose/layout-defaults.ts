@@ -9,7 +9,7 @@ import type { FragmentKnowledge } from "../app/profiles/layout-fragment";
 import { STUDIO_VIEW_GRAPH_RULES } from "../preview/preview-view-graph";
 import { STUDIO_MODULE_REGISTRATION, STUDIO_MODULES } from "./modules";
 import { STUDIO_CATALOGUE } from "./views";
-import type { DockLayout, UIPreferences } from "../app/ui-preferences";
+import { legacyEnabledModules, type DockLayout, type UIPreferences } from "../app/ui-preferences";
 import { dockPanels, rewriteDock, type InitialProfileLayout } from "../app/profiles/profiles-migration-data";
 import { defaultDockState } from "../studio-ui/layout-defaults";
 import { DOCK_FORMAT, DOCK_VERSION, parseTree, unparkPanels, type DockState, type DockTree } from "../studio-ui/dock/layout";
@@ -29,8 +29,9 @@ export const STUDIO_INITIAL_LAYOUT: InitialProfileLayout = { origin: first.id, d
 
 /** Dock mechanics stay in the adapter: enabled legacy modules return at remembered places, or join their factory siblings. */
 function legacyDock(dock: DockLayout, preferences: UIPreferences): DockLayout {
+  const on = legacyEnabledModules(preferences);
   const enabled = STUDIO_CATALOGUE.panels.filter(panel => STUDIO_MODULES.some(module => (module.feature ?? module.id) === panel.owner
-    && preferences.modules?.[module.id] === true)).map(panel => panel.id);
+    && on.has(module.id))).map(panel => panel.id);
   if (!enabled.length || dock.format !== DOCK_FORMAT || dock.version !== DOCK_VERSION || !dock.state || typeof dock.state !== "object") return dock;
   const state = dock.state as unknown as DockState, defaults = defaultDockState(STUDIO_CATALOGUE);
   const tree = (size: "wide" | "compact"): DockTree => {

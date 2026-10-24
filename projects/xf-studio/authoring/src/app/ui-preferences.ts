@@ -138,6 +138,10 @@ function remember<T>(map: Record<string, T> | undefined, entries: readonly (read
   return result.size ? Object.fromEntries(result) : undefined;
 }
 
+/** The modules a pre-phase-2 workspace had switched on: frozen migration input only, never a live visibility switch. */
+export const legacyEnabledModules = (preferences: Pick<UIPreferences, "modules">): ReadonlySet<string> =>
+  new Set(Object.entries(preferences.modules ?? {}).filter(([, on]) => on === true).map(([id]) => id));
+
 export function defaultUIPreferences(): UIPreferences {
   return { schema: "xfs/ui-preferences-1", theme: "system", inputHints: true };
 }
