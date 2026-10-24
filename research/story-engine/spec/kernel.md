@@ -1,7 +1,7 @@
 # S0. Kernel specification
 
 **Status:** v4.16, 24 October 2026.
-- v4.16: the save chain is append-only truth, and recovering a swept node replays its saved records (§14.1).
+- v4.16: the save chain is append-only truth; recovering a swept node replays its saved records; and a sweep drops only what recovery restores exactly (§14.1).
 - v4.15: an event a persisted record references keeps its facts, not only its header (§14.1). This changes what every save holds, in every configuration, so both frozen digests were re-frozen with it: v3 `d534e0dc…` → `f924d2c9…`, v4 `da48cabc…` → `42d5a84e…`. The old behaviour lost data, and no native core depended on the old values. A digest is re-frozen only for a deliberate, documented change like this one.
 - v4.14 adds `classifiesAs`, a nominal kind compatibility that queries never widen to (§2.2).
 - v4.13 names the settle step of a boundary (§9.4), which S1 §10.2 relies on.
@@ -1041,6 +1041,7 @@ The trace is the complete account (I-8).
 - **The facts of referenced events** (v4.15). An event that persisted state references (an outstanding process output, a seed record, a layer record) keeps its minted fields, its own contributions, not only its header, so every consumer reads it identically after a load.
 - **The save chain is append-only truth** (v4.16). A save writes every change to a record an earlier save holds (a contribution or edge ending, a pin withdrawn), whether or not that record is still retained. Retention decides only what new material a save adds and what a sweep may drop from live memory; it never hides a change to material already saved.
 - **Recovery is replay** (v4.16). A swept node that something references again is restored by replaying its saved records through the same path a load uses (headers first, then contributions, provenance and edges), never by a separate route. So a run that swept and a run that reloaded hold the same state by construction. Saved history roots nothing: only a reached reference triggers recovery.
+- **A sweep drops only what recovery restores exactly** (v4.16). Sweeping is a memory optimisation, so it may never change a result. It drops a record only if recovery can bring it back exactly. A record that can't be recovered, such as an authored rule still applying to a retained target, or a contribution whose target header was never saved, stays live. **Every path that brings a node back goes through recovery first:** a reference, a regeneration or a re-mint. A recreated default never supersedes a saved record.
 - **Contributions** that packs can't reproduce: seeds, committed procedural decisions, runtime authored decisions. Pack contributions are reloaded, and the record keeps each pack's id and version.
 - **Memorable beliefs.**
 - **Canon events:** their headers and pinned fields.
