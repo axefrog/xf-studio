@@ -6,6 +6,7 @@ import { PANEL_IDS, PANEL_META } from "../src/compose/views";
 import { contrastTable } from "../src/studio-ui/style-guide/contrast";
 import { finishCatalogue } from "./fixtures/eye-region";
 import { notDrawnStateMarkup } from "../src/studio-ui/components";
+import { XF_STUDIO_SITE } from "../src/studio-ui/style-guide/back-link";
 
 const root = resolve(import.meta.dir, "..");
 const lf = (text: string) => text.replace(/\r\n/g, "\n");
@@ -75,7 +76,8 @@ test("design tokens meet their contrast minimums in both themes", () => {
 test("the style guide is self-contained", () => {
   expect(/<link[^>]+stylesheet/.test(guide)).toBe(false);
   expect(/<script[^>]+src=/.test(guide)).toBe(false);
-  expect(guide.match(/https?:\/\/(?!www\.w3\.org)[^\s"')]+/g) ?? []).toEqual([]);
+  // Nothing is loaded from elsewhere. The one outside address is the Back link's destination on a localhost copy (the site), which is navigation.
+  expect((guide.match(/https?:\/\/(?!www\.w3\.org)[^\s"')]+/g) ?? []).filter(url => url !== XF_STUDIO_SITE)).toEqual([]);
   // Exactly one closing tag: the inline module's own.
   expect(guide.match(/<\/script/gi)?.length).toBe(1);
 });

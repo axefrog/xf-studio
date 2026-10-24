@@ -19,7 +19,7 @@ test("a workspace-only desktop save failure leaves Export this window's copy rea
   const rt = { port: shell, modules: { list: [] }, toolFilter: () => ({ modules: [], research: false }),
     file: (action: Parameters<typeof shell.files.execute>[0]) => { const result = shell.files.execute(action); files.push(result); return result; } };
   const commands = buildCommands(rt as never, { system: "dark" } as never, { research: () => false, hints: () => true } as never,
-    new Map(), [], { commands: () => [] } as never);
+    new Map(), []);
   const recovery = commands.find(command => command.title === "Export this window's copy");
   expect(recovery).toBeDefined();
   expect(recovery!.capability().available).toBe(true);
