@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition) + character.resolveConflict (claude/profiles-p1; additions only) + collection.exportWindowCopy (claude/polish-2; additions only) + tabs.rename and tabs.move (claude/profiles-p2; additions only) + tabs.new, tabs.reset, tabs.saveAsDefault, tabs.updateDefault, defaults.rename, defaults.delete and defaults.restore (claude/profiles-p2; additions only) + P2-iv tab keys and palette (claude/profiles-p2; spec fields unchanged) + P2-vi empty.choose (claude/profiles-p2; spec fields unchanged) + P2-vi review: registered empty.choose request owner (claude/profiles-p2; additions only, spec fields unchanged) + P2-vi U6 design fixes (claude/profiles-p2; spec fields unchanged) + workspace.showInFolder (claude/polish-4; additions only) + package.stop (claude/polish-5; additions only)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition) + character.resolveConflict (claude/profiles-p1; additions only) + collection.exportWindowCopy (claude/polish-2; additions only) + tabs.rename and tabs.move (claude/profiles-p2; additions only) + tabs.new, tabs.reset, tabs.saveAsDefault, tabs.updateDefault, defaults.rename, defaults.delete and defaults.restore (claude/profiles-p2; additions only) + P2-iv tab keys and palette (claude/profiles-p2; spec fields unchanged) + P2-vi empty.choose (claude/profiles-p2; spec fields unchanged) + P2-vi review: registered empty.choose request owner (claude/profiles-p2; additions only, spec fields unchanged) + P2-vi U6 design fixes (claude/profiles-p2; spec fields unchanged) + workspace.showInFolder (claude/polish-4; additions only) + package.stop (claude/polish-5; additions only) + starter shapes (claude/starter-shapes; additions only)",
  "states": {
   "starter": {
    "modes": {
@@ -262,6 +262,18 @@
       "max": 0.1
      }
     },
+    "layer/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "layer/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "layer/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -385,6 +397,20 @@
      }
     },
     "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -927,6 +953,18 @@
       "max": 0.1
      }
     },
+    "point/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "point/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "point/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -1050,6 +1088,20 @@
      }
     },
     "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -1589,6 +1641,18 @@
       "max": 0.1
      }
     },
+    "viewport/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "viewport/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "viewport/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -1712,6 +1776,20 @@
      }
     },
     "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -2251,6 +2329,18 @@
       "max": 0.1
      }
     },
+    "collection/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "collection/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "collection/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -2374,6 +2464,20 @@
      }
     },
     "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -2913,6 +3017,18 @@
       "max": 0.1
      }
     },
+    "preset/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "preset/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "preset/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -3036,6 +3152,20 @@
      }
     },
     "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -3798,6 +3928,18 @@
       "max": 0.1
      }
     },
+    "layer/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "layer/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "layer/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -3921,6 +4063,20 @@
      }
     },
     "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -4470,6 +4626,18 @@
       "max": 0.1
      }
     },
+    "point/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "point/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "point/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -4593,6 +4761,20 @@
      }
     },
     "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -5132,6 +5314,18 @@
       "max": 0.1
      }
     },
+    "viewport/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "viewport/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "viewport/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -5255,6 +5449,20 @@
      }
     },
     "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -5794,6 +6002,18 @@
       "max": 0.1
      }
     },
+    "collection/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "collection/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "collection/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -5917,6 +6137,20 @@
      }
     },
     "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -6456,6 +6690,18 @@
       "max": 0.1
      }
     },
+    "preset/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "preset/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "preset/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -6579,6 +6825,20 @@
      }
     },
     "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -7342,6 +7602,18 @@
       "max": 0.1
      }
     },
+    "layer/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "layer/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "layer/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -7465,6 +7737,20 @@
      }
     },
     "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -8015,6 +8301,18 @@
       "max": 0.1
      }
     },
+    "point/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "point/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "point/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -8138,6 +8436,20 @@
      }
     },
     "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -8677,6 +8989,18 @@
       "max": 0.1
      }
     },
+    "viewport/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "viewport/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "viewport/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -8800,6 +9124,20 @@
      }
     },
     "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -9339,6 +9677,18 @@
       "max": 0.1
      }
     },
+    "collection/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "collection/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "collection/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -9462,6 +9812,20 @@
      }
     },
     "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -10001,6 +10365,18 @@
       "max": 0.1
      }
     },
+    "preset/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "preset/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "preset/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -10124,6 +10500,20 @@
      }
     },
     "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -10886,6 +11276,18 @@
       "max": 0.1
      }
     },
+    "layer/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "layer/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "layer/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -11009,6 +11411,20 @@
      }
     },
     "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -11558,6 +11974,18 @@
       "max": 0.1
      }
     },
+    "point/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "point/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "point/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -11681,6 +12109,20 @@
      }
     },
     "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -12220,6 +12662,18 @@
       "max": 0.1
      }
     },
+    "viewport/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "viewport/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "viewport/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -12343,6 +12797,20 @@
      }
     },
     "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -12882,6 +13350,18 @@
       "max": 0.1
      }
     },
+    "collection/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "collection/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "collection/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -13005,6 +13485,20 @@
      }
     },
     "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -13544,6 +14038,18 @@
       "max": 0.1
      }
     },
+    "preset/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "preset/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "preset/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -13667,6 +14173,20 @@
      }
     },
     "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -14429,6 +14949,18 @@
       "max": 0.1
      }
     },
+    "layer/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "layer/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "layer/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -14552,6 +15084,20 @@
      }
     },
     "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -15101,6 +15647,18 @@
       "max": 0.1
      }
     },
+    "point/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "point/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "point/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -15224,6 +15782,20 @@
      }
     },
     "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -15763,6 +16335,18 @@
       "max": 0.1
      }
     },
+    "viewport/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "viewport/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "viewport/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -15886,6 +16470,20 @@
      }
     },
     "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -16425,6 +17023,18 @@
       "max": 0.1
      }
     },
+    "collection/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "collection/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "collection/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -16548,6 +17158,20 @@
      }
     },
     "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -17087,6 +17711,18 @@
       "max": 0.1
      }
     },
+    "preset/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "preset/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "preset/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -17210,6 +17846,20 @@
      }
     },
     "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -17975,6 +18625,18 @@
       "max": 0.1
      }
     },
+    "layer/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "layer/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "layer/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -18098,6 +18760,20 @@
      }
     },
     "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -18650,6 +19326,18 @@
       "max": 0.1
      }
     },
+    "point/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "point/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "point/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -18773,6 +19461,20 @@
      }
     },
     "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -19312,6 +20014,18 @@
       "max": 0.1
      }
     },
+    "viewport/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "viewport/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "viewport/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -19435,6 +20149,20 @@
      }
     },
     "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -19974,6 +20702,18 @@
       "max": 0.1
      }
     },
+    "collection/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "collection/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "collection/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -20097,6 +20837,20 @@
      }
     },
     "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
@@ -20636,6 +21390,18 @@
       "max": 0.1
      }
     },
+    "preset/layer.edit/add": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
+    "preset/layer.edit/reset": {
+     "starter": {
+      "minLength": 1,
+      "maxLength": 80
+     }
+    },
     "preset/layer.edit/rename": {
      "name": {
       "minLength": 1,
@@ -20759,6 +21525,20 @@
      }
     },
     "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.save": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/starters.rename": {
      "name": {
       "minLength": 1,
       "maxLength": 60,
