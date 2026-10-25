@@ -8,7 +8,7 @@ import { fx3Slice } from '../../src/sim/slices.ts';
 import type { S1Data } from '../../src/sim/data.ts';
 import { chainOf, transfer } from './feed.ts';
 import { fxData, seedOf } from './helpers.ts';
-import { watchChanges, W } from './goals-helpers.ts';
+import { bigSim, gnode, watchChanges, W } from './goals-helpers.ts';
 
 setDefaultTimeout(300_000);
 const FULL = process.env.S1_FULL === '1';
@@ -98,6 +98,40 @@ describe('SF1-Y-9: reload', () => {
   });
 });
 
+/** The reads `leads` and `holds` over the whole past of `a`'s seat and holder edges, as each of the runs answers them (S1 9.1: initial value first, then the kernel's edge times). */
+function pastReads(a: Sim, s: Sim): unknown {
+  const pairs = a.k.store.allEdges().filter((e) => e.type === 'xf:leads' || e.type === 'xf:held-by').sort((x, y) => (x.id < y.id ? -1 : 1));
+  return pairs.map((e) => [e.type, e.from, e.to, e.type === 'xf:leads' ? s.reads.transitions('leads', [e.from, e.to], 0, s.k.now) : s.reads.transitions('holds', [e.to, e.from], 0, s.k.now)]);
+}
+
+describe('a seat edge that ended before the first save', () => {
+  test('a run that never saved before the holders died, saved and reloaded: the reads of the past answer as the unbroken run does, though the unsaved run\'s next-save view would not list the ended edges', () => {
+    const make1 = (): Sim => bigSim('SF1-ended-seats', undefined, ['group.decide']);
+    const a = make1();
+    a.advance(5);
+    const GA = gnode(a, 'A1');
+    const live = a.k.store.edgesTo(GA).filter((e) => e.type === 'xf:leads' && e.valid.to === undefined);
+    expect(live.length).toBeGreaterThan(0);
+    for (const e of live) a.k.pin({ node: e.from, slot: 'died', value: a.k.now, reason: 'committed', cause: a.w.port, at: a.k.now });
+    a.advance(4);
+    const ended = a.k.store.edgesTo(GA).filter((e) => e.type === 'xf:leads' && e.valid.to !== undefined);
+    expect(ended.length).toBe(live.length);
+    // the view of the unsaved run omits them; its save writes them (they changed since the base), and the reload answers every read of the past alike
+    a.flush();
+    expect((a.k.persistence.currentView().toData().edges as Array<{ type: string; valid: { to?: number } }>).filter((e) => e.type === 'xf:leads' && e.valid.to !== undefined)).toHaveLength(0);
+    a.k.persistence.save('X');
+    const c = transfer(a, 'X', make1, 5);
+    for (const e of ended) {
+      expect(c.reads.transitions('leads', [e.from, GA], 0, c.k.now)).toEqual(a.reads.transitions('leads', [e.from, GA], 0, a.k.now));
+      expect(c.reads.eval('leads', [e.from, GA], 100)).toBe('yes');
+    }
+    // and a sweep of the run that was saved, then a read of the past, is the same
+    a.k.retention.scheduleSweep();
+    a.k.settle();
+    for (const e of ended) expect(a.reads.eval('leads', [e.from, GA], 100)).toBe('yes');
+  });
+});
+
 describe('the three-way property over goals, posts, items and intentions', () => {
   test('unswept, swept and reloaded runs of the same world agree, window after window and at the end', () => {
     const name = 'SF1-three-way';
@@ -108,6 +142,13 @@ describe('the three-way property over goals, posts, items and intentions', () =>
       a.advance(FULL ? 70 : 45);
       b.advance(FULL ? 70 : 45);
       // b: sweep what a save could recover, and carry on
+      // at the first step the seat holders of the Claws die, so that seats pass on and their edges end: past intervals for the reads to answer
+      if (step === 0) {
+        const GA = a.w.group(a.w.districts[0]!.id, 'A1');
+        for (const sim of [a, b]) for (const e of sim.k.store.edgesTo(GA).filter((x) => x.type === 'xf:leads' && x.valid.to === undefined)) sim.k.pin({ node: e.from, slot: 'died', value: sim.k.now, reason: 'committed', cause: sim.w.port, at: sim.k.now });
+        a.advance(3);
+        b.advance(3);
+      }
       b.k.retention.scheduleSweep();
       b.k.settle();
       // c: a reload of a's save at this window, run to the same window
@@ -117,6 +158,11 @@ describe('the three-way property over goals, posts, items and intentions', () =>
       // an ended goal frame is dropped by a sweep when no event refers to it, and recovery restores it from its records (S1 11): what must agree is what is alive
       expect(observation(c, false), `reloaded at step ${step}`).toEqual(observation(a, false));
       expect(observation(b, false), `swept at step ${step}`).toEqual(observation(a, false));
+      // the past is answered the same: the intervals of every seat and holder edge, ended ones included, by the unbroken, the swept and the reloaded run
+      const past = pastReads(a, a);
+      expect(JSON.stringify(pastReads(a, c)), `reloaded past at step ${step}`).toEqual(JSON.stringify(past));
+      expect(JSON.stringify(pastReads(a, b)), `swept past at step ${step}`).toEqual(JSON.stringify(past));
+      if (step > 0) expect(a.k.store.allEdges().some((e) => e.type === 'xf:leads' && e.valid.to !== undefined), 'an ended seat edge').toBe(true);
       checks.push(a.windowNow());
     }
     expect(checks).toHaveLength(FULL ? 6 : 3);

@@ -69,7 +69,7 @@ function countRuns(sim: Sim): Map<string, number[]> {
   test('the records of R equal those of U; the outstanding batch applies without re-running; nothing is re-minted; the epoch changes no byte', () => {
     const u = runU();
     expect(u.bStar).toBeGreaterThanOrEqual(200);
-    const reference = recordOf(u.sim);
+    const reference = recordOf(u.sim, { endedEdges: true });
     const rnd = lcg(0xe2);
 
     const r = make();
@@ -100,7 +100,12 @@ function countRuns(sim: Sim): Map<string, number[]> {
       cur = transfer(cur, `R${n}`, make, 3 + n);
     }
     expect(cur.windowNow()).toBe(N);
-    expect(differing(recordOf(cur), reference)).toEqual([]);
+    expect(differing(recordOf(cur, { endedEdges: true }), reference)).toEqual([]);
+    // the past is answered alike: every seat and holder interval U's store holds, ended ones included, gives the same reads in R (S1 9.1)
+    for (const e of u.sim.k.store.allEdges().filter((x) => x.type === 'xf:leads' || x.type === 'xf:held-by')) {
+      const read = (sim: Sim): unknown => (e.type === 'xf:leads' ? sim.reads.transitions('leads', [e.from, e.to], 0, sim.k.now) : sim.reads.transitions('holds', [e.to, e.from], 0, sim.k.now));
+      expect(read(cur), `the past of ${e.type} ${e.id}`).toEqual(read(u.sim));
+    }
 
     // the outstanding batch applied at its boundary without running its process again: no window ran twice, and none ran at b*
     for (const [id, ks] of runs) {

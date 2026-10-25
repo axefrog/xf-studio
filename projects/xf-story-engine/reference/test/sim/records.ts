@@ -9,13 +9,17 @@ export type Sections = Record<string, string>;
  * The canonical encoding of everything a save of this sim would hold, one entry per section: headers, pins, edges, contributions,
  * memorable beliefs, canon, summaries, frames, seeds (which hold the S1 record), settings, and each process's state, digest and
  * outstanding batch. Two sims whose futures are the same have the same sections.
+ *
+ * `endedEdges: true` leaves out the edges that have ended. The view is what the next save would hold *from the last save on*: a run that was saved holds, in the
+ * view, an ended edge it had saved while live, and one that never was does not, though a save of it writes the edge (it changed since the base) and every read of
+ * the past answers alike (the reads are compared by `pastReads`, SPEC-NOTES).
  */
-export function recordOf(sim: Sim, skip: { processes?: string[]; logProcs?: string[] } = {}): Sections {
+export function recordOf(sim: Sim, skip: { processes?: string[]; logProcs?: string[]; endedEdges?: boolean } = {}): Sections {
   sim.flush();
   const data = sim.k.persistence.currentView().toData();
   const out: Sections = {};
   for (const key of ['headers', 'pins', 'edges', 'contributions', 'beliefs', 'canon', 'materialisations', 'summaries', 'frames', 'seeds', 'settings'] as const) {
-    out[key] = canonicalKey(data[key] ?? []);
+    out[key] = canonicalKey(key === 'edges' && skip.endedEdges ? (data.edges ?? []).filter((e) => e.valid.to === undefined || e.valid.to > sim.k.now) : data[key] ?? []);
   }
   for (const p of data.processes) if (!skip.processes?.includes(p.id)) out[`process:${p.id}`] = canonicalKey(p);
   const record = structuredClone(sim.record);
