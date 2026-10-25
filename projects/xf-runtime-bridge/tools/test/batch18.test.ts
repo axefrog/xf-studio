@@ -254,6 +254,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
     ImGuiCol, ImGuiStyleVar, ImGuiWindowFlags, ImGuiInputTextFlags = any, any, any, setmetatable({ EnterReturnsTrue = 32, ReadOnly = 16384 }, { __index = function() return nil end })
     ImGuiKey = setmetatable({}, { __index = function(_, k) return k end })
     ImGui = setmetatable({
+      BeginChild = function() return true end, EndChild = function() end,
       Begin = function() return true end,
       GetFontSize = function() return 14 end,
       GetTime = function() return frameTime end,

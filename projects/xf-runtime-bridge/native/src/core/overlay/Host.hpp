@@ -12,6 +12,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -149,6 +150,13 @@ public:
     MotionSetting MotionSettingNow() const { return static_cast<MotionSetting>(m_motionSetting.load()); }
     void NoteWindowsAnimation(bool aOn) { m_windowsAnimations.store(aOn); }
     bool WindowsAnimation() const { return m_windowsAnimations.load(); }
+    // 0.8.22 (review): whether a frame-generation module is loaded must not depend on the overlay having started its renderer (with
+    // [overlay] enabled = false the render thread never looks, and CET would animate under auto). The game thread refreshes it
+    // from the loaded modules, bounded to one probe per kFrameGenerationProbeMs however often it is called (every tick, and with
+    // each info refresh), and keeps it current when a module is loaded or unloaded later. True when a probe ran.
+    static constexpr int kFrameGenerationProbeMs = 2000;
+    bool RefreshFrameGeneration(const std::function<std::vector<std::string>()>& aProbe,
+                                std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now());
     MotionState Motion() const { return ResolveMotion(MotionSettingNow(), m_windowsAnimations.load(), m_frameGenerationLoaded.load()); }
     // 0.8 (the UI review): the host was refused or stopped while a frame-generation module is loaded, so the CET label says
     // the overlay is off while frame generation is on.
@@ -188,6 +196,8 @@ private:
     std::atomic<int> m_motionSetting{static_cast<int>(MotionSetting::Auto)};
     std::atomic<bool> m_windowsAnimations{true};
     std::atomic<bool> m_frameGenerationLoaded{false};
+    std::atomic<int64_t> m_frameGenerationProbedNs{0};
+    std::atomic<bool> m_frameGenerationProbed{false};
     ThemeKind m_theme = ThemeKind::Dark;
     uint32_t m_scalePercent = 100;
     mutable std::mutex m_mutex; // the fields below

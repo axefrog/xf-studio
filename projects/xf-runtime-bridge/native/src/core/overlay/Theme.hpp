@@ -50,6 +50,7 @@ struct ThemeType
     const char* role;
     const char* face; // ui, display or mono
     float size;
+    int weight; // 400 or 600: the Studio's weight for the role (the host asks for it; see LoadFont for what it can draw)
     bool caps;
 };
 

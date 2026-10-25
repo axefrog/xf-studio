@@ -115,6 +115,7 @@ std::string HudFrame()
 xfb::overlay::MotionState MotionNow(State& aState)
 {
     aState.overlayHost.NoteWindowsAnimation(win32::ClientAreaAnimation());
+    aState.overlayHost.RefreshFrameGeneration(&win32::FrameGenerationModules);
     return aState.overlayHost.Motion();
 }
 

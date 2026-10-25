@@ -33,6 +33,7 @@ const luaFixture = `
   ImGuiInputTextFlags = { EnterReturnsTrue = 32, ReadOnly = 16384 }
   bit32 = { bor = function() return 0 end }; unpack = table.unpack
   ImGui = setmetatable({
+    BeginChild = function() return true end, EndChild = function() end,
     Begin = function() return expanded end, GetFontSize = function() return 14 end,
     GetTime = function() return clock end, GetFrameCount = function() return frame end,
     GetCursorPosY = function() return y end, SetCursorPosY = function(v) y = v end,

@@ -250,11 +250,29 @@ local STYLE_VARS = {
 }
 local ROUNDING_VARS = { "WindowRounding", "FrameRounding", "GrabRounding", "PopupRounding", "ScrollbarRounding", "TabRounding", "ChildRounding" }
 
+-- Slots Dear ImGui renamed between CET's 1.91.1 and the 1.92.9 the table follows: the theme's (new) name, then the older name that
+-- same colour has in 1.91.1 (and 1.91.4 renamed NavHighlight to NavCursor). Tried only when the new name is absent, so a newer CET
+-- keeps the exact slot. The tab slots were renamed in 1.90.9, so 1.91.1 already has the new names; their old names are for a CET
+-- older than that.
+local COLOUR_ALIASES = {
+  NavCursor = "NavHighlight",
+  TabSelected = "TabActive",
+  TabDimmed = "TabUnfocused",
+  TabDimmedSelected = "TabUnfocusedActive",
+}
+
+-- The ImGuiCol index for a theme slot: its own name, else its compatibility alias, else nil (this ImGui has no such colour).
+function panel.colourIndex(name)
+  local index = ImGuiCol[name]
+  if index == nil and COLOUR_ALIASES[name] then index = ImGuiCol[COLOUR_ALIASES[name]] end
+  return index
+end
+
 function panel.pushTheme(theme, which)
   if not theme or not theme.colors then return 0, 0 end
   local colours, vars = 0, 0
   for name, entry in pairs(theme.colors) do
-    local index = ImGuiCol[name]
+    local index = panel.colourIndex(name)
     local c = entry[which]
     if index ~= nil and c then
       ImGui.PushStyleColor(index, c[1], c[2], c[3], c[4])
@@ -425,42 +443,63 @@ function panel.dot(state, theme, which, tone, x, y, alpha)
 end
 
 -- A card: a child window with ChildBg, a 1 px XfLine border and the card padding, holding what fn draws; edge (a colour name, or
--- nil) is a 2 px left edge that breathes (the pulse) while pulsing is true. Cards never nest. Where this CET has no BeginChild the
--- content is drawn plain under a rule. The child's height is the content's last frame (one frame to settle after a change).
+-- nil) is a 2 px left edge that breathes (the pulse) while pulsing is true. Cards never nest. Where this CET has no BeginChild,
+-- or it rejects the call, the content is drawn plain under a rule. The child's height is the content's last frame (one frame to
+-- settle after a change).
+-- The child is made under pcall with its pushes counted: if the begin fails, exactly what was pushed is popped, the failure is
+-- named once in the mod's log (state.noteDraw) and this window uses the plain form from then on. A begin that succeeds is always
+-- paired with EndChild, and the content is drawn only if the child says it is visible (a hidden child still gets its EndChild).
 function panel.card(state, theme, which, id, edgeName, pulsing, fn)
   state.cards = state.cards or {}
   local padX, padY = panel.metric(theme, "ChildPaddingX", 8), panel.metric(theme, "ChildPaddingY", 6)
   local width = ImGui.GetFontSize() * WRAP_EM
-  if ImGui.BeginChild == nil or ImGui.EndChild == nil then
+  if ImGui.BeginChild == nil or ImGui.EndChild == nil or state.childFailed then
     ImGui.Separator()
     fn()
     return
   end
   local height = state.cards[id] or (ImGui.GetFontSize() * 2 + padY * 2)
-  ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, padX, padY)
   local line = panel.colour(theme, which, "XfLine", GREY)
-  ImGui.PushStyleColor(ImGuiCol.Border, line[1], line[2], line[3], line[4])
-  ImGui.BeginChild("##xf_card_" .. id, width, height, true, bit32 and bit32.bor(ImGuiWindowFlags.NoScrollbar, ImGuiWindowFlags.NoScrollWithMouse) or 0)
-  local savedWidth, savedPad = cardWidth, cardPad
-  cardWidth, cardPad = width, padX
-  local ok, err = pcall(function()
-    fn()
-    local itemSpacingY = panel.metric(theme, "ItemSpacingY", 6)
-    state.cards[id] = curY() - itemSpacingY + padY
-    if edgeName then
-      try(state, "card_edge", function()
-        local colour = panel.colour(theme, which, edgeName, AMBER)
-        local wx, wy = xyOf(ImGui.GetWindowPos())
-        local ww, wh = ImGui.GetWindowSize()
-        local alpha = pulsing and panel.pulseAlpha(theme, ImGui.GetTime(), panel.reduced(state)) or 1.0
-        rectFilled(drawList(), wx, wy, wx + 2 * (panel.k or 1), wy + wh, colour, alpha)
-      end)
-    end
+  local vars, colours = 0, 0
+  local began, visible = pcall(function()
+    ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, padX, padY)
+    vars = vars + 1
+    ImGui.PushStyleColor(ImGuiCol.Border, line[1], line[2], line[3], line[4])
+    colours = colours + 1
+    return ImGui.BeginChild("##xf_card_" .. id, width, height, true, bit32 and bit32.bor(ImGuiWindowFlags.NoScrollbar, ImGuiWindowFlags.NoScrollWithMouse) or 0)
   end)
-  cardWidth, cardPad = savedWidth, savedPad
+  if not began then
+    -- Undo exactly what was pushed before the failure, then draw plain.
+    if colours > 0 then pcall(function() ImGui.PopStyleColor(colours) end) end
+    if vars > 0 then pcall(function() ImGui.PopStyleVar(vars) end) end
+    state.childFailed = true
+    if state.noteDraw then state.noteDraw("BeginChild", tostring(visible)) end
+    ImGui.Separator()
+    fn()
+    return
+  end
+  local savedWidth, savedPad = cardWidth, cardPad
+  local ok, err = true, nil
+  if visible ~= false then
+    cardWidth, cardPad = width, padX
+    ok, err = pcall(function()
+      fn()
+      state.cards[id] = curY() - panel.metric(theme, "ItemSpacingY", 6) + padY
+      if edgeName then
+        try(state, "card_edge", function()
+          local colour = panel.colour(theme, which, edgeName, AMBER)
+          local wx, wy = xyOf(ImGui.GetWindowPos())
+          local _, wh = ImGui.GetWindowSize()
+          local alpha = pulsing and panel.pulseAlpha(theme, ImGui.GetTime(), panel.reduced(state)) or 1.0
+          rectFilled(drawList(), wx, wy, wx + 2 * (panel.k or 1), wy + wh, colour, alpha)
+        end)
+      end
+    end)
+    cardWidth, cardPad = savedWidth, savedPad
+  end
   ImGui.EndChild()
-  ImGui.PopStyleColor(1)
-  ImGui.PopStyleVar(1)
+  ImGui.PopStyleColor(colours)
+  ImGui.PopStyleVar(vars)
   if not ok then error(err, 0) end
 end
 

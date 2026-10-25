@@ -79,6 +79,7 @@ describe("0.8.22 the theme generator reads the Studio's in-game table", () => {
       expect(t.scale).toBeLessThanOrEqual(CET_SCALE_RANGE[1]);
     }
     expect(theme.types.find((t) => t.role === "body")!.scale).toBe(1);
+    expect(theme.types.map((t) => [t.role, t.weight])).toEqual(IN_GAME_THEME.type.map((t) => [t.role, t.weight]));
     expect(ruleDeclaration(css, ".btn:disabled", "opacity")).toBe(".45");
   });
 
@@ -102,6 +103,11 @@ describe("0.8.22 the theme generator reads the Studio's in-game table", () => {
     expect((native.match(/^XF_THEME_VALUE\(/gm) ?? []).length).toBe(8);
     expect((native.match(/^XF_THEME_TYPE\(/gm) ?? []).length).toBe(5);
     expect(native).toContain('XF_THEME_FONT(display, L"bahnschrift.ttf")');
+    // review 4: the Studio's weights (600 for the title and eyebrow roles) reach the native table and CET's
+    expect(native).toContain("XF_THEME_TYPE(title, display, 15.0f, 600, false)");
+    expect(native).toContain("XF_THEME_TYPE(eyebrow, display, 11.0f, 600, true)");
+    expect(native).toContain("XF_THEME_TYPE(body, ui, 13.0f, 400, false)");
+    expect(read("cet", "xf_runtime_bridge", "theme.lua")).toContain('title = { face = "display", size = 15, weight = 600,');
     if (!existsSync(FENGARI)) return;
     const out = runLua(`local t = (function() ${read("cet", "xf_runtime_bridge", "theme.lua")} end)()
       return table.concat({ t.types.title.scale, t.types.eyebrow.scale, t.types.body.scale, t.values.PulsePeriodMs, t.values.DisabledAlpha,
@@ -170,6 +176,26 @@ describe("0.8.22 the overlay host's source", () => {
     expect(read("native", "src", "core", "overlay", "Motion.cpp")).toContain('"frame_generation"');
   });
 
+  test("review 2: frame generation is looked for by the game thread, bounded, whether or not the overlay draws", () => {
+    const main = read("native", "src", "plugin", "Main.cpp");
+    const plugin = read("native", "src", "plugin", "Plugin.cpp");
+    expect((main.match(/RefreshFrameGeneration\(&win32::FrameGenerationModules\)/g) ?? []).length).toBe(2); // at load and in the tick
+    expect(plugin).toContain("RefreshFrameGeneration(&win32::FrameGenerationModules)"); // with each info refresh
+    // the tick's refresh sits outside the overlay-enabled block
+    const tick = main.indexOf("frame generation is looked for here whether or not the overlay draws");
+    expect(tick).toBeGreaterThan(0);
+    expect(main.indexOf("if (state.overlayHost.Enabled())", tick)).toBeGreaterThan(tick);
+    expect(overlay).toContain("win32::FrameGenerationModules()"); // one list of modules, shared
+    expect(overlay).not.toContain("std::vector<std::string> FrameGenerationModules()");
+  });
+
+  test("review 4: the Studio's weight reaches LoadFont and the approximation is said once per bake", () => {
+    expect(overlay).toContain("ImFont* LoadFont(const char* aFace, float aSize, int aWeight)");
+    expect(overlay).toContain("type->weight");
+    expect(overlay).toContain('log::Info("overlay.fonts", "weights_asked=');
+    expect(overlay).toContain("stb_truetype");
+  });
+
   test("the status carries the short chip labels", () => {
     const ink = read("native", "src", "core", "InkUi.cpp");
     for (const label of ["Read-only", "Changes allowed", "Paused", "Stopped"]) expect(ink).toContain(`out.chip = "${label}"`);
@@ -178,8 +204,8 @@ describe("0.8.22 the overlay host's source", () => {
 });
 
 // CET's ImGui, stubbed, recording the calls this layer cares about. The game runs LuaJIT; fengari is Lua 5.3.
-const IMGUI = (flags: { child?: boolean; fontScale?: boolean } = {}) => `
-  calls, curY, T = {}, 0, 0
+const IMGUI = (flags: { child?: boolean; fontScale?: boolean; childMode?: "throws" | "hidden" } = {}) => `
+  calls, curY, T, pc, pv = {}, 0, 0, 0, 0
   local function rec(s) calls[#calls + 1] = s end
   local function item(kind, text, h) curY = curY + (h or 14); rec(kind .. ":" .. tostring(text)) end
   ImGuiCol = setmetatable({}, { __index = function(_, k) return k end })
@@ -227,19 +253,25 @@ const IMGUI = (flags: { child?: boolean; fontScale?: boolean } = {}) => `
     CollapsingHeader = function(label) rec("header:" .. label); return false end,
     BeginDisabled = function() end,
     EndDisabled = function() end,
-    PushStyleColor = function() end,
-    PopStyleColor = function() end,
-    PushStyleVar = function() end,
-    PopStyleVar = function() end,
+    PushStyleColor = function() pc = pc + 1 end,
+    PopStyleColor = function(n) pc = pc - (n or 1) end,
+    PushStyleVar = function() pv = pv + 1 end,
+    PopStyleVar = function(n) pv = pv - (n or 1) end,
   }
   ${flags.fontScale === false ? "" : 'base.SetWindowFontScale = function(s) rec("scale:" .. tostring(s)) end'}
-  ${flags.child === false ? "" : 'base.BeginChild = function(id) rec("child:" .. tostring(id)); return true end; base.EndChild = function() rec("endchild") end'}
-  ImGui = setmetatable(base, { __index = function() return function() return false end end })
+  ${flags.child === false ? "" : flags.childMode === "throws" ? 'base.BeginChild = function(id) error("bad argument #5 to BeginChild") end; base.EndChild = function() rec("endchild") end'
+    : flags.childMode === "hidden" ? 'base.BeginChild = function(id) rec("child:" .. tostring(id)); return false end; base.EndChild = function() rec("endchild") end'
+    : 'base.BeginChild = function(id) rec("child:" .. tostring(id)); return true end; base.EndChild = function() rec("endchild") end'}
+  ImGui = setmetatable(base, { __index = function(_, k)
+    ${flags.child === false ? 'if k == "BeginChild" or k == "EndChild" then return nil end' : ""}
+    return function() return false end
+  end })
 `;
 
 describe.skipIf(!existsSync(FENGARI))("0.8.22 the CET layer under fengari", () => {
   const panel = read("cet", "xf_runtime_bridge", "panel.lua");
   const theme = read("cet", "xf_runtime_bridge", "theme.lua");
+  const THEME_NAV_R = () => runLua(`local t = (function() ${theme} end)(); return string.format("%.4f", t.colors.NavCursor.dark[1])`);
   const init = read("cet", "xf_runtime_bridge", "init.lua");
   const run = (stub: string, body: string) =>
     runLua(`${stub}
@@ -296,6 +328,50 @@ describe.skipIf(!existsSync(FENGARI))("0.8.22 the CET layer under fengari", () =
     expect(without).toContain("text:QUESTION FROM XF STUDIO");
     expect(without).toContain("button:Done##xf_answer_1");
     expect(without).toContain("text:KEYS");
+  });
+
+  test("review 1: a BeginChild that rejects the call pops exactly what was pushed, is named once, and the content draws plain from then on", () => {
+    const out = run(IMGUI({ childMode: "throws" }), `local s = state({ pendingAsk = { id = 1, text = "Ready?", choices = { "Done", "Not yet" } } })
+      local a = draw(s); local netA = pc .. "," .. pv
+      local b = draw(s); local netB = pc .. "," .. pv
+      local failures = 0
+      for _ in string.gmatch(a .. "|" .. b, "failed:BeginChild") do failures = failures + 1 end
+      return table.concat({ netA, netB, failures, tostring(string.find(a, "button:Done##xf_answer_1", 1, true) ~= nil), tostring(string.find(b, "button:Done##xf_answer_1", 1, true) ~= nil),
+        tostring(string.find(a .. b, "endchild", 1, true) == nil), tostring(s.childFailed) }, ";")`);
+    // the style stack is balanced after both frames, one log line in all, the answers drawn each time, no EndChild without a begin
+    expect(out).toBe("0,0;0,0;1;true;true;true;true");
+  });
+
+  test("review 1: a child that says it is not visible still gets its EndChild, its pops, and no content", () => {
+    const out = run(IMGUI({ childMode: "hidden" }), `local s = state({ pendingAsk = { id = 1, text = "Ready?", choices = { "Done" } } })
+      local a = draw(s)
+      local begins, ends = 0, 0
+      for _ in string.gmatch(a, "child:") do begins = begins + 1 end
+      for _ in string.gmatch(a, "endchild") do ends = ends + 1 end
+      return table.concat({ pc .. "," .. pv, begins > 0 and begins == ends and "paired" or "unpaired:" .. begins .. "/" .. ends,
+        tostring(string.find(a, "button:Done##xf_answer_1", 1, true) == nil), tostring(s.childFailed) }, ";")`);
+    expect(out).toBe("0,0;paired;true;nil");
+  });
+
+  test("review 3: a colour ImGui renamed (NavCursor was NavHighlight before 1.91.4) is found under its older name, and the exact name wins when both exist", () => {
+    const run2 = (cols: string) => runLua(`${IMGUI()}
+      ImGuiCol = { ${cols} }
+      local pushed = {}
+      ImGui.PushStyleColor = function(index, r) pushed[#pushed + 1] = index .. "=" .. string.format("%.4f", r) end
+      local panel = (function() ${panel} end)()
+      local THEME = (function() ${theme} end)()
+      local n = panel.pushTheme(THEME, "dark")
+      table.sort(pushed)
+      return n .. ":" .. table.concat(pushed, ",")`);
+    const focus = THEME_NAV_R();
+    const old = run2("Text = 0, NavHighlight = 7");
+    expect(old).toBe(`2:0=${runLua(`local t = (function() ${theme} end)(); return string.format("%.4f", t.colors.Text.dark[1])`)},7=${focus}`);
+    const both = run2("Text = 0, NavHighlight = 7, NavCursor = 9");
+    expect(both).toContain("9=");
+    expect(both).not.toContain("7=");
+    expect(run2("Text = 0")).toMatch(/^1:/);
+    // the aliases are only the renames: nothing else is mapped
+    expect(panel).toContain("NavCursor = \"NavHighlight\"");
   });
 
   test("the heading, the status line and the mode chip: brand mark, 'XF Runtime Bridge', the plugin's chip in capitals, the version", () => {

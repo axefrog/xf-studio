@@ -124,10 +124,10 @@ return {
     LabelledBarAlpha = 0.3,
   },
   types = {
-    title = { face = "display", size = 15, scale = 1.1538, caps = false },
-    eyebrow = { face = "display", size = 11, scale = 0.8462, caps = true },
-    body = { face = "ui", size = 13, scale = 1, caps = false },
-    label = { face = "ui", size = 12, scale = 0.9231, caps = false },
-    value = { face = "mono", size = 12, scale = 0.9231, caps = false },
+    title = { face = "display", size = 15, weight = 600, scale = 1.1538, caps = false },
+    eyebrow = { face = "display", size = 11, weight = 600, scale = 0.8462, caps = true },
+    body = { face = "ui", size = 13, weight = 400, scale = 1, caps = false },
+    label = { face = "ui", size = 12, weight = 400, scale = 0.9231, caps = false },
+    value = { face = "mono", size = 12, weight = 400, scale = 0.9231, caps = false },
   },
 }

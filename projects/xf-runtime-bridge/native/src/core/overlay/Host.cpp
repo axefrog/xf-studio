@@ -296,6 +296,28 @@ void OverlayHost::NoteFrameGeneration(const std::vector<std::string>& aModules)
     m_frameGenerationLoaded.store(!aModules.empty());
 }
 
+bool OverlayHost::RefreshFrameGeneration(const std::function<std::vector<std::string>()>& aProbe, std::chrono::steady_clock::time_point aNow)
+{
+    const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(aNow.time_since_epoch()).count();
+    if (m_frameGenerationProbed.load() && nowNs - m_frameGenerationProbedNs.load() < static_cast<int64_t>(kFrameGenerationProbeMs) * 1000000)
+    {
+        return false;
+    }
+    m_frameGenerationProbedNs.store(nowNs);
+    m_frameGenerationProbed.store(true);
+    auto modules = aProbe();
+    bool changed;
+    {
+        std::scoped_lock _(m_mutex);
+        changed = modules != m_frameGeneration;
+    }
+    if (changed)
+    {
+        NoteFrameGeneration(modules);
+    }
+    return true;
+}
+
 bool OverlayHost::OffForFrameGeneration() const
 {
     std::scoped_lock _(m_mutex);

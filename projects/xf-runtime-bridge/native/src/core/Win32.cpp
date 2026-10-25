@@ -14,6 +14,19 @@
 
 namespace xfb::win32
 {
+std::vector<std::string> FrameGenerationModules()
+{
+    std::vector<std::string> out;
+    for (const auto* name : {L"sl.dlss_g.dll", L"ffx_frameinterpolation_x64.dll", L"libxess_fg.dll", L"nvngx_dlssg.dll"})
+    {
+        if (GetModuleHandleW(name))
+        {
+            out.push_back(Narrow(name));
+        }
+    }
+    return out;
+}
+
 bool ClientAreaAnimation()
 {
     BOOL on = TRUE;

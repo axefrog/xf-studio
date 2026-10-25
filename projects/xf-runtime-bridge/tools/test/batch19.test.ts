@@ -48,6 +48,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
       calls[#calls + 1] = kind .. ":" .. tostring(label) .. (disabled > 0 and " [disabled]" or "")
     end
     ImGui = setmetatable({
+      BeginChild = function() return true end, EndChild = function() end,
       Begin = function() calls[#calls + 1] = "begin"; return true end,
       SetNextWindowBgAlpha = function(a) calls[#calls + 1] = "bgalpha:" .. tostring(a) end,
       PushStyleVar = function(i, v) calls[#calls + 1] = "var:" .. tostring(i) .. "=" .. tostring(v) end,

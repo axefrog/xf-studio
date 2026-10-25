@@ -33,6 +33,7 @@ const IMGUI = `
   bit32 = { bor = function() return 0 end }
   unpack = table.unpack
   ImGui = setmetatable({
+    BeginChild = function() return true end, EndChild = function() end,
     Begin = function(name) rec("begin:" .. tostring(name)); return true end,
     GetFontSize = function() return 14 end,
     GetTime = function() return 100 end,

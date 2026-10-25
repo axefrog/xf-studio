@@ -7,9 +7,12 @@
 #include "core/overlay/Motion.hpp"
 #include "core/overlay/Theme.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -126,6 +129,40 @@ int OverlayUnitTests()
         Check(host.Snapshot()["motion"]["reason"] == "frame_generation", "motion: a loaded frame-generation module reduces auto");
         host.SetMotion(o::MotionSetting::Full);
         Check(host.Snapshot()["motion"]["effective"] == "full", "motion: full wins over frame generation");
+    }
+
+    // ---- review: the Studio's type weights are carried (title and eyebrow 600, the rest 400) ----
+    Check(title->weight == 600 && eyebrow->weight == 600 && o::ThemeTypeOf("body")->weight == 400 && o::ThemeTypeOf("label")->weight == 400 && value->weight == 400,
+          "theme: each type role carries its Studio weight (the host cannot draw 600 from a variable font with stb_truetype and says so)");
+
+    // ---- review: frame generation is found without the overlay's renderer, bounded, and kept current ----
+    {
+        using Clock = std::chrono::steady_clock;
+        o::OverlayHost host; // never configured: [overlay] enabled = false
+        int probes = 0;
+        std::vector<std::string> loaded;
+        const auto probe = [&] {
+            ++probes;
+            return loaded;
+        };
+        const auto t0 = Clock::now();
+        Check(!host.Enabled() && std::strcmp(host.Motion().effective, "full") == 0, "frame generation: a disabled overlay starts with full motion");
+        Check(host.RefreshFrameGeneration(probe, t0) && probes == 1, "frame generation: the first call probes");
+        loaded = {"sl.dlss_g.dll"};
+        Check(!host.RefreshFrameGeneration(probe, t0 + std::chrono::milliseconds(500)) && probes == 1 && std::strcmp(host.Motion().effective, "full") == 0,
+              "frame generation: bounded to one probe per two seconds however often it is asked");
+        Check(host.RefreshFrameGeneration(probe, t0 + std::chrono::milliseconds(2100)) && probes == 2, "frame generation: probes again after two seconds");
+        const auto reduced = host.Motion();
+        Check(reduced.reduced && std::strcmp(reduced.reason, "frame_generation") == 0 && host.Snapshot()["frame_generation_modules"].size() == 1,
+              "frame generation: with the overlay disabled, a loaded module still reduces auto motion");
+        loaded.clear();
+        host.RefreshFrameGeneration(probe, t0 + std::chrono::milliseconds(4300));
+        Check(!host.Motion().reduced && host.Snapshot()["frame_generation_modules"].empty(), "frame generation: kept current when the module goes away");
+        loaded = {"ffx_frameinterpolation_x64.dll", "libxess_fg.dll"};
+        host.RefreshFrameGeneration(probe, t0 + std::chrono::milliseconds(6500));
+        Check(host.Motion().reduced && host.Snapshot()["frame_generation_modules"].size() == 2, "frame generation: and when another is loaded later");
+        host.SetMotion(o::MotionSetting::Full);
+        Check(!host.Motion().reduced, "frame generation: full motion still wins");
     }
 
     // ---- the pulse and the settle: time-based, on one clock ----

@@ -11,7 +11,7 @@ namespace
 #define XF_THEME_COLOR(name, token, dr, dg, db, da, lr, lg, lb, la) {#name, token, {dr, dg, db, da}, {lr, lg, lb, la}},
 #define XF_THEME_METRIC(name, token, value)
 #define XF_THEME_VALUE(name, source, value)
-#define XF_THEME_TYPE(role, face, size, caps)
+#define XF_THEME_TYPE(role, face, size, weight, caps)
 #define XF_THEME_FONT(face, file)
 const ThemeColor kColors[] = {
 #include "core/overlay/ThemeTable.inc"
@@ -25,7 +25,7 @@ const ThemeColor kColors[] = {
 #define XF_THEME_COLOR(name, token, dr, dg, db, da, lr, lg, lb, la)
 #define XF_THEME_METRIC(name, token, value) {#name, token, value},
 #define XF_THEME_VALUE(name, source, value)
-#define XF_THEME_TYPE(role, face, size, caps)
+#define XF_THEME_TYPE(role, face, size, weight, caps)
 #define XF_THEME_FONT(face, file)
 const ThemeMetric kMetrics[] = {
 #include "core/overlay/ThemeTable.inc"
@@ -39,7 +39,7 @@ const ThemeMetric kMetrics[] = {
 #define XF_THEME_COLOR(name, token, dr, dg, db, da, lr, lg, lb, la)
 #define XF_THEME_METRIC(name, token, value)
 #define XF_THEME_VALUE(name, source, value) {#name, source, value},
-#define XF_THEME_TYPE(role, face, size, caps)
+#define XF_THEME_TYPE(role, face, size, weight, caps)
 #define XF_THEME_FONT(face, file)
 const ThemeValue kValues[] = {
 #include "core/overlay/ThemeTable.inc"
@@ -53,7 +53,7 @@ const ThemeValue kValues[] = {
 #define XF_THEME_COLOR(name, token, dr, dg, db, da, lr, lg, lb, la)
 #define XF_THEME_METRIC(name, token, value)
 #define XF_THEME_VALUE(name, source, value)
-#define XF_THEME_TYPE(role, face, size, caps) {#role, #face, size, caps},
+#define XF_THEME_TYPE(role, face, size, weight, caps) {#role, #face, size, weight, caps},
 #define XF_THEME_FONT(face, file)
 const ThemeType kTypes[] = {
 #include "core/overlay/ThemeTable.inc"
@@ -72,7 +72,7 @@ struct FontFile
 #define XF_THEME_COLOR(name, token, dr, dg, db, da, lr, lg, lb, la)
 #define XF_THEME_METRIC(name, token, value)
 #define XF_THEME_VALUE(name, source, value)
-#define XF_THEME_TYPE(role, face, size, caps)
+#define XF_THEME_TYPE(role, face, size, weight, caps)
 #define XF_THEME_FONT(face, file) {#face, file},
 const FontFile kFonts[] = {
 #include "core/overlay/ThemeTable.inc"

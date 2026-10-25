@@ -314,6 +314,9 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         HandleRearm(state);
         PollKillKey(state);
         SoundNewQuestion(state, scriptsReady);
+        // 0.8.22: frame generation is looked for here whether or not the overlay draws ([overlay] enabled = false never starts its
+        // renderer), at most once per two seconds, so CET's auto motion and the info answer stay current.
+        state.overlayHost.RefreshFrameGeneration(&win32::FrameGenerationModules);
         // 0.8.2: the status surface for this tick (one at a time: core/InkUi.hpp ChooseStatusSurface). 0.8.3: none while no
         // game session is live (a loading screen, the press-any-key screen after a load).
         const auto surface = inkui::ChooseStatusSurface({state.InkVisible(), state.overlayHost.CanShowPanel(), scriptsReady});
@@ -559,6 +562,7 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
         xfb::overlay::MotionSettingFromName(state.config.overlayMotion, motion);
         state.overlayHost.SetMotion(motion);
         state.overlayHost.NoteWindowsAnimation(win32::ClientAreaAnimation());
+        state.overlayHost.RefreshFrameGeneration(&win32::FrameGenerationModules);
     }
     xfb::plugin::overlay::Install(aHandle, aSdk, state.overlayHost);
 

@@ -7,6 +7,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace xfb::win32
 {
@@ -22,6 +23,10 @@ bool CurrentUserSid(std::string& aOut);
 // 0.8.22: whether Windows' animation effects are on (SPI_GETCLIENTAREAANIMATION, Settings > Accessibility > Visual effects >
 // Animation effects). True when the answer can't be had: the overlay then animates as it was asked to.
 bool ClientAreaAnimation();
+
+// 0.8.22: the frame-generation modules loaded in this process now (DLSS-G, FSR 3 / FidelityFX frame interpolation, XeSS-FG, the
+// NGX frame-generation library), by file name; empty when none. A cheap GetModuleHandle per name.
+std::vector<std::string> FrameGenerationModules();
 
 // Folder that holds this module (the plugin DLL or the self-test exe).
 std::filesystem::path ModuleDirectory(const void* aAddressInModule);

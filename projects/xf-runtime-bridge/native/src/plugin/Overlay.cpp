@@ -80,6 +80,7 @@
 #include <imgui_internal.h>
 
 #include "core/Log.hpp"
+#include "core/Win32.hpp"
 #include "core/overlay/Motion.hpp"
 #include "plugin/Overlay.hpp"
 
@@ -344,24 +345,6 @@ ComPtr<T> NativeOf(T* aObject)
     return out;
 }
 
-std::vector<std::string> FrameGenerationModules()
-{
-    std::vector<std::string> out;
-    for (const auto* name : {L"sl.dlss_g.dll", L"ffx_frameinterpolation_x64.dll", L"libxess_fg.dll", L"nvngx_dlssg.dll"})
-    {
-        if (GetModuleHandleW(name))
-        {
-            std::string text;
-            for (const wchar_t* c = name; *c; ++c)
-            {
-                text.push_back(static_cast<char>(*c));
-            }
-            out.push_back(text);
-        }
-    }
-    return out;
-}
-
 // What the renderer sees now for a device index: the facts the refusal checks read, the swap chain's description, and the
 // engine's swap-chain record (null when there is none). Used at the first present and again after every resize (RB-97).
 RED4ext::GpuApi::SSwapChainData* ReadFacts(int32_t aDeviceIndex, DeviceFacts& aFacts, DXGI_SWAP_CHAIN_DESC1& aDesc)
@@ -432,9 +415,12 @@ void ApplyTheme(ThemeKind aKind, float aScale)
 }
 
 // A face's font at a pixel size (the Studio's size times the back buffer's scale), from the first of the face's Windows font
-// files that exists, else ImGui's built-in font. Baked with the panel's glyph ranges only (RB-99).
-ImFont* LoadFont(const char* aFace, float aSize)
+// files that exists, else ImGui's built-in font. Baked with the panel's glyph ranges only (RB-99). aWeight is the Studio's weight
+// for the role: no static file of any face here has another weight (see BuildFonts), so it is carried to this point and the
+// file's default instance is what is drawn.
+ImFont* LoadFont(const char* aFace, float aSize, int aWeight)
 {
+    (void)aWeight;
     auto& io = ImGui::GetIO();
     wchar_t windows[MAX_PATH]{};
     GetWindowsDirectoryW(windows, MAX_PATH);
@@ -522,9 +508,15 @@ void BuildFonts()
     auto& io = ImGui::GetIO();
     io.Fonts->Clear();
     const float scale = (static_cast<float>(gR.height) / 1080.0f) * gHost->Scale();
-    const auto roleFont = [scale](const char* aRole, const char* aFace, float aFallback) {
+    std::string weights; // roles whose Studio weight (600) the builder cannot draw, for the log line below
+    const auto roleFont = [scale, &weights](const char* aRole, const char* aFace, float aFallback) {
         const auto* type = xfb::overlay::ThemeTypeOf(aRole);
-        return LoadFont(type ? type->face : aFace, (type ? type->size : aFallback) * scale);
+        const int weight = type ? type->weight : 400;
+        if (weight != 400)
+        {
+            weights += (weights.empty() ? "" : ",") + std::string(aRole) + "=" + std::to_string(weight);
+        }
+        return LoadFont(type ? type->face : aFace, (type ? type->size : aFallback) * scale, weight);
     };
     gR.fonts.title = roleFont("title", "display", 15.0f);
     gR.fonts.eyebrow = roleFont("eyebrow", "display", 11.0f);
@@ -536,6 +528,15 @@ void BuildFonts()
     ApplyTheme(gHost->Theme(), scale);
     LoadStyle(scale);
     ImGui::GetStyle().FontSizeBase = gR.fonts.body ? gR.fonts.body->LegacySize : 13.0f * scale;
+    if (!weights.empty())
+    {
+        // 0.8.22: the Studio sets the title and eyebrow roles at weight 600 (Bahnschrift SemiBold). The display face on Windows is one
+        // variable font (bahnschrift.ttf: wght 300-700, default 400, no static instances), and this build's font builder (Dear ImGui's
+        // stb_truetype) draws a variable font's default instance only: choosing wght needs FreeType (a new dependency), which
+        // ImGui's builder would then drive. So these roles are drawn at the default weight (400); the size, face and capitals are
+        // the Studio's. Said once per bake, in the log, so a review does not take it for a bug.
+        log::Info("overlay.fonts", "weights_asked=" + weights + " drawn=400 (the display face is a variable font; the font builder cannot select a weight)");
+    }
     gR.fontHeight = gR.height;
     gR.uploadsAllowed = true;
 }
@@ -638,7 +639,7 @@ bool Initialise(int32_t aDeviceIndex)
     DeviceFacts facts;
     DXGI_SWAP_CHAIN_DESC1 desc{};
     auto* sc = ReadFacts(aDeviceIndex, facts, desc);
-    gR.frameGeneration = FrameGenerationModules();
+    gR.frameGeneration = win32::FrameGenerationModules();
     gHost->NoteFrameGeneration(gR.frameGeneration);
     gR.frameGenerationText.clear();
     for (const auto& name : gR.frameGeneration)
