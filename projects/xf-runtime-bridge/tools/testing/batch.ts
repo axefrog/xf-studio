@@ -28,6 +28,7 @@ import { cetWindowRect, decodeCetBinding, keysLabel, parseCetBindings, parseKeys
 import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, runPlan, type Action, type ExecContext, type Executor, type Match, type Outcome, type Plan, type PlanClock, type PlanResult, type ReportEntry, type Step } from "./plan.ts";
 import { planTestStep, TEST_STEP_KINDS, TestSession } from "./script.ts";
 import { captureCursor, waitForEvent } from "./windows.ts";
+import { tripReason } from "../commit-tripwire.ts";
 import { DEFAULT_HALT_PATTERNS, Telemetry, type RowTelemetry } from "./telemetry.ts";
 
 export const SCRIPT_SCHEMA_3 = "xfb/session-script-3";
@@ -97,6 +98,7 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   "config.read": { required: [], optional: [], help: "the staged config.ini's values" },
   "config.restore": { required: [], optional: [], help: "put config.ini back as it was before the run" },
   "actors.release_all": { required: [], optional: [], help: "release every actor the bridge directs (npc.status, then npc.release despawn)" },
+  "overlay.restore": { required: [], optional: [], help: "put the overlay's live look back as this game session started it (the first overlay.set's undo)" },
 };
 
 /** The command a step's action calls, or undefined (a local, host or test action). */
@@ -238,6 +240,10 @@ export function planBatch(script: BatchScript): PlannedBatch {
     return { row, plan: p, failRow };
   });
   const teardown = plan("teardown", script.teardown);
+  // The runner's own steps (the prelude in both load modes, the built-in teardown) meet the same checks as the script's.
+  for (const steps of [preludeSteps({ "overlay.enabled": "true" }, true, true), preludeSteps({}, true, false), builtinTeardown()]) {
+    for (const problem of checkPlan({ id: "runner", steps }, checker)) problems.push(`the runner's own steps: ${problem}`);
+  }
   return { setup, rows, teardown, problems };
 }
 
@@ -258,9 +264,9 @@ export function launchSteps(load: boolean): Step[] {
     { label: "bridge", do: "run", command: "bridge.ping", input: {}, until: { ok: true }, interval_ms: 2000, deadline_ms: 180_000 },
     ...(load
       ? [
-          { label: "load", do: "run", command: "game.load", input: { name: "$fixture.save", discard_unsaved: true, continue_wait_s: 120 }, bind: "load", deadline_ms: 150_000,
+          { label: "load", do: "run", command: "game.load", input: { name: "$fixture.save", discard_unsaved: true, continue_wait_s: 85 }, bind: "load", deadline_ms: 150_000,
             retry: { times: 2, backoff_ms: 5000, on: { code: ["timeout", "busy", "bridge_busy", "game_loading", "rate_limited"] } },
-            alternatives: [[{ do: "run", command: "game.load", input: { latest: true, discard_unsaved: true, continue_wait_s: 120 }, bind: "load", deadline_ms: 150_000 }]] },
+            alternatives: [[{ do: "run", command: "game.load", input: { latest: true, discard_unsaved: true, continue_wait_s: 85 }, bind: "load", deadline_ms: 150_000 }]] },
           { label: "press-any-key", do: "host.key", keys: "Space", when: { match: { ref: "$load.reached", equals: "press_any_key" } },
             retry: { times: 5, backoff_ms: 3000, on: { code: "not_foreground" } },
             outcomes: [{ name: "behind", match: { code: "not_foreground" }, run: [{ do: "note", text: "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)." }] }],
@@ -294,6 +300,7 @@ export function builtinTeardown(): Step[] {
     { label: "supervisor", do: "run", command: "supervisor.clear", input: {}, on_fail: "continue" },
     { label: "recorder", do: "run", command: "test.record.stop", input: {}, on_fail: "continue" },
     { label: "actors", do: "actors.release_all", on_fail: "continue" },
+    { label: "overlay", do: "overlay.restore", on_fail: "continue" },
     { label: "messages", do: "run", command: "ui.message", input: { clear: true }, on_fail: "continue" },
     { label: "ink-panel", do: "run", command: "ui.hud", input: { reset: true }, on_fail: "continue" },
     { label: "photo-mode", do: "run", command: "photo.exit", input: {}, when: { check: { do: "run", command: "game.status", input: {} }, match: { path: "phase", equals: "photo_mode" } }, on_fail: "continue" },
@@ -351,7 +358,8 @@ export class CommitMonitor {
         this.lastFreeGb = free === null ? null : free / GB;
         if (free !== null && free < this.o.floorGb * GB) {
           this.reason = `The commit tripwire tripped: free commit ${(free / GB).toFixed(1)} GB is under the ${this.o.floorGb} GB floor. The runner handed the game over (session.handover) and stopped.`;
-          await this.o.api.run("session.handover", { note: "commit tripwire" }, { source: "session" }).catch(() => undefined);
+          // The tripwire's own words (commit-tripwire.ts), so every refusal the handover causes names it.
+          await this.o.api.run("session.handover", { note: tripReason(free / GB, this.o.floorGb) }, { source: "session" }).catch(() => undefined);
           this.trip.abort();
           break;
         }
@@ -407,6 +415,8 @@ export class SessionExecutor implements Executor {
   /** Every API path the executor takes (commands, schema-2 steps, questions, releases) goes through this, so a handed_over refusal is seen on any of them. */
   private readonly api: Pick<CommandApi, "run">;
   private handedOver = false;
+  /** The overlay's look as this game session started it: each key from the first overlay.set that changed it. */
+  private overlayUndo: Record<string, unknown> = {};
 
   constructor(private readonly c: BatchContext, script: BatchScript) {
     this.api = {
@@ -503,6 +513,8 @@ export class SessionExecutor implements Executor {
           if ((await this.gamePid()) !== undefined) return { ok: false, code: "already_running", message: "The game is already running." };
           if (context.signal.aborted) return CANCELLED;
           const started = await this.c.host.launch({ exe: mo2.exe, profile: mo2.profile, executable: mo2.executable, arguments: mo2.arguments }, context.signal);
+          // A new game session starts from config.ini: nothing live to put back from the last one.
+          if (started.started) this.overlayUndo = {};
           if (!started.started) return context.signal.aborted ? CANCELLED : { ok: false, code: "launch_failed", message: `MO2 didn't start${started.error ? ` (${started.error})` : ""}: check mo2.exe in the fixtures.` };
           return { ok: true, value: { command: started.command } };
         }
@@ -556,6 +568,14 @@ export class SessionExecutor implements Executor {
           const fine = restored.restored || restored.reason === "unchanged by this run";
           return { ok: fine, ...(fine ? {} : { code: "not_restored", message: restored.reason }), value: restored };
         }
+        case "overlay.restore": {
+          const keys = Object.keys(this.overlayUndo);
+          if (!keys.length) return { ok: true, value: { restored: false, reason: "this game session's look wasn't changed live" } };
+          const back = await this.api.run("overlay.set", this.overlayUndo, { source: "session", signal: context.signal });
+          if (!back.ok) return { ok: false, code: back.error.code, message: back.error.message };
+          this.overlayUndo = {};
+          return { ok: true, value: { restored: true, keys, result: back.result } };
+        }
         case "actors.release_all": {
           const status = await this.api.run("npc.status", {}, { source: "session", signal: context.signal });
           if (!status.ok) return { ok: false, code: status.error.code, message: status.error.message };
@@ -583,6 +603,11 @@ export class SessionExecutor implements Executor {
       return { ok: false, code: outcome.error.code, message: outcome.error.message };
     }
     if (expectError) return { ok: false, code: "unexpected_success", message: `Expected ${expectError}, but it went ahead.`, value: outcome.result };
+    if (command === "overlay.set") {
+      // Keep each key's value from before its first live change, for the teardown's overlay.restore.
+      const undo = (outcome.result as { undo?: { params?: Record<string, unknown> } })?.undo?.params ?? {};
+      for (const [k, v] of Object.entries(undo)) if (!Object.hasOwn(this.overlayUndo, k)) this.overlayUndo[k] = v;
+    }
     const capture = outcome.result as { full?: { path: string }; view?: { path: string }; contact_sheet?: { path: string }; manifest?: string };
     for (const file of [capture?.full?.path, capture?.view?.path, capture?.contact_sheet?.path, capture?.manifest]) if (typeof file === "string") this.evidence.push(relative(this.c.outDir, file));
     return { ok: true, value: outcome.result };
