@@ -296,27 +296,43 @@ describe("exporter cache keys", () => {
   });
 
   test("by-hash launches run a few at a time, and not at all when the archive index can't be read (PREV-55)", async () => {
-    // A fake WolvenKit: a path pattern finds nothing in a nameless archive; each `--hash` call takes a while and writes `<hash>.png`.
+    // Control the injected tool's completion, not elapsed time: cache/disk work is part of textures(), too.
+    const wanted: string[] = [P.packD, P.packN, P.strandId, P.capMask, P.irisMask, P.eyeD];
+    let started = wanted.map(() => Promise.withResolvers<void>());
+    let finish = wanted.map(() => Promise.withResolvers<void>());
     const launches: string[] = [];
     let running = 0, peak = 0;
     const fakeWolvenKit = async ({ depotPaths, outDir, byHash }: { depotPaths: string[]; outDir: string; byHash?: boolean }) => {
       launches.push(byHash ? `hash ${depotPaths[0]}` : `path ${depotPaths.length}`);
       if (!byHash) return;
       running++; peak = Math.max(peak, running);
-      await Bun.sleep(20);
+      const index = wanted.indexOf(depotPaths[0]!);
+      started[index]!.resolve();
+      await finish[index]!.promise;
       mkdirSync(outDir, { recursive: true });
       writeFileSync(join(outDir, `${depotHash(depotPaths[0]!)}.png`), png);
       running--;
     };
-    const wanted = [P.packD, P.packN, P.strandId, P.capMask, P.irisMask, P.eyeD];
     const indexed = createGameAssetExporter(join(root, "by-hash-lane"), fakeWolvenKit, { contains: (_source, hashes) => new Set(hashes) });
-    const started = performance.now();
-    const got = await indexed.open(archiveExportSource(join(root, "nameless-lane.archive"), route.gameRoot)).textures(wanted);
+    const exporting = indexed.open(archiveExportSource(join(root, "nameless-lane.archive"), route.gameRoot)).textures(wanted);
+    await Promise.all(started.slice(0, BY_HASH_CONCURRENCY).map(gate => gate.promise));
+    expect(launches).toEqual([`path ${wanted.length}`, ...wanted.slice(0, BY_HASH_CONCURRENCY).map(path => `hash ${path}`)]);
+    expect(running).toBe(BY_HASH_CONCURRENCY);
+    // Free just one slot at a time: queued work starts without waiting for the rest of the first wave.
+    finish[0]!.resolve();
+    await started[BY_HASH_CONCURRENCY]!.promise;
+    expect(launches).toHaveLength(1 + BY_HASH_CONCURRENCY + 1);
+    expect(running).toBe(BY_HASH_CONCURRENCY);
+    finish[BY_HASH_CONCURRENCY]!.resolve();
+    await started[BY_HASH_CONCURRENCY + 1]!.promise;
+    expect(launches).toHaveLength(1 + wanted.length);
+    expect(running).toBe(BY_HASH_CONCURRENCY);
+    for (const gate of finish) gate.resolve();
+    const got = await exporting;
     expect([...got.keys()].sort()).toEqual([...wanted].sort());
     expect(launches.filter(launch => launch.startsWith("hash"))).toHaveLength(wanted.length);
     expect(peak).toBe(Math.min(BY_HASH_CONCURRENCY, wanted.length));
-    // Six 20 ms launches at four at a time take two rounds, not six.
-    expect(performance.now() - started).toBeLessThan(6 * 20);
+    expect(running).toBe(0);
     // An unreadable index: no by-hash launch at all, and the textures are simply absent.
     launches.length = 0;
     const unreadable = createGameAssetExporter(join(root, "by-hash-unindexed"), fakeWolvenKit, { contains: () => { throw Error("unreadable index"); } });
@@ -324,11 +340,28 @@ describe("exporter cache keys", () => {
     expect(none.size).toBe(0);
     expect(launches).toEqual([`path ${wanted.length}`]);
     // A tool failure in one launch surfaces once, after the others stopped.
+    launches.length = 0;
+    started = wanted.map(() => Promise.withResolvers<void>());
+    finish = wanted.map(() => Promise.withResolvers<void>());
     const failing = createGameAssetExporter(join(root, "by-hash-failing"), async input => {
-      if (input.byHash && input.depotPaths[0] === P.strandId) throw new GameAssetExportError("tool_failed", "fake failure");
+      if (input.byHash && input.depotPaths[0] === P.strandId) {
+        launches.push(`hash ${P.strandId}`);
+        started[wanted.indexOf(P.strandId)]!.resolve();
+        throw new GameAssetExportError("tool_failed", "fake failure");
+      }
       await fakeWolvenKit(input);
     }, { contains: (_source, hashes) => new Set(hashes) });
-    await expect(failing.open(archiveExportSource(join(root, "nameless-failing.archive"), route.gameRoot)).textures(wanted)).rejects.toMatchObject({ code: "tool_failed" });
+    let settled = false;
+    const failed = failing.open(archiveExportSource(join(root, "nameless-failing.archive"), route.gameRoot)).textures(wanted)
+      .then(() => { settled = true; return null; }, error => { settled = true; return error; });
+    // The path launch resolves immediately. Wait for its hash wave, whose third launch fails synchronously.
+    // The siblings stay held until the test releases them; no real timer decides the failure order.
+    await Promise.all(started.slice(0, BY_HASH_CONCURRENCY).map(gate => gate.promise));
+    expect(running).toBe(BY_HASH_CONCURRENCY - 1);
+    expect(settled).toBe(false);
+    for (const gate of finish) gate.resolve();
+    expect(await failed).toMatchObject({ code: "tool_failed" });
+    expect(launches).toEqual([`path ${wanted.length}`, ...wanted.slice(0, BY_HASH_CONCURRENCY).map(path => `hash ${path}`)]);
     expect(running).toBe(0);
   });
 });
