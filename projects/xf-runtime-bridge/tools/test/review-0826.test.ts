@@ -114,6 +114,29 @@ describe("M5: a hanging blackboard read can't defeat deadlines or a cancel", () 
   });
 });
 
+describe("M6: deadlines bound blocks, polling, guards and backoff", () => {
+  const never = { run: async () => ({ ok: false, code: "no" }) };
+  test("a block's deadline_ms ends the polling inside it", async () => {
+    const clock = new FakeClock();
+    const result = await runPlan({ id: "p", steps: [{ deadline_ms: 3000, sequence: [{ do: "ping", until: { ok: true }, interval_ms: 1000, deadline_ms: 60_000 }] }] }, { clock, executor: never });
+    expect(result.status).toBe("failed");
+    expect(clock.now()).toBeLessThanOrEqual(3000);
+  });
+
+  test("a guard's wait inside a block stops at the block's deadline", async () => {
+    const clock = new FakeClock();
+    const result = await runPlan({ id: "p", steps: [{ deadline_ms: 2000, sequence: [{ do: "x", when: { check: { do: "state" }, match: { ok: true }, wait_ms: 60_000, interval_ms: 500 } }] }] }, { clock, executor: never });
+    expect(clock.now()).toBeLessThanOrEqual(2000);
+    expect(result.status).toBe("done");
+  });
+
+  test("a retry's backoff never sleeps past the plan's deadline", async () => {
+    const clock = new FakeClock();
+    await runPlan({ id: "p", deadline_ms: 5000, steps: [{ do: "x", retry: { times: 3, backoff_ms: 10_000 } }] }, { clock, executor: never });
+    expect(clock.now()).toBeLessThanOrEqual(5000);
+  });
+});
+
 describe("H1: exceptions never bypass the cleanup", () => {
   test("a report callback that throws doesn't skip the release or the close", async () => {
     const clock = new FakeClock();

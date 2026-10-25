@@ -458,66 +458,69 @@ function emit(run: Run, entry: Omit<ReportEntry, "key" | "plan" | "at_ms"> & { k
   }
 }
 
-/** One call to the executor, bounded by its deadline and the plan's. */
-async function perform(run: Run, raw: Action, path: string, attempt: number, deadlineMs: number, board: unknown, bind?: string): Promise<Outcome> {
+/** One call to the executor, bounded by its deadline, the enclosing blocks' (limit, absolute) and the plan's. */
+async function perform(run: Run, raw: Action, path: string, attempt: number, deadlineMs: number, board: unknown, bind?: string, limit = Infinity): Promise<Outcome> {
   if (run.halt) return { ok: false, code: "halted", message: run.halt, halt: run.halt };
   if (run.signal.aborted) return { ok: false, code: "cancelled", message: "The plan was cancelled." };
-  const remaining = Math.min(deadlineMs, run.deadline - run.clock.now());
+  const remaining = Math.min(deadlineMs, run.deadline - run.clock.now(), limit - run.clock.now());
   if (remaining <= 0) return { ok: false, code: "deadline", message: "The plan's deadline passed." };
   const missing: string[] = [];
   const action = resolveRefs(raw, run.bindings, missing) as Action;
   if (missing.length) return { ok: false, code: "unbound", message: `Not bound yet: ${missing.join(", ")}` };
-  const limit = linked(run.signal, remaining, run.clock);
+  const bound = linked(run.signal, remaining, run.clock);
   try {
     const outcome = await Promise.race([
-      run.options.executor.run(action, { signal: limit.signal, deadline: run.clock.now() + remaining, plan: run.plan.id, step: path, attempt, board, raw, bind }).catch((error) => ({ ok: false, code: "executor_error", message: String((error as Error)?.message ?? error) }) as Outcome),
-      limit.expired.then(() => new Promise<Outcome>((resolve) => setTimeout(() => resolve(run.signal.aborted ? { ok: false, code: "cancelled", message: "The plan was cancelled." } : { ok: false, code: "deadline", message: `No outcome within ${Math.round(remaining)} ms.` }), 0))),
+      run.options.executor.run(action, { signal: bound.signal, deadline: run.clock.now() + remaining, plan: run.plan.id, step: path, attempt, board, raw, bind }).catch((error) => ({ ok: false, code: "executor_error", message: String((error as Error)?.message ?? error) }) as Outcome),
+      bound.expired.then(() => new Promise<Outcome>((resolve) => setTimeout(() => resolve(run.signal.aborted ? { ok: false, code: "cancelled", message: "The plan was cancelled." } : { ok: false, code: "deadline", message: `No outcome within ${Math.round(remaining)} ms.` }), 0))),
     ]);
     if (outcome.halt && !run.halt) run.halt = outcome.halt;
     return outcome;
   } finally {
-    limit.done();
+    bound.done();
   }
 }
 
 const succeeded = (step: Step, outcome: Outcome, bindings: Record<string, unknown>) => (step.success ? matches(step.success, outcome, bindings) : outcome.ok);
 
 /** The step's own route: until-polling, then bounded retries with backoff. */
-async function primary(run: Run, step: Step, path: string, board: unknown): Promise<Outcome> {
+async function primary(run: Run, step: Step, path: string, board: unknown, limit = Infinity): Promise<Outcome> {
   const raw = actionOf(step);
   const deadlineMs = step.deadline_ms ?? run.options.defaultDeadlineMs ?? DEFAULT_DEADLINE_MS;
   const retry = step.retry;
   let outcome: Outcome = { ok: false, code: "not_run" };
+  const left = () => Math.min(limit, run.deadline) - run.clock.now();
   for (let attempt = 1; attempt <= 1 + (retry?.times ?? 0); attempt++) {
     const started = run.clock.now();
     if (step.until) {
-      const stopAt = started + deadlineMs;
+      const stopAt = Math.min(started + deadlineMs, limit, run.deadline);
       for (;;) {
-        outcome = await perform(run, raw, path, attempt, Math.max(1, stopAt - run.clock.now()), board, step.bind);
+        outcome = await perform(run, raw, path, attempt, Math.max(1, stopAt - run.clock.now()), board, step.bind, limit);
         if (matches(step.until, outcome, run.bindings)) { outcome = { ...outcome, ok: true }; break; }
         if (outcome.halt || run.signal.aborted || ["cancelled", "halted"].includes(outcome.code ?? "")) break;
         if (run.clock.now() + (step.interval_ms ?? 1000) >= stopAt) { outcome = { ok: false, code: "deadline", message: `Not reached within ${deadlineMs} ms.`, value: outcome.value }; break; }
-        await run.clock.sleep(step.interval_ms ?? 1000, run.signal);
+        await run.clock.sleep(Math.min(step.interval_ms ?? 1000, Math.max(0, stopAt - run.clock.now())), run.signal);
       }
     } else {
-      outcome = await perform(run, raw, path, attempt, deadlineMs, board, step.bind);
+      outcome = await perform(run, raw, path, attempt, deadlineMs, board, step.bind, limit);
     }
     emit(run, { kind: "attempt", step: path, label: step.label, attempt, route: 1, action: raw.do, ok: outcome.ok, code: outcome.code, message: outcome.message, value: outcome.value, ms: Math.round(run.clock.now() - started) });
     if (succeeded(step, outcome, run.bindings) || outcome.halt || run.signal.aborted) break;
     if (retry?.on && !matches(retry.on, outcome, run.bindings)) break;
     if (attempt <= (retry?.times ?? 0)) {
       const wait = Math.min(retry!.max_backoff_ms ?? 10_000, (retry!.backoff_ms ?? 500) * (retry!.factor ?? 2) ** (attempt - 1));
+      // No backoff past the time that is left: the next attempt would only meet the deadline.
+      if (wait >= left()) { outcome = { ...outcome, ok: false, code: outcome.code ?? "deadline" }; break; }
       await run.clock.sleep(wait, run.signal);
     }
   }
   return outcome;
 }
 
-async function guardHolds(run: Run, step: Step, path: string, board: unknown): Promise<boolean> {
+async function guardHolds(run: Run, step: Step, path: string, board: unknown, limit = Infinity): Promise<boolean> {
   const guard = step.when!;
-  const stopAt = run.clock.now() + (guard.wait_ms ?? 0);
+  const stopAt = Math.min(run.clock.now() + (guard.wait_ms ?? 0), limit, run.deadline);
   for (let attempt = 1; ; attempt++) {
-    const outcome = guard.check ? await perform(run, guard.check, `${path}/when`, attempt, Math.max(1, (guard.wait_ms ?? 0) || DEFAULT_DEADLINE_MS), board) : { ok: true, value: run.bindings };
+    const outcome = guard.check ? await perform(run, guard.check, `${path}/when`, attempt, Math.max(1, (guard.wait_ms ?? 0) || DEFAULT_DEADLINE_MS), board, undefined, limit) : { ok: true, value: run.bindings };
     const met = matches(guard.match, outcome, run.bindings);
     if (met || run.clock.now() >= stopAt || run.halt || run.signal.aborted) return met;
     await run.clock.sleep(Math.min(guard.interval_ms ?? 500, Math.max(1, stopAt - run.clock.now())), run.signal);
@@ -525,7 +528,7 @@ async function guardHolds(run: Run, step: Step, path: string, board: unknown): P
 }
 
 /** Runs one step (at any depth). */
-async function runStep(run: Run, step: Step, path: string, inherited?: unknown): Promise<ListResult> {
+async function runStep(run: Run, step: Step, path: string, inherited?: unknown, limit = Infinity): Promise<ListResult> {
   run.steps++;
   if (run.steps > (run.plan.max_steps ?? 1000)) return { status: "ended", end: "fail", reason: `More than ${run.plan.max_steps ?? 1000} steps ran (a goto loop?).` };
   const visit = (run.visits.get(path) ?? 0) + 1;
@@ -555,40 +558,43 @@ async function runStep(run: Run, step: Step, path: string, inherited?: unknown):
     if (run.signal.aborted) { record("failed", { code: "cancelled" }); return { status: "failed", reason: "cancelled" }; }
   }
   if (board !== undefined) run.bindings.board = board;
-  if (step.when && !(await guardHolds(run, step, vpath, board))) {
+  // A block's deadline_ms is an absolute limit for everything inside it (each action's own is per attempt).
+  const until = (step.together || step.sequence) && step.deadline_ms !== undefined ? Math.min(limit, run.clock.now() + step.deadline_ms) : limit;
+  if (step.when && !(await guardHolds(run, step, vpath, board, limit))) {
     if ((step.when.otherwise ?? "skip") === "skip") { record("skipped", { guard: "unmet" }); return { status: "ok" }; }
     const unmet: Outcome = { ok: false, code: "precondition", message: "The precondition was not met." };
     // fallback: the step's fallback (and branches) act on it; fail: straight to on_fail, since the step never started.
-    if (step.when.otherwise === "fallback") return finish(run, step, vpath, visit, unmet, board, record, { guard: "unmet" });
-    return finish(run, { ...step, fallback: undefined, outcomes: undefined }, vpath, visit, unmet, board, record, { guard: "unmet" });
+    if (step.when.otherwise === "fallback") return finish(run, step, vpath, visit, unmet, board, record, { guard: "unmet" }, limit);
+    return finish(run, { ...step, fallback: undefined, outcomes: undefined }, vpath, visit, unmet, board, record, { guard: "unmet" }, limit);
   }
   let outcome: Outcome = { ok: false, code: "not_run" };
   let route = 1;
   if (step.together) {
-    const children = await Promise.all(step.together.map((child, i) => runStep(run, child, `${vpath}/t${i + 1}`, board ?? null)));
+    const children = await Promise.all(step.together.map((child, i) => runStep(run, child, `${vpath}/t${i + 1}`, board ?? null, until)));
     const failedChild = children.find((c) => c.status !== "ok");
     outcome = failedChild ? { ok: false, code: failedChild.status === "stopped" ? "stopped" : "joint_failed", message: failedChild.reason ?? failedChild.outcome?.message } : { ok: true, value: children.map((c) => c.outcome?.value) };
     if (failedChild?.jump) return failedChild;
   } else if (step.sequence) {
-    const result = await runList(run, step.sequence, `${vpath}/s`, board);
+    const result = await runList(run, step.sequence, `${vpath}/s`, board, until);
     if (result.jump || result.status === "stopped" || result.status === "ended") return result;
     outcome = result.status === "ok" ? { ...(result.outcome ?? { ok: true }), ok: true } : { ...(result.outcome ?? { ok: false }), ok: false, code: result.outcome?.code ?? "block_failed", message: result.reason };
   }
   if (!step.together) {
-    if (!step.sequence) outcome = await primary(run, step, vpath, board);
+    if (!step.sequence) outcome = await primary(run, step, vpath, board, limit);
     // Rung 2: alternative routes, in order, while the route before failed.
     for (let r = 0; !succeeded(step, outcome, run.bindings) && !outcome.halt && !run.signal.aborted && r < (step.alternatives?.length ?? 0); r++) {
       route = r + 2;
-      const result = await runList(run, step.alternatives![r], `${vpath}/r${route}`, board);
+      const result = await runList(run, step.alternatives![r], `${vpath}/r${route}`, board, until);
       if (result.jump || result.status === "stopped" || result.status === "ended") return result;
       outcome = result.status === "ok" ? { ...(result.outcome ?? { ok: true }), ok: true } : (result.outcome ?? { ok: false, code: "route_failed" });
     }
   }
-  return finish(run, step, vpath, visit, outcome, board, record, { route });
+  if (until < limit && run.clock.now() >= until && !succeeded(step, outcome, run.bindings)) outcome = { ...outcome, ok: false, code: "deadline", message: `The block's ${step.deadline_ms} ms ran out.` };
+  return finish(run, step, vpath, visit, outcome, board, record, { route }, limit);
 }
 
 /** Branches, the fallback and on_fail, after the step's routes. */
-async function finish(run: Run, step: Step, path: string, visit: number, outcome: Outcome, board: unknown, record: (status: string, extra?: Json) => void, extra: Json): Promise<ListResult> {
+async function finish(run: Run, step: Step, path: string, visit: number, outcome: Outcome, board: unknown, record: (status: string, extra?: Json) => void, extra: Json, limit = Infinity): Promise<ListResult> {
   if (step.bind && outcome.value !== undefined) run.bindings[step.bind] = structuredClone(outcome.value);
   let ok = succeeded(step, outcome, run.bindings);
   let jump: string | undefined;
@@ -598,12 +604,12 @@ async function finish(run: Run, step: Step, path: string, visit: number, outcome
   // A cancel ends the plan here: no branch or fallback acts on a world that is going away.
   if (run.signal.aborted) { record("failed", { ...extra, code: "cancelled" }); return { status: "failed", outcome, reason: "cancelled" }; }
   for (const [b, branch] of (step.outcomes ?? []).entries()) {
-    const subject = branch.observe ? await perform(run, branch.observe, `${path}/b${b + 1}/observe`, 1, DEFAULT_DEADLINE_MS, board) : outcome;
+    const subject = branch.observe ? await perform(run, branch.observe, `${path}/b${b + 1}/observe`, 1, DEFAULT_DEADLINE_MS, board, undefined, limit) : outcome;
     if (!matches(branch.match, subject, run.bindings)) continue;
     anticipated = true;
     branchName = branch.name ?? `branch ${b + 1}`;
     if (branch.run) {
-      const result = await runList(run, branch.run, `${path}/b${b + 1}`, board);
+      const result = await runList(run, branch.run, `${path}/b${b + 1}`, board, limit);
       if (result.jump || result.status === "stopped" || result.status === "ended") { record(result.status === "ok" ? "ok" : "failed", { ...extra, branch: branchName }); return result; }
       ok = result.status === "ok";
       if (result.outcome) outcome = result.outcome;
@@ -619,7 +625,7 @@ async function finish(run: Run, step: Step, path: string, visit: number, outcome
   let fellBack = false;
   if (!ok && step.fallback) {
     fellBack = true;
-    const result = await runList(run, step.fallback, `${path}/f`, board);
+    const result = await runList(run, step.fallback, `${path}/f`, board, limit);
     if (result.jump || result.status === "stopped" || result.status === "ended") { record(result.status === "ok" ? "ok" : "failed", { ...extra, ...(branchName ? { branch: branchName } : {}), fallback: true, unanticipated }); return result; }
     ok = result.status === "ok";
     if (result.outcome) outcome = result.outcome;
@@ -632,10 +638,10 @@ async function finish(run: Run, step: Step, path: string, visit: number, outcome
 }
 
 /** A nested list of steps (a route, a branch, a fallback). A jump goes up to the plan's top level. */
-async function runList(run: Run, steps: Step[], path: string, board: unknown): Promise<ListResult> {
+async function runList(run: Run, steps: Step[], path: string, board: unknown, limit = Infinity): Promise<ListResult> {
   let last: Outcome | undefined;
   for (const [i, step] of steps.entries()) {
-    const result = await runStep(run, step, `${path}/${i + 1}`, board);
+    const result = await runStep(run, step, `${path}/${i + 1}`, board, limit);
     if (result.status !== "ok" || result.jump) return result;
     last = result.outcome;
   }
