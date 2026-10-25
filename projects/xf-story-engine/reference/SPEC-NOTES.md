@@ -2108,6 +2108,22 @@ Entries for what this build did and what the specifications left open. The numbe
 | `groupsProcess` | via restoreReferencedHeader |
 | `groupsProcess.init` | layer-owned data or gated kernel delegation |
 | `groupsProcess.run` | via restoreReferencedHeader |
+| `eventsProcess` | recoverIfSaved |
+| `eventsProcess.cloneState` | layer-owned data or gated kernel delegation |
+| `eventsProcess.init` | layer-owned data or gated kernel delegation |
+| `eventsProcess.run` | recoverIfSaved |
+| `goalsProcess` | recoverIfSaved |
+| `goalsProcess.cloneState` | layer-owned data or gated kernel delegation |
+| `goalsProcess.init` | layer-owned data or gated kernel delegation |
+| `goalsProcess.run` | via restoreReferencedHeader |
+| `grievanceFromAct` | via restoreReferencedHeader |
+| `Policies.sizeOf` | layer-owned data or gated kernel delegation |
+| `Sim.postAt` | layer-owned data or gated kernel delegation |
+| `stateRules` | via restoreEdge |
+| `stateRules.endsBy` | layer-owned data or gated kernel delegation |
+| `stateRules.fromChange` | layer-owned data or gated kernel delegation |
+| `stateRules.holdsAt` | via restoreEdge |
+| `stateRules.search` | layer-owned data or gated kernel delegation |
 
 ### What this build holds, and what it leaves
 
@@ -2115,7 +2131,7 @@ Entries for what this build did and what the specifications left open. The numbe
 
 **Built (S1 v0.6):** the kind registry's `fills`, `outcomes` and `agentRoles` with the load lint (§5.1, §5.2a; SF1-K-1 to K-3); outcomes drawn once from the occurrence's `Id`, with `guarded`, `pRefuse` and the compliance history, effects and the guard participant following the outcome, facts carrying `outcome`, `parties` and `effects` (§5.2a, §7.2; SF1-F-1, F-2, F-4); the norms' refusals, the `compliers` history, enforcement aimed at the oldest pending refuser and the interregnum's discipline (§7.5; SF1-N-8 to N-10); group seats, leaders' leanings, removal, succession, interregnum, the bar after an arrest, the pulses by function, decisions and relents as events, the refusal share of the books (§7.8; SF1-G-1, G-7 to G-10, G-13, G-15, G-16, F-3); news beliefs, the `told` role of a telling, a promise's outcome (§8.3, §8.4, §8.6; SF1-W-8, L-9); the `leads` and `holds` reads (§9.1; SF1-R-4 in part); the key and mint-name pins (SF1-H-9 in part).
 
-**Not built (S1 v0.6), for the next build:** `people.goals` and its goals, duties, posts and caps (§7.10; SF1-Y-1 to Y-14); the goal acts of `city.events` and the working holder map (§7.2, §4.9; SF1-I-17, I-18, the E4 variant, E5); `punish`, the grievance policy, `seedGoals`, the encounters of `scene.acts` and the protagonist-object clauses of the gate (§7.8.1, §8.9, §8.10, §7.9; SF1-D-1 to D-10, E6); the `wants`, `guarded` and `intentAgainst` reads (registered and unbuilt: they answer `maybe`) and the state fillers (§9.1, §9.1a; SF1-R-5); the v0.6 audits (SF1-Q-2 additions). `guarded` is implemented as `guardOf` over a post history read from the `people.goals` digest; with no such process the history is empty, so nothing is ever guarded and `prevented` is reached only in fixtures that supply posts. `SF1-A-6` (an item's outcome at opening) is built in `scene.acts` (the same `drawOutcome` as admission) and checked through SF1-F-2 only for events.
+**Not built when the first part of this build ended (all of it is built by the third part, below):** `people.goals` and its goals, duties, posts and caps (§7.10; SF1-Y-1 to Y-14); the goal acts of `city.events` and the working holder map (§7.2, §4.9; SF1-I-17, I-18, the E4 variant, E5); `punish`, the grievance policy, `seedGoals`, the encounters of `scene.acts` and the protagonist-object clauses of the gate (§7.8.1, §8.9, §8.10, §7.9; SF1-D-1 to D-10, E6); the `wants`, `guarded` and `intentAgainst` reads (registered and unbuilt: they answer `maybe`) and the state fillers (§9.1, §9.1a; SF1-R-5); the v0.6 audits (SF1-Q-2 additions). `guarded` is implemented as `guardOf` over a post history read from the `people.goals` digest; with no such process the history is empty, so nothing is ever guarded and `prevented` is reached only in fixtures that supply posts. `SF1-A-6` (an item's outcome at opening) is built in `scene.acts` (the same `drawOutcome` as admission) and checked through SF1-F-2 only for events.
 
 ### Kernel notes (S0 v4.17)
 
@@ -2142,3 +2158,30 @@ Entries for what this build did and what the specifications left open. The numbe
 - **M3's real run** (`test/m3/witness.test.ts`, "V told of an incident near it") is seed-tuned: its world `p3b` reaches two told incidents in 84 windows under the v0.5 groups and none under v0.6, whose groups start intentions otherwise. The real run now uses world `p3d` (two told incidents, one offer sown, in 84 windows) and waits behind `S1_FULL=1` (about a minute); the small tests of the same file check the same behaviour in the default run. M3's committed packets and results are evidence of the v0.5 dynamics and are not rebuilt by this build; their byte-for-byte rebuild tests (`S1_FULL=1`) are expected to differ.
 - **Process versions** rose: `city.events` 5, `order.norms` 4, `group.decide` 4, `scene.acts` 2 (a save made under the old ones opens read-only, S1 1.4).
 - **Kinds** `decide.<intent>`, `relent.<intent>` and `succession` (family `group`, producer `group.decide`), and `promise` with the tag `news`, are in the registry. The event-kind enum and the participant roles of the schema were widened (`told`, `guard`, `item`, `promiser`, `promisee` and the roles of the group and goal kinds).
+
+### Third part of the second build: goals, goal acts, items and holders, and D-30
+
+This part builds what the first part left (see "Not built" above, now superseded by this list). **Built:** `people.goals` and its goals, duties, posts, caps, endings and frames (S1 7.10; SF1-Y-1 to Y-14); the goal acts, items and holders of `city.events` (S1 7.2, 4.9; SF1-I-17, I-18, the E4 variant, SF1-E5); `punish`, the grievance policy, `seedGoals`, the gate's protagonist-object clauses and the encounters of `scene.acts` (S1 7.8.1, 8.9, 8.10, 6, 7.9; SF1-D-1 to D-10, SF1-E6); the reads `wants`, `guarded` and `intentAgainst` and S1's state rules (S1 9.1, 9.1a; SF1-R-4, R-5); the v0.6 audits (SF1-Q-2) and property tests (S1 14.3). Process versions: `city.events` 6, `group.decide` 5, `scene.acts` 3, `people.goals` 1.
+
+Not built: the state rules for `conceal`, `befall` as a state, `compete`, `tied` and the norm non-complier's `want` (the first three are filled by reads and events that exist; a rule form for them waits for S3's matcher); the split of `reply`.
+
+#### Spec notes (third part)
+
+- **A goal with a post acts only while its owner stands at it.** S1 7.2's `goalAct` pseudocode has no such condition, but SF1-E5 says collectors' shakedowns happen "only at their market posts in M and D", and a warner "waits where V is known". The reference model refuses a goal act for a goal with a post when `where` gives its owner anything but `post`.
+- **`opened` and `expires`.** A goal opens in the run of window `w`; `opened = w`, `expires = w + 2016`, and `expired` is reached when `w' >= expires`. The spec's "2,016 windows after it opens" leaves the run's window open.
+- **No offspring for the kinds goals add** (`presence`, `call-in`, `warning`, `price`, `search`): they have no row in the offspring matrix, so "no row left: no child" applies. `assault`, `theft` and `shakedown` goal acts draw offspring like any admitted occurrence.
+- **`parentCast` is `inherit`.** The reference model's `Descriptor.inherit` and `PendingChild.inherit` hold the victim and the original aggressor (as `target`) that S1 5.4's `parentCast` would give a police response; an item parent keeps it in the ring's `meta`. The E4 variant (an item parent cast under a guard's post, a child due after the post left the history) passes with it.
+- **`EventFact.punish`.** The fact of a goal act of a `punish` duty carries `{ group, intent, rung }` (the spec's `EventFact` has only `goal`), so `group.decide` can count the warnings and prices admitted for its intention without reading the ring.
+- **The group digest** gains `district`, the intention's `motive`, `rung`, `entry`, `grounds`, `warnings` (with `warnKinds`, a parallel list of their kinds), and a `lifecycle` feed of starts, climbs, drops and ends (the relent event as the cause of an end) that `people.goals` reads by its `groups` cursor to date and cause the end of a duty.
+- **`decide.punish` cites the act, not the belief.** S1 7.8's "cause the pulse's source" is, for `retribution-v`, the grounding belief, which is not an event. The decision's `causes` is the act the belief rests on; the belief is the intention's `grounds`.
+- **`seat holder` in a redress.** The motive of a redress carries `leaderSev` when the one wronged holds a seat (the formula of S1 7.8 is the spec's reference for severity).
+- **Mirrored people.** M3's `where` places only residents; a mirrored person is `away`, so a mirrored non-canon person may own a goal but never acts on it, and such goals share one bucket of the district cap. Coarse processes read no position of a mirrored person.
+- **A role goal's owner leaving** (dead or no longer eligible) ends the role goal in S1's state without touching the seed's frame.
+- **Attempts.** The 24 attempts of a duty draw and of a seat draw are `data.goals.attempts` (24) and fixed (24); a small fixture world often leaves a duty unfilled (logged `duty-unfilled`), so the hunt fixtures raise `attempts`.
+- **`protagonist` is an agent role** for the grievance and `absorb`: V in a seed's `response` (roles `protagonist`, `asker`) is an act of V's. The watch frame gains selectors for a belief whose subject is V and for the frames of residents (`xf:resident`, which is not `core:person` by kind).
+- **The gate's floors** include the roles of the goal acts (`guard`, `ward`, `creditor`, `debtor`, `warner`, `searcher`, `asked`, `confronter`); `participantRoles` adds `ward` and `other` (S1 reads `repair`'s `other`).
+- **`intentAgainst`** answers `maybe` for a subject other than V. Its `ranks` value lasts only while the dwell of rung 1 has not run out after the warning was seen; with a short dwell a climb follows the pin in the same run.
+- **`wants` transitions** replay the goal feed (8 windows); a `from` older than the feed answers `maybe`.
+- **State rules** (`src/sim/fillers.ts`) take the form of S3 v0.6 2.2a (S3 v0.6 itself is the next build): `fromChange`, `endsBy`, `search`, `holdsAt` over the digests, edges and memorable beliefs. `blame` reads memorable beliefs only: a witness who does not care about the victim forms a `did.*` belief that is texture, and fills nothing.
+- **Scale of the new end-to-end fixtures.** SF1-E5 and SF1-E6 run one seed of 330 and 520 windows by default and the spec's twenty seeds and two weeks (or the hunt to its end) under `S1_FULL=1`. SF1-D-8 (a) covers the `paid` end at small scale.
+- **`test/sim/transcript.test.ts`** was re-frozen (`201ddb38…` to the digest in the test): in the story's week a goal opens and ends (a log line `goal-end`); the transcript's other lines are unchanged.

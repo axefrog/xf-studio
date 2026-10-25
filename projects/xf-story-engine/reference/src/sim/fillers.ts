@@ -85,6 +85,18 @@ function intentRule(fn: string, id: string, names: string[], argsOf: (group: Id,
   };
 }
 
+/** The live holder edges of every item, each as a fill; the edges and items are recovered first (S0 14.1). */
+function heldBy(sim: Sim): StateFill[] {
+  const out: StateFill[] = [];
+  for (const item of sim.k.store.idsOfKind('xf:item')) {
+    sim.k.persistence.recoverIfSaved(item);
+    for (const e of sim.k.store.edgesFrom(item)) {
+      if (e.type === 'xf:held-by' && (e.valid.to === undefined || e.valid.to > sim.k.now)) out.push({ filler: { edge: e.id }, args: { who: e.to, what: item }, at: e.valid.from, causes: [e.cause] });
+    }
+  }
+  return out;
+}
+
 /** The rules S1 registers (S1 9.1a): each row of the table, over the durable records. */
 export function stateRules(sim: Sim): StateRule[] {
   const v = sim.w.v;
@@ -96,13 +108,7 @@ export function stateRules(sim: Sim): StateRule[] {
   };
 
   // hold(who, what): an `xf:held-by` edge (S1 4.9), searchable from the holder or the item
-  const heldEdges = (): StateFill[] => {
-    const out: StateFill[] = [];
-    for (const item of sim.k.store.idsOfKind('xf:item')) for (const e of sim.k.store.edgesFrom(item)) {
-      if (e.type === 'xf:held-by' && (e.valid.to === undefined || e.valid.to > sim.k.now)) out.push({ filler: { edge: e.id }, args: { who: e.to, what: item }, at: e.valid.from, causes: [e.cause] });
-    }
-    return byId(out);
-  };
+  const heldEdges = (): StateFill[] => byId(heldBy(sim));
   rules.push({
     fn: 'hold', id: 'hold.held-by', durable: true, changes: EDGE_CHANGES('xf:held-by'),
     fromChange: (c) => (c.c === 'edge' && c.edge.type === 'xf:held-by' && !c.ended ? [{ filler: { edge: c.edge.id }, args: { who: c.edge.to, what: c.edge.from }, at: c.edge.valid.from, causes: [c.edge.cause] }] : []),
@@ -110,7 +116,7 @@ export function stateRules(sim: Sim): StateRule[] {
     search: (arg, node, _t, _s, limit) => cut(heldEdges().filter((f) => f.args[arg === 'who' ? 'who' : 'what'] === node), limit),
     holdsAt: (f, t) => {
       if (!('edge' in f)) return 'no';
-      const e = sim.k.store.edges.get(f.edge) ?? sim.k.persistence.restoreEdge(f.edge);
+      const e = sim.k.persistence.restoreEdge(f.edge);
       return e === undefined ? 'maybe' : e.valid.from <= t && (e.valid.to === undefined || t < e.valid.to) ? 'yes' : 'no';
     },
   });

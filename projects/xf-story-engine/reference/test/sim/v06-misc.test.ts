@@ -155,9 +155,9 @@ describe('SF1-R-4: the v0.6 reads that are built', () => {
     expect(sim.reads.eval('holds', [owner, item], 5000)).toBe('yes');
     expect(sim.reads.eval('holds', [holder, item], 5000)).toBe('no');
     expect(sim.reads.transitions('holds', [owner, item], 0, 5000)).toEqual([{ t: 0, value: 'no' }, { t: 500, value: 'yes' }]);
-    // the reads of the goals and the hunt are registered and not built: maybe, until their processes are
+    // the reads of the goals and the hunt are built with their processes; with no process run they have nothing to say (test/sim/v06-reads.test.ts answers them properly)
     for (const r of ['wants', 'guarded', 'intentAgainst']) {
-      expect(sim.reads.defs.get(r)!.built).toBe(false);
+      expect(sim.reads.defs.get(r)!.built).toBe(true);
       expect(sim.reads.eval(r, [holder])).toBe('maybe');
     }
   });

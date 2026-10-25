@@ -182,7 +182,8 @@ export function auditGate(gate: object): Finding[] {
 
 /** The feed cursors each consumer keeps in its state (S1 2.2, S1-I-26). */
 export const FEED_CURSORS: Record<string, string[]> = {
-  'group.decide': ['cursors.events', 'cursors.mirror'],
+  'group.decide': ['cursors.events', 'cursors.mirror', 'cursors.norms', 'cursors.grudges'],
+  'people.goals': ['cursors.events', 'cursors.mirror', 'cursors.norms', 'cursors.groups', 'cursors.roleGoals'],
   'order.stocks': ['cursors.events', 'cursors.norms'],
 };
 
