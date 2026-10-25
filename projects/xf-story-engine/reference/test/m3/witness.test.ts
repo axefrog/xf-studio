@@ -173,16 +173,17 @@ describe('the report is of one incident: the second stage matches that kind of i
   });
 });
 
-describe('V told of an incident near it (the real run)', () => {
+// the real run plays 84 windows of the district with the offer tier on: about a minute, so it waits behind `S1_FULL=1`; the small tests above check the same behaviour (a report completes a pattern, and only its own kind among its own people) in the default run
+(FULL ? describe : describe.skip)('V told of an incident near it (the real run)', () => {
   const play = (witness: boolean, windows: number): Run => {
-    const { opts, notes } = run2World('p3f', 'E', 'restless');
+    const { opts, notes } = run2World('p3d', 'E', 'restless');
     const r = new Run(opts, early, policies.decline!, { walk: true, witness, notes });
     r.runWindows(windows);
     return r;
   };
   // the default is one run that is long enough for two offers to be told; `S1_FULL=1` plays the 108 windows of the first version, with and without the report
   const windows = FULL ? 108 : 84;
-  const on = play(true, windows);
+  const on = FULL ? play(true, windows) : (undefined as unknown as Run);
 
   test('the offer tier completes, and its second stage is a report caused by the incident, naming it, with V as its listener', () => {
     expect(on.witnessed).toBeGreaterThanOrEqual(2);
@@ -219,7 +220,7 @@ describe('V told of an incident near it (the real run)', () => {
     expect(on.w.sim.record.tieHistory).toEqual({});
   });
 
-  (FULL ? test : test.skip)('without the report no offer is sown: the engine\'s own gates refuse an offer about people V was not told of (S1_FULL=1)', () => {
+  test('without the report no offer is sown: the engine\'s own gates refuse an offer about people V was not told of (S1_FULL=1)', () => {
     const off = play(false, windows);
     expect(off.witnessed).toBe(0);
     expect(off.deliveries.filter((d) => d.what === 'offer' && d.template.startsWith(OFFER_PACK))).toEqual([]);

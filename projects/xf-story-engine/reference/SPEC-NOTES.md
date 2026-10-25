@@ -2105,6 +2105,9 @@ Entries for what this build did and what the specifications left open. The numbe
 | `pRefuse` | pure data, supplied predicate environment or gated kernel delegation |
 | `Sim.drawOutcome` | layer-owned data or gated kernel delegation |
 | `Sim.partiesOf` | layer-owned data or gated kernel delegation |
+| `groupsProcess` | via restoreReferencedHeader |
+| `groupsProcess.init` | layer-owned data or gated kernel delegation |
+| `groupsProcess.run` | via restoreReferencedHeader |
 
 ### What this build holds, and what it leaves
 
@@ -2136,6 +2139,6 @@ Entries for what this build did and what the specifications left open. The numbe
 - **Group digest.** The digest keeps the `intent` string of v0.5 (`active:<name>`) and adds `seats`, `interregnum` and `active` (the spec's record), so the existing tests and S2's reads keep working.
 - **A promise's outcome "recorded".** S1 8.6 says the promise is absorbed "once the record gives it an outcome". This build hears a pin on the `outcome` slot of a promise (the watch frame's kind-level selector reaches it) and absorbs then.
 - **Item and holder schema** (`xf:item`, `xf:held-by`, `xf:leads`) is in the world schema. The `xf:held-by` target is `core:thing`, since residents are not `core:person`.
-- **M3's real run** (`test/m3/witness.test.ts`, "V told of an incident near it") is seed-tuned: its world `p3b` reaches two told incidents in 84 windows under the v0.5 groups and none under v0.6, whose groups start intentions otherwise. The default run uses world `p3f` (eight told incidents, seven completed, one offer sown, in 84 windows); the other expectations are unchanged. M3's committed packets and results are evidence of the v0.5 dynamics and are not rebuilt by this build; their byte-for-byte rebuild tests (`S1_FULL=1`) are expected to differ.
+- **M3's real run** (`test/m3/witness.test.ts`, "V told of an incident near it") is seed-tuned: its world `p3b` reaches two told incidents in 84 windows under the v0.5 groups and none under v0.6, whose groups start intentions otherwise. The real run now uses world `p3d` (two told incidents, one offer sown, in 84 windows) and waits behind `S1_FULL=1` (about a minute); the small tests of the same file check the same behaviour in the default run. M3's committed packets and results are evidence of the v0.5 dynamics and are not rebuilt by this build; their byte-for-byte rebuild tests (`S1_FULL=1`) are expected to differ.
 - **Process versions** rose: `city.events` 5, `order.norms` 4, `group.decide` 4, `scene.acts` 2 (a save made under the old ones opens read-only, S1 1.4).
 - **Kinds** `decide.<intent>`, `relent.<intent>` and `succession` (family `group`, producer `group.decide`), and `promise` with the tag `news`, are in the registry. The event-kind enum and the participant roles of the schema were widened (`told`, `guard`, `item`, `promiser`, `promisee` and the roles of the group and goal kinds).
