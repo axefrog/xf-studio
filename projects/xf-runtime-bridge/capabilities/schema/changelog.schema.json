@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "xfb/capability-change-1",
+  "title": "One line of the capability changelog",
+  "description": "changelog/<yyyy-mm>.jsonl holds one JSON object per line, appended, never rewritten. Every change to an item, the registry or the schema gets one line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["at", "by", "kind", "summary"],
+  "properties": {
+    "at": { "description": "When, ISO 8601 with the local offset.", "type": "string", "format": "date-time" },
+    "by": { "description": "Who: a consumer id from registry.json (the owner is 'runtime-bridge').", "type": "string" },
+    "kind": {
+      "description": "added, removed or retired: an item came or went. stage, evidence, health, priority: that axis changed (give from and to). demand: a consumer's demand entry changed. issue: a known issue opened, changed or closed. detail: any other field. registry: areas, consumers or vocabularies. schema: the schema itself.",
+      "enum": ["added", "removed", "retired", "stage", "evidence", "health", "priority", "demand", "issue", "detail", "registry", "schema"]
+    },
+    "items": { "description": "The item ids the change touches.", "type": "array", "items": { "type": "string" } },
+    "from": { "description": "The previous value, for an axis change." },
+    "to": { "description": "The new value, for an axis change." },
+    "summary": { "description": "One plain sentence a reader can follow without the diff.", "type": "string", "maxLength": 300 },
+    "refs": { "description": "Commits, sessions, findings files, messages.", "type": "array", "items": { "type": "string" } }
+  }
+}

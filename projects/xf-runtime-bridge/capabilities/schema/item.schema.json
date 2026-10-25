@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "xfb/capability-item-1",
+  "title": "One bridge capability",
+  "description": "Something the bridge does, will do, or is asked to do. Three independent axes describe where it stands: stage (how far it is built), evidence (how far it is proven in the game) and health (how well it works). Keep them separate: a merged capability can have no game evidence, and a proven one can regress.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "summary", "area", "kind", "stage", "evidence", "health", "priority", "updated"],
+  "properties": {
+    "id": {
+      "description": "Stable id, '<area>.<name>' in lower kebab case. Never reused; a retired capability keeps its id with stage 'retired'.",
+      "type": "string",
+      "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+(\\.[a-z0-9-]+)*$"
+    },
+    "title": { "type": "string", "maxLength": 80 },
+    "summary": {
+      "description": "One or two plain sentences: what it lets someone do, for a reader who doesn't know the code.",
+      "type": "string",
+      "maxLength": 400
+    },
+    "area": { "description": "An id from registry.json areas.", "type": "string" },
+    "parent": { "description": "The id of a broader capability this one is part of.", "type": "string" },
+    "kind": {
+      "description": "sense: reads game state. verb: changes the game. service: infrastructure other capabilities use (pipe, recorder, supervisor). surface: what a person sees (in-game UI). tool: host-side tooling (runner, MCP, CLI). safety: guards and kill paths. research: an investigation, not a feature.",
+      "enum": ["sense", "verb", "service", "surface", "tool", "safety", "research"]
+    },
+    "stage": {
+      "description": "How far it is built. requested: someone asked, not triaged. proposed: triaged, design not agreed. planned: agreed and queued. building: work in progress (branch named). built: done offline on a branch. merged: on main. released: in a published package. retired: removed or replaced (say by what in notes).",
+      "enum": ["requested", "proposed", "planned", "building", "built", "merged", "released", "retired"]
+    },
+    "evidence": {
+      "description": "How far it is proven in the game. none. offline: unit or self-tests only. partial: seen working in game for some rows, others unrun or inconclusive. proven: every required row passed in game. regressed: proven once, now failing.",
+      "enum": ["none", "offline", "partial", "proven", "regressed"]
+    },
+    "health": {
+      "description": "How well it works as far as anyone knows. unknown (never run), works, caveats (works, with known_issues or quirks a user must know), degraded (works badly), broken.",
+      "enum": ["unknown", "works", "caveats", "degraded", "broken"]
+    },
+    "priority": {
+      "description": "P0: blocks a consumer or a session now. P1: next up. P2: queued. P3: someday. Say why in priority_reason when it is P0 or P1.",
+      "enum": ["P0", "P1", "P2", "P3"]
+    },
+    "priority_reason": { "type": "string" },
+    "branch": { "description": "While building or built: the branch it lives on.", "type": "string" },
+    "since": { "description": "The bridge version that first had it, e.g. 0.8.19.", "type": "string" },
+    "changed_in": { "description": "The bridge version of its last behaviour change.", "type": "string" },
+    "depends_on": { "description": "Capability ids it needs. The validator refuses cycles and unknown ids.", "type": "array", "items": { "type": "string" } },
+    "demand": {
+      "description": "Who wants it and why. Consumers write and maintain their own entries here (and only theirs); the owner never edits another consumer's entry except to mark it met.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["consumer", "level", "since"],
+        "properties": {
+          "consumer": { "description": "An id from registry.json consumers.", "type": "string" },
+          "level": { "description": "blocking: the consumer is stopped without it. needs: required for a planned milestone. wants: valuable, not required.", "enum": ["blocking", "needs", "wants"] },
+          "ref": { "description": "The consumer's own requirement id or document anchor, e.g. 'S7' or 'runtime-requirements.md#scene-execution'.", "type": "string" },
+          "milestone": { "description": "The consumer's milestone that needs it, e.g. 'M4'.", "type": "string" },
+          "note": { "description": "What exactly they need from it, in their words.", "type": "string" },
+          "since": { "type": "string", "format": "date" },
+          "met": { "description": "Set when the consumer agrees the need is met.", "type": "string", "format": "date" }
+        }
+      }
+    },
+    "surface": {
+      "description": "Where it shows up, so readers can find it and the validator can cross-check it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commands": { "description": "Catalogue command names (checked against tools/api).", "type": "array", "items": { "type": "string" } },
+        "events": { "description": "Session event kinds it emits.", "type": "array", "items": { "type": "string" } },
+        "config": { "description": "config.ini keys, '[section] key'.", "type": "array", "items": { "type": "string" } },
+        "code": { "description": "Repository paths relative to the bridge project.", "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "verification": {
+      "description": "What proves it. rows: test-card rows with their latest verdicts. tests: offline test files.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["row", "verdict"],
+            "properties": {
+              "row": { "description": "Test-card row id, e.g. 'ST7' or 'CS8181'.", "type": "string" },
+              "verdict": { "enum": ["unrun", "pass", "partial", "fail", "inconclusive", "skipped"] },
+              "session": { "description": "The session that gave the verdict, e.g. 'borg-4'.", "type": "string" },
+              "build": { "description": "Bridge version and commit, e.g. '0.8.22 1cd681c3'.", "type": "string" },
+              "date": { "type": "string", "format": "date" },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "tests": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "limits": { "description": "Hard limits a user must plan around (e.g. 'at most 5 XF actors').", "type": "array", "items": { "type": "string" } },
+    "quirks": { "description": "Nuances and idiosyncrasies: behaviour that is correct but surprising.", "type": "array", "items": { "type": "string" } },
+    "known_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary", "severity", "status", "since"],
+        "properties": {
+          "summary": { "type": "string" },
+          "severity": { "enum": ["high", "medium", "low"] },
+          "status": { "enum": ["open", "fixing", "fixed-unverified", "fixed", "wontfix"] },
+          "since": { "type": "string", "format": "date" },
+          "ref": { "description": "A ledger id (RB-…), findings file or commit.", "type": "string" }
+        }
+      }
+    },
+    "unknowns": {
+      "description": "Open questions, and how to settle each.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question"],
+        "properties": {
+          "question": { "type": "string" },
+          "settle_by": { "description": "How: a test row, a research brief, reading source.", "type": "string" },
+          "needs_game": { "type": "boolean" }
+        }
+      }
+    },
+    "improvements": {
+      "description": "Ways it could be better, not yet planned.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary"],
+        "properties": {
+          "summary": { "type": "string" },
+          "value": { "enum": ["high", "medium", "low"] },
+          "effort": { "enum": ["small", "medium", "large"] }
+        }
+      }
+    },
+    "docs": { "description": "Links (repository-relative) to design, knowledge and test-card sections.", "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" },
+    "updated": { "description": "Date of the last change to this entry; every change also gets a changelog line.", "type": "string", "format": "date" }
+  }
+}

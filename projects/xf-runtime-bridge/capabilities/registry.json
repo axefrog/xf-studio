@@ -1,0 +1,32 @@
+{
+  "schema": "xfb/capability-registry-1",
+  "owner": "runtime-bridge",
+  "areas": [
+    { "id": "link", "title": "Link and protocol", "summary": "The pipe, discovery, the writer seat and reader slots, the command catalogue, refusals and undo." },
+    { "id": "safety", "title": "Safety", "summary": "Write gates, the save lock, the kill switch, handover, refusals in unsafe states, the commit tripwire." },
+    { "id": "lifecycle", "title": "Game lifecycle", "summary": "Launch, phases, waiting, loading saves, the start screen and continue, closing." },
+    { "id": "player", "title": "V: state and control", "summary": "Reading V's state, appearance, weapon and wardrobe; moving, looking, acting and teleporting V." },
+    { "id": "world", "title": "World senses and nudges", "summary": "Scene reports, probes, districts, facts, time and weather, props, doors and lights." },
+    { "id": "npc", "title": "NPCs and actors", "summary": "Spawning, directing, speech, substitution of crowd people, fighters and casts." },
+    { "id": "incidents", "title": "Incidents and witnessing", "summary": "Declared and observed incidents, who perceived them, and the reports tied to them." },
+    { "id": "story", "title": "Story and DM toolkit", "summary": "Phone calls and texts, quest objectives and pins, choices, notifications: the tools a director uses." },
+    { "id": "photo", "title": "Photo mode", "summary": "Opening photo mode, camera, lights, poses, expressions, framing and subjects." },
+    { "id": "character", "title": "Character and inventory", "summary": "The character creator, equipment, cyberware, live posing and expressions." },
+    { "id": "capture", "title": "Capture and evidence", "summary": "Screenshots, bursts, recrops, event-armed captures and scene checks before a capture." },
+    { "id": "recorder", "title": "Recorder and catch-up", "summary": "Continuous channels, taps, session events and catching up on what happened between turns." },
+    { "id": "supervisor", "title": "Supervisor and plans", "summary": "Actor goals, invariants and policies at frame rate; the plan executor shared with scene scripts." },
+    { "id": "surfaces", "title": "In-game surfaces", "summary": "The ink panel, the XF overlay box, the CET window and line, their themes and motion." },
+    { "id": "tooling", "title": "Host tooling", "summary": "The MCP server, CLI, session runner, preflight, packaging and staging." },
+    { "id": "core", "title": "XF Core and plugins", "summary": "The planned runtime base: plugin host, manifests, services, distribution." }
+  ],
+  "consumers": [
+    { "id": "runtime-bridge", "title": "XF · Runtime bridge", "kind": "chat" },
+    { "id": "story-engine", "title": "XF · Story Engine", "kind": "chat", "requirements_doc": "research/story-engine/runtime-requirements.md" },
+    { "id": "studio", "title": "XF · Studio", "kind": "chat" },
+    { "id": "meta-coordinator", "title": "XF · Meta-coordinator", "kind": "chat" },
+    { "id": "orrery", "title": "Live world view (working name XF Orrery)", "kind": "product" },
+    { "id": "photo-mode-tools", "title": "Photo Mode Tools", "kind": "product" },
+    { "id": "session-runner", "title": "Session runner and test sessions", "kind": "tool" },
+    { "id": "maintainer", "title": "The maintainer", "kind": "person-role" }
+  ]
+}

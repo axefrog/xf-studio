@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "xfb/capability-registry-1",
+  "title": "The capability registry's index",
+  "description": "registry.json: the areas items are filed under, and the consumers who may record demand. Items live in items/<area>.json as arrays of xfb/capability-item-1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "owner", "areas", "consumers"],
+  "properties": {
+    "schema": { "const": "xfb/capability-registry-1" },
+    "owner": { "description": "The consumer id that owns primary details (stage, evidence, health, priority, surface, verification, limits, quirks, known issues).", "type": "string" },
+    "areas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "summary"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "title": { "type": "string" },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "consumers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "kind"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "title": { "description": "How they're addressed, e.g. 'XF · Story Engine'.", "type": "string" },
+          "kind": { "enum": ["chat", "product", "tool", "person-role"] },
+          "requirements_doc": { "description": "Their own requirements document, if any.", "type": "string" }
+        }
+      }
+    }
+  }
+}
