@@ -789,7 +789,11 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   };
   const kindOfStop = (reason: string | undefined) => (reason?.includes("handed to the player") ? "handed_over" : reason?.includes("tripwire tripped") ? "tripwire" : "stopped");
   const reportOf = (result: PlanResult) => ({ outcome: result.outcome, status: result.status, reason: result.reason, last_step: result.last_step });
-  const plan = (p: Plan, extra: Partial<Parameters<typeof runPlan>[1]> = {}) => runPlan(p, { executor, clock, signal, bindings, ...extra });
+  // The batch's plans run under the caller's signal and the commit monitor's: a trip interrupts the work in hand.
+  const work = new AbortController();
+  const interrupt = () => work.abort();
+  for (const s of [signal, monitor.signal]) { if (s.aborted) interrupt(); else s.addEventListener("abort", interrupt, { once: true }); }
+  const plan = (p: Plan, extra: Partial<Parameters<typeof runPlan>[1]> = {}) => runPlan(p, { executor, clock, signal: work.signal, bindings, ...extra });
   const remaining = () => {
     const rerun = new Set(halt?.rerun ?? []);
     return planned.rows.map((r) => r.row.id).filter((id) => {
@@ -861,6 +865,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       record.prelude = { status: prelude.status, reason: prelude.reason };
       record.reports.push(...prelude.reports);
       restartDue = false;
+      if (monitor.reason) stopWith("tripwire", monitor.reason, row.id);
       if (prelude.status !== "done") {
         stopWith(prelude.status === "stopped" ? kindOfStop(prelude.reason) : "prelude", prelude.status === "stopped" ? prelude.reason ?? "stopped" : `the game couldn't be brought to ${row.id}'s set-up: ${prelude.reason}`, row.id);
         record.reason = `could not set up: ${prelude.reason}`;
@@ -881,6 +886,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       record.telemetry = await telemetry.collect(row.id);
       record.ms = Math.round(clock.now() - started);
       log(`${record.verdict.padEnd(7)} ${row.id}${record.reason ? `: ${record.reason}` : ""}`);
+      if (monitor.reason) stopWith("tripwire", monitor.reason, row.id);
       if (result.status === "stopped") stopWith(kindOfStop(result.reason), result.reason ?? "stopped", row.id);
       restartDue = row.after === "restart";
       // Significant bugs: the batch stops here rather than piling misleading rows on top.

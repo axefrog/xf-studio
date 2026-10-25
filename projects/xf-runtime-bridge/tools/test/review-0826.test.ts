@@ -40,6 +40,21 @@ describe("H2 and M12: the tripwire can't block the restore, and the restore's ou
   });
 });
 
+describe("M10: the commit monitor interrupts a long action", () => {
+  test("free commit falling during a minute-long step stops it within a reading, not at its end", async () => {
+    const clock = new FakeClock();
+    const host = fakeHost({ freeGb: 40 });
+    void clock.sleep(5000).then(() => { host.free = 1024 ** 3; });
+    const api = fakeApi(clock);
+    const rows = [{ id: "long", title: "long", steps: [{ do: "wait", ms: 60_000, deadline_ms: 70_000 }] }, { id: "next", title: "next", steps: [{ do: "set", value: 1 }] }];
+    const result = await go(script(rows), api, host, clock, tempDir("xfb-review-"), { commitEveryMs: 1000 });
+    expect(result.haltInfo?.kind).toBe("tripwire");
+    expect(clock.now()).toBeLessThan(20_000);
+    expect(api.calls.filter((c) => c.name === "session.handover").length).toBe(1);
+    expect(result.remaining).toEqual(["long", "next"]);
+  });
+});
+
 describe("H1: exceptions never bypass the cleanup", () => {
   test("a report callback that throws doesn't skip the release or the close", async () => {
     const clock = new FakeClock();
