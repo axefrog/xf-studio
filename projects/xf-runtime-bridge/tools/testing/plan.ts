@@ -571,23 +571,26 @@ async function runStep(run: Run, step: Step, path: string, inherited?: unknown, 
   let route = 1;
   if (step.together) {
     const children = await Promise.all(step.together.map((child, i) => runStep(run, child, `${vpath}/t${i + 1}`, board ?? null, until)));
+    // A child's stop, end or goto goes up as it is: the parent's on_fail never swallows it.
+    const control = children.find((c) => c.status === "stopped") ?? children.find((c) => c.status === "ended") ?? children.find((c) => c.jump);
+    if (control) {
+      record(control.status === "ok" ? "ok" : "failed", { route, control: control.status === "ok" ? `goto ${control.jump}` : control.status });
+      return control;
+    }
     const failedChild = children.find((c) => c.status !== "ok");
-    outcome = failedChild ? { ok: false, code: failedChild.status === "stopped" ? "stopped" : "joint_failed", message: failedChild.reason ?? failedChild.outcome?.message } : { ok: true, value: children.map((c) => c.outcome?.value) };
-    if (failedChild?.jump) return failedChild;
+    outcome = failedChild ? { ok: false, code: "joint_failed", message: failedChild.reason ?? failedChild.outcome?.message } : { ok: true, value: children.map((c) => c.outcome?.value) };
   } else if (step.sequence) {
     const result = await runList(run, step.sequence, `${vpath}/s`, board, until);
     if (result.jump || result.status === "stopped" || result.status === "ended") return result;
     outcome = result.status === "ok" ? { ...(result.outcome ?? { ok: true }), ok: true } : { ...(result.outcome ?? { ok: false }), ok: false, code: result.outcome?.code ?? "block_failed", message: result.reason };
   }
-  if (!step.together) {
-    if (!step.sequence) outcome = await primary(run, step, vpath, board, limit);
-    // Rung 2: alternative routes, in order, while the route before failed.
-    for (let r = 0; !succeeded(step, outcome, run.bindings) && !outcome.halt && !run.signal.aborted && r < (step.alternatives?.length ?? 0); r++) {
-      route = r + 2;
-      const result = await runList(run, step.alternatives![r], `${vpath}/r${route}`, board, until);
-      if (result.jump || result.status === "stopped" || result.status === "ended") return result;
-      outcome = result.status === "ok" ? { ...(result.outcome ?? { ok: true }), ok: true } : (result.outcome ?? { ok: false, code: "route_failed" });
-    }
+  if (!step.together && !step.sequence) outcome = await primary(run, step, vpath, board, limit);
+  // Rung 2, for every kind of step (an action, a block, a joint beat): alternative routes, in order, while the route before failed.
+  for (let r = 0; !succeeded(step, outcome, run.bindings) && !outcome.halt && !run.signal.aborted && r < (step.alternatives?.length ?? 0); r++) {
+    route = r + 2;
+    const result = await runList(run, step.alternatives![r], `${vpath}/r${route}`, board, until);
+    if (result.jump || result.status === "stopped" || result.status === "ended") return result;
+    outcome = result.status === "ok" ? { ...(result.outcome ?? { ok: true }), ok: true } : (result.outcome ?? { ok: false, code: "route_failed" });
   }
   if (until < limit && run.clock.now() >= until && !succeeded(step, outcome, run.bindings)) outcome = { ...outcome, ok: false, code: "deadline", message: `The block's ${step.deadline_ms} ms ran out.` };
   return finish(run, step, vpath, visit, outcome, board, record, { route }, limit);

@@ -137,6 +137,34 @@ describe("M6: deadlines bound blocks, polling, guards and backoff", () => {
   });
 });
 
+describe("M7: a joint beat passes its children's control results up, and takes the same ladder", () => {
+  const ok = { run: async (a: { do: string }) => (a.do === "bad" ? { ok: false, code: "no" } : { ok: true }) };
+  test("a child's stop stops the plan, even under the parent's on_fail continue", async () => {
+    const clock = new FakeClock();
+    const result = await runPlan({ id: "p", steps: [{ on_fail: "continue", together: [{ do: "a", outcomes: [{ match: { ok: true }, result: "stop" }] }, { do: "b" }] }, { do: "after" }] }, { clock, executor: ok });
+    expect(result.status).toBe("stopped");
+  });
+
+  test("a child's goto is followed", async () => {
+    const clock = new FakeClock();
+    const done: string[] = [];
+    const result = await runPlan({ id: "p", steps: [{ together: [{ do: "a", outcomes: [{ match: { ok: true }, goto: "there" }] }, { do: "b" }] }, { do: "skipped" }, { label: "there", do: "landed" }] },
+      { clock, executor: { run: async (a) => { done.push(a.do); return { ok: true }; } } });
+    expect(result.status).toBe("done");
+    expect(done).not.toContain("skipped");
+    expect(done).toContain("landed");
+  });
+
+  test("a failed joint beat takes its alternatives", async () => {
+    const clock = new FakeClock();
+    const done: string[] = [];
+    const result = await runPlan({ id: "p", steps: [{ together: [{ do: "bad" }, { do: "b" }], alternatives: [[{ do: "other" }]] }] },
+      { clock, executor: { run: async (a) => { done.push(a.do); return ok.run(a); } } });
+    expect(result.status).toBe("done");
+    expect(done).toContain("other");
+  });
+});
+
 describe("H1: exceptions never bypass the cleanup", () => {
   test("a report callback that throws doesn't skip the release or the close", async () => {
     const clock = new FakeClock();
