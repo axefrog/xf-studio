@@ -94,6 +94,26 @@ describe("M4: the release has its own step budget", () => {
   });
 });
 
+describe("M5: a hanging blackboard read can't defeat deadlines or a cancel", () => {
+  test("the plan's deadline still ends a plan whose snapshot never answers", async () => {
+    const clock = new FakeClock();
+    const result = await runPlan({ id: "p", deadline_ms: 5000, steps: [{ do: "a" }, { do: "b" }] }, {
+      clock, executor: { run: async () => ({ ok: true }), snapshot: () => new Promise(() => {}) },
+    });
+    expect(result.status).toBe("failed");
+    expect(clock.now()).toBeLessThanOrEqual(5000);
+  });
+
+  test("a cancel ends it too", async () => {
+    const clock = new FakeClock();
+    const stop = new AbortController();
+    void clock.sleep(1000).then(() => stop.abort());
+    const result = await runPlan({ id: "p", steps: [{ do: "a" }] }, { clock, signal: stop.signal, executor: { run: async () => ({ ok: true }), snapshot: () => new Promise(() => {}) } });
+    expect(result.status).toBe("cancelled");
+    expect(clock.now()).toBe(1000);
+  });
+});
+
 describe("H1: exceptions never bypass the cleanup", () => {
   test("a report callback that throws doesn't skip the release or the close", async () => {
     const clock = new FakeClock();

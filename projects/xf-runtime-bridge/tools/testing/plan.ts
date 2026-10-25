@@ -540,7 +540,19 @@ async function runStep(run: Run, step: Step, path: string, inherited?: unknown):
   // The blackboard: one read per step, shared by all its roles (a together step's children inherit it).
   let board = inherited;
   if (board === undefined && run.options.executor.snapshot && !run.signal.aborted) {
-    try { board = await run.options.executor.snapshot({ signal: run.signal, plan: run.plan.id, step: vpath }); } catch (error) { board = { unavailable: String(error) }; }
+    // Bounded like any action: a read that hangs can't hold the plan past its deadline or a cancel.
+    const limit = linked(run.signal, Math.max(0, Math.min(run.options.defaultDeadlineMs ?? DEFAULT_DEADLINE_MS, run.deadline - run.clock.now())), run.clock);
+    try {
+      board = await Promise.race([
+        run.options.executor.snapshot({ signal: limit.signal, plan: run.plan.id, step: vpath }),
+        limit.expired.then(() => ({ unavailable: run.signal.aborted ? "cancelled" : "the blackboard read ran out of time" })),
+      ]);
+    } catch (error) {
+      board = { unavailable: String(error) };
+    } finally {
+      limit.done();
+    }
+    if (run.signal.aborted) { record("failed", { code: "cancelled" }); return { status: "failed", reason: "cancelled" }; }
   }
   if (board !== undefined) run.bindings.board = board;
   if (step.when && !(await guardHolds(run, step, vpath, board))) {
