@@ -202,3 +202,73 @@ test("state kept with a generation is checked against the generation read again:
   endContextGeneration(renderer); lost = true;
   expect(inGeneration(renderer, next)).toBe(false);
 });
+
+// ---- The morph textures are made together, one fence a round (experiment 044 §16) ----
+
+/** A mesh drawing `targets` position targets of `vertices` vertices: a morph texture the preparation makes ahead. */
+function morphMesh(vertices: number, targets: number) {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(vertices * 3), 3));
+  geometry.morphAttributes.position = Array.from({ length: targets }, () => new THREE.Float32BufferAttribute(new Float32Array(vertices * 3).fill(0.5), 3));
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  mesh.updateMorphTargets();
+  return mesh;
+}
+/** The recording renderer with GPU fences the test controls: each is unsignalled until `release`d (or while `held`). */
+async function fencedRenderer() {
+  const { recordingRenderer } = await import("./fixtures/recording-gl");
+  const { morphTextures } = await import("../src/platform/scene/morph-textures");
+  const recording = recordingRenderer();
+  const fences: { signalled: boolean }[] = [];
+  const gl = { isContextLost: () => false, SYNC_GPU_COMMANDS_COMPLETE: 1, SYNC_STATUS: 2, UNSIGNALED: 3, SIGNALED: 4,
+    fenceSync: () => { const fence = { signalled: false }; fences.push(fence); return fence; },
+    getSyncParameter: (fence: { signalled: boolean }) => fence.signalled ? 4 : 3, deleteSync: () => {}, flush: () => {} };
+  Object.defineProperty(recording.renderer, "getContext", { value: () => gl });
+  return { recording, fences, morphTextures: morphTextures(recording.renderer)! };
+}
+const noLighting = { prepareSteps: () => ({ steps: [], programs: () => [], result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) }),
+  prepareDisplay: () => ({ ready: Promise.resolve(), programs: () => [] }) };
+
+test("every morph texture is made in the same rounds, not one geometry's fences after another's: the frames follow the rounds, not the sum of the steps", async () => {
+  const { recording, fences, morphTextures } = await fencedRenderer();
+  const scene = new THREE.Scene(), meshes = Array.from({ length: 6 }, () => morphMesh(100, 40));
+  scene.add(...meshes);
+  let frames = 0, clock = 0;
+  // A fence signals by the next frame; an upload costs 3 ms of the frame's 8 (two fit a round), a fill nothing.
+  const sent = () => recording.volumes.length;
+  const frame = async () => { frames++; clock += 20; for (const fence of fences) fence.signalled = true; await Promise.resolve(); };
+  const done = await prepareRuntime({ renderer: recording.renderer, scene, camera: new THREE.PerspectiveCamera(), lighting: noLighting, frame,
+    warmUp: () => false, now: () => clock + 3 * sent() });
+  expect(done.uploads).toBe(6);
+  for (const mesh of meshes) expect(morphTextures.get(mesh.geometry)).toMatchObject({ count: 40 });
+  // Made one geometry after another, each of its three steps (allocate, fill, upload) behind a fence, it took 18 frames or more.
+  expect(frames).toBeLessThan(10);
+});
+
+test("morph uploads wait for the GPU to catch up with the last round's, and go on once it has", async () => {
+  const { recording, fences } = await fencedRenderer();
+  const scene = new THREE.Scene(), meshes = Array.from({ length: 4 }, () => morphMesh(100, 40));
+  scene.add(...meshes);
+  const controller = new AbortController();
+  let frames = 0, clock = 0, firstUpload = -1;
+  const sent = () => recording.volumes.length;
+  const seen: number[] = [];
+  // Fences signal at the next frame until the first upload is sent; then none does for 6 frames.
+  const frame = async () => {
+    frames++; clock += 20;
+    seen.push(sent());
+    if (firstUpload < 0 && sent() > 0) firstUpload = frames;
+    if (firstUpload < 0 || frames >= firstUpload + 6) for (const fence of fences) fence.signalled = true;
+    if (frames > 200) controller.abort(new DOMException("Stopped.", "AbortError"));
+    controller.signal.throwIfAborted();
+    await Promise.resolve();
+  };
+  await prepareRuntime({ renderer: recording.renderer, scene, camera: new THREE.PerspectiveCamera(), lighting: noLighting, frame,
+    warmUp: () => false, now: () => clock + 3 * sent(), signal: controller.signal });
+  // The first round sent what fit its share; the closed fence then held every upload back for six frames, and the rest went once it opened.
+  expect(firstUpload).toBeGreaterThan(0);
+  const at = firstUpload - 1;
+  expect(seen.slice(at, at + 5).every(count => count === seen[at])).toBe(true);
+  expect(sent()).toBeGreaterThan(seen[at]!);
+  expect(frames).toBeLessThan(60);
+});

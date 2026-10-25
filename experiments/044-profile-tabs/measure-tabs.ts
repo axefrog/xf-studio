@@ -20,7 +20,9 @@ type Tick = { at: number; tab: string; drawn: string | null; onCanvas: string | 
   canvasSize?: [number, number] | null; hash: number | null };
 export type Run = { t0: number; before: Tick; ticks: Tick[]; sent: { tab: string; at: number }[]; errors: string[];
   shown: number | null; presented: number | null; target: Tab; links: { linkAt: number; name: string }[]; creates: number[];
-  long: [number, number][]; rasters: { at: number }[]; draws: { at: number; view: string | null }[] };
+  long: [number, number][]; rasters: { at: number }[]; draws: { at: number; view: string | null }[];
+  /** The page's timing marks, GL uploads and program waits over the interval (null detail: none), as [name, ms from the click, ...]. */
+  marks?: [string, number, unknown][]; uploads?: unknown[][]; waits?: unknown[][] };
 type Memory = { live: Record<string, number>; heapMB: number | null; residents: Resident[]; objects?: { kind: string; stack: string }[] };
 type OSMemory = { privateMB: number; dedicatedMB: number | null; sharedMB: number | null; processes: number; error?: string };
 type Closure = { before: Memory; after: Memory; osBefore: OSMemory; osAfter: OSMemory; scene: string };
@@ -215,10 +217,12 @@ async function measure(page: Session, row: Row, noGame: boolean, quick: boolean,
   if (row === "T-h") { target = { ...a, unchanged: true }; steps = [[0, b.tab, true]]; }
   // One-second tail is mandatory for T-g and a late-result check is mandatory for T-f even in quick mode.
   const tail = row === "T-f" ? 5000 : 1000;
-  const repetitions = quick || !["T-a", "T-b", "T-c", "T-d", "T-g"].includes(row) ? 1 : 5;
+  const repetitions = quick || !["T-a", "T-b", "T-c", "T-d", "T-e", "T-g"].includes(row) ? 1 : row === "T-e" ? 3 : 5;
   const runs: { result: ReturnType<typeof analyse>; raw: Run }[] = [];
   for (let i = 0; i < repetitions; i++) {
     if (i) await show(page, a, noGame);
+    // T-e again from cold: A, then B shown leaves C past the warm budget, so the runtime is disposed and the next click builds it afresh.
+    if (i && row === "T-e") await show(page, b, noGame);
     const raw = await page.evaluate(`${G}.run(${JSON.stringify(steps)},${JSON.stringify(target)},${noGame},${tail},${noGame ? 15_000 : 900_000},${row === "T-f"})`) as Run;
     let closure: Closure | undefined;
     if (baseline) {

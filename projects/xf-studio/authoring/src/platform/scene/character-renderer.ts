@@ -2,11 +2,12 @@ import * as THREE from "three";
 import { linkPacer } from "./link-pacing";
 import { gpuDrained, gpuGate } from "./gpu-gate";
 import { contextGeneration } from "./context-generation";
+import { markPhase } from "../../character/character-timing";
 import { copyMaterialShading, extendSkin, fullSkinDepthMaterial, releaseFullSkinDepth } from "../../materials/render/skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../materials/render/eye-material";
 import type { ProfileEncoding } from "../../materials/hair-colour-model";
 import { prepareTemplateGeometry, type AdapterContext, type ResolvedSkinSurface } from "../../materials/render/character-material-adapters";
-import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, uploadStep, uploadUnfinished, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
+import { BODY_SHAPE_KEY, DetailPartPool, detailLedgerOf, loadCharacterDetails, uploadStep, uploadUnfinished, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
   type LoadedCharacterDetails } from "../../character/render/character-detail-loader";
 import { chunkOfMesh, type CharacterDetail, type DetailSlot } from "../../character/render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../character/render/head-skin-placement";
@@ -68,6 +69,8 @@ export type DetailPreparation = {
   frame(): Promise<void>;
   signal?: AbortSignal;
 };
+/** Texels (4 MB of them) a preparation sends the GPU before it waits for it to finish them: a synchronous call behind less never waits noticeably. */
+const DRAIN_TEXELS = 1 << 20;
 /** Main-thread time a preparation spends uploading in one frame before it waits for the next (a map already started finishes). */
 export const PREPARE_FRAME_MS = 8;
 /** Run `callback` in a task of its own, soon (a message is not clamped as a timer is). */
@@ -215,8 +218,16 @@ export function createCharacterRenderer(input: {
       await preparation.frame();
       started = performance.now();
     };
+    /**
+     * Texels this preparation sent the GPU (a bake counts as `DRAIN_TEXELS`): what a first use could wait behind. A preparation that sent
+     * little (a third runtime of one V finds its maps already uploaded) has nothing to wait for. Waiting anyway cost 0.23–0.29 s, the
+     * longest step of that takeover: a fence asked of a quiet GPU process signals late (knowledge/webgl-program-linking.md §4).
+     */
+    let queued = 0;
     const uploadAll = async (textures: Iterable<THREE.Texture>) => {
       for (const texture of textures) {
+        const size = texture.image as { width?: number; height?: number } | null;
+        if (needsWork(texture)) queued += (size?.width ?? 0) * (size?.height ?? 0);
         // A large map a band at a time, a frame let through whenever a step used up its share.
         while (needsWork(texture)) {
           if (signal.aborted) return;
@@ -246,12 +257,13 @@ export function createCharacterRenderer(input: {
       mesh.boundingSphere = mesh.geometry.boundingSphere!.clone();
     }
     await uploadAll(fresh.flatMap(item => item.textures ?? []));
+    markPhase("details:uploads");
     if (fresh.some(item => item.layered?.some(entry => entry.handle.state === "pending"))) await drained();
     // Layered stacks bake with their (now uploaded) layer maps, as the placement would, one stack per frame.
     for (const item of fresh) if (componentShown(item)) for (const { handle } of item.layered ?? []) {
       if (signal.aborted || handle.state !== "pending") continue;
       await pace();
-      if (!signal.aborted) { handle.bake(renderer); started = 0; }
+      if (!signal.aborted) { handle.bake(renderer); started = 0; queued += DRAIN_TEXELS; }
     }
     if (signal.aborted) return;
     // Each part's programs, about one per step, a frame let through whenever a step used up its share (a whole part in one call was 306 ms).
@@ -285,8 +297,10 @@ export function createCharacterRenderer(input: {
       if (signal.aborted) resolve(); else signal.addEventListener("abort", () => resolve(), { once: true });
     })]);
     if (signal.aborted) return;
-    // Each linked program's first use (its uniforms and attributes read back), one at a time between frames, once the GPU is idle.
-    await drained();
+    // Each linked program's first use (its uniforms and attributes read back), one at a time between frames, once the GPU is idle (when what was
+    // sent could keep it busy: `queued`).
+    if (queued >= DRAIN_TEXELS) await drained();
+    markPhase("details:drained");
     for (const program of new Set(compiled.flatMap(entry => entry.programs()))) {
       if (signal.aborted) break;
       await pace();
@@ -326,7 +340,7 @@ export function createCharacterRenderer(input: {
    * Parts that left the scene (or whose change was superseded before it was shown), kept on this renderer's context for the next change
    * that brings them back (character-detail-loader.ts `DetailPartPool`).
    */
-  const pool = new DetailPartPool();
+  const pool = new DetailPartPool(undefined, detailLedgerOf(renderer));
   /**
    * Maps waiting to be uploaded, a few per frame (`PREPARE_FRAME_MS`), from the moment their part is built (PREV-189): a V's maps stream to
    * the GPU while the rest of it loads, and each decoded bitmap is released as its map is uploaded.

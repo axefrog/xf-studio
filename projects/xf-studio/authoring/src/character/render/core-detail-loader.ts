@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
+import { markPhase } from "../character-timing";
 import { HeadLoadError } from "../../preview/head-load-error";
 import { floatJointIndices, restoreFirstWeights } from "../../materials/render/skin";
 import { CORE_TEXTURE_COLOUR, CORE_TEXTURE_SLOTS, coreAssetName, coreDetailUrl, parseCoreDetail, type CoreBody, type CoreDetail,
@@ -55,6 +56,23 @@ async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch,
   return bytes;
 }
 
+const geometryBytes = new WeakMap<object, Map<CoreBody, { key: string; bytes: Promise<ArrayBuffer> }>>();
+/**
+ * A body's core head file (12 MB) as the renderer's runtimes share it: fetched and checked once, whichever runtime asks first, instead of
+ * once per runtime (a third scene's head waited 0.09–0.5 s for it, experiment 044 §16). The bytes are the record's hash, so a core
+ * prepared again (another file) is another entry; only the latest of each body is kept, and a failed read is not kept.
+ */
+function sharedGeometryBytes(renderer: object, body: CoreBody, resource: RenderResource, fetcher: CoreDetailFetch): Promise<ArrayBuffer> {
+  let bodies = geometryBytes.get(renderer);
+  if (!bodies) geometryBytes.set(renderer, bodies = new Map());
+  const key = `${resource.file}|${resource.sha256}`, kept = bodies.get(body);
+  if (kept?.key === key) return kept.bytes;
+  const bytes = resourceBytes(resource, fetcher, body);
+  bodies.set(body, { key, bytes });
+  bytes.catch(() => { if (bodies.get(body)?.bytes === bytes) bodies.delete(body); });
+  return bytes;
+}
+
 /**
  * Load a body's core head. `signal` is checked between steps (the record, the geometry's bytes, its parse, the textures): an abort rejects
  * with its reason, and what was made is disposed. A step already running (a parse, a decode) finishes first.
@@ -66,14 +84,17 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
   try { record = await readCoreDetail(fetcher, body); }
   // An abort is no failure of the files: a read cut short by it rejects with its reason, not as an unreachable preview.
   catch (error) { if (signal?.aborted) throw signal.reason; throw error; }
+  markPhase("core:record");
   signal?.throwIfAborted();
   const textures: Partial<Record<CoreTextureSlot, THREE.Texture>> = {};
   let gltf: GLTF | undefined;
   try {
-    const data = await resourceBytes(record.geometry, fetcher, body);
+    const data = await sharedGeometryBytes(renderer, body, record.geometry, fetcher);
     signal?.throwIfAborted();
+    markPhase("core:bytes");
     const weights = restoreFirstWeights(data);
     gltf = await new GLTFLoader().parseAsync(data, "/assets/");
+    markPhase("core:parsed");
     signal?.throwIfAborted();
     const meshes: THREE.Mesh[] = [];
     gltf.scene.traverse(object => { if (object instanceof THREE.Mesh) meshes.push(object); });
@@ -106,6 +127,7 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
         textures[slot] = texture;
       } finally { URL.revokeObjectURL(url); }
     }));
+    markPhase("core:textures");
     signal?.throwIfAborted();
     return { record, body, gltf, meshes, head, surfaces: surfaces as Map<string, THREE.SkinnedMesh>, eyes, textures: textures as Record<CoreTextureSlot, THREE.Texture> };
   } catch (error) {

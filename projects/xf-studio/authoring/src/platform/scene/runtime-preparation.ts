@@ -5,6 +5,7 @@ import { PREPARE_FRAME_MS } from "./character-renderer";
 import { isDrawable } from "./drawables";
 import { linkPacer } from "./link-pacing";
 import { gpuDrained, gpuGate } from "./gpu-gate";
+import { markPhase } from "../../character/character-timing";
 import { morphGeometry, morphTextureSteps } from "./morph-textures";
 
 /**
@@ -143,6 +144,7 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
     report("programs", 0.8 + 0.2 * (index + 1) / programs.length);
   }
   report("programs", 1);
+  markPhase("run:programs");
 
   if (ports.programsOnly) return { programs: programs.length, uploads: 0, frames, parallel, warmedUp: false };
   // 2. Textures: the maps the programs sample, and the core head's own, a few per frame.
@@ -173,21 +175,31 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
       }
       report("textures", (index + 1) / total);
     }
-    // The morph textures, a step at a time (each a few layers filled, or those layers uploaded once the GPU process caught up).
-    for (const [index, made] of steps.entries()) {
-      for (let done = false; !done;) {
-        await pace();
-        while (!gate.idle()) await frame();
-        done = made.step();
-        gate.mark();
+    // The morph textures, all of them together a frame at a time: each frame fills what its share allows (memory only, never waiting on the
+    // GPU) and sends uploads only when the GPU process caught up with the last frame's, then marks one fence for them all. One geometry after
+    // another, each step behind its own fence, took 0.7–1.0 s for the head and seven small parts (experiment 044 §16).
+    for (const live = [...steps]; live.length;) {
+      const open = gate.idle();
+      let sent = false;
+      for (let worked = true; worked && live.length && now() - started < budget;) {
+        worked = false;
+        for (const made of [...live]) {
+          if (made.uploading() && !open) continue;
+          sent ||= made.uploading();
+          worked = true;
+          if (made.step()) { live.splice(live.indexOf(made), 1); uploads++; report("textures", (textures.length + steps.length - live.length) / total); }
+          if (now() - started >= budget) break;
+        }
       }
-      uploads++;
-      report("textures", (textures.length + index + 1) / total);
+      if (sent) gate.mark();
+      await frame();
     }
   } finally { for (const made of steps) made.dispose(); gate.dispose(); }
   report("textures", 1);
+  markPhase("run:textures-done");
   for (const step of ports.work?.() ?? []) { await frame(); step(); }
 
+  markPhase("run:work");
   // 3. The hidden warm-up, in pieces, each in a frame's turn of its own, the GPU finishing each before the next (see the header).
   await frame();
   report("warm-up", 0);
@@ -207,6 +219,7 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   await pace();
   if (ports.warmUp()) { warmedUp = true; await drained("warm-up", 0.95, "gpu"); }
   check();
+  markPhase("run:warm-up");
   report("warm-up", 1);
   return { programs: programs.length, uploads, frames, parallel, warmedUp };
 }

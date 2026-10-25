@@ -479,7 +479,7 @@ type PartResources = { materials: THREE.Material[]; owned: THREE.Texture[]; text
  * Textures shared between loads (PREV-68): a load that reuses the shown details' components also takes over their ledger, so a map
  * several parts (or two records) use is uploaded once and disposed when its last user is released.
  */
-class DetailLedger {
+export class DetailLedger {
   readonly textures = new Map<string, { texture: THREE.Texture; refs: number; file: string }>();
   readonly images = new Map<string, HTMLImageElement>();
   /** Each image's decoded bitmap while the textures made from it are being made (`uploadTexture`); dropped once they are. */
@@ -500,6 +500,19 @@ class DetailLedger {
   }
 }
 const ledgers = new WeakMap<LoadedCharacterDetails, DetailLedger>();
+const rendererLedgers = new WeakMap<object, DetailLedger>();
+/**
+ * The ledger of the maps (and their decoded images) every scene runtime on one renderer shares: a map is decoded once and uploaded once
+ * per renderer, whichever runtime's V draws it, and is disposed when the last part of any runtime that uses it lets go (its `refs`).
+ * Without it each runtime decoded and uploaded the same files again: a third scene of one V took 7 s of paced uploads and about
+ * 0.9 GB of the GPU's memory more (experiment 044 §16). Textures belong to the renderer (one context), so sharing them is safe;
+ * materials, meshes, bakes and each pool's kept parts stay the runtime's own.
+ */
+export function detailLedgerOf(renderer: object): DetailLedger {
+  let ledger = rendererLedgers.get(renderer);
+  if (!ledger) rendererLedgers.set(renderer, ledger = new DetailLedger());
+  return ledger;
+}
 
 /** How many parts, and how many texels only kept parts use, a pool holds before it releases the least recently used. */
 export const PART_POOL_LIMITS = { parts: 48, texels: 64 * 1024 * 1024 };
@@ -511,12 +524,13 @@ export const PART_POOL_LIMITS = { parts: 48, texels: 64 * 1024 * 1024 };
  * only kept parts use exceed `limits.texels`; parts on screen or being loaded never count and are never released by it.
  */
 export class DetailPartPool {
-  readonly ledger = new DetailLedger();
+  readonly ledger: DetailLedger;
   /** Kept parts, least recently kept first. */
   private readonly kept = new Map<string, LoadedCharacterComponent>();
   /** Loaded details not yet disposed (on screen or being loaded): their geometry and textures are in use. */
   readonly live = new Set<LoadedCharacterDetails>();
-  constructor(readonly limits: { parts: number; texels: number } = PART_POOL_LIMITS) {}
+  /** `ledger`: the maps this pool's parts share with other pools' (`detailLedgerOf`); default: its own. */
+  constructor(readonly limits: { parts: number; texels: number } = PART_POOL_LIMITS, ledger: DetailLedger = new DetailLedger()) { this.ledger = ledger; }
   get size() { return this.kept.size; }
   /** Whether a part with this identity is kept (a load fetches nothing for it). */
   has(key: string): boolean { return this.kept.has(key); }

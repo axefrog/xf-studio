@@ -44,10 +44,11 @@ export function morphGeometry(object: THREE.Object3D): THREE.BufferGeometry | un
 /**
  * The steps that make `geometry`'s morph texture ahead, each within `budget` ms of `now` (fill) or `chunk` bytes (upload); undefined when
  * there is nothing to make (Three isn't patched, or the renderer holds the geometry's texture already). `step()` returns true once the
- * texture is registered with the renderer. `dispose()` frees a texture not handed over (a preparation that stopped part-way).
+ * texture is registered with the renderer. `uploading()` says whether the next step sends texels to the GPU (the one waiting for the GPU
+ * to catch up) or only fills memory. `dispose()` frees a texture not handed over (a preparation that stopped part-way).
  */
 export function morphTextureSteps(renderer: THREE.WebGLRenderer, geometry: THREE.BufferGeometry,
-  options: { now?(): number; budget?: number; chunk?: number } = {}): { step(): boolean; dispose(): void } | undefined {
+  options: { now?(): number; budget?: number; chunk?: number } = {}): { step(): boolean; uploading(): boolean; dispose(): void } | undefined {
   const map = morphTextures(renderer);
   const morphs = geometry.morphAttributes;
   // Three reads them the same way (`Vector4.fromBufferAttribute`, interleaved or not).
@@ -80,6 +81,7 @@ export function morphTextureSteps(renderer: THREE.WebGLRenderer, geometry: THREE
   };
   const release = () => { if (texture && !handed) texture.dispose(); texture = null; buffer = null; };
   return {
+    uploading: () => !handed && !!texture && filled > uploaded,
     step() {
       if (handed) return true;
       // A context lost meanwhile took the renderer's morph textures with it: Three builds its own at the draw, as before.

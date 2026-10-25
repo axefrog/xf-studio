@@ -96,8 +96,14 @@ export const TAB_PROBE = String.raw`(() => {
     return {t0,before,ticks,sent,errors,shown,presented,target,
       links:window.xfsGl.programs.filter(p=>p.linkAt>=t0), creates:g.creates.filter(at=>at>=t0),
       long:g.long.filter(([at,ms])=>at+ms>=t0 && at<=ticks.at(-1).at),
-      rasters:g.rasters.slice(starts.rasters), draws:g.draws.slice(starts.draws)};
+      rasters:g.rasters.slice(starts.rasters), draws:g.draws.slice(starts.draws), ...g.stages(t0)};
   };
+  // Where the interval went (README §16): the page's own User Timing marks (the character stages and the preparation phases), and the GL
+  // probe's uploads and program waits. Read after the interval, so the probe adds nothing inside it.
+  g.stages = t0 => ({
+    marks: performance.getEntriesByType('mark').filter(e => e.startTime >= t0 && e.name.startsWith('xfs:')).map(e => [e.name.slice(4), Math.round((e.startTime-t0)*10)/10, e.detail ?? null]),
+    uploads: (window.xfsGl?.uploads ?? []).filter(u => u.at >= t0).map(u => [u.method, Math.round((u.at-t0)*10)/10, Math.round(u.ms*10)/10, u.w + 'x' + u.h + ' ' + u.kind]),
+    waits: (window.xfsGl?.programs ?? []).filter(p => p.linkAt >= t0).map(p => [p.name, Math.round((p.linkAt-t0)*10)/10, p.waited === null ? null : Math.round(p.waited*10)/10]) });
   g.memory = async () => {
     window.gc?.(); await new Promise(r=>setTimeout(r,100)); window.gc?.();
     g.trackObjects = true;

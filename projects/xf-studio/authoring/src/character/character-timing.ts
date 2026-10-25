@@ -29,3 +29,19 @@ export function takeCharacterTimings(): { stage: CharacterStage; at: number; det
     return marks;
   } catch { return []; }
 }
+
+/**
+ * Phase boundaries inside a preparation, as User Timing marks (`xfs:phase:<name>`), read with the stages above by experiment 044's cold
+ * takeover breakdown (`measure-tabs.ts`): the core head's record, file, parse and maps (`core:*`), a V's maps sent and the wait for the GPU
+ * after them (`details:*`), and the runtime's own preparation (`run:*`). Kept like the stages: only the recent ones stay.
+ */
+const PHASES = ["core:record", "core:bytes", "core:parsed", "core:textures", "details:uploads", "details:drained", "run:programs", "run:textures-done",
+  "run:work", "run:warm-up"] as const;
+export type CharacterPhase = typeof PHASES[number];
+let phases = 0;
+export function markPhase(name: CharacterPhase): void {
+  try {
+    performance.mark(`xfs:phase:${name}`);
+    if (++phases > KEEP) { for (const phase of PHASES) performance.clearMarks(`xfs:phase:${phase}`); phases = 0; }
+  } catch { /* No User Timing here: timings are evidence only. */ }
+}

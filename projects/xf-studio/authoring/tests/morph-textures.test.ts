@@ -166,3 +166,20 @@ test("two renderers drawing one geometry keep their own entries: one drawing it 
   expect(ofA.get(twin)).toBe(made);
   expect(a.volumes.length).toBe(uploads);
 });
+
+test("uploading() says whether the next step sends texels (a fill or the allocation never waits on the GPU), so a scheduler can fill without a fence (experiment 044 §16)", () => {
+  const recording = recordingRenderer(), renderer = recording.renderer;
+  const steps = morphTextureSteps(renderer, morphed(300, 12), { chunk: 1 })!;
+  const trace: { uploading: boolean; sent: number; done: boolean }[] = [];
+  for (let done = false, guard = 0; !done && guard < 1000; guard++) {
+    const uploading = steps.uploading(), before = recording.volumes.length;
+    done = steps.step();
+    trace.push({ uploading, sent: recording.volumes.length - before, done });
+  }
+  // Allocating and filling send nothing; every step that said it uploads sent texels, and no other step did.
+  expect(trace[0]).toEqual({ uploading: false, sent: 0, done: false });
+  expect(trace.every(step => (step.sent > 0) === step.uploading)).toBe(true);
+  expect(trace.some(step => step.uploading)).toBe(true);
+  // Once registered, nothing is left to send.
+  expect(steps.uploading()).toBe(false);
+});
