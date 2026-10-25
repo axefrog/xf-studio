@@ -690,11 +690,12 @@ export async function runPlan(plan: Plan, options: RunPlanOptions): Promise<Plan
     // Rung 5, release: always, bounded by its own deadline even after a cancel or an exception.
     if (plan.finally?.length) {
       const own = new AbortController();
-      const releaseRun: Run = { ...run, signal: own.signal, halt: undefined, deadline: clock.now() + (options.finallyDeadlineMs ?? 30_000) };
+      // Its own step budget: a plan that ran out of steps (a goto loop) must still release.
+      const releaseRun: Run = { ...run, steps: 0, signal: own.signal, halt: undefined, deadline: clock.now() + (options.finallyDeadlineMs ?? 30_000) };
       for (const [i, step] of plan.finally.entries()) {
         try { await runStep(releaseRun, { ...step, on_fail: "continue" }, `finally/${i + 1}`, null); } catch (error) { run.reportErrors.push(`finally/${i + 1}: ${String((error as Error)?.message ?? error)}`); }
       }
-      run.steps = releaseRun.steps;
+      run.steps += releaseRun.steps;
     }
   }
   const outcome: Closing = status === "done" ? (run.continued ? "partial" : "completed") : decision !== undefined && decision !== "dissolve" && decision !== "abandon" ? "partial" : "abandoned";

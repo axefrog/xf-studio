@@ -83,6 +83,17 @@ describe("H3: no host side effect after a cancel", () => {
   });
 });
 
+describe("M4: the release has its own step budget", () => {
+  test("a goto loop that exhausts max_steps still releases", async () => {
+    const clock = new FakeClock();
+    const done: string[] = [];
+    const plan: Plan = { id: "p", max_steps: 10, steps: [{ label: "top", do: "spin", outcomes: [{ match: { ok: true }, goto: "top" }] }], finally: [{ do: "release" }, { do: "release2" }] };
+    const result = await runPlan(plan, { clock, executor: { run: async (a) => { done.push(a.do); return { ok: true }; } } });
+    expect(result.reason).toContain("More than 10 steps");
+    expect(done.slice(-2)).toEqual(["release", "release2"]);
+  });
+});
+
 describe("H1: exceptions never bypass the cleanup", () => {
   test("a report callback that throws doesn't skip the release or the close", async () => {
     const clock = new FakeClock();
