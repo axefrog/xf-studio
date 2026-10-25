@@ -193,6 +193,10 @@ By the Khronos Group. [Specification 1.3](https://registry.khronos.org/DataForma
 
 By the llama.cpp project and contributors. [Grammar (GBNF) guide](https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md). It shows how a grammar can force a local model's output into a fixed form. It also covers converting a limited subset of JSON Schema to such grammars and warns about patterns that slow sampling. It informed our plan for constraining local model output. No code is used.
 
+### LuaJIT
+
+By Mike Pall and contributors. [luajit.org](https://luajit.org/). The Lua runtime Cyber Engine Tweaks embeds. Its tail calls replace the calling frame, so a call into ImGui written as `return ImGui.X(...)` inside a protected call loses the environment CET's wrapper looks up. That explained why the bridge's in-game cards drew plain and set the CET layer's rule against such calls.
+
 ### LZ4
 
 By the LZ4 authors and contributors. [Block format specification](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md). The specification let us write the independent decompression in XF Studio's save reader, and its length encoding bounds how far a block can expand, which the reader checks before it allocates anything.
@@ -264,6 +268,10 @@ By the SciPy and NumPy developers. [SciPy](https://scipy.org/), [NumPy](https://
 ### Semantic Versioning
 
 By Tom Preston-Werner. [semver.org](https://semver.org/). Its rule of major, minor and patch numbers, raised for breaking changes, compatible additions and compatible fixes, informed how we think about versioning content packs. Nothing from it is used.
+
+### sol2
+
+By ThePhD and contributors. [GitHub](https://github.com/ThePhD/sol2). The C++ binding library behind CET's Lua API. Its overload resolution with all safeties on (exact arity, integral integers, strict booleans), its `this_environment` lookup and the wording of its type errors let us read a CET error back to its cause, and the bridge's offline binding-table test follows them.
 
 ### SPIRV-Cross
 

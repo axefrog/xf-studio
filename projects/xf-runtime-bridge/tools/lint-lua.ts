@@ -7,6 +7,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import { imguiTailCalls } from "./overlay/cet-bindings.ts";
 
 const args = process.argv.slice(2);
 const index = args.indexOf("--luaparse");
@@ -61,6 +62,10 @@ for (const file of files) {
       }
     }
   });
+  for (const line of imguiTailCalls(code)) {
+    failures++;
+    console.log(`FAIL ${file}:${line}: a tail call into ImGui loses CET's caller environment (hold the result in a local, then return it)`);
+  }
   console.log(`OK   ${file}`);
 }
 process.exit(failures === 0 ? 0 : 1);

@@ -345,7 +345,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.22 the CET layer under fengari", () =
       local a = draw(s); local netA = pc .. "," .. pv
       local b = draw(s); local netB = pc .. "," .. pv
       local failures = 0
-      for _ in string.gmatch(a .. "|" .. b, "failed:BeginChild") do failures = failures + 1 end
+      for _ in string.gmatch(a .. "|" .. b, "failed:card question at BeginChild") do failures = failures + 1 end
       return table.concat({ netA, netB, failures, tostring(string.find(a, "button:Done##xf_answer_1", 1, true) ~= nil), tostring(string.find(b, "button:Done##xf_answer_1", 1, true) ~= nil),
         tostring(string.find(a .. b, "endchild", 1, true) == nil), tostring(s.childFailed) }, ";")`);
     // the style stack is balanced after both frames, one log line in all, the answers drawn each time, no EndChild without a begin

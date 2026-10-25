@@ -88,11 +88,11 @@ test("3. an armed capture survives invalid samples and counters from before it w
   arms.cancel();
 });
 
-test("3. an armed capture is still cancelled by loss or invalid event data after the arm", async () => {
+test("3. an arm on a recorder channel is still cancelled by loss or invalid event data after the arm (0.8.22: only such an arm)", async () => {
   for (const mode of ["dropped", "missed", "invalid_event_channel"]) {
     const f = recorder({ rows: 30, invalidFirst: 5, sourceNow: 4 });
     const arms = new EventCaptures(catchupApi(f), clock());
-    await arms.arm({ run: 1, event: "toast.created", capture: "screenshot" }, f.api);
+    await arms.arm({ run: 1, event: "toast.created", channel: "ui", capture: "screenshot" }, f.api);
     await arms.poll(); expect(arms.status().armed, mode).toBe(true);
     if (mode === "dropped") f.state.dropped = 2;
     if (mode === "missed") f.state.missed = 1;
@@ -101,10 +101,10 @@ test("3. an armed capture is still cancelled by loss or invalid event data after
     expect(arms.status().armed, mode).toBe(false);
     expect(String(arms.status().receipts.at(-1).status), mode).toContain("Timeline coverage gap");
   }
-  // Invalid polled-state samples after the arm cannot hide a named event and do not cancel it.
+  // Invalid samples on another channel after the arm cannot hide its event and do not cancel it.
   const f = recorder({ rows: 30, sourceNow: 4 });
   const arms = new EventCaptures(catchupApi(f), clock());
-  await arms.arm({ run: 1, event: "toast.created", capture: "screenshot" }, f.api);
+  await arms.arm({ run: 1, event: "toast.created", channel: "ui", capture: "screenshot" }, f.api);
   f.add("v", false, { reason: "not_v" }); f.state.invalid++;
   await arms.poll();
   expect(arms.status().armed).toBe(true);
@@ -183,15 +183,13 @@ test("R3. a forged counter baseline is refused, never read as coverage", async (
   expect((await forge({ dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false })).gaps).toContain("source_coverage_incomplete");
 });
 
-test("R4. a delayed capture is cancelled when the recorder stops, restarts or loses data during the delay", async () => {
-  for (const mode of ["stopped", "restarted", "dropped", "invalid_event_channel"]) {
+test("R4. a delayed capture is cancelled when the recorder stops or restarts during the delay (0.8.22: loss cancels only a recorder-channel arm, borg4-0822.test.ts)", async () => {
+  for (const mode of ["stopped", "restarted"]) {
     const f = recorder({ rows: 30, sourceNow: 7 });
     const calls: string[] = [], c = clock();
     const during = () => {
       if (mode === "stopped") f.state.active = false;
       if (mode === "restarted") f.state.run = 2;
-      if (mode === "dropped") f.state.dropped = 1;
-      if (mode === "invalid_event_channel") { f.add("face", false, { error: "sample_failed" }); f.state.invalid++; }
     };
     const arms = new EventCaptures(catchupApi(f, calls), { now: c.now, sleep: async ms => { c.t += ms; during(); } });
     await arms.arm({ run: 1, event: "dm.quest", match: { quest: "tl3" }, capture: "screenshot", delay_ms: 400 }, f.api);

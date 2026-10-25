@@ -15,6 +15,27 @@ function supervisionByActor(supervision: any[]): Record<string, { violations: nu
   }
   return out;
 }
+
+/**
+ * 0.8.22 (Borg 4): the summary was only what was new since the cursor, so a catch-up after the one that reported the
+ * supervisor's intervention said "no supervisor receipts observed". The cursor now carries the run's totals and its latest
+ * receipts (compact, bounded), and the supervisor's own writes are linked to its actions by cid.
+ */
+export type SupervisorTotals = { violations: number; actions: number; refused: number; cancellations: number; writes: number };
+export type SupervisorRecent = { receipt_seq: number; event: string; source_s?: number; actor: string; detail: string };
+export const SUPERVISOR_RECENT_MAX = 8;
+function recentOf(v: Json): SupervisorRecent {
+  const cid = v.response?.cid ?? v.response?.id;
+  const detail = v.event === "supervisor.violation" ? `violation ${v.violation ?? "?"}, policy ${v.policy ?? "?"}`
+    : v.event === "supervisor.action" ? `action ${v.action ?? "?"}: ${v.method ?? "?"} ${v.response?.ok === false ? `refused ${v.response?.error?.code ?? ""}`.trim() : "ok"}${typeof cid === "string" ? ` (cid ${cid})` : ""}`
+    : v.event === "supervisor.cleared" ? `cleared: ${v.reason ?? "?"}` : String(v.event).replace(/^supervisor\./, "");
+  return { receipt_seq: v.receipt_seq, event: String(v.event).slice(0, 64), ...(Number.isFinite(v.source_s) ? { source_s: v.source_s } : {}),
+    actor: v?.actor?.kind && v?.actor?.ref ? `${v.actor.kind}:${v.actor.ref}`.slice(0, 80) : "player:V", detail: detail.slice(0, 160) };
+}
+function plural(n: number, one: string, many = `${one}s`) { return `${n} ${n === 1 ? one : many}`; }
+function totalsText(t: SupervisorTotals) {
+  return `${plural(t.violations, "violation")}, ${plural(t.actions, "action")}${t.refused ? ` (${t.refused} refused)` : ""}, ${plural(t.cancellations, "clearing")}, ${plural(t.writes, "write")}`;
+}
 export type IncidentCounters = { dropped: number; tap_dropped: number; report_gaps: number };
 const counterOf = (d: Json): IncidentCounters => ({ dropped: (d.dropped_rate ?? 0) + (d.dropped_invalid ?? 0), tap_dropped: (d.tap_dropped_cap ?? 0) + (d.tap_dropped_weak ?? 0), report_gaps: d.report_gaps ?? 0 });
 /**
@@ -99,6 +120,9 @@ export type TimelineCursor = FileCursor & {
   supervisor_seen?: number[];
   supervisor_retired_through?: number;
   supervisor_reconciliation_lost?: boolean;
+  /** 0.8.22: the run's supervisor receipts and writes so far, and its latest receipts, across every call on this cursor. */
+  supervisor_totals?: SupervisorTotals;
+  supervisor_recent?: SupervisorRecent[];
   source_counters?: SourceCounters;
   /** The newest recorder V sample seen so far, so a page with no V row can still say how old the last one is. */
   last_v_seq?: number; last_v_source_s?: number;
@@ -113,6 +137,10 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   if (saved && ((saved.supervisor_seen !== undefined && (!Array.isArray(saved.supervisor_seen) || saved.supervisor_seen.length > 512 || saved.supervisor_seen.some(v => !seq(v) || !v))) ||
     (saved.supervisor_retired_through !== undefined && !seq(saved.supervisor_retired_through)) ||
     (saved.supervisor_reconciliation_lost !== undefined && typeof saved.supervisor_reconciliation_lost !== "boolean"))) throw new Error("Invalid supervisor reconciliation cursor");
+  const st = saved?.supervisor_totals as Json | undefined, sr = saved?.supervisor_recent as Json | undefined;
+  if ((st !== undefined && !(st && typeof st === "object" && ["violations", "actions", "refused", "cancellations", "writes"].every(k => seq(st[k])))) ||
+    (sr !== undefined && !(Array.isArray(sr) && sr.length <= SUPERVISOR_RECENT_MAX && sr.every((r: Json) => r && seq(r.receipt_seq) && typeof r.event === "string" && typeof r.actor === "string" && typeof r.detail === "string"))))
+    throw new Error("Invalid supervisor totals cursor");
   const sc = saved?.source_counters as Json | undefined;
   if (sc !== undefined && !(sc && typeof sc === "object" && seq(sc.dropped) && seq(sc.invalid) && seq(sc.missed_deadlines) && typeof sc.file_error === "boolean")) throw new Error("Invalid source counter baseline");
   const ic = saved?.incident_counters as Json | undefined;
@@ -186,6 +214,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   }
   const counts: Json = {}, channels: Json = {}, path: number[][] = [], supervision: Json[] = [];
   const supervisorSeen = new Set(saved?.supervisor_seen ?? []);
+  const reportedBefore = new Set(saved?.supervisor_seen ?? []), alreadyReported = new Set<number>();
   let retired = saved?.supervisor_retired_through ?? 0, outOfScope = 0;
   const scoped = (v: Json, sourceTime: unknown) => {
     const time = v?.source_s ?? sourceTime;
@@ -199,7 +228,11 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       return false;
     }
     if (!seq(v.receipt_seq) || !v.receipt_seq) { gaps.push("supervisor_receipt_identity_missing"); return false; }
-    if (v.receipt_seq <= retired || supervisorSeen.has(v.receipt_seq)) return false;
+    if (v.receipt_seq <= retired || supervisorSeen.has(v.receipt_seq)) {
+      // Each receipt comes on both feeds; one an earlier catch-up already reported is counted as such, not as nothing.
+      if (v.receipt_seq <= retired || reportedBefore.has(v.receipt_seq)) alreadyReported.add(v.receipt_seq);
+      return false;
+    }
     supervisorSeen.add(v.receipt_seq);
     supervision.push({ source, source_s: sourceTime, ...v }); return true;
   };
@@ -291,6 +324,25 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     alerts.push({ kind: "contact", source: "supervisor", ...receipt });
   }
   if (supervision.some(v => v.event === "supervisor.gap")) gaps.push("supervisor_history_lost");
+  // The supervisor's own writes (world.pause, npc.stop, ...): the session's write and refused events whose cid an action names.
+  const actionCids = new Set<string>();
+  for (const v of supervision) if (v.event === "supervisor.action") for (const c of [v.response?.cid, v.response?.id]) if (typeof c === "string" && c) actionCids.add(c);
+  const supervisorWrites = events.filter(e => (e.kind === "write" || e.kind === "refused") && actionCids.has(e.data?.cid))
+    .map(e => ({ seq: e.seq, kind: e.kind, method: e.data?.method ?? null, code: e.data?.code ?? null, cid: e.data?.cid, source_s: e.source_s ?? null }));
+  const pageCounts = { violations: supervision.filter(v => v.event === "supervisor.violation").length, actions: supervision.filter(v => v.event === "supervisor.action").length,
+    refused: supervision.filter(v => v.event === "supervisor.action" && v.response?.ok === false).length, cancellations: supervision.filter(v => v.event === "supervisor.cleared").length };
+  const before: SupervisorTotals = saved?.supervisor_totals ?? { violations: 0, actions: 0, refused: 0, cancellations: 0, writes: 0 };
+  const runTotals: SupervisorTotals = { violations: before.violations + pageCounts.violations, actions: before.actions + pageCounts.actions,
+    refused: before.refused + pageCounts.refused, cancellations: before.cancellations + pageCounts.cancellations, writes: before.writes + supervisorWrites.length };
+  const recent = [...(saved?.supervisor_recent ?? []), ...supervision.filter(v => seq(v.receipt_seq) && v.receipt_seq).map(recentOf)].slice(-SUPERVISOR_RECENT_MAX);
+  cursor.supervisor_totals = runTotals;
+  cursor.supervisor_recent = recent;
+  const fresh = supervision.length
+    ? `while you were away: ${plural(supervision.length, "new supervisor receipt")} (${totalsText({ ...pageCounts, writes: supervisorWrites.length })})`
+    : alreadyReported.size ? `while you were away: no new supervisor receipts (${plural(alreadyReported.size, "receipt")} on these feeds already reported by an earlier catch-up)`
+    : "while you were away: no supervisor receipts observed";
+  const runText = runTotals.violations + runTotals.actions + runTotals.cancellations + runTotals.writes > 0 || recent.length
+    ? `; this run so far: ${totalsText(runTotals)}${outOfScope ? `; ${plural(outOfScope, "receipt")} outside this run's world or interval left out` : ""}` : outOfScope ? `; ${plural(outOfScope, "receipt")} outside this run's world or interval left out` : "";
   cursor.contact_observed = saved?.contact_observed === true || contactObserved;
   cursor.vehicle_hit_observed = saved?.vehicle_hit_observed === true || vehicleHitObserved;
   const incidentCover = incidentCoverage(records, events, saved?.incident_counters, gaps);
@@ -341,10 +393,9 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       distance_m: travelled, path_points: path.length,
       health_min: healthMin, health_max: healthMax, changes, latest: last }, channels, counts, count_detail: countDetail,
     events: compact(events), alerts: compact(alerts), omitted: { ...omitted, events: options.detail ? 0 : Math.max(0, events.length - 24), alerts: options.detail ? 0 : Math.max(0, alerts.length - 24) },
-    supervisor_summary: { message: supervision.length ? "while you were away: supervisor receipts observed" : "while you were away: no supervisor receipts observed",
+    supervisor_summary: { message: fresh + runText,
       scope: { world_generation: cursor.world, start_s: status.start_s, end_s: status.end_s }, excluded_out_of_scope: outOfScope,
-      counts: { violations: supervision.filter(v => v.event === "supervisor.violation").length, actions: supervision.filter(v => v.event === "supervisor.action").length,
-        refused: supervision.filter(v => v.event === "supervisor.action" && v.response?.ok === false).length, cancellations: supervision.filter(v => v.event === "supervisor.cleared").length },
+      counts: pageCounts, already_reported: alreadyReported.size, writes: supervisorWrites, run_totals: runTotals, recent,
       by_actor: supervisionByActor(supervision),
       receipts: compact(supervision), omitted: options.detail ? 0 : Math.max(0, supervision.length - 24), history_complete: !gaps.length && !recordMore && !eventMore },
     contact_summary: { message: contactObserved ? "contact observed" : `no contact observed (covered paths: ${coveredPaths.join(", ") || "explicit session receipts only"})`,

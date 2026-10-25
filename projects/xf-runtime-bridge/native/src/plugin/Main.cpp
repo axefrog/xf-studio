@@ -369,7 +369,6 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
                 }
             }
             state.overlayHost.SetKilled(killed);
-            state.overlayHost.SetCetOpen(state.cetOverlayOpen.load());
             xfb::plugin::overlay::Publish(panel);
         }
         // A client dropped for idleness can't be driving photo mode any more: give the cursor back

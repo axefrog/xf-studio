@@ -3025,7 +3025,11 @@ void Bridge060Tests()
         xfb::GameThreadQueue queue;
         xfb::Dispatcher dispatcher(open, session, queue);
         std::vector<std::string> kinds;
-        dispatcher.SetEventSink([&](const std::string& aKind, const std::string&, const std::string&, const json&) { kinds.push_back(aKind); });
+        std::vector<std::string> texts;
+        dispatcher.SetEventSink([&](const std::string& aKind, const std::string&, const std::string& aText, const json&) {
+            kinds.push_back(aKind);
+            texts.push_back(aText);
+        });
         dispatcher.Register({"t.write", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "", [](const xfb::MethodContext&) { return json{{"undo", nullptr}}; }});
         const auto request = R"({"v":1,"id":1,"token":"t","method":"t.write"})";
         const auto ok = json::parse(dispatcher.Handle(request, 1).line);
@@ -3037,6 +3041,20 @@ void Bridge060Tests()
               ok.value("ok", false) && refused["error"]["code"] == "handed_over" && again.value("ok", false) &&
                   std::find(kinds.begin(), kinds.end(), "handover") != kinds.end() && std::find(kinds.begin(), kinds.end(), "resume") != kinds.end() &&
                   std::count(kinds.begin(), kinds.end(), "write") == 2 && std::count(kinds.begin(), kinds.end(), "refused") == 1);
+        {
+            // 0.8.22 (Borg 4): the handover's reason travels with every refusal and its event, and a resume clears it.
+            const std::string why = "handed over by the commit tripwire (free commit 3.4 GB under 4 GB)";
+            dispatcher.SetHandover(true, why);
+            dispatcher.SetHandover(true); // a second handover without a note keeps the first reason
+            const auto withWhy = json::parse(dispatcher.Handle(request, 1).line);
+            const bool eventSays = !texts.empty() && texts.back().find(why) != std::string::npos;
+            const auto thrown = ParamsCode([&] { dispatcher.RequireWritesOpen(); });
+            dispatcher.SetHandover(false);
+            Check("0.8.22 handover: the reason is in the refusal, its event and the note until resume",
+                  withWhy["error"]["code"] == "handed_over" && withWhy["error"]["message"].get<std::string>().find(why) != std::string::npos &&
+                      eventSays && thrown == "handed_over" && dispatcher.HandoverNote().empty(),
+                  withWhy.dump());
+        }
         Check("0.6 RequireWriteClass: a class that is off is refused", ParamsCode([&] { dispatcher.RequireWriteClass(xfb::Access::WritePlayer); }) ==
                                                                       "write_class_disabled");
     }
@@ -3327,6 +3345,16 @@ void Bridge070Tests()
 
         o::OverlayHost host;
         Check("0.7 overlay: off by default, nothing drawn", !host.Enabled() && !host.ShouldDraw() && host.Snapshot()["phase"] == "disabled");
+        {
+            // 0.8.22 (Borg 4): CET's overlay is tracked with the host disabled, and is null (unknown) until the CET layer reports.
+            o::OverlayHost off;
+            const bool unknown = off.Snapshot()["cet_open"].is_null() && !off.CetOpenKnown();
+            off.SetCetOpen(true);
+            const bool open = off.Snapshot()["cet_open"] == true && !off.Enabled();
+            off.SetCetOpen(false);
+            Check("0.8.22 overlay: cet_open is null until reported, then follows CET with the host disabled",
+                  unknown && open && off.Snapshot()["cet_open"] == false);
+        }
         host.Configure(true, o::ThemeKind::Dark, 100);
         host.NoteHooks(true, true, true, "");
         Check("0.7 overlay: hooked, waiting for the first present", host.Snapshot()["phase"] == "waiting" && !host.ShouldDraw());

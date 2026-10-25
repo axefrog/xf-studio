@@ -357,7 +357,7 @@ json OverlayHost::Snapshot(std::chrono::steady_clock::time_point aNow) const
              {"cpu_ms_max", std::round(m_cpuMicrosMax.load()) / 1000.0},
              {"gpu_ms", nullptr},
              {"hidden_for_capture", HiddenForCapture(aNow)},
-             {"cet_open", m_cetOpen.load()},
+             {"cet_open", m_cetKnown.load() ? json(m_cetOpen.load()) : json(nullptr)},
              {"killed", m_killed.load()},
              {"pass_through", m_passThrough.load()},
              {"resizes", m_resizes},

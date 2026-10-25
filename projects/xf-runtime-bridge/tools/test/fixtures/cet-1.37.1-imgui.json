@@ -1,0 +1,5576 @@
+{
+ "cet": "v1.37.1",
+ "source": "src/sol_imgui/sol_imgui.h",
+ "functions": {
+  "AlignTextToFramePadding": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "ArrowButton": [
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "Begin": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean",
+     "integer"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   }
+  ],
+  "BeginChild": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "boolean"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "boolean",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginChildFrame": [
+   {
+    "params": [
+     "integer",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "integer",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginCombo": [
+   {
+    "params": [
+     "string",
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginDisabled": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "BeginGroup": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "BeginListBox": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginMainMenuBar": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginMenu": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginMenuBar": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginPopup": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginPopupContextItem": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginPopupContextVoid": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginPopupContextWindow": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginPopupModal": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginTabBar": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginTabItem": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean",
+     "integer"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   }
+  ],
+  "BeginTable": [
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "BeginTooltip": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "Bullet": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "BulletText": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "Button": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "CalcItemWidth": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "CalcTextSize": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "number",
+     "number"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "number",
+     "number"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean",
+     "number"
+    ],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "CaptureKeyboardFromApp": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "CaptureMouseFromApp": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "Checkbox": [
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   }
+  ],
+  "CloseCurrentPopup": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "CollapsingHeader": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean",
+     "integer"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   }
+  ],
+  "ColorButton": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "ColorConvertFloat4ToU32": [
+   {
+    "params": [
+     "table"
+    ],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "ColorConvertHSVtoRGB": [
+   {
+    "params": [
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "ColorConvertRGBtoHSV": [
+   {
+    "params": [
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "ColorConvertU32ToFloat4": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "table"
+    ]
+   }
+  ],
+  "ColorEdit3": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "ColorEdit4": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "ColorPicker3": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "ColorPicker4": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "Columns": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer",
+     "string"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer",
+     "string",
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "Combo": [
+   {
+    "params": [
+     "string",
+     "integer",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "table",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   }
+  ],
+  "DragFloat": [
+   {
+    "params": [
+     "string",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   }
+  ],
+  "DragFloat2": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "DragFloat3": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "DragFloat4": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "DragInt": [
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "number"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "number",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "number",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "number",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   }
+  ],
+  "DragInt2": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "DragInt3": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "DragInt4": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "Dummy": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "End": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndChild": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndChildFrame": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndCombo": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndDisabled": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndGroup": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndListBox": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndMainMenuBar": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndMenu": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndMenuBar": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndPopup": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndTabBar": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndTabItem": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndTable": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "EndTooltip": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "GetBackgroundDrawList": [
+   {
+    "params": [],
+    "results": [
+     "drawlist"
+    ]
+   }
+  ],
+  "GetClipboardText": [
+   {
+    "params": [],
+    "results": [
+     "string"
+    ]
+   }
+  ],
+  "GetColorU32": [
+   {
+    "params": [
+     "integer",
+     "number"
+    ],
+    "results": [
+     "integer"
+    ]
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "integer"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "GetColumnIndex": [
+   {
+    "params": [],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "GetColumnOffset": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetColumnWidth": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetColumnsCount": [
+   {
+    "params": [],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "GetContentRegionAvail": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetContentRegionMax": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetCursorPos": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetCursorPosX": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetCursorPosY": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetCursorScreenPos": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetCursorStartPos": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetFontSize": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetFontTexUvWhitePixel": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetForegroundDrawList": [
+   {
+    "params": [],
+    "results": [
+     "drawlist"
+    ]
+   }
+  ],
+  "GetFrameCount": [
+   {
+    "params": [],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "GetFrameHeight": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetFrameHeightWithSpacing": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetID": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "GetItemRectMax": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetItemRectMin": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetItemRectSize": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetKeyIndex": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "GetMouseCursor": [
+   {
+    "params": [],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "GetMouseDragDelta": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "number",
+     "number"
+    ]
+   },
+   {
+    "params": [
+     "integer",
+     "number"
+    ],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetMousePos": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetMousePosOnOpeningCurrentPopup": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetScrollMaxX": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetScrollMaxY": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetScrollX": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetScrollY": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetStyle": [
+   {
+    "params": [],
+    "results": [
+     "userdata"
+    ]
+   }
+  ],
+  "GetStyleColorName": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "string"
+    ]
+   }
+  ],
+  "GetStyleColorVec4": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "number",
+     "number",
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetTextLineHeight": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetTextLineHeightWithSpacing": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetTime": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetTreeNodeToLabelSpacing": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetWindowContentRegionMax": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetWindowContentRegionMin": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetWindowContentRegionWidth": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetWindowDrawList": [
+   {
+    "params": [],
+    "results": [
+     "drawlist"
+    ]
+   }
+  ],
+  "GetWindowHeight": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "GetWindowPos": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetWindowSize": [
+   {
+    "params": [],
+    "results": [
+     "number",
+     "number"
+    ]
+   }
+  ],
+  "GetWindowWidth": [
+   {
+    "params": [],
+    "results": [
+     "number"
+    ]
+   }
+  ],
+  "ImDrawListAddBezierCubic": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddBezierQuadratic": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddCircle": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddCircleFilled": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddLine": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddNgon": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddNgonFilled": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddQuad": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddQuadFilled": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddRect": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number",
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddRectFilled": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddRectFilledMultiColor": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "integer",
+     "integer",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddText": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "integer",
+     "string"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "string"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "string",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddTriangle": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "ImDrawListAddTriangleFilled": [
+   {
+    "params": [
+     "drawlist",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "Indent": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "InputDouble": [
+   {
+    "params": [
+     "string",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   }
+  ],
+  "InputFloat": [
+   {
+    "params": [
+     "string",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   }
+  ],
+  "InputFloat2": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "InputFloat3": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "InputFloat4": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "InputInt": [
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   }
+  ],
+  "InputInt2": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "InputInt3": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "InputInt4": [
+   {
+    "params": [
+     "string",
+     "table"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "InputText": [
+   {
+    "params": [
+     "string",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "string",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "string",
+     "boolean"
+    ]
+   }
+  ],
+  "InputTextMultiline": [
+   {
+    "params": [
+     "string",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "string",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string",
+     "integer",
+     "number",
+     "number"
+    ],
+    "results": [
+     "string",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string",
+     "integer",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": [
+     "string",
+     "boolean"
+    ]
+   }
+  ],
+  "InputTextWithHint": [
+   {
+    "params": [
+     "string",
+     "string",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "string",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string",
+     "string",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "string",
+     "boolean"
+    ]
+   }
+  ],
+  "InvisibleButton": [
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsAnyItemActive": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsAnyItemFocused": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsAnyItemHovered": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsAnyMouseDown": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemActivated": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemActive": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemClicked": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemDeactivated": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemDeactivatedAfterEdit": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemEdited": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemFocused": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemHovered": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemToggledOpen": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsItemVisible": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsKeyDown": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsKeyPressed": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "integer",
+     "boolean"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsKeyReleased": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsMouseClicked": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "integer",
+     "boolean"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsMouseDoubleClicked": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsMouseDown": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsMouseDragging": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "integer",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsMouseHoveringRect": [
+   {
+    "params": [
+     "number",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "number",
+     "number",
+     "boolean"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsMouseReleased": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsPopupOpen": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsRectVisible": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsWindowAppearing": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsWindowCollapsed": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsWindowFocused": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "IsWindowHovered": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "LabelText": [
+   {
+    "params": [
+     "string",
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "ListBox": [
+   {
+    "params": [
+     "string",
+     "integer",
+     "table",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "table",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   }
+  ],
+  "MenuItem": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string",
+     "boolean",
+     "boolean"
+    ],
+    "results": [
+     "boolean",
+     "boolean"
+    ]
+   }
+  ],
+  "NewLine": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "NextColumn": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "OpenPopup": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "PopAllowKeyboardFocus": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "PopButtonRepeat": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "PopClipRect": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "PopID": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "PopItemFlag": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "PopItemWidth": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "PopStyleColor": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "PopStyleVar": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "PopTabStop": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "PopTextWrapPos": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "ProgressBar": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "PushAllowKeyboardFocus": [
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "PushButtonRepeat": [
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "PushClipRect": [
+   {
+    "params": [
+     "number",
+     "number",
+     "number",
+     "number",
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "PushID": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "PushItemFlag": [
+   {
+    "params": [
+     "integer",
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "PushItemWidth": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "PushStyleColor": [
+   {
+    "params": [
+     "integer",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer",
+     "number",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "PushStyleVar": [
+   {
+    "params": [
+     "integer",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer",
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "PushTabStop": [
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "PushTextWrapPos": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "RadioButton": [
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   }
+  ],
+  "ResetMouseDragDelta": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SameLine": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "Selectable": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "boolean",
+     "integer",
+     "number",
+     "number"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "Separator": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "SetClipboardText": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "SetColumnOffset": [
+   {
+    "params": [
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetColumnWidth": [
+   {
+    "params": [
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetCursorPos": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetCursorPosX": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetCursorPosY": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetCursorScreenPos": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetItemAllowOverlap": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "SetItemDefaultFocus": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "SetKeyboardFocusHere": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SetMouseCursor": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextFrameWantCaptureKeyboard": [
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextFrameWantCaptureMouse": [
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextItemAllowOverlap": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "SetNextItemOpen": [
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "boolean",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextItemWidth": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextWindowBgAlpha": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextWindowCollapsed": [
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "boolean",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextWindowContentSize": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextWindowFocus": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "SetNextWindowPos": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "integer",
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextWindowSize": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SetNextWindowSizeConstraints": [
+   {
+    "params": [
+     "number",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetScrollFromPosX": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetScrollFromPosY": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetScrollHereX": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetScrollHereY": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetScrollX": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetScrollY": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetTabItemClosed": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "SetTooltip": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "SetWindowCollapsed": [
+   {
+    "params": [
+     "boolean"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "boolean",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "boolean",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SetWindowFocus": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "SetWindowFontScale": [
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "SetWindowPos": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SetWindowSize": [
+   {
+    "params": [
+     "number",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "SliderAngle": [
+   {
+    "params": [
+     "string",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   }
+  ],
+  "SliderFloat": [
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   }
+  ],
+  "SliderFloat2": [
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "SliderFloat3": [
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "SliderFloat4": [
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "SliderInt": [
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   }
+  ],
+  "SliderInt2": [
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "SliderInt3": [
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "SliderInt4": [
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "table",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "table",
+     "boolean"
+    ]
+   }
+  ],
+  "SmallButton": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "Spacing": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "TableGetColumnCount": [
+   {
+    "params": [],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "TableGetColumnFlags": [
+   {
+    "params": [],
+    "results": [
+     "integer"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "TableGetColumnIndex": [
+   {
+    "params": [],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "TableGetColumnName": [
+   {
+    "params": [],
+    "results": [
+     "string"
+    ]
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "string"
+    ]
+   }
+  ],
+  "TableGetRowIndex": [
+   {
+    "params": [],
+    "results": [
+     "integer"
+    ]
+   }
+  ],
+  "TableGetSortSpecs": [
+   {
+    "params": [],
+    "results": [
+     "userdata"
+    ]
+   }
+  ],
+  "TableHeader": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "TableHeadersRow": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "TableNextColumn": [
+   {
+    "params": [],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "TableNextRow": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer",
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "TableSetBgColor": [
+   {
+    "params": [
+     "integer",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer",
+     "number",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer",
+     "integer",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "integer",
+     "number",
+     "number",
+     "number",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "TableSetColumnIndex": [
+   {
+    "params": [
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "TableSetupColumn": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "number",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "TableSetupScrollFreeze": [
+   {
+    "params": [
+     "integer",
+     "integer"
+    ],
+    "results": []
+   }
+  ],
+  "Text": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "TextColored": [
+   {
+    "params": [
+     "number",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "TextDisabled": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "TextUnformatted": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "TextWrapped": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "TreeNode": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "TreeNodeEx": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": [
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "boolean"
+    ]
+   }
+  ],
+  "TreePop": [
+   {
+    "params": [],
+    "results": []
+   }
+  ],
+  "TreePush": [
+   {
+    "params": [
+     "string"
+    ],
+    "results": []
+   }
+  ],
+  "Unindent": [
+   {
+    "params": [],
+    "results": []
+   },
+   {
+    "params": [
+     "number"
+    ],
+    "results": []
+   }
+  ],
+  "VSliderFloat": [
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "string"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "number",
+     "number",
+     "number",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "number",
+     "boolean"
+    ]
+   }
+  ],
+  "VSliderInt": [
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "integer",
+     "integer",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "integer",
+     "integer",
+     "integer",
+     "string"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "number",
+     "integer",
+     "integer",
+     "integer",
+     "string",
+     "integer"
+    ],
+    "results": [
+     "integer",
+     "boolean"
+    ]
+   }
+  ],
+  "Value": [
+   {
+    "params": [
+     "string",
+     "boolean"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "integer"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "number"
+    ],
+    "results": []
+   },
+   {
+    "params": [
+     "string",
+     "number",
+     "string"
+    ],
+    "results": []
+   }
+  ]
+ },
+ "enums": {
+  "ImDrawFlags": [
+   "None",
+   "Closed",
+   "ImDrawFlags_RoundCornersTopLeft",
+   "RoundCornersTopRight",
+   "RoundCornersBottomLeft",
+   "RoundCornersBottomRight",
+   "RoundCornersNone",
+   "RoundCornersTop",
+   "RoundCornersBottom",
+   "RoundCornersLeft",
+   "RoundCornersRight",
+   "RoundCornersAll"
+  ],
+  "ImGuiChildFlags": [
+   "None",
+   "Borders",
+   "AlwaysUseWindowPadding",
+   "ResizeX",
+   "ResizeY",
+   "AutoResizeX",
+   "AutoResizeY",
+   "AlwaysAutoResize",
+   "FrameStyle",
+   "NavFlattened"
+  ],
+  "ImGuiCol": [
+   "Text",
+   "TextDisabled",
+   "WindowBg",
+   "ChildBg",
+   "PopupBg",
+   "Border",
+   "BorderShadow",
+   "FrameBg",
+   "FrameBgHovered",
+   "FrameBgActive",
+   "TitleBg",
+   "TitleBgActive",
+   "TitleBgCollapsed",
+   "MenuBarBg",
+   "ScrollbarBg",
+   "ScrollbarGrab",
+   "ScrollbarGrabHovered",
+   "ScrollbarGrabActive",
+   "CheckMark",
+   "SliderGrab",
+   "SliderGrabActive",
+   "Button",
+   "ButtonHovered",
+   "ButtonActive",
+   "Header",
+   "HeaderHovered",
+   "HeaderActive",
+   "Separator",
+   "SeparatorHovered",
+   "SeparatorActive",
+   "ResizeGrip",
+   "ResizeGripHovered",
+   "ResizeGripActive",
+   "Tab",
+   "TabHovered",
+   "TabSelected",
+   "TabDimmed",
+   "TabDimmedSelected",
+   "PlotLines",
+   "PlotLinesHovered",
+   "PlotHistogram",
+   "PlotHistogramHovered",
+   "TableHeaderBg",
+   "TableBorderStrong",
+   "TableBorderLight",
+   "TableRowBg",
+   "TableRowBgAlt",
+   "TextSelectedBg",
+   "DragDropTarget",
+   "NavHighlight",
+   "NavWindowingHighlight",
+   "NavWindowingDimBg",
+   "ModalWindowDimBg",
+   "TabActive",
+   "TabUnfocused",
+   "TabUnfocusedActive",
+   "COUNT"
+  ],
+  "ImGuiColorEditFlags": [
+   "None",
+   "NoAlpha",
+   "NoPicker",
+   "NoOptions",
+   "NoSmallPreview",
+   "NoInputs",
+   "NoTooltip",
+   "NoLabel",
+   "NoSidePreview",
+   "NoDragDrop",
+   "NoBorder",
+   "AlphaBar",
+   "AlphaPreview",
+   "AlphaPreviewHalf",
+   "HDR",
+   "DisplayRGB",
+   "DisplayHSV",
+   "DisplayHex",
+   "Uint8",
+   "Float",
+   "PickerHueBar",
+   "PickerHueWheel",
+   "InputRGB",
+   "InputHSV",
+   "_OptionsDefault",
+   "_DisplayMask",
+   "_DataTypeMask",
+   "_PickerMask",
+   "_InputMask"
+  ],
+  "ImGuiComboFlags": [
+   "None",
+   "PopupAlignLeft",
+   "HeightSmall",
+   "HeightRegular",
+   "HeightLarge",
+   "HeightLargest",
+   "NoArrowButton",
+   "NoPreview",
+   "HeightMask"
+  ],
+  "ImGuiCond": [
+   "None",
+   "Always",
+   "Once",
+   "FirstUseEver",
+   "Appearing"
+  ],
+  "ImGuiDir": [
+   "None",
+   "Left",
+   "Right",
+   "Up",
+   "Down",
+   "COUNT"
+  ],
+  "ImGuiFocusedFlags": [
+   "None",
+   "ChildWindows",
+   "RootWindow",
+   "AnyWindow",
+   "RootAndChildWindows"
+  ],
+  "ImGuiHoveredFlags": [
+   "None",
+   "ChildWindows",
+   "RootWindow",
+   "AnyWindow",
+   "AllowWhenBlockedByPopup",
+   "AllowWhenBlockedByActiveItem",
+   "AllowWhenOverlapped",
+   "AllowWhenDisabled",
+   "RectOnly",
+   "RootAndChildWindows",
+   "ForTooltip",
+   "Stationary",
+   "DelayNone",
+   "DelayShort",
+   "DelayNormal",
+   "NoSharedDelay"
+  ],
+  "ImGuiInputTextFlags": [
+   "None",
+   "CharsDecimal",
+   "CharsHexadecimal",
+   "CharsUppercase",
+   "CharsNoBlank",
+   "AutoSelectAll",
+   "EnterReturnsTrue",
+   "CallbackCompletion",
+   "CallbackHistory",
+   "CallbackAlways",
+   "CallbackCharFilter",
+   "AllowTabInput",
+   "CtrlEnterForNewLine",
+   "NoHorizontalScroll",
+   "AlwaysOverwrite",
+   "ReadOnly",
+   "Password",
+   "NoUndoRedo",
+   "CharsScientific",
+   "CallbackResize",
+   "CallbackEdit"
+  ],
+  "ImGuiItemFlags": [
+   "None",
+   "NoTabStop",
+   "NoNav",
+   "NoNavDefaultFocus",
+   "ButtonRepeat",
+   "AutoClosePopups"
+  ],
+  "ImGuiKey": [
+   "None",
+   "Tab",
+   "LeftArrow",
+   "RightArrow",
+   "UpArrow",
+   "DownArrow",
+   "PageUp",
+   "PageDown",
+   "Home",
+   "End",
+   "Insert",
+   "Delete",
+   "Backspace",
+   "Space",
+   "Enter",
+   "Escape",
+   "LeftCtrl",
+   "LeftShift",
+   "LeftAlt",
+   "LeftSuper",
+   "RightCtrl",
+   "RightShift",
+   "RightAlt",
+   "RightSuper",
+   "Menu",
+   "0",
+   "1",
+   "2",
+   "3",
+   "4",
+   "5",
+   "6",
+   "7",
+   "8",
+   "9",
+   "A",
+   "B",
+   "C",
+   "D",
+   "E",
+   "F",
+   "G",
+   "H",
+   "I",
+   "J",
+   "K",
+   "L",
+   "M",
+   "N",
+   "O",
+   "P",
+   "Q",
+   "R",
+   "S",
+   "T",
+   "U",
+   "V",
+   "W",
+   "X",
+   "Y",
+   "Z",
+   "F1",
+   "F2",
+   "F3",
+   "F4",
+   "F5",
+   "F6",
+   "F7",
+   "F8",
+   "F9",
+   "F10",
+   "F11",
+   "F12",
+   "F13",
+   "F14",
+   "F15",
+   "F16",
+   "F17",
+   "F18",
+   "F19",
+   "F20",
+   "F21",
+   "F22",
+   "F23",
+   "F24",
+   "Apostrophe",
+   "Comma",
+   "Minus",
+   "Period",
+   "Slash",
+   "Semicolon",
+   "Equal",
+   "LeftBracket",
+   "Backslash",
+   "RightBracket",
+   "GraveAccent",
+   "CapsLock",
+   "ScrollLock",
+   "NumLock",
+   "PrintScreen",
+   "Pause",
+   "Keypad0",
+   "Keypad1",
+   "Keypad2",
+   "Keypad3",
+   "Keypad4",
+   "Keypad5",
+   "Keypad6",
+   "Keypad7",
+   "Keypad8",
+   "Keypad9",
+   "KeypadDecimal",
+   "KeypadDivide",
+   "KeypadMultiply",
+   "KeypadSubtract",
+   "KeypadAdd",
+   "KeypadEnter",
+   "COUNT"
+  ],
+  "ImGuiMouseButton": [
+   "Left",
+   "Right",
+   "Middle",
+   "COUNT"
+  ],
+  "ImGuiMouseCursor": [
+   "None",
+   "Arrow",
+   "TextInput",
+   "ResizeAll",
+   "ResizeNS",
+   "ResizeEW",
+   "ResizeNESW",
+   "ResizeNWSE",
+   "Hand",
+   "NotAllowed",
+   "COUNT"
+  ],
+  "ImGuiPopupFlags": [
+   "None",
+   "MouseButtonLeft",
+   "MouseButtonRight",
+   "MouseButtonMiddle",
+   "MouseButtonMask_",
+   "NoOpenOverExistingPopup",
+   "NoOpenOverItems",
+   "AnyPopupId",
+   "AnyPopupLevel",
+   "AnyPopup"
+  ],
+  "ImGuiSelectableFlags": [
+   "None",
+   "NoAutoClosePopups",
+   "SpanAllColumns",
+   "AllowDoubleClick",
+   "Disabled",
+   "AllowOverlap",
+   "DontClosePopups",
+   "AllowItemOverlap"
+  ],
+  "ImGuiSliderFlags": [
+   "None",
+   "AlwaysClamp",
+   "Logarithmic",
+   "NoRoundToFormat",
+   "NoInput"
+  ],
+  "ImGuiStyleVar": [
+   "Alpha",
+   "DisabledAlpha",
+   "WindowPadding",
+   "WindowRounding",
+   "WindowBorderSize",
+   "WindowMinSize",
+   "WindowTitleAlign",
+   "ChildRounding",
+   "ChildBorderSize",
+   "PopupRounding",
+   "PopupBorderSize",
+   "FramePadding",
+   "FrameRounding",
+   "FrameBorderSize",
+   "ItemSpacing",
+   "ItemInnerSpacing",
+   "IndentSpacing",
+   "CellPadding",
+   "ScrollbarSize",
+   "ScrollbarRounding",
+   "GrabMinSize",
+   "GrabRounding",
+   "TabRounding",
+   "SelectableTextAlign",
+   "ButtonTextAlign",
+   "COUNT"
+  ],
+  "ImGuiTabBarFlags": [
+   "None",
+   "Reorderable",
+   "AutoSelectNewTabs",
+   "TabListPopupButton",
+   "NoCloseWithMiddleMouseButton",
+   "NoTabListScrollingButtons",
+   "NoTooltip",
+   "FittingPolicyResizeDown",
+   "FittingPolicyScroll",
+   "FittingPolicyMask_",
+   "FittingPolicyDefault_"
+  ],
+  "ImGuiTabItemFlags": [
+   "None",
+   "UnsavedDocument",
+   "SetSelected",
+   "NoCloseWithMiddleMouseButton",
+   "NoPushId",
+   "NoTooltip",
+   "NoReorder",
+   "Leading",
+   "Trailing"
+  ],
+  "ImGuiTableBgTarget": [
+   "None",
+   "RowBg0",
+   "RowBg1",
+   "CellBg"
+  ],
+  "ImGuiTableColumnFlags": [
+   "None",
+   "Disabled",
+   "DefaultHide",
+   "DefaultSort",
+   "WidthStretch",
+   "WidthFixed",
+   "NoResize",
+   "NoReorder",
+   "NoHide",
+   "NoClip",
+   "NoSort",
+   "NoSortAscending",
+   "NoSortDescending",
+   "NoHeaderLabel",
+   "NoHeaderWidth",
+   "PreferSortAscending",
+   "PreferSortDescending",
+   "IndentEnable",
+   "IndentDisable",
+   "IsEnabled",
+   "IsVisible",
+   "IsSorted",
+   "IsHovered",
+   "WidthMask_",
+   "IndentMask_",
+   "StatusMask_",
+   "NoDirectResize_"
+  ],
+  "ImGuiTableFlags": [
+   "None",
+   "Resizable",
+   "Reorderable",
+   "Hideable",
+   "Sortable",
+   "NoSavedSettings",
+   "ContextMenuInBody",
+   "RowBg",
+   "BordersInnerH",
+   "BordersOuterH",
+   "BordersInnerV",
+   "BordersOuterV",
+   "BordersH",
+   "BordersV",
+   "BordersInner",
+   "BordersOuter",
+   "Borders",
+   "NoBordersInBody",
+   "NoBordersInBodyUntilResize",
+   "SizingFixedFit",
+   "SizingFixedSame",
+   "SizingStretchProp",
+   "SizingStretchSame",
+   "NoHostExtendX",
+   "NoHostExtendY",
+   "NoKeepColumnsVisible",
+   "PreciseWidths",
+   "NoClip",
+   "PadOuterX",
+   "NoPadOuterX",
+   "NoPadInnerX",
+   "ScrollX",
+   "ScrollY",
+   "SortMulti",
+   "SortTristate",
+   "SizingMask"
+  ],
+  "ImGuiTableRowFlags": [
+   "None",
+   "Headers"
+  ],
+  "ImGuiTreeNodeFlags": [
+   "None",
+   "Selected",
+   "Framed",
+   "AllowOverlap",
+   "NoTreePushOnOpen",
+   "NoAutoOpenOnLog",
+   "DefaultOpen",
+   "OpenOnDoubleClick",
+   "OpenOnArrow",
+   "Leaf",
+   "Bullet",
+   "FramePadding",
+   "SpanAvailWidth",
+   "SpanFullWidth",
+   "NavLeftJumpsBackHere",
+   "CollapsingHeader",
+   "AllowItemOverlap"
+  ],
+  "ImGuiWindowFlags": [
+   "None",
+   "NoTitleBar",
+   "NoResize",
+   "NoMove",
+   "NoScrollbar",
+   "NoScrollWithMouse",
+   "NoCollapse",
+   "AlwaysAutoResize",
+   "NoBackground",
+   "NoSavedSettings",
+   "NoMouseInputs",
+   "MenuBar",
+   "HorizontalScrollbar",
+   "NoFocusOnAppearing",
+   "NoBringToFrontOnFocus",
+   "AlwaysVerticalScrollbar",
+   "AlwaysHorizontalScrollbar",
+   "NoNavInputs",
+   "NoNavFocus",
+   "UnsavedDocument",
+   "NoNav",
+   "NoDecoration",
+   "NoInputs",
+   "ChildWindow",
+   "Tooltip",
+   "Popup",
+   "Modal",
+   "ChildMenu",
+   "AlwaysUseWindowPadding",
+   "NavFlattened"
+  ]
+ }
+}

@@ -170,16 +170,47 @@ local function xyOf(a, b)
 end
 
 local function u32(c, alpha)
-  return ImGui.GetColorU32(c[1], c[2], c[3], (c[4] or 1.0) * (alpha or 1.0))
+  local packed = ImGui.GetColorU32(c[1], c[2], c[3], (c[4] or 1.0) * (alpha or 1.0))
+  return packed
 end
 
--- The window's draw list, else the foreground one.
+-- Flags combined without bit32 (LuaJIT's own library is `bit`; CET whitelists bit32, but nothing here depends on it): each
+-- member is a non-negative integer, a missing (nil) member is left out, and a bit set twice counts once.
+function panel.flags(...)
+  local out = 0
+  for i = 1, select("#", ...) do
+    local v = select(i, ...)
+    if type(v) == "number" and v > 0 then
+      local result, x, y, bit = 0, out, math.floor(v), 1
+      while x > 0 or y > 0 do
+        if x % 2 == 1 or y % 2 == 1 then result = result + bit end
+        x, y, bit = math.floor(x / 2), math.floor(y / 2), bit * 2
+      end
+      out = result
+    end
+  end
+  return out
+end
+
+-- The child flag for a border: ImGuiChildFlags.Borders (Dear ImGui 1.91.1, CET 1.37.1), Border before that, else 1.
+function panel.childBorders()
+  local flags = ImGuiChildFlags
+  local value = flags ~= nil and (flags.Borders or flags.Border) or nil
+  if type(value) ~= "number" then value = 1 end
+  return value
+end
+
+-- The window's draw list, else the foreground one. Never a tail call into ImGui (see panel.card): the result is held first.
 local function drawList()
   if ImGui.GetWindowDrawList ~= nil then
-    local ok, list = pcall(function() return ImGui.GetWindowDrawList() end)
+    local ok, list = pcall(function()
+      local window = ImGui.GetWindowDrawList()
+      return window
+    end)
     if ok and list then return list end
   end
-  return ImGui.GetForegroundDrawList()
+  local foreground = ImGui.GetForegroundDrawList()
+  return foreground
 end
 
 local function rectFilled(list, x1, y1, x2, y2, c, alpha)
@@ -446,9 +477,17 @@ end
 -- nil) is a 2 px left edge that breathes (the pulse) while pulsing is true. Cards never nest. Where this CET has no BeginChild,
 -- or it rejects the call, the content is drawn plain under a rule. The child's height is the content's last frame (one frame to
 -- settle after a change).
--- The child is made under pcall with its pushes counted: if the begin fails, exactly what was pushed is popped, the failure is
--- named once in the mod's log (state.noteDraw) and this window uses the plain form from then on. A begin that succeeds is always
--- paired with EndChild, and the content is drawn only if the child says it is visible (a hidden child still gets its EndChild).
+-- The child is made under pcall one step at a time (the padding push, the border colour push, BeginChild): if a step fails,
+-- exactly what was pushed is popped, the step, its arguments and the push counts are named once in the mod's log
+-- (state.noteDraw) and this window uses the plain form from then on. A begin that succeeds is always paired with EndChild, and
+-- the content is drawn only if the child says it is visible (a hidden child still gets its EndChild).
+-- The child flags are ImGuiChildFlags (Borders, Border before Dear ImGui 1.91.1, else 1) as an integer, and the window flags
+-- are combined without bit32, so the (string, float, float, int, int) overload takes them; no deprecated bool form.
+-- Borg 4 (26 Oct): every card drew plain with "stack index -1, expected userdata, received nil". CET wraps each ImGui function
+-- to look up its caller's environment (__logger, via sol::this_environment), and the old `return ImGui.BeginChild(...)` was a
+-- tail call straight out of the pcall'd function: LuaJIT drops a tail-calling frame, so the caller it saw was pcall, whose
+-- environment is the global table without __logger. So no ImGui call here (or anywhere in this layer) is a tail call: lint-lua
+-- refuses `return ImGui.X(...)`, and tools/test/cet-bindings.test.ts checks the caller as CET does.
 function panel.card(state, theme, which, id, edgeName, pulsing, fn)
   state.cards = state.cards or {}
   local padX, padY = panel.metric(theme, "ChildPaddingX", 8), panel.metric(theme, "ChildPaddingY", 6)
@@ -460,20 +499,36 @@ function panel.card(state, theme, which, id, edgeName, pulsing, fn)
   end
   local height = state.cards[id] or (ImGui.GetFontSize() * 2 + padY * 2)
   local line = panel.colour(theme, which, "XfLine", GREY)
+  local childFlags = panel.childBorders()
+  local windowFlags = panel.flags(ImGuiWindowFlags and ImGuiWindowFlags.NoScrollbar, ImGuiWindowFlags and ImGuiWindowFlags.NoScrollWithMouse)
   local vars, colours = 0, 0
+  local step = "start"
   local began, visible = pcall(function()
-    ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, padX, padY)
-    vars = vars + 1
-    ImGui.PushStyleColor(ImGuiCol.Border, line[1], line[2], line[3], line[4])
-    colours = colours + 1
-    return ImGui.BeginChild("##xf_card_" .. id, width, height, true, bit32 and bit32.bor(ImGuiWindowFlags.NoScrollbar, ImGuiWindowFlags.NoScrollWithMouse) or 0)
+    step = "PushStyleVar(WindowPadding)"
+    local padding = ImGuiStyleVar and ImGuiStyleVar.WindowPadding
+    if padding ~= nil then
+      ImGui.PushStyleVar(padding, padX, padY)
+      vars = vars + 1
+    end
+    step = "PushStyleColor(Border)"
+    local border = ImGuiCol and ImGuiCol.Border
+    if border ~= nil then
+      ImGui.PushStyleColor(border, line[1], line[2], line[3], line[4])
+      colours = colours + 1
+    end
+    step = string.format("BeginChild(\"##xf_card_%s\", %s, %s, %s, %s)", tostring(id), tostring(width), tostring(height), tostring(childFlags), tostring(windowFlags))
+    local shown = ImGui.BeginChild("##xf_card_" .. id, width, height, childFlags, windowFlags)
+    return shown
   end)
   if not began then
     -- Undo exactly what was pushed before the failure, then draw plain.
     if colours > 0 then pcall(function() ImGui.PopStyleColor(colours) end) end
     if vars > 0 then pcall(function() ImGui.PopStyleVar(vars) end) end
     state.childFailed = true
-    if state.noteDraw then state.noteDraw("BeginChild", tostring(visible)) end
+    if state.noteDraw then
+      state.noteDraw("card " .. tostring(id) .. " at " .. step,
+        string.format("%s (before it: %d style vars and %d colours pushed, all popped again)", tostring(visible), vars, colours))
+    end
     ImGui.Separator()
     fn()
     return
@@ -489,7 +544,7 @@ function panel.card(state, theme, which, id, edgeName, pulsing, fn)
         try(state, "card_edge", function()
           local colour = panel.colour(theme, which, edgeName, AMBER)
           local wx, wy = xyOf(ImGui.GetWindowPos())
-          local _, wh = ImGui.GetWindowSize()
+          local _, wh = xyOf(ImGui.GetWindowSize())
           local alpha = pulsing and panel.pulseAlpha(theme, ImGui.GetTime(), panel.reduced(state)) or 1.0
           rectFilled(drawList(), wx, wy, wx + 2 * (panel.k or 1), wy + wh, colour, alpha)
         end)
@@ -498,8 +553,8 @@ function panel.card(state, theme, which, id, edgeName, pulsing, fn)
     cardWidth, cardPad = savedWidth, savedPad
   end
   ImGui.EndChild()
-  ImGui.PopStyleColor(colours)
-  ImGui.PopStyleVar(vars)
+  if colours > 0 then ImGui.PopStyleColor(colours) end
+  if vars > 0 then ImGui.PopStyleVar(vars) end
   if not ok then error(err, 0) end
 end
 

@@ -9,6 +9,9 @@
 //   bun tools/commit-tripwire.ts --for-s 90 --on-trip "test.events {\"stims\":false}"
 // --on-trip is any catalogue command (as bridge-client.ts run takes it). Each reading is one line; exit 0 when the time ran out
 // above the floor, 3 when it tripped, 2 when the machine's counters could not be read.
+// 0.8.22 (Borg 4: a bare handed_over sent the coordinator looking for another client): when the off switch is session.handover,
+// the tripwire gives it the reason as its note (unless the command names one), so every refusal the handover causes and its
+// session event say "handed over by the commit tripwire (free commit 3.4 GB under 4 GB)".
 
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -27,6 +30,28 @@ export const tripped = (reading: CommitReading, floorGb: number) => freeCommitBy
 export function parseReading(text: string): CommitReading | null {
   const [limit, committed] = text.trim().split(/\s+/).map(Number);
   return Number.isFinite(limit) && Number.isFinite(committed) && limit! > 0 && committed! >= 0 ? { limit: limit!, committed: committed! } : null;
+}
+
+/** Why the tripwire tripped, in the words the handover carries. */
+export const tripReason = (freeGb: number, floorGb: number) =>
+  `handed over by the commit tripwire (free commit ${freeGb.toFixed(1)} GB under ${floorGb} GB)`;
+
+/**
+ * The off switch's command and its JSON input, as bridge-client.ts run takes them. session.handover gets the trip's reason as
+ * its note unless the input already has one; any other command is passed as written.
+ */
+export function offSwitch(onTrip: string, freeGb: number, floorGb: number): { command: string; input?: string } {
+  const [command, ...rest] = onTrip.trim().split(" ");
+  const text = rest.join(" ").trim();
+  if (command !== "session.handover") return { command: command!, ...(text ? { input: text } : {}) };
+  let input: Record<string, unknown> = {};
+  if (text) {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("session.handover's input must be a JSON object");
+    input = parsed;
+  }
+  if (typeof input.note !== "string" || !input.note) input = { ...input, note: tripReason(freeGb, floorGb) };
+  return { command, input: JSON.stringify(input) };
 }
 
 /** The machine's commit now (Windows performance counters through PowerShell, hidden). */
@@ -63,9 +88,9 @@ async function main(argv: string[]) {
     if (tripped(reading, floorGb)) {
       console.log(`TRIPPED: free commit ${free.toFixed(1)} GB is under ${floorGb} GB`);
       if (onTrip) {
-        const [command, ...rest] = onTrip.split(" ");
-        const run = spawnSync("bun", [join(import.meta.dir, "bridge-client.ts"), "run", command!, ...(rest.length ? [rest.join(" ")] : [])], { encoding: "utf8", windowsHide: true, timeout: 30_000 });
-        console.log(`off switch ${onTrip}: exit ${run.status}`);
+        const { command, input } = offSwitch(onTrip, free, floorGb);
+        const run = spawnSync("bun", [join(import.meta.dir, "bridge-client.ts"), "run", command, ...(input ? [input] : [])], { encoding: "utf8", windowsHide: true, timeout: 30_000 });
+        console.log(`off switch ${command}${input ? " " + input : ""}: exit ${run.status}`);
       }
       return 3;
     }

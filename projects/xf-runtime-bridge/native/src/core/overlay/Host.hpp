@@ -174,7 +174,14 @@ public:
     // Captures hide the panel for their frames (overlay.hide); the flag lapses by itself after aMs.
     void HideForCapture(bool aHidden, uint32_t aMs, std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now());
     bool HiddenForCapture(std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now()) const;
-    void SetCetOpen(bool aOpen) { m_cetOpen.store(aOpen); }
+    // CET's overlay, as the CET layer last reported it (XFBridge_CetOverlay), whether or not this host is enabled. Until the CET
+    // layer has reported (no CET, an older layer, before its onInit) the snapshot says null: unknown, never a guessed false.
+    void SetCetOpen(bool aOpen)
+    {
+        m_cetOpen.store(aOpen);
+        m_cetKnown.store(true);
+    }
+    bool CetOpenKnown() const { return m_cetKnown.load(); }
     void SetKilled(bool aKilled) { m_killed.store(aKilled); }
     // The pass-through switch (never an unhook, feasibility §2.4): false makes the detour call straight through.
     void SetPassThrough(bool aOn) { m_passThrough.store(aOn); }
@@ -187,6 +194,7 @@ private:
     std::atomic<bool> m_enabled{false};
     std::atomic<Phase> m_phase{Phase::Disabled};
     std::atomic<bool> m_cetOpen{false};
+    std::atomic<bool> m_cetKnown{false};
     std::atomic<bool> m_killed{false};
     std::atomic<bool> m_passThrough{false};
     std::atomic<int64_t> m_hiddenUntilNs{0};

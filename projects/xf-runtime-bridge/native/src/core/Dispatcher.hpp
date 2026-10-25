@@ -174,8 +174,11 @@ public:
     // 0.6, session.handover / session.resume: while handed over, every write is refused with handed_over, so the player
     // has the game to themselves; nothing else changes (reads, notes, the kill switch still work). Unlike the panel's pause
     // (the player's own switch, which no pipe method can undo), a client that handed over may resume.
+    // The note travels with the handover (0.8.22, Borg 4: the commit tripwire's handover read as a bare handed_over): every
+    // refusal it causes, and its session event, carry it, until session.resume.
     void SetHandover(bool aOn, const std::string& aNote = {});
     bool HandedOver() const;
+    std::string HandoverNote() const;
 
     // 0.6: the session event stream (core/Events.hpp). The dispatcher reports every write it answers (ok or refused),
     // the kill switch and handovers through this sink; unset, nothing is reported.
@@ -205,6 +208,7 @@ private:
 
     mutable std::mutex m_mutex;
     std::string m_killReason;
+    std::string m_handoverNote; // m_mutex; the note of the handover in force
     std::atomic<bool> m_killed{false};
     std::atomic<bool> m_writesPaused{false};
     std::atomic<bool> m_handover{false};

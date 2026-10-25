@@ -520,6 +520,9 @@ void CetOverlay(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut,
     Guarded("XFBridge_CetOverlay", [&] {
         Get().cetOverlayOpen.store(open);
         Get().cetOverlaySeen.store(true);
+        // 0.8.22 (Borg 4: cet_open read false with CET's overlay open): straight to the overlay host, which used to hear it
+        // only on ticks while it was enabled, so overlay.state tracks CET whether or not the XF box is on.
+        Get().overlayHost.SetCetOpen(open);
         if (aOut)
         {
             *aOut = true;

@@ -158,6 +158,9 @@ registerForEvent("onInit", function()
   if ok then
     log("info", cid, "native ping reply: " .. tostring(reply))
     callNative("XFBridge_Announce", "cet", "onInit; CET " .. tostring(GetVersion()))
+    -- 0.8.22: the overlay's state is known from here on: closed, unless CET opens it. CET sends onOverlayOpen straight after
+    -- onInit when its overlay is already open (a start with it open, Reload all mods), so a reload never leaves it unknown.
+    callNative("XFBridge_CetOverlay", state.overlayOpen == true)
   end
 
   -- Redscript layer: CET maps the class XFRuntimeBridge.XFBridgeQuery to the Lua global
@@ -678,8 +681,19 @@ local function drawLabel()
     colours, vars = panel.pushTheme(theme, which)
   end
   ImGui.SetNextWindowPos(12, 12, ImGuiCond.Always)
-  local flags = bit32.bor(ImGuiWindowFlags.NoDecoration, ImGuiWindowFlags.NoInputs,
-    ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoSavedSettings, ImGuiWindowFlags.NoFocusOnAppearing)
+  -- 0.8.22: the flags' union without bit32 (a member this CET lacks is left out; NoDecoration and NoInputs are composites).
+  local flags = 0
+  for _, name in ipairs({ "NoDecoration", "NoInputs", "AlwaysAutoResize", "NoSavedSettings", "NoFocusOnAppearing" }) do
+    local v = ImGuiWindowFlags[name]
+    if type(v) == "number" and v > 0 then
+      local union, x, y, bit = 0, flags, math.floor(v), 1
+      while x > 0 or y > 0 do
+        if x % 2 == 1 or y % 2 == 1 then union = union + bit end
+        x, y, bit = math.floor(x / 2), math.floor(y / 2), bit * 2
+      end
+      flags = union
+    end
+  end
   local ok, err = true, nil
   if ImGui.Begin("XF Runtime Bridge##indicator", flags) then
     ok, err = pcall(drawLabelBody, which)
