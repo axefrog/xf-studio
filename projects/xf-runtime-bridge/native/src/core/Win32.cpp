@@ -14,6 +14,16 @@
 
 namespace xfb::win32
 {
+bool ClientAreaAnimation()
+{
+    BOOL on = TRUE;
+    if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &on, 0))
+    {
+        return true;
+    }
+    return on != FALSE;
+}
+
 std::string Narrow(std::wstring_view aText)
 {
     if (aText.empty())

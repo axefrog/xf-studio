@@ -72,6 +72,9 @@ struct Config
     // 0.8 (the UI review): the XF box's diagnostic lines (frames, CPU time, the back buffer, frame-generation modules,
     // the script gate, requests and the moving bar) only when asked for; the -diagnostic package turns them on.
     bool overlayDiagnostics = false;
+    // 0.8.22 (the Studio's in-game motion rule): auto | reduced | full. auto follows Windows' animation-effects setting and skips the
+    // pulse and the settle while frame generation is on; reduced draws everything still; full animates whatever either says.
+    std::string overlayMotion = "auto";
 
     // [log]
     Level logLevel = Level::Debug; // baseline is verbose by design; bounded by RED4ext rotation

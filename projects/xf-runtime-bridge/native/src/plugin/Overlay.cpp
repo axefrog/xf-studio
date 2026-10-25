@@ -54,7 +54,9 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cfloat>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -69,6 +71,7 @@
 #include <imgui_internal.h>
 
 #include "core/Log.hpp"
+#include "core/overlay/Motion.hpp"
 #include "plugin/Overlay.hpp"
 
 #if !defined(XFB_IMGUI_ASSERT_OVERRIDDEN)
@@ -188,8 +191,31 @@ struct Renderer
     bool needBuffers = true;
     xfb::overlay::DescriptorFreeList slots{kSrvSlots};
     ImGuiContext* context = nullptr;
-    ImFont* body = nullptr;
-    ImFont* display = nullptr;
+    // 0.8.22: one baked font per type role (the Studio's scale), the palette and sizes looked up when they were baked, and the
+    // render-thread state of the motion (the status row's settle).
+    struct Fonts
+    {
+        ImFont* title = nullptr;   // display face, the heading
+        ImFont* eyebrow = nullptr; // display face, group labels and chips
+        ImFont* body = nullptr;    // UI face, status and messages
+        ImFont* label = nullptr;   // UI face, key-value labels
+        ImFont* value = nullptr;   // mono face, figures
+    } fonts;
+    struct Colours
+    {
+        ImVec4 text, textDisabled, textMuted, accent, accentInk, accentEdge, accentText, signal, signalBg, signalLine, line, success, successBg,
+            warning, warningBg, danger, dangerBg, plot, childBg;
+    } colours;
+    struct Metrics
+    {
+        float itemSpacingX = 8, itemSpacingY = 6, itemInnerSpacingX = 6, sectionGap = 16, childPadX = 8, childPadY = 6, chipPadX = 8, chipPadY = 2,
+              bevelSmall = 4, bevelLarge = 7, barThin = 6, barLabelled = 16, rounding = 2, dot = 8, markW = 30, markH = 24, eyebrowSquare = 6, edge = 2,
+              tracking = 0.1f;
+    } metrics;
+    float scale = 1.0f;          // the back buffer's height over 1080 times the player's overlay scale
+    ImVec4 cardEdge{0, 0, 0, 0}; // the open card's left edge colour (alpha 0: none)
+    xfb::overlay::Settle statusSettle;
+    float statusRowHeight = 0.0f; // the status row's height last frame (the settle wash is drawn before the row)
     UINT fontHeight = 0;         // the back buffer height the fonts were baked for (RB-108: rebuilt after a resize)
     bool uploadsAllowed = false; // RB-99: a font texture upload is expected (the first frame, the frame after a rebuild)
     std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
@@ -361,8 +387,9 @@ RED4ext::GpuApi::SSwapChainData* ReadFacts(int32_t aDeviceIndex, DeviceFacts& aF
     return sc;
 }
 
-// The XF Studio theme (core/overlay/ThemeTable.inc, generated from the Studio's tokens) as the ImGui style, from scratch
-// (ScaleAllSizes is cumulative, so a rebuild after a resize starts from the default style).
+// The XF Studio theme (core/overlay/ThemeTable.inc, generated from the Studio's tokens and its in-game table) as the ImGui style,
+// from scratch (ScaleAllSizes is cumulative, so a rebuild after a resize starts from the default style). Every colour slot of the
+// pinned ImGui 1.92.9 has an entry, so no widget shows ImGui's default blue; the names are looked up by ImGui's own colour name.
 void ApplyTheme(ThemeKind aKind, float aScale)
 {
     auto& style = ImGui::GetStyle();
@@ -385,17 +412,21 @@ void ApplyTheme(ThemeKind aKind, float aScale)
         style.ChildRounding = rounding;
     style.WindowBorderSize = 1.0f;
     style.FrameBorderSize = 1.0f;
+    style.ChildBorderSize = 1.0f;
+    // 0.8.22: the Studio's thin scrollbars and its disabled opacity (the .btn:disabled rule), from the table.
+    style.ScrollbarSize = ThemeMetricOf("ScrollbarSize", 8);
+    style.DisabledAlpha = xfb::overlay::ThemeValueOf("DisabledAlpha", 0.45f);
     style.ScaleAllSizes(aScale);
 }
 
-ImFont* LoadFont(const char* aKind, float aSize)
+// A face's font at a pixel size (the Studio's size times the back buffer's scale), from the first of the face's Windows font
+// files that exists, else ImGui's built-in font. Baked with the panel's glyph ranges only (RB-99).
+ImFont* LoadFont(const char* aFace, float aSize)
 {
     auto& io = ImGui::GetIO();
     wchar_t windows[MAX_PATH]{};
     GetWindowsDirectoryW(windows, MAX_PATH);
-    const std::vector<const wchar_t*> files = std::string(aKind) == "display" ? std::vector<const wchar_t*>{L"bahnschrift.ttf"}
-                                                                               : std::vector<const wchar_t*>{L"SegUIVar.ttf", L"segoeui.ttf"};
-    for (const auto* file : files)
+    for (const auto* file : xfb::overlay::ThemeFontFiles(aFace))
     {
         const auto path = std::filesystem::path(windows) / L"Fonts" / file;
         std::error_code error;
@@ -415,19 +446,84 @@ ImFont* LoadFont(const char* aKind, float aSize)
     return io.Fonts->AddFontDefault(&config);
 }
 
-// RB-99, RB-108: the fonts at the current height's scale, every glyph baked now (the atlas is never grown while drawing),
-// and the theme at the same scale. The next frame uploads the new atlas; that upload is expected.
+ImVec4 ThemeVec(const char* aName, ThemeKind aKind)
+{
+    float rgba[4] = {1, 1, 1, 1};
+    xfb::overlay::ThemeColorOf(aName, aKind, rgba);
+    return ImVec4(rgba[0], rgba[1], rgba[2], rgba[3]);
+}
+
+// The colours and sizes the panel draws with, looked up once per (re)build, never per frame (0.8.22: the draw code reads these
+// and carries no colour or pixel literal of its own).
+void LoadStyle(float aScale)
+{
+    const auto kind = gHost->Theme();
+    auto& c = gR.colours;
+    c.text = ThemeVec("Text", kind);
+    c.textDisabled = ThemeVec("TextDisabled", kind);
+    c.textMuted = ThemeVec("XfTextMuted", kind);
+    c.accent = ThemeVec("XfAccent", kind);
+    c.accentInk = ThemeVec("XfAccentInk", kind);
+    c.accentEdge = ThemeVec("XfAccentEdge", kind);
+    c.accentText = ThemeVec("XfAccentText", kind);
+    c.signal = ThemeVec("XfSignal", kind);
+    c.signalBg = ThemeVec("XfSignalBg", kind);
+    c.signalLine = ThemeVec("XfSignalLine", kind);
+    c.line = ThemeVec("XfLine", kind);
+    c.success = ThemeVec("XfSuccess", kind);
+    c.successBg = ThemeVec("XfSuccessBg", kind);
+    c.warning = ThemeVec("XfWarning", kind);
+    c.warningBg = ThemeVec("XfWarningBg", kind);
+    c.danger = ThemeVec("XfDanger", kind);
+    c.dangerBg = ThemeVec("XfDangerBg", kind);
+    c.plot = ThemeVec("PlotHistogram", kind);
+    c.childBg = ThemeVec("ChildBg", kind);
+    using xfb::overlay::ThemeMetricOf;
+    auto& m = gR.metrics;
+    m.itemSpacingX = ThemeMetricOf("ItemSpacingX", 8) * aScale;
+    m.itemSpacingY = ThemeMetricOf("ItemSpacingY", 6) * aScale;
+    m.itemInnerSpacingX = ThemeMetricOf("ItemInnerSpacingX", 6) * aScale;
+    m.sectionGap = ThemeMetricOf("SectionGap", 16) * aScale;
+    m.childPadX = ThemeMetricOf("ChildPaddingX", 8) * aScale;
+    m.childPadY = ThemeMetricOf("ChildPaddingY", 6) * aScale;
+    m.chipPadX = ThemeMetricOf("ChipPaddingX", 8) * aScale;
+    m.chipPadY = ThemeMetricOf("ChipPaddingY", 2) * aScale;
+    m.bevelSmall = ThemeMetricOf("BevelSmall", 4) * aScale;
+    m.bevelLarge = ThemeMetricOf("BevelLarge", 7) * aScale;
+    m.barThin = ThemeMetricOf("BarThin", 6) * aScale;
+    m.barLabelled = ThemeMetricOf("BarLabelled", 16) * aScale;
+    m.rounding = ThemeMetricOf("Rounding", 2) * aScale;
+    m.dot = 8.0f * aScale; // the status dot's diameter: the Studio's 8 px (the style guide's Status line anatomy)
+    m.markW = 30.0f * aScale; // the brand mark: the Studio's .brand-mark, 30 x 24
+    m.markH = 24.0f * aScale;
+    m.eyebrowSquare = 6.0f * aScale; // the eyebrow's square and its gap
+    m.edge = 2.0f * aScale;          // a card's left edge
+    m.tracking = 0.1f;               // a tracked label's gap, in em
+}
+
+// RB-99, RB-108: the fonts at the current height's scale, every glyph baked now (the atlas is never grown while drawing, and
+// never per frame), and the theme at the same scale. 0.8.22: one font per type role, five in all (title and eyebrow in the
+// display face, body and label in the UI face, value in the mono face), sized by the Studio's scale. The next frame uploads the
+// new atlas; that upload is expected.
 void BuildFonts()
 {
     auto& io = ImGui::GetIO();
     io.Fonts->Clear();
     const float scale = (static_cast<float>(gR.height) / 1080.0f) * gHost->Scale();
-    gR.body = LoadFont("ui", xfb::overlay::ThemeMetricOf("FontSize", 13.0f) * scale);
-    gR.display = LoadFont("display", xfb::overlay::ThemeMetricOf("FontSizeLarge", 15.0f) * scale);
-    io.FontDefault = gR.body;
+    const auto roleFont = [scale](const char* aRole, const char* aFace, float aFallback) {
+        const auto* type = xfb::overlay::ThemeTypeOf(aRole);
+        return LoadFont(type ? type->face : aFace, (type ? type->size : aFallback) * scale);
+    };
+    gR.fonts.title = roleFont("title", "display", 15.0f);
+    gR.fonts.eyebrow = roleFont("eyebrow", "display", 11.0f);
+    gR.fonts.body = roleFont("body", "ui", 13.0f);
+    gR.fonts.label = roleFont("label", "ui", 12.0f);
+    gR.fonts.value = roleFont("value", "mono", 12.0f);
+    io.FontDefault = gR.fonts.body;
     ImFontAtlasBuildMain(io.Fonts);
     ApplyTheme(gHost->Theme(), scale);
-    ImGui::GetStyle().FontSizeBase = gR.body ? gR.body->LegacySize : 13.0f * scale;
+    LoadStyle(scale);
+    ImGui::GetStyle().FontSizeBase = gR.fonts.body ? gR.fonts.body->LegacySize : 13.0f * scale;
     gR.fontHeight = gR.height;
     gR.uploadsAllowed = true;
 }
@@ -497,7 +593,7 @@ void Teardown()
         }
         ImGui::DestroyContext(gR.context);
         gR.context = nullptr;
-        gR.body = gR.display = nullptr;
+        gR.fonts = {};
     }
     gR.list.Reset();
     gR.allocators.clear();
@@ -669,17 +765,301 @@ bool MakeBuffers()
     return true;
 }
 
-ImVec4 ThemeColour(const char* aName)
+// ---- 0.8.22: the Studio's in-game components (the style guide's "In-game surfaces", "In-game components") ------------------------
+// Each is a recipe of theme slots and metrics, drawn here because Dear ImGui has no bevel, tracking or live pulse of its own.
+// Nothing here allocates: text goes through stack buffers, shapes through the window's draw list, and every colour and size comes
+// from the palette LoadStyle() filled when the fonts were baked. All text is drawn at the baked size of its font (LegacySize).
+
+ImU32 Col(const ImVec4& aColour, float aAlpha = 1.0f)
 {
-    float rgba[4] = {1, 1, 1, 1};
-    xfb::overlay::ThemeColorOf(aName, gHost->Theme(), rgba);
-    return ImVec4(rgba[0], rgba[1], rgba[2], rgba[3]);
+    ImVec4 c = aColour;
+    c.w *= aAlpha;
+    return ImGui::GetColorU32(c);
 }
 
-// The panel (P0): no input. 0.8 (the UI review): right of the CET label, its widest extent being the label's 640 px wrap
-// from x 12 (unscaled, as the label's wrap is); the status line every surface shows; the diagnostics (with the moving bar,
-// one sweep a second so flicker and ghosting show) only with [overlay] diagnostics. Its text is limited to the baked
-// glyphs when the game thread publishes it (Publish); the figures come from atomics.
+float Tracked(ImFont* aFont, const char* aText, bool aMeasureOnly, ImDrawList* aList, float aX, float aY, ImU32 aColour)
+{
+    // The Studio tracks capitals; ImGui cannot. Short fixed labels are drawn glyph by glyph with a 0.1 em gap.
+    const float size = aFont->LegacySize;
+    float x = aX;
+    for (const char* c = aText; *c; ++c)
+    {
+        const ImVec2 advance = aFont->CalcTextSizeA(size, FLT_MAX, 0.0f, c, c + 1);
+        if (!aMeasureOnly)
+        {
+            aList->AddText(aFont, size, ImVec2(x, aY), aColour, c, c + 1);
+        }
+        x += advance.x + gR.metrics.tracking * size;
+    }
+    return x - aX - (*aText ? gR.metrics.tracking * size : 0.0f);
+}
+
+// Upper-case ASCII copy of a short label into a caller's buffer (capitals roles).
+void Caps(char* aOut, size_t aSize, const char* aText)
+{
+    size_t i = 0;
+    for (; aText[i] && i + 1 < aSize; ++i)
+    {
+        const char c = aText[i];
+        aOut[i] = (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
+    }
+    aOut[i] = 0;
+}
+
+// A chamfered rectangle (top-right and bottom-left corners cut by aBevel): six points, convex.
+void ChamferPoints(ImVec2 aPoints[6], ImVec2 aMin, ImVec2 aMax, float aBevel)
+{
+    aPoints[0] = ImVec2(aMin.x, aMin.y);
+    aPoints[1] = ImVec2(aMax.x - aBevel, aMin.y);
+    aPoints[2] = ImVec2(aMax.x, aMin.y + aBevel);
+    aPoints[3] = ImVec2(aMax.x, aMax.y);
+    aPoints[4] = ImVec2(aMin.x + aBevel, aMax.y);
+    aPoints[5] = ImVec2(aMin.x, aMax.y - aBevel);
+}
+
+enum class Tone
+{
+    Neutral,
+    Success,
+    Warning,
+    Danger,
+    Info
+};
+
+Tone ToneOfStatus(const std::string& aTone)
+{
+    return aTone == "ok" ? Tone::Success : aTone == "write" || aTone == "paused" ? Tone::Warning : aTone == "killed" ? Tone::Danger : Tone::Neutral;
+}
+
+const ImVec4& ToneColour(Tone aTone)
+{
+    const auto& c = gR.colours;
+    return aTone == Tone::Success ? c.success : aTone == Tone::Warning ? c.warning : aTone == Tone::Danger ? c.danger : aTone == Tone::Info ? c.signal : c.textDisabled;
+}
+
+float TextHeight(ImFont* aFont)
+{
+    return aFont->CalcTextSizeA(aFont->LegacySize, FLT_MAX, 0.0f, "X").y;
+}
+
+// A chip's height: the eyebrow line, ChipPaddingY above and below, and the 1 px border (the Studio's 20 px chip at 1080p).
+float ChipHeight()
+{
+    return gR.fonts.eyebrow ? TextHeight(gR.fonts.eyebrow) + 2.0f * gR.metrics.chipPadY + 2.0f * std::max(1.0f, gR.scale) : 0.0f;
+}
+
+// The chip: eyebrow-role capitals in the tone, the tone's wash, a 1 px border of the tone at ChipBorderAlpha, the top-right and
+// bottom-left corners chamfered BevelSmall. Hollow (paused) has no fill. Takes the cursor's place as an item.
+void Chip(const char* aLabel, Tone aTone, bool aHollow)
+{
+    auto* list = ImGui::GetWindowDrawList();
+    auto* font = gR.fonts.eyebrow;
+    if (!font)
+    {
+        return;
+    }
+    char caps[48];
+    Caps(caps, sizeof(caps), aLabel);
+    const auto& c = gR.colours;
+    const float border = std::max(1.0f, gR.scale);
+    const float textW = Tracked(font, caps, true, nullptr, 0, 0, 0);
+    const float lineH = TextHeight(font);
+    const ImVec2 size(textW + 2.0f * gR.metrics.chipPadX + 2.0f * border, ChipHeight());
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const ImVec2 max(min.x + size.x, min.y + size.y);
+    ImVec2 points[6];
+    ChamferPoints(points, min, max, gR.metrics.bevelSmall);
+    const float borderAlpha = xfb::overlay::ThemeValueOf("ChipBorderAlpha", 0.5f);
+    ImVec4 text = c.textMuted, wash(0, 0, 0, 0), edge = c.line;
+    switch (aTone)
+    {
+    case Tone::Success:
+        text = c.success, wash = c.successBg, edge = c.success, edge.w *= borderAlpha;
+        break;
+    case Tone::Warning:
+        text = c.warning, wash = c.warningBg, edge = c.warning, edge.w *= borderAlpha;
+        break;
+    case Tone::Danger:
+        text = c.danger, wash = c.dangerBg, edge = c.danger, edge.w *= borderAlpha;
+        break;
+    case Tone::Info:
+        text = c.signal, wash = c.signalBg, edge = c.signalLine;
+        break;
+    case Tone::Neutral:
+        break;
+    }
+    if (!aHollow && wash.w > 0.0f)
+    {
+        list->AddConvexPolyFilled(points, 6, Col(wash));
+    }
+    list->AddPolyline(points, 6, Col(edge), border, ImDrawFlags_Closed);
+    Tracked(font, caps, false, list, min.x + border + gR.metrics.chipPadX, min.y + (size.y - lineH) * 0.5f, Col(text));
+    ImGui::Dummy(size);
+}
+
+// The status dot: an 8 px disc in the tone's slot; paused is a warning ring. aAlpha is the live pulse (1 when still).
+void StatusDot(const ImVec2& aCentre, const std::string& aTone, float aAlpha)
+{
+    auto* list = ImGui::GetWindowDrawList();
+    const float radius = gR.metrics.dot * 0.5f;
+    const auto& c = gR.colours;
+    if (aTone == "paused")
+    {
+        list->AddCircle(aCentre, radius - 0.75f * gR.scale, Col(c.warning), 20, 1.5f * gR.scale);
+        return;
+    }
+    const ImVec4& colour = aTone == "ok" ? c.success : aTone == "write" ? c.warning : aTone == "killed" ? c.danger : c.textDisabled;
+    list->AddCircleFilled(aCentre, radius, Col(colour, aAlpha), 20);
+}
+
+// The heading: the brand mark (the Studio's chamfered .brand-mark: XfAccent with XfAccentInk), the title in the title role, an
+// info chip saying this is a test build.
+void Heading()
+{
+    auto* list = ImGui::GetWindowDrawList();
+    const auto& c = gR.colours;
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const float rowTop = ImGui::GetCursorPosY();
+    const ImVec2 min = origin, max(origin.x + gR.metrics.markW, origin.y + gR.metrics.markH);
+    ImVec2 points[6];
+    ChamferPoints(points, min, max, gR.metrics.bevelLarge);
+    list->AddConvexPolyFilled(points, 6, Col(c.accent));
+    if (gR.fonts.title)
+    {
+        const float size = gR.fonts.title->LegacySize;
+        const ImVec2 text = gR.fonts.title->CalcTextSizeA(size, FLT_MAX, 0.0f, "XF");
+        list->AddText(gR.fonts.title, size, ImVec2(min.x + (gR.metrics.markW - text.x) * 0.5f, min.y + (gR.metrics.markH - text.y) * 0.5f), Col(c.accentInk), "XF");
+    }
+    ImGui::Dummy(ImVec2(gR.metrics.markW, gR.metrics.markH));
+    ImGui::SameLine(0.0f, gR.metrics.itemSpacingX);
+    if (gR.fonts.title)
+    {
+        ImGui::PushFont(gR.fonts.title, gR.fonts.title->LegacySize);
+        ImGui::SetCursorPosY(rowTop + (gR.metrics.markH - ImGui::GetTextLineHeight()) * 0.5f);
+        ImGui::TextColored(c.accentText, "XF Runtime Bridge");
+        ImGui::PopFont();
+    }
+    ImGui::SameLine(0.0f, gR.metrics.itemSpacingX);
+    ImGui::SetCursorPosY(rowTop + (gR.metrics.markH - ChipHeight()) * 0.5f);
+    Chip("test", Tone::Info, false);
+    ImGui::SetCursorPosY(rowTop + gR.metrics.markH + gR.metrics.itemSpacingY);
+}
+
+// An eyebrow: a 6 px XfAccentEdge square, then a tracked capitals label in XfTextMuted. SectionGap above a new group (aFlush: none,
+// as at the top of a card).
+void Eyebrow(const char* aLabel, bool aFlush)
+{
+    auto* font = gR.fonts.eyebrow;
+    if (!font)
+    {
+        return;
+    }
+    if (!aFlush)
+    {
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gR.metrics.sectionGap - gR.metrics.itemSpacingY);
+    }
+    char caps[64];
+    Caps(caps, sizeof(caps), aLabel);
+    auto* list = ImGui::GetWindowDrawList();
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const float lineH = font->LegacySize;
+    list->AddRectFilled(ImVec2(at.x, at.y + (lineH - gR.metrics.eyebrowSquare) * 0.5f),
+                        ImVec2(at.x + gR.metrics.eyebrowSquare, at.y + (lineH + gR.metrics.eyebrowSquare) * 0.5f), Col(gR.colours.accentEdge));
+    Tracked(font, caps, false, list, at.x + gR.metrics.eyebrowSquare * 2.0f, at.y, Col(gR.colours.textMuted));
+    ImGui::Dummy(ImVec2(1.0f, lineH));
+}
+
+// A key-value row: the label (label role, XfTextMuted) in a column as wide as 9 em, then the value (mono for figures, body else).
+void KeyValue(const char* aLabel, const char* aValue, bool aFigure)
+{
+    const auto& c = gR.colours;
+    auto* labelFont = gR.fonts.label ? gR.fonts.label : gR.fonts.body;
+    auto* valueFont = aFigure ? (gR.fonts.value ? gR.fonts.value : gR.fonts.body) : gR.fonts.body;
+    const float column = labelFont->LegacySize * 9.0f;
+    ImGui::PushFont(labelFont, labelFont->LegacySize);
+    ImGui::TextColored(c.textMuted, "%s", aLabel);
+    ImGui::PopFont();
+    ImGui::SameLine(column + gR.metrics.itemSpacingX);
+    ImGui::PushFont(valueFont, valueFont->LegacySize);
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextColored(c.text, "%s", aValue);
+    ImGui::PopTextWrapPos();
+    ImGui::PopFont();
+}
+
+// A value bar: a track in XfLine, the fill PlotHistogram (or the warning / danger tone of a meter), square ends, no border. Thin
+// (BarThin) or labelled (BarLabelled, the figure inside in the value role, the fill at LabelledBarAlpha with no opaque cap so
+// the figure stays readable). aFraction < 0 is indeterminate: a 35 % segment that sweeps (still, at the left, when motion is
+// reduced).
+void Bar(float aFraction, bool aLabelled, const char* aLabel, Tone aTone, bool aReduced, double aSeconds)
+{
+    auto* list = ImGui::GetWindowDrawList();
+    const auto& c = gR.colours;
+    const float height = aLabelled ? gR.metrics.barLabelled : gR.metrics.barThin;
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const float width = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+    const ImVec2 max(min.x + width, min.y + height);
+    list->AddRectFilled(min, max, Col(c.line));
+    const ImVec4& fill = aTone == Tone::Warning ? c.warning : aTone == Tone::Danger ? c.danger : c.plot;
+    const float alpha = aLabelled ? xfb::overlay::ThemeValueOf("LabelledBarAlpha", 0.3f) : 1.0f;
+    if (aFraction < 0.0f)
+    {
+        const float segment = width * 0.35f;
+        float left = 0.0f;
+        if (!aReduced)
+        {
+            const float sweep = xfb::overlay::ThemeValueOf("SweepSeconds", 1.1f);
+            const float phase = static_cast<float>(std::fmod(aSeconds, static_cast<double>(sweep)) / sweep);
+            const float eased = phase * phase * (3.0f - 2.0f * phase);
+            left = -segment + (width + segment) * eased;
+        }
+        list->PushClipRect(min, max, true);
+        list->AddRectFilled(ImVec2(min.x + left, min.y), ImVec2(min.x + left + segment, max.y), Col(fill, alpha));
+        list->PopClipRect();
+    }
+    else if (aFraction > 0.0f)
+    {
+        list->AddRectFilled(min, ImVec2(min.x + width * std::min(1.0f, aFraction), max.y), Col(fill, alpha));
+    }
+    if (aLabelled && aLabel && gR.fonts.value)
+    {
+        const float size = gR.fonts.value->LegacySize;
+        const ImVec2 text = gR.fonts.value->CalcTextSizeA(size, FLT_MAX, 0.0f, aLabel);
+        list->AddText(gR.fonts.value, size, ImVec2(min.x + (width - text.x) * 0.5f, min.y + (height - text.y) * 0.5f), Col(c.text), aLabel);
+    }
+    ImGui::Dummy(ImVec2(width, height));
+}
+
+// A card: a child with ChildBg, a 1 px XfLine border, ChildPaddingX/Y and the 2 px radius; aEdge adds a 2 px left edge. Cards
+// never nest. Click-through like the window.
+bool BeginCard(const char* aId, const ImVec4* aEdge)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(gR.metrics.childPadX, gR.metrics.childPadY));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, gR.metrics.rounding);
+    ImGui::PushStyleColor(ImGuiCol_Border, gR.colours.line);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, gR.colours.childBg);
+    gR.cardEdge = aEdge ? *aEdge : ImVec4(0, 0, 0, 0);
+    return ImGui::BeginChild(aId, ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding,
+                             ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings);
+}
+
+void EndCard()
+{
+    if (gR.cardEdge.w > 0.0f)
+    {
+        auto* list = ImGui::GetWindowDrawList();
+        const ImVec2 at = ImGui::GetWindowPos();
+        list->AddRectFilled(at, ImVec2(at.x + gR.metrics.edge, at.y + ImGui::GetWindowSize().y), Col(gR.cardEdge));
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
+}
+
+// The panel (P0): no input. 0.8 (the UI review): placed where the ink panel stands; the status line every surface shows; the
+// diagnostics only with [overlay] diagnostics. 0.8.22: the Studio's in-game components (heading with the brand mark, status line
+// with its live pulse and settle, message lines, a diagnostics card of key-value rows and bars). Its text is limited to the
+// baked glyphs when the game thread publishes it (Publish); the figures come from atomics.
 void DrawPanel(double aSeconds)
 {
     if (gPanel.Take())
@@ -693,37 +1073,60 @@ void DrawPanel(double aSeconds)
         return;
     }
     const auto scale = static_cast<float>(gR.height) / 1080.0f * gHost->Scale();
+    gR.scale = scale;
     const float width = 360.0f * scale;
     const auto [left, top] = xfb::overlay::PanelOrigin(gR.panel.anchor, gR.panel.x, gR.panel.y, static_cast<float>(gR.width), static_cast<float>(gR.height), width, gPanelHeight);
     ImGui::SetNextWindowPos(ImVec2(left, top), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(width, 0.0f), ImGuiCond_Always);
     const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                        ImGuiWindowFlags_NoNav;
+    // One clock for the pulse and the settle (ImGui::GetTime, which accumulates the frame's real delta): time-based, so a slow
+    // or doubled frame never changes the motion's speed. Reduced motion (the setting, Windows, or frame generation) draws the
+    // dot at full alpha and starts no settle.
+    const double clock = ImGui::GetTime();
+    const auto motion = gHost->Motion();
     if (ImGui::Begin("XF Runtime Bridge##xf_overlay_panel", nullptr, flags))
     {
         gPanelHeight = ImGui::GetWindowSize().y; // its auto-fitted height (from last frame's content), for the next placement
-        if (gR.display)
+        const auto& c = gR.colours;
+        Heading();
+
+        // The status line: the dot in the tone's slot (live tones pulse), then the plugin's sentence, hanging under its own
+        // words when it wraps. A change of tone settles once: the signal wash fades out behind the row.
+        const std::string& tone = gR.panel.tone;
+        gR.statusSettle.Note(tone, clock * 1000.0, motion.reduced);
+        const float settle = gR.statusSettle.Strength(clock * 1000.0);
+        const ImVec2 rowAt = ImGui::GetCursorScreenPos();
+        if (settle > 0.0f)
         {
-            ImGui::PushFont(gR.display, gR.display->LegacySize);
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(rowAt.x - gR.metrics.childPadX, rowAt.y - gR.metrics.itemSpacingY * 0.5f),
+                                                      ImVec2(rowAt.x + ImGui::GetContentRegionAvail().x + gR.metrics.childPadX, rowAt.y + gR.statusRowHeight + gR.metrics.itemSpacingY * 0.5f),
+                                                      Col(c.signalBg, settle), gR.metrics.rounding);
         }
-        ImGui::TextColored(ThemeColour("XfAccentText"), "XF Runtime Bridge");
-        if (gR.display)
-        {
-            ImGui::PopFont();
-        }
-        const char* tone = gR.panel.tone == "ok" ? "XfSuccess" : gR.panel.tone == "killed" ? "XfDanger" : gR.panel.tone == "write" || gR.panel.tone == "paused" ? "XfWarning" : "TextDisabled";
+        const float lineH = ImGui::GetTextLineHeight();
+        const bool live = tone == "ok" || tone == "write";
+        StatusDot(ImVec2(rowAt.x + gR.metrics.dot * 0.5f, rowAt.y + lineH * 0.5f), tone, live ? xfb::overlay::PulseAlpha(clock, motion.reduced) : 1.0f);
+        const float hang = gR.metrics.dot + gR.metrics.itemSpacingX;
+        ImGui::Indent(hang);
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(ThemeColour(tone), "%s", gR.panel.bridgeStatus.empty() ? "Not ready yet." : gR.panel.bridgeStatus.c_str());
+        const ImVec4& sentence = tone == "paused" ? c.warning : tone == "killed" ? c.danger : c.textMuted;
+        ImGui::TextColored(sentence, "%s", gR.panel.bridgeStatus.empty() ? "Not ready yet." : gR.panel.bridgeStatus.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::Unindent(hang);
+        gR.statusRowHeight = std::max(lineH, ImGui::GetCursorScreenPos().y - rowAt.y - gR.metrics.itemSpacingY);
+        ImGui::PushTextWrapPos(0.0f);
         // 0.8.2: as the status surface, the coordinator's lines and the question too (the ink panel's content), each level in
-        // the theme's colour, the question in the text colour with its answer keys under it.
-        for (const auto& [level, text] : gR.panel.lines)
+        // the theme's colour; at most four lines, the oldest going first. The answer keys sit under the question, muted.
+        const size_t first = gR.panel.lines.size() > 4 ? gR.panel.lines.size() - 4 : 0;
+        for (size_t i = first; i < gR.panel.lines.size(); ++i)
         {
-            const char* colour = level == "warn" ? "XfWarning" : level == "done" ? "XfSuccess" : "Text";
-            ImGui::TextColored(ThemeColour(colour), "%s", text.c_str());
+            const auto& [level, text] = gR.panel.lines[i];
+            const ImVec4& colour = level == "warn" ? c.warning : level == "done" ? c.success : level == "ask" ? c.accentText : c.text;
+            ImGui::TextColored(colour, "%s", text.c_str());
         }
         if (!gR.panel.askHint.empty())
         {
-            ImGui::TextColored(ThemeColour("XfAccentText"), "%s", gR.panel.askHint.c_str());
+            ImGui::TextColored(c.textMuted, "%s", gR.panel.askHint.c_str());
         }
         ImGui::PopTextWrapPos();
         if (!gR.panel.diagnostics)
@@ -731,21 +1134,34 @@ void DrawPanel(double aSeconds)
             ImGui::End();
             return;
         }
-        ImGui::Separator();
-        ImGui::TextDisabled("frames %llu   cpu %.3f ms (max %.3f)", static_cast<unsigned long long>(gHost->Frames()), gHost->CpuMs(), gHost->CpuMsMax());
-        ImGui::TextDisabled("%s x%u  %ux%u  sdr  theme %s", FormatName(gR.format).c_str(), gR.bufferCount, gR.width, gR.height, xfb::overlay::ThemeName(gHost->Theme()));
+        // The diagnostics card: eyebrow, key-value rows, the CPU time as a labelled meter against a 1 ms budget (warning past 75 %,
+        // danger past 90 %) and the moving bar, an instrument (one sweep a second so a skipped or doubled frame shows as a jump).
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gR.metrics.sectionGap - gR.metrics.itemSpacingY);
+        BeginCard("##xf_overlay_diagnostics", nullptr);
+        Eyebrow("Diagnostics", true);
+        char value[160];
+        std::snprintf(value, sizeof(value), "%llu", static_cast<unsigned long long>(gHost->Frames()));
+        KeyValue("Frames", value, true);
+        std::snprintf(value, sizeof(value), "%.3f ms (max %.3f)", gHost->CpuMs(), gHost->CpuMsMax());
+        KeyValue("CPU", value, true);
+        std::snprintf(value, sizeof(value), "%s \xC3\x97 %u, %u \xC3\x97 %u, sdr", FormatName(gR.format).c_str(), gR.bufferCount, gR.width, gR.height);
+        KeyValue("Back buffer", value, true);
         std::string fg;
         for (const auto& name : gR.frameGeneration)
         {
             fg += (fg.empty() ? "" : ", ") + name;
         }
-        ImGui::TextDisabled("frame generation modules: %s", fg.empty() ? "none" : fg.c_str());
-        ImGui::TextDisabled("scripts %s   requests %llu", gR.panel.scriptsLive ? "live" : "not live", static_cast<unsigned long long>(gR.panel.requests));
-        // The moving bar: one sweep a second, so a skipped or doubled frame shows as a jump.
-        const float phase = static_cast<float>(std::fmod(aSeconds, 1.0));
-        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ThemeColour("XfSignal"));
-        ImGui::ProgressBar(phase, ImVec2(-1.0f, 6.0f * scale), "");
-        ImGui::PopStyleColor();
+        KeyValue("Frame generation", fg.empty() ? "none" : fg.c_str(), false);
+        std::snprintf(value, sizeof(value), "%s, %llu requests", gR.panel.scriptsLive ? "scripts live" : "scripts not live", static_cast<unsigned long long>(gR.panel.requests));
+        KeyValue("Bridge", value, false);
+        std::snprintf(value, sizeof(value), "%s, motion %s", xfb::overlay::ThemeName(gHost->Theme()), motion.effective);
+        KeyValue("Theme", value, false);
+        const double cpu = gHost->CpuMs();
+        char label[48];
+        std::snprintf(label, sizeof(label), "%.2f ms of 1 ms", cpu);
+        Bar(static_cast<float>(cpu), true, label, cpu > 0.9 ? Tone::Danger : cpu > 0.75 ? Tone::Warning : Tone::Neutral, motion.reduced, aSeconds);
+        Bar(static_cast<float>(std::fmod(aSeconds, 1.0)), false, nullptr, Tone::Neutral, motion.reduced, aSeconds);
+        EndCard();
     }
     ImGui::End();
 }

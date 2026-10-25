@@ -93,7 +93,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
       panel.draw(s, queue, THEME)
       local from = nil
       for i, call in ipairs(calls) do
-        if call == "text:Keys" then from = i end
+        if string.sub(call, 1, 9) == "text:KEYS" then from = i end
       end
       return calls, from
     end

@@ -99,7 +99,8 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 the XF Runtime Bridge window's Keys
       local refused = state({ killKeyChanged = true, killKeyRefused = "F6 answers questions, so it can't stop the bridge." })
       local d = draw(refused); local yd = y
       local savedInSlot = string.find(a, "text:The stop key is now Ctrl + Alt + Page Down, saved for next time. {0.5,0.5,0.5,1}", 1, true) ~= nil
-      local noDummyAfterChange = string.find(a, "dummy:", 1, true) == nil
+      local keysAt = string.find(a, "text:KEYS", 1, true) or 1
+      local noDummyAfterChange = string.find(a, "dummy:", keysAt, true) == nil
       local promptNotSaved = string.find(b, "Press the new key", 1, true) ~= nil and string.find(b, "saved for next time", 1, true) == nil
       local emptyKeepsBand = string.find(c, "dummy:14", 1, true) ~= nil
       local red = string.find(d, "can't stop the bridge. {0.9,0.4,0.4,1}", 1, true) ~= nil
@@ -161,8 +162,8 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
 
   test("P5 (0.8.11, UI review fix 1): the status dot is drawn on the foreground draw list at the middle of the window's left padding and of the line, so the words start at the padding like every later line", () => {
     const out = run(`return draw()`);
-    // Window at 12, 12; padding 26: the dot's centre is at 12 + 13 = 25, and 12 + 7 (half the 14 px line) = 19 down; radius a fifth of the font.
-    expect(out).toMatch(/dot@25(\.0)?,19(\.0)? r=2\.8\|colour:Text=[^|]+\|wrapped@26:XF Runtime Bridge/);
+    // Window at 12, 12; padding 26: the dot's centre is at 12 + 13 = 25, and 12 + 7 (half the 14 px line) = 19 down; radius 4 px at a 13 px body (here 14 px, so 4 x 14 / 13).
+    expect(out).toMatch(/dot@25(\.0)?,19(\.0)? r=4\.30\d*\|colour:Text=[^|]+\|wrapped@26:XF Runtime Bridge/);
     expect(out).not.toContain("bullet@");
     expect(out).not.toContain("indent:");
   });

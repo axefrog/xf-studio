@@ -300,7 +300,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
       end
       local keys, change = false, false
       for _, call in ipairs(c) do
-        if call == "text:Keys" then keys = true end
+        if string.sub(call, 1, 9) == "text:KEYS" then keys = true end
         if string.find(call, "Change...", 1, true) then change = true end
       end
       local tallHeight = s.layoutHeight

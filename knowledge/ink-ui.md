@@ -138,6 +138,8 @@ Rule for every injected screen [source, from the bridge's crash]: UI code runs o
 
 **Built as P0 in the XF Runtime Bridge 0.7 (offline; 30 September 2026):** draw-only, off by default (`[overlay] enabled`, on in the test packages), refused in HDR and on an unexpected back-buffer format, device, queue or window, one diagnostic panel, hidden for captures, yielding while CET's overlay is open, and themed from XF Studio's own design tokens (a generated table, dark by default, light by hand). It builds its frame on the render thread from data the game thread hands over through a three-slot buffer; input (P1) is next. Design and code: [runtime bridge design §3.7](../research/runtime/runtime-bridge-design.md#37-bridge-07-more-hooks-in-game-answers-and-the-overlay-host). In game [unverified]: the [session-8 checks](../research/runtime/runtime-bridge-test-card.md#session-8-checks-bridge-07), group I.
 
+The Studio's In-game surfaces theme table (`projects/xf-studio/authoring/src/studio-ui/style-guide/in-game-theme.ts`) specifies every colour in the pinned ImGui 1.92.9 docking enum, including `CheckboxSelectedBg`, plus the required XF semantic slots; its offline tests (`tests/in-game-theme.test.ts`) check coverage, resolution and contrast.
+
 The full study, with the component diagram, prototype plan and test card, is [ImGui overlay feasibility](../research/runtime/imgui-overlay-feasibility.md) (30 September 2026). Grades as above; **[external]** marks a public issue report or vendor document.
 
 | Question | Answer | Grade |

@@ -226,6 +226,7 @@ Status Summarize(const BridgeView& aView)
     {
         whole("killed", "Stopped. Reconnect in the XF Runtime Bridge window (open the CET overlay), or restart the game.");
         out.connection = "Stopped.";
+        out.chip = "Stopped";
     }
     else if (!aView.listening)
     {
@@ -241,16 +242,19 @@ Status Summarize(const BridgeView& aView)
         {
             out.changes = "read-only";
             out.changesTone = "ok";
+            out.chip = "Read-only";
         }
         else if (aView.writesPaused)
         {
             out.changes = "changes paused";
             out.changesTone = "paused";
+            out.chip = "Paused";
         }
         else
         {
             out.changes = "changes allowed";
             out.changesTone = "write";
+            out.chip = "Changes allowed";
         }
         out.tone = out.changesTone;
         out.text = out.connection + " \xC2\xB7 " + out.changes;
@@ -297,7 +301,8 @@ json StatusJson(const BridgeView& aView)
                 {"connection", status.connection},
                 {"connection_tone", status.connectionTone},
                 {"changes", status.changes},
-                {"changes_tone", status.changesTone}};
+                {"changes_tone", status.changesTone},
+                {"chip", status.chip}};
 }
 
 namespace

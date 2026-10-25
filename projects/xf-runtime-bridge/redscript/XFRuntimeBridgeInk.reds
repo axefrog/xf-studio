@@ -265,6 +265,29 @@ public abstract class XFInkStyle {
     return text;
   }
 
+  // 0.8.22: the answers' feedback flash, in seconds. A key that did nothing holds the danger colour for FlashHold, then the
+  // resting colour comes back over FlashEase. FlashRestOpacity is that colour's opacity elapsed seconds into the flash: 0.3 at the
+  // end of the hold, rising to 1 along an ease-out curve, and 1 from then on.
+  public static func FlashHold() -> Float {
+    return 0.45;
+  }
+
+  public static func FlashEase() -> Float {
+    return 0.25;
+  }
+
+  public static func FlashRestOpacity(elapsed: Float) -> Float {
+    let t = (elapsed - XFInkStyle.FlashHold()) / XFInkStyle.FlashEase();
+    if t <= 0.0 {
+      return 0.3;
+    }
+    if t >= 1.0 {
+      return 1.0;
+    }
+    let eased = 1.0 - (1.0 - t) * (1.0 - t);
+    return 0.3 + 0.7 * eased;
+  }
+
   public static func ToneToken(tone: String) -> CName {
     if Equals(tone, "ok") {
       return n"MainColors.Green";
@@ -858,9 +881,13 @@ public class XFInkPanel {
     this.m_hint.SetText(StrLen(text) > 0 ? text : " ");
   }
 
-  // The answers flash (red and back) for a moment: a key that did nothing is seen to have done nothing.
+  // The answers flash (the danger colour, then back) for a moment: a key that did nothing is seen to have done nothing.
+  // 0.8.22 (the Studio's in-game motion rule: the old flash changed red and yellow every 0.15 s for 0.9 s, about 3.3 changes a
+  // second, near the three-flashes-a-second limit): one hold in the danger colour for 0.45 s, then an ease back over 0.25 s. The
+  // game's styles can't be blended, so the ease is the resting colour (yellow, or blue under the pointer) coming back at a rising
+  // opacity. tools/overlay/ink-flash.ts mirrors the timing and tools/test checks the two agree.
   public func Flash() -> Void {
-    this.m_flash = 0.9;
+    this.m_flash = XFInkStyle.FlashHold() + XFInkStyle.FlashEase();
   }
 
   public func Step(dt: Float) -> Void {
@@ -870,13 +897,28 @@ public class XFInkPanel {
     this.m_flash -= dt;
     if this.m_flash <= 0.0 {
       this.m_flash = 0.0;
+      this.ChipOpacity(1.0);
       this.SetHovered(this.m_hovered);
       return;
     }
-    let on = (Cast<Int32>(this.m_flash / 0.15) % 2) == 0;
+    let elapsed = XFInkStyle.FlashHold() + XFInkStyle.FlashEase() - this.m_flash;
+    if elapsed < XFInkStyle.FlashHold() {
+      let i = 0;
+      while i < ArraySize(this.m_chips) {
+        XFInkStyle.Bind(this.m_chips[i], n"MainColors.Red");
+        i += 1;
+      }
+      this.ChipOpacity(1.0);
+      return;
+    }
+    this.SetHovered(this.m_hovered);
+    this.ChipOpacity(XFInkStyle.FlashRestOpacity(elapsed));
+  }
+
+  private func ChipOpacity(opacity: Float) -> Void {
     let i = 0;
     while i < ArraySize(this.m_chips) {
-      XFInkStyle.Bind(this.m_chips[i], on ? n"MainColors.Red" : n"MainColors.Yellow");
+      this.m_chips[i].SetOpacity(opacity);
       i += 1;
     }
   }

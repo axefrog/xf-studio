@@ -553,6 +553,13 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     live::ResolveAddresses(); // the live-pose commands' own engine addresses (refused for the session if missing)
     // 0.7: the XF overlay host (off unless [overlay] enabled; its hooks attach only then, and never detach at run time).
     state.overlayHost.Configure(state.config.overlayEnabled, xfb::overlay::ThemeFromName(state.config.overlayTheme), state.config.overlayScalePercent);
+    {
+        // 0.8.22: [overlay] motion, and Windows' own animation-effects setting now (it is read again with each info refresh).
+        xfb::overlay::MotionSetting motion = xfb::overlay::MotionSetting::Auto;
+        xfb::overlay::MotionSettingFromName(state.config.overlayMotion, motion);
+        state.overlayHost.SetMotion(motion);
+        state.overlayHost.NoteWindowsAnimation(win32::ClientAreaAnimation());
+    }
     xfb::plugin::overlay::Install(aHandle, aSdk, state.overlayHost);
 
     InstallLifecycle(aHandle, aSdk);

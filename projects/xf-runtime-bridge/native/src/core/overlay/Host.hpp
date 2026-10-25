@@ -20,6 +20,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/overlay/Motion.hpp"
 #include "core/overlay/Theme.hpp"
 
 namespace xfb::overlay
@@ -141,6 +142,14 @@ public:
     double CpuMs() const { return m_cpuMicros.load() / 1000.0; }
     double CpuMsMax() const { return m_cpuMicrosMax.load() / 1000.0; }
     void NoteFrameGeneration(const std::vector<std::string>& aModules);
+    // 0.8.22 (the Studio's in-game motion rule): [overlay] motion, Windows' own animation-effects setting (read at start and with
+    // each info refresh, SPI_GETCLIENTAREAANIMATION) and whether a frame-generation module is loaded give the effective motion;
+    // the render thread asks once per frame (atomic loads only).
+    void SetMotion(MotionSetting aSetting) { m_motionSetting.store(static_cast<int>(aSetting)); }
+    MotionSetting MotionSettingNow() const { return static_cast<MotionSetting>(m_motionSetting.load()); }
+    void NoteWindowsAnimation(bool aOn) { m_windowsAnimations.store(aOn); }
+    bool WindowsAnimation() const { return m_windowsAnimations.load(); }
+    MotionState Motion() const { return ResolveMotion(MotionSettingNow(), m_windowsAnimations.load(), m_frameGenerationLoaded.load()); }
     // 0.8 (the UI review): the host was refused or stopped while a frame-generation module is loaded, so the CET label says
     // the overlay is off while frame generation is on.
     bool OffForFrameGeneration() const;
@@ -176,6 +185,9 @@ private:
     std::atomic<uint64_t> m_frames{0};
     std::atomic<double> m_cpuMicros{0.0};
     std::atomic<double> m_cpuMicrosMax{0.0};
+    std::atomic<int> m_motionSetting{static_cast<int>(MotionSetting::Auto)};
+    std::atomic<bool> m_windowsAnimations{true};
+    std::atomic<bool> m_frameGenerationLoaded{false};
     ThemeKind m_theme = ThemeKind::Dark;
     uint32_t m_scalePercent = 100;
     mutable std::mutex m_mutex; // the fields below

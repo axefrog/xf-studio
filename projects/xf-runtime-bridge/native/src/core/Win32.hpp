@@ -19,6 +19,10 @@ bool RandomHex(size_t aBytes, std::string& aOut);
 // String SID of the user running this process, e.g. "S-1-5-21-...".
 bool CurrentUserSid(std::string& aOut);
 
+// 0.8.22: whether Windows' animation effects are on (SPI_GETCLIENTAREAANIMATION, Settings > Accessibility > Visual effects >
+// Animation effects). True when the answer can't be had: the overlay then animates as it was asked to.
+bool ClientAreaAnimation();
+
 // Folder that holds this module (the plugin DLL or the self-test exe).
 std::filesystem::path ModuleDirectory(const void* aAddressInModule);
 

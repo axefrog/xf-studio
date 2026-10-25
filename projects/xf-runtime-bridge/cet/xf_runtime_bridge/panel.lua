@@ -25,6 +25,16 @@
 -- Buttons only queue an action; init.lua carries it out in onUpdate, never while drawing.
 -- 0.7: the window takes the XF Studio theme (theme.lua, generated from the Studio's tokens): dark by default, light when
 -- the plugin's [overlay] theme says so; never switched automatically. init.lua themes its label through panel.pushTheme.
+--
+-- 0.8.22: the Studio's "In-game surfaces" (the style guide's section 09), built from theme.lua alone (no colour or size literal
+-- of this file's own except as a fallback where the theme is missing): the heading with the brand mark, the status line with
+-- its live dot, the mode chip, the question as a card whose accent edge breathes while it waits, key-value rows, bars, cards
+-- and the eyebrow labels. Text takes the type roles through SetWindowFontScale (body 1, title and the smaller roles by the
+-- theme's scales, kept inside CET_SCALE_RANGE), set before a role's text and put back to 1 after it. The pulse and the settle
+-- run on one clock (ImGui.GetTime) and stand still when the plugin says the motion is reduced (info.overlay.motion).
+-- Every call that draws a shape goes through try(): a binding this CET lacks or answers differently is named once in the mod's
+-- log (state.noteDraw) and that part draws plain, never taking the window down. Existence is tested with ~= nil, never type():
+-- CET's bound functions are not Lua functions (init.lua's status dot found that out in game).
 
 local panel = {}
 
@@ -35,6 +45,163 @@ local RED = { 1.0, 0.4, 0.4, 1.0 }
 local DEFAULTS = { GREY = GREY, GREEN = GREEN, AMBER = AMBER, RED = RED }
 local WRAP_EM = 28
 
+-- Where the content is being drawn (0.8.22): the window's text width, or a card's inner width while one is open.
+local cardWidth = nil -- the open card's outer width in pixels, or nil
+local cardPad = 0     -- its horizontal padding
+
+-- A theme colour by token (theme.lua), or the fallback.
+function panel.colour(theme, which, name, fallback)
+  local entry = theme and theme.colors and theme.colors[name]
+  return (entry and entry[which]) or fallback
+end
+
+-- ---- 0.8.22: the Studio's type roles, motion and metrics ------------------------------------------------------------------------
+
+local ROLE_DEFAULTS = { title = 1.1538, eyebrow = 0.8462, body = 1.0, label = 0.9231, value = 0.9231 }
+
+-- The CET font scale of a type role: theme.lua's (the role's size over the body size, inside the spec's range), else the table above.
+function panel.roleScale(theme, role)
+  local entry = theme and theme.types and theme.types[role]
+  return (entry and entry.scale) or ROLE_DEFAULTS[role] or 1.0
+end
+
+-- One metric of the theme in pixels at this font size (the Studio's pixels over its 13 px body, times CET's font size).
+function panel.metric(theme, name, fallback)
+  local m = theme and theme.metrics or {}
+  return (m[name] or fallback) * (panel.k or 1)
+end
+
+local function setFontScale(scale)
+  if ImGui.SetWindowFontScale ~= nil then
+    pcall(function() ImGui.SetWindowFontScale(scale) end)
+  end
+end
+
+-- Runs fn with a role's font scale in force and puts the scale back to 1 after it, whatever happens.
+function panel.inRole(theme, role, fn)
+  local scale = panel.roleScale(theme, role)
+  if scale ~= 1.0 then setFontScale(scale) end
+  local ok, a, b = pcall(fn)
+  if scale ~= 1.0 then setFontScale(1.0) end
+  if not ok then error(a, 0) end
+  return a, b
+end
+
+-- The live pulse's alpha at time t seconds on the shared clock: 1 down to 1 - depth and back once per period, eased, never
+-- stepped. reduced: always 1. (core/overlay/Motion.cpp PulseAlpha is the same arithmetic.)
+function panel.pulseAlpha(theme, t, reduced)
+  if reduced then return 1.0 end
+  local v = theme and theme.values or {}
+  local period, depth = v.PulsePeriodMs or 2400, v.PulseDepth or 0.4
+  local phase = ((t or 0) * 1000.0 % period) / period
+  return 1.0 - depth * (0.5 - 0.5 * math.cos(2 * math.pi * phase))
+end
+
+-- The settle wash's strength (1 down to 0) elapsedMs after it started; 0 before and after. (Motion.cpp SettleStrength.)
+function panel.settleStrength(theme, elapsedMs)
+  local v = theme and theme.values or {}
+  local total = v.SettleMs or 600
+  if elapsedMs == nil or elapsedMs < 0 or elapsedMs >= total then return 0.0 end
+  local left = 1.0 - elapsedMs / total
+  return left * left * left
+end
+
+-- One element's settle (slot is a table kept in the state): a change of state starts a settle unless motion is reduced or the last
+-- one began less than SettleGapMs ago; the first state seen settles nothing. nowMs is the shared clock in milliseconds.
+function panel.noteSettle(theme, slot, stateName, nowMs, reduced)
+  local gap = (theme and theme.values and theme.values.SettleGapMs) or 2000
+  if not slot.seen then
+    slot.seen, slot.name = true, stateName
+    return false
+  end
+  if slot.name == stateName then return false end
+  slot.name = stateName
+  if reduced or (slot.startedMs and nowMs - slot.startedMs < gap) then return false end
+  slot.startedMs = nowMs
+  return true
+end
+
+function panel.settleNow(theme, slot, nowMs)
+  if not slot.startedMs then return 0.0 end
+  return panel.settleStrength(theme, nowMs - slot.startedMs)
+end
+
+-- Whether motion stands still: the plugin's answer (info.overlay.motion: "reduced" or "full"), from [overlay] motion, Windows'
+-- animation-effects setting and frame generation. Without the field, motion runs.
+function panel.reduced(state)
+  local overlay = state and state.info and state.info.overlay
+  return type(overlay) == "table" and overlay.motion == "reduced"
+end
+
+-- A call that draws a shape or reads a binding this CET may lack: pcall'd; a failure is named once through state.noteDraw and
+-- answers false, so the caller draws plain.
+local function try(state, name, fn, ...)
+  local ok, a, b, c = pcall(fn, ...)
+  if ok then return true, a, b, c end
+  if state then
+    state.drawFailed = state.drawFailed or {}
+    if not state.drawFailed[name] then
+      state.drawFailed[name] = true
+      if state.noteDraw then state.noteDraw(name, tostring(a)) end
+    end
+  end
+  return false
+end
+
+-- Numbers from bindings, never nil or a boolean (a CET that answers oddly must not take the window down).
+local function num(v, default)
+  if type(v) == "number" then return v end
+  return default or 0
+end
+
+local function curX() return num(ImGui.GetCursorPosX(), 0) end
+local function curY() return num(ImGui.GetCursorPosY(), 0) end
+local function lineHeight() return num(ImGui.GetTextLineHeight(), num(ImGui.GetFontSize(), 14)) end
+
+-- The size of a text at the font scale now.
+local function textSize(text)
+  local w, h = ImGui.CalcTextSize(text)
+  return num(w, 7 * #text), num(h, lineHeight())
+end
+
+local function xyOf(a, b)
+  if type(a) == "table" then return a.x or a[1], a.y or a[2] end
+  return a, b
+end
+
+local function u32(c, alpha)
+  return ImGui.GetColorU32(c[1], c[2], c[3], (c[4] or 1.0) * (alpha or 1.0))
+end
+
+-- The window's draw list, else the foreground one.
+local function drawList()
+  if ImGui.GetWindowDrawList ~= nil then
+    local ok, list = pcall(function() return ImGui.GetWindowDrawList() end)
+    if ok and list then return list end
+  end
+  return ImGui.GetForegroundDrawList()
+end
+
+local function rectFilled(list, x1, y1, x2, y2, c, alpha)
+  ImGui.ImDrawListAddRectFilled(list, x1, y1, x2, y2, u32(c, alpha))
+end
+
+local function rectLine(list, x1, y1, x2, y2, c, alpha)
+  ImGui.ImDrawListAddRect(list, x1, y1, x2, y2, u32(c, alpha))
+end
+
+-- The text width a row may use now: the window's, or the open card's inner width.
+local function limitWidth()
+  if cardWidth then return cardWidth - cardPad * 2 end
+  return ImGui.GetFontSize() * WRAP_EM
+end
+
+-- The wrap position in window-local coordinates (a child's own space inside a card).
+local function wrapPos()
+  if cardWidth then return cardWidth - cardPad end
+  return ImGui.GetFontSize() * WRAP_EM
+end
+
 local function coloured(colour, text)
   ImGui.TextColored(colour[1], colour[2], colour[3], colour[4], text)
 end
@@ -42,15 +209,9 @@ end
 local drawKillKey -- 0.8.4, defined with the kill-key controls below
 
 local function wrapped(text)
-  ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+  ImGui.PushTextWrapPos(wrapPos())
   ImGui.TextWrapped(text)
   ImGui.PopTextWrapPos()
-end
-
--- A theme colour by token (theme.lua), or the fallback.
-function panel.colour(theme, which, name, fallback)
-  local entry = theme and theme.colors and theme.colors[name]
-  return (entry and entry[which]) or fallback
 end
 
 local function toneColour(tone)
@@ -77,22 +238,10 @@ local function connectionLine(state)
   return toneColour(status.connection_tone), text
 end
 
--- What this build may do to the game. Amber only while changes are allowed or paused (0.8, the UI review).
-local function changesLine(bridge)
-  if not bridge or not bridge.enabled or bridge.killed then
-    return nil
-  end
-  if not bridge.allow_writes then
-    return GREEN, "Read-only: this build can't change the game."
-  end
-  if bridge.writes_paused then
-    return AMBER, "Changes are paused."
-  end
-  return AMBER, "Changes allowed (XF test profile)."
-end
-
 -- The XF Studio theme: pushes the ImGui colours and metrics the theme table maps from the Studio's tokens, and answers how
--- many colours and style values were pushed (both must be popped). Names this CET's ImGui doesn't have are skipped.
+-- many colours and style values were pushed (both must be popped). Names this CET's ImGui doesn't have are skipped (CET 1.37.1
+-- carries Dear ImGui 1.91.1; theme.lua names every colour of 1.92.9, so the newer ones, such as CheckboxSelectedBg and the
+-- tab overlines, find no ImGuiCol entry here and push nothing).
 local STYLE_VARS = {
   { "WindowPadding", "WindowPaddingX", "WindowPaddingY" },
   { "FramePadding", "FramePaddingX", "FramePaddingY" },
@@ -114,6 +263,7 @@ function panel.pushTheme(theme, which)
   end
   local m = theme.metrics or {}
   local k = ImGui.GetFontSize() / (m.FontSize or 13)
+  panel.k = k
   for _, v in ipairs(STYLE_VARS) do
     local index = ImGuiStyleVar[v[1]]
     if index ~= nil and m[v[2]] and m[v[3]] then
@@ -127,6 +277,16 @@ function panel.pushTheme(theme, which)
       ImGui.PushStyleVar(index, m.Rounding * k)
       vars = vars + 1
     end
+  end
+  -- 0.8.22: the Studio's disabled opacity (the .btn:disabled rule) and its thin scrollbars, where this CET has the style vars.
+  local values = theme.values or {}
+  if ImGuiStyleVar.DisabledAlpha ~= nil and values.DisabledAlpha then
+    ImGui.PushStyleVar(ImGuiStyleVar.DisabledAlpha, values.DisabledAlpha)
+    vars = vars + 1
+  end
+  if ImGuiStyleVar.ScrollbarSize ~= nil and m.ScrollbarSize then
+    ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarSize, m.ScrollbarSize * k)
+    vars = vars + 1
   end
   return colours, vars
 end
@@ -151,6 +311,7 @@ function panel.opened(state)
   state.questionSlotHeight = nil
   state.layoutHeight = nil
   state.layoutChangedAt = nil
+  state.cards = nil -- a card measures itself again
   settling = false
 end
 
@@ -173,9 +334,10 @@ end
 
 -- 0.8.5 (the UI review's N1): one wrap rule for rows of controls (the answer buttons, the Stop key row): an item goes on the
 -- row while the row still fits the window's text width (WRAP_EM), else it starts the next row, so a control appearing never
--- widens the window. row = { used = 0 } per row; place(row, width) before drawing each item.
+-- widens the window. row = { used = 0 } per row; place(row, width) before drawing each item. 0.8.22: inside a card, the card's
+-- inner width.
 local function place(row, width, gap)
-  local limit = ImGui.GetFontSize() * WRAP_EM
+  local limit = limitWidth()
   if row.used > 0 and row.used + gap + width <= limit then
     ImGui.SameLine()
     row.used = row.used + gap + width
@@ -184,55 +346,122 @@ local function place(row, width, gap)
   end
 end
 
--- The question's slot (0.8, the UI review): the pending question with its answers as primary buttons (0.8.7, session 14:
--- without their keys, since this window shows only while CET's overlay is open, and CET then takes the keyboard, so a key
--- named on a button would do nothing);
--- once answered, the same slot says what was sent, at the buttons' height, so nothing below it moves. 0.8.4 (the UI
--- review's fixes 1-3): the hover is the Studio's primary hover (XfAccentHover; XfAccentEdge only as the border), the
--- buttons wrap onto a new row at the window's text width instead of widening it, and "Sent: ..." stays until the next
--- question takes its place.
-local function drawQuestion(state, queue, theme, which)
-  local ask = state.pendingAsk
-  local answered = state.answeredAsk
-  -- 0.8.9: with no question, the newest line from XF Studio (info included) holds the slot.
-  local latest = not ask and not answered and state.latestMessage or nil
-  if latest then
+-- ---- 0.8.22: the Studio's components -------------------------------------------------------------------------------------------
+
+-- A tone's colours: text, wash and border (a chip's border is the tone at ChipBorderAlpha; the info chip's is XfSignalLine).
+local function toneSlots(theme, which, tone)
+  local c = function(name, fallback) return panel.colour(theme, which, name, fallback) end
+  if tone == "ok" then return c("XfSuccess", GREEN), c("XfSuccessBg", nil), c("XfSuccess", GREEN), true end
+  if tone == "write" or tone == "paused" or tone == "warning" then return c("XfWarning", AMBER), c("XfWarningBg", nil), c("XfWarning", AMBER), true end
+  if tone == "killed" or tone == "danger" then return c("XfDanger", RED), c("XfDangerBg", nil), c("XfDanger", RED), true end
+  if tone == "info" then return c("XfSignal", GREY), c("XfSignalBg", nil), c("XfSignalLine", GREY), false end
+  return c("XfTextMuted", GREY), nil, c("XfLine", GREY), false
+end
+
+-- The status chip: eyebrow-role capitals in the tone inside the tone's wash and a 1 px border (square corners in CET: the host
+-- draws the chamfer, CET keeps it square). hollow: no fill (paused). Takes the cursor's place as an item.
+function panel.chip(state, theme, which, label, tone, hollow)
+  local text, wash, edge, alphaBorder = toneSlots(theme, which, tone)
+  local caps = string.upper(label)
+  local borderAlpha = (theme and theme.values and theme.values.ChipBorderAlpha) or 0.5
+  local padX, padY = panel.metric(theme, "ChipPaddingX", 8), panel.metric(theme, "ChipPaddingY", 2)
+  panel.inRole(theme, "eyebrow", function()
+    local tw, th = textSize(caps)
+    local w, h = tw + padX * 2 + 2, th + padY * 2 + 2
+    local cx, cy = curX(), curY()
+    try(state, "chip", function()
+      local sx, sy = xyOf(ImGui.GetCursorScreenPos())
+      local list = drawList()
+      if wash and not hollow then rectFilled(list, sx, sy, sx + w, sy + h, wash) end
+      rectLine(list, sx, sy, sx + w, sy + h, edge, alphaBorder and borderAlpha or 1.0)
+    end)
+    ImGui.SetCursorPosX(cx + padX + 1)
+    ImGui.SetCursorPosY(cy + padY + 1)
+    coloured(text, caps)
+    ImGui.SetCursorPosX(cx)
+    ImGui.SetCursorPosY(cy)
+    ImGui.Dummy(w, h)
+  end)
+end
+
+-- The eyebrow: a small XfAccentEdge square, then a capitals label in XfTextMuted (or the named colour). SectionGap above a new
+-- group, none when flush (the first line of a card).
+function panel.eyebrow(state, theme, which, label, flush, colourName)
+  if not flush then
+    ImGui.SetCursorPosY(curY() + math.max(0, panel.metric(theme, "SectionGap", 16) - panel.metric(theme, "ItemSpacingY", 6)))
+  end
+  local colour = panel.colour(theme, which, colourName or "XfTextMuted", GREY)
+  local edge = panel.colour(theme, which, "XfAccentEdge", AMBER)
+  local square = 6 * (panel.k or 1)
+  panel.inRole(theme, "eyebrow", function()
+    local _, th = textSize("X")
+    local cx = curX()
+    try(state, "eyebrow_square", function()
+      local sx, sy = xyOf(ImGui.GetCursorScreenPos())
+      rectFilled(drawList(), sx, sy + (th - square) / 2, sx + square, sy + (th + square) / 2, edge)
+    end)
+    ImGui.SetCursorPosX(cx + square * 2)
+    coloured(colour, string.upper(label))
+    ImGui.SetCursorPosX(cx)
+  end)
+end
+
+-- The status dot: an 8 px disc (the Studio's, scaled by CET's font size over 13) in the tone's slot, drawn on the window's draw
+-- list at (x, y) in screen pixels; paused is a ring. alpha is the pulse. Answers whether it was drawn.
+function panel.dot(state, theme, which, tone, x, y, alpha)
+  local radius = 4 * (panel.k or 1)
+  local colour = tone == "ok" and panel.colour(theme, which, "XfSuccess", GREEN)
+    or (tone == "write" or tone == "paused") and panel.colour(theme, which, "XfWarning", AMBER)
+    or tone == "killed" and panel.colour(theme, which, "XfDanger", RED)
+    or panel.colour(theme, which, "TextDisabled", GREY)
+  return (try(state, "dot", function()
+    local list = drawList()
+    if tone == "paused" then
+      ImGui.ImDrawListAddCircle(list, x, y, radius - 0.75 * (panel.k or 1), u32(colour), 12, 1.5 * (panel.k or 1))
+    else
+      ImGui.ImDrawListAddCircleFilled(list, x, y, radius, u32(colour, alpha), 12)
+    end
+  end))
+end
+
+-- A card: a child window with ChildBg, a 1 px XfLine border and the card padding, holding what fn draws; edge (a colour name, or
+-- nil) is a 2 px left edge that breathes (the pulse) while pulsing is true. Cards never nest. Where this CET has no BeginChild the
+-- content is drawn plain under a rule. The child's height is the content's last frame (one frame to settle after a change).
+function panel.card(state, theme, which, id, edgeName, pulsing, fn)
+  state.cards = state.cards or {}
+  local padX, padY = panel.metric(theme, "ChildPaddingX", 8), panel.metric(theme, "ChildPaddingY", 6)
+  local width = ImGui.GetFontSize() * WRAP_EM
+  if ImGui.BeginChild == nil or ImGui.EndChild == nil then
     ImGui.Separator()
-    coloured(panel.colour(theme, which, "XfAccentText", AMBER), "From XF Studio")
-    wrapped(tostring(latest.text))
+    fn()
     return
   end
-  if not ask and not answered then return end
-  ImGui.Separator()
-  coloured(panel.colour(theme, which, "XfAccentText", AMBER), "Question from XF Studio")
-  wrapped(tostring(ask and ask.text or answered.text))
-  if ask then
-    local fill = panel.colour(theme, which, "XfAccent", AMBER)
-    local hover = panel.colour(theme, which, "XfAccentHover", fill)
-    local edge = panel.colour(theme, which, "XfAccentEdge", fill)
-    local ink = panel.colour(theme, which, "XfAccentInk", { 0.09, 0.09, 0.05, 1.0 })
-    ImGui.PushStyleColor(ImGuiCol.Button, fill[1], fill[2], fill[3], fill[4])
-    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hover[1], hover[2], hover[3], hover[4])
-    ImGui.PushStyleColor(ImGuiCol.ButtonActive, fill[1], fill[2], fill[3], fill[4])
-    ImGui.PushStyleColor(ImGuiCol.Text, ink[1], ink[2], ink[3], ink[4])
-    ImGui.PushStyleColor(ImGuiCol.Border, edge[1], edge[2], edge[3], edge[4])
-    local bordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
-    if bordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
-    local pad, gap = spacing(theme)
-    local row = { used = 0 }
-    for i, label in ipairs(ask.choices) do
-      local text = tostring(label)
-      place(row, (ImGui.CalcTextSize(text)) + pad * 2, gap)
-      if button(text .. "##xf_answer_" .. tostring(i)) then
-        queue("answer", { id = ask.id, choice = i - 1 })
-      end
+  local height = state.cards[id] or (ImGui.GetFontSize() * 2 + padY * 2)
+  ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, padX, padY)
+  local line = panel.colour(theme, which, "XfLine", GREY)
+  ImGui.PushStyleColor(ImGuiCol.Border, line[1], line[2], line[3], line[4])
+  ImGui.BeginChild("##xf_card_" .. id, width, height, true, bit32 and bit32.bor(ImGuiWindowFlags.NoScrollbar, ImGuiWindowFlags.NoScrollWithMouse) or 0)
+  local savedWidth, savedPad = cardWidth, cardPad
+  cardWidth, cardPad = width, padX
+  local ok, err = pcall(function()
+    fn()
+    local itemSpacingY = panel.metric(theme, "ItemSpacingY", 6)
+    state.cards[id] = curY() - itemSpacingY + padY
+    if edgeName then
+      try(state, "card_edge", function()
+        local colour = panel.colour(theme, which, edgeName, AMBER)
+        local wx, wy = xyOf(ImGui.GetWindowPos())
+        local ww, wh = ImGui.GetWindowSize()
+        local alpha = pulsing and panel.pulseAlpha(theme, ImGui.GetTime(), panel.reduced(state)) or 1.0
+        rectFilled(drawList(), wx, wy, wx + 2 * (panel.k or 1), wy + wh, colour, alpha)
+      end)
     end
-    if bordered then ImGui.PopStyleVar(1) end
-    ImGui.PopStyleColor(5)
-  else
-    ImGui.AlignTextToFramePadding()
-    coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Sent: " .. tostring(answered.label) .. ". Waiting for the next question.")
-  end
+  end)
+  cardWidth, cardPad = savedWidth, savedPad
+  ImGui.EndChild()
+  ImGui.PopStyleColor(1)
+  ImGui.PopStyleVar(1)
+  if not ok then error(err, 0) end
 end
 
 -- 0.8.4 (session 11: the comment box didn't wrap): word wrap for the comment box. CET 1.37.1's Dear ImGui (1.91.1) has no
@@ -440,15 +669,13 @@ end
 
 local function mutedWrapped(theme, which, text)
   local muted = panel.colour(theme, which, "XfTextMuted", GREY)
-  ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+  ImGui.PushTextWrapPos(wrapPos())
   ImGui.TextColored(muted[1], muted[2], muted[3], muted[4], tostring(text))
   ImGui.PopTextWrapPos()
 end
 
-drawKillKey = function(state, queue, theme, which, killKey)
-  if not killKey then return end
-  ImGui.Separator()
-  ImGui.Text("Keys")
+-- 0.8.22: "Keys" is an eyebrow over a card (the Studio's keys card); the stop key row, the reserved line and the notes sit in it.
+local function drawKeysBody(state, queue, theme, which, killKey)
   local pad, gap = spacing(theme)
   local row = { used = 0 }
   local capLabel = killKey.enabled and tostring(killKey.label) or "Off"
@@ -479,7 +706,7 @@ drawKillKey = function(state, queue, theme, which, killKey)
   end
   -- The reserved line under the row (0.8.6, P2): the prompt while a key is being taken, else the latest outcome; its height
   -- is the tallest of the prompt and the outcome kept now, so nothing below moves when one takes the other's place.
-  local limit = ImGui.GetFontSize() * WRAP_EM
+  local limit = limitWidth()
   local function wrappedHeight(text)
     local _, h = ImGui.CalcTextSize(text, false, limit)
     return (type(h) == "number" and h > 0) and h or ImGui.GetFontSize()
@@ -491,7 +718,7 @@ drawKillKey = function(state, queue, theme, which, killKey)
   if kind then
     local colour = kind == "prompt" and panel.colour(theme, which, "XfAccentText", AMBER)
       or kind == "refused" and RED or panel.colour(theme, which, "XfTextMuted", GREY)
-    ImGui.PushTextWrapPos(limit)
+    ImGui.PushTextWrapPos(wrapPos())
     ImGui.TextColored(colour[1], colour[2], colour[3], colour[4], text)
     ImGui.PopTextWrapPos()
     local short = slotHeight - wrappedHeight(text)
@@ -511,7 +738,7 @@ drawKillKey = function(state, queue, theme, which, killKey)
     end
   end
   for _, warning in ipairs(type(killKey.warnings) == "table" and killKey.warnings or {}) do
-    ImGui.PushTextWrapPos(limit)
+    ImGui.PushTextWrapPos(wrapPos())
     ImGui.TextColored(AMBER[1], AMBER[2], AMBER[3], AMBER[4], tostring(warning))
     ImGui.PopTextWrapPos()
   end
@@ -525,15 +752,22 @@ drawKillKey = function(state, queue, theme, which, killKey)
   end
 end
 
+drawKillKey = function(state, queue, theme, which, killKey)
+  if not killKey then return end
+  panel.eyebrow(state, theme, which, "Keys", false)
+  panel.card(state, theme, which, "keys", nil, false, function()
+    drawKeysBody(state, queue, theme, which, killKey)
+  end)
+end
+
 -- The commentary box: Send, disabled while the box is empty, or Ctrl+Enter while typing (session 8's request).
 -- 0.8.2 (session 9's C2: Ctrl+Enter only took the box out of editing): in a multi-line box Dear ImGui treats Ctrl+Enter as
 -- "done" and ends the editing inside the widget call, so by the time the code after it ran, the box was no longer active and
 -- the key went unseen. EnterReturnsTrue makes the call itself answer true for that Ctrl+Enter (plain Enter still starts a
 -- new line), and the text is taken every frame.
 local function drawComment(state, queue, theme, which)
-  ImGui.Separator()
-  ImGui.Text("Comment for XF Studio")
-  local width = ImGui.GetFontSize() * WRAP_EM
+  panel.eyebrow(state, theme, which, "Comment for XF Studio", false)
+  local width = limitWidth()
   local nativeWrap = ImGuiInputTextFlags and ImGuiInputTextFlags.WordWrap -- Dear ImGui 1.92+, if a later CET offers it
   local flags = (ImGuiInputTextFlags and ImGuiInputTextFlags.EnterReturnsTrue) or 0
   local reloading = state.commentReload ~= nil
@@ -583,6 +817,74 @@ local function drawComment(state, queue, theme, which)
   end
 end
 
+-- The primary button (the one thing the player is asked for): XfAccent fill, the Studio's primary hover (XfAccentHover; XfAccentEdge
+-- only as the border), XfAccentInk text. Answers a click as button() does.
+local function primaryButton(theme, which, label, target, state)
+  local fill = panel.colour(theme, which, "XfAccent", AMBER)
+  local hover = panel.colour(theme, which, "XfAccentHover", fill)
+  local edge = panel.colour(theme, which, "XfAccentEdge", fill)
+  local ink = panel.colour(theme, which, "XfAccentInk", { 0.09, 0.09, 0.05, 1.0 })
+  ImGui.PushStyleColor(ImGuiCol.Button, fill[1], fill[2], fill[3], fill[4])
+  ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hover[1], hover[2], hover[3], hover[4])
+  ImGui.PushStyleColor(ImGuiCol.ButtonActive, fill[1], fill[2], fill[3], fill[4])
+  ImGui.PushStyleColor(ImGuiCol.Text, ink[1], ink[2], ink[3], ink[4])
+  ImGui.PushStyleColor(ImGuiCol.Border, edge[1], edge[2], edge[3], edge[4])
+  local bordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
+  if bordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
+  local a, b, c = button(label, target, state)
+  if bordered then ImGui.PopStyleVar(1) end
+  ImGui.PopStyleColor(5)
+  return a, b, c
+end
+
+-- The gap between groups (SectionGap, less the item spacing the cursor already carries).
+local function sectionGap(theme)
+  ImGui.SetCursorPosY(curY() + math.max(0, panel.metric(theme, "SectionGap", 16) - panel.metric(theme, "ItemSpacingY", 6)))
+end
+
+-- The question's slot (0.8, the UI review): the pending question with its answers as primary buttons (0.8.7, session 14:
+-- without their keys, since this window shows only while CET's overlay is open, and CET then takes the keyboard, so a key
+-- named on a button would do nothing);
+-- once answered, the same slot says what was sent, at the buttons' height, so nothing below it moves. 0.8.4 (the UI
+-- review's fixes 1-3): the hover is the Studio's primary hover (XfAccentHover; XfAccentEdge only as the border), the
+-- buttons wrap onto a new row at the window's text width instead of widening it, and "Sent: ..." stays until the next
+-- question takes its place. 0.8.22: a card edged XfAccentEdge whose edge breathes while the question waits and stands still once
+-- answered (the Studio's question card); the newest plain line from XF Studio is a card without the edge.
+local function drawQuestion(state, queue, theme, which)
+  local ask = state.pendingAsk
+  local answered = state.answeredAsk
+  -- 0.8.9: with no question, the newest line from XF Studio (info included) holds the slot.
+  local latest = not ask and not answered and state.latestMessage or nil
+  if latest then
+    sectionGap(theme)
+    panel.card(state, theme, which, "message", nil, false, function()
+      panel.eyebrow(state, theme, which, "From XF Studio", true, "XfAccentText")
+      wrapped(tostring(latest.text))
+    end)
+    return
+  end
+  if not ask and not answered then return end
+  sectionGap(theme)
+  panel.card(state, theme, which, "question", "XfAccentEdge", ask ~= nil, function()
+    panel.eyebrow(state, theme, which, "Question from XF Studio", true, "XfAccentText")
+    wrapped(tostring(ask and ask.text or answered.text))
+    if ask then
+      local pad, gap = spacing(theme)
+      local row = { used = 0 }
+      for i, label in ipairs(ask.choices) do
+        local text = tostring(label)
+        place(row, (ImGui.CalcTextSize(text)) + pad * 2, gap)
+        if primaryButton(theme, which, text .. "##xf_answer_" .. tostring(i)) then
+          queue("answer", { id = ask.id, choice = i - 1 })
+        end
+      end
+    else
+      ImGui.AlignTextToFramePadding()
+      coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Sent: " .. tostring(answered.label) .. ". Waiting for the next question.")
+    end
+  end)
+end
+
 -- 0.8.7 (session 14's T2: the window's top edge moved when its height changed): the window's top-left corner stays put. A
 -- frame whose size changed and whose corner moved with it is put back where the corner was; a move with no change of size is
 -- the player dragging the window, and that becomes the corner to keep.
@@ -615,6 +917,203 @@ function panel.anchorAfter(state)
   end
 end
 
+-- ---- 0.8.22: the heading, the status block and the diagnostics -------------------------------------------------------------------
+
+local function setPos(x, y)
+  ImGui.SetCursorPosX(x)
+  ImGui.SetCursorPosY(y)
+end
+
+-- The heading: the brand mark (the Studio's chamfered mark: XfAccent with XfAccentInk; the chamfer is two quads, a square where this
+-- CET lacks the call), the title in the title role, an info chip saying this is a test build, and the version at the right in
+-- TextDisabled. 24 px row (at 13 px body); ItemSpacingY below.
+function panel.heading(state, theme, which, info)
+  local k = panel.k or 1
+  local markW, markH = 30 * k, 24 * k
+  local bevel = panel.metric(theme, "BevelLarge", 7)
+  local gap = panel.metric(theme, "ItemSpacingX", 8)
+  local rowW = ImGui.GetFontSize() * WRAP_EM
+  local cx, cy = curX(), curY()
+  local accent = panel.colour(theme, which, "XfAccent", AMBER)
+  local ink = panel.colour(theme, which, "XfAccentInk", { 0.09, 0.09, 0.05, 1.0 })
+  try(state, "mark", function()
+    local sx, sy = xyOf(ImGui.GetCursorScreenPos())
+    local list = drawList()
+    local col = u32(accent)
+    local x2, y2 = sx + markW, sy + markH
+    local ok = pcall(function()
+      -- top-right and bottom-left corners cut by the bevel: two quads share the diagonal edge
+      ImGui.ImDrawListAddQuadFilled(list, sx, sy, x2 - bevel, sy, sx + bevel, y2, sx, y2 - bevel, col)
+      ImGui.ImDrawListAddQuadFilled(list, x2 - bevel, sy, x2, sy + bevel, x2, y2, sx + bevel, y2, col)
+    end)
+    if not ok then ImGui.ImDrawListAddRectFilled(list, sx, sy, x2, y2, col) end
+  end)
+  panel.inRole(theme, "title", function()
+    local tw, th = textSize("XF")
+    setPos(cx + (markW - tw) / 2, cy + (markH - th) / 2)
+    coloured(ink, "XF")
+    local _, lineH = textSize("XF Runtime Bridge")
+    setPos(cx + markW + gap, cy + (markH - lineH) / 2)
+    coloured(panel.colour(theme, which, "XfAccentText", AMBER), "XF Runtime Bridge")
+  end)
+  local titleW = panel.inRole(theme, "title", function() return (textSize("XF Runtime Bridge")) end)
+  local chipX = cx + markW + gap + (type(titleW) == "number" and titleW or 0) + gap
+  local _, eh = panel.inRole(theme, "eyebrow", function() return textSize("X") end)
+  local chipH = (type(eh) == "number" and eh or ImGui.GetFontSize()) + panel.metric(theme, "ChipPaddingY", 2) * 2 + 2
+  setPos(chipX, cy + (markH - chipH) / 2)
+  panel.chip(state, theme, which, "test", "info", false)
+  if info and info.plugin_version ~= nil then
+    local version = tostring(info.plugin_version)
+    panel.inRole(theme, "label", function()
+      local vw, vh = textSize(version)
+      setPos(math.max(chipX, cx + rowW - vw), cy + (markH - vh) / 2)
+      ImGui.TextDisabled(version)
+    end)
+  end
+  setPos(cx, cy + markH + panel.metric(theme, "ItemSpacingY", 6))
+end
+
+-- The mode chip's label and tone: the plugin's (status.chip, with the status tone), else worked out from the bridge's flags for a
+-- plugin without the field.
+local function chipOf(info, bridge)
+  local status = info and info.status
+  if type(status) == "table" and type(status.chip) == "string" then
+    return status.chip ~= "" and status.chip or nil, status.tone
+  end
+  if not bridge or not bridge.enabled then return nil end
+  if bridge.killed then return "Stopped", "killed" end
+  if not bridge.allow_writes then return "Read-only", "ok" end
+  if bridge.writes_paused then return "Paused", "paused" end
+  return "Changes allowed", "write"
+end
+
+-- The status line (the Studio's): the dot in the tone's slot, pulsing while the bridge is live and motion runs, the plugin's
+-- connection sentence in the muted colour (the danger colour once stopped), the settle wash behind the row when the tone has just
+-- changed; under it the mode chip and what it means for the player.
+function panel.statusBlock(state, theme, which, info, bridge)
+  local now = ImGui.GetTime()
+  local reduced = panel.reduced(state)
+  local status = info and info.status
+  local tone = state.pluginPresent == false and "off" or (type(status) == "table" and status.tone) or "idle"
+  local _, sentence = connectionLine(state)
+  state.settle = state.settle or {}
+  panel.noteSettle(theme, state.settle, tone, now * 1000, reduced)
+  local strength = panel.settleNow(theme, state.settle, now * 1000)
+  local lineH = lineHeight()
+  local k = panel.k or 1
+  local drawn = try(state, "status_row", function()
+    local sx, sy = xyOf(ImGui.GetCursorScreenPos())
+    if strength > 0 then
+      local wash = panel.colour(theme, which, "XfSignalBg", nil)
+      if wash then
+        rectFilled(drawList(), sx - 4 * k, sy - 2 * k, sx + ImGui.GetFontSize() * WRAP_EM, sy + (state.statusRowHeight or lineH) + 2 * k, wash, strength)
+      end
+    end
+  end)
+  local live = tone == "ok" or tone == "write"
+  local sx, sy = xyOf(ImGui.GetCursorScreenPos())
+  local dotDrawn = type(sx) == "number" and panel.dot(state, theme, which, tone, sx + 4 * k, sy + lineH / 2, live and panel.pulseAlpha(theme, now, reduced) or 1.0)
+  local hang = 8 * k + panel.metric(theme, "ItemSpacingX", 8)
+  if dotDrawn then
+    ImGui.Indent(hang)
+  else
+    local c = panel.colour(theme, which, tone == "ok" and "XfSuccess" or (tone == "write" or tone == "paused") and "XfWarning" or tone == "killed" and "XfDanger" or "TextDisabled", GREY)
+    ImGui.PushStyleColor(ImGuiCol.Text, c[1], c[2], c[3], c[4])
+    ImGui.Bullet()
+    ImGui.PopStyleColor(1)
+    ImGui.SameLine()
+  end
+  local text = tone == "killed" and panel.colour(theme, which, "XfDanger", RED) or panel.colour(theme, which, "XfTextMuted", GREY)
+  local top = curY()
+  ImGui.PushTextWrapPos(wrapPos())
+  coloured(text, sentence)
+  ImGui.PopTextWrapPos()
+  state.statusRowHeight = math.max(lineH, curY() - top - panel.metric(theme, "ItemSpacingY", 6))
+  if dotDrawn then ImGui.Unindent(hang) end
+  -- the chip row
+  local label, chipTone = chipOf(info, bridge)
+  if label and bridge and bridge.enabled then
+    panel.chip(state, theme, which, label, chipTone, chipTone == "paused")
+    local foot = (not bridge.allow_writes and not bridge.killed) and "This build can't change the game."
+      or bridge.killed and nil
+      or bridge.writes_paused and "Changes are paused."
+      or "XF test profile"
+    if foot then
+      ImGui.SameLine()
+      panel.inRole(theme, "label", function() coloured(panel.colour(theme, which, "TextDisabled", GREY), foot) end)
+    end
+  end
+end
+
+-- One key-value row: the label (label role, XfTextMuted) in a column as wide as 9 em, then the value (value role for figures).
+local function keyValue(theme, which, label, value, figure)
+  local column
+  panel.inRole(theme, "label", function()
+    column = ImGui.GetFontSize() * 9
+    coloured(panel.colour(theme, which, "XfTextMuted", GREY), label)
+  end)
+  ImGui.SameLine(column + panel.metric(theme, "ItemSpacingX", 8))
+  panel.inRole(theme, figure and "value" or "body", function()
+    ImGui.PushTextWrapPos(wrapPos())
+    coloured(panel.colour(theme, which, "Text", { 0.92, 0.92, 0.92, 1.0 }), tostring(value))
+    ImGui.PopTextWrapPos()
+  end)
+end
+
+-- A value bar: a track in XfLine, the fill PlotHistogram (the warning or danger slot of a meter), square ends, no border. Labelled:
+-- BarLabelled high with the figure inside in the value role and the fill at LabelledBarAlpha with no opaque cap, so the figure stays
+-- readable across the filled and unfilled track. Thin: BarThin.
+function panel.bar(state, theme, which, fraction, label, tone)
+  local labelled = label ~= nil
+  local height = panel.metric(theme, labelled and "BarLabelled" or "BarThin", labelled and 16 or 6)
+  local width = limitWidth()
+  local fill = panel.colour(theme, which, tone == "danger" and "XfDanger" or tone == "warning" and "XfWarning" or "PlotHistogram", GREEN)
+  local alpha = labelled and ((theme and theme.values and theme.values.LabelledBarAlpha) or 0.3) or 1.0
+  local cx, cy = curX(), curY()
+  try(state, "bar", function()
+    local sx, sy = xyOf(ImGui.GetCursorScreenPos())
+    local list = drawList()
+    rectFilled(list, sx, sy, sx + width, sy + height, panel.colour(theme, which, "XfLine", GREY))
+    if fraction > 0 then
+      rectFilled(list, sx, sy, sx + width * math.min(1, fraction), sy + height, fill, alpha)
+    end
+  end)
+  if labelled then
+    panel.inRole(theme, "value", function()
+      local tw, th = textSize(label)
+      setPos(cx + (width - tw) / 2, cy + (height - th) / 2)
+      coloured(panel.colour(theme, which, "Text", { 0.92, 0.92, 0.92, 1.0 }), label)
+    end)
+    setPos(cx, cy)
+  end
+  ImGui.Dummy(width, height)
+end
+
+-- The diagnostics (collapsed by default: the window's actions, the question and the stop button never collapse): the plugin's
+-- numbers as key-value rows and the overlay host's CPU time as a labelled meter against a 1 ms budget (warning past 75 %, danger
+-- past 90 %, the figure always shown).
+local function drawDiagnostics(state, theme, which, info)
+  if not info then return end
+  sectionGap(theme)
+  local open = false
+  panel.inRole(theme, "eyebrow", function() open = ImGui.CollapsingHeader("DIAGNOSTICS##xf_diagnostics") end)
+  if not open then return end
+  local overlay = type(info.overlay) == "table" and info.overlay or {}
+  local bridge = type(info.bridge) == "table" and info.bridge or {}
+  panel.card(state, theme, which, "diagnostics", nil, false, function()
+    keyValue(theme, which, "Overlay", tostring(overlay.phase or "off") .. (overlay.off_for_frame_generation and " (off for frame generation)" or ""), false)
+    if overlay.frames ~= nil then keyValue(theme, which, "Frames", string.format("%d", overlay.frames), true) end
+    if overlay.cpu_ms ~= nil then keyValue(theme, which, "CPU", string.format("%.3f ms (max %.3f)", overlay.cpu_ms, overlay.cpu_ms_max or 0), true) end
+    keyValue(theme, which, "Motion", tostring(overlay.motion or "full") .. (overlay.motion_reason and overlay.motion_reason ~= "" and (" (" .. tostring(overlay.motion_reason) .. ")") or ""), false)
+    keyValue(theme, which, "Requests", string.format("%d", bridge.requests or 0), true)
+    keyValue(theme, which, "Game", tostring(info.game_state or "?"), false)
+    if type(overlay.cpu_ms) == "number" then
+      local cpu = overlay.cpu_ms
+      panel.bar(state, theme, which, cpu, string.format("%.2f ms of 1 ms", cpu), cpu > 0.9 and "danger" or cpu > 0.75 and "warning" or nil)
+    end
+  end)
+end
+
 -- state: init.lua's state (info from XFBridge_Info, pluginPresent, pending, message, pendingAsk, answeredAsk, comment).
 -- queue(name, argument): asks init.lua to run an action on the next update.
 -- theme: theme.lua's table, or nil.
@@ -624,6 +1123,7 @@ function panel.draw(state, queue, theme)
   if type(overlay) == "table" and overlay.theme == "light" then
     which = "light"
   end
+  panel.k = ImGui.GetFontSize() / ((theme and theme.metrics and theme.metrics.FontSize) or 13)
   local colours, vars = panel.pushTheme(theme, which)
   if ImGuiStyleVar and ImGuiStyleVar.Alpha ~= nil then
     ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 1.0)
@@ -656,12 +1156,8 @@ function panel.body(state, queue, theme, which)
     local info = state.info
     local bridge = info and info.bridge
 
-    local colour, text = connectionLine(state)
-    coloured(colour, text)
-    local changesColour, changesText = changesLine(bridge)
-    if changesText then
-      coloured(changesColour, changesText)
-    end
+    panel.heading(state, theme, which, info)
+    panel.statusBlock(state, theme, which, info, bridge)
 
     local live = bridge and bridge.enabled and bridge.listening and not bridge.killed
     local slotTop = ImGui.GetCursorPosY()
@@ -679,12 +1175,13 @@ function panel.body(state, queue, theme, which)
 
     if bridge and bridge.enabled then
       if bridge.killed then
-        ImGui.Separator()
+        sectionGap(theme)
         if state.pending == "rearm" or (info and info.rearm_pending) then
           wrapped("Reconnecting... The bridge first puts back what it changed (a frozen world, a hidden menu), then starts again.")
         else
           -- 0.8.4 (the UI review's fix 7): the button, and the one thing the player needs to know, only when it applies.
-          if button("Reconnect") then
+          -- 0.8.22: Reconnect is the window's one primary once the bridge is stopped.
+          if primaryButton(theme, which, "Reconnect") then
             queue("rearm")
           end
           if info and info.writes_used then
@@ -692,7 +1189,7 @@ function panel.body(state, queue, theme, which)
           end
         end
       elseif bridge.listening then
-        ImGui.Separator()
+        sectionGap(theme)
         if bridge.allow_writes then
           if bridge.writes_paused then
             if button("Resume changes") then
@@ -731,17 +1228,24 @@ function panel.body(state, queue, theme, which)
           coloured(panel.colour(theme, which, "XfTextMuted", GREY), "or load a save")
         end
         -- 0.8 (the UI review): the kill switch on its own row, in the danger colour, away from the everyday buttons. 0.8.5 (the
-        -- UI review's fix 8): the Studio's danger button (.btn.danger): danger text and border on a clear fill; hover and press
-        -- keep the theme's.
+        -- UI review's fix 8): the Studio's danger button (.btn.danger): danger text and border on a clear fill. 0.8.22: its hover
+        -- and press take the danger wash (XfDangerBg), as the Studio's.
         ImGui.Spacing()
+        local wash = panel.colour(theme, which, "XfDangerBg", nil)
         ImGui.PushStyleColor(ImGuiCol.Button, 0, 0, 0, 0)
         ImGui.PushStyleColor(ImGuiCol.Text, RED[1], RED[2], RED[3], RED[4])
         ImGui.PushStyleColor(ImGuiCol.Border, RED[1], RED[2], RED[3], RED[4])
+        local pushed = 3
+        if wash then
+          ImGui.PushStyleColor(ImGuiCol.ButtonHovered, wash[1], wash[2], wash[3], wash[4])
+          ImGui.PushStyleColor(ImGuiCol.ButtonActive, wash[1], wash[2], wash[3], wash[4])
+          pushed = 5
+        end
         local stopBordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
         if stopBordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
         local stop = button("Stop the bridge")
         if stopBordered then ImGui.PopStyleVar(1) end
-        ImGui.PopStyleColor(3)
+        ImGui.PopStyleColor(pushed)
         if stop then
           queue("kill")
         end
@@ -767,6 +1271,9 @@ function panel.body(state, queue, theme, which)
       drawKillKey(state, queue, theme, which, info and type(info.kill_key) == "table" and info.kill_key or nil)
     end
 
+    -- 0.8.22: the diagnostics, collapsed until opened.
+    drawDiagnostics(state, theme, which, info)
+
     -- 0.8.7: Save anyway's outcome, once, in the message line.
     local saveLock = info and type(info.save_lock) == "table" and info.save_lock or nil
     if saveLock and saveLock.last and saveLock.last_seq ~= state.saveSeenSeq then
@@ -780,8 +1287,10 @@ function panel.body(state, queue, theme, which)
     end
 
     if info then
-      ImGui.Separator()
-      ImGui.TextDisabled("Version " .. tostring(info.plugin_version)) -- 0.8.4 (the UI review's fix 10): the title already names it
+      sectionGap(theme)
+      panel.inRole(theme, "label", function()
+        ImGui.TextDisabled("Version " .. tostring(info.plugin_version)) -- 0.8.4 (the UI review's fix 10): the title already names it
+      end)
     end
   end)
   if state.testInput and state.testInput.ui then

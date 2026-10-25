@@ -15,12 +15,18 @@
 // a rule elsewhere in studio.css never fails the check. Every plain :root block is read (RB-116), and a mapped token set
 // in a theme-qualified or @media :root rule is refused (the generator wouldn't see it).
 //
-// The mapping is a design decision for the UI component track's review (AGENTS.md: component-first UI, UI/UX review);
-// this file only carries it out. ImGui has no bevelled corners, so the Studio's bevel becomes its 2 px radius everywhere.
+// 0.8.22: the mapping is the Studio's own table, the style guide's "In-game surfaces" section: IN_GAME_THEME in
+// projects/xf-studio/authoring/src/studio-ui/style-guide/in-game-theme.ts (plain data, no browser imports), imported below by a
+// relative path (the Studio's tests read this generator back, so the two cannot drift). The style guide is the design authority;
+// this file only carries it out: every ImGui 1.92.9 colour slot and the XF semantic slots, every metric, the numbers the Studio
+// sets on a rule (DisabledAlpha, the indeterminate sweep), the motion constants and the type roles. ImGui has no bevelled
+// corners, so widgets take the Studio's 2 px radius; the host draws the chamfers (chips, the mark) by hand.
 
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+
+import { CET_SCALE_RANGE, IN_GAME_LABELLED_BAR_ALPHA, IN_GAME_THEME } from "../../../xf-studio/authoring/src/studio-ui/style-guide/in-game-theme";
 
 export const PROJECT_DIR = resolve(import.meta.dir, "..", "..");
 export const STUDIO_CSS = resolve(PROJECT_DIR, "..", "xf-studio", "authoring", "public", "studio.css");
@@ -145,110 +151,70 @@ export function px(value: string): number {
 }
 
 /**
- * Which token each ImGui colour takes. `alpha` multiplies the token's own alpha (for hover and selection washes the
- * tokens give as colours). The XF entries (prefix Xf) are the panel's own semantic colours, not ImGui's.
+ * Which token each ImGui colour (and each XF semantic colour, prefix Xf) takes: the Studio's in-game table, which maps every slot of
+ * ImGui 1.92.9 docking's ImGuiCol_ enum, so no widget ever shows ImGui's default blue. `alpha` multiplies the token's own alpha.
+ * A name an older ImGui (Cyber Engine Tweaks' 1.91.1) lacks is skipped by its consumer (panel.pushTheme), not here.
  */
-export const MAPPING: readonly { name: string; token: string; alpha?: number }[] = [
-  { name: "Text", token: "--text" },
-  { name: "TextDisabled", token: "--text-faint" },
-  { name: "WindowBg", token: "--bg-overlay" },
-  { name: "ChildBg", token: "--bg-panel" },
-  { name: "PopupBg", token: "--bg-overlay" },
-  { name: "Border", token: "--line" },
-  { name: "BorderShadow", token: "--bg-app", alpha: 0 },
-  { name: "FrameBg", token: "--bg-sunken" },
-  { name: "FrameBgHovered", token: "--bg-hover" },
-  { name: "FrameBgActive", token: "--bg-active" },
-  { name: "TitleBg", token: "--bg-raised" },
-  { name: "TitleBgActive", token: "--bg-raised" },
-  { name: "TitleBgCollapsed", token: "--bg-raised" },
-  { name: "MenuBarBg", token: "--bg-panel" },
-  { name: "ScrollbarBg", token: "--bg-sunken" },
-  { name: "ScrollbarGrab", token: "--line-strong" },
-  { name: "ScrollbarGrabHovered", token: "--text-faint" },
-  { name: "ScrollbarGrabActive", token: "--text-muted" },
-  { name: "CheckMark", token: "--accent" },
-  { name: "SliderGrab", token: "--signal" },
-  { name: "SliderGrabActive", token: "--accent" },
-  { name: "Button", token: "--bg-raised" },
-  { name: "ButtonHovered", token: "--bg-hover" },
-  { name: "ButtonActive", token: "--bg-active" },
-  { name: "Header", token: "--signal-bg" },
-  { name: "HeaderHovered", token: "--bg-hover" },
-  { name: "HeaderActive", token: "--bg-active" },
-  { name: "Separator", token: "--line-soft" },
-  { name: "SeparatorHovered", token: "--line-strong" },
-  { name: "SeparatorActive", token: "--accent" },
-  { name: "ResizeGrip", token: "--line" },
-  { name: "ResizeGripHovered", token: "--line-strong" },
-  { name: "ResizeGripActive", token: "--accent" },
-  { name: "Tab", token: "--bg-panel" },
-  { name: "TabHovered", token: "--bg-hover" },
-  { name: "PlotLines", token: "--signal" },
-  { name: "PlotLinesHovered", token: "--accent" },
-  { name: "PlotHistogram", token: "--signal" },
-  { name: "PlotHistogramHovered", token: "--accent" },
-  { name: "TableHeaderBg", token: "--bg-raised" },
-  { name: "TableBorderStrong", token: "--line-strong" },
-  { name: "TableBorderLight", token: "--line-soft" },
-  { name: "TextSelectedBg", token: "--signal-bg" },
-  { name: "DragDropTarget", token: "--accent" },
-  { name: "NavCursor", token: "--focus" },
-  { name: "ModalWindowDimBg", token: "--bg-app", alpha: 0.6 },
-  // XF semantic colours for the panel's own text and marks.
-  { name: "XfAccent", token: "--accent" },
-  { name: "XfAccentInk", token: "--accent-ink" },
-  { name: "XfAccentEdge", token: "--accent-edge" },
-  { name: "XfAccentText", token: "--accent-text" },
-  { name: "XfSignal", token: "--signal" },
-  { name: "XfSuccess", token: "--success" },
-  { name: "XfWarning", token: "--warning" },
-  { name: "XfDanger", token: "--danger" },
-  { name: "XfTextMuted", token: "--text-muted" },
-  { name: "XfLineStrong", token: "--line-strong" },
-];
+export const MAPPING: readonly { name: string; token: string; alpha?: number }[] = IN_GAME_THEME.colours.map((c) => ({
+  name: c.slot,
+  token: c.token,
+  ...(c.alpha !== undefined ? { alpha: c.alpha } : {}),
+}));
 
-/**
- * 0.8.4 (the UI review's fix 1: the answer buttons' hover used --accent-edge, the fill's own yellow in dark and near-black
- * under near-black text in light): colours the Studio sets on a component's rule rather than as a token, read from that
- * rule's declaration (the same value in both themes unless it is a light-dark()).
- */
-export const RULE_COLOURS: readonly { name: string; rule: string; property: string }[] = [
-  { name: "XfAccentHover", rule: ".btn.primary:hover", property: "background" },
-];
+/** Colours the Studio sets on a component's rule rather than as a token, read from that rule's declaration. */
+export const RULE_COLOURS: readonly { name: string; rule: string; property: string }[] = IN_GAME_THEME.ruleColours.map((c) => ({
+  name: c.slot,
+  rule: c.rule,
+  property: c.property,
+}));
 
 /** ImGui style metrics from the spacing, size and radius tokens (at the Studio's own 1x; the host scales them). */
-export const METRICS: readonly { name: string; from: string; note: string }[] = [
-  { name: "WindowPaddingX", from: "--sp-5", note: "panel padding" },
-  { name: "WindowPaddingY", from: "--sp-5", note: "panel padding" },
-  { name: "FramePaddingX", from: "--sp-4", note: "field padding (.field)" },
-  { name: "FramePaddingY", from: "--sp-3", note: "(control height - text) / 2, about sp-3 at 13 px text in 28 px controls" },
-  { name: "ItemSpacingX", from: "--sp-4", note: "gap between controls" },
-  { name: "ItemSpacingY", from: "--sp-3", note: "gap between rows" },
-  { name: "ItemInnerSpacingX", from: "--sp-3", note: ".btn gap" },
-  { name: "ItemInnerSpacingY", from: "--sp-2", note: "" },
-  { name: "Rounding", from: "--radius", note: "every corner (ImGui has no bevel)" },
-  { name: "BevelSmall", from: "--bevel-sm", note: "for the panel's own drawn bevels" },
-  { name: "FontSize", from: "--fs-md", note: "body text" },
-  { name: "FontSizeSmall", from: "--fs-sm", note: "labels, the footer" },
-  { name: "FontSizeLarge", from: "--fs-lg", note: "the panel's title" },
-  { name: "ControlHeight", from: "--control-h", note: "buttons and fields" },
-];
+export const METRICS: readonly { name: string; from: string; note: string }[] = IN_GAME_THEME.metrics.map((m) => ({
+  name: m.name,
+  from: m.token,
+  note: m.use,
+}));
+
+/** Numbers the Studio sets on a rule (an opacity as written, an animation's duration in seconds). */
+export const RULE_VALUES: readonly { name: string; rule: string; property: string }[] = IN_GAME_THEME.ruleValues.map((v) => ({
+  name: v.name,
+  rule: v.rule,
+  property: v.property,
+}));
 
 /** The typography the Studio names, as Windows font files (the host loads the first it finds, else ImGui's default). */
-export const FONTS = {
-  ui: ["SegUIVar.ttf", "segoeui.ttf"],
-  display: ["bahnschrift.ttf"],
-  mono: ["CascadiaMono.ttf", "consola.ttf"],
-} as const;
+export const FONTS = IN_GAME_THEME.fonts;
+
+export type TypeRole = { role: string; face: "ui" | "display" | "mono"; weight: number; token: string; size: number; scale: number; caps: boolean };
 
 export type Theme = {
-  /** RB-104: the SHA-256 of the mapped tokens' resolved values (colours and metrics), not of the whole stylesheet, so an
-   * unrelated rule in studio.css never makes the tables "drift". */
+  /** RB-104: the SHA-256 of the mapped tokens' resolved values (colours, metrics, rule values, motion and type), not of the
+   * whole stylesheet, so an unrelated rule in studio.css never makes the tables "drift". */
   tokens_sha256: string;
   colors: { name: string; token: string; dark: Rgba; light: Rgba }[];
   metrics: { name: string; value: number; from: string }[];
+  /** Numbers read from a Studio rule (DisabledAlpha, SweepSeconds), then the design constants of the spec (motion, labelled bar). */
+  values: { name: string; source: string; value: number }[];
+  /** The type roles: size in the Studio's pixels at 1x, and the CET scale (size over the body size, kept inside CET_SCALE_RANGE). */
+  types: TypeRole[];
 };
+
+/**
+ * The last unconditional declaration of a property on a rule whose selector is `selector` or `selector:` + a pseudo-class (the
+ * Studio's own reading: tests/in-game-theme.test.ts resolves the same table against the same stylesheet).
+ */
+export function ruleDeclaration(css: string, selector: string, property: string): string | undefined {
+  let value: string | undefined;
+  for (const rule of cssRules(css)) {
+    if (rule.media) continue;
+    if (!splitTop(rule.selector, ",").some((part) => part.trim() === selector || part.trim().startsWith(`${selector}:`))) continue;
+    for (const declaration of splitTop(rule.body, ";")) {
+      const m = /^\s*([\w-]+)\s*:\s*([\s\S]+?)\s*$/.exec(declaration);
+      if (m && m[1] === property) value = m[2]!;
+    }
+  }
+  return value;
+}
 
 export function buildTheme(css: string): Theme {
   const tokens = parseRootTokens(css);
@@ -264,12 +230,9 @@ export function buildTheme(css: string): Theme {
     return [r, g, b, Math.round(a * alpha * 10000) / 10000];
   };
   const colors = MAPPING.map((m) => ({ name: m.name, token: m.token, dark: colour(m.token, "dark", m.alpha ?? 1), light: colour(m.token, "light", m.alpha ?? 1) }));
-  const rules = cssRules(css);
   for (const r of RULE_COLOURS) {
-    const rule = rules.find((x) => !x.media && x.selector.split(",").some((part) => part.trim().startsWith(r.rule)));
-    const m = rule && new RegExp(`(?:^|;)\\s*${r.property}\\s*:\\s*([^;]+)`).exec(rule.body);
-    if (!m) throw new Error(`studio.css has no ${r.property} on ${r.rule}`);
-    const value = m[1]!.trim();
+    const value = ruleDeclaration(css, r.rule, r.property);
+    if (value === undefined) throw new Error(`studio.css has no ${r.property} on ${r.rule}`);
     const ld = /^light-dark\(([\s\S]+)\)$/.exec(value);
     const parts = ld ? splitTop(ld[1]!, ",") : [value, value];
     colors.push({ name: r.name, token: `${r.rule} ${r.property}`, light: oklchToSrgb(parts[0]!.trim()), dark: oklchToSrgb(parts[1]!.trim()) });
@@ -279,21 +242,53 @@ export function buildTheme(css: string): Theme {
     if (!t) throw new Error(`studio.css has no token ${m.from}`);
     return { name: m.name, value: px(t.dark), from: m.from };
   });
-  const tokens_sha256 = createHash("sha256").update(JSON.stringify({ colors, metrics })).digest("hex");
-  return { tokens_sha256, colors, metrics };
+  const values: Theme["values"] = RULE_VALUES.map((v) => {
+    const raw = ruleDeclaration(css, v.rule, v.property);
+    const m = raw && (v.property === "animation" ? /(?:^|\s)([\d.]+)s(?:\s|$)/.exec(raw) : /^([\d.]+)$/.exec(raw));
+    if (!m) throw new Error(`studio.css has no number for ${v.property} on ${v.rule} (${v.name})`);
+    return { name: v.name, source: `${v.rule} ${v.property}`, value: parseFloat(m[1]!) };
+  });
+  const motion = IN_GAME_THEME.motion;
+  values.push(
+    { name: "PulsePeriodMs", source: "spec", value: motion.pulsePeriodMs },
+    { name: "PulseDepth", source: "spec", value: motion.pulseDepth },
+    { name: "SettleMs", source: "spec", value: motion.settleMs },
+    { name: "SettleGapMs", source: "spec", value: motion.settleGapMs },
+    { name: "ChipBorderAlpha", source: "spec", value: motion.chipBorderAlpha },
+    { name: "LabelledBarAlpha", source: "spec", value: IN_GAME_LABELLED_BAR_ALPHA },
+  );
+  const bodyToken = tokens.get("--fs-md");
+  if (!bodyToken) throw new Error("studio.css has no token --fs-md");
+  const body = px(bodyToken.dark);
+  const [low, high] = CET_SCALE_RANGE;
+  const types: TypeRole[] = IN_GAME_THEME.type.map((t) => {
+    const entry = tokens.get(t.token);
+    if (!entry) throw new Error(`studio.css has no token ${t.token}`);
+    const size = px(entry.dark);
+    return { role: t.role, face: t.face, weight: t.weight, token: t.token, size, scale: Math.round(Math.min(high, Math.max(low, size / body)) * 10000) / 10000, caps: t.caps };
+  });
+  const tokens_sha256 = createHash("sha256").update(JSON.stringify({ colors, metrics, values, types })).digest("hex");
+  return { tokens_sha256, colors, metrics, values, types };
 }
 
 const f = (v: number) => (Number.isInteger(v) ? `${v}.0f` : `${v}f`);
 
 export function nativeTable(theme: Theme): string {
   const lines = [
-    "// GENERATED by tools/overlay/theme.ts from projects/xf-studio/authoring/public/studio.css; do not edit.",
+    "// GENERATED by tools/overlay/theme.ts from projects/xf-studio/authoring/public/studio.css and the Studio's in-game theme table",
+    "// (projects/xf-studio/authoring/src/studio-ui/style-guide/in-game-theme.ts); do not edit.",
     `// Mapped tokens' SHA-256 ${theme.tokens_sha256}. Regenerate with bun tools/overlay/theme.ts (CI and the tests check it).`,
     "// Colours are sRGB (gamma-encoded) RGBA, dark then light; metrics are the Studio's pixels at 1x.",
     "// XF_THEME_COLOR(name, token, dark r, g, b, a, light r, g, b, a)",
     ...theme.colors.map((c) => `XF_THEME_COLOR(${c.name}, "${c.token}", ${c.dark.map(f).join(", ")}, ${c.light.map(f).join(", ")})`),
     "// XF_THEME_METRIC(name, token, value)",
     ...theme.metrics.map((m) => `XF_THEME_METRIC(${m.name}, "${m.from}", ${f(m.value)})`),
+    "// XF_THEME_VALUE(name, source, value): numbers read from a Studio rule, then the spec's motion constants",
+    ...theme.values.map((v) => `XF_THEME_VALUE(${v.name}, "${v.source}", ${f(v.value)})`),
+    "// XF_THEME_TYPE(role, face, size, caps): one baked font per role (the face's file is the first XF_THEME_FONT of that face that exists)",
+    ...theme.types.map((t) => `XF_THEME_TYPE(${t.role}, ${t.face}, ${f(t.size)}, ${t.caps ? "true" : "false"})`),
+    "// XF_THEME_FONT(face, file)",
+    ...(Object.entries(FONTS) as [string, readonly string[]][]).flatMap(([face, files]) => files.map((file) => `XF_THEME_FONT(${face}, L"${file}")`)),
     "",
   ];
   return lines.join("\n");
@@ -302,15 +297,23 @@ export function nativeTable(theme: Theme): string {
 export function luaTable(theme: Theme): string {
   const rgba = (c: Rgba) => `{ ${c.join(", ")} }`;
   const lines = [
-    "-- GENERATED by tools/overlay/theme.ts from projects/xf-studio/authoring/public/studio.css; do not edit.",
+    "-- GENERATED by tools/overlay/theme.ts from projects/xf-studio/authoring/public/studio.css and the Studio's in-game theme table",
+    "-- (projects/xf-studio/authoring/src/studio-ui/style-guide/in-game-theme.ts); do not edit.",
     `-- Mapped tokens' SHA-256 ${theme.tokens_sha256}. Regenerate with bun tools/overlay/theme.ts (CI and the tests check it).`,
-    "-- The XF Studio theme for the bridge's CET window: ImGui colours (sRGB RGBA) per theme and the Studio's metrics in pixels.",
+    "-- The XF Studio theme for the bridge's CET window: ImGui colours (sRGB RGBA) per theme and the Studio's metrics in pixels, the",
+    "-- numbers read from a Studio rule and the spec's motion constants, and the type roles with the CET font scale of each.",
     "return {",
     "  colors = {",
     ...theme.colors.map((c) => `    ${c.name} = { token = "${c.token}", dark = ${rgba(c.dark)}, light = ${rgba(c.light)} },`),
     "  },",
     "  metrics = {",
     ...theme.metrics.map((m) => `    ${m.name} = ${m.value},`),
+    "  },",
+    "  values = {",
+    ...theme.values.map((v) => `    ${v.name} = ${v.value},`),
+    "  },",
+    "  types = {",
+    ...theme.types.map((t) => `    ${t.role} = { face = "${t.face}", size = ${t.size}, scale = ${t.scale}, caps = ${t.caps} },`),
     "  },",
     "}",
     "",

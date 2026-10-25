@@ -210,7 +210,7 @@ describe("0.8.9 the senses, the surfaces, the answer keys and the probes", () =>
   test("the window's question slot gives way to a newer line, info included", () => {
     const init = read("cet", "xf_runtime_bridge", "init.lua");
     expect(init).toContain("if not state.pendingAsk and newest and (not state.answeredAsk or newest.id > state.answeredAsk.id) then");
-    expect(read("cet", "xf_runtime_bridge", "panel.lua")).toContain('coloured(panel.colour(theme, which, "XfAccentText", AMBER), "From XF Studio")');
+    expect(read("cet", "xf_runtime_bridge", "panel.lua")).toContain('panel.eyebrow(state, theme, which, "From XF Studio", true, "XfAccentText")');
   });
 
   test("the event probe records dialogue.index and call only on a change, and death and defeated carry the victim's attitude", () => {

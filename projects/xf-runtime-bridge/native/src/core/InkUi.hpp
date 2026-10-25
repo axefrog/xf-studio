@@ -131,6 +131,10 @@ struct Status
     std::string connectionTone;
     std::string changes;
     std::string changesTone;
+    // 0.8.22 (the Studio's in-game components: "the plugin supplies the short label"): the status chip's text, one of Read-only,
+    // Changes allowed, Paused, Stopped, or empty while there is none (off, not ready). A chip never abbreviates a sentence; it
+    // names the mode. Its tone is the status tone's (ok, write, paused, killed).
+    std::string chip;
 };
 Status Summarize(const BridgeView& aView);
 json StatusJson(const BridgeView& aView);

@@ -6,6 +6,7 @@
 #include "core/BuildInfo.hpp"
 #include "core/Win32.hpp"
 
+#include <cmath>
 #include <fstream>
 #include <sstream>
 
@@ -110,6 +111,13 @@ std::string HudFrame()
                              static_cast<inkui::StatusSurface>(state.statusSurface.load()), state.InkKeysAsk());
 }
 
+// 0.8.22: re-reads Windows' animation-effects setting (at start and with each info refresh) so the motion in force is current.
+xfb::overlay::MotionState MotionNow(State& aState)
+{
+    aState.overlayHost.NoteWindowsAnimation(win32::ClientAreaAnimation());
+    return aState.overlayHost.Motion();
+}
+
 nlohmann::json InfoJson()
 {
     auto& state = Get();
@@ -140,7 +148,17 @@ nlohmann::json InfoJson()
         {"overlay", {{"enabled", state.config.overlayEnabled}, {"theme", state.config.overlayTheme}, {"phase", xfb::overlay::PhaseName(state.overlayHost.CurrentPhase())},
                      // 0.8 (the UI review): the CET label says so when frame generation keeps the overlay off.
                      {"off_for_frame_generation", state.overlayHost.OffForFrameGeneration()},
-                     {"diagnostics", state.config.overlayDiagnostics}}},
+                     {"diagnostics", state.config.overlayDiagnostics},
+                     // 0.8.22 (the Studio's in-game motion rule): the effective motion, "full" or "reduced" ([overlay] motion, Windows'
+                     // animation-effects setting read now, and frame generation), with the setting and the reason.
+                     {"motion", MotionNow(state).effective},
+                     {"motion_setting", xfb::overlay::MotionSettingName(state.overlayHost.MotionSettingNow())},
+                     {"motion_reason", state.overlayHost.Motion().reason},
+                     {"windows_animations", state.overlayHost.WindowsAnimation()},
+                     // the host's own figures, for the CET window's diagnostics card
+                     {"frames", state.overlayHost.Frames()},
+                     {"cpu_ms", std::round(state.overlayHost.CpuMs() * 1000.0) / 1000.0},
+                     {"cpu_ms_max", std::round(state.overlayHost.CpuMsMax() * 1000.0) / 1000.0}}},
         // 0.8 (the UI review): the status wording every surface shows, made in one place (core/InkUi.cpp Summarize).
         {"status", inkui::StatusJson(BridgeViewNow())},
         // 0.8.2: which status surface shows now (0.8.3's names: ink_panel, xf_box, cet_line, or none while loading).

@@ -115,6 +115,12 @@ local function log(level, cid, message)
   end
 end
 
+-- 0.8.22: a draw call the panel tried and this CET refused or answered differently is named once in the mod's log (the part that
+-- needed it draws plain); the window and the line never go down for it.
+state.noteDraw = function(name, why)
+  log("info", "-", "CET: the " .. tostring(name) .. " draw call failed, so that part draws plain: " .. tostring(why))
+end
+
 -- Calls a plugin native through CET's RTTI lookup; records whether the plugin is there.
 local function callNative(name, ...)
   local args = { ... }
@@ -565,8 +571,17 @@ local function xyOf(a, b)
   return a, b
 end
 
-local function statusDot(tone, startX)
-  local radius = ImGui.GetFontSize() * 0.2
+-- 0.8.22 (the Studio's status line): the dot is the Studio's 8 px (4 px radius at CET's 13 px body, scaled with its font size), in the
+-- tone's slot, and breathes while the bridge is live (the success and changes-allowed tones; panel.pulseAlpha, one clock for
+-- every pulsing element: ImGui.GetTime); paused is a ring, stopped, off and idle are still. It changes alpha only. Under
+-- reduced motion (the plugin's info.overlay.motion) it is drawn at full alpha.
+local function statusDot(toneName, tone, startX)
+  local k = ImGui.GetFontSize() / ((theme and theme.metrics and theme.metrics.FontSize) or 13)
+  local radius = 4 * k
+  local reduced = state.info and type(state.info.overlay) == "table" and state.info.overlay.motion == "reduced"
+  local live = toneName == "ok" or toneName == "write"
+  local alpha = 1.0
+  if live and panel and panel.pulseAlpha then alpha = panel.pulseAlpha(theme, ImGui.GetTime(), reduced) end
   local why = nil
   if not (startX >= 2 * radius + 2) then
     why = "the window's padding (" .. tostring(startX) .. " px) is narrower than the dot (" .. tostring(2 * radius + 2) .. " px)"
@@ -575,8 +590,14 @@ local function statusDot(tone, startX)
       local _, sy = xyOf(ImGui.GetCursorScreenPos())
       local wx = xyOf(ImGui.GetWindowPos())
       local list = ImGui.GetForegroundDrawList()
-      local colour = ImGui.GetColorU32(tone[1], tone[2], tone[3], tone[4])
-      ImGui.ImDrawListAddCircleFilled(list, wx + startX / 2, sy + ImGui.GetTextLineHeight() / 2, radius, colour, 12)
+      local x, y = wx + startX / 2, sy + ImGui.GetTextLineHeight() / 2
+      if toneName == "paused" then
+        local ring = ImGui.GetColorU32(tone[1], tone[2], tone[3], tone[4])
+        ImGui.ImDrawListAddCircle(list, x, y, radius - 0.75 * k, ring, 12, 1.5 * k)
+      else
+        local colour = ImGui.GetColorU32(tone[1], tone[2], tone[3], (tone[4] or 1.0) * alpha)
+        ImGui.ImDrawListAddCircleFilled(list, x, y, radius, colour, 12)
+      end
     end)
     if not ok then why = "the draw-list call raised: " .. tostring(err) end
   end
@@ -595,9 +616,14 @@ end
 -- text colour, and how to answer it.
 local function drawLabelBody(which)
   local drawnTexts = {}
-  local function draw(colour, text)
+  -- 0.8.22: a line takes its type role's font scale (the answer hint and the notes are label role, 0.92; the rest body, 1).
+  local function draw(colour, text, role)
     drawnTexts[#drawnTexts + 1] = tostring(text)
-    colouredWrapped(colour, text)
+    if role and panel and panel.inRole then
+      panel.inRole(theme, role, function() colouredWrapped(colour, text) end)
+    else
+      colouredWrapped(colour, text)
+    end
   end
   local status = bridgeStatus()
   local muted = themeColour(which, "XfTextMuted", MUTED)
@@ -608,7 +634,7 @@ local function drawLabelBody(which)
   -- fit there does the text hang past the dot, as in 0.8.5.
   local startX = ImGui.GetCursorPosX()
   local hang = 0
-  if not statusDot(tone, startX) then
+  if not statusDot(status.tone, tone, startX) then
     ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
     ImGui.Bullet()
     ImGui.PopStyleColor(1)
@@ -621,7 +647,7 @@ local function drawLabelBody(which)
   local answered = state.answeredAsk
   local inkShows = (ask and state.inkAsk == ask.id) or (not ask and answered and state.inkAsk == answered.id)
   if inkShows then
-    draw(muted, ask and answerHint(ask) or ("Answered: " .. tostring(answered.label) .. "."))
+    draw(muted, ask and answerHint(ask) or ("Answered: " .. tostring(answered.label) .. "."), "label")
   else
     for _, message in ipairs(state.messages) do
       local isQuestion = ask and message.id == ask.id
@@ -629,14 +655,14 @@ local function drawLabelBody(which)
       draw(themeColour(which, token, MESSAGE_COLORS[message.level] or MESSAGE_COLORS.info), message.text)
     end
     if ask then
-      draw(muted, answerHint(ask))
+      draw(muted, answerHint(ask), "label")
     elseif answered then
-      draw(muted, "Answered: " .. tostring(answered.label) .. ".")
+      draw(muted, "Answered: " .. tostring(answered.label) .. ".", "label")
     end
   end
   -- 0.8 (the UI review): why the XF box isn't there.
   if state.info and type(state.info.overlay) == "table" and state.info.overlay.off_for_frame_generation then
-    draw(muted, "XF overlay is off while frame generation is on.")
+    draw(muted, "XF overlay is off while frame generation is on.", "label")
   end
   if hang > 0 then ImGui.Unindent(hang) end
   ImGui.PopTextWrapPos()
@@ -709,7 +735,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.13",
+  version = "0.8.22",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

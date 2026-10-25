@@ -318,6 +318,15 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseBool(value, config.overlayDiagnostics);
         }
+        else if (key == "overlay.motion")
+        {
+            const auto motion = Lower(value);
+            ok = motion == "auto" || motion == "reduced" || motion == "full";
+            if (ok)
+            {
+                config.overlayMotion = motion;
+            }
+        }
         else if (key == "log.level")
         {
             ok = ParseLevel(Lower(value), config.logLevel);
@@ -397,7 +406,7 @@ std::string DescribeConfig(const Config& aConfig)
     text += " ui.kill_key=" + killKey;
     text += " ui.question_sound=" + (aConfig.questionSound.empty() ? std::string("off") : aConfig.questionSound);
     text += " overlay.enabled=" + std::string(aConfig.overlayEnabled ? "true" : "false") + " overlay.theme=" + aConfig.overlayTheme +
-            " overlay.scale_percent=" + std::to_string(aConfig.overlayScalePercent) + " overlay.diagnostics=" + (aConfig.overlayDiagnostics ? "true" : "false");
+            " overlay.scale_percent=" + std::to_string(aConfig.overlayScalePercent) + " overlay.diagnostics=" + (aConfig.overlayDiagnostics ? "true" : "false") + " overlay.motion=" + aConfig.overlayMotion;
     text += " log.level=" + std::string(LevelName(aConfig.logLevel));
     text += " capture.root=" + (aConfig.captureRoot.empty() ? std::string("<default>") : std::string("<custom>"));
     return text;

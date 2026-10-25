@@ -293,6 +293,7 @@ void OverlayHost::NoteFrameGeneration(const std::vector<std::string>& aModules)
 {
     std::scoped_lock _(m_mutex);
     m_frameGeneration = aModules;
+    m_frameGenerationLoaded.store(!aModules.empty());
 }
 
 bool OverlayHost::OffForFrameGeneration() const
@@ -339,6 +340,14 @@ json OverlayHost::Snapshot(std::chrono::steady_clock::time_point aNow) const
              {"pass_through", m_passThrough.load()},
              {"resizes", m_resizes},
              {"frame_generation_modules", m_frameGeneration}};
+    {
+        // 0.8.22: the motion in force and why (the pulse and the settle stand still when it is reduced).
+        const auto motion = Motion();
+        out["motion"] = {{"setting", MotionSettingName(MotionSettingNow())},
+                         {"effective", motion.effective},
+                         {"reason", motion.reason},
+                         {"windows_animations", m_windowsAnimations.load()}};
+    }
     if (!m_missing.empty())
     {
         out["missing"] = m_missing;
