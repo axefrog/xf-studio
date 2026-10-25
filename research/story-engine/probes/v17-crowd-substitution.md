@@ -2,6 +2,8 @@
 
 A checklist for one of the runtime bridge's prepared game sessions. It tests route (a) of [V17](../runtime-requirements.md): a person from the game's crowd is replaced by an XF actor with the same look, which the Story Engine then runs on its own routine, and later dissolves back into the crowd. Route (b), adopting the game's own crowd body, and a stable identity key for community-spawned people are research questions queued with XF · Meta-coordinator, and are not tested here.
 
+**Status:** bridge 0.8.19 provides `npc.substitute` (lane-crowd walkers only; community people are refused with `community_npc`) and supervisor entries for up to 5 actors. These probes are on the bridge's test card as CRS1 to CRS15, under [Crowd substitution (0.8.19)](../../runtime/runtime-bridge-test-card.md#crowd-substitution-0819), with extras for the community refusal and for returns. They run in the session after Borg 4.
+
 **What the engine needs from it:** a simulated resident (P3 §3.5) can stand in for a passer-by the protagonist notices, keep the same look and identity afterwards, and act on the engine's routine without breaking the street's illusion.
 
 ## Set-up
