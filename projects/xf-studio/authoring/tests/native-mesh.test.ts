@@ -316,15 +316,18 @@ for (const [label, regions] of [
   });
   const withoutRegions = read(morphResource({ chunks, baseMesh: "base\\m\\head.mesh", targets: targets.map(({ faceRegion, ...target }) => target) }));
   expect(morphGeometry(model, null).glb).toEqual(morphGeometry(withoutRegions, null).glb);
-  // Re-encode through the unchanged production writer. It must not insert a region into an omitted entry, and its next write
+  // Re-encode through the unchanged production writer. EYES survives; NONE is omitted as the writer's default.
+  // It must not insert a region into an omitted entry, and its next write
   // must be byte-identical (the synthetic source builder intentionally uses different table/header conventions).
-  if (regions[0] === undefined) {
-    const encode = (value: unknown) => writeCr2wDocument(value, data => data);
-    const rewritten = encode(document);
-    const reread = readResourceJson(rewritten, fakeDecompress, { buffers: "base64" });
-    expect(Object.hasOwn((reread.Data.RootChunk as { targets: object[] }).targets[0]!, "faceRegion")).toBe(false);
-    expect(encode(reread)).toEqual(rewritten);
-  }
+  const encode = (value: unknown) => writeCr2wDocument(value, data => data);
+  const rewritten = encode(document);
+  const reread = readResourceJson(rewritten, fakeDecompress, { buffers: "base64" });
+  const rewrittenEntries = (reread.Data.RootChunk as { targets: Record<string, unknown>[] }).targets;
+  rewrittenEntries.forEach((entry, i) => {
+    expect(Object.hasOwn(entry, "faceRegion")).toBe(regions[i] === "FACE_REGION_EYES");
+    if (regions[i] === "FACE_REGION_EYES") expect(entry.faceRegion).toBe("FACE_REGION_EYES");
+  });
+  expect(encode(reread)).toEqual(rewritten);
 });
 
 test("a morph target becomes WolvenKit's GLB: sparse deltas, first mapping wins, padding and empty mappings, joints from the base mesh", () => {
