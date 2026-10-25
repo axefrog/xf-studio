@@ -1,0 +1,35 @@
+{
+ "version": 1,
+ "seed": "m3-blind-1",
+ "n": 24,
+ "raters": 4,
+ "a3Rule": "rated-v1",
+ "a4States": [
+  "S-early-quiet",
+  "S-mid-squeezed",
+  "S-mid-crackdown",
+  "S-late-wary"
+ ],
+ "runs": [
+  {
+   "file": "A1-restless-early.json",
+   "name": "w-early",
+   "hash": "30a27933aa29868cd6a38ad9bfc84eda"
+  },
+  {
+   "file": "A1-restless-mid.json",
+   "name": "w-mid",
+   "hash": "62cecf1a930ba1624794e7655a16ab16"
+  },
+  {
+   "file": "E-restless-early.json",
+   "name": "w-early",
+   "hash": "89ecc8e97bc572dd94715ec31defed40"
+  },
+  {
+   "file": "E-restless-mid.json",
+   "name": "w-mid",
+   "hash": "db84811e179d00ff227e35ccb113620a"
+  }
+ ]
+}

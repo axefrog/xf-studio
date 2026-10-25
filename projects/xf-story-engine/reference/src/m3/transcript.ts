@@ -76,6 +76,13 @@ export interface RunRecord {
   hash: string;
 }
 
+/** The hash a record carries: over everything but the hash itself, so a stored record can be checked after a round trip through JSON. */
+const bodyHash = (body: Omit<RunRecord, 'hash'>): string => H(s('m3-record'), hrec(body as unknown as Record<string, unknown>));
+export const recordHash = (r: RunRecord): string => {
+  const { hash: _hash, ...body } = r;
+  return bodyHash(body);
+};
+
 /** The machine-readable record of a run: what was shown, what was sown and why, and a hash of all of it. */
 export function recordOf(run: Run): RunRecord {
   const l2 = run.w.l2;
@@ -94,7 +101,7 @@ export function recordOf(run: Run): RunRecord {
     version: 1 as const, name: run.opts.name, state: run.state.id, windows: run.windowNo, play: run.play, layer3: !!run.w.l3,
     tempo: run.w.sim.k.settings.current().tempo, policy: run.policy.id, deliveries: run.deliveries, instances, decisions,
   };
-  return { ...body, hash: H(s('m3-record'), hrec(body as unknown as Record<string, unknown>)) };
+  return { ...body, hash: bodyHash(body) };
 }
 
 /** The deliveries layer 3 sowed (not the authored seed's own): the hooks of a run. */

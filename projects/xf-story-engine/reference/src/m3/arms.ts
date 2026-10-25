@@ -56,49 +56,91 @@ function nearCells(sim: Sim, cell: Id): Id[][] {
 
 export interface Radiant { template: string; text: string; names: string[] }
 
+/**
+ * Which slot rule fills a job.
+ * - `declared`: dossier 23 5.4.1, the rule for every run from now on. Each slot takes the nearest eligible resident or place:
+ *   residents of V's own block first, then the blocks next to it, then those two steps away, the first eligible by the slot's
+ *   role class; ties go to the smaller identifier. Places are ordered the same way (ring, then service identifier) and the
+ *   second place of an escort is the next distinct one.
+ * - `rated-v1`: the rule the rated M3 packet was built with, frozen so that packet rebuilds byte for byte. It differs from the
+ *   declaration: a keyed draw among the first four of the nearest ring stands in for "the first, ties by identifier", and the
+ *   places pool every ring and then the whole district before the draw. It is a recorded deviation of the rated run (results.md,
+ *   dossier 23 5.4.1), not a second definition of A3.
+ */
+export type SlotRule = 'declared' | 'rated-v1';
+
 /** One A3 job for the draw `n` of the run `key`, around V at `cellName`. Returns undefined if no template can be filled. */
-export function radiantJob(world: M3World, nameOf: (id: Id) => string, key: string, n: number, cellName = 'g1'): Radiant | undefined {
+export function radiantJob(world: M3World, nameOf: (id: Id) => string, key: string, n: number, cellName = 'g1', rule: SlotRule = 'declared'): Radiant | undefined {
   const sim = world.sim;
   const cell = sim.w.index.names![cellName]!;
   const rings = nearCells(sim, cell);
   const draw = (tag: string, ...rest: number[]): number => rand(hs('m3-a3'), hs(key), hi(n), hs(tag), ...rest.map(hi));
-  // residents and venues by distance, each ring in identifier order
-  const people = (pred: (role: string, ageBand: number) => boolean): Array<{ id: Id; role: string }> => {
+  type Person = { id: Id; role: string };
+  // residents by distance, each ring in identifier order: the nearest ring with an eligible resident, minus anyone in `not`
+  const people = (pred: (role: string, ageBand: number) => boolean, not: Id[] = []): Person[] => {
     for (const ring of rings) {
-      const found: Array<{ id: Id; role: string }> = [];
+      const found: Person[] = [];
       for (const c of ring) for (const r of sim.people.residentsOfBlock(c)) {
         const v = sim.people.view(r);
-        if (v && v.aband >= 1 && pred(v.role, v.aband) && nameOf(r)) found.push({ id: r, role: v.role });
+        if (v && v.aband >= 1 && pred(v.role, v.aband) && nameOf(r) && !not.includes(r)) found.push({ id: r, role: v.role });
       }
       if (found.length) return found.sort((a, b) => (a.id < b.id ? -1 : 1));
     }
     return [];
   };
-  const venues = (): string[] => {
-    const out: string[] = [];
-    for (const ring of rings) for (const c of ring) for (const sv of sim.w.index.cells[c]!.services) out.push(sv.type);
-    for (const c of sim.w.districts[0]!.cellIds) for (const sv of sim.w.index.cells[c]!.services) out.push(sv.type);
-    return out;
-  };
-  const places = [...new Set(venues())].map((t) => PLACE_WORD[t]).filter((x): x is string => x !== undefined);
+  const otherPred = (x: Template) => (role: string): boolean => (x.other === 'gang' ? role === 'gang' : true);
   const clients = people((role) => CLIENT_ROLES.has(role));
-  const eligible = TEMPLATES.filter((t) => clients.length > 0 && (!t.other || people((role) => (t.other === 'gang' ? role === 'gang' : true)).length > 0) && (!t.needs.includes('place') || places.length > 0) && (!t.needs.includes('place2') || places.length > 1));
-  if (eligible.length === 0) return undefined;
-  const t = eligible[Math.floor(draw('template') * eligible.length)]!;
-  // slots: the nearest eligible, the first of the ring after a keyed pick among its first four
-  const pick = <T,>(list: T[], tag: string): T => list[Math.floor(draw(tag) * Math.min(4, list.length))]!;
-  const client = pick(clients, 'client');
+  let t: Template;
+  let client: Person;
+  let other: Person | undefined;
+  let place: string | undefined, place2: string | undefined;
+  if (rule === 'declared') {
+    // venues by distance (ring, then service identifier), each kind of place once, at its nearest
+    const places: string[] = [];
+    for (const ring of rings) {
+      const svcs = ring.flatMap((c) => sim.w.index.cells[c]!.services).sort((a, b) => (a.id < b.id ? -1 : 1));
+      for (const sv of svcs) {
+        const word = PLACE_WORD[sv.type];
+        if (word !== undefined && !places.includes(word)) places.push(word);
+      }
+    }
+    if (clients.length === 0) return undefined;
+    client = clients[0]!;
+    const eligible = TEMPLATES.filter((x) => (!x.other || people(otherPred(x), [client.id]).length > 0) && (!x.needs.includes('place') || places.length > 0) && (!x.needs.includes('place2') || places.length > 1));
+    if (eligible.length === 0) return undefined;
+    t = eligible[Math.floor(draw('template') * eligible.length)]!;
+    if (t.needs.includes('other')) other = people(otherPred(t), [client.id])[0]!;
+    place = places[0];
+    place2 = places[1];
+  } else {
+    const venues = (): string[] => {
+      const out: string[] = [];
+      for (const ring of rings) for (const c of ring) for (const sv of sim.w.index.cells[c]!.services) out.push(sv.type);
+      for (const c of sim.w.districts[0]!.cellIds) for (const sv of sim.w.index.cells[c]!.services) out.push(sv.type);
+      return out;
+    };
+    const places = [...new Set(venues())].map((x) => PLACE_WORD[x]).filter((x): x is string => x !== undefined);
+    const eligible = TEMPLATES.filter((x) => clients.length > 0 && (!x.other || people(otherPred(x)).length > 0) && (!x.needs.includes('place') || places.length > 0) && (!x.needs.includes('place2') || places.length > 1));
+    if (eligible.length === 0) return undefined;
+    t = eligible[Math.floor(draw('template') * eligible.length)]!;
+    const pick = <T,>(list: T[], tag: string): T => list[Math.floor(draw(tag) * Math.min(4, list.length))]!;
+    client = pick(clients, 'client');
+    if (t.needs.includes('other')) {
+      const others = people(otherPred(t)).filter((p) => p.id !== client.id);
+      other = pick(others.length ? others : clients.filter((p) => p.id !== client.id), 'other');
+    }
+    if (t.needs.includes('place')) place = pick(places, 'place');
+    if (t.needs.includes('place2')) place2 = pick(places.filter((p) => p !== place), 'place2');
+  }
   const slots: Record<string, string> = { client: nameOf(client.id), clientRole: ROLE_WORD[client.role] ?? client.role };
   const names = [slots.client!];
-  if (t.needs.includes('other')) {
-    const others = people((role) => (t.other === 'gang' ? role === 'gang' : true)).filter((p) => p.id !== client.id);
-    const other = pick(others.length ? others : clients.filter((p) => p.id !== client.id), 'other');
+  if (other) {
     slots.other = nameOf(other.id);
     slots.otherRole = ROLE_WORD[other.role] ?? other.role;
     names.push(slots.other);
   }
-  if (t.needs.includes('place')) slots.place = pick(places, 'place');
-  if (t.needs.includes('place2')) slots.place2 = pick(places.filter((p) => p !== slots.place), 'place2');
+  if (t.needs.includes('place')) slots.place = place!;
+  if (t.needs.includes('place2')) slots.place2 = place2!;
   if (t.needs.includes('item')) slots.item = ITEMS[Math.floor(draw('item') * ITEMS.length)]!;
   const price = sim.reads.eval('priceLevel', ['wat_kab']);
   slots.reward = String(Math.round(REWARD[t.tier] * (price === 'dear' ? 1.2 : price === 'cheap' ? 0.8 : 1)));
