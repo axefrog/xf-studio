@@ -50,22 +50,30 @@ test("B3-1. the recorder's tap, face and UI coverage samples are enveloped, so t
   expect(source("native", "src", "core", "Recording.cpp")).toContain('{"message", std::string(e.what()).substr(0, 200)}');
 });
 
-test("B3-7. a catch-up channel count reconciles with its list: invalid, coalesced and listed records are told apart", async () => {
+test("B3-7. every record of a catch-up channel has one disposition: invalid, filtered, summarised, coalesced or listed", async () => {
   const rows: Array<{ channel: string; valid: boolean; data: Json }> = [];
   for (let i = 0; i < 40; i++) rows.push({ channel: "ui", valid: false, data: { error: "failed" } });
   for (let i = 0; i < 6; i++) rows.push({ channel: "ui", valid: true, data: { reason: i === 0 ? "change" : "heartbeat", hud: {} } });
   for (let i = 0; i < 30; i++) rows.push({ channel: "ui", valid: true, data: { event: "ui.consumer", consumer: `c${i}` } });
   for (let i = 0; i < 10; i++) rows.push({ channel: "v", valid: true, data: { position: [i, 0, 0], vitals: { health: 100, in_combat: false }, heat: "0", vehicle: { mounted: false }, busy: "" } });
+  rows.push({ channel: "v", valid: true, data: null as unknown as Json });
+  // Supervisor receipts: one kept, one seen twice (filtered), one with no identity (filtered), a coverage heartbeat (listed).
+  const receipt = (extra: Json) => ({ channel: "supervisor", valid: true, data: { event: "supervisor.violation", world_generation: 2, source_s: 1, ...extra } });
+  rows.push(receipt({ receipt_seq: 1 }), receipt({ receipt_seq: 1 }), receipt({}), { channel: "supervisor", valid: true, data: { event: "supervisor.coverage" } });
   const page = await catchUp(recorder(rows, { invalid: 40 }), { run: 1 });
-  // The count is every record read (as before) ...
   expect(page.counts.ui).toBe(76);
-  // ... and the detail says where each went.
-  expect(page.count_detail.ui).toEqual({ records: 76, invalid: 40, coalesced: 6, listed: 30, omitted: 6, shown: 24, valid: 36 });
-  expect(page.count_detail.ui.invalid + page.count_detail.ui.coalesced + page.count_detail.ui.listed).toBe(page.counts.ui);
+  expect(page.count_detail.ui).toEqual({ records: 76, invalid: 40, filtered: 0, summarised: 0, coalesced: 6, listed: 30, omitted: 6, shown: 24, valid: 36 });
+  expect(page.count_detail.v).toEqual({ records: 11, invalid: 0, filtered: 1, summarised: 10, coalesced: 0, listed: 0, omitted: 0, shown: 0, valid: 11 });
+  expect(page.count_detail.supervisor).toMatchObject({ records: 4, invalid: 0, filtered: 2, summarised: 0, coalesced: 0, listed: 2 });
   expect(page.channels.ui.length + page.omitted.ui).toBe(page.count_detail.ui.listed);
   expect(page.channels.ui_latest.reason).toBe("heartbeat");
-  expect(page.count_detail.v).toMatchObject({ records: 10, invalid: 0, listed: 0, coalesced: 0 });
-  // Detail mode lists everything: nothing omitted.
+  // The invariant, for every channel the page read: nothing is counted that has no disposition, and omitted is a part of listed.
+  for (const [channel, d] of Object.entries<Json>(page.count_detail)) {
+    expect(d.records, channel).toBe(d.invalid + d.filtered + d.summarised + d.coalesced + d.listed);
+    expect(d.records, channel).toBe(page.counts[channel]);
+    expect(d.omitted, channel).toBeLessThanOrEqual(d.listed);
+    expect(d.shown + d.omitted, channel).toBe(d.listed);
+  }
   const detailed = await catchUp(recorder(rows, { invalid: 40 }), { run: 1, detail: true });
   expect(detailed.count_detail.ui).toMatchObject({ omitted: 0, shown: 30 });
   expect(detailed.invalid_channels).toEqual(["ui"]);
@@ -108,7 +116,7 @@ test("B3-3. phone.call: ring_s reaches the game's HUD ring timer, auto_answer is
   expect(wrap).toContain("this.m_TimeoutPeroid = ring;");
   expect(wrap.indexOf("wrappedMethod();")).toBeGreaterThan(wrap.indexOf("this.m_TimeoutPeroid = ring;"));
   expect(wrap.indexOf("this.m_TimeoutPeroid = kept;")).toBeGreaterThan(wrap.indexOf("wrappedMethod();"));
-  expect(dm).toContain("registry.SetCallRing(ringS);");
+  expect(dm).toContain("registry.BeginCall(contact, ringS);");
   expect(dm).toContain("public static func Ring(cid: String, contact: String, mode: String, rejectable: Bool, ringS: Float)");
   // Answering is the HUD's own PickupPhoneRequest for the owned, ringing call; nothing is pressed.
   const answer = dm.slice(dm.indexOf("public static func Answer("), dm.indexOf("public static func Start("));
@@ -158,4 +166,34 @@ test("B3-6. a call line with no speaker is spoken by the contact's localised nam
   expect(core).not.toMatch(/out\.speaker = request\.contact;/);
   const catalogue = source("tools", "api", "catalogue080dm.ts");
   expect(catalogue).toContain("default the contact's name as the phone shows it");
+});
+
+test("R1. the bridge's auto-answer pickup is checked again, right before the phone consumes it", () => {
+  const dm = source("redscript-dm", "XFRuntimeBridgeDm.reds");
+  // Every change of the owned call is a new generation: a new ring (also the same contact again), a clear, a kill.
+  const registry = dm.slice(dm.indexOf("public func SetCallContact("), dm.indexOf("public func CallGeneration()"));
+  expect(registry).toContain("if NotEquals(this.m_callContact, contact) { this.m_callGen += 1; }");
+  expect(registry).toMatch(/public func BeginCall\(contact: String, seconds: Float\) -> Void \{[^}]*this\.m_callGen \+= 1;/);
+  // The pickup is tagged with the generation it answers.
+  const answer = dm.slice(dm.indexOf("public static func Answer("), dm.indexOf("public static func Start("));
+  expect(answer).toContain("pickup.xfsDmGeneration = registry.CallGeneration();");
+  expect(answer.indexOf("pickup.xfsDmGeneration")).toBeLessThan(answer.indexOf("phone.QueueRequest(pickup)"));
+  // The consumer: untagged pickups go straight to the game; a tagged one runs only while live, owned, current and ringing.
+  expect(dm).toContain("@addField(PickupPhoneRequest)\npublic let xfsDmGeneration: Int32;");
+  const wrap = dm.slice(dm.indexOf("@wrapMethod(PhoneSystem)\nprivate final func OnPickupPhone("), dm.indexOf("@wrapMethod(PhoneSystem)\nprivate final func TriggerCall("));
+  expect(wrap).toContain("if request.xfsDmGeneration <= 0 {\n    wrappedMethod(request);\n    return;\n  }");
+  for (const gate of [
+    "XFBridge_Live()",
+    "Equals(registry.CallContact(), contact)",
+    "registry.CallGeneration() == request.xfsDmGeneration",
+    "this.m_LastCallInformation.callPhase, questPhoneCallPhase.IncomingCall",
+    "Equals(this.m_LastCallInformation.contactName, request.CallInformation.contactName)",
+  ]) expect(wrap, gate).toContain(gate);
+  // The tagged pickup that fails any gate returns without reaching the game's handler; wrappedMethod is called once, after the gate.
+  expect(wrap.match(/wrappedMethod\(request\)/g)?.length).toBe(2);
+  expect(wrap.indexOf("if !ringing {")).toBeLessThan(wrap.lastIndexOf("wrappedMethod(request)"));
+  expect(wrap.slice(wrap.indexOf("if !ringing {"), wrap.lastIndexOf("wrappedMethod(request)"))).toContain("return;");
+  // The kill switch, an end and every vanilla supersession clear the owned contact, which is what makes the tag stale.
+  expect(dm).toContain("if IsDefined(registry) && !owned { registry.SetCallContact(\"\"); }");
+  expect(dm).toContain("if StrLen(call) > 0 { ended = XFDmPhone.End(cid, call); }");
 });

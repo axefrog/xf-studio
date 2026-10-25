@@ -232,9 +232,14 @@ Character.xfs_actor_man_masked_reactive:
 # personalities/base_values.tweak:25-31, attitude/attitudes.tweak:682-686, 1346-1351 and 1374-1379; AMM Modules/util.lua:1156-1168.
 #   $base                  scavenger_grunt1_melee1_fists_ma: the weakest melee archetype (tier 1, rarity Normal, bare fists,
 #                          Items.Npc_fists_ma), the slowest and safest first fixture; scavenger_grunt1_ranged1_slaughtomatic_ma:
-#                          the tier-1 handgun grunt of the same gang (it deals chemical damage). The Scavengers' attitude group
-#                          is Neutral towards V by default and Hostile only to the Maelstrom, so a spawn picks no fight with
-#                          anyone else, and npc.spawn sets its attitude towards V.
+#                          the tier-1 handgun grunt of the same gang (it deals chemical damage).
+#   baseAttitudeGroup      xfs_fighter, the isolated group defined below, NOT the Scavengers' own group: that one is Hostile to
+#                          the Maelstrom (attitudes.tweak:1374-1379), so a fighter that kept it would fight any Maelstrom NPC
+#                          near V, a real fight in the world that despawning the fighter cannot undo (found by the review of
+#                          bridge 0.8.18). Hostility towards V is the directed attitude npc.spawn sets on each actor.
+#   squadParamsID          the generic street squad (the one generic_street_base grunts use), not the Scavengers' squad, so a
+#                          fighter shares no squad behaviour with real Scavengers near it [hypothesis: squad params are
+#                          behaviour, not membership; a spawned actor has no community squad either way]
 #   isCrowd: false         a full AI puppet, as the civilian casts (a gang record is not a crowd one already)
 #   entityTemplatePath     the base game's own Scavenger template, as the base game's debug and quest records name it
 #                          (gameplay.tweak:989, street_stories/sts_wat_kab_101.tweak), so no clone needs Phantom Liberty: the
@@ -247,9 +252,27 @@ Character.xfs_actor_man_masked_reactive:
 #   savable: false         never saved
 # Not changed: the reaction preset (the gang's own is part of what makes it fight, so there is no _reactive twin); god mode is
 # set by npc.spawn at spawn, as for the civilians.
+#
+# The isolated attitude group. AttitudeGroup records carry a name, an optional parent, and the attitude a group has towards any
+# group it has no explicit relation to (defaultAttitude, Friendly in the schema) and towards itself (attitudeToSelf)
+# [resource: attitude/schema.tweak]; a pair's Hostile value only ever comes from an explicit Attitude record (the Scavenger and
+# Maelstrom one is the only hostile pair the Scavengers have). This group has no parent (so it inherits no relations), no
+# Attitude record of its own, and a Neutral default, so it is neutral to every other group; fighters are friendly to each other
+# (attitudeToSelf). Shared vanilla relations are not touched by this file. What the group does not prevent: the aggressive reaction
+# preset can still turn a fighter hostile to whoever fires near it, as for any gang NPC (the game's own TryChangingAttitudeToHostile,
+# which changes the pair of this group and theirs, never a pair of vanilla groups) [source: aiActionHelper.script:190-215].
+Attitudes.Group_XFSFighter:
+  $type: gamedataAttitudeGroup_Record
+  name: xfs_fighter
+  isState: false
+  defaultAttitude: Neutral
+  attitudeToSelf: Friendly
+
 Character.xfs_actor_fighter_melee:
   $base: Character.scavenger_grunt1_melee1_fists_ma
   isCrowd: false
+  baseAttitudeGroup: xfs_fighter
+  squadParamsID: FactionSquads.GenericSquad
   entityTemplatePath: 'base\characters\entities\gang\gang__scavenger_ma.ent'
   affiliation: Factions.Unaffiliated
   priority: SpawnableObjectPriority.Regular
@@ -261,6 +284,8 @@ Character.xfs_actor_fighter_melee:
 Character.xfs_actor_fighter_pistol:
   $base: Character.scavenger_grunt1_ranged1_slaughtomatic_ma
   isCrowd: false
+  baseAttitudeGroup: xfs_fighter
+  squadParamsID: FactionSquads.GenericSquad
   entityTemplatePath: 'base\characters\entities\gang\gang__scavenger_ma.ent'
   affiliation: Factions.Unaffiliated
   priority: SpawnableObjectPriority.Regular

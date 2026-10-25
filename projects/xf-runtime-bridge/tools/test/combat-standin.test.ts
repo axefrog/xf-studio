@@ -19,6 +19,54 @@ const FIGHTERS = ["fighter_melee", "fighter_pistol"] as const;
 const yaml = (Bun as Any).YAML.parse(readFileSync(join(projectDir, "tweaks", "test-profile", "xf_npc_actors.yaml"), "utf8"));
 const npcSource = readFileSync(join(projectDir, "native", "src", "core", "Npc.cpp"), "utf8");
 
+describe("0.8.18 combat stand-ins: isolation from the world's factions (review)", () => {
+  test("the fighters are in their own attitude group, which has no parent, no hostile pair and a neutral default", () => {
+    const group = yaml["Attitudes.Group_XFSFighter"];
+    expect(group).toBeDefined();
+    expect(group.$type).toBe("gamedataAttitudeGroup_Record");
+    expect(group.name).toBe("xfs_fighter");
+    expect(group.parent).toBeUndefined(); // a parent would bring its relations
+    expect(group.defaultAttitude).toBe("Neutral"); // towards every group it has no explicit relation to
+    expect(group.attitudeToSelf).toBe("Friendly");
+    for (const cast of FIGHTERS) {
+      const record = yaml[`Character.xfs_actor_${cast}`];
+      expect(record.baseAttitudeGroup).toBe("xfs_fighter"); // never the Scavengers' own, which is hostile to the Maelstrom
+      expect(record.squadParamsID).toBe("FactionSquads.GenericSquad");
+      expect(JSON.stringify(record)).not.toMatch(/scavenger"|ScavengersSquad/);
+    }
+  });
+
+  test("the file writes no relation between groups and touches no vanilla attitude record", () => {
+    const keys = Object.keys(yaml);
+    // The only Attitudes.* key is the new group; no Attitude record (a pair's relation) of any kind, no vanilla group edited.
+    expect(keys.filter((k) => k.startsWith("Attitudes."))).toEqual(["Attitudes.Group_XFSFighter"]);
+    for (const [key, value] of Object.entries<Any>(yaml)) {
+      if (value && typeof value === "object") expect(value.$type, key).not.toBe("gamedataAttitude_Record");
+    }
+    const text = readFileSync(join(projectDir, "tweaks", "test-profile", "xf_npc_actors.yaml"), "utf8");
+    expect(text).not.toMatch(/^\s*group[12]:/m);
+    // The bridge never writes a group relation either (SetAttitudeRelation and its persistent variants change the world's groups).
+    for (const file of ["XFRuntimeBridgeNpc.reds", "XFRuntimeBridgeDm.reds"]) {
+      const src = readFileSync(join(projectDir, file.includes("Dm") ? "redscript-dm" : "redscript", file), "utf8");
+      expect(src, file).not.toMatch(/SetAttitudeRelation|SetAttitudeGroupRelation|SetAttitudeTowardsAgentGroup/);
+    }
+  });
+
+  test("a fighter is checked against the live attitude system when it appears, and moved to the plain neutral group if it is not isolated", () => {
+    const reds = readFileSync(join(projectDir, "redscript", "XFRuntimeBridgeNpc.reds"), "utf8");
+    const isolate = reds.slice(reds.indexOf("public static func Isolate("), reds.indexOf("public static func Prepare("));
+    expect(isolate).toContain('Equals(group, n"xfs_fighter")');
+    expect(isolate).toContain("attitudes.GetAttitudeRelation(group, other)");
+    for (const group of ["maelstrom", "scavenger", "police", "civilian"]) expect(isolate, group).toContain(`n"${group}"`);
+    expect(isolate).toContain('agent.SetAttitudeGroup(n"neutral");');
+    expect(isolate).toContain("XFBridgeLog.Warn");
+    // It runs for fighters before the directed attitude towards V is set.
+    const prepare = reds.slice(reds.indexOf("public static func Prepare("));
+    expect(prepare.indexOf('if StrContains(entry.record, "xfs_actor_fighter_") { XFNpc.Isolate(entry, puppet); }')).toBeGreaterThan(-1);
+    expect(prepare.indexOf("XFNpc.Isolate(entry, puppet)")).toBeLessThan(prepare.indexOf("agent.SetAttitudeTowards(player.GetAttitudeAgent(), stance);"));
+  });
+});
+
 describe("0.8.18 combat stand-ins: the records", () => {
   test("each fighter cast has a TweakXL clone of a street-gang grunt (not a crowd record), on the base game's gang template", () => {
     for (const cast of FIGHTERS) {

@@ -60,6 +60,7 @@ public class XFDmRegistry extends ScriptableSystem {
   private let m_lines: array<Int32>;
   private let m_callContact: String;
   private let m_callRingS: Float;
+  private let m_callGen: Int32;
   private let m_warning: String;
   private let m_onscreen: String;
 
@@ -180,15 +181,26 @@ public class XFDmRegistry extends ScriptableSystem {
     ArrayClear(this.m_lines);
   }
 
+  // 0.8.18: every change of the owned call (a new ring, the contact cleared by an end, a kill, a cancellation or a vanilla call
+  // taking over) is a new generation; a pickup the bridge queued carries the generation it was queued for and is dropped by the
+  // PhoneSystem.OnPickupPhone wrap below unless it is still the current one.
   public func SetCallContact(contact: String) -> Void {
+    if NotEquals(this.m_callContact, contact) { this.m_callGen += 1; }
     this.m_callContact = contact;
     if StrLen(contact) == 0 { this.m_callRingS = 0.0; }
   }
 
-  // 0.8.18 (Borg 3): how long the bridge wants the owned call to ring; 0 when none is owned. The game's HUD phone ends a ring
-  // after its own timeout (about 8 s) whatever the request says, so the HUD wrap below lends its timer this value.
-  public func SetCallRing(seconds: Float) -> Void {
+  // A new owned call: its contact, a fresh generation (also when the same contact rings again) and how long it may ring. 0.8.18
+  // (Borg 3): the game's HUD phone ends a ring after its own timeout (about 8 s) whatever the request says, so the HUD wrap below
+  // lends its timer the asked ring time.
+  public func BeginCall(contact: String, seconds: Float) -> Void {
+    this.m_callContact = contact;
+    this.m_callGen += 1;
     this.m_callRingS = seconds;
+  }
+
+  public func CallGeneration() -> Int32 {
+    return this.m_callGen;
   }
 
   public func CallRing() -> Float {
@@ -1117,6 +1129,32 @@ private final func OnTriggerCall(request: ref<questTriggerCallRequest>) -> Void 
   if IsDefined(registry) && Equals(request.callPhase, questPhoneCallPhase.EndCall) { registry.SetCallContact(""); }
 }
 
+// 0.8.18 (review): the bridge's own pickup (Answer above) is checked again at the moment the phone consumes it. Queued requests
+// run later, and the call it was queued for may be gone: a kill or an end cleared the ownership, a vanilla quest call replaced
+// ours, or the same contact rings again as a different call. Ordinary pickups (the player's key, a quest's) have no tag and pass
+// straight through to the game's own handler.
+@addField(PickupPhoneRequest)
+public let xfsDmGeneration: Int32;
+
+@wrapMethod(PhoneSystem)
+private final func OnPickupPhone(request: ref<PickupPhoneRequest>) -> Void {
+  if request.xfsDmGeneration <= 0 {
+    wrappedMethod(request);
+    return;
+  }
+  let registry = XFDmRegistry.Get();
+  let contact = NameToString(request.CallInformation.contactName);
+  let live = XFBridge_Live();
+  let owned = live && IsDefined(registry) && Equals(registry.CallContact(), contact);
+  let current = owned && registry.CallGeneration() == request.xfsDmGeneration;
+  let ringing = current && Equals(this.m_LastCallInformation.callPhase, questPhoneCallPhase.IncomingCall) && Equals(this.m_LastCallInformation.contactName, request.CallInformation.contactName);
+  if !ringing {
+    XFBridgeLog.Info("dm-phone", "a bridge pickup for " + contact + " was dropped (live " + XFJson.Flag(live) + ", owned " + XFJson.Flag(owned) + ", current generation " + XFJson.Flag(current) + ", ringing " + XFJson.Flag(ringing) + ")");
+    return;
+  }
+  wrappedMethod(request);
+}
+
 @wrapMethod(PhoneSystem)
 private final func TriggerCall(callMode: questPhoneCallMode, isAudio: Bool, contactName: CName, isPlayerCalling: Bool, callPhase: questPhoneCallPhase, isPlayerTriggered: Bool, opt isRejectable: Bool, showAvatar: Bool, callVisuals: questPhoneCallVisuals) -> Void {
   if !XFBridge_Live() {
@@ -1249,8 +1287,7 @@ public abstract class XFDmPhone {
     phone.QueueRequest(XFDmPhone.Request(contact, questPhoneCallPhase.IncomingCall, mode, rejectable));
     let registry = XFDmRegistry.Get();
     if IsDefined(registry) {
-      registry.SetCallContact(contact);
-      registry.SetCallRing(ringS);
+      registry.BeginCall(contact, ringS);
     }
     XFBridgeLog.Info(cid, "dm call ringing from " + contact + " (" + mode + ", rings up to " + FloatToString(ringS) + " s)");
     return "{\"ok\":true}";
@@ -1277,6 +1314,9 @@ public abstract class XFDmPhone {
     let pickup = new PickupPhoneRequest();
     pickup.CallInformation = current;
     pickup.shouldBeRejected = false;
+    // Tagged with the generation of the call it answers: the OnPickupPhone wrap below consumes it only while that call is still
+    // the owned, ringing one (a kill, a cancellation, a vanilla call or a replacement ring from the same contact make it stale).
+    pickup.xfsDmGeneration = registry.CallGeneration();
     phone.QueueRequest(pickup);
     XFBridgeLog.Info(cid, "dm call from " + contact + " answered by the bridge (the phone's own pickup)");
     return "{\"ok\":true}";

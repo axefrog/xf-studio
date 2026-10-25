@@ -908,9 +908,41 @@ public abstract class XFNpc {
 
   // An actor's first moment in the world: its attitude towards V (friendly by default, as AMM's Director sets its actors;
   // V15: neutral or hostile) and, unless it was spawned mortal, god mode; both go with it.
+  // 0.8.18 (review): a combat stand-in must not be hostile to anyone but V. Its record puts it in the isolated attitude group
+  // xfs_fighter (tweaks/test-profile/xf_npc_actors.yaml), whose only hostile pair is none; this checks that the group took
+  // (a record or group missing from TweakDB would leave the Scavengers' own group, hostile to the Maelstrom) and that the
+  // group is not hostile to the common gangs, police and civilians, and otherwise moves the actor to the plain neutral
+  // group every ordinary NPC starts in. It only reads the attitude system; no shared relation is ever written.
+  public static func Isolate(entry: ref<XFNpcEntry>, puppet: ref<ScriptedPuppet>) -> Void {
+    let agent = puppet.GetAttitudeAgent();
+    if !IsDefined(agent) { return; }
+    let group = agent.GetAttitudeGroup();
+    let isolated = Equals(group, n"xfs_fighter");
+    let hostileTo = "";
+    if isolated {
+      let attitudes = GameInstance.GetAttitudeSystem(GetGameInstance());
+      let others: array<CName>;
+      ArrayPush(others, n"maelstrom"); ArrayPush(others, n"scavenger"); ArrayPush(others, n"tygerClaws"); ArrayPush(others, n"valentinos");
+      ArrayPush(others, n"animals"); ArrayPush(others, n"6thStreet"); ArrayPush(others, n"wraiths"); ArrayPush(others, n"voodooBoys");
+      ArrayPush(others, n"police"); ArrayPush(others, n"civilian"); ArrayPush(others, n"neutral");
+      if IsDefined(attitudes) {
+        for other in others {
+          if Equals(attitudes.GetAttitudeRelation(group, other), EAIAttitude.AIA_Hostile) { hostileTo += NameToString(other) + " "; }
+        }
+      }
+    }
+    if isolated && StrLen(hostileTo) == 0 {
+      XFBridgeLog.Info("npc-attitude", entry.who + " is in the isolated group xfs_fighter, hostile to none of the common groups");
+      return;
+    }
+    agent.SetAttitudeGroup(n"neutral");
+    XFBridgeLog.Warn("npc-attitude", entry.who + " was not isolated (group " + NameToString(group) + ", hostile to: " + hostileTo + "): moved to the plain neutral group");
+  }
+
   public static func Prepare(entry: ref<XFNpcEntry>, puppet: ref<ScriptedPuppet>) -> Void {
     let player = XFPlayer.Player();
     let agent = puppet.GetAttitudeAgent();
+    if StrContains(entry.record, "xfs_actor_fighter_") { XFNpc.Isolate(entry, puppet); }
     if IsDefined(agent) && IsDefined(player) {
       let stance = EAIAttitude.AIA_Friendly;
       if entry.attitude == 1 {

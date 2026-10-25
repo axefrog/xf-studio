@@ -120,9 +120,12 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   const invalidChannels = new Set<string>();
   // 0.8.18 (Borg 3): counts[channel] is every record read, but the lists show only valid event records (invalid rows are
   // counted, polled snapshots are coalesced into <channel>_latest), so a channel's count and its list disagreed (237 against
-  // 22). The detail says where each record went: records = invalid + coalesced + listed (+ omitted from the compact list).
-  const where: Record<string, { records: number; invalid: number; coalesced: number; listed: number }> = {};
-  const track = (channel: string) => where[channel] ??= { records: 0, invalid: 0, coalesced: 0, listed: 0 };
+  // 22). The detail says where each record went; every record has exactly one disposition:
+  // records = invalid + filtered + summarised + coalesced + listed, and the compact list's omitted records are a subset of listed.
+  // filtered: a valid record that was dropped on purpose (a supervisor receipt out of this run's scope or already seen);
+  // summarised: a V sample, which feeds the path, health and change figures and is never listed.
+  const where: Record<string, { records: number; invalid: number; filtered: number; summarised: number; coalesced: number; listed: number }> = {};
+  const track = (channel: string) => where[channel] ??= { records: 0, invalid: 0, filtered: 0, summarised: 0, coalesced: 0, listed: 0 };
   let lastVRow: Json | undefined;
   for (const row of records) {
     counts[row.channel] = (counts[row.channel] ?? 0) + 1;
@@ -131,7 +134,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     // Invalid samples inside this queried interval (the cursor makes the interval start where the last call ended).
     if (!row.valid) { gaps.push("invalid_source"); invalidChannels.add(row.channel); track(row.channel).invalid++; continue; }
     const v = row.data;
-    if (v?.event?.startsWith("supervisor.") && v.event !== "supervisor.coverage" && !receiveSupervisor(v, "recorder", row.source_s)) continue;
+    if (v?.event?.startsWith("supervisor.") && v.event !== "supervisor.coverage" && !receiveSupervisor(v, "recorder", row.source_s)) { track(row.channel).filtered++; continue; }
     if (v?.event === "placement.traffic") alerts.push({ kind: "traffic_risk", seq: row.seq, source_s: row.source_s, ...v });
     if (row.channel === "contacts" && v?.event?.startsWith("contact.") && v.event !== "contact.coverage") {
       contactObserved = true;
@@ -145,7 +148,8 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       else { channels[`${row.channel}_latest`] = { seq: row.seq, source_s: row.source_s, ...v }; track(row.channel).coalesced++; }
       continue;
     }
-    if (!v) continue;
+    if (!v) { track(row.channel).filtered++; continue; }
+    track(row.channel).summarised++;
     lastVRow = row;
     if (Array.isArray(v.position)) path.push(v.position);
     const health = v.vitals?.health;
