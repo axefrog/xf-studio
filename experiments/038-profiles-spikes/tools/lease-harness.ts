@@ -303,7 +303,7 @@ async function scenarios(host: Host, record: (scenario: string, check: string, o
       await a.kill(); await b.kill();
       await sleep(100);
     }
-    // 4e. A takeover whose answer is lost, whose cancellation is delayed past a retry: the cancellation removes only its own request.
+    // 4e. Withdrawal must finish before retry. A duplicate old cancellation arriving after retry removes only its own request.
     {
       const s = "late cancellation after a retried takeover";
       const a = await host.open("U");
@@ -314,17 +314,29 @@ async function scenarios(host: Host, record: (scenario: string, check: string, o
       b.command("lose-takeover-answer"); b.command("delay-cancel");
       await b.wait(event => event.event === "control" && event.command === "delay-cancel");
       b.command("takeover");
-      await b.wait(event => event.event === "takeover" && event.ok === false);
+      const cancelling = await b.wait(event => event.event === "lease-request" && event.action === "cancel");
       await a.wait(phase("release-failed"));
       b.command("takeover");
-      await sleep(200);
+      const blocked = await b.wait(event => event.event === "takeover" && event.message === "The previous request is still finishing.");
+      record(s, "retry is refused until the first request finishes withdrawing", !!cancelling && !!blocked &&
+        b.events.filter(event => event.event === "lease-request" && event.action === "takeover").length === 1 &&
+        !b.events.some(phase("disconnected")), "only the first takeover was sent while cancellation was pending");
       b.command("open-cancel");
-      await b.wait(event => event.event === "control" && event.command === "open-cancel");
+      const withdrawn = await b.wait(event => event.event === "control" && event.command === "open-cancel");
+      const failed = await b.wait(event => event.event === "takeover" && event.ok === false &&
+        event.message !== "The previous request is still finishing.");
+      record(s, "withdrawal is confirmed before a fresh retry", withdrawn?.arrived === 204 && !!failed &&
+        !b.events.some(phase("disconnected")), `cancellation answered ${withdrawn?.arrived}`);
+      b.command("takeover");
+      const retried = await b.wait(event => event.event === "takeover-queued" && event.request !== cancelling?.request);
+      b.command("repeat-cancel");
+      const late = await b.wait(event => event.event === "control" && event.command === "repeat-cancel");
       a.command("fix-writes");
       await a.wait(event => event.event === "writes" && event.broken === false);
       a.command("retry");
       const granted = await b.wait(phase("taken-over"));
-      record(s, "the retried takeover is still queued and is granted", !!granted, granted ? "granted" : "not granted (its request was removed)");
+      record(s, "the retried takeover is still queued and is granted", retried?.status === 202 && late?.arrived === 204 && !!granted,
+        `old cancellation answered ${late?.arrived}; retry ${granted ? "granted" : "not granted"}`);
       await a.kill(); await b.kill();
       await sleep(100);
     }

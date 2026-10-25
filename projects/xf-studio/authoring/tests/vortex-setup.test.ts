@@ -290,7 +290,9 @@ test("a newer backup is read when the database is incomplete, even though the da
 }));
 
 test("a staging folder that isn't on a local drive is never opened (VORTEX-06)", () => withFolderAsync(async base => {
-  expect([String.raw`C:\Vortex\mods`, "d:/mods"].map(path => isLocalFolder(path))).toEqual([true, true]);
+  const windows = process.platform === "win32";
+  expect([String.raw`C:\Vortex\mods`, "d:/mods"].map(path => isLocalFolder(path))).toEqual([windows, windows]);
+  expect(isLocalFolder("/opt/xfs-mods")).toBe(!windows);
   expect([String.raw`\\server\share\mods`, "//server/share/mods", String.raw`\\?\UNC\server\x`, String.raw`\\.\pipe\x`, "mods", ""]
     .map(path => isLocalFolder(path))).toEqual([false, false, false, false, false, false]);
   // Separators are normalised before a path is classified: on Windows each of these is a share, a device or not absolute (INSTALL-05).
@@ -299,13 +301,41 @@ test("a staging folder that isn't on a local drive is never opened (VORTEX-06)",
   expect(notLocal.map(path => isLocalDrivePath(path, "win32"))).toEqual(notLocal.map(() => false));
   expect([String.raw`C:\Vortex\mods`, "d:/mods", String.raw`E:/mixed\mods`].map(path => isLocalDrivePath(path, "win32"))).toEqual([true, true, true]);
   expect(["/opt/xfs-mods", "//server/share", "mods"].map(path => isLocalDrivePath(path, "posix"))).toEqual([true, false, false]);
-  const game = join(base, "game"), share = String.raw`/\xfs-test.invalid\share\mods`;
+  // A mixed-separator UNC path is remote on Windows but an ordinary absolute filename on POSIX.
+  // Exercise Windows's normalisation there and use a double-slash path (refused on either host) elsewhere.
+  const game = join(base, "game"), share = windows ? String.raw`/\xfs-test.invalid\share\mods` : "//xfs-test.invalid/share/mods";
   mkdirSync(game, { recursive: true });
   const manifest = JSON.parse(readFileSync(join(fixtures, "cyberpunk-hardlink.vortex.deployment.json"), "utf8"));
   writeFileSync(join(game, "vortex.deployment.json"), JSON.stringify({ ...manifest, stagingPath: share }));
   const setup = await inspectVortexSetup(game, () => undefined);
   expect([setup.stagingPath, setup.stagingMarker]).toEqual([share, null]);
   expect(setup.problems).toContain("The staging folder isn't on a local drive, so XF Studio didn't look inside it.");
+}));
+
+test("the staging guard uses the host's path rules on Windows and Linux (VORTEX-06)", () => withFolder(base => {
+  const game = join(base, "game");
+  mkdirSync(game, { recursive: true });
+  const manifest = JSON.parse(readFileSync(join(fixtures, "cyberpunk-hardlink.vortex.deployment.json"), "utf8"));
+  for (const platform of ["win32", "linux"]) {
+    const windows = platform === "win32";
+    const share = windows ? String.raw`/\xfs-test.invalid\share\mods` : "//xfs-test.invalid/share/mods";
+    writeFileSync(join(game, "vortex.deployment.json"), JSON.stringify({ ...manifest, stagingPath: share }));
+    // Import after setting the platform, in an isolated process: path-containment captures its host default at module load.
+    const script = `
+      import { strict as assert } from "node:assert";
+      Object.defineProperty(process, "platform", { value: ${JSON.stringify(platform)} });
+      const { isLocalFolder, inspectVortexSetup } = await import(${JSON.stringify(new URL("../src/installation/host/vortex-host.ts", import.meta.url).href)});
+      assert.equal(isLocalFolder("C:/mods"), ${windows});
+      assert.equal(isLocalFolder("/opt/xfs-mods"), ${!windows});
+      assert.equal(isLocalFolder(${JSON.stringify(share)}), false);
+      const setup = await inspectVortexSetup(${JSON.stringify(game)}, () => undefined);
+      assert.equal(setup.stagingPath, ${JSON.stringify(share)});
+      assert.equal(setup.stagingMarker, null);
+      assert.ok(setup.problems.includes("The staging folder isn't on a local drive, so XF Studio didn't look inside it."));
+    `;
+    const run = Bun.spawnSync([process.execPath, "--eval", script], { stdout: "pipe", stderr: "pipe" });
+    expect(run.exitCode, `${platform}: ${run.stderr.toString()}`).toBe(0);
+  }
 }));
 
 test("the Vortex check tool leaves the profile's name out of what testers paste (VORTEX-07)", () => withFolder(base => {

@@ -15,6 +15,7 @@ import { latePut, runPage } from "./lease-page";
 
 const [base, cookie, name, hang, editMs] = process.argv.slice(2);
 let loseRelease = false, delayRelease = false, loseTakeover = false, delayCancel = false;
+let oldCancel: { url: string; init: RequestInit } | null = null;
 /** Requests held back in transit, released by the harness: the body arrives at the host only when `open` runs. */
 const delayed = new Map<string, { open(): void; answer: Promise<number> }>();
 const raw = (url: string, init: RequestInit) => fetch(base + url, { ...init, headers: { Cookie: cookie, Origin: base, ...(init.headers as Record<string, string> | undefined) } });
@@ -29,12 +30,29 @@ const holdBack = (key: string, url: string, init: RequestInit) => {
 };
 const send = async (url: string, init: RequestInit = {}) => {
   const body = typeof init.body === "string" ? init.body : "";
+  if (body.includes('"action":"takeover"') || body.includes('"action":"cancel"')) {
+    const { action, request } = JSON.parse(body) as { action: string; request: string };
+    report({ event: "lease-request", action, request });
+  }
   if (delayRelease && body.includes('"action":"release"')) { delayRelease = false; holdBack("release", url, init); }
-  if (delayCancel && body.includes('"action":"cancel"')) { delayCancel = false; holdBack("cancel", url, init); }
+  if (delayCancel && body.includes('"action":"cancel"')) {
+    delayCancel = false;
+    oldCancel = { url, init };
+    let open!: () => void;
+    const gate = new Promise<void>(resolve => { open = resolve; });
+    // Keep withdrawal pending, rather than failing it (a failed cancellation disconnects the real adapter).
+    const answer = gate.then(() => raw(url, init));
+    delayed.set("cancel", { open, answer: answer.then(response => response.status, () => 0) });
+    return answer;
+  }
   const response = await raw(url, init);
   // The host acted on the request; only its answer goes missing.
   if (loseRelease && body.includes('"action":"release"')) { loseRelease = false; throw Error("The answer was lost."); }
   if (loseTakeover && body.includes('"action":"takeover"')) { loseTakeover = false; throw Error("The answer was lost."); }
+  if (body.includes('"action":"takeover"')) {
+    const { request } = JSON.parse(body) as { request: string };
+    report({ event: "takeover-queued", request, status: response.status });
+  }
   return response;
 };
 const report = (event: Record<string, unknown>) => process.stdout.write(`${JSON.stringify({ window: name, at: performance.timeOrigin + performance.now(), ...event })}\n`);
@@ -55,6 +73,7 @@ const page = await runPage({
     if (command === "delay-release") delayRelease = true;
     else if (command === "lose-takeover-answer") loseTakeover = true;
     else if (command === "delay-cancel") delayCancel = true;
+    else if (command === "repeat-cancel" && oldCancel) return { arrived: (await raw(oldCancel.url, oldCancel.init)).status };
     else if (command.startsWith("open-")) {
       const held = delayed.get(command.slice(5));
       if (!held) return { arrived: null };
