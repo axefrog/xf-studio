@@ -159,8 +159,6 @@ The full study, with the component diagram, prototype plan and test card, is [Im
 
 **Verdict:** feasible, recommended for development tools (dense, immediate-mode panels, live values, gizmos) beside, not instead of, the ink route for player-facing UI. Confidence is high for drawing, medium for interact mode and medium-low for frame generation and HDR until a session. First prototype: draw-only, off by default, refusing in HDR (about 4 days plus a session), then interact mode (about 3 days), then an own HDR-aware renderer and the panel kit (about 5 days).
 
-The Studio's [In-game surfaces theme table](../projects/xf-studio/authoring/src/studio-ui/style-guide/in-game-theme.ts) specifies every colour in the pinned ImGui 1.92.9 docking enum, including `CheckboxSelectedBg`, plus the required XF semantic slots. Its [offline tests](../projects/xf-studio/authoring/tests/in-game-theme.test.ts) check completeness and spelling against the cited enum, resolve unconditional top-level CSS rules and the Studio's explicit light/dark roots, and compare rule-derived colours with the bridge generator. Labelled bars use a 30 % tone fill over `XfLine` without an opaque end cap; normal, warning and danger fills and the unfilled track meet 4.5:1 for value text in both themes, on plates and cards [offline: token-resolution and contrast tests, 26 October 2026]. These are design-spec and sRGB contrast checks, not game-rendering or HDR proof.
-
 ## 9. The XF Runtime Bridge's ink demos (0.5.3, temporary test features)
 
 | Demo | What | Route | Status |
