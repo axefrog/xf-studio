@@ -6,6 +6,9 @@
 
 :root {
   color-scheme: light dark;
+  /* ImGui dims a disabled control by one alpha (its DisabledAlpha); the Studio uses faint ink and a quiet border. This is the in-game
+     surfaces' equivalent of that treatment (style guide, In-game surfaces), read by their token table. */
+  --disabled-alpha: .45;
   --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-display: "Bahnschrift SemiCondensed", "Bahnschrift", "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif;
   --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;

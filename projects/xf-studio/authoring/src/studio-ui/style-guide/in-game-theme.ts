@@ -188,7 +188,7 @@ export const IN_GAME_METRICS: readonly Metric[] = [
 /** Numbers the Studio sets on a rule, read from it. */
 export type RuleValue = { name: string; rule: string; property: string; use: string };
 export const IN_GAME_RULE_VALUES: readonly RuleValue[] = [
-  { name: "DisabledAlpha", rule: ".btn:disabled", property: "opacity", use: "ImGui's DisabledAlpha: every disabled control and BeginDisabled block" },
+  { name: "DisabledAlpha", rule: ":root", property: "--disabled-alpha", use: "ImGui's DisabledAlpha: every disabled control and BeginDisabled block (the Studio's faint-ink disabled treatment as one alpha)" },
   { name: "SweepSeconds", rule: ".progress.indeterminate::after", property: "animation", use: "An indeterminate bar's sweep (the Studio's 1.1 s)" },
 ];
 
