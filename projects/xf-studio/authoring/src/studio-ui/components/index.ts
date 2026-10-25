@@ -53,5 +53,6 @@ export { pageStep, TypeAhead } from "./listbox-keys";
 export { stageLabel, stageShortLabel, stageTag, type Stage } from "./stage-tag";
 // Feature-specific: a 3D view that is not drawn (c-setup, U7).
 export { notDrawnState, notDrawnStateMarkup, notDrawnStateName, type NotDrawnStateData } from "./not-drawn-state";
+export { linkButton, linkButtonMarkup } from "./link-button";
 export { menuSecondaryRow } from "./menu-secondary";
 export { openChoicePopover, type ChoicePopoverField, type ChoicePopoverState } from "./choice-popover";

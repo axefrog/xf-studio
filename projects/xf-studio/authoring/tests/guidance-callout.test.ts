@@ -25,6 +25,8 @@ test("shared callouts focus the title without a pointer ring, preserve keyboard 
     const link = callout.element.querySelector<HTMLButtonElement>(".link-button")!;
     expect(link.textContent).toBe("Installing your mod"); link.click();
     expect(opened).toEqual(["install"]);
+    link.setAttribute("aria-disabled", "true"); link.click();
+    expect(opened).toEqual(["install"]);
     const css = readFileSync(new URL("../public/studio.css", import.meta.url), "utf8");
     expect(css).toContain('.guidance-title:focus-visible { outline: 2px solid var(--focus)');
     expect(css).toContain('.guidance-title[data-pointer-focus]:focus { outline: none; }');

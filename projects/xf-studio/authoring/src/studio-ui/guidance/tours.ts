@@ -15,7 +15,7 @@ export const WHATS_NEW_TOUR_ID = "whats-new-0.1.0-beta.1";
 
 /** The walk from nothing to an eye makeup mod added to the game: two looks, Check, Build, add it, and what to look for in the game. */
 export const EYE_TOUR_ID = "first-eye-mod";
-/** What the eye tour's "Do it for me" makes: contributed starter shapes (`features/eye-makeup/starters.ts`), a colour and a finish for each look. */
+/** Suggested eye-tour shapes, colours and finishes. Add preset keeps the person's default starter; the second layer uses Classic wing explicitly. */
 export const EYE_TOUR_LOOKS = {
   first: { starter: "lid-wash", color: "#a8576b", finish: "regular" },
   second: { starter: "classic-wing", color: "#2c3a5e", finish: "metallic" },
@@ -77,32 +77,30 @@ export const TOURS: readonly Tour[] = [
       { id: "read-only", when: { writable: false }, content: { title: "This window can't make changes",
         body: "XF Studio is open in another window, so this one is read-only. This tour makes looks and a mod, so it needs the window that can make changes.\n\nUse that window, or choose **Use it here** at the top of this window to work here instead, then start the tour again from Help." } },
       { id: "intro", when: { writable: true }, content: { title: "Your first eye makeup mod",
-        body: `In a few minutes you'll make **two eye makeup looks**, build them into your own **${EYE_MAKEUP_MOD.modName}** mod and add it to your game, ready to try in the character creator.\n\nWhere a step is fiddly, **Do it for me** does it for you, and you can undo it like anything else. The two looks are added to the collection you have open; nothing you already made is changed.` } },
+        body: `In a few minutes you'll make **two eye makeup looks**, build them into your own **${EYE_MAKEUP_MOD.modName}** mod and add it to your game, ready to try in the character creator.\n\nWhere a step is fiddly, **Do it for me** does it for you, Colour, finish and layer edits can be undone. Adding a preset works like **Add preset**: remove it from the Presets list if you no longer want it; the removal offers Restore. The two looks are added to the collection you have open; nothing you already made is changed.` } },
       { id: "first-look-add", when: { writable: true }, anchor: "presets.add", content: { title: "First look: add a preset",
-        body: "A **preset** is one complete look, and each one becomes a choice in the game. **Add preset** starts it with a layer shaped like the **Lid wash** starter shape: a soft wash over the eyelid.\n\nPress **Add preset**, or let me do it." },
-        buttons: [{ label: "Do it for me", then: "next", action: { kind: "sequence", steps: [
-          { kind: "studio", action: { kind: "preset.edit", command: { kind: "add" } } },
-          { kind: "studio.resetActiveLayer", starter: EYE_TOUR_LOOKS.first.starter }] } }],
+        body: "A **preset** is one complete look, and each one becomes a choice in the game. **Add preset** starts it with your default starter shape (**Lid wash**, a soft wash over the eyelid, until you choose another default).\n\nPress **Add preset**, or let me do it." },
+        buttons: [{ label: "Do it for me", then: "next", action: { kind: "studio", target: "first", capture: "preset", action: { kind: "preset.edit", command: { kind: "add" } } } }],
         advanceWhen: { event: "preset.added" } },
       { id: "first-look-style", when: { writable: true }, anchor: "panel.finish", content: { title: "First look: colour and finish",
         body: `Choose the layer's colour, then its finish. ${FINISH_MOD_TOKEN}. A rose colour with the Satin finish suits a first look.` },
         buttons: [{ label: "Do it for me", then: "next", action: { kind: "sequence", steps: [
-          { kind: "studio.activeLayer", action: { kind: "layer.setColor", color: EYE_TOUR_LOOKS.first.color } },
-          { kind: "studio.activeLayer", action: { kind: "layer.setFinish", finish: EYE_TOUR_LOOKS.first.finish } }] } }],
+          { kind: "studio.activeLayer", target: "first", action: { kind: "layer.setColor", color: EYE_TOUR_LOOKS.first.color } },
+          { kind: "studio.activeLayer", target: "first", action: { kind: "layer.setFinish", finish: EYE_TOUR_LOOKS.first.finish } }] } }],
         advanceWhen: { event: "finish.changed" } },
       { id: "second-look-add", when: { writable: true }, anchor: "presets.add", content: { title: "Second look: add another preset",
-        body: "Add a second preset for a different look. It starts with the same Lid wash layer; the next step adds a second layer to it." },
-        buttons: [{ label: "Do it for me", then: "next", action: { kind: "studio", action: { kind: "preset.edit", command: { kind: "add" } } } }],
+        body: "Add a second preset for a different look. It starts with your default starter layer; the next step adds a second layer to it." },
+        buttons: [{ label: "Do it for me", then: "next", action: { kind: "studio", target: "second", capture: "preset", action: { kind: "preset.edit", command: { kind: "add" } } } }],
         advanceWhen: { event: "preset.added" } },
       { id: "second-look-shape", when: { writable: true }, anchor: "layers.starters", content: { title: "Second look: a different starter shape",
         body: "A look can have several layers, like real makeup: a wash on the lid with a liner on top. Open the arrow beside **Add layer** and choose **Classic wing**, a clean liner with a flick past the outer corner.\n\nThe other starter shapes are in the same menu." },
-        buttons: [{ label: "Do it for me", then: "next", action: { kind: "studio", action: { kind: "layer.edit", command: { kind: "add", starter: EYE_TOUR_LOOKS.second.starter } } } }],
+        buttons: [{ label: "Do it for me", then: "next", action: { kind: "studio", target: "second", capture: "layer", action: { kind: "layer.edit", command: { kind: "add", starter: EYE_TOUR_LOOKS.second.starter } } } }],
         advanceWhen: { event: "layer.added" } },
       { id: "second-look-style", when: { writable: true }, anchor: "panel.finish", content: { title: "Second look: colour and finish",
         body: "Give the new layer its own colour and finish. A deep blue with the Metallic finish stands well apart from the first look." },
         buttons: [{ label: "Do it for me", then: "next", action: { kind: "sequence", steps: [
-          { kind: "studio.activeLayer", action: { kind: "layer.setColor", color: EYE_TOUR_LOOKS.second.color } },
-          { kind: "studio.activeLayer", action: { kind: "layer.setFinish", finish: EYE_TOUR_LOOKS.second.finish } }] } }],
+          { kind: "studio.activeLayer", target: "second", action: { kind: "layer.setColor", color: EYE_TOUR_LOOKS.second.color } },
+          { kind: "studio.activeLayer", target: "second", action: { kind: "layer.setFinish", finish: EYE_TOUR_LOOKS.second.finish } }] } }],
         advanceWhen: { event: "finish.changed" } },
       { id: "check", when: { writable: true }, anchor: "package.check", content: { title: "Check your looks",
         body: "Open **Mod package** and press **Check**. It lists which looks can become mod files, and names anything it would leave out and why.\n\nCheck creates no files and changes nothing." },

@@ -1,5 +1,5 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
-import { menuSecondaryRow, shapeThumbnail, openChoicePopover, badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, EmptyChoices, EmptyTargetPointer, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
+import { linkButton, menuSecondaryRow, shapeThumbnail, openChoicePopover, badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, EmptyChoices, EmptyTargetPointer, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, notDrawnState, type LightListItem, type TabItem, type TreeNodeData } from "../components";
@@ -61,6 +61,7 @@ function recursiveTree() {
 }
 
 const MOUNTS: Record<string, Mount> = {
+  "lib-link-button": () => h("p", {}, "If the row is missing: ", linkButton({ label: "Installing your mod", onClick: () => {} }), " in Help."),
   "lib-button": () => { const unavailable = button({ label: "Build mod files", icon: "package", onClick: () => {} });
     applyCapability(unavailable, { available: false, reason: "Choose your Cyberpunk 2077 folder in Settings › Game first." });
     return h("div", { class: "row wrap gap-s" }, button({ label: "Save version", icon: "save", variant: "primary", onClick: () => {} }),

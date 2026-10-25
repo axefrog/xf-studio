@@ -9,6 +9,7 @@ import { LEASE_MESSAGES, WorkspaceLease } from "../src/app/workspace/workspace-l
 import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { EYE_STARTERS } from "../src/features/eye-makeup/starters";
 import { isAnchorId, anchorInfo, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
+import { TourCommandRun, TOUR_TARGET_MISSING } from "../src/studio-ui/guidance/command-run";
 import { commandCapability, packageFacts, runCommand } from "../src/studio-ui/guidance/controller";
 import { eventHappened, gateHolds, GuidanceService, type GuidanceEnvironment } from "../src/studio-ui/guidance/engine";
 import { plainText } from "../src/studio-ui/guidance/content";
@@ -209,36 +210,42 @@ function runtime(options: Parameters<typeof trustedFixture>[0] = {}) {
     dispatch: (action: Parameters<typeof shell.authoring.dispatch>[0]) => { const result = shell.authoring.dispatch(action); if (!result.ok) refused.push(result.message); return result.ok; },
     file: async (action: unknown) => { files.push(action); return { ok: true }; },
     settings: { open: (section: string) => { settings.push(section); } }, dock: { reveal: () => {} } };
-  return { ...fixture, rt: rt as unknown as Parameters<typeof runCommand>[0], eye, refused, announced, files, settings,
+  return { ...fixture, run: new TourCommandRun(), rt: rt as unknown as Parameters<typeof runCommand>[0], eye, refused, announced, files, settings,
     presets: () => shell.library.summary().draft!.presets, layer: () => eye.view().layer()! };
 }
 const button = (id: string) => tour.steps.find(step => step.id === id)!.buttons![0].action as TourCommand;
 
-test("Do it for me makes a ready look by registered actions, each undoable like any edit", async () => {
+test("Do it for me uses Add preset convention; colour, finish and layer edits stay undoable", async () => {
   const world = runtime(), { shell, rt } = world;
   const before = world.presets().length;
   expect(commandCapability(rt, button("first-look-add"))).toEqual({ available: true });
-  expect(await runCommand(rt, button("first-look-add"))).toBe(true);
-  // A new preset, selected, with a layer from the contributed Lid wash.
+  expect(await runCommand(rt, button("first-look-add"), world.run)).toBe(true);
+  // Just like Add preset: no Undo entry for creating the preset, and no extra reset.
+  const ordinary = runtime();
+  expect(ordinary.shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "add" } }).ok).toBe(true);
+  expect(shell.authoring.historyTimeline().steps.length).toBe(ordinary.shell.authoring.historyTimeline().steps.length);
+  expect(shell.authoring.dispatch({ kind: "history.undo" }).ok).toBe(false);
+  expect(world.presets()).toHaveLength(before + 1);
+  // A new preset, selected, with a layer from the default Lid wash.
   expect(world.presets()).toHaveLength(before + 1);
   const lidWash = EYE_STARTERS.find(starter => starter.id === EYE_TOUR_LOOKS.first.starter)!.shape;
   expect(world.layer().points.length).toBe(lidWash.points.length);
-  expect(await runCommand(rt, button("first-look-style"))).toBe(true);
+  expect(await runCommand(rt, button("first-look-style"), world.run)).toBe(true);
   expect(world.layer()).toMatchObject({ finish: EYE_TOUR_LOOKS.first.finish, color: EYE_TOUR_LOOKS.first.color });
   const first = world.presets().at(-1)!.id;
   // The second look: another preset, then a second layer from Classic wing, then its own colour and finish.
-  expect(await runCommand(rt, button("second-look-add"))).toBe(true);
+  expect(await runCommand(rt, button("second-look-add"), world.run)).toBe(true);
   expect(world.presets()).toHaveLength(before + 2);
   expect(world.presets().at(-1)!.id).not.toBe(first);
-  expect(await runCommand(rt, button("second-look-shape"))).toBe(true);
+  expect(await runCommand(rt, button("second-look-shape"), world.run)).toBe(true);
   expect(world.eye.view().recipe().layers).toHaveLength(2);
   const classic = EYE_STARTERS.find(starter => starter.id === EYE_TOUR_LOOKS.second.starter)!.shape;
   expect(world.layer().points.length).toBe(classic.points.length);
   expect(world.layer().name).toBe("Classic wing");
-  expect(await runCommand(rt, button("second-look-style"))).toBe(true);
+  expect(await runCommand(rt, button("second-look-style"), world.run)).toBe(true);
   expect(world.layer()).toMatchObject({ finish: EYE_TOUR_LOOKS.second.finish, color: EYE_TOUR_LOOKS.second.color });
   expect(world.refused).toEqual([]);
-  expect(world.announced.filter(text => text.startsWith("Done"))).toHaveLength(3);
+  expect(world.announced.filter(text => text.startsWith("Done"))).toHaveLength(2);
   // Undo steps back through the colour and finish the tour set, one change at a time, like the person's own edits.
   expect(shell.authoring.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(world.layer().finish).not.toBe(EYE_TOUR_LOOKS.second.finish);
@@ -271,9 +278,10 @@ test("Do it for me runs only registered actions, never DOM clicks, and stops at 
   expect(controller).not.toMatch(/\.click\(|dispatchEvent\(/);
   // A refused first command ends the run: nothing after it is attempted, and the refusal was said once.
   const world = runtime();
+  expect(await runCommand(world.rt, button("first-look-add"), world.run)).toBe(true);
   let attempts = 0;
   const refusing = { ...world.rt, dispatch: () => { attempts++; return false; } } as unknown as typeof world.rt;
-  expect(await runCommand(refusing, button("first-look-style"))).toBe(false);
+  expect(await runCommand(refusing, button("first-look-style"), world.run)).toBe(false);
   expect(attempts).toBe(1);
   expect(world.announced).toEqual([]);
 });
@@ -285,7 +293,7 @@ test("a window that can't make changes refuses the buttons with its own reason; 
   await lease.start();
   const readOnly = runtime({ lease }), before = readOnly.presets().length;
   expect(commandCapability(readOnly.rt, button("first-look-add"))).toMatchObject({ available: false });
-  expect(await runCommand(readOnly.rt, button("first-look-add"))).toBe(false);
+  expect(await runCommand(readOnly.rt, button("first-look-add"), readOnly.run)).toBe(false);
   expect(readOnly.presets()).toHaveLength(before);
   expect(readOnly.refused).toEqual([LEASE_MESSAGES.refused]);
   const world = runtime();
@@ -345,4 +353,105 @@ test("the closing callout keeps three checks and sends troubleshooting to Help",
   expect(body).toContain("If the row isn't there: [[help:install|Installing your mod]] in Help.");
   expect(body).not.toContain("RED4ext");
   expect(body.split(/\s+/).length).toBeLessThan(110);
+});
+
+test("reproduction: selecting existing work after the first tour Add refuses styling", async () => {
+  const world = runtime(), original = world.shell.focus.targets().look!;
+  const recipe = JSON.stringify(world.eye.view().recipe());
+  expect(await runCommand(world.rt, button("first-look-add"), world.run)).toBe(true);
+  const created = world.shell.focus.targets().look!;
+  expect(created.look).not.toBe(original.look);
+  expect(world.shell.authoring.dispatch({ kind: "scene.setLook", look: original }).ok).toBe(true);
+  expect(commandCapability(world.rt, button("first-look-style"), world.run)).toMatchObject({ available: false, reason: TOUR_TARGET_MISSING });
+  expect(await runCommand(world.rt, button("first-look-style"), world.run)).toBe(false);
+  expect(JSON.stringify(world.eye.view().recipe())).toBe(recipe);
+  expect(world.refused).toEqual([TOUR_TARGET_MISSING]);
+  // Returning to the same look/layer cannot reuse an earlier scene generation.
+  expect(world.shell.authoring.dispatch({ kind: "scene.setLook", look: created }).ok).toBe(true);
+  expect(await runCommand(world.rt, button("first-look-style"), world.run)).toBe(false);
+});
+
+test("manual Add captures a new preset identity; selecting existing work does not", async () => {
+  const world = runtime();
+  world.run.watch(world.rt, button("first-look-add"));
+  expect(world.run.observe(world.rt)).toBe(false);
+  expect(await runCommand(world.rt, button("first-look-style"), world.run)).toBe(false);
+  expect(world.shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "add" } }).ok).toBe(true);
+  expect(world.run.observe(world.rt)).toBe(true);
+  expect(await runCommand(world.rt, button("first-look-style"), world.run)).toBe(true);
+});
+
+test("switching layers or removing the captured layer refuses the tour edit", async () => {
+  const world = runtime();
+  expect(await runCommand(world.rt, button("first-look-add"), world.run)).toBe(true);
+  const captured = world.layer().id;
+  expect(world.shell.authoring.dispatch({ kind: "layer.edit", command: { kind: "add" } }).ok).toBe(true);
+  const other = JSON.stringify(world.layer());
+  expect(await runCommand(world.rt, button("first-look-style"), world.run)).toBe(false);
+  expect(JSON.stringify(world.layer())).toBe(other);
+  expect(world.shell.authoring.dispatch({ kind: "layer.edit", command: { kind: "remove", id: captured } }).ok).toBe(true);
+  expect(await runCommand(world.rt, button("first-look-style"), world.run)).toBe(false);
+});
+
+test("the second tour layer can only be added to its captured look", async () => {
+  const world = runtime(), original = world.shell.focus.targets().look!;
+  expect(await runCommand(world.rt, button("second-look-add"), world.run)).toBe(true);
+  expect(world.shell.authoring.dispatch({ kind: "scene.setLook", look: original }).ok).toBe(true);
+  const recipe = JSON.stringify(world.eye.view().recipe());
+  expect(await runCommand(world.rt, button("second-look-shape"), world.run)).toBe(false);
+  expect(JSON.stringify(world.eye.view().recipe())).toBe(recipe);
+});
+
+test("Add stays pinned to the context chosen when its step opens", async () => {
+  const world = runtime(), original = world.shell.focus.targets().look!;
+  world.run.watch(world.rt, button("first-look-add"));
+  expect(world.shell.authoring.dispatch({ kind: "scene.setLook", look: original }).ok).toBe(true);
+  const count = world.presets().length;
+  expect(await runCommand(world.rt, button("first-look-add"), world.run)).toBe(false);
+  expect(world.presets()).toHaveLength(count);
+});
+
+test("closing a tour cancels a sequence before its next edit", async () => {
+  const world = runtime();
+  expect(await runCommand(world.rt, button("first-look-add"), world.run)).toBe(true);
+  const finish = world.layer().finish, dispatch = world.rt.dispatch;
+  const closing = { ...world.rt, dispatch: (action: Parameters<typeof dispatch>[0]) => {
+    const result = dispatch(action);
+    if (action.kind === "layer.setColor") world.run.cancel();
+    return result;
+  } } as typeof world.rt;
+  expect(await runCommand(closing, button("first-look-style"), world.run)).toBe(false);
+  expect(world.layer().color).toBe(EYE_TOUR_LOOKS.first.color);
+  expect(world.layer().finish).toBe(finish);
+  expect(world.announced).toEqual([]);
+});
+
+test("an unrelated scope cannot satisfy pending creation, and cancellation releases the wait", async () => {
+  const world = runtime(), original = structuredClone(world.shell.focus.targets());
+  world.shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "add" } });
+  let displayed = structuredClone(world.shell.focus.targets());
+  const delayed = { ...world.rt, port: { ...world.rt.port, focus: { ...world.rt.port.focus, targets: () => displayed } } } as typeof world.rt;
+  const pending = runCommand(delayed, button("first-look-add"), world.run);
+  displayed = original; // A different existing look, never the new identity the helper added.
+  expect(world.run.observe(delayed)).toBe(false);
+  expect(world.run.target("first")).toBeUndefined();
+  world.run.cancel();
+  expect(await pending).toBe(false);
+  expect(world.run.target("first")).toBeUndefined();
+  expect(await runCommand(world.rt, button("first-look-style"), world.run)).toBe(false);
+});
+
+
+test("a target switch between colour and finish stops the remaining sequence", async () => {
+  const world = runtime(), original = world.shell.focus.targets().look!;
+  const existing = JSON.stringify(world.eye.view().recipe());
+  expect(await runCommand(world.rt, button("first-look-add"), world.run)).toBe(true);
+  const dispatch = world.rt.dispatch;
+  const switching = { ...world.rt, dispatch: (action: Parameters<typeof dispatch>[0]) => {
+    const result = dispatch(action);
+    if (action.kind === "layer.setColor") world.shell.authoring.dispatch({ kind: "scene.setLook", look: original });
+    return result;
+  } } as typeof world.rt;
+  expect(await runCommand(switching, button("first-look-style"), world.run)).toBe(false);
+  expect(JSON.stringify(world.eye.view().recipe())).toBe(existing);
 });

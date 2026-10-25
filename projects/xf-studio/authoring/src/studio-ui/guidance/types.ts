@@ -18,18 +18,16 @@ import type { AnchorId } from "./anchors";
 export type HelpContent = Readonly<{ title: string; body: string }>;
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-/** Layer actions whose `layerId` a tour fills in from the active layer when the button is pressed. */
+/** Layer actions whose `layerId` comes from the captured tour target, or the active layer for unbound tours. */
 export type ActiveLayerAction = DistributiveOmit<Extract<PresentationAction, { layerId: string }>, "layerId">;
 
 /**
  * What a tour button may do ("Do it for me"). Each is an ordinary typed action dispatched through
- * the same validated port as a menu or button, so tours never bypass validation or Undo.
+ * the same validated port as a menu or button, so tours follow the same validation and history policy as those controls.
  */
 export type SingleTourCommand =
-  | { kind: "studio"; action: PresentationAction }
-  | { kind: "studio.activeLayer"; action: ActiveLayerAction }
-  /** Start the active layer over from a starter shape (`layer.edit` reset, which names the layer inside its command). */
-  | { kind: "studio.resetActiveLayer"; starter: string }
+  | { kind: "studio"; action: PresentationAction; target?: string; capture?: "preset" | "layer" }
+  | { kind: "studio.activeLayer"; action: ActiveLayerAction; target?: string }
   | { kind: "file"; action: PresentationFileAction }
   | { kind: "previewSetup"; action: PreviewSetupAction }
   /** The existing dock command that opens (or brings forward) a panel. */
@@ -37,7 +35,7 @@ export type SingleTourCommand =
   /** Settings, at one of its groups. */
   | { kind: "settings"; section: SettingsSection };
 /**
- * Commands one after another, each an ordinary action with its own Undo step. It stops at the first one that is refused, and it is
+ * Commands one after another, each with its ordinary history policy (preset creation has no Undo step). It stops at the first one that is refused, and it is
  * available while its first one is (the rest depend on what the first changes).
  */
 export type TourCommand = SingleTourCommand | { kind: "sequence"; steps: readonly SingleTourCommand[] };

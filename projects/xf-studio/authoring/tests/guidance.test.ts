@@ -32,7 +32,6 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap(name => {
 function commandProblems(command: TourCommand, where: string): string[] {
   switch (command.kind) {
     case "sequence": return command.steps.flatMap(step => commandProblems(step, where));
-    case "studio.resetActiveLayer": return typeof command.starter === "string" && command.starter ? [] : [`${where}: a reset names its starter`];
     case "settings": return (SETTINGS_SECTIONS as readonly string[]).includes(command.section) ? [] : [`${where}: unknown settings group ${command.section}`];
     case "studio": return command.action.kind in ACTION_DESCRIPTORS ? [] : [`${where}: unknown action ${command.action.kind}`];
     case "studio.activeLayer": {
@@ -304,7 +303,7 @@ test("guidance modules stay presentation: no domain internals, and the runner an
   expect(problems).toEqual([]);
   // Buttons only name commands; the shell runs them through the same validated paths as every control.
   const controller = readFileSync(join(guidanceDir, "controller.ts"), "utf8");
-  for (const path of ["rt.dispatch(command.action)", "rt.file(command.action)", "port.previewSetup.dispatch(command.action)", "rt.dock.reveal(command.panel"])
+  for (const path of ["rt.dispatch({ ...command.action", "rt.file(command.action)", "port.previewSetup.dispatch(command.action)", "rt.dock.reveal(command.panel"])
     expect(controller).toContain(path);
   expect(controller).not.toMatch(/controlBegin|beginGesture|applyGesture|library\.dispatch/);
 });

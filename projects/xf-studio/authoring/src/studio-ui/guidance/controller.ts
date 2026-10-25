@@ -6,6 +6,7 @@ import type { Frame, StudioRuntime } from "../runtime";
 import { panelAnchor } from "./anchors";
 import { GuidanceService, type GuidanceAction, type GuidanceCapability, type GuidanceEnvironment, type StepButton } from "./engine";
 import { Callout, TourOverlay } from "./overlay";
+import { TourCommandRun, TOUR_TARGET_MISSING } from "./command-run";
 import { ONBOARDING_TOUR_ID, toursFor } from "./tours";
 import type { GuidanceFacts, SingleTourCommand, TourCommand, TourNavigation } from "./types";
 
@@ -40,16 +41,13 @@ export function packageFacts(rt: StudioRuntime): Pick<GuidanceFacts, "writable" 
 }
 
 /** The capability of a tour button's command, from the same port capabilities every other control uses. */
-export function commandCapability(rt: StudioRuntime, command: TourCommand): GuidanceCapability {
+export function commandCapability(rt: StudioRuntime, command: TourCommand, run?: TourCommandRun): GuidanceCapability {
   const port = rt.port;
+  if (command.kind !== "sequence" && "target" in command && command.target && !(command.kind === "studio" && command.capture === "preset")
+    && !run?.valid(rt, command.target)) return { available: false, reason: TOUR_TARGET_MISSING };
   switch (command.kind) {
     // The rest of a sequence depends on what its first command changes, so it is available while the first is.
-    case "sequence": return command.steps.length ? commandCapability(rt, command.steps[0]) : { available: false, reason: "Nothing to do." };
-    case "studio.resetActiveLayer": {
-      const layer = rt.editor.layer();
-      return layer ? port.authoring.capability({ kind: "layer.edit", command: { kind: "reset", id: layer.id, starter: command.starter } })
-        : { available: false, reason: "Add or select a layer first." };
-    }
+    case "sequence": return command.steps.length ? commandCapability(rt, command.steps[0], run) : { available: false, reason: "Nothing to do." };
     case "settings": return { available: true };
     case "studio": return port.authoring.capability(command.action);
     case "studio.activeLayer": {
@@ -62,44 +60,44 @@ export function commandCapability(rt: StudioRuntime, command: TourCommand): Guid
     case "panel": return { available: true };
   }
 }
-/** Run a tour button's command through the ordinary validated paths (dispatch, file workflow, dock). */
-export async function runCommand(rt: StudioRuntime, command: TourCommand): Promise<boolean> {
-  if (command.kind !== "sequence") return runSingle(rt, command);
-  // Each command is an ordinary action with its own Undo step; the first one refused ends the run (its refusal has already been said).
-  const lookBefore = rt.port.focus.editing()?.scope;
+/** Run ordinary validated actions with a per-tour capture and cancellation scope. */
+export async function runCommand(rt: StudioRuntime, command: TourCommand, run?: TourCommandRun): Promise<boolean> {
+  if (run?.signal.aborted) return false;
+  if (command.kind !== "sequence") return runSingle(rt, command, run);
   for (const step of command.steps) {
-    if (!await runSingle(rt, step)) return false;
-    // A new preset is shown by the editor a moment after it is added; the next command must act on its layer, never on the previous preset's.
-    if (step.kind === "studio" && step.action.kind === "preset.edit" && !await editorSwitched(rt, lookBefore)) {
-      rt.feedback.toast("warning", "Tour", "The new preset isn't showing yet. Try again in a moment."); return false;
-    }
+    if (run?.signal.aborted || !await runSingle(rt, step, run)) return false;
   }
-  rt.feedback.announce("Done. Undo steps back through each change.");
+  if (run?.signal.aborted) return false;
+  rt.feedback.announce("Done.");
   return true;
 }
-/** Wait (at most a second) until the look edits go to is not `before`, the one shown when the run began (the editing context names it). */
-async function editorSwitched(rt: StudioRuntime, before: string | undefined) {
-  for (let waited = 0; waited < 1000; waited += 25) {
-    const now = rt.port.focus.editing()?.scope;
-    // Nothing names the editing context (a window without one): there is nothing to wait for.
-    if (now !== before || now === undefined) return true;
-    await new Promise(resolve => setTimeout(resolve, 25));
+async function runSingle(rt: StudioRuntime, command: SingleTourCommand, run?: TourCommandRun): Promise<boolean> {
+  if (run?.signal.aborted) return false;
+  const key = "target" in command ? command.target : undefined;
+  const createsPreset = command.kind === "studio" && command.capture === "preset";
+  if (key && (!run || (!createsPreset && !run.valid(rt, key)))) {
+    rt.feedback.toast("warning", "Tour", TOUR_TARGET_MISSING, [], { code: "missing_target" }); return false;
   }
-  return false;
-}
-async function runSingle(rt: StudioRuntime, command: SingleTourCommand): Promise<boolean> {
+  const captured = !createsPreset && key && run?.target(key);
+  const named = captured ? { look: captured.named.look, view: captured.named.view, scene: captured.named.scene, sceneGen: captured.named.sceneGen } : {};
   switch (command.kind) {
-    case "studio.resetActiveLayer": {
-      const layer = rt.editor.layer();
-      if (!layer) { rt.feedback.toast("info", "Tour", "Add or select a layer first."); return false; }
-      return rt.dispatch({ kind: "layer.edit", command: { kind: "reset", id: layer.id, starter: command.starter } });
-    }
     case "settings": rt.settings.open(command.section); return true;
-    case "studio": return rt.dispatch(command.action);
+    case "studio": {
+      if (command.capture && run && !run.prepare(rt, command)) {
+        rt.feedback.toast("warning", "Tour", TOUR_TARGET_MISSING, [], { code: "missing_target" }); return false;
+      }
+      const collection = createsPreset ? rt.port.focus.targets().collection : undefined;
+      if (!rt.dispatch({ ...command.action, ...named, ...(collection ? { collection } : {}) } as Parameters<StudioRuntime["dispatch"]>[0])) return false;
+      if (command.capture && run && !await run.created(rt)) {
+        if (!run.signal.aborted) rt.feedback.toast("warning", "Tour", TOUR_TARGET_MISSING, [], { code: "missing_target" });
+        return false;
+      }
+      return !run?.signal.aborted;
+    }
     case "studio.activeLayer": {
       const layer = rt.editor.layer();
       if (!layer) { rt.feedback.toast("info", "Tour", "Add or select a layer first."); return false; }
-      return rt.dispatch({ ...command.action, layerId: layer.id } as Parameters<StudioRuntime["dispatch"]>[0]);
+      return rt.dispatch({ ...command.action, ...named, layerId: captured ? captured.layer : layer.id } as Parameters<StudioRuntime["dispatch"]>[0]);
     }
     case "file": return (await rt.file(command.action)).ok;
     case "previewSetup": {
@@ -122,6 +120,7 @@ const NAV_ACTIONS: Record<TourNavigation, GuidanceAction> = {
  */
 export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: string): void }) {
   const port = rt.port;
+  let commandRun = new TourCommandRun();
   const record = (tourId: string, outcome: TourRecord) => {
     const action = { kind: "tours.record" as const, tourId, outcome };
     if (port.preferences.capability(action).available) port.preferences.dispatch(action);
@@ -134,7 +133,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     anchor: id => rt.anchors.state(id),
     panelVisible: panel => rt.dock.isVisible(panel),
     panelTitle: panel => rt.views.meta[panel]?.title ?? panel,
-    capability: command => commandCapability(rt, command),
+    capability: command => commandCapability(rt, command, commandRun),
     record,
   };
   const service = new GuidanceService(toursFor(rt.finishes), env);
@@ -144,7 +143,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     nav: action => navigate(action),
     openTopic: id => { navigate(service.snapshot().active?.last ? "finish" : "skip"); options.openHelp(id); },
     // Dock changes (tab switches, floating, closing) don't touch the port; re-check anchors a few times a second.
-    refresh: () => { service.observe(); paint(false); },
+    refresh: () => { commandRun.observe(rt); service.observe(); paint(false); },
   });
   let invoker: HTMLElement | null = null, shown = "", running = false;
 
@@ -160,6 +159,8 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
       const step = `${active.tour.id}:${active.step}`;
       if (step !== shown || snapshot.revision !== lastRevision) {
         if (step !== shown) {
+          const command = service.tourList().find(tour => tour.id === active.tour.id)?.steps[active.step].buttons?.find(button => typeof button.action !== "string")?.action;
+          if (command && typeof command !== "string") commandRun.watch(rt, command);
           rt.feedback.announce(`${active.tour.title}, step ${active.index + 1} of ${active.count}: ${active.content.title}`);
           // Bring an anchor scrolled out of its panel into view (the panel scrolls, never the page).
           const target = active.target;
@@ -169,6 +170,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
         if (focus) requestAnimationFrame(() => overlay.callout.focusTitle());
       }
     } else if (running) {
+      commandRun.cancel();
       running = false; shown = "";
       rt.changed();
       const last = snapshot.last;
@@ -188,17 +190,26 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     return true;
   }
   function navigate(action: TourNavigation) { dispatch(NAV_ACTIONS[action]); }
+  let pendingRun: TourCommandRun | null = null;
   async function press(button: StepButton) {
     if (typeof button.action === "string") { navigate(button.action); return; }
     // Read the step before the command runs: a shell paint during an async command can already have advanced
     // the tour on its `advanceWhen`, and `then: "next"` must not move it a second time (UI-42).
     const before = service.snapshot().active?.step;
-    const ok = await runCommand(rt, button.action);
+    const run = commandRun;
+    if (pendingRun === run) return;
+    pendingRun = run;
+    let ok: boolean;
+    try { ok = await runCommand(rt, button.action, run); }
+    finally { if (pendingRun === run) pendingRun = null; }
+    if (run.signal.aborted) return;
     // A satisfied `advanceWhen` moves on by itself; `then: "next"` covers commands without one.
     if (ok && !service.observe() && button.then === "next" && service.snapshot().active?.step === before) dispatch({ kind: "guidance.next" });
     else paint(true);
   }
   function start(tourId: string) {
+    if (!service.capability({ kind: "guidance.startTour", tourId }).available) return false;
+    commandRun.cancel(); commandRun = new TourCommandRun();
     hideOffer();
     if (!running) invoker = document.activeElement instanceof HTMLElement && !overlay.element.contains(document.activeElement) &&
       !offer.element.contains(document.activeElement) && document.activeElement !== document.body ? document.activeElement : null;
@@ -274,7 +285,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     status: (tourId: string) => port.preferences.snapshot().tours?.[tourId],
     /** Called on each shell paint: advance on `advanceWhen`, refresh the card and consider the offer. */
     update(frame: Frame) {
-      if (running) { service.observe(); paint(false); }
+      if (running) { commandRun.observe(rt); service.observe(); paint(false); }
       maybeOffer(frame);
     },
     commands(): Command[] {
