@@ -1,3 +1,4 @@
+import { EYE_MAKEUP_MOD } from "../../legacy/eye-makeup/mod-branding";
 import { FINISH_EXPORT_TOKEN, FINISH_MOD_TOKEN, withFinishText, type FinishSummary } from "./finish-text";
 import type { Tour } from "./types";
 
@@ -11,6 +12,14 @@ export const ONBOARDING_TOUR_ID = "onboarding";
 export const STUDIO_TOUR_ID = "your-v-and-view";
 /** This version's "What's new" tour: one per release, replaced when the next one ships. */
 export const WHATS_NEW_TOUR_ID = "whats-new-0.1.0-beta.1";
+
+/** The walk from nothing to an eye makeup mod added to the game: two looks, Check, Build, add it, and what to look for in the game. */
+export const EYE_TOUR_ID = "first-eye-mod";
+/** What the eye tour's "Do it for me" makes: contributed starter shapes (`features/eye-makeup/starters.ts`), a colour and a finish for each look. */
+export const EYE_TOUR_LOOKS = {
+  first: { starter: "lid-wash", color: "#a8576b", finish: "regular" },
+  second: { starter: "classic-wing", color: "#2c3a5e", finish: "metallic" },
+} as const;
 
 export const TOURS: readonly Tour[] = [
   {
@@ -39,7 +48,7 @@ export const TOURS: readonly Tour[] = [
         body: "When your looks are ready, open **Mod package**.\n\n- **Check** lists which looks can become mod files, and names anything that would be left out and why. It needs no game files.\n- **Build** makes the mod files. **Add to my mod manager** adds them to your game when you choose to." },
         buttons: [{ label: "Open Mod package", action: { kind: "panel", panel: "package" } }] },
       { anchor: "header.help", content: { title: "Help is always here",
-        body: "Open **Help** with [[key:shell.help]] for tours, answers and every keyboard and mouse shortcut. [[key:shell.palette]] finds any command by name." } },
+        body: "Open **Help** with [[key:shell.help]] for tours, answers and every keyboard and mouse shortcut. [[key:shell.palette]] finds any command by name.\n\n**Your first eye makeup mod**, in Help's Guided tours, takes you from two looks to a mod in your game." } },
     ],
   },
   {
@@ -57,6 +66,60 @@ export const TOURS: readonly Tour[] = [
         buttons: [{ label: "Open Settings", action: { kind: "panel", panel: "settings" } }] },
       { anchor: "header.help", content: { title: "Help is always here",
         body: "Open **Help** with [[key:shell.help]] for the other tours, answers for each part of the Studio, and **What's not in this version yet**." } },
+    ],
+  },
+  {
+    id: EYE_TOUR_ID, audience: "howto", title: "Your first eye makeup mod",
+    summary: "Make two eye makeup looks, build them into a mod and add it to your game, ready to try in the character creator.",
+    keywords: "first mod eye makeup make looks check build install add mod manager character creator walkthrough how to",
+    steps: [
+      // Only this one shows in a window that can't make changes (another window holds the workspace).
+      { id: "read-only", when: { writable: false }, content: { title: "This window can't make changes",
+        body: "XF Studio is open in another window, so this one is read-only. This tour makes looks and a mod, so it needs the window that can make changes.\n\nUse that window, or choose **Use it here** at the top of this window to work here instead, then start the tour again from Help." } },
+      { id: "intro", when: { writable: true }, content: { title: "Your first eye makeup mod",
+        body: `In a few minutes you'll make **two eye makeup looks**, build them into your own **${EYE_MAKEUP_MOD.modName}** mod and add it to your game, ready to try in the character creator.\n\nWhere a step is fiddly, **Do it for me** does it for you, and you can undo it like anything else. The two looks are added to the collection you have open; nothing you already made is changed.` } },
+      { id: "first-look-add", when: { writable: true }, anchor: "presets.add", content: { title: "First look: add a preset",
+        body: "A **preset** is one complete look, and each one becomes a choice in the game. **Add preset** starts it with a layer shaped like the **Lid wash** starter shape: a soft wash over the eyelid.\n\nPress **Add preset**, or let me do it." },
+        buttons: [{ label: "Do it for me", then: "next", action: { kind: "sequence", steps: [
+          { kind: "studio", action: { kind: "preset.edit", command: { kind: "add" } } },
+          { kind: "studio.resetActiveLayer", starter: EYE_TOUR_LOOKS.first.starter }] } }],
+        advanceWhen: { event: "preset.added" } },
+      { id: "first-look-style", when: { writable: true }, anchor: "panel.finish", content: { title: "First look: colour and finish",
+        body: `Choose the layer's colour, then its finish. ${FINISH_MOD_TOKEN}. A rose colour with the Satin finish suits a first look.` },
+        buttons: [{ label: "Do it for me", then: "next", action: { kind: "sequence", steps: [
+          { kind: "studio.activeLayer", action: { kind: "layer.setColor", color: EYE_TOUR_LOOKS.first.color } },
+          { kind: "studio.activeLayer", action: { kind: "layer.setFinish", finish: EYE_TOUR_LOOKS.first.finish } }] } }],
+        advanceWhen: { event: "finish.changed" } },
+      { id: "second-look-add", when: { writable: true }, anchor: "presets.add", content: { title: "Second look: add another preset",
+        body: "Add a second preset for a different look. It starts with the same Lid wash layer; the next step adds a second layer to it." },
+        buttons: [{ label: "Do it for me", then: "next", action: { kind: "studio", action: { kind: "preset.edit", command: { kind: "add" } } } }],
+        advanceWhen: { event: "preset.added" } },
+      { id: "second-look-shape", when: { writable: true }, anchor: "layers.starters", content: { title: "Second look: a different starter shape",
+        body: "A look can have several layers, like real makeup: a wash on the lid with a liner on top. Open the arrow beside **Add layer** and choose **Classic wing**, a clean liner with a flick past the outer corner.\n\nThe other starter shapes are in the same menu." },
+        buttons: [{ label: "Do it for me", then: "next", action: { kind: "studio", action: { kind: "layer.edit", command: { kind: "add", starter: EYE_TOUR_LOOKS.second.starter } } } }],
+        advanceWhen: { event: "layer.added" } },
+      { id: "second-look-style", when: { writable: true }, anchor: "panel.finish", content: { title: "Second look: colour and finish",
+        body: "Give the new layer its own colour and finish. A deep blue with the Metallic finish stands well apart from the first look." },
+        buttons: [{ label: "Do it for me", then: "next", action: { kind: "sequence", steps: [
+          { kind: "studio.activeLayer", action: { kind: "layer.setColor", color: EYE_TOUR_LOOKS.second.color } },
+          { kind: "studio.activeLayer", action: { kind: "layer.setFinish", finish: EYE_TOUR_LOOKS.second.finish } }] } }],
+        advanceWhen: { event: "finish.changed" } },
+      { id: "check", when: { writable: true }, anchor: "package.check", content: { title: "Check your looks",
+        body: "Open **Mod package** and press **Check**. It lists which looks can become mod files, and names anything it would leave out and why.\n\nCheck creates no files and changes nothing." },
+        buttons: [{ label: "Check for me", action: { kind: "file", action: { kind: "package.check" } } }],
+        advanceWhen: { event: "package.checked" } },
+      // Until the game and mod manager are set up, the Package steps point at the setup card's one next step; the tour carries on when it's done.
+      { id: "setup", when: { writable: true, setup: "needs" }, anchor: "package.setup", content: { title: "One thing first: your game and mod manager",
+        body: "XF Studio needs to know where your game and mod manager are before it can build your mod. The **Game** card here says the one thing to do next, with a button where it can.\n\n**Settings › Game** holds the rest. Once the card says it's ready, this tour carries on by itself." },
+        buttons: [{ label: "Open Settings › Game", action: { kind: "settings", section: "game" } }] },
+      { id: "build", when: { writable: true, setup: "ready" }, anchor: "package.build", content: { title: "Build your mod",
+        body: "Press **Build mod files** and confirm. Building can take a minute or two, and you can stop it with **Stop** beside the progress.\n\nNothing goes into your game yet: Build only makes the mod files." },
+        advanceWhen: { event: "package.built" } },
+      { id: "install", when: { writable: true, setup: "ready", built: true }, anchor: "package.install", content: { title: "Add it to your game",
+        body: `Press **Add to my mod manager**. It shows exactly what will be added and where before anything changes. If you install mods by hand, **Show in folder** opens the built mod instead.\n\nEither way only the **${EYE_MAKEUP_MOD.modName}** mod is added: your other mods and frameworks are never changed.` },
+        advanceWhen: { event: "mod.installed" } },
+      { id: "in-game", when: { writable: true }, content: { title: "What to check in the game",
+        body: `Start the game (through Mod Organizer 2, if you use it) and open the character creator.\n\n- Among the head options, near the eye makeup, there's a new row labelled **${EYE_MAKEUP_MOD.selectorLabel}**. The mod itself is called ${EYE_MAKEUP_MOD.modName}.\n- Its choices are **Off** and your two looks, named as in your Presets list.\n- Choose each look and check the eyes show the colour, shape and finish you made.\n\nIf the row isn't there, check that ${EYE_MAKEUP_MOD.modName} is switched on in your mod manager, and that ArchiveXL, RED4ext and redscript are up to date. XF Studio never changes your frameworks; each one's page on Nexus Mods has its latest release. **Installing your mod** in Help has more.\n\nA masculine V's row hasn't been seen in the game yet. If something doesn't look right, **Report a problem…** in Help prepares a report for you to review.` } },
     ],
   },
   {

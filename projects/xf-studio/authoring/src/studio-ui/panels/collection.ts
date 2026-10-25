@@ -166,6 +166,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
         .then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "Mod package", outcome.message, [], { code: outcome.code }); }) });
       const line = h("p", { class: "install-line small", role: "status" });
       row = { element: h("div", { class: "install-row" }, h("div", { class: "row wrap gap-s" }, add, show), line), add, show, line };
+      // The tour points at the first mod's row; its element is in the page only while a Build result shows.
+      if (!installRows.size) rt.anchors.register("package.install", row.element);
       installRows.set(product, row);
     }
     return row;
@@ -192,6 +194,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     result,
     setup);
   rt.anchors.register("package.check", check);
+  rt.anchors.register("package.setup", setup);
+  // Build's button is the one showing: Build mod files, or (once the latest Build is current) its secondary twin.
+  let buildAnchor = "", releaseBuildAnchor = () => {};
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
     update(frame) {
@@ -201,6 +206,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       applyCapability(rebuild, buildCapability());
       const builtCurrent = files.package?.kind === "packageBuild" && files.package.freshness === "current";
       build.hidden = builtCurrent; rebuild.hidden = !builtCurrent;
+      const anchored = builtCurrent ? "rebuild" : "build";
+      if (anchored !== buildAnchor) { buildAnchor = anchored; releaseBuildAnchor(); releaseBuildAnchor = rt.anchors.register("package.build", builtCurrent ? rebuild : build); }
       renderMods(frame.library.products ?? [], frame.library.packagePlanIssue);
       const line = setupStatus(frame);
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;

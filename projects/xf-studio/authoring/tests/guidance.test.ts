@@ -16,6 +16,7 @@ import { ONBOARDING_TOUR_ID, TOURS, toursFor } from "../src/studio-ui/guidance/t
 import type { GuidanceFacts, Tour, TourCommand } from "../src/studio-ui/guidance/types";
 import type { StudioPanelId } from "../src/studio-ui/layout-defaults";
 import { PANEL_IDS, PANEL_META } from "../src/compose/views";
+import { SETTINGS_SECTIONS } from "../src/studio-ui/settings-sections";
 import { studioShortcut } from "../src/studio-ui/shortcuts";
 import { finishCatalogue } from "./fixtures/eye-region";
 
@@ -30,6 +31,9 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap(name => {
 
 function commandProblems(command: TourCommand, where: string): string[] {
   switch (command.kind) {
+    case "sequence": return command.steps.flatMap(step => commandProblems(step, where));
+    case "studio.resetActiveLayer": return typeof command.starter === "string" && command.starter ? [] : [`${where}: a reset names its starter`];
+    case "settings": return (SETTINGS_SECTIONS as readonly string[]).includes(command.section) ? [] : [`${where}: unknown settings group ${command.section}`];
     case "studio": return command.action.kind in ACTION_DESCRIPTORS ? [] : [`${where}: unknown action ${command.action.kind}`];
     case "studio.activeLayer": {
       const descriptor = (ACTION_DESCRIPTORS as Record<string, { payload: Record<string, unknown> }>)[command.action.kind];
@@ -115,7 +119,8 @@ test("the registry reports visible, hidden and missing anchors from layout boxes
 
 // ---------- Engine ----------
 
-const baseFacts: GuidanceFacts = { layers: 1, activeLayer: "a", finish: "matte", color: "#905774", edit: "1:0:s1", presets: 1, lighting: "studio", visiblePanels: ["layers", "uv", "head"] };
+const baseFacts: GuidanceFacts = { layers: 1, activeLayer: "a", finish: "matte", color: "#905774", edit: "1:0:s1", presets: 1, lighting: "studio", visiblePanels: ["layers", "uv", "head"],
+  writable: true, setup: "ready", package: "none", lastPackage: "", installed: 0 };
 function environment(overrides: Partial<{ anchors: Partial<Record<AnchorId, AnchorState>>; panels: StudioPanelId[]; unavailable: string[] }> = {}) {
   let facts = { ...baseFacts };
   const recorded: [string, string][] = [];

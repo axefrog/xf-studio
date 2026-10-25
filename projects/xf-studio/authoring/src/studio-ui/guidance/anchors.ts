@@ -17,13 +17,19 @@ export const CONTROL_ANCHORS = {
   "tabs.strip": { label: "Layout tabs" },
   "layers.add": { panel: "layers", label: "Add layer" },
   "layers.list": { panel: "layers", label: "Layer list" },
+  "layers.starters": { panel: "layers", label: "Starter shapes" },
   "uv.canvas": { panel: "uv", label: "UV map" },
   "head.view": { panel: "head", label: "3D view" },
   "finish.color": { panel: "finish", label: "Colour" },
   "finish.picker": { panel: "finish", label: "Finish picker" },
   "presets.list": { panel: "presets", label: "Preset list" },
+  "presets.add": { panel: "presets", label: "Add preset" },
   "history.list": { panel: "history", label: "History list" },
   "package.check": { panel: "package", label: "Check" },
+  "package.build": { panel: "package", label: "Build" },
+  "package.setup": { panel: "package", label: "Game setup" },
+  /** The row with Add to my mod manager and Show in folder; it exists once a Build has finished. */
+  "package.install": { panel: "package", label: "Add to my mod manager" },
 } as const satisfies Record<string, { panel?: StudioPanelId; label: string }>;
 
 export type ControlAnchorId = keyof typeof CONTROL_ANCHORS;

@@ -443,7 +443,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   // The check at start (the host skips it when Settings › Updates turns it off); the service waits until after first paint.
   startupUpdateCheck(rt);
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, tabs, panelsMenu: () => panelMenuItems(rt, view.research()), preferences: () => port.preferences.snapshot(),
-    guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port, catalogue, dockRef?.tree)) } } });
+    guidance: { start: guidance.start, reach: guidance.reach, verifyFacts: guidance.verifyFacts, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port, catalogue, dockRef?.tree)) } } });
   return { dock, runtime: rt };
 }
 

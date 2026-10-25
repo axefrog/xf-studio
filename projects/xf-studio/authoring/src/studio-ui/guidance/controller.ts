@@ -7,7 +7,7 @@ import { panelAnchor } from "./anchors";
 import { GuidanceService, type GuidanceAction, type GuidanceCapability, type GuidanceEnvironment, type StepButton } from "./engine";
 import { Callout, TourOverlay } from "./overlay";
 import { ONBOARDING_TOUR_ID, toursFor } from "./tours";
-import type { GuidanceFacts, TourCommand, TourNavigation } from "./types";
+import type { GuidanceFacts, SingleTourCommand, TourCommand, TourNavigation } from "./types";
 
 /** Read-only facts for `advanceWhen`, from the port's snapshots and the dock. */
 export function guidanceFacts(rt: StudioRuntime): GuidanceFacts {
@@ -19,6 +19,23 @@ export function guidanceFacts(rt: StudioRuntime): GuidanceFacts {
     presets: port.library.summary().draft?.presets.length ?? 0,
     lighting: port.authoring.previewState().preview?.lightingPreset ?? null,
     visiblePanels: rt.views.ids.filter(id => rt.dock.isVisible(id)),
+    ...packageFacts(rt),
+  };
+}
+
+/** Whether this window can change anything, how far the game setup is, and where the Mod package panel stands. */
+export function packageFacts(rt: StudioRuntime): Pick<GuidanceFacts, "writable" | "setup" | "package" | "lastPackage" | "installed"> {
+  const port = rt.port, lease = port.status.snapshot().lease, view = port.localSetup.snapshot().view, files = port.files.snapshot();
+  const readiness = view?.readiness;
+  // The same first issue the Mod package panel's setup line reports.
+  const issue = readiness && [...readiness.build.issues, ...readiness.sourceDiscovery.issues][0];
+  const last = files.last;
+  return {
+    writable: !lease || lease.writable,
+    setup: !view ? "loading" : issue || view.source === "backup" ? "needs" : "ready",
+    package: files.package ? files.package.kind === "packageBuild" ? "build" : "check" : "none",
+    lastPackage: last?.ok && (last.kind === "package.check" || last.kind === "package.build") ? `${last.kind === "package.build" ? "build" : "check"}@${last.at}` : "",
+    installed: Object.values(port.modInstall.snapshot().outcomes).filter(outcome => outcome.ok).length,
   };
 }
 
@@ -26,6 +43,14 @@ export function guidanceFacts(rt: StudioRuntime): GuidanceFacts {
 export function commandCapability(rt: StudioRuntime, command: TourCommand): GuidanceCapability {
   const port = rt.port;
   switch (command.kind) {
+    // The rest of a sequence depends on what its first command changes, so it is available while the first is.
+    case "sequence": return command.steps.length ? commandCapability(rt, command.steps[0]) : { available: false, reason: "Nothing to do." };
+    case "studio.resetActiveLayer": {
+      const layer = rt.editor.layer();
+      return layer ? port.authoring.capability({ kind: "layer.edit", command: { kind: "reset", id: layer.id, starter: command.starter } })
+        : { available: false, reason: "Add or select a layer first." };
+    }
+    case "settings": return { available: true };
     case "studio": return port.authoring.capability(command.action);
     case "studio.activeLayer": {
       const layer = rt.editor.layer();
@@ -39,7 +64,37 @@ export function commandCapability(rt: StudioRuntime, command: TourCommand): Guid
 }
 /** Run a tour button's command through the ordinary validated paths (dispatch, file workflow, dock). */
 export async function runCommand(rt: StudioRuntime, command: TourCommand): Promise<boolean> {
+  if (command.kind !== "sequence") return runSingle(rt, command);
+  // Each command is an ordinary action with its own Undo step; the first one refused ends the run (its refusal has already been said).
+  const lookBefore = rt.port.focus.editing()?.scope;
+  for (const step of command.steps) {
+    if (!await runSingle(rt, step)) return false;
+    // A new preset is shown by the editor a moment after it is added; the next command must act on its layer, never on the previous preset's.
+    if (step.kind === "studio" && step.action.kind === "preset.edit" && !await editorSwitched(rt, lookBefore)) {
+      rt.feedback.toast("warning", "Tour", "The new preset isn't showing yet. Try again in a moment."); return false;
+    }
+  }
+  rt.feedback.announce("Done. Undo steps back through each change.");
+  return true;
+}
+/** Wait (at most a second) until the look edits go to is not `before`, the one shown when the run began (the editing context names it). */
+async function editorSwitched(rt: StudioRuntime, before: string | undefined) {
+  for (let waited = 0; waited < 1000; waited += 25) {
+    const now = rt.port.focus.editing()?.scope;
+    // Nothing names the editing context (a window without one): there is nothing to wait for.
+    if (now !== before || now === undefined) return true;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  return false;
+}
+async function runSingle(rt: StudioRuntime, command: SingleTourCommand): Promise<boolean> {
   switch (command.kind) {
+    case "studio.resetActiveLayer": {
+      const layer = rt.editor.layer();
+      if (!layer) { rt.feedback.toast("info", "Tour", "Add or select a layer first."); return false; }
+      return rt.dispatch({ kind: "layer.edit", command: { kind: "reset", id: layer.id, starter: command.starter } });
+    }
+    case "settings": rt.settings.open(command.section); return true;
     case "studio": return rt.dispatch(command.action);
     case "studio.activeLayer": {
       const layer = rt.editor.layer();
@@ -71,8 +126,11 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     const action = { kind: "tours.record" as const, tourId, outcome };
     if (port.preferences.capability(action).available) port.preferences.dispatch(action);
   };
+  // Verification only (?verify=1): facts a capture sets by hand, over the real ones (a window that can't change anything, a computer that
+  // isn't set up, a Build result), so each state of a step can be shown without them.
+  let factsOverride: Partial<GuidanceFacts> | null = null;
   const env: GuidanceEnvironment = {
-    facts: () => guidanceFacts(rt),
+    facts: () => factsOverride ? { ...guidanceFacts(rt), ...factsOverride } : guidanceFacts(rt),
     anchor: id => rt.anchors.state(id),
     panelVisible: panel => rt.dock.isVisible(panel),
     panelTitle: panel => rt.views.meta[panel]?.title ?? panel,
@@ -98,7 +156,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
       if (!running) rt.changed();
       running = true;
       // A step is identified by its tour too: starting another tour at the same index still announces it.
-      const step = `${active.tour.id}:${active.index}`;
+      const step = `${active.tour.id}:${active.step}`;
       if (step !== shown || snapshot.revision !== lastRevision) {
         if (step !== shown) {
           rt.feedback.announce(`${active.tour.title}, step ${active.index + 1} of ${active.count}: ${active.content.title}`);
@@ -133,10 +191,10 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     if (typeof button.action === "string") { navigate(button.action); return; }
     // Read the step before the command runs: a shell paint during an async command can already have advanced
     // the tour on its `advanceWhen`, and `then: "next"` must not move it a second time (UI-42).
-    const before = service.snapshot().active?.index;
+    const before = service.snapshot().active?.step;
     const ok = await runCommand(rt, button.action);
     // A satisfied `advanceWhen` moves on by itself; `then: "next"` covers commands without one.
-    if (ok && !service.observe() && button.then === "next" && service.snapshot().active?.index === before) dispatch({ kind: "guidance.next" });
+    if (ok && !service.observe() && button.then === "next" && service.snapshot().active?.step === before) dispatch({ kind: "guidance.next" });
     else paint(true);
   }
   function start(tourId: string) {
@@ -196,6 +254,20 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     service, overlay, offer,
     elements: [overlay.element, offer.element],
     start, openHelp: options.openHelp,
+    /** Verification only: hold some facts at set values (null: back to the real ones), and the tour's repaint follows. */
+    verifyFacts(override: Partial<GuidanceFacts> | null) { factsOverride = override; service.observe(); paint(false); },
+    /** Verification only: start a tour and go to its step `stepId` (a step's own `id`); false when that step isn't shown in the state held now. */
+    reach(tourId: string, stepId: string) {
+      const tour = service.tourList().find(item => item.id === tourId), target = tour?.steps.findIndex(step => step.id === stepId) ?? -1;
+      if (!tour || target < 0 || !start(tourId)) return false;
+      for (let guard = 0; guard < tour.steps.length; guard++) {
+        const active = service.snapshot().active;
+        if (!active) return false;
+        if (active.step === target) { paint(false); return true; }
+        if (active.step > target || !dispatch({ kind: "guidance.next" }, false)) return false;
+      }
+      return false;
+    },
     /** Verification harnesses ask for the offer explicitly; it never appears by itself there. */
     offerOnboarding(frame: Frame) { offerState = "waiting"; maybeOffer(frame, true); },
     status: (tourId: string) => port.preferences.snapshot().tours?.[tourId],
@@ -210,7 +282,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
         { id: "help.open", title: "Help", group: "Help", icon: "help", shortcut: shortcutLabel("shell.help"),
           keywords: "help guide tour topics questions support answers shortcuts go to open panel", capability: () => ({ available: true }), run: () => options.openHelp() },
         ...service.tourList().map(tour => ({ id: `tour.${tour.id}`, title: `Start tour: ${tour.title}`, group: "Help", icon: "play" as const,
-          keywords: `tour guide walkthrough ${tour.audience === "whats-new" ? "new release changes" : "onboarding introduction"}`,
+          keywords: `tour guide walkthrough ${tour.keywords ?? (tour.audience === "whats-new" ? "new release changes" : "onboarding introduction")}`,
           capability: () => service.capability({ kind: "guidance.startTour", tourId: tour.id }), run: () => { start(tour.id); } })),
       ];
     },

@@ -105,6 +105,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       h("div", { class: "row gap-xs" }, add, starters, duplicate, more)),
     noPreset, newer.element, empty, list.element);
   ctx.anchors.register("layers.add", add);
+  ctx.anchors.register("layers.starters", starters);
   ctx.anchors.register("layers.list", list.element);
   return {
     spec: { id: "layers", ...EYE_MAKEUP_PANEL_META.layers, element },

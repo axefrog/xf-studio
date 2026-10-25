@@ -87,6 +87,7 @@ export function presetsPanel(ctx: EyeMakeupViewContext): PanelController {
     failed, list.element,
     h("div", { class: "row wrap gap-s panel-foot" }, restore, importRecipe));
   ctx.anchors.register("presets.list", list.element);
+  ctx.anchors.register("presets.add", addButton);
   return {
     spec: { id: "presets", ...EYE_MAKEUP_PANEL_META["presets"], element },
     emptyChoices: "first",

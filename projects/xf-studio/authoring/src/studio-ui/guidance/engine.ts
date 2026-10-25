@@ -1,7 +1,7 @@
 import type { PayloadSchema } from "../../app/studio-action-descriptors";
 import type { StudioPanelId } from "../layout-defaults";
 import { anchorInfo, type AnchorId, type AnchorState } from "./anchors";
-import type { AppCondition, GuidanceEvent, GuidanceFacts, HelpContent, Side, Tour, TourButton, TourCommand, TourNavigation } from "./types";
+import type { AppCondition, GuidanceEvent, GuidanceFacts, HelpContent, Side, Tour, TourButton, TourCommand, TourGate, TourNavigation } from "./types";
 
 /**
  * The tour runner: a DOM-free presentation service with a typed snapshot and typed actions.
@@ -53,7 +53,10 @@ export type StepButton = { id: string; label: string; role: "command" | "nav"; p
   action: TourCommand | TourNavigation; then?: "next"; capability: GuidanceCapability };
 export type ActiveTour = {
   tour: { id: string; title: string; audience: Tour["audience"]; version?: string };
-  index: number; count: number; first: boolean; last: boolean;
+  /** The step's place among the steps this state shows (gated-out ones aren't counted), and how many there are. */
+  index: number; count: number;
+  /** The step's own position in the tour's list: its identity. */
+  step: number; first: boolean; last: boolean;
   content: HelpContent; placement: "auto" | Side; target: StepTarget; buttons: StepButton[];
   /** The step moves on by itself once its condition holds. */
   waiting: boolean;
@@ -69,7 +72,19 @@ export function eventHappened(event: GuidanceEvent, before: GuidanceFacts, now: 
     case "color.changed": return now.color !== null && now.color !== before.color && now.activeLayer === before.activeLayer;
     case "preset.added": return now.presets > before.presets;
     case "lighting.changed": return now.lighting !== before.lighting;
+    // A Check or Build that finished after the step began (a Build also settles the Check before it).
+    case "package.checked": return now.lastPackage !== "" && now.lastPackage !== before.lastPackage;
+    case "package.built": return now.lastPackage.startsWith("build@") && now.lastPackage !== before.lastPackage;
+    case "mod.installed": return now.installed > before.installed;
   }
+}
+/** Whether a step's gate holds for these facts (no gate always holds). */
+export function gateHolds(gate: TourGate | undefined, facts: GuidanceFacts): boolean {
+  if (!gate) return true;
+  if (gate.writable !== undefined && gate.writable !== facts.writable) return false;
+  if (gate.setup !== undefined && gate.setup !== (facts.setup === "needs" ? "needs" : "ready")) return false;
+  if (gate.built !== undefined && gate.built !== (facts.package === "build")) return false;
+  return true;
 }
 export function conditionHolds(condition: AppCondition, before: GuidanceFacts, now: GuidanceFacts,
   capability: (command: TourCommand) => GuidanceCapability): boolean {
@@ -88,14 +103,28 @@ export class GuidanceService {
   private listeners = new Set<() => void>();
   constructor(private tours: readonly Tour[], private env: GuidanceEnvironment) {}
 
+  /**
+   * The app's facts are read once per public call, not once per step looked at: reading them copies the app's snapshots, and a tour
+   * reads them on every paint.
+   */
+  private memo?: GuidanceFacts;
+  private depth = 0;
+  private facts(): GuidanceFacts { return this.memo ??= this.env.facts(); }
+  private scoped<T>(run: () => T): T {
+    if (this.depth++ === 0) this.memo = undefined;
+    try { return run(); } finally { if (--this.depth === 0) this.memo = undefined; }
+  }
+
   tourList(): readonly Tour[] { return this.tours; }
   descriptors() { return structuredClone(GUIDANCE_DESCRIPTORS); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private changed() { this.revision++; for (const listener of this.listeners) listener(); }
 
-  /** Whether a step can be shown at all: an unavailable anchor without a panel to open is skipped. */
+  /** Whether a step can be shown at all: its gate must hold, and an unavailable anchor without a panel to open is skipped. */
   private showable(tour: Tour, index: number) {
-    const anchor = tour.steps[index]?.anchor;
+    const step = tour.steps[index];
+    if (step?.when && !gateHolds(step.when, this.facts())) return false;
+    const anchor = step?.anchor;
     if (!anchor) return true;
     return this.env.anchor(anchor) === "visible" || !!anchorInfo(anchor)?.panel;
   }
@@ -104,7 +133,8 @@ export class GuidanceService {
     return undefined;
   }
 
-  capability(action: GuidanceAction): GuidanceCapability {
+  capability(action: GuidanceAction): GuidanceCapability { return this.scoped(() => this.capabilityNow(action)); }
+  private capabilityNow(action: GuidanceAction): GuidanceCapability {
     if (action.kind === "guidance.startTour") {
       if (typeof action.tourId !== "string" || !this.tours.some(tour => tour.id === action.tourId))
         return { available: false, reason: "That tour isn't available in this version." };
@@ -119,7 +149,8 @@ export class GuidanceService {
     return { available: true };
   }
 
-  dispatch(action: GuidanceAction): GuidanceResult {
+  dispatch(action: GuidanceAction): GuidanceResult { return this.scoped(() => this.dispatchNow(action)); }
+  private dispatchNow(action: GuidanceAction): GuidanceResult {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, reason: allowed.reason ?? "Unavailable." };
     switch (action.kind) {
@@ -129,19 +160,19 @@ export class GuidanceService {
         if (this.active) this.end(this.active.tour.id, "skipped");
         const index = this.nearest(tour, 0, 1);
         if (index === undefined) { this.end(tour.id, "completed"); return { ok: true }; }
-        this.active = { tour, index, baseline: this.env.facts() };
+        this.active = { tour, index, baseline: this.facts() };
         break;
       }
       case "guidance.next": {
         const { tour, index } = this.active!;
         const next = this.nearest(tour, index + 1, 1);
         if (next === undefined) { this.end(tour.id, "completed"); return { ok: true }; }
-        this.active = { tour, index: next, baseline: this.env.facts() };
+        this.active = { tour, index: next, baseline: this.facts() };
         break;
       }
       case "guidance.back": {
         const { tour, index } = this.active!;
-        this.active = { tour, index: this.nearest(tour, index - 1, -1)!, baseline: this.env.facts() };
+        this.active = { tour, index: this.nearest(tour, index - 1, -1)!, baseline: this.facts() };
         break;
       }
       case "guidance.skip": this.end(this.active!.tour.id, "skipped"); return { ok: true };
@@ -161,12 +192,13 @@ export class GuidanceService {
    * Re-read the app after it changed: advance when the step's condition holds, and move past a
    * step whose anchor has gone with no panel to open. Returns whether the step changed.
    */
-  observe(): boolean {
+  observe(): boolean { return this.scoped(() => this.observeNow()); }
+  private observeNow(): boolean {
     const active = this.active;
     if (!active) return false;
     const step = active.tour.steps[active.index];
     if (!this.showable(active.tour, active.index)) { this.dispatch({ kind: "guidance.next" }); return true; }
-    if (step.advanceWhen && conditionHolds(step.advanceWhen, active.baseline, this.env.facts(), command => this.env.capability(command))) {
+    if (step.advanceWhen && conditionHolds(step.advanceWhen, active.baseline, this.facts(), command => this.env.capability(command))) {
       this.dispatch({ kind: "guidance.next" });
       return true;
     }
@@ -182,7 +214,8 @@ export class GuidanceService {
     return { kind: "none" };
   }
 
-  snapshot(): GuidanceSnapshot {
+  snapshot(): GuidanceSnapshot { return this.scoped(() => this.snapshotNow()); }
+  private snapshotNow(): GuidanceSnapshot {
     const active = this.active;
     if (!active) return { active: null, revision: this.revision, last: this.last };
     const { tour, index } = active, step = tour.steps[index];
@@ -207,11 +240,13 @@ export class GuidanceService {
         : [...(first ? [] : [nav("back")]), nav(last ? "finish" : "next", true)];
       buttons = [...commands, ...navButtons];
     }
+    // Steps the person's state rules out (a gate) are not counted, so the progress marks match the steps they will meet.
+    const facts = this.facts(), counted = tour.steps.map(item => gateHolds(item.when, facts));
     return {
       revision: this.revision, last: this.last,
       active: {
         tour: { id: tour.id, title: tour.title, audience: tour.audience, ...(tour.version ? { version: tour.version } : {}) },
-        index, count: tour.steps.length, first, last,
+        index: counted.slice(0, index).filter(Boolean).length, count: counted.filter(Boolean).length, step: index, first, last,
         content: step.content, placement: step.placement ?? "auto", target, buttons, waiting: !!step.advanceWhen,
       },
     };
