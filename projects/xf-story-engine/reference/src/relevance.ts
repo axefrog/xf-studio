@@ -89,6 +89,12 @@ export function bindingsOf(change: Change): { bindings: Binding[]; wild: Extract
       for (const n of change.focus) out.push({ node: n, role: 'focus' });
       return { bindings: out, wild: null };
     }
+    case 'belief': {
+      // A memorable belief change binds the believer (role `believer`), the subject (role `subject`) and each evidence event (role `evidence`) (v4.17).
+      const out: Binding[] = [{ node: change.believer, role: 'believer' }, { node: change.subject, role: 'subject' }];
+      for (const e of change.evidence) out.push({ node: e, role: 'evidence' });
+      return { bindings: out, wild: null };
+    }
     case 'contribution': {
       const sc = change.contribution.target.scope;
       if (sc && 'nodes' in sc) return { bindings: sc.nodes.map((n): Binding => ({ node: n, slot: change.contribution.target.slot })), wild: null };

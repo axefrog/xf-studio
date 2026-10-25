@@ -207,12 +207,19 @@ export type Change =
   | {
       c: 'event'; event: Id; kind: string; place?: Id;
       participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }>;
+      /** v4.17 (V4-51), under `eventChangeFields`: what the event was minted with, so a reader can apply an outcome-conditioned fill from the change alone. */
+      outcome?: 'done' | 'failed' | 'prevented'; served?: Id; data?: Record<string, Value>;
     }
   | { c: 'minted'; node: Id; kind: KindId }
   | { c: 'contribution'; contribution: Contribution; ended: boolean }
   | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value; at?: GameTime }
   /** A frame's status changed (v4, V4-4). Weight and parent changes produce none. */
-  | { c: 'frame'; frame: Id; actor: Id; level: string; focus: Id[]; old: string; new: string };
+  | { c: 'frame'; frame: Id; actor: Id; level: string; focus: Id[]; old: string; new: string }
+  /** A memorable belief set, revised or dropped (v4.17, V4-52, under `beliefChanges`). `evidence` is the belief's originating events. */
+  | {
+      c: 'belief'; belief: Id; believer: Id; subject: Id; path: SlotPath; at?: GameTime;
+      op: 'set' | 'revised' | 'dropped'; by: 'observed' | 'told' | 'inferred'; evidence: Id[];
+    };
 
 /** A change as queued: stamped with the time it was made, the revision it produced, and the epoch it was made in. */
 export interface PendingChange {

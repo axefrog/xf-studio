@@ -46,6 +46,15 @@ export interface Config {
    * On by default.
    */
   itemScopePlace: boolean;
+  /**
+   * v4.17 (V4-53): whether opening a frame is a semantic change (`frame`, `old: 'none'` or the earlier status), kept apart from
+   * `frameChanges` so that turning it off takes nothing from the v4 digest. Off in both digest configurations. On by default.
+   */
+  openingChanges: boolean;
+  /** v4.17 (V4-52): whether setting, revising or dropping a memorable belief is a semantic change (`belief`). Off in both digests. */
+  beliefChanges: boolean;
+  /** v4.17 (V4-51): whether the `event` change carries `outcome`, `served` and `data`. Off in both digest configurations. */
+  eventChangeFields: boolean;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -69,6 +78,9 @@ export const DEFAULT_CONFIG: Config = {
   summaryPlaceMax: 1024,
   frameChanges: true,
   itemScopePlace: true,
+  openingChanges: true,
+  beliefChanges: true,
+  eventChangeFields: true,
 };
 
 export function makeConfig(over?: Partial<Config>): Config {

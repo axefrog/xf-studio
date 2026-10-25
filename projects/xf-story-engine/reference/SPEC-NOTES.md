@@ -1510,6 +1510,7 @@ Schema, hashing and identity arithmetic never inspect live state.
 | `Beliefs.drop` | recoverIfSaved |
 | `Beliefs.get` | recoverIfSaved |
 | `Beliefs.knows` | recoverIfSaved |
+| `Beliefs.promote` | recoverIfSaved |
 | `Beliefs.observe` | recoverIfSaved |
 | `Beliefs.restore` | raw: replay hook |
 | `Beliefs.set` | recoverIfSaved |
@@ -1619,6 +1620,7 @@ Schema, hashing and identity arithmetic never inspect live state.
 | `Kernel.mintSilent` | via recoverOrAddHeader |
 | `Kernel.mirrored` | via recoverOrAddHeader |
 | `Kernel.observeAs` | recoverIfSaved |
+| `Kernel.observedAt` | recoverIfSaved |
 | `Kernel.observeReading` | recoverIfSaved |
 | `Kernel.open` | recoverIfSaved |
 | `Kernel.pin` | recoverIfSaved |

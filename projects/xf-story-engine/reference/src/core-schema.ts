@@ -94,6 +94,8 @@ export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
           dim('core:seed-fact-value', { t: 'int', min: -(2 ** 31), max: 2 ** 31 - 1 }, 'order'),
           dim('core:event-outcome', { t: 'enum', values: ['done', 'failed', 'prevented'] }),
           dim('core:frame-ref', { t: 'text' }),
+          // v4.17 (V4-50): a `meta:` event's data record, encoded canonically (see event-kinds.ts).
+          dim('core:event-data', { t: 'text' }),
         ]
       : []),
     dim('core:effect-id', { t: 'enum', values: CORE_EFFECTS }),
@@ -256,6 +258,7 @@ export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
           ? [
               { key: 'outcome', dim: 'core:event-outcome', card: 'one' as const, mode: 'assigned' as const, tier: 3 as const },
               { key: 'served', dim: 'core:frame-ref', card: 'one' as const, mode: 'assigned' as const, tier: 3 as const },
+              { key: 'data', dim: 'core:event-data', card: 'one' as const, mode: 'assigned' as const, tier: 3 as const },
             ]
           : []),
       ],

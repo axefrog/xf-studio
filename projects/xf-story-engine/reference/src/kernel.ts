@@ -6,6 +6,7 @@ import { hrec } from './canon.ts';
 import { type Config, makeConfig } from './config.ts';
 import { H, b as hb, f as hf, i as hi, id as hid, isId, memberId, mirroredId, ownedId, rootId, s as hs, val as hval } from './id.ts';
 import { Events } from './events.ts';
+import { EventKinds } from './event-kinds.ts';
 import { Evolution, type AdvanceReport, type Envelope, type SubmitResult } from './evolution.ts';
 import { Beliefs } from './beliefs.ts';
 import { StagedBatch } from './batch.ts';
@@ -153,6 +154,8 @@ export class Kernel {
   readonly queries: Queries;
   readonly summaries: Summaries;
   readonly events: Events;
+  /** The event-kind registry (S0 10.5, v4.8; `roles`, `fills` and `dataFields` from v4.17). */
+  readonly eventKinds = new EventKinds();
   readonly beliefs: Beliefs;
   readonly provenance: Provenance;
   readonly persistence: Persistence;
@@ -584,6 +587,21 @@ export class Kernel {
     const spec: PinSpec = { node, slot: key, value: r.value, reason: 'observed', cause: observer, at };
     if (evidence !== undefined) spec.evidence = evidence;
     return this.pin(spec);
+  }
+
+  /**
+   * `observedAt(node, t)` (S0 9.4, v4.17, V4-55): the earliest `at` among the node's pins with reason `observed` that are valid at `t`, or
+   * undefined if there are none. A read as of the snapshot, like every process read; a `committed` pin does not count.
+   */
+  observedAt(node: Id, t: GameTime): GameTime | undefined {
+    this.persistence.recoverIfSaved(node);
+    let best: GameTime | undefined;
+    for (const p of this.store.pinsOfNode(node)) {
+      if (p.reason !== 'observed' || this.store.isWithdrawn(p.id)) continue;
+      if (!(p.valid.from <= t && (p.valid.to === undefined || t < p.valid.to))) continue;
+      if (best === undefined || p.at < best) best = p.at;
+    }
+    return best;
   }
 
   /** The greatest relevance a change has against an actor's eligible frames, optionally for some interest types only (S0 10.5, V4-44). */

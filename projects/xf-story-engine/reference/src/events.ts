@@ -9,6 +9,7 @@ import { H, id as hid, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
 import { newOpCtx, type OpCtx } from './resolve.ts';
 import { failIfFailed } from './work.ts';
+import { decodeData, encodeData } from './event-kinds.ts';
 import type { Effect, GameTime, Id, PinReason, SlotPath, Value } from './types.ts';
 
 export interface EventSpec {
@@ -26,9 +27,11 @@ export interface EventSpec {
   outcome?: 'done' | 'failed' | 'prevented';
   /** v4 (V4-3): the Id of the frame whose goal the act served. Optional. */
   served?: Id;
+  /** v4.17 (V4-50): the data record of a `meta:` kind, whose keys and value types the kind's registry entry declares. */
+  data?: Record<string, Value>;
 }
 
-export type EventField = 'time' | 'place' | 'kind' | 'participants' | 'effects' | 'witnesses' | 'causes' | 'outcome' | 'served';
+export type EventField = 'time' | 'place' | 'kind' | 'participants' | 'effects' | 'witnesses' | 'causes' | 'outcome' | 'served' | 'data';
 /** An opened summary item's descriptor belongs to its summary; its other fields belong to the opening process. */
 export interface EventProvenance { descriptor: Id; materialisation: Id }
 export interface EventMaterialisation { event: Id; provenance: EventProvenance }
@@ -179,12 +182,25 @@ export class Events {
     if (outcome === 'done' || outcome === 'failed' || outcome === 'prevented') spec.outcome = outcome;
     const served = own(id, 'served');
     if (typeof served === 'string') spec.served = served;
+    const data = own(id, 'data');
+    if (typeof data === 'string') {
+      const rec = decodeData(data);
+      if (rec !== undefined) spec.data = rec;
+    }
     return spec;
   }
 
   private put(spec: EventSpec, quiet: boolean, provenance?: EventProvenance): Id {
     const k = this.k;
     k.assertWritable();
+    // v4.17 (V4-50): a data record that is not the kind's declared one, or on a kind that is not `meta:`, is refused as a defect and nothing is minted.
+    if (!quiet) {
+      const problem = k.eventKinds.dataProblem(spec.kind, spec.data);
+      if (problem !== undefined) {
+        k.defects.record({ kind: 'event-data', detail: problem });
+        throw new Error(`event data refused: ${problem}`);
+      }
+    }
     const nid = H(hs('mint'), hid(spec.creator), hid(spec.cause), hs(spec.name));
     // Reusing a header is silent: the occurrence was announced when it first happened.
     const have = k.persistence.restoreReferencedHeader(nid) !== undefined;
@@ -238,6 +254,7 @@ export class Events {
     causes.forEach((c, i) => put(nid, `causes[${i}]`, c));
     if (spec.outcome !== undefined) put(nid, 'outcome', spec.outcome);
     if (spec.served !== undefined) put(nid, 'served', spec.served);
+    if (spec.data !== undefined) put(nid, 'data', encodeData(spec.data));
     if (!provenance && spec.place !== undefined && k.store.header(spec.place)) {
       k.addEdge({ type: 'core:located-in', from: nid, to: spec.place, cause: nid, valid: { from: spec.time }, silent: true });
     }
@@ -251,6 +268,11 @@ export class Events {
       effects: effects.map((e) => ({ on: e.on, effect: e.effect })),
     };
     if (spec.place !== undefined) ch.place = spec.place;
+    if (k.config.eventChangeFields) {
+      if (spec.outcome !== undefined) ch.outcome = spec.outcome;
+      if (spec.served !== undefined) ch.served = spec.served;
+      if (spec.data !== undefined) ch.data = { ...spec.data };
+    }
     k.emit(ch, spec.time);
     return nid;
   }
@@ -326,6 +348,7 @@ export class Events {
       case 'kind':
       case 'outcome':
       case 'served':
+      case 'data':
         out.push({ node: event, slot: field });
         break;
       case 'participants':
@@ -379,7 +402,7 @@ export class Events {
     const out: EventField[] = [...EVENT_FIELDS];
     const h = this.k.store.header(event);
     if (h && this.k.schema.slotInfo(h.kind, 'outcome')) {
-      for (const f of ['outcome', 'served'] as const) {
+      for (const f of ['outcome', 'served', 'data'] as const) {
         if (this.k.resolve(event, f, this.k.now).status === 'ok') out.push(f);
       }
     }

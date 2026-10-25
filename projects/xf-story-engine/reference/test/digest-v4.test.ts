@@ -9,7 +9,8 @@ import { digestOf, makerProcess, moodProcess, startWorld, synKernel } from './sy
 
 describe('the v4 determinism digest', () => {
   const run = () => {
-    const k = synKernel('digest', { snapshotEvery: 40 });
+    // the v4.17 emissions (openings, belief changes, the event change's new fields) are off in both digest configurations (S0 v4.17, section 20)
+    const k = synKernel('digest', { snapshotEvery: 40, openingChanges: false, beliefChanges: false, eventChangeFields: false });
     const w = startWorld(k);
     k.evolution.register(moodProcess(() => w.agents));
     k.evolution.register(makerProcess(() => w));
@@ -29,7 +30,7 @@ describe('the v4 determinism digest', () => {
   });
 
   test('each v4 switch moves the digest on its own, so the v3 digest is a deliberate mode', () => {
-    const k3 = synKernel('digest', { snapshotEvery: 40, frameChanges: false }, { v4: false });
+    const k3 = synKernel('digest', { snapshotEvery: 40, frameChanges: false, openingChanges: false, beliefChanges: false, eventChangeFields: false }, { v4: false });
     const w3 = startWorld(k3);
     k3.evolution.register(moodProcess(() => w3.agents));
     k3.evolution.register(makerProcess(() => w3));

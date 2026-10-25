@@ -152,7 +152,7 @@ describe('V4-4: the frame change', () => {
   });
 
   test('the change can be switched off (the frozen v3 digest runs without it)', () => {
-    const k = coreKernel('V4-4b', undefined, { frameChanges: false });
+    const k = coreKernel('V4-4b', undefined, { frameChanges: false, openingChanges: false });
     const a = k.root('a', 'core:person');
     const f = k.frames.open({ actor: a, level: 'goal', origin: a, weight: 1, cause });
     k.frames.setStatus(f.id, 'satisfied', cause);

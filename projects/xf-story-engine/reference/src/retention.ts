@@ -127,6 +127,26 @@ export class Retention {
     for (const f of k.frames.all()) {
       if (rootActors.has(f.actor) && k.frames.eligible(f)) for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
     }
+    // Retained frames (v4.17, V4-54) are roots while active or blocked, whoever their actor is; once satisfied or abandoned one is kept only
+    // while a persisted record refers to it, which here is a canon event's `served`.
+    let served: Set<Id> | undefined;
+    for (const f of k.frames.all()) {
+      if (!f.retain) continue;
+      if (k.frames.eligible(f)) {
+        for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
+        continue;
+      }
+      if (served === undefined) {
+        served = new Set<Id>();
+        const canon = new Set(k.events.canonEvents());
+        for (const c of k.store.allContributions()) {
+          const sc = c.target.scope;
+          if (c.target.slot === 'served' && c.form.f === 'const' && typeof c.form.value === 'string' && sc && 'nodes' in sc && sc.nodes.some((n) => canon.has(n))) served.add(c.form.value);
+        }
+        for (const p of k.store.allPins()) if (p.slot === 'served' && typeof p.value === 'string' && canon.has(p.node)) served.add(p.value);
+      }
+      if (served.has(f.id)) for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
+    }
     return frameIds;
   }
 

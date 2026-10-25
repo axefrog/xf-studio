@@ -9,6 +9,7 @@ import type { Schema } from './schema.ts';
 import type {
   Edge, EdgeTypeId, GameTime, Id, KindId, Predicate, Region, ResolveResult, Selector, SlotPath, SpatialRegion, Value,
 } from './types.ts';
+import { decodeData } from './event-kinds.ts';
 import { contains } from './region.ts';
 import { valueKey } from './value.ts';
 import { failIfFailed } from './work.ts';
@@ -136,6 +137,14 @@ function follow(env: PredicateEnv, node: Id, rawPath: string): { target: Target;
       cur = o;
       if (isLast) return { target: { k: 'node', node: cur }, bucket };
       continue;
+    }
+    if (isLast && seg.startsWith('data.') && !env.restrict) {
+      // `data.<key>`: a field of a `meta:` event's data record (S0 9.2, v4.17). The record is the event's `data` slot, encoded canonically.
+      const r = env.read(cur, 'data');
+      failIfFailed(r.status, `data of ${cur}`);
+      const rec = (r.status === 'ok' || r.status === 'contradiction') && typeof r.value === 'string' ? decodeData(r.value) : undefined;
+      const v = rec?.[seg.slice('data.'.length)];
+      return { target: v === undefined ? { k: 'missing' } : { k: 'value', value: v }, bucket };
     }
     if (isLast) {
       const r = env.read(cur, seg);

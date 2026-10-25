@@ -10,7 +10,7 @@ import { H, id as hid, i as hi, s as hs } from './id.ts';
 import type { TellOperator } from './evolution.ts';
 import type { Kernel } from './kernel.ts';
 import { newOpCtx } from './resolve.ts';
-import type { DimId, Edge, GameTime, Id, Region, SlotPath, Value } from './types.ts';
+import type { Change, DimId, Edge, GameTime, Id, Region, SlotPath, Value } from './types.ts';
 import { type Budget, Worklist, failIfFailed } from './work.ts';
 import { valueKey } from './value.ts';
 
@@ -234,7 +234,39 @@ export class Beliefs {
     }
     this.k.bump();
     if (outcome === 'added' || outcome === 'replaced') this.notify(b.believer, b.subject);
+    // A change is heard only for memorable beliefs (v4.17, V4-52): a non-memorable one is texture that a reload does not keep.
+    switch (outcome) {
+      case 'added': if (b.memorable) this.announce('set', b); break;
+      case 'corroborated': if (existing!.memorable) this.announce('revised', existing!); break;
+      case 'replaced':
+        if (existing!.memorable) this.announce(b.memorable ? 'revised' : 'dropped', b.memorable ? b : existing!);
+        else if (b.memorable) this.announce('set', b);
+        break;
+      default: break;
+    }
     return outcome;
+  }
+
+  /** A memorable belief change (v4.17, V4-52), queued like any other change: a staged batch holds it until its commit, and a replay makes none. */
+  private announce(op: 'set' | 'revised' | 'dropped', b: Belief): void {
+    if (!this.k.config.beliefChanges) return;
+    const ch: Change = {
+      c: 'belief', belief: b.id, believer: b.believer, subject: b.subject, path: b.path, op, by: b.source.by, evidence: [...b.evidence],
+    };
+    if (b.at !== undefined) ch.at = b.at;
+    this.k.emit(ch);
+  }
+
+  /** An existing belief becomes memorable (v4.17, V4-52): the change is a `set`. Returns whether anything changed. */
+  promote(believer: Id, beliefId: Id): boolean {
+    this.k.assertWritable();
+    this.k.persistence.recoverIfSaved(believer);
+    const b = this.byBeliever.get(believer) && [...this.byBeliever.get(believer)!.values()].find((x) => x.id === beliefId);
+    if (!b || b.memorable) return false;
+    b.memorable = true;
+    this.k.bump();
+    this.announce('set', b);
+    return true;
   }
 
   /**
@@ -261,6 +293,7 @@ export class Beliefs {
         m.delete(key);
         this.k.bump();
         this.notify(believer, b.subject);
+        if (b.memorable) this.announce('dropped', b);
         return true;
       }
     }

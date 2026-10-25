@@ -82,6 +82,8 @@ export interface ProcessCtx {
   /** Process randomness for the window being computed, `w` (V4-41): rand("proc", worldSeed, processId, w, ...key). */
   procRand(w: number, ...key: HArg[]): number;
   query(q: Query): QueryOutcome;
+  /** The earliest `at` of the node's `observed` pins valid at `t`, or undefined (S0 9.4, v4.17). As of the snapshot. */
+  observedAt(node: Id, t: GameTime): GameTime | undefined;
   /** This process's own state as of the snapshot (V4-35). Undefined until the process has returned one. */
   own<S = any>(): S | undefined;
   /** Another process's last published digest as of the snapshot (V4-36), read-only. */
@@ -361,6 +363,7 @@ export class Evolution {
         rand: (...key) => rand(hs('proc'), hid(k.worldSeed), hs(def.id), hi(b), ...key),
         procRand: (w, ...key) => rand(hs('proc'), hid(k.worldSeed), hs(def.id), hi(w), ...key),
         query: (q) => k.queries.run(q),
+        observedAt: (node, at) => k.observedAt(node, at),
         own: <S>() => this.ownOf<S>(def),
         digest: <D>(processId: string) => this.digestOf<D>(processId),
         demanded: (tier) => k.frames.demanded(tier),

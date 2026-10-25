@@ -49,6 +49,8 @@ export interface ContextFrame {
   status: FrameStatus;
   opened: GameTime;
   cause: Id;
+  /** v4.17 (V4-54): a retained frame is a retention root while active or blocked, persisted like a demand root's, and creates no demand (focus tier 0). */
+  retain?: boolean;
 }
 
 export interface FrameSpec {
@@ -63,6 +65,8 @@ export interface FrameSpec {
   status?: FrameStatus;
   cause: Id;
   id?: Id;
+  /** v4.17: open a retained frame (S0 9.4). Its focus tier must be 0 (the default when `retain` is set). */
+  retain?: boolean;
 }
 
 export interface Dilemma {
@@ -254,6 +258,8 @@ export class Frames {
     this.k.assertWritable();
     this.k.persistence.recoverIfSaved(spec);
     this.checkWritable(spec.actor, spec.level);
+    // A retained frame never creates demand: its focus tier is 0 (S0 9.4, v4.17).
+    if (spec.retain && (spec.focus?.tier ?? 0) !== 0) throw new Error('a retained frame has focus tier 0, so that retaining a frame never creates demand (S0 9.4)');
     const opened = this.k.now;
     const payload = spec.payload ?? {};
     const fid = spec.id ?? H(
@@ -261,7 +267,10 @@ export class Frames {
       hrec((spec.parents ?? []).map((p) => [p.frame, p.weight])),
     );
     const existing = this.frames.get(fid);
-    if (existing) return existing;
+    // A frame that ended and is opened again under its Id is opened afresh (S0 10.5, v4.17), when openings are heard; otherwise the
+    // record that ended stays as it is, as in v4.16.
+    const afresh = existing !== undefined && !this.eligible(existing) && this.k.config.openingChanges;
+    if (existing && !afresh) return existing;
     const parents = (spec.parents ?? []).map((p) => ({ ...p }));
     for (const p of parents) {
       if (!this.frames.get(p.frame)) throw new Error(`unknown parent frame: ${p.frame}`);
@@ -272,11 +281,17 @@ export class Frames {
     const f: ContextFrame = {
       id: fid, actor: spec.actor, level: spec.level, parents, origin: spec.origin, payload,
       weight: spec.weight, own: { ...emptyInterests(), ...spec.own },
-      focus: { nodes: spec.focus?.nodes ?? [], tier: spec.focus?.tier ?? 3 },
+      focus: { nodes: spec.focus?.nodes ?? [], tier: spec.focus?.tier ?? (spec.retain ? 0 : 3) },
       status: spec.status ?? 'active', opened, cause: spec.cause,
     };
+    if (spec.retain) f.retain = true;
+    if (afresh) for (const p of existing.parents) this.kids.get(p.frame)?.delete(fid);
     this.insert(f);
     this.touch(f.id, { dilemma: true });
+    // Opening a frame is a semantic change (S0 10.5, v4.17), under its own switch: `old` is `none`, or the earlier status when reopened afresh.
+    if (this.k.config.openingChanges) {
+      this.k.emit({ c: 'frame', frame: f.id, actor: f.actor, level: f.level, focus: [...f.focus.nodes], old: afresh ? existing.status : 'none', new: f.status });
+    }
     return f;
   }
 

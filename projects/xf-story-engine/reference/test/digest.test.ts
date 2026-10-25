@@ -57,7 +57,7 @@ describe('primitive vectors (BLAKE3 hash, unit mapping, randomness, fdlibm ln)',
 
 describe('the determinism digest', () => {
   const run = () => {
-    const k = synKernel('digest', { snapshotEvery: 40, frameChanges: false }, { v4: false });
+    const k = synKernel('digest', { snapshotEvery: 40, frameChanges: false, openingChanges: false, beliefChanges: false, eventChangeFields: false }, { v4: false });
     const w = startWorld(k);
     k.evolution.register(moodProcess(() => w.agents));
     k.evolution.register(makerProcess(() => w));
