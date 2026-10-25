@@ -9,6 +9,8 @@ export type Status = "implemented" | "future" | "rule";
 export type Pattern = {
   id: string; title: string; status: Status; specimen?: string; wide?: boolean;
   what: string; when: string; combine?: string; adapt?: string; drives?: string; a11y?: string; avoid?: string;
+  /** Further labelled rows after Avoid (the in-game surfaces' Tokens, Type, Components and Motion). */
+  rows?: [label: string, value: string][];
 };
 const statusLabel: Record<Status, string> = { implemented: "Implemented", future: "Future direction · not built", rule: "Rule" };
 
@@ -19,7 +21,7 @@ export function pattern(input: Pattern) {
   return `<article class="pattern${p.wide ? " wide" : ""}" id="${p.id}" data-status="${p.status}">
   <header class="pattern-head"><h3>${p.title}</h3><span class="status-tag ${p.status}">${statusLabel[p.status]}</span></header>
   ${p.specimen ? `<div class="specimen" data-compare>${p.specimen}</div>` : ""}
-  <dl class="guidance">${row("What", p.what)}${row("When", p.when)}${row("Combine", p.combine)}${row("Adapt", p.adapt)}${row("Driven by", p.drives)}${row("Keyboard &amp; access", p.a11y)}${row("Avoid", p.avoid)}</dl>
+  <dl class="guidance">${row("What", p.what)}${row("When", p.when)}${row("Combine", p.combine)}${row("Adapt", p.adapt)}${row("Driven by", p.drives)}${row("Keyboard &amp; access", p.a11y)}${row("Avoid", p.avoid)}${(input.rows ?? []).map(([label, value]) => row(label, value)).join("")}</dl>
 </article>`;
 }
 export function section(id: string, number: string, title: string, intro: string, patterns: string[]) {

@@ -2,6 +2,7 @@ import type { PanelInfo } from "./reference";
 import { compositions, futures, states } from "./compositions";
 import { components } from "./components";
 import { foundations, shell } from "./foundations";
+import { inGameCss, inGameSurfaces } from "./in-game";
 import { i } from "./kit";
 import { library } from "./library";
 import { panelSystem } from "./panels";
@@ -159,7 +160,7 @@ export type GuideInput = { css: string; script: string; generated: string; panel
 
 export function guideDocument(input: GuideInput) {
   const panels = input.panels;
-  const sections = [foundations(input.css), shell(), panelSystem(), components(), library(), states(), compositions(), futures(), reference(panels)];
+  const sections = [foundations(input.css), shell(), panelSystem(), components(), library(), states(), compositions(), futures(), inGameSurfaces(input.css), reference(panels)];
   const toc = sections.map(html => {
     const id = /<section class="guide-section" id="([^"]+)"/.exec(html)![1], title = /<h2 id="[^"]+">([^<]+)<\/h2>/.exec(html)![1];
     const items = [...html.matchAll(/<article class="pattern[^"]*" id="([^"]+)"[^>]*>\s*<header class="pattern-head"><h3>([^<]+)<\/h3>/g)];
@@ -176,7 +177,7 @@ export function guideDocument(input: GuideInput) {
 <style id="studio-css">
 ${input.css}
 </style>
-<style id="guide-css">${guideCss}</style>
+<style id="guide-css">${guideCss}${inGameCss(input.css)}</style>
 </head>
 <body class="guide">
 <header class="guide-top"><span class="brand-mark" aria-hidden="true">XF</span><h1>Studio interface guide</h1><span class="meta">Authoritative reference · generated ${input.generated}</span>
