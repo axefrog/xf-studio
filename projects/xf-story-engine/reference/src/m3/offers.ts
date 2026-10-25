@@ -1,7 +1,12 @@
-// M3 run 2's offer kits: hooks with an ask, grounded in what happened. Each kit tells one pattern of S1's record (a collector's demand and the
-// police, a theft and the police, a beating, an accident, two thefts in the crowd, a scuffle that covered a theft) as a request: someone near
-// the incident asks the player's character for something, with a reason the events supply, and says what it is worth. The words are plain
-// stand-ins written for the run, in the voice of a message from a local.
+// M3 run 2's offer kits: hooks with an ask, grounded in what happened. Each kit tells one pattern of S1's record (a collector's demand at a
+// stall, a theft, a beating, an accident, a street fight between crews, a scuffle in the crowd) as a request: the person it happened to tells
+// the player's character about it, asks for something, and says what it is worth. The words are plain stand-ins written for the run, in the
+// voice of a message from a local.
+//
+// Every pattern has two stages: the incident, and the victim telling V (a `disclosure` event caused by the incident, with V as its listener).
+// The second stage is what the engine asks of an offer: V-link (V takes part in a stage's event, S3 gate 5) and a recorded cause on the last
+// event (gate 3). S1 opens an incident into people only where V's focus is, so the incidents with named people are those V was near; the
+// harness reports V's being told (`RunExtra.witness`), as the game's own report of what V saw will.
 //
 // The people are the ones the pattern binds (`subject`, `other`), so nothing in the words is a claim the world did not make. No kit names a
 // main-story character, and nothing depends on who the player's character is: the words say "you". Stakes and rewards are not a price list: the
@@ -20,21 +25,24 @@ const stage = (kind: string, who: Array<[string, string]>, effects: NonNullable<
   kind, who: who.map(([role, as]) => ({ role, as })), ...(effects.length ? { effects } : {}),
 });
 const pp = { kind: 'core:person' } as const;
+/** The second stage of every offer pattern: the person it happened to tells V about it. */
+const told = (teller: string): SiftPattern['stages'][number] => stage('disclosure', [['teller', teller], ['listener', '?me']]);
+const WITHIN = 21_600;
 
-/** A collector's demand at a stall and the police taking the collector: the stall is left owing. */
+/** A collector's demand at a stall: the stall is left owing. */
 export const FEE_SHORTFALL: OfferKit = {
-  id: 'fee-shortfall', tags: ['fee', 'police'], sender: 'other', stakeOf: 'the stall',
+  id: 'fee-shortfall', tags: ['fee'], sender: 'other', stakeOf: 'the stall',
   roles: { subject: clawsPerson, other: person },
   pattern: {
-    roles: { '?a': { kind: 'core:person', where: [CLAWS] }, '?v': pp },
-    stages: [stage('shakedown', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'take' }]), stage('police-action', [['target', '?a'], ['victim', '?v']])],
-    within: 172_800, once: ['?a', '?v'], tags: ['fee', 'police'], binds: { subject: '?a', other: '?v' },
+    roles: { '?a': { kind: 'core:person', where: [CLAWS] }, '?v': pp, '?me': pp },
+    stages: [stage('shakedown', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'take' }]), told('?v')],
+    within: WITHIN, once: ['?a', '?v'], tags: ['fee'], binds: { subject: '?a', other: '?v' },
   },
   opener: [
-    { t: '{other.name} messages you: {subject.name} came to the stall for the Friday fee and the NCPD took {subject.name} before a cred changed hands.' },
-    { t: '{other.name}, who trades in the market, writes that the Claws sent {subject.name} for the Friday money and a patrol hauled {subject.name} away mid-demand.' },
-    { t: 'Message from {other.name}: {subject.name} had a hand out for the Claws when the police pulled {subject.name} off the row.' },
-    { t: '{other.name} on the line, short of breath: the Claws collector {subject.name} was taken by the NCPD right at the till.' },
+    { t: '{other.name} messages you: {subject.name} came to the stall for the Friday fee the Claws collect, and the till is short.' },
+    { t: '{other.name}, who trades in the market, writes that the Claws sent {subject.name} for the Friday money, and there is not enough to give.' },
+    { t: 'Message from {other.name}: {subject.name} had a hand out for the Claws again this morning, and I could not make the number.' },
+    { t: '{other.name} on the line, short of breath: the Claws collector {subject.name} was at the till, and I told them to come back Friday.' },
   ],
   ask: [
     { t: 'The Claws will want the fee from somebody by Friday, and it will be me. Cover the gap, speak to them for me, or tell them the stalls are done paying.' },
@@ -50,8 +58,8 @@ export const FEE_SHORTFALL: OfferKit = {
     { t: 'We have not really met, and I would not ask if the Claws would listen to anyone else.', when: ['unknownV'] },
     { t: 'The whole row is sick of the fee, and it would not take much for them to say so out loud.', when: ['feePressed'] },
     { t: 'With the police all over the district the Claws are jumpy, so whatever you do, do it quietly.', when: ['crackdown'] },
-    { t: '{subject.name} has collected from this row for years and knows what each of us makes.', when: ['known'] },
-    { t: 'I had never seen {subject.name} before this month, so this is the Claws leaning on us harder.', when: ['strangers'] },
+    { t: 'They have collected from this row for years and know what each of us makes.', when: ['known'] },
+    { t: 'I had never seen that collector before this month, so this is the Claws leaning on us harder.', when: ['strangers'] },
   ],
   actions: [
     {
@@ -86,25 +94,25 @@ export const FEE_SHORTFALL: OfferKit = {
   settles: 'the fee is paid or it is not',
 };
 
-/** A theft, the thief taken by the police, the goods still missing. */
+/** A theft in the crowd: the goods are still missing. */
 export const GOODS_BACK: OfferKit = {
-  id: 'goods-back', tags: ['theft', 'police'], sender: 'other', stakeOf: 'the stolen goods',
+  id: 'goods-back', tags: ['theft'], sender: 'other', stakeOf: 'the stolen goods',
   roles: { subject: person, other: person },
   pattern: {
-    roles: { '?a': pp, '?v': pp },
-    stages: [stage('theft', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'take' }]), stage('police-action', [['target', '?a'], ['victim', '?v']])],
-    within: 172_800, once: ['?a', '?v'], tags: ['theft', 'police'], binds: { subject: '?a', other: '?v' },
+    roles: { '?a': pp, '?v': pp, '?me': pp },
+    stages: [stage('theft', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'take' }]), told('?v')],
+    within: WITHIN, once: ['?a', '?v'], tags: ['theft'], binds: { subject: '?a', other: '?v' },
   },
   opener: [
-    { t: '{other.name} messages you: {subject.name} lifted a bag off {other.name} in the Kabuki crowd and a patrol had {subject.name} within the hour, but the bag was not on {subject.name}.' },
-    { t: 'Message from {other.name}: the police picked up {subject.name} for the theft, and nothing {subject.name} was carrying belonged to me.' },
-    { t: '{other.name} writes that {subject.name} took a bag in the market crush and was in a patrol car before dark. The goods are still missing.' },
-    { t: '{other.name} on the line: {subject.name} is in custody for the theft and swears the bag was passed on before the police came.' },
+    { t: '{other.name} messages you: {subject.name} lifted a bag off me in the Kabuki crowd and was gone before anyone moved.' },
+    { t: 'Message from {other.name}: {subject.name} took my bag in the market crush, and nobody did a thing.' },
+    { t: '{other.name} writes that {subject.name} worked the crowd and took a bag, and the bag has not turned up anywhere.' },
+    { t: '{other.name} on the line: {subject.name} robbed me in the crowd by the market, and I want what was in the bag more than I want an apology.' },
   ],
   ask: [
-    { t: 'I want what was in it back. Find out who has it, lean on {subject.name}\'s people until they hand it over, or cover the loss and I will square it with you later.' },
-    { t: 'Can you get it back for me? Track down whoever has it, make it worth {subject.name}\'s while to say where it went, or pay what it was worth and wait for my thanks.' },
-    { t: 'I will take the goods or the value of them. Trace the bag, put pressure on {subject.name}\'s crowd, or stand me the loss.' },
+    { t: 'I want what was in it back. Find out who has it, lean on the thief\'s people until they hand it over, or cover the loss and I will square it with you later.' },
+    { t: 'Can you get it back for me? Track down whoever has it, make it worth the thief\'s while to say where it went, or pay what it was worth and wait for my thanks.' },
+    { t: 'I will take the goods or the value of them. Trace the bag, put pressure on the thief\'s crowd, or stand me the loss.' },
   ],
   clause: [
     { t: 'What was in the bag matters more to me than the money. There is no other copy.' },
@@ -114,8 +122,8 @@ export const GOODS_BACK: OfferKit = {
     { t: 'People say you look after this market, and this is what that looks like.', when: ['trusted'] },
     { t: 'I know you owe me nothing, and I am asking anyway.', when: ['unknownV'] },
     { t: 'The police are too busy sweeping the district to look for a bag, so nobody else is going to.', when: ['crackdown'] },
-    { t: '{subject.name} drinks with half the row, which is why nobody will say where the bag went.', when: ['known'] },
-    { t: 'Nobody on the row had seen {subject.name} before, so somebody must have given the nod.', when: ['strangers'] },
+    { t: 'The thief drinks with half the row, which is why nobody will say where the bag went.', when: ['known'] },
+    { t: 'Nobody on the row had seen the thief before, so somebody must have given the nod.', when: ['strangers'] },
   ],
   actions: [
     {
@@ -149,36 +157,36 @@ export const GOODS_BACK: OfferKit = {
   settles: 'the goods are found or they are not',
 };
 
-/** A beating, the attacker taken by the police, and nobody saying why. */
+/** A beating, and nobody saying why. */
 export const ASSAULT_WHY: OfferKit = {
-  id: 'assault-why', tags: ['assault', 'police'], sender: 'other', stakeOf: 'the victim\'s safety and work',
+  id: 'assault-why', tags: ['assault'], sender: 'other', stakeOf: 'the victim\'s safety and work',
   roles: { subject: person, other: person },
   pattern: {
-    roles: { '?a': pp, '?v': pp },
-    stages: [stage('assault', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'harm' }]), stage('police-action', [['target', '?a'], ['victim', '?v']])],
-    within: 172_800, once: ['?a', '?v'], tags: ['assault', 'police'], binds: { subject: '?a', other: '?v' },
+    roles: { '?a': pp, '?v': pp, '?me': pp },
+    stages: [stage('assault', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'harm' }]), told('?v')],
+    within: WITHIN, once: ['?a', '?v'], tags: ['assault'], binds: { subject: '?a', other: '?v' },
   },
   opener: [
-    { t: '{other.name} messages you from the clinic: {subject.name} put {other.name} on the pavement outside the market and the NCPD took {subject.name} away for it.' },
-    { t: '{other.name} writes that {subject.name} beat {other.name} bloody near the market and was detained by a patrol, and nobody will say what it was about.' },
-    { t: 'Message from {other.name}: {subject.name} came at {other.name} in the street without a word, and the police have {subject.name} now.' },
-    { t: '{other.name} on the line, voice thick: {subject.name} did this, the NCPD hauled {subject.name} off, and it still makes no sense.' },
+    { t: '{other.name} messages you from the clinic: {subject.name} put me on the pavement outside the market without a word of warning.' },
+    { t: '{other.name} writes that {subject.name} beat them bloody near the market, and nobody will say what it was about.' },
+    { t: 'Message from {other.name}: {subject.name} came at me in the street out of nowhere, and no one stepped in.' },
+    { t: '{other.name} on the line, voice thick: {subject.name} did this, and it still makes no sense.' },
   ],
   ask: [
-    { t: 'Find out why {subject.name} did it before they walk free, or make sure {subject.name} keeps away from me afterwards, or just see me through the clinic.' },
-    { t: 'Someone should learn what this was about, and someone should look after me while I cannot work. Ask around, have a word with {subject.name}, or cover the clinic.' },
-    { t: 'Will you ask around about {subject.name}, face {subject.name} when they let go, or see me home from the clinic?' },
+    { t: 'Find out why they did it, or make sure they keep away from me, or just see me through the clinic.' },
+    { t: 'Someone should learn what this was about, and someone should look after me while I cannot work. Ask around, have a word with the one who did it, or cover the clinic.' },
+    { t: 'Will you ask around about why, face the one who did it, or see me home from the clinic?' },
   ],
   clause: [
     { t: 'I cannot afford to lose a week of work, and nobody else is going to chase this for me.' },
-    { t: 'If you find out why, I will tell you everything I know about {subject.name}, which is more than I told the police.' },
+    { t: 'If you find out why, I will tell you everything I know about them, which is more than I have told anyone else.' },
     { t: 'The clinic charges what it likes now. I can give you two hundred and sixty of what I have left.', when: ['priceHigh'] },
     { t: 'I have sixty eddies and a spare room, if either is any use to you.', when: ['priceLow'] },
     { t: 'I heard you stood up for someone near here before, and I am hoping that was not only a story.', when: ['trusted'] },
     { t: 'We have never spoken, and I know that makes this a lot to ask.', when: ['unknownV'] },
     { t: 'The police will not follow this up, not while they have the whole district to lean on.', when: ['crackdown'] },
-    { t: '{subject.name} and I used to drink together, so this was never a stranger\'s quarrel.', when: ['known'] },
-    { t: 'I had never seen {subject.name} before today, and that is what frightens me.', when: ['strangers'] },
+    { t: 'We used to drink together, so this was never a stranger\'s quarrel.', when: ['known'] },
+    { t: 'I had never seen them before today, and that is what frightens me.', when: ['strangers'] },
   ],
   actions: [
     {
@@ -214,17 +222,17 @@ export const ASSAULT_WHY: OfferKit = {
 
 /** An accident that leaves someone laid up with a job they cannot do. */
 export const ACCIDENT_ERRAND: OfferKit = {
-  id: 'accident-errand', tags: ['accident', 'police'], sender: 'other', stakeOf: 'the job',
+  id: 'accident-errand', tags: ['accident'], sender: 'other', stakeOf: 'the job',
   roles: { other: person },
   pattern: {
-    roles: { '?s': pp },
-    stages: [stage('accident', [['victim', '?s']], [{ on: '?s', effect: 'harm' }]), stage('police-action', [['victim', '?s']])],
-    within: 172_800, once: ['?s'], tags: ['accident', 'police'], binds: { other: '?s' },
+    roles: { '?s': pp, '?me': pp },
+    stages: [stage('accident', [['victim', '?s']], [{ on: '?s', effect: 'harm' }]), told('?s')],
+    within: WITHIN, once: ['?s'], tags: ['accident'], binds: { other: '?s' },
   },
   opener: [
-    { t: '{other.name} messages you from a clinic bed: an accident in Kabuki put {other.name} here, and the NCPD have been asking questions all morning.' },
-    { t: 'Message from {other.name}: I was caught in that accident in Kabuki, and the police report is still being written.' },
-    { t: '{other.name} writes from the clinic that the accident left them unable to stand, and the NCPD turned up before the dust settled.' },
+    { t: '{other.name} messages you from a clinic bed: an accident in Kabuki put me here, and the day\'s work is going to waste.' },
+    { t: 'Message from {other.name}: I was caught in that accident in Kabuki and I cannot stand yet.' },
+    { t: '{other.name} writes from the clinic that the accident in the street left them unable to walk, with a job waiting.' },
   ],
   ask: [
     { t: 'I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work.' },
@@ -270,126 +278,124 @@ export const ACCIDENT_ERRAND: OfferKit = {
   settles: 'the parcel is late, or someone else takes it',
 };
 
-/** Two thefts in the crowd close together. */
-export const MARKET_HIT_TWICE: OfferKit = {
-  id: 'market-hit-twice', tags: ['theft'], sender: 'other', stakeOf: 'the market\'s stalls',
+/** A street fight between crews: the person who came off worse tells V, and fears what follows. */
+export const CLASH_AFTERMATH: OfferKit = {
+  id: 'clash-aftermath', tags: ['clash', 'gang'], sender: 'other', stakeOf: 'the victim\'s safety',
   roles: { subject: person, other: person },
   pattern: {
-    roles: { '?t1': pp, '?v1': pp, '?t2': pp, '?v2': pp },
-    stages: [stage('theft', [['aggressor', '?t1'], ['victim', '?v1']], [{ on: '?v1', effect: 'take' }]), stage('theft', [['aggressor', '?t2'], ['victim', '?v2']], [{ on: '?v2', effect: 'take' }])],
-    within: 86_400, once: ['?v1'], tags: ['theft'], binds: { subject: '?v1', other: '?v2' },
+    roles: { '?a': pp, '?v': pp, '?me': pp },
+    stages: [stage('gang-clash', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'harm' }]), told('?v')],
+    within: WITHIN, once: ['?a', '?v'], tags: ['clash', 'gang'], binds: { subject: '?a', other: '?v' },
   },
   opener: [
-    { t: '{other.name} messages you: {subject.name} lost a bag in the Kabuki crowd, and now so has {other.name}.' },
-    { t: 'Message from {other.name}: that makes two thefts in the crowd in a day, {subject.name} first and now me.' },
-    { t: '{other.name} writes that the crowd has been picked twice this week: {subject.name}\'s bag went first, and then {other.name}\'s.' },
+    { t: '{other.name} messages you: {subject.name} and I ended up on opposite sides of a street fight in Kabuki, and I came off worse.' },
+    { t: 'Message from {other.name}: {subject.name} went for me in the middle of a crew fight near the market, and I am still shaking.' },
+    { t: '{other.name} writes that the crews clashed on the street and {subject.name} picked them out of it.' },
   ],
   ask: [
-    { t: 'Somebody is working the market and the police are not stopping them. Watch the stalls tonight, find out who is behind it, or put the fear into whoever it is.' },
-    { t: 'If it carries on the stalls will shut. Can you keep watch for us, ask around about who is doing it, or give them reason to stop?' },
+    { t: 'Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do.' },
+    { t: 'I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me.' },
   ],
   clause: [
-    { t: '{subject.name} and I will each put in what we can for whoever ends it.' },
-    { t: 'I cannot name a price, but every stall on the row will remember who helped.' },
-    { t: 'Everyone is stretched with prices up, but between us we can raise four hundred.', when: ['priceHigh'] },
-    { t: 'We have little to give, but there are ninety eddies and free food for a week.', when: ['priceLow'] },
-    { t: 'The row trusts you, which is more than I can say for the police.', when: ['trusted'] },
-    { t: 'None of us knows you, which may help, because the thief will not know you either.', when: ['unknownV'] },
-    { t: 'The police are chasing curfew breaches across the district and have no time for pickpockets.', when: ['crackdown'] },
-    { t: '{subject.name} and I go back years, and neither of us has anything left to lose.', when: ['known'] },
-    { t: '{subject.name} and I have never spoken, so this is no feud, just someone who has found an easy crowd.', when: ['strangers'] },
+    { t: 'I have nothing the crews want, and that is exactly why I am afraid.' },
+    { t: 'If you take this on, I will tell you who runs that corner and who they owe.' },
+    { t: 'Everything is dearer and I have little, but there are three hundred eddies in it for you.', when: ['priceHigh'] },
+    { t: 'There is not much to give, only eighty eddies and a place to sleep for the week.', when: ['priceLow'] },
+    { t: 'People say the stalls look to you when there is trouble, which is why I am writing to you and not to the police.', when: ['trusted'] },
+    { t: 'You will not know me, and I know it is a lot to ask a stranger.', when: ['unknownV'] },
+    { t: 'With the police sweeping the district nobody will be looking at one more fight.', when: ['crackdown'] },
+    { t: 'We used to run errands for the same people, so this is not a stranger\'s grudge.', when: ['known'] },
+    { t: 'I had never seen them before the fight, so I do not know what I am supposed to have done.', when: ['strangers'] },
   ],
   actions: [
     {
-      id: 'watch', stance: 'help', foresight: 'Watch the stalls through the evening.', cost: { bearer: 'v', what: 'an evening', when: 'now', shown: 'named' },
+      id: 'carry-word', stance: 'bargain', foresight: 'Carry word to the other crew that it is over.', cost: { bearer: 'v', what: 'standing with the crew', when: 'later', shown: 'quiet' },
       outcomes: [
-        { t: 'You stood at the end of the row all evening. Nobody was robbed, and the stallholders left you food in a paper bag.', when: ['trusted'] },
-        { t: 'You watched until the market closed. Nothing happened, which may be what watching is for.' },
+        { t: 'The crew listened to you in a doorway, took what you said as a favour owed and not as an apology, and let it be known that it was settled.', when: ['trusted'] },
+        { t: 'You took the word across the street. {subject.name} shrugged, and nobody has come for {other.name} since.' },
       ],
     },
     {
-      id: 'ask-around', stance: 'bargain', foresight: 'Ask around about who is behind it.', cost: { bearer: 'v', what: 'time and a few favours', when: 'now', shown: 'named' },
+      id: 'walk-home', stance: 'help', foresight: 'See them home by the safe way.', cost: { bearer: 'v', what: 'an evening', when: 'now', shown: 'named' },
       outcomes: [
-        { t: 'Two kids from the arcade, one with a cousin on the Claws\' books. {other.name} decided not to take it further.', when: ['feePressed'] },
-        { t: 'You asked in a dozen places and learned that the thefts were not the work of one person. {other.name} said that was somehow worse.' },
+        { t: 'You walked {other.name} home by the long way. Nobody followed, and {other.name} left the light on until you were out of sight.', when: ['crackdown'] },
+        { t: 'You saw {other.name} home. The street was empty, which was somehow worse.' },
       ],
     },
     {
-      id: 'put-fear', stance: 'oppose', foresight: 'Put the fear into whoever it is.', cost: { bearer: 'third', what: 'a score settled the hard way', when: 'later', shown: 'quiet' },
+      id: 'stand-with', stance: 'oppose', foresight: 'Stand with them when the crew comes.', cost: { bearer: 'third', what: 'a fight you did not start', when: 'later', shown: 'quiet' },
       outcomes: [
-        { t: 'You spent the night in the crowd. Someone with quick hands decided to work another district.', when: ['crackdown'] },
-        { t: 'You found a boy with a stolen wallet and had a quiet word. The thefts stopped, and {other.name} did not ask how.' },
+        { t: 'The crew came, saw the two of you on the corner, and kept walking. {subject.name} looked back once.', when: ['known'] },
+        { t: 'It did not come to blows. {other.name} says the crew has found a different corner to worry about.' },
       ],
     },
   ],
   declined: [
-    { t: '{other.name} said they understood and went back to guarding their pockets.' },
-    { t: 'The message sat unanswered. The row posted a handwritten notice about pickpockets and left it at that.' },
+    { t: '{other.name} said they understood. Their stall was shut for a week.' },
+    { t: 'You did not answer. {other.name} moved to a cousin\'s place across the district.' },
   ],
-  notNow: 'Ask me again later.', closing: 'The crowd went on being a crowd.',
-  settles: 'the thefts continue or they move on',
+  notNow: 'Not tonight.', closing: 'The street fight turned into a story, and the story into a rumour.',
+  settles: 'the grudge fades or it does not',
 };
 
-/** A scuffle in the crowd that left someone hurt and covered a theft. */
-export const CRUSH_THEFT: OfferKit = {
-  id: 'crush-theft', tags: ['theft', 'disorder'], sender: 'other', stakeOf: 'the stolen goods and the hurt',
-  roles: { subject: person, other: person },
+/** A scuffle in the crowd: someone who was caught in it asks V to find out who stirred it up. */
+export const CROWD_SCUFFLE: OfferKit = {
+  id: 'crowd-scuffle', tags: ['disorder'], sender: 'other', stakeOf: 'the market\'s peace',
+  roles: { other: person },
   pattern: {
-    roles: { '?p': pp, '?t': pp, '?w': pp },
-    stages: [stage('disorder', [['victim', '?p']], [{ on: '?p', effect: 'harm' }]), stage('theft', [['aggressor', '?t'], ['victim', '?w']], [{ on: '?w', effect: 'take' }])],
-    within: 86_400, once: ['?p'], tags: ['theft', 'disorder'], binds: { subject: '?p', other: '?w' },
+    roles: { '?p': pp, '?me': pp },
+    stages: [stage('disorder', [['participant', '?p']]), told('?p')],
+    within: WITHIN, once: ['?p'], tags: ['disorder'], binds: { other: '?p' },
   },
   opener: [
-    { t: '{other.name} messages you: a scuffle in the Kabuki crowd left {subject.name} hurt, and in the crush someone lifted {other.name}\'s bag.' },
-    { t: 'Message from {other.name}: the crowd went wild near the market, {subject.name} was hurt, and while everyone looked the other way my bag went.' },
-    { t: '{other.name} writes that the disorder in the crowd hurt {subject.name} and covered a theft, and the goods taken were {other.name}\'s.' },
+    { t: '{other.name} messages you: a scuffle broke out in the Kabuki crowd and I was caught in the middle of it.' },
+    { t: 'Message from {other.name}: the crowd by the market turned ugly, and I was in the thick of it before I knew what was happening.' },
+    { t: '{other.name} writes that the street went from busy to a brawl in a minute, and they still do not know who started it.' },
   ],
   ask: [
-    { t: 'I want the bag back, and I want to know who started the trouble. Find the thief, ask who was behind the scuffle, or look after {subject.name}, who took the worst of it.' },
-    { t: 'Whoever caused the scuffle wanted the crowd looking the wrong way. Track down the thief, find out who stirred it up, or see {subject.name} safe.' },
+    { t: 'I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight.' },
+    { t: 'Somebody wanted that crowd angry. Find out who, keep the corner calm, or see me through it.' },
   ],
   clause: [
-    { t: 'I owe {subject.name} for being hurt in a crowd I should have steered us out of.' },
-    { t: 'I cannot offer much, only the goods that come back and my word that I know who helped.' },
-    { t: 'Everything is dearer, so I can put two hundred and ninety on finding the thief.', when: ['priceHigh'] },
-    { t: 'Nothing in the bag is worth fighting over, but I will pay seventy eddies to get it back.', when: ['priceLow'] },
-    { t: 'People here say the market is safer when you are in it, and I am hoping that is true.', when: ['trusted'] },
-    { t: 'We have not met, but you are the only name that came up when we asked who might care.', when: ['unknownV'] },
-    { t: 'The police are not looking into a scuffle when they have the whole district to sweep.', when: ['crackdown'] },
-    { t: '{subject.name} and I have known each other for years, which is why I am angry as well as frightened.', when: ['known'] },
-    { t: 'I do not know {subject.name} at all, so what happened to us can only have been chance, or someone else\'s plan.', when: ['strangers'] },
+    { t: 'It will happen again if nobody learns why, and next time I might not walk away.' },
+    { t: 'I cannot pay you, but I know every stall on that row, and they will talk to me.' },
+    { t: 'Prices are up and tempers with them. I can put two hundred and ten eddies toward finding out who is paying for this.', when: ['priceHigh'] },
+    { t: 'Nobody has money to start a fight over, which is what makes it strange. I can give you seventy eddies.', when: ['priceLow'] },
+    { t: 'The row says you keep a cool head, which is what the corner needs.', when: ['trusted'] },
+    { t: 'You do not know me, and that may be why somebody will talk to you.', when: ['unknownV'] },
+    { t: 'The police are busy sweeping the district and will not care about one scuffle.', when: ['crackdown'] },
   ],
   actions: [
     {
-      id: 'find-thief', stance: 'bargain', foresight: 'Track down the thief.', cost: { bearer: 'v', what: 'time', when: 'now', shown: 'named' },
+      id: 'find-instigator', stance: 'bargain', foresight: 'Ask around about who stirred it up.', cost: { bearer: 'v', what: 'time and a few favours', when: 'now', shown: 'named' },
       outcomes: [
-        { t: 'The bag was in a locker at the metro. Nothing was missing but the cash. {other.name} thanked you for it and meant it.', when: ['strangers'] },
-        { t: 'You found the thief in a bar two streets from the market, wearing the bag as if it were theirs. {other.name} did not press charges.' },
+        { t: 'Someone had paid two kids to shove a stranger and shout. {other.name} was told, and decided to say nothing.', when: ['crackdown'] },
+        { t: 'It began with a stolen seat and a grudge from last year. {other.name} laughed for the first time in days.' },
       ],
     },
     {
-      id: 'find-instigator', stance: 'oppose', foresight: 'Find out who stirred up the scuffle.', cost: { bearer: 'third', what: 'trouble with whoever it was', when: 'later', shown: 'quiet' },
+      id: 'cool-corner', stance: 'oppose', foresight: 'Quiet the corner before it boils over again.', cost: { bearer: 'third', what: 'a few enemies on the corner', when: 'later', shown: 'quiet' },
       outcomes: [
-        { t: 'The trouble had been paid for, in small eddies, by someone who wanted the stalls to shut. You brought a name to {other.name}.', when: ['feePressed'] },
-        { t: 'It began with a shove nobody would own up to. You came back with a story that sounded true and was not much use.' },
+        { t: 'You stood at the corner with the stallholders for an evening. Tempers cooled the way they do when someone is watching.', when: ['trusted'] },
+        { t: 'You stood on the corner until closing and pointed out the one who kept starting it. They left, and the crowd let out its breath.' },
       ],
     },
     {
-      id: 'look-after', stance: 'help', foresight: 'See the hurt person safe.', cost: { bearer: 'v', what: 'money and an evening', when: 'now', shown: 'named' },
+      id: 'see-clear', stance: 'help', foresight: 'See them clear of it.', cost: { bearer: 'v', what: 'an evening', when: 'now', shown: 'named' },
       outcomes: [
-        { t: '{subject.name} was patched up and put in a cab. The stalls remember who paid for it.', when: ['trusted'] },
-        { t: '{subject.name} was seen to, grudgingly. {other.name} sent word that the debt was now between the two of you.' },
+        { t: 'You walked {other.name} out by the back of the market. They said very little and thanked you at the door.' },
+        { t: '{other.name} took your arm past the stalls and did not let go until the metro.' },
       ],
     },
   ],
   declined: [
-    { t: '{other.name} said nothing and went to see to {subject.name} on their own.' },
-    { t: 'The bag was never recovered. {other.name} stopped bringing a bag to the market.' },
+    { t: '{other.name} said they would keep away from that corner and meant it.' },
+    { t: 'The message sat unanswered. The crowd by the market was thinner for a week.' },
   ],
-  notNow: 'Let me think.', closing: 'The scuffle turned into a story, and the story into a rumour.',
-  settles: 'the thief and the instigator are found, or they are not',
+  notNow: 'Maybe later.', closing: 'The scuffle was forgotten by the end of the week.',
+  settles: 'the corner calms, or it does not',
 };
 
-export const KITS: OfferKit[] = [FEE_SHORTFALL, GOODS_BACK, ASSAULT_WHY, ACCIDENT_ERRAND, MARKET_HIT_TWICE, CRUSH_THEFT];
+export const KITS: OfferKit[] = [FEE_SHORTFALL, GOODS_BACK, ASSAULT_WHY, ACCIDENT_ERRAND, CLASH_AFTERMATH, CROWD_SCUFFLE];
 export const offerKitPack = () => offerPack(KITS);
 export const offerPatterns = (): SiftPattern[] => KITS.map(offerPattern);

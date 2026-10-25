@@ -67,6 +67,15 @@ export const policies: Record<string, Policy> = {
 export interface RunExtra {
   walk?: boolean;
   notes?: string[];
+  /**
+   * V is told of what happens where V stands (M3 run 2). S1 opens an incident into people only where a root's focus is (the fine tier, "seen up
+   * close"), so every incident with named people happened where something was looking. With this on, the driver stands in for the game's report
+   * of what V saw: for each incident that opened at the block V stood in, or at a block next to it (within earshot), when a sift pattern of the
+   * offer tier has matched it, it mints a `disclosure` event
+   * (the victim tells V), caused by the incident, with V as its listener. The pattern's second stage matches that event, so the V-link and
+   * the recorded cause that S3's gates 3 and 5 ask of an offer are in the record, not assumed. Off, the driver does nothing of the kind.
+   */
+  witness?: boolean;
 }
 
 /** A busier district: every kind's base rate times `k` (a named calibration of S1's data, for a run that needs more incidents). */
@@ -77,12 +86,18 @@ export const density = (k: number): { name: string; apply: (d: import('../sim/da
 
 const WALK = ['g1', 'g2', 'g3', 'g4', 'g6', 'g7', 'g8', 'g9', 'g11'];
 
+/** The block V stands in during window `w`: the keyed draw of `Run.step`, recomputed (a pure function of the run's name and the window). */
+export const walkCellAt = (name: string, w: number): string => WALK[Math.floor(rand(hs('m3-walk'), hs(name), hi(Math.floor(w / 6))) * WALK.length)]!;
+
 export class Run {
   readonly w: M3World;
   windowNo = 0;
   play = 0;
   readonly deliveries: DeliveryRecord[] = [];
   private seen = new Set<Id>();
+  private told = new Set<Id>();
+  /** How many incidents V was told of (the `witness` option). */
+  witnessed = 0;
   frame: (at: number) => SenseFrame = (at) => quietFrame(at);
 
   constructor(readonly opts: WorldOpts, readonly state: StoryState, readonly policy: Policy = policies.decline!, readonly extra: RunExtra = {}) {
@@ -104,13 +119,14 @@ export class Run {
   step(): void {
     // V walks the district: a new block every game hour, chosen by a keyed draw, so that the fine tier opens around V
     if (this.extra.walk && this.windowNo % 6 === 0) {
-      const cell = WALK[Math.floor(rand(hs('m3-walk'), hs(this.opts.name), hi(this.windowNo / 6)) * WALK.length)]!;
+      const cell = walkCellAt(this.opts.name, this.windowNo);
       const t = this.windowNo * WINDOW;
       this.w.replay.submit([{ t: t + 1, op: 'reading', node: 'v', slot: 'district', value: 'wat_kab' }, { t: t + 2, op: 'reading', node: 'v', slot: 'cell', value: cell }]);
     }
     this.windowNo++;
     this.w.sim.k.settle({ to: this.windowNo * WINDOW });
     this.w.sim.k.dispatcher.drain();
+    if (this.extra.witness && this.extra.walk && this.w.l3) this.tellV();
     for (let i = 0; i < PLAY_PER_WINDOW; i++) {
       this.play++;
       const to = this.w.l2.playBase + this.play;
@@ -118,6 +134,27 @@ export class Run {
       else this.w.l2.advancePlay(to);
       this.settle();
       this.handle();
+    }
+  }
+
+  /** The `witness` option: V is told of the incidents the offer tier has matched that opened at the block V stood in (see RunExtra). */
+  private tellV(): void {
+    const l3 = this.w.l3!;
+    const names = this.w.sim.w.index.names!;
+    for (const e of l3.state.pool) {
+      if (e.complete || e.stages.length !== 1 || !e.pattern.startsWith('xf.m3b:') || this.told.has(e.id)) continue;
+      const ev = l3.kv.event(e.stages[0]!.event);
+      if (!ev || ev.place === undefined) continue;
+      const here = names[walkCellAt(this.opts.name, Math.floor(ev.time / WINDOW))]!;
+      if (here !== ev.place && !this.w.sim.w.index.cells[here]!.adj1.includes(ev.place)) continue;
+      const teller = ev.participants.find((p) => p.role === 'victim') ?? ev.participants.find((p) => p.role === 'participant');
+      if (!teller) continue;
+      this.told.add(e.id);
+      this.witnessed++;
+      this.w.replay.submit([{
+        t: this.windowNo * WINDOW + 1, op: 'event', kind: 'disclosure', place: ev.place,
+        participants: [{ who: teller.who, role: 'teller' }, { who: 'v', role: 'listener' }], causes: [ev.id],
+      }]);
     }
   }
 

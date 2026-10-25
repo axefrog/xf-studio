@@ -18,6 +18,7 @@ describe('run 2 configuration', () => {
     expect(dataProblems(d)).toEqual([]);
     expect(d.sower.featureWeights).toEqual({ F3: 2, F5: 2, F6: 1, F11: 1 });
     expect(d.sower.lambda).toBe(3);
+    expect(d.sifter.candidateTtl).toBe(86_400);
     const a1 = run2World('x', 'A1', 'restless').opts.l3Data!;
     expect(a1.sower.lambda).toBe(0);
     expect(a1.sower.diversity).toBe(0);

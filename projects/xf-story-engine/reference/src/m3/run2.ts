@@ -20,13 +20,16 @@ import { r2Pack } from './r2.ts';
  * What layer 3's ranking weighs (S3 6.5, 7.4) and how the data is tuned so that it favours what run 1 found missing.
  *
  * The four features of a completed match, each banded across the slot's candidates:
- *   F3  stakes: distinct (who, effect) pairs with a harmful effect over the match's events. A chain that ends with the police answering a
- *       beating or a demand carries three; a lone sighting carries one. Stakes for someone are what makes an ask worth making.
- *   F5  personal link: the people the match binds that V has been shown (presented), plus 2 if V took part. An offer exists only where this
- *       is at least one (gate 5), so every offer candidate carries it and a texture candidate usually does not. It is how the ranking
- *       prefers a hook that follows an earlier telling to the same people.
+ *   F3  stakes: distinct (who, effect) pairs with a harmful effect over the match's events (harm, take, protect, rescue, kill, expose). The
+ *       offer patterns each carry one, so among offers it is constant and is skipped; against a texture candidate it is the same one. It would
+ *       rank a chain that harms and then protects above a single incident, but S1 opens almost no such chains near V (see the results).
+ *   F5  personal link: the people the match binds that V has been shown (presented), plus 2 if V took part. An offer exists only where V took
+ *       part in a stage's event (gate 5: V was told), so every offer candidate carries at least 2 and a texture candidate usually carries none.
+ *       It is how the ranking prefers a hook about people V has met over news about people V has not.
  *   F6  irreversibility: kill or expose. The kits tell nothing that irreversible, so it is constant and is skipped.
  *   F11 timeliness: how recent the last event is.
+ * A completed match stays a candidate for one game day, not three (`sifter.candidateTtl`): the pool is what a slot ranks, and a pool of three days of
+ * incidents makes every run slower without making a hook more timely.
  * Weights double the first two and keep the rest; `lambda` is raised so that the bands tilt the draw clearly (the default tilt of one
  * natural-log unit makes the best candidate only 2.7 times likelier than the worst); `diversity` is raised so that a kit or a place that was
  * sown lately is much less likely to be sown again (the repeated frames run 1's critics named).
@@ -36,6 +39,7 @@ export function run2Layer3(): Layer3Data {
   d.sower.featureWeights = { F3: 2, F5: 2, F6: 1, F11: 1 };
   d.sower.lambda = 3;
   d.sower.diversity = 1;
+  d.sifter.candidateTtl = 86_400;
   return d;
 }
 
@@ -55,7 +59,8 @@ export function run2World(name: string, arm: Run2Arm, tempo: Tempo): { opts: Wor
     notes: [
       dens.name,
       'the wide name registry of S1\'s pack (origins weighted by affiliation class and district)',
-      'layer 3 data: feature weights F3 2, F5 2, F6 1, F11 1; lambda 3; diversity 1',
+      'layer 3 data: feature weights F3 2, F5 2, F6 1, F11 1; lambda 3; diversity 1; a completed match is a candidate for one game day',
+      'V is told of the incidents that open where V stands (the report of what V saw, stood in for by the driver: RunExtra.witness)',
       arm === 'A1' ? 'arm A1: layer 3 chooses at random among what passes its gates' : 'arm E: layer 3 ranks and chooses',
     ],
   };

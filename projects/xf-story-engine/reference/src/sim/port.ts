@@ -15,6 +15,8 @@ export type ReplayLine =
   | {
       t: number; op: 'event'; kind: string; place?: string; participants: Array<{ who: string; role: string }>;
       effects?: Array<{ on: string; effect: Effect }>; witnesses?: number;
+      /** The events this one was caused by, as Ids (a report of V's own perception names the incident it saw, M3 run 2). */
+      causes?: string[];
     }
   | { t: number; op: 'person'; key: string; slots: Record<string, Value> };
 
@@ -38,9 +40,10 @@ export class ReplayPort {
     throw new Error(`the replay script names an unknown place: ${name}`);
   }
 
-  /** The Id of a game key; `v` is V. */
+  /** The Id of a game key; `v` is V. A node of the world that already has an Id (a generated resident, an event) is named by it. */
   node(key: string, kind = 'xf:person'): Id {
     if (key === 'v') return this.k.vId;
+    if (/^[0-9a-f]{32}$/.test(key)) return key;
     if (key.startsWith('journal:')) return this.k.mirrored(key, 'xf:journal');
     if (key.startsWith('fact:')) return this.k.mirrored(key, 'core:game-fact');
     return this.k.mirrored(key, kind);
@@ -91,6 +94,7 @@ export class ReplayPort {
           participants: line.participants.map((p) => ({ who: this.node(p.who), role: p.role })),
           effects: (line.effects ?? []).map((e) => ({ on: this.node(e.on), effect: e.effect })),
           witnesses: Array.from({ length: line.witnesses ?? 0 }, (_, i) => H(hs('witness'), hs(name), hid(port), hs(String(i)))),
+          ...(line.causes ? { causes: line.causes.map((c) => this.node(c)) } : {}),
         };
         this.send(line.t, { op: 'event', spec });
         return;

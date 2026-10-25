@@ -14,7 +14,7 @@ import { recordOf, transcript } from '../../src/m3/transcript.ts';
 const [file, name, stateId, tempo, arm, days, out] = process.argv.slice(2) as [string, string, string, Tempo, Run2Arm, string, string];
 if (!file || !name || !stateId || !tempo || !arm || !days || !out) throw new Error('usage: run2-hooks <file> <world> <state> <tempo> <E|A1> <days> <outdir>');
 const { opts, notes } = run2World(name, arm, tempo);
-const run = new Run(opts, stateById(stateId), policies.decline!, { walk: true, notes });
+const run = new Run(opts, stateById(stateId), policies.decline!, { walk: true, witness: true, notes });
 const t0 = performance.now();
 run.runWindows(Number(days) * 144);
 mkdirSync(out, { recursive: true });

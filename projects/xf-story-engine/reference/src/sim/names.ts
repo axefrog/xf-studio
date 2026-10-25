@@ -3,9 +3,11 @@
 // residents shows the same names again and again. Here every origin has its own given and family names, an origin is drawn by weight from
 // the resident's affiliation class and from the district, and the draw feeds nothing (the schema audit keeps it display-only, S1-I-7).
 //
-// The origins are the ones Night City's streets are written with: the districts are a mix of the diasporas the setting's own names show,
-// weighted by where the setting puts them (Kabuki is Japantown, beside Little China; the Claws recruit from it, the NCPD from everywhere).
-// A weight is a pack judgement, not a census of the game, and no origin is ever excluded: the tables only tilt the draw.
+// The origins are the ones Night City's streets are written with: a port city of many diasporas, weighted by where the setting puts them. Kabuki
+// is a Watson market district beside Little China, held by the Tyger Claws (knowledge/places.md and population-and-affiliations.md: 205 Claws, 112
+// Mox, 48 Scavengers in its entry), a gang with Japanese roots that recruits from the whole harbour; the NCPD recruits from everywhere. The game's
+// records give no names for street characters (population-and-affiliations.md, section 7), so the registry is the pack's own. A weight is a pack
+// judgement, not a census of the game, and no origin is ever excluded: the tables only tilt the draw.
 //
 // Every name is one capitalised word of plain letters, so that a name never reads as two people and a skeleton check can mask it. None is
 // the name of a character in the game's own stories: the pools are checked against a list of those names in the tests.
@@ -43,7 +45,7 @@ export const WIDE_NAMES: NameData = {
       family: ['Washington', 'Jackson', 'Mitchell', 'Okafor', 'Adeyemi', 'Bell', 'Ford', 'Coleman', 'Banks', 'Mensah', 'Tucker', 'Osei', 'Freeman', 'Abara', 'Rhodes', 'Boateng'],
     },
     slavic: {
-      given: ['Dmitri', 'Katya', 'Pavel', 'Irina', 'Anton', 'Sasha', 'Mila', 'Oleg', 'Nadia', 'Stanislav', 'Vera', 'Bogdan', 'Tamara', 'Ivo', 'Lidia', 'Marek'],
+      given: ['Dmitri', 'Katya', 'Pavel', 'Irina', 'Anton', 'Sasha', 'Mila', 'Oleg', 'Nadia', 'Stanislav', 'Vera', 'Bogdan', 'Tamara', 'Ivo', 'Lidia', 'Emil'],
       family: ['Novak', 'Petrov', 'Kovacs', 'Volkov', 'Sokolov', 'Marek', 'Kuznetsov', 'Horvat', 'Lebedev', 'Jankowski', 'Orlov', 'Zielinski', 'Popov', 'Kozlov', 'Dvorak', 'Smirnov'],
     },
     southasian: {
@@ -69,7 +71,7 @@ export const WIDE_NAMES: NameData = {
     { anglo: 2.2, black: 1.8, slavic: 1.6, latin: 1.3, japanese: 0.3, chinese: 0.3, korean: 0.3 },
     {},
   ],
-  // The multipliers of a district's origins by its key; Kabuki is Japantown, with Little China and the harbour's diasporas beside it.
+  // The multipliers of a district's origins by its key: Kabuki leans to the Claws' own origin, with Little China's and the harbour's diasporas beside it.
   byDistrict: {
     wat_kab: { japanese: 4, chinese: 2, korean: 1.3, vietnamese: 1.3, filipino: 0.9, latin: 0.9, anglo: 0.9, black: 0.8, slavic: 0.6, southasian: 0.7, middleeastern: 0.5 },
   },
@@ -99,6 +101,7 @@ export function nameProblems(n: NameData): string[] {
       const xs = lists[kind];
       if (xs.length < 2) out.push(`names: ${o} needs two ${kind} names at least`);
       if (new Set(xs).size !== xs.length) out.push(`names: ${o} repeats a ${kind} name`);
+      if (kind === 'given') for (const x of xs) if (lists.family.includes(x)) out.push(`names: "${x}" (${o}) is both a given and a family name`);
       for (const x of xs) if (!word.test(x)) out.push(`names: "${x}" (${o}) is not one plain capitalised word`);
     }
   }

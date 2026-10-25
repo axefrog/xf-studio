@@ -28,6 +28,10 @@ describe('the registry as data', () => {
     for (const reserved of RESERVED_NAMES) expect(names.has(reserved.toLowerCase()), reserved).toBe(false);
   });
 
+  test('no origin gives a name as both its given and its family name (so no resident is "Marek Marek")', () => {
+    for (const [o, l] of Object.entries(WIDE_NAMES.origins)) expect(l.given.filter((g) => l.family.includes(g)), o).toEqual([]);
+  });
+
   test('a registry with a repeated name, a two-word name or a weight on an unknown origin is refused', () => {
     const bad = structuredClone(WIDE_NAMES);
     bad.origins.japanese!.given.push('Haruto');
