@@ -3,22 +3,78 @@
  * metric in pixels, every rule-derived value. The style guide prints the result and tests/in-game-theme.test.ts checks it, so a token
  * the table names that the stylesheet lacks fails here and not in game.
  */
-import { IN_GAME_THEME } from "./in-game-theme";
+import { IN_GAME_THEME, IN_GAME_LABELLED_BAR_ALPHA } from "./in-game-theme";
 
 export type Theme = "light" | "dark";
 export type Rgba = [number, number, number, number];
 
-/** The declarations of every plain `:root { ... }` block, later blocks overriding earlier ones: token -> [light, dark] source text. */
+/** Unconditional top-level style rules in source order. Nested rules (including all at-rule contexts) are excluded. */
+function styleRules(css: string): { selector: string; body: string }[] {
+  const rules: { selector: string; body: string }[] = [];
+  let start = 0, open = 0, depth = 0, parens = 0, quote = "", selector = "";
+  // Preserve quoted strings: braces, semicolons and comment markers inside them are not CSS structure.
+  let text = "";
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i]!;
+    if (quote) {
+      text += c;
+      if (c === "\\") text += css[++i] ?? "";
+      else if (c === quote) quote = "";
+    } else if (c === '"' || c === "'") { quote = c; text += c; }
+    else if (c === "/" && css[i + 1] === "*") {
+      const end = css.indexOf("*/", i + 2);
+      i = end < 0 ? css.length : end + 1;
+      text += " ";
+    } else text += c;
+  }
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (quote) { if (c === "\\") i++; else if (c === quote) quote = ""; continue; }
+    if (c === '"' || c === "'") { quote = c; continue; }
+    if (c === "(") parens++;
+    if (c === ")") parens--;
+    if (parens) continue;
+    if (c === ";" && depth === 0) start = i + 1; // e.g. @import
+    if (c === "{") {
+      if (depth === 0) { selector = text.slice(start, i).trim(); open = i + 1; }
+      depth++;
+    } else if (c === "}" && --depth === 0) {
+      if (!selector.startsWith("@")) rules.push({ selector, body: text.slice(open, i) });
+      start = i + 1;
+    }
+  }
+  return rules;
+}
+
+function declarations(body: string): [string, string][] {
+  return splitTop(body, ";").flatMap(part => {
+    const m = /^\s*([\w-]+)\s*:\s*([\s\S]+?)\s*$/.exec(part);
+    return m ? [[m[1]!, m[2]!] as [string, string]] : [];
+  });
+}
+
+function themePair(value: string): [string, string] {
+  const ld = /^light-dark\(([\s\S]+)\)$/.exec(value);
+  const pair = ld ? splitTop(ld[1]!, ",").map(s => s.trim()) : [];
+  return pair.length === 2 ? [pair[0]!, pair[1]!] : [value, value];
+}
+
+/** Plain roots plus Studio's explicit data-theme roots; scoped roots have higher specificity than plain roots. */
 export function rootTokens(css: string): Map<string, [string, string]> {
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = styleRules(css);
   const out = new Map<string, [string, string]>();
-  for (const block of text.matchAll(/(?:^|\})\s*:root\s*\{([^}]*)\}/g)) {
-    for (const part of splitTop(block[1]!, ";")) {
-      const m = /^\s*(--[a-z0-9-]+)\s*:\s*([\s\S]+?)\s*$/.exec(part);
-      if (!m) continue;
-      const ld = /^light-dark\(([\s\S]+)\)$/.exec(m[2]!);
-      const pair = ld ? splitTop(ld[1]!, ",").map(s => s.trim()) : [];
-      out.set(m[1]!, pair.length === 2 ? [pair[0]!, pair[1]!] : [m[2]!, m[2]!]);
+  for (const scoped of [false, true]) for (const rule of rules) {
+    const selectors = splitTop(rule.selector, ",").map(s => s.trim());
+    for (const [name, value] of declarations(rule.body)) {
+      if (!name.startsWith("--")) continue;
+      const pair = themePair(value);
+      if (!scoped && selectors.includes(":root")) out.set(name, pair);
+      if (scoped) for (const [i, theme] of ["light", "dark"].entries()) {
+        if (!selectors.some(s => new RegExp(`^:root\\[data-theme=["']?${theme}["']?\\]$`).test(s))) continue;
+        const current = out.get(name) ?? ["", ""];
+        current[i] = pair[i]!;
+        out.set(name, current);
+      }
     }
   }
   return out;
@@ -26,10 +82,18 @@ export function rootTokens(css: string): Map<string, [string, string]> {
 
 function splitTop(text: string, separator: string): string[] {
   const out: string[] = [];
-  let depth = 0, current = "";
-  for (const c of text) {
-    if (c === "(") depth++;
-    if (c === ")") depth--;
+  let depth = 0, current = "", quote = "";
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (quote) {
+      current += c;
+      if (c === "\\") current += text[++i] ?? "";
+      else if (c === quote) quote = "";
+      continue;
+    }
+    if (c === '"' || c === "'") quote = c;
+    if (c === "(" || c === "{" || c === "[") depth++;
+    if (c === ")" || c === "}" || c === "]") depth--;
     if (c === separator && depth === 0) { out.push(current); current = ""; } else current += c;
   }
   if (current.trim()) out.push(current);
@@ -77,15 +141,17 @@ export function resolveColours(css: string): ResolvedColour[] {
   return out;
 }
 
-/** A declaration's value on the first plain (not nested in an at-rule) rule that lists the selector. */
+/** The last unconditional declaration matching the selector, optionally refined by pseudo-classes (as Studio's hover is). */
 export function ruleValue(css: string, selector: string, property: string): string | undefined {
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  for (const rule of text.matchAll(/(?:^|[};])\s*([^{};@][^{};]*)\{([^{}]*)\}/g)) {
-    if (!rule[1]!.split(",").some(part => part.trim().startsWith(selector))) continue;
-    const m = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`).exec(rule[2]!);
-    if (m) return m[1]!.trim();
+  let value: string | undefined;
+  for (const rule of styleRules(css)) {
+    if (!splitTop(rule.selector, ",").some(part => {
+      const s = part.trim();
+      return s === selector || s.startsWith(`${selector}:`);
+    })) continue;
+    for (const [name, raw] of declarations(rule.body)) if (name === property) value = raw;
   }
-  return undefined;
+  return value;
 }
 
 export type ResolvedMetric = { name: string; token: string; px: number };
@@ -132,7 +198,9 @@ export function contrast(fg: Rgba, bg: Rgba): number {
  * Text pairs the in-game surfaces draw: [foreground slot, background slots stacked bottom to top, minimum ratio, use]. The plate is
  * WindowBg over the game; its alpha is 0.97, so it is laid over the app background here as the nearest honest stand-in for "a scene".
  */
-export const IN_GAME_CONTRAST: readonly [string, readonly string[], number, string][] = [
+export type ContrastLayer = string | readonly [slot: string, alpha: number];
+export const contrastLayerLabel = (layer: ContrastLayer) => typeof layer === "string" ? layer : `${layer[0]} ${Math.round(layer[1] * 100)}%`;
+export const IN_GAME_CONTRAST: readonly [string, readonly ContrastLayer[], number, string][] = [
   ["Text", ["WindowBg"], 4.5, "Body text on the plate"],
   ["XfTextMuted", ["WindowBg"], 4.5, "Labels and hints on the plate"],
   ["TextDisabled", ["WindowBg"], 4.5, "Footers and the idle dot's words on the plate"],
@@ -150,13 +218,26 @@ export const IN_GAME_CONTRAST: readonly [string, readonly string[], number, stri
   ["XfAccentInk", ["XfAccent"], 4.5, "Text on the primary button"],
   ["XfDanger", ["WindowBg", "ChildBg", "XfDangerBg"], 4.5, "The stop button's text on its hover wash"],
   ["Border", ["WindowBg"], 3, "A control's frame against the plate"],
+  // Bars appear on the window plate and in diagnostics cards. Check the track and each tone's translucent fill.
+  ...[false, true].flatMap(card => {
+    const base = card ? ["WindowBg", "ChildBg", "XfLine"] : ["WindowBg", "XfLine"];
+    const place = card ? "card" : "plate";
+    return [
+      ["Text", base, 4.5, `Labelled bar's unfilled track on the ${place}`],
+      ...["PlotHistogram", "XfWarning", "XfDanger"].map(slot =>
+        ["Text", [...base, [slot, IN_GAME_LABELLED_BAR_ALPHA]], 4.5, `Labelled bar's ${slot} fill on the ${place}`]),
+    ] as [string, ContrastLayer[], number, string][];
+  }),
 ];
 
 export function contrastRows(css: string) {
   const bySlot = new Map(resolveColours(css).map(c => [c.slot, c]));
   const get = (slot: string, theme: Theme) => { const c = bySlot.get(slot); if (!c) throw new Error(`no slot ${slot}`); return c[theme]; };
   const app = rootTokens(css).get("--bg-app")!;
-  const stack = (slots: readonly string[], theme: Theme) => slots.reduce<Rgba>((under, slot) => over(get(slot, theme), under), oklch(app[theme === "light" ? 0 : 1]));
+  const stack = (slots: readonly ContrastLayer[], theme: Theme) => slots.reduce<Rgba>((under, layer) => {
+    const c = get(typeof layer === "string" ? layer : layer[0], theme);
+    return over(typeof layer === "string" ? c : [c[0], c[1], c[2], c[3] * layer[1]], under);
+  }, oklch(app[theme === "light" ? 0 : 1]));
   return IN_GAME_CONTRAST.map(([fg, bgs, min, use]) => {
     const value = (theme: Theme) => contrast(get(fg, theme), stack(bgs, theme));
     return { fg, bgs, min, use, light: value("light"), dark: value("dark") };

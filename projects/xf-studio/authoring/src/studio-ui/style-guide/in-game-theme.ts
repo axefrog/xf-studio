@@ -13,9 +13,36 @@
  * yet. Both are build instructions for the bridge and are tolerated stale: once the generator reads this table they say nothing.
  */
 
+/** Dear ImGui 1.92.9 docking, enum ImGuiCol_ in imgui.h (COUNT and obsolete aliases excluded).
+ * Source: https://github.com/ocornut/imgui/blob/v1.92.9-docking/imgui.h#L1688-L1753
+ * Names omit the common ImGuiCol_ prefix, as the bridge's table does. Keep this pinned list independent of the mapping below.
+ */
+export const IMGUI_COLOUR_SLOTS = [
+  "Text", "TextDisabled", "WindowBg", "ChildBg", "PopupBg", "Border", "BorderShadow",
+  "FrameBg", "FrameBgHovered", "FrameBgActive", "TitleBg", "TitleBgActive", "TitleBgCollapsed", "MenuBarBg",
+  "ScrollbarBg", "ScrollbarGrab", "ScrollbarGrabHovered", "ScrollbarGrabActive", "CheckMark", "CheckboxSelectedBg",
+  "SliderGrab", "SliderGrabActive", "Button", "ButtonHovered", "ButtonActive", "Header", "HeaderHovered", "HeaderActive",
+  "Separator", "SeparatorHovered", "SeparatorActive", "ResizeGrip", "ResizeGripHovered", "ResizeGripActive", "InputTextCursor",
+  "TabHovered", "Tab", "TabSelected", "TabSelectedOverline", "TabDimmed", "TabDimmedSelected", "TabDimmedSelectedOverline",
+  "DockingPreview", "DockingEmptyBg", "PlotLines", "PlotLinesHovered", "PlotHistogram", "PlotHistogramHovered",
+  "TableHeaderBg", "TableBorderStrong", "TableBorderLight", "TableRowBg", "TableRowBgAlt", "TextLink", "TextSelectedBg",
+  "TreeLines", "DragDropTarget", "DragDropTargetBg", "UnsavedMarker", "NavCursor", "NavWindowingHighlight", "NavWindowingDimBg", "ModalWindowDimBg",
+] as const;
+
+/** Required XF surface colours, alongside the pinned ImGui slots. */
+export const XF_COLOUR_SLOTS = [
+  "XfAccent", "XfAccentInk", "XfAccentEdge", "XfAccentText", "XfAccentHover", "XfSignal", "XfSignalBg", "XfSignalLine",
+  "XfTextMuted", "XfLine", "XfLineStrong", "XfSuccess", "XfSuccessBg", "XfWarning", "XfWarningBg", "XfDanger", "XfDangerBg",
+] as const;
+
+export type ColourSlotName = typeof IMGUI_COLOUR_SLOTS[number] | typeof XF_COLOUR_SLOTS[number];
+
+/** A labelled bar keeps body text legible over its fill in both themes. No opaque edge crosses the label. */
+export const IN_GAME_LABELLED_BAR_ALPHA = 0.3;
+
 export type ColourSlot = {
   /** The Dear ImGui colour (ImGuiCol_<slot>) or an XF semantic slot (Xf...), which a surface reads by name. */
-  slot: string;
+  slot: ColourSlotName;
   /** A custom property of studio.css :root. */
   token: string;
   /** Multiplies the token's own alpha (a wash given as a colour). */
@@ -60,6 +87,7 @@ export const IN_GAME_COLOURS: readonly ColourSlot[] = [
   { slot: "ButtonHovered", token: "--bg-hover", use: "A button under the pointer" },
   { slot: "ButtonActive", token: "--bg-active", use: "A button being pressed" },
   { slot: "CheckMark", token: "--signal", from: "--accent", use: "A checked box or radio", why: "An on state is cyan (the Studio's switch: .switch:checked); yellow is commitment." },
+  { slot: "CheckboxSelectedBg", token: "--signal-bg", use: "A selected checkbox's background", added: true, why: "The Studio's cyan on-state wash; named so no slot keeps an ImGui default." },
   { slot: "SliderGrab", token: "--signal", use: "A slider's thumb" },
   { slot: "SliderGrabActive", token: "--accent", use: "A slider's thumb while dragged" },
   { slot: "Header", token: "--signal-bg", use: "A selected row or an open section header" },
@@ -122,7 +150,7 @@ export const IN_GAME_COLOURS: readonly ColourSlot[] = [
  * Colours the Studio sets on a component's rule rather than as a token (the generator reads the rule's declaration).
  * The primary button's hover is the one: a lighter yellow that no token names.
  */
-export type RuleColour = { slot: string; rule: string; property: string; use: string };
+export type RuleColour = { slot: ColourSlotName; rule: string; property: string; use: string };
 export const IN_GAME_RULE_COLOURS: readonly RuleColour[] = [
   { slot: "XfAccentHover", rule: ".btn.primary:hover", property: "background", use: "The primary button under the pointer (its edge colour would be near-black in light)" },
 ];
