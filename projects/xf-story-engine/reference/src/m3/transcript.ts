@@ -78,10 +78,10 @@ export interface RunRecord {
 
 /** The hash a record carries: over everything but the hash itself, so a stored record can be checked after a round trip through JSON. */
 const bodyHash = (body: Omit<RunRecord, 'hash'>): string => H(s('m3-record'), hrec(body as unknown as Record<string, unknown>));
-export const recordHash = (r: RunRecord): string => {
+export function recordHash(r: RunRecord): string {
   const { hash: _hash, ...body } = r;
   return bodyHash(body);
-};
+}
 
 /** The machine-readable record of a run: what was shown, what was sown and why, and a hash of all of it. */
 export function recordOf(run: Run): RunRecord {

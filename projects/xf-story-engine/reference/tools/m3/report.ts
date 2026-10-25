@@ -22,6 +22,14 @@ for (const { f, r } of recs) {
 }
 lines.push('');
 
+// ---- the fit and the play with sowing off and on (from the fit tool's table, when it sits beside the runs) ----
+const fitFile = `${runs}/../fit/fit-results.md`;
+if (existsSync(fitFile)) {
+  const fit = readFileSync(fitFile, 'utf8').split(/\r?\n/);
+  const pick = (prefix: string): string[] => fit.filter((l) => l.startsWith(prefix));
+  lines.push('## R2 fitted and played with sowing off and on', '', 'The second done-when is about the fit: R2 is fitted the same way with sowing off as with it on. That holds. The play is a separate matter and is not claimed identical: layer 3 holds the first delivery for its pacing, and a later world can select a different fragment. The table is in fit/fit-results.md.', '', ...pick('Same fit').map((l) => `- ${l}`), ...pick('Same selection').map((l) => `- ${l}`), ...pick('First delivery').map((l) => `- ${l}`), '');
+}
+
 // ---- critic ----
 const packet = JSON.parse(readFileSync(`${packetDir}/packet.json`, 'utf8')) as Pick<Packet, 'cards' | 'orders' | 'pairs'>;
 const keyFile = JSON.parse(readFileSync(`${packetDir}/key.json`, 'utf8')) as { key: Packet['key']; pairKey: Packet['pairKey']; n: number; available: Record<string, number> };
@@ -47,6 +55,15 @@ if (answersDir !== '-' && existsSync(answersDir)) {
     for (const x of s.pairs.slice().sort(order)) lines.push(`| ${x.x} | ${x.y} | ${x.criterion} | ${s.perRater.map((r) => { const o = r.pairs.find((q) => q.x === x.x && q.y === x.y && q.criterion === x.criterion); return o ? `${o.wins} of ${o.n}` : 'n/a'; }).join(' | ')} |`);
     lines.push('', `Disagreement (share of rater pairs differing by 2 or more points): ${JSON.stringify(s.disagreement)}.`, '');
     for (const x of answers) if (x.a.critic) lines.push(`### Critic, ${x.a.rater}`, '', x.a.critic, '');
+  }
+}
+// ---- how the packet was built ----
+const inputsFile = `${packetDir}/inputs.json`;
+if (existsSync(inputsFile)) {
+  const m = JSON.parse(readFileSync(inputsFile, 'utf8')) as { a3Rule: string; runs: Array<{ file: string; hash: string }>; n: number; raters: number };
+  lines.push('## How the packet was built', '', `The packet is rebuilt byte for byte from blind/inputs.json: ${m.runs.length} hook runs by file name and record hash (${m.runs.map((r) => r.file.replace('.json', '')).join(', ')}), ${m.n} hooks per arm, ${m.raters} raters. The calm and steady runs of the table above are not in the rated packet.`, '');
+  if (m.a3Rule === 'rated-v1') {
+    lines.push('### Protocol deviation of the rated run', '', 'The baseline A3 of the rated packet does not follow the slot rule that dossier 23 5.4.1 declares (each slot takes the nearest eligible resident or place, ties to the smaller identifier). It took a keyed draw among the first four residents of the nearest ring for each person slot, and drew places from a pool of every ring and then the whole district. Its jobs were therefore less local and more varied than the declared rule would give. The packet was not regenerated and was not re-rated, and the verdicts above stand for the baseline as it was. Runs from now on use the declared rule (`declared` in the manifest); the old rule is kept as `rated-v1` so that the rated packet can still be rebuilt.', '');
   }
 }
 writeFileSync(out, lines.join('\n') + '\n');
