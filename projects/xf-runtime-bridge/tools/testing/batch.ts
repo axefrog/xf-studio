@@ -28,6 +28,7 @@ import { cetWindowRect, decodeCetBinding, keysLabel, parseCetBindings, parseKeys
 import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, runPlan, type Action, type ExecContext, type Executor, type Match, type Outcome, type Plan, type PlanClock, type PlanResult, type ReportEntry, type Step } from "./plan.ts";
 import { planTestStep, TEST_STEP_KINDS, TestSession } from "./script.ts";
 import { captureCursor, waitForEvent } from "./windows.ts";
+import { DEFAULT_HALT_PATTERNS, Telemetry, type RowTelemetry } from "./telemetry.ts";
 
 export const SCRIPT_SCHEMA_3 = "xfb/session-script-3";
 export const REPORT_SCHEMA_3 = "xfb/session-report-3";
@@ -51,6 +52,8 @@ export type Row = {
   judged_by?: string;
   /** restart: the game is restarted before the next row (the row stops the bridge, for example). */
   after?: "restart";
+  /** This row's own halt kinds, instead of the batch's ([] for none). */
+  halt_on?: string[];
 };
 export type BatchScript = {
   schema: string;
@@ -62,6 +65,10 @@ export type BatchScript = {
   setup?: SessionStep[];
   rows: Row[];
   teardown?: SessionStep[];
+  /** Which significant bugs stop the batch early (see HALT_KINDS; --halt-on overrides). */
+  halt_on?: string[];
+  /** More plugin log patterns (regular expressions) that count as a draw_call halt. */
+  halt_patterns?: string[];
 };
 export type Verdict = "PASS" | "FAIL" | "PARTIAL" | "SKIP";
 
@@ -175,7 +182,9 @@ export type PlannedBatch = { setup: Plan; rows: { row: Row; plan: Plan; failRow:
 export function planBatch(script: BatchScript): PlannedBatch {
   const problems: string[] = [];
   if (script.schema !== SCRIPT_SCHEMA_3) problems.push(`schema must be "${SCRIPT_SCHEMA_3}"`);
-  const allowed = new Set(["schema", "name", "title", "card", "requires", "fixtures", "setup", "rows", "teardown"]);
+  const allowed = new Set(["schema", "name", "title", "card", "requires", "fixtures", "setup", "rows", "teardown", "halt_on", "halt_patterns"]);
+  try { parseHaltOn(script?.halt_on); } catch (error) { problems.push(String((error as Error).message).replace("--halt-on", "halt_on")); }
+  for (const pattern of script?.halt_patterns ?? []) { try { new RegExp(pattern); } catch { problems.push(`halt_patterns: ${pattern} isn't a regular expression`); } }
   for (const key of Object.keys(script ?? {})) if (!allowed.has(key)) problems.push(`script: unknown field ${key}`);
   if (!/^[A-Za-z0-9._-]{1,60}$/.test(script?.name ?? "")) problems.push("name must be 1-60 letters, digits, '.', '_' or '-'");
   if (!Array.isArray(script?.rows) || !script.rows.length) return { setup: { id: "setup", steps: [] }, rows: [], teardown: { id: "teardown", steps: [] }, problems: [...problems, "rows must be a non-empty list"] };
@@ -192,7 +201,7 @@ export function planBatch(script: BatchScript): PlannedBatch {
   const rows = script.rows.map((row, i) => {
     const where = `row ${i + 1}${row?.id ? ` (${row.id})` : ""}`;
     if (!row || typeof row !== "object") { problems.push(`${where}: a row must be an object`); return { row, plan: { id: "x", steps: [] }, failRow: new Set<string>() }; }
-    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after"].includes(key)) problems.push(`${where}: unknown field ${key}`);
+    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on"].includes(key)) problems.push(`${where}: unknown field ${key}`);
     if (typeof row.id !== "string" || !/^[A-Za-z0-9._-]{1,60}$/.test(row.id)) problems.push(`${where}: id must be 1-60 letters, digits, '.', '_' or '-'`);
     if (ids.has(row.id)) problems.push(`${where}: id is used more than once`);
     ids.add(row.id);
@@ -210,6 +219,7 @@ export function planBatch(script: BatchScript): PlannedBatch {
       if (!known.has(name)) problems.push(`${where}: pass check ${check.label} reads ${check.ref}, which no step binds`);
     }
     if (row.after !== undefined && row.after !== "restart") problems.push(`${where}: after is restart`);
+    if (row.halt_on !== undefined) { try { parseHaltOn(row.halt_on.length ? row.halt_on : ["none"]); } catch (error) { problems.push(`${where}: ${String((error as Error).message).replace("--halt-on", "halt_on")}`); } }
     const failRow = new Set<string>();
     const p = plan(row.id, row.steps, { ...(row.deadline_ms ? { deadline_ms: row.deadline_ms } : {}), ...(row.cleanup ? { finally: toPlanSteps(row.cleanup, failRow, where, problems) } : {}) }, failRow);
     // Capture names are the evidence's file names: one per capture across the script.
@@ -611,10 +621,57 @@ export type RowRecord = {
   checks: CheckResult[];
   prelude?: { status: string; reason?: string };
   close?: { outcome: string; status: string; reason?: string; last_step?: string };
+  telemetry?: RowTelemetry;
+  attempt?: number;
   started_at?: string;
   ms?: number;
   reports: ReportEntry[];
+  /** This row's records from earlier attempts of the same session (the loop reran it). */
+  earlier?: Omit<RowRecord, "earlier" | "reports">[];
 };
+
+// ---- Halting early on a significant bug ---------------------------------------------------------------
+
+/**
+ * The failures that make the rest of a batch pointless or misleading: the game gone (a crash), the bridge gone
+ * (not after a row that stops it on purpose), a draw call that failed or the overlay stopping (the plugin log's
+ * halt patterns), an exception in the runner, and the same failure across N rows. --halt-on (or the script's
+ * halt_on, or a row's) chooses them; handed_over and the commit tripwire always stop a batch.
+ */
+export const HALT_KINDS = ["crash", "bridge_lost", "draw_call", "runner_error", "repeated"] as const;
+export type HaltPolicy = { kinds: Set<string>; repeated: number };
+export type Halt = { kind: string; reason: string; row?: string; evidence: string[]; rerun: string[] };
+
+/** "crash,bridge_lost,draw_call,runner_error,repeated:3", "all" (the default, repeated after 3 rows) or "none". */
+export function parseHaltOn(text: string | string[] | undefined): HaltPolicy {
+  const parts = (Array.isArray(text) ? text : (text ?? "all").split(",")).map((p) => p.trim()).filter(Boolean);
+  const kinds = new Set<string>();
+  let repeated = 3;
+  for (const part of parts) {
+    if (part === "none") continue;
+    if (part === "all") { HALT_KINDS.forEach((k) => kinds.add(k)); continue; }
+    const [kind, n] = part.split(":");
+    if (!(HALT_KINDS as readonly string[]).includes(kind)) throw new Error(`--halt-on: unknown kind ${kind} (use ${HALT_KINDS.join(", ")}, all or none)`);
+    kinds.add(kind);
+    if (kind === "repeated" && n !== undefined) {
+      repeated = Number(n);
+      if (!Number.isInteger(repeated) || repeated < 2 || repeated > 50) throw new Error("--halt-on: repeated:N takes 2 to 50");
+    }
+  }
+  return { kinds, repeated };
+}
+
+/** A failure's signature for the repeated check: the plan's failing code, without the row's own labels. */
+export function failureSignature(record: RowRecord): string | undefined {
+  if (record.verdict === "PASS" || !record.close || record.close.status === "done") return undefined;
+  const code = /^[^:]+: ([a-z_]+)/.exec(record.close.reason ?? "")?.[1];
+  return code && !["cancelled", "deadline"].includes(code) ? code : record.close.reason?.includes("deadline") ? "deadline" : code;
+}
+
+const closesTheGame = (row: Row) => JSON.stringify(row.steps).includes('"host.close"');
+
+// ---- Running a batch -----------------------------------------------------------------------------------
+
 export type BatchRunOptions = {
   api: CommandApi;
   host: Host;
@@ -630,10 +687,44 @@ export type BatchRunOptions = {
   readCetBindings?: () => string | null;
   commitEveryMs?: number;
   preflight?: unknown;
+  /** Which significant bugs end the batch early (default: all of them, repeated after 3 rows). */
+  haltOn?: HaltPolicy;
+  /** Close the game cleanly after a halt (default true; never after handed_over: the player has the game). */
+  closeOnHalt?: boolean;
+  /** The command that continues after a halt, given the rows still to run (resume.json records it). */
+  resumeCommand?: (rows: string[]) => string;
+  /** Bridge pings before the bridge counts as lost (default 3, 2 s apart). */
+  bridgeProbes?: number;
 };
-export type BatchResult = { ok: boolean; outcome: "complete" | "stopped" | "interrupted"; halt?: string; rows: RowRecord[]; manifestPath: string; reportPath: string };
+export type BatchResult = {
+  ok: boolean;
+  outcome: "complete" | "stopped" | "interrupted";
+  halt?: string;
+  haltInfo?: Halt;
+  attempt: number;
+  remaining: string[];
+  rows: RowRecord[];
+  manifestPath: string;
+  reportPath: string;
+  resumePath: string;
+};
 
-/** Runs a schema-3 script: setup, every row with its prelude and verdict, then the teardown, writing the report as it goes. */
+type PreviousRun = { attempts: unknown[]; rows: RowRecord[] } | undefined;
+
+/** The report folder's earlier attempts of this script (the loop continues into the same folder). */
+function previousRun(outDir: string, name: string): PreviousRun {
+  const path = join(outDir, "manifest.json");
+  if (!existsSync(path)) return undefined;
+  try {
+    const manifest = JSON.parse(readFileSync(path, "utf8"));
+    if (manifest?.schema !== REPORT_SCHEMA_3 || manifest.script?.name !== name) return undefined;
+    return { attempts: Array.isArray(manifest.attempts) ? manifest.attempts : [], rows: Array.isArray(manifest.rows) ? manifest.rows : [] };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Runs a schema-3 script: setup, every row with its prelude, telemetry and verdict, then the teardown, writing the report as it goes. */
 export async function runBatch(script: BatchScript, options: BatchRunOptions): Promise<BatchResult> {
   const planned = planBatch(script);
   if (planned.problems.length) throw new Error(`script problems:\n  ${planned.problems.join("\n  ")}`);
@@ -641,96 +732,178 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   const clock = options.clock ?? realClock;
   const fixtures = { ...(script.fixtures ?? {}), ...(options.fixtures ?? {}) };
   mkdirSync(options.outDir, { recursive: true });
-  const config = typeof fixtures.staged_mod === "string" ? new ConfigEditor(stagedConfigPath(fixtures.staged_mod), join(options.outDir, "config-backup")) : undefined;
+  const previous = previousRun(options.outDir, script.name);
+  const attempt = (previous?.attempts.length ?? 0) + 1;
+  const policy = options.haltOn ?? parseHaltOn(script.halt_on);
+  const config = typeof fixtures.staged_mod === "string" ? new ConfigEditor(stagedConfigPath(fixtures.staged_mod), join(options.outDir, `config-backup-a${attempt}`)) : undefined;
   const readCetBindings = options.readCetBindings ?? (() => {
     const path = typeof fixtures.game_dir === "string" ? join(fixtures.game_dir, "bin", "x64", "plugins", "cyber_engine_tweaks", "bindings.json") : "";
     return path && existsSync(path) ? readFileSync(path, "utf8") : null;
   });
   const executor = new SessionExecutor({ api: options.api, host: options.host, outDir: options.outDir, fixtures, clock, log, echo: options.echo !== false, config, readCetBindings,
     commitFloorGb: typeof fixtures.commit_floor_gb === "number" ? fixtures.commit_floor_gb : 4, commitEveryMs: options.commitEveryMs }, script);
+  const logs = fixtures.logs as { plugin_dir?: string } | undefined;
+  const telemetry = new Telemetry({ api: options.api, host: options.host, outDir: options.outDir, attempt, clock,
+    pluginLogDir: logs?.plugin_dir ?? (typeof fixtures.game_dir === "string" ? join(fixtures.game_dir, "red4ext", "logs") : undefined),
+    haltPatterns: [...DEFAULT_HALT_PATTERNS, ...((script.halt_patterns ?? fixtures.halt_patterns ?? []) as string[])] });
   const bindings = executor.bindings;
   const signal = options.signal ?? new AbortController().signal;
   const startedAt = new Date().toISOString();
   const records: RowRecord[] = [];
-  let halt: string | undefined;
+  // Set by stopWith (also from closures), so its type is declared wide.
+  let halt = undefined as Halt | undefined;
+  const stopWith = (kind: string, reason: string, row?: string, evidence: string[] = [], rerun: string[] = row ? [row] : []) => {
+    halt ??= { kind, reason, row, evidence, rerun };
+  };
+  const kindOfStop = (reason: string | undefined) => (reason?.includes("handed to the player") ? "handed_over" : reason?.includes("tripwire tripped") ? "tripwire" : "stopped");
   const reportOf = (result: PlanResult) => ({ outcome: result.outcome, status: result.status, reason: result.reason, last_step: result.last_step });
   const plan = (p: Plan, extra: Partial<Parameters<typeof runPlan>[1]> = {}) => runPlan(p, { executor, clock, signal, bindings, ...extra });
-  const write = (setup?: PlanResult, teardown?: PlanResult, finished = false) => writeReports(script, options, { startedAt, finished, halt, setup, teardown, rows: records, executor, config, interrupted: signal.aborted });
+  const remaining = () => {
+    const rerun = new Set(halt?.rerun ?? []);
+    return planned.rows.map((r) => r.row.id).filter((id) => {
+      const record = records.find((r) => r.id === id);
+      if (options.rows && !options.rows.includes(id)) return false;
+      return rerun.has(id) || !record || /^(not reached|interrupted)/.test(record.reason ?? "");
+    });
+  };
+  const write = (setup?: PlanResult, teardown?: PlanResult, finished = false) =>
+    writeReports(script, options, { startedAt, finished, halt, setup, teardown, rows: records, executor, config, interrupted: signal.aborted, attempt, previous, remaining: remaining() });
 
-  log(`${script.title ?? script.name}: ${planned.rows.length} rows`);
+  log(`${script.title ?? script.name}: ${planned.rows.length} rows (attempt ${attempt})`);
   await executor.run({ do: "note", text: `XF session: ${script.title ?? script.name} (${planned.rows.length} rows)` }, { signal, deadline: clock.now() + 10_000, plan: "start", step: "start", attempt: 1, raw: { do: "note" } }).catch(() => undefined);
   const setup = await plan(planned.setup);
-  if (setup.status === "stopped") halt = setup.reason;
+  if (setup.status === "stopped") stopWith(kindOfStop(setup.reason), setup.reason ?? "setup stopped");
   const setupFailed = setup.status !== "done" ? `setup didn't finish: ${setup.reason}` : undefined;
+  // The recorder from the start when the game already runs; otherwise from the first row's launch.
+  await telemetry.ensureRecorder().catch(() => undefined);
+  telemetry.markRow();
   let restartDue = false;
+  const failures = new Map<string, string[]>();
   for (const { row, plan: rowPlan, failRow } of planned.rows) {
     const started = clock.now();
-    const record: RowRecord = { id: row.id, title: row.title, verdict: "SKIP", evidence: [], checks: [], reports: [], started_at: new Date().toISOString(), ...(row.judged_by ? { judged_by: row.judged_by } : {}) };
+    const record: RowRecord = { id: row.id, title: row.title, verdict: "SKIP", evidence: [], checks: [], reports: [], attempt, started_at: new Date().toISOString(), ...(row.judged_by ? { judged_by: row.judged_by } : {}) };
     records.push(record);
     if (options.rows && !options.rows.includes(row.id)) { record.reason = "not selected"; continue; }
     if (signal.aborted) { record.reason = "interrupted"; continue; }
-    if (halt) { record.reason = `not reached: ${halt}`; continue; }
+    if (halt) { record.reason = `not reached: ${halt.reason}`; continue; }
     if (setupFailed) { record.reason = setupFailed; continue; }
-    const unmet = (row.requires ?? []).flatMap((need) => {
-      if (need.fixture && fixtures[need.fixture] === undefined) return [`the fixtures file has no ${need.fixture}`];
-      if (need.binding) {
-        const text = readCetBindings();
-        const [mod, name] = need.binding.split(".");
-        const value = text ? parseCetBindings(text)[mod]?.[name] : undefined;
-        if (!value) return [`CET has no key bound for ${need.binding}`];
-        if (need.equals !== undefined) {
-          const want = String(resolveRefs(need.equals, bindings));
-          try { if (keysLabel(decodeCetBinding(value)) !== keysLabel(parseKeys(want))) return [`CET's ${need.binding} is ${keysLabel(decodeCetBinding(value))}, not ${want}`]; } catch (error) { return [String(error)]; }
+    try {
+      const unmet = (row.requires ?? []).flatMap((need) => {
+        if (need.fixture && fixtures[need.fixture] === undefined) return [`the fixtures file has no ${need.fixture}`];
+        if (need.binding) {
+          const text = readCetBindings();
+          const [mod, name] = need.binding.split(".");
+          const value = text ? parseCetBindings(text)[mod]?.[name] : undefined;
+          if (!value) return [`CET has no key bound for ${need.binding}`];
+          if (need.equals !== undefined) {
+            const want = String(resolveRefs(need.equals, bindings));
+            try { if (keysLabel(decodeCetBinding(value)) !== keysLabel(parseKeys(want))) return [`CET's ${need.binding} is ${keysLabel(decodeCetBinding(value))}, not ${want}`]; } catch (error) { return [String(error)]; }
+          }
+        }
+        if (need.config && !config?.exists()) return ["the staged config.ini isn't reachable (fixtures staged_mod)"];
+        return [];
+      });
+      if (unmet.length) { record.reason = `requires: ${unmet.join("; ")}`; continue; }
+      log(`--- ${row.id}: ${row.title}`);
+      executor.startRow(row.id);
+      // The prelude: the row's config, a restart if anything read at load changed, a launch if the game isn't running.
+      const current = config?.exists() ? config.read() : {};
+      const needs = configNeeds(row, current);
+      const prelude = await plan({ id: `${row.id}.prelude`, steps: preludeSteps(needs, restartDue, needsLoad({ ...current, ...needs })) });
+      record.prelude = { status: prelude.status, reason: prelude.reason };
+      record.reports.push(...prelude.reports);
+      restartDue = false;
+      if (prelude.status !== "done") {
+        stopWith(prelude.status === "stopped" ? kindOfStop(prelude.reason) : "prelude", prelude.status === "stopped" ? prelude.reason ?? "stopped" : `the game couldn't be brought to ${row.id}'s set-up: ${prelude.reason}`, row.id);
+        record.reason = `could not set up: ${prelude.reason}`;
+        record.telemetry = await telemetry.collect(`${row.id}`);
+        write(setup);
+        continue;
+      }
+      // Telemetry: the recorder again after a restart (a new bridge session), and the row's slice from here.
+      const recorder = await telemetry.ensureRecorder();
+      if (recorder.restarted) log(`     recorder run ${recorder.run} on every channel`);
+      const before = new Map(Object.entries(bindings));
+      const result = await plan(rowPlan);
+      record.close = reportOf(result);
+      record.reports.push(...result.reports);
+      record.checks = (row.pass ?? []).map((check) => evaluateCheck(check, bindings, (name) => !before.has(name) || before.get(name) !== bindings[name]));
+      Object.assign(record, verdictOf(result, record.checks, failRow));
+      record.evidence = [...executor.evidence];
+      record.telemetry = await telemetry.collect(row.id);
+      record.ms = Math.round(clock.now() - started);
+      log(`${record.verdict.padEnd(7)} ${row.id}${record.reason ? `: ${record.reason}` : ""}`);
+      if (result.status === "stopped") stopWith(kindOfStop(result.reason), result.reason ?? "stopped", row.id);
+      restartDue = row.after === "restart";
+      // Significant bugs: the batch stops here rather than piling misleading rows on top.
+      const kinds = row.halt_on ? new Set(row.halt_on) : policy.kinds;
+      if (!halt && kinds.has("runner_error") && /runner_error|executor_error/.test(record.close.reason ?? "")) stopWith("runner_error", `the runner failed in ${row.id}: ${record.close.reason}`, row.id, [record.telemetry.dir]);
+      if (!halt && kinds.has("draw_call") && record.telemetry.log_matches.length) stopWith("draw_call", `the plugin log reports a failure during ${row.id}: ${record.telemetry.log_matches[0]}`, row.id, [record.telemetry.dir, ...record.telemetry.log_matches]);
+      if (!halt && (kinds.has("crash") || kinds.has("bridge_lost"))) {
+        const game = await options.host.gameProcess();
+        if (!game && kinds.has("crash") && !closesTheGame(row)) stopWith("crash", `the game is no longer running after ${row.id} (a crash?)`, row.id, [record.telemetry.dir]);
+        else if (game && kinds.has("bridge_lost") && row.after !== "restart") {
+          let alive = false;
+          for (let probe = 0; probe < (options.bridgeProbes ?? 3) && !alive; probe++) {
+            if (probe) await clock.sleep(2000, signal);
+            alive = (await options.api.run("bridge.ping", {}, { source: "session" })).ok;
+          }
+          if (!alive) stopWith("bridge_lost", `the bridge stopped answering after ${row.id} while the game still runs`, row.id, [record.telemetry.dir]);
         }
       }
-      if (need.config && !config?.exists()) return ["the staged config.ini isn't reachable (fixtures staged_mod)"];
-      return [];
-    });
-    if (unmet.length) { record.reason = `requires: ${unmet.join("; ")}`; continue; }
-    log(`--- ${row.id}: ${row.title}`);
-    executor.startRow(row.id);
-    // The prelude: the row's config, a restart if anything read at load changed, a launch if the game isn't running.
-    const current = config?.exists() ? config.read() : {};
-    const needs = configNeeds(row, current);
-    const prelude = await plan({ id: `${row.id}.prelude`, steps: preludeSteps(needs, restartDue, needsLoad({ ...current, ...needs })) });
-    record.prelude = { status: prelude.status, reason: prelude.reason };
-    record.reports.push(...prelude.reports);
-    restartDue = false;
-    if (prelude.status !== "done") {
-      halt = prelude.status === "stopped" ? prelude.reason : `the game couldn't be brought to ${row.id}'s set-up: ${prelude.reason}`;
-      record.reason = `could not set up: ${prelude.reason}`;
-      write(setup);
-      continue;
+      const signature = failureSignature(record);
+      if (signature) {
+        const rows = [...(failures.get(signature) ?? []), row.id];
+        failures.set(signature, rows);
+        if (!halt && kinds.has("repeated") && rows.length >= policy.repeated) stopWith("repeated", `${rows.length} rows failed the same way (${signature}): ${rows.join(", ")}`, row.id, rows.map((id) => records.find((r) => r.id === id)?.telemetry?.dir ?? id), rows);
+      }
+    } catch (error) {
+      record.reason = `the runner failed: ${String((error as Error)?.stack ?? error).slice(0, 600)}`;
+      if (policy.kinds.has("runner_error")) stopWith("runner_error", `the runner failed in ${row.id}: ${(error as Error)?.message ?? error}`, row.id, [String((error as Error)?.stack ?? error)]);
     }
-    const before = new Map(Object.entries(bindings));
-    const result = await plan(rowPlan);
-    record.close = reportOf(result);
-    record.reports.push(...result.reports);
-    record.checks = (row.pass ?? []).map((check) => evaluateCheck(check, bindings, (name) => !before.has(name) || before.get(name) !== bindings[name]));
-    Object.assign(record, verdictOf(result, record.checks, failRow));
-    record.evidence = [...executor.evidence];
-    record.ms = Math.round(clock.now() - started);
-    log(`${record.verdict.padEnd(7)} ${row.id}${record.reason ? `: ${record.reason}` : ""}`);
-    if (result.status === "stopped") halt = result.reason;
-    restartDue = row.after === "restart";
+    const stopped = halt as Halt | undefined;
+    if (stopped) log(`HALT (${stopped.kind}): ${stopped.reason}`);
     write(setup);
   }
-  // The teardown: the script's own steps, then the built-in ones; always, each best effort.
+  // The teardown: the script's own steps, then the built-in ones; always, each best effort. A halt (handed_over,
+  // the tripwire) must not stop the teardown itself: each step is tried and its refusal recorded.
+  await telemetry.finish().catch(() => undefined);
   const teardownPlan: Plan = { id: "teardown", steps: [...planned.teardown.steps.map((s) => ({ ...s, on_fail: "continue" as const })), ...builtinTeardown()] };
-  // A halt (handed_over, the tripwire) must not stop the teardown itself: each step is tried and its refusal recorded.
   executor.stopReason = undefined;
   const teardownExecutor: Executor = { run: async (action, context) => ({ ...(await executor.run(action, context)), halt: undefined }) };
   const teardown = await runPlan(teardownPlan, { executor: teardownExecutor, clock, bindings });
   await executor.run({ do: "note", text: `XF session ${halt ? "stopped" : "complete"}: ${script.title ?? script.name}` }, { signal: new AbortController().signal, deadline: clock.now() + 10_000, plan: "end", step: "end", attempt: 1, raw: { do: "note" } }).catch(() => undefined);
+  // A fast exit: close the game cleanly, so the fix can go in and the next attempt starts fresh.
+  if (halt && halt.kind !== "handed_over" && options.closeOnHalt !== false && (await options.host.gameProcess())) {
+    log("Closing the game after the halt.");
+    const closed = await runPlan({ id: "halt-close", steps: closeSteps() }, { executor: teardownExecutor, clock });
+    teardown.reports.push(...closed.reports);
+  }
   const paths = write(setup, teardown, true);
+  const left = remaining();
+  const resumePath = join(options.outDir, "resume.json");
+  writeFileSync(resumePath, JSON.stringify({
+    schema: "xfb/session-resume-1",
+    script: { name: script.name, path: options.scriptPath },
+    attempt,
+    finished_at: new Date().toISOString(),
+    outcome: signal.aborted ? "interrupted" : halt ? "halted" : "complete",
+    ...(halt ? { halt } : {}),
+    rows_done: records.filter((r) => r.reason !== "not selected" && !left.includes(r.id)).map((r) => ({ id: r.id, verdict: r.verdict, ...(r.reason ? { reason: r.reason } : {}) })),
+    rows_remaining: left,
+    command: left.length ? (options.resumeCommand?.(left) ?? `bun tools/session.ts ${options.scriptPath ?? "<script.json>"} --fixtures <private.json> --out "${options.outDir}" --rows ${left.join(",")}`) : null,
+  }, null, 2) + "\n");
   options.api.close();
   const outcome = signal.aborted ? "interrupted" : halt ? "stopped" : "complete";
-  return { ok: !halt && !signal.aborted && records.every((r) => r.verdict === "PASS" || r.reason === "not selected"), outcome, halt, rows: records, ...paths };
+  return { ok: !halt && !signal.aborted && records.every((r) => r.verdict === "PASS" || r.reason === "not selected"), outcome, halt: halt?.reason, haltInfo: halt, attempt, remaining: left, rows: records, ...paths, resumePath };
 }
 
 // ---- Reports ---------------------------------------------------------------------------------------------
 
-type ReportState = { startedAt: string; finished: boolean; halt?: string; setup?: PlanResult; teardown?: PlanResult; rows: RowRecord[]; executor: SessionExecutor; config?: ConfigEditor; interrupted: boolean };
+type ReportState = {
+  startedAt: string; finished: boolean; halt?: Halt; setup?: PlanResult; teardown?: PlanResult; rows: RowRecord[]; executor: SessionExecutor; config?: ConfigEditor;
+  interrupted: boolean; attempt: number; previous: PreviousRun; remaining: string[];
+};
 
 /** The detours a run took (retries, other routes, branches, fallbacks): the session's friction, found automatically. */
 export function detoursOf(reports: ReportEntry[]): string[] {
@@ -757,41 +930,60 @@ export function detoursOf(reports: ReportEntry[]): string[] {
 function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportState) {
   const manifestPath = join(options.outDir, "manifest.json");
   const reportPath = join(options.outDir, "report.md");
-  const counts = Object.fromEntries((["PASS", "FAIL", "PARTIAL", "SKIP"] as const).map((v) => [v, s.rows.filter((r) => r.verdict === v).length]));
+  // One report across every attempt: each row shows its latest run, with the earlier ones beside it.
+  const earlierRows = s.previous?.rows ?? [];
+  const merged: RowRecord[] = s.rows.map((record) => {
+    const before = earlierRows.find((r) => r.id === record.id);
+    const ranHere = record.reason !== "not selected";
+    const latest = ranHere || !before ? record : before;
+    const history = [...(before?.earlier ?? []), ...(before && ranHere ? [Object.fromEntries(Object.entries(before).filter(([k]) => k !== "earlier" && k !== "reports")) as Omit<RowRecord, "earlier" | "reports">] : [])];
+    return history.length ? { ...latest, earlier: history } : latest;
+  });
+  const counts = Object.fromEntries((["PASS", "FAIL", "PARTIAL", "SKIP"] as const).map((v) => [v, merged.filter((r) => r.verdict === v).length]));
   const all = [...(s.setup?.reports ?? []), ...s.rows.flatMap((r) => r.reports), ...(s.teardown?.reports ?? [])];
+  const outcome = s.interrupted ? "interrupted" : s.halt ? "halted" : s.finished ? "complete" : "running";
+  const thisAttempt = {
+    attempt: s.attempt, started_at: s.startedAt, ...(s.finished ? { finished_at: new Date().toISOString() } : { in_progress: true }), outcome,
+    ...(s.halt ? { halt: s.halt } : {}), rows_run: s.rows.filter((r) => r.reason !== "not selected").map((r) => r.id), remaining: s.remaining,
+    telemetry: `telemetry/a${s.attempt}`, key_refusals: s.executor.refusals, detours: detoursOf(all), free_commit_gb: s.executor.lastFreeGb,
+    ...(options.preflight ? { preflight: options.preflight } : {}),
+    setup: s.setup ? { close: { outcome: s.setup.outcome, status: s.setup.status, reason: s.setup.reason }, reports: s.setup.reports } : null,
+    teardown: s.teardown ? { close: { outcome: s.teardown.outcome, status: s.teardown.status }, reports: s.teardown.reports } : null,
+  };
+  const attempts = [...((s.previous?.attempts ?? []) as (typeof thisAttempt)[]), thisAttempt];
   const manifest = {
     schema: REPORT_SCHEMA_3,
     script: { name: script.name, title: script.title, card: script.card, path: options.scriptPath, requires: script.requires ?? [] },
-    run: { started_at: s.startedAt, ...(s.finished ? { finished_at: new Date().toISOString() } : { in_progress: true }), outcome: s.interrupted ? "interrupted" : s.halt ? "stopped" : s.finished ? "complete" : "running", ...(s.halt ? { halt: s.halt } : {}), counts },
-    ...(options.preflight ? { preflight: options.preflight } : {}),
-    setup: s.setup ? { close: { outcome: s.setup.outcome, status: s.setup.status, reason: s.setup.reason }, reports: s.setup.reports } : null,
-    rows: s.rows,
-    teardown: s.teardown ? { close: { outcome: s.teardown.outcome, status: s.teardown.status }, reports: s.teardown.reports } : null,
-    key_refusals: s.executor.refusals,
-    detours: detoursOf(all),
-    free_commit_gb: s.executor.lastFreeGb,
+    run: { attempts: attempts.length, outcome, counts, ...(s.halt ? { halt: s.halt } : {}) },
+    attempts,
+    rows: merged,
     notes: [
       "Screenshots are external window captures (what was on screen, after ReShade and overlays), 8-bit; each capture's result in the reports records the window size, crop and scale.",
       "A verdict covers the named state checks and that the evidence was captured; what a capture shows is judged by the row's judged_by where named.",
-      "Report entries are keyed by plan, step and attempt; a step revisited by a goto carries ~n.",
+      "Report entries are keyed by plan, step and attempt; a step revisited by a goto carries ~n. Each row's telemetry folder holds its slice of the recorder, the plugin log, overlay_state, bridge_info and memory.",
     ],
   };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  const memory = (r: RowRecord) => (r.telemetry?.memory ? `${r.telemetry.memory.free_commit_gb ?? "?"} GB free${r.telemetry.memory.game_handles ? `, ${r.telemetry.memory.game_handles} handles` : ""}` : "");
   const lines = [
     `# ${script.title ?? script.name}`,
     "",
-    `Run ${s.startedAt}${s.finished ? ` to ${new Date().toISOString()}` : " (in progress)"}: ${manifest.run.outcome}. PASS ${counts.PASS}, FAIL ${counts.FAIL}, PARTIAL ${counts.PARTIAL}, SKIP ${counts.SKIP}.${script.card ? ` Card: ${script.card}.` : ""}`,
-    ...(s.halt ? ["", `**Stopped:** ${s.halt}`] : []),
+    `${attempts.length} attempt${attempts.length > 1 ? "s" : ""}, the latest ${s.startedAt}${s.finished ? ` to ${new Date().toISOString()}` : " (in progress)"}: ${outcome}. PASS ${counts.PASS}, FAIL ${counts.FAIL}, PARTIAL ${counts.PARTIAL}, SKIP ${counts.SKIP}.${script.card ? ` Card: ${script.card}.` : ""}`,
+    ...(s.halt ? ["", `**Halted (${s.halt.kind}):** ${s.halt.reason}`, ...s.halt.evidence.slice(0, 8).map((e) => `- ${e}`), "", s.remaining.length ? `Still to run: ${s.remaining.join(", ")} (resume.json has the command).` : ""] : []),
     "",
-    "| Row | Title | Verdict | Why | Evidence |",
-    "|---|---|---|---|---|",
-    ...s.rows.map((r) => `| ${r.id} | ${r.title.replace(/\|/g, "/")} | ${r.verdict === "SKIP" ? `SKIP` : r.verdict} | ${(r.reason ?? "").replace(/\|/g, "/").slice(0, 300)}${r.judged_by && r.verdict !== "SKIP" ? ` (judged by ${r.judged_by})` : ""} | ${r.evidence.filter((e) => /\.full\.png$|sheet|manifest/.test(e)).length} files |`),
+    "| Row | Title | Verdict | Why | Evidence | Telemetry |",
+    "|---|---|---|---|---|---|",
+    ...merged.map((r) => `| ${r.id} | ${r.title.replace(/\|/g, "/")} | ${r.verdict}${r.earlier?.length ? ` (attempt ${r.attempt}; earlier ${r.earlier.map((e) => e.verdict).join(", ")})` : ""} | ${(r.reason ?? "").replace(/\|/g, "/").slice(0, 300)}${r.judged_by && r.verdict !== "SKIP" ? ` (judged by ${r.judged_by})` : ""} | ${r.evidence.filter((e) => /\.full\.png$|sheet|manifest/.test(e)).length} files | ${r.telemetry ? `${r.telemetry.dir.replace(/\\/g, "/")} ${memory(r)}` : ""} |`),
     "",
-    "## Detours taken (the friction log's automatic part)",
+    "## Attempts",
     "",
-    ...(manifest.detours.length ? manifest.detours.map((d) => `- ${d}`) : ["- none: every step took its first route"]),
+    ...attempts.map((a) => `- Attempt ${a.attempt} (${a.started_at}): ${a.outcome}${a.halt ? `, halted (${a.halt.kind}): ${a.halt.reason}` : ""}; ran ${a.rows_run.length} rows.`),
     "",
-    "## Key presses refused",
+    "## Detours taken this attempt (the friction log's automatic part)",
+    "",
+    ...(thisAttempt.detours.length ? thisAttempt.detours.map((d) => `- ${d}`) : ["- none: every step took its first route"]),
+    "",
+    "## Key presses refused this attempt",
     "",
     ...(s.executor.refusals.length ? s.executor.refusals.map((r) => `- ${r.at}: ${r.keys} (${r.reason})`) : ["- none"]),
     "",

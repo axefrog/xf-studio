@@ -34,6 +34,10 @@ export interface Host {
   monitors(): Promise<Monitor[]>;
   /** The machine's free commit in bytes (commit limit less committed), or null when unreadable. */
   freeCommitBytes(): Promise<number | null>;
+  /** A process's private bytes (its commit charge), working set and handle count, or null. */
+  processStats(pid: number): Promise<{ private_bytes: number; working_set: number; handles: number } | null>;
+  /** Every process's handles summed (the kernel's growth showed there in Borg 4), or null. */
+  systemHandles(): Promise<number | null>;
 }
 
 // ---- Key names ----------------------------------------------------------------------------------------------
@@ -191,5 +195,15 @@ export const windowsHost: Host = {
     const { code, out } = await powershell('$m = Get-CimInstance Win32_PerfRawData_PerfOS_Memory; "$($m.CommitLimit) $($m.CommittedBytes)"');
     const reading = code === 0 ? parseReading(out) : null;
     return reading ? reading.limit - reading.committed : null;
+  },
+  async processStats(pid) {
+    const { code, out } = await powershell(`$p = Get-Process -Id ${Number(pid)} -ErrorAction SilentlyContinue; if ($p) { "$($p.PrivateMemorySize64) $($p.WorkingSet64) $($p.HandleCount)" }`);
+    const [privateBytes, workingSet, handles] = out.trim().split(/\s+/).map(Number);
+    return code === 0 && Number.isFinite(privateBytes) && privateBytes > 0 ? { private_bytes: privateBytes, working_set: workingSet, handles } : null;
+  },
+  async systemHandles() {
+    const { code, out } = await powershell("(Get-Process | Measure-Object HandleCount -Sum).Sum");
+    const total = Number(out.trim());
+    return code === 0 && Number.isFinite(total) && total > 0 ? total : null;
   },
 };

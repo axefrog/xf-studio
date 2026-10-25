@@ -78,6 +78,17 @@
 // game_dir, staged_mod, save, cet_overlay_key, commit_floor_gb (tools/sessions/fixtures.example.json shows the keys).
 // The report folder has manifest.json (schema xfb/session-report-3) and report.md (verdicts, the detours the run
 // took, refused key presses).
+//
+// Telemetry is always on (testing/telemetry.ts): the recorder on every channel from the first row (started again
+// after each game restart), and at each row's end its slice in telemetry/a<attempt>/<row>/: game.catchup (events and
+// recorder samples), the plugin log's lines, overlay_state, bridge_info, free commit and the game's memory and
+// handles. A significant bug stops the batch early (--halt-on, default all: crash, bridge_lost, draw_call (the
+// plugin log's halt patterns), runner_error, repeated:3; a row's halt_on overrides): the teardown runs, the game is
+// closed cleanly, and resume.json lists the rows not yet run, the evidence and the command that continues.
+//   --resume (with --out <the session folder>) continues those rows into the same report.
+//   --loop waits after a halt, with no game running, for the fix and a go (a file named go in the session folder,
+//   or "go" typed in a terminal; stop ends it), runs the fixtures' restage hook (restage: a command line), then
+//   starts the next attempt as a fresh process: preflight, relaunch, continue. --max-attempts (default 5) bounds it.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
@@ -85,7 +96,10 @@ import { findCommand } from "./api/catalogue.ts";
 import { CommandApi, type CommandOutcome } from "./api/command-api.ts";
 import { bool, str, validate, type JsonSchema } from "./api/schema.ts";
 import { acquireSessionLock, sessionRunningMessage } from "./session-lock.ts";
-import { describeBatch, planBatch, runBatch, SCRIPT_SCHEMA_3, type BatchScript } from "./testing/batch.ts";
+import { spawnSync } from "node:child_process";
+import { describeBatch, parseHaltOn, planBatch, runBatch, SCRIPT_SCHEMA_3, type BatchScript } from "./testing/batch.ts";
+import { nextAttemptArgs, readResume, runRestage, waitForSignal } from "./testing/loop.ts";
+import { realClock } from "./testing/plan.ts";
 import { readIni, stagedConfigPath } from "./testing/config-ini.ts";
 import { windowsHost } from "./testing/host.ts";
 import { formatPreflight, preflight } from "./testing/preflight.ts";
@@ -578,13 +592,47 @@ async function batchMain(script: BatchScript, scriptPath: string, args: string[]
   });
   const stampText = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const outDir = resolve(option("--out") ?? join(import.meta.dir, "..", "captures", "sessions", `${script.name}-${stampText}`));
+  // --resume continues the rows resume.json lists, into the same folder (the report spans every attempt).
+  let rowsWanted = option("--rows")?.split(",").map((r) => r.trim()).filter(Boolean);
+  if (args.includes("--resume")) {
+    const resume = readResume(outDir);
+    if (!resume) {
+      console.error(`\n--resume: no resume.json in ${outDir} (give --out the session's report folder).`);
+      process.exit(2);
+    }
+    rowsWanted = resume.rows;
+    console.log(`\nResuming after attempt ${resume.attempt}: ${resume.rows.length} rows (${resume.rows.join(", ")}).`);
+  }
+  let haltOn;
+  try { haltOn = option("--halt-on") !== undefined ? parseHaltOn(option("--halt-on")) : undefined; } catch (error) { console.error(String((error as Error).message)); process.exit(2); }
+  const command = (left: string[]) => `bun tools/session.ts ${scriptPath} ${option("--fixtures") ? `--fixtures "${option("--fixtures")}" ` : ""}--out "${outDir}" --rows ${left.join(",")}`;
   const result = await runBatch(script, {
     api, host: windowsHost, outDir, fixtures, signal: stop.signal, echo: !args.includes("--no-echo"), scriptPath: basename(scriptPath), preflight: checked,
-    rows: option("--rows")?.split(",").map((r) => r.trim()).filter(Boolean),
+    rows: rowsWanted, haltOn, resumeCommand: command,
   });
   lock.release();
-  console.log(`\n${result.outcome === "complete" ? "Batch complete" : result.outcome === "interrupted" ? "Batch interrupted (teardown ran)" : `Batch stopped: ${result.halt}`}`);
-  console.log(`Report: ${result.reportPath}\nManifest: ${result.manifestPath}`);
+  console.log(`\n${result.outcome === "complete" ? "Batch complete" : result.outcome === "interrupted" ? "Batch interrupted (teardown ran)" : `Batch stopped${result.haltInfo ? ` (${result.haltInfo.kind})` : ""}: ${result.halt}`}`);
+  console.log(`Report: ${result.reportPath}\nManifest: ${result.manifestPath}\nResume: ${result.resumePath}`);
+  if (result.remaining.length && result.outcome !== "interrupted") console.log(`Continue with:\n  ${command(result.remaining)}`);
+  // --loop: wait (no game running) for the fix and its go, restage, then the next attempt as a fresh process.
+  const maxAttempts = Number(option("--max-attempts") ?? 5);
+  if (args.includes("--loop") && result.haltInfo && result.remaining.length && result.attempt < maxAttempts) {
+    for (;;) {
+      console.log(`\nLoop (attempt ${result.attempt} of at most ${maxAttempts}): make the fix, then signal go: create ${join(outDir, "go")}${process.stdin.isTTY ? " or type go" : ""}. A "stop" file (or typing stop) ends the loop.`);
+      const lines = process.stdin.isTTY ? (await import("node:readline")).createInterface({ input: process.stdin }) : undefined;
+      const said = await waitForSignal(outDir, realClock, { lines, signal: stop.signal });
+      lines?.close();
+      if (said === "stop") { console.log("Loop stopped; resume.json still lists the rows."); break; }
+      if (typeof fixtures.restage === "string") {
+        console.log(`Restaging: ${fixtures.restage}`);
+        const staged = runRestage(fixtures.restage, outDir, result.attempt + 1);
+        if (!staged.ok) { console.error(`The restage hook failed (exit ${staged.status}; ${staged.log}). Fix it and signal go again.`); continue; }
+      }
+      const next = spawnSync(process.execPath, [import.meta.path, ...nextAttemptArgs(args, outDir)], { stdio: "inherit" });
+      process.exit(next.status ?? 1);
+    }
+  }
+  if (args.includes("--loop") && result.haltInfo && result.attempt >= maxAttempts) console.log(`\nLoop: ${maxAttempts} attempts made; stopping here.`);
   process.exit(result.outcome === "interrupted" ? 130 : result.ok ? 0 : 1);
 }
 
@@ -603,14 +651,14 @@ async function askOnTerminal(text: string) {
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  const valued = ["--out", "--from", "--until", "--runtime-dir", "--fixtures", "--rows"];
+  const valued = ["--out", "--from", "--until", "--runtime-dir", "--fixtures", "--rows", "--halt-on", "--max-attempts"];
   const option = (name: string) => {
     const index = args.indexOf(name);
     return index >= 0 ? args[index + 1] : undefined;
   };
   const scriptPath = args.find((a, i) => !a.startsWith("--") && !valued.includes(args[i - 1]));
   if (!scriptPath || !existsSync(scriptPath)) {
-    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--fixtures <private.json>] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo] [--setup-asks-private]\n       schema 3: bun tools/session.ts <script.json> --fixtures <private.json> [--preflight | --dry-run] [--rows <id,id>] [--out <dir>] [--force] [--no-echo]");
+    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--fixtures <private.json>] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo] [--setup-asks-private]\n       schema 3: bun tools/session.ts <script.json> --fixtures <private.json> [--preflight | --dry-run] [--rows <id,id>] [--out <dir>] [--resume] [--halt-on <kinds>] [--loop] [--max-attempts <n>] [--force] [--no-echo]");
     process.exit(2);
   }
   const script = JSON.parse(readFileSync(scriptPath, "utf8")) as SessionScript;
