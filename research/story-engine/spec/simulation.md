@@ -1,8 +1,19 @@
 # S1. Simulation layer specification
 
-**Status:** v0.5, 24 October 2026. v0.5 makes the transitions' `ord` one persistent sequence (S2 v1.10 §4.2), and says tie history records only ended intervals. v0.4: v0.4 rules on seven questions from the first fix round: what the record keeps (§2.2), reopening a tie (§4.7), reopening a frame (§8.2), assimilation's default reasons (§8.4), a position's district (§8.8), and, in S0 v4.13 and S2 v1.9, the settle step and the read port's order. v0.3 rules on six questions from the first build: the fit's tolerance, the first window V stands in a cell, SF1-E3's wording, the protected set as of a time, V and the tie cap, and which group a changed affiliation joins. This is the specification stage of [P3](../p3-simulation-layer.md) (work package [WP-11](../plan.md#82-work-packages)). It is exact enough to build the first implementation of layer 1 in the TypeScript reference model from this page and the kernel specification [S0](kernel.md) (v4.10) alone.
+**Status:** v0.6, 25 October 2026. v0.6 gives the city people with goals, groups with leaders, and acts that can fail, so that stories can grow out of what people want and do ([D-27](../decisions.md), [D-28](../decisions.md)). It adopts the composite's proposals S1-1 to S1-10 ([pattern language §13](../composite/pattern-language.md#13-proposed-specification-changes); dispositions in §18):
+- every kind declares the story functions it fills (§5.1, §5.2a);
+- **individual goals:** a small core of four goal kinds, opened from recorded facts and acting only through the simulation's own rates (§7.10);
+- **leaders:** keyed seats in each group, a leaders' term in its decisions, decisions as events, and succession (§7.8);
+- **outcomes:** shakedowns can be refused and wrongs prevented (§5.2a);
+- **norms:** a public refusal left unanswered weakens its norm (§7.5);
+- **group pulses** read harm to a member from any kind (§7.8);
+- **visible intentions:** each intention puts members to work where they can be seen (§7.8, §7.10);
+- **items** with holders, and tellings that carry plans (§4.9, §8.3, §8.4);
+- **[D-30](../decisions.md):** a group may act against the protagonist, from its own belief about what the protagonist did, warning first, bounded by the proactivity setting (§7.8.1); this replaces S1-I-8's old reading of D-09.
+
+S0 v4.17 supplies the kernel's part (§16.1). v0.5 makes the transitions' `ord` one persistent sequence (S2 v1.10 §4.2), and says tie history records only ended intervals. v0.4: v0.4 rules on seven questions from the first fix round: what the record keeps (§2.2), reopening a tie (§4.7), reopening a frame (§8.2), assimilation's default reasons (§8.4), a position's district (§8.8), and, in S0 v4.13 and S2 v1.9, the settle step and the read port's order. v0.3 rules on six questions from the first build: the fit's tolerance, the first window V stands in a cell, SF1-E3's wording, the protected set as of a time, V and the tie cap, and which group a changed affiliation joins. This is the specification stage of [P3](../p3-simulation-layer.md) (work package [WP-11](../plan.md#82-work-packages)). It is exact enough to build the first implementation of layer 1 in the TypeScript reference model from this page and the kernel specification [S0](kernel.md) (v4.17) alone.
 - **The core.** This version specifies the **core**: the processes, policies, data and reads that milestone M3 builds. That is one district (Kabuki) at coarse and medium detail, in its smallest useful form (§0.2). Everything else in P3 is a **later capability** (§0.3). The first implementation rejects it plainly rather than half-doing it.
-- **Reviews.** Round 1, GPT-6 Astra, on v0.1: 20 findings and the whole over-engineering section, all adopted (§18). v0.2 shrinks the core, runs every process one window at a time, and fixes the findings.
+- **Reviews.** Round 1, GPT-6 Astra, on v0.1: 20 findings and the whole over-engineering section, all adopted (§18). v0.2 shrinks the core, runs every process one window at a time, and fixes the findings. v0.6 is a specification pass, not a review round; §18 records how each composite proposal was settled.
 - **What it reads and what reads it.** S1 fills the hooks of S0 (§9.4 processes, §11 beliefs, §10.8 the conflict table) and is read by the seeding layer [S2](seeding.md) (§2.16 and §2.17) and the procedural engine [S3](procedural.md) (v0.3, §1.2 and §6.1).
 
 Where this page and P3 differ, this page wins. P3 explains why; this page says exactly what. §15 lists every departure, with the reason.
@@ -21,7 +32,7 @@ S1 is the **content and policy** that turn the kernel's mechanism into a city: w
 1. **The game is ground truth.** S1 mirrors what the game owns and simulates only what the game does not. Where they disagree, the game wins and the record reconciles (§7.3, §8.8).
 2. **Counts first, items on demand.** Every incident starts as a count in a summary. Detail is the lazy opening of its items (§7.9).
 3. **A policy is a registered function or a data table.** Packs supply tables and parameters, never code.
-4. **V is observed, never owned** ([D-09](../decisions.md)). No S1 process names V as the target of a harmful effect, and none models V's feelings. V's acts are history. V's position and attention change nothing coarse.
+4. **V is observed, never owned** ([D-09](../decisions.md)). No S1 output puts a harmful effect on V, and none models V's feelings or drives. V's acts are history. V's position and attention change nothing coarse. **The city may still aim at V** ([D-30](../decisions.md)): a group may decide to act against V, but only from its own belief that V acted against it, resting on an act of V's that the record holds; its first act is a warning, nothing graver follows until the warning was perceived, and its reach is bounded by the proactivity setting, down to nothing at `off` (§7.8.1). Even then S1 asserts no harm to V: the gravest thing it produces is an encounter, whose outcome is the game's and the player's.
 5. **Deterministic by construction.** Every draw is keyed by what it is about (§1.3). Nothing reads the session epoch, the load count, the play clock or the wall clock (S0 I-16).
 6. **Nothing is modelled until something asks.** Residents are drawn, not simulated. Ties are implicit. Beliefs exist for the observed and the focal.
 7. **Simple first.** One window, one tie function, one gate, one admission owner. Everything that can wait for measured need waits (§0.3).
@@ -37,10 +48,13 @@ The first implementation is the TypeScript reference model, beside the kernel an
 | Events | A small catalogue of ten city kinds as data; opportunity fields; counts, summaries, events; bounded aftershocks (a generation cap and a bounded mean); stable identities and retained causal records; heat and bands; exogenous regimes | §5, §7.1, §7.2 |
 | Admission | **One owner,** `city.events`, for every size-2-and-above occurrence and size-4 regime, with persisted budgets in a declared order | §7.2 |
 | The mirror | Mirror reconciliation against the **offline replay port**, from hand-authored story states ([D-18](../decisions.md)) | §3.4, §7.3, §8.8 |
-| Groups | The Tyger Claws and The Mox: four pressures and two simple intentions each, which start, expire and are removed | §7.8 |
-| Order | One public and private norm demonstration (the Friday fee; its twin, the norm against talking to the uniforms, feeds the report chance); the stocks | §7.5, §7.6 |
+| Groups | The Tyger Claws and The Mox: four pressures and two simple intentions each, which start, expire and are removed; pulses that read harm to a member from any kind; **leaders** in keyed seats, whose leanings bend the group's decisions, with succession when one is removed; decisions as events; a third intention, `punish`, against the protagonist under D-30 | §7.8 |
+| People with goals | **Four goal kinds** (redress, collect, carry-out, role), opened from recorded facts only, held by a bounded set of people as retained goal frames, acting only through a goal-act rate inside `city.events` | §7.10, §7.2 |
+| Outcomes | Shakedowns refused, wrongs prevented by a guard, debts called in and refused: a keyed outcome per occurrence, with what each outcome fills | §5.2a |
+| Items | A minimal `xf:item` with a holder edge that transfers move | §4.9 |
+| Order | One public and private norm demonstration (the Friday fee; its twin, the norm against talking to the uniforms, feeds the report chance); public refusals that weaken a norm when left unanswered; the stocks | §7.5, §7.6 |
 | Reputation | One carrier demonstration: V among Kabuki's stallholders, the Tyger Claws and the district | §7.7, §8.6 |
-| Beliefs and ties | `witness`, `social` (telling), `fade`, `ties` (stable ties, recorded interactions), `v.frames`, `reconcile` | §8 |
+| Beliefs and ties | `witness` (news of plans included), `social` (telling), `fade`, `ties` (stable ties, recorded interactions), `v.frames`, `reconcile`, `grievance` (a group's belief that V acted against it), `seedGoals` (hears the goals seeds open) | §8 |
 | Reads, registries | The registered reads for S2, each with timestamped transitions; the registries for S3 | §9 |
 | Fixtures | A Kabuki week, written out from a template; partition, reload and coarse-against-detail consistency | §14 |
 
@@ -53,9 +67,14 @@ The first implementation rejects these with a plain finding ("not supported yet"
 | Later capability | Why it waits |
 |---|---|
 | **The full drive catalogue** (39 individual drives, drive-states, importance, urgency models R, S, D, P, X, C, Y) | No individual wants are needed to show a causal district. Groups use four named pressures (§8.1) |
-| **The O1 to O5 concern machinery** | Needs the catalogue |
-| **General means scoring**: the means library, commitment, reconsideration, goal outcomes | Needs concerns. Groups use two fixed intentions |
-| **Dilemma strategies**, the defect options of an order, `order` operations to members | Need goals. Member-order realisation belongs in `scene.acts` (E-09) |
+| **The O1 to O7 concern machinery** beyond the core's four goal kinds | Needs the catalogue. The core opens goals from recorded facts by fixed rules (§7.10) |
+| **General means scoring**: the means library, commitment, reconsideration | Needs concerns. The core's goals take their acts from fixed tables (§7.10) |
+| **Order dilemmas**: a member's answer (delay, fake, warn, refuse, betray) when an order would harm someone tied to them; the kernel's `order` operation | The core never gives a duty to a member tied at layer 1 to its target (§7.10), so no S1 order produces a `Dilemma`; seeds still can (S2) |
+| **Ambition**: goals of advancement and rivalry, a contested succession, a group that splits when no successor is accepted, governance records (officers, councils) | The core's succession is a keyed draw with an interregnum (§7.8) |
+| **Goals for people known only at the fine tier** (the people of opened items; focal people's frames on demand, P3 §8.1) | A coarse process may not read fine-tier events (S1-I-5): the core's goals come from coarse-readable facts only (§10.1) |
+| **D-30 beyond the core:** a price that others than the group may collect, shelter given to the protagonist by another group, groups acting against persons other than V by intention | The core's `punish` belongs to the wronged group alone, with three rungs (§7.8.1) |
+| **Items S1 mints**, item kinds beyond the stand-in, markets | S2 and packs mint items in the core (§4.9) |
+| **Debts beyond favours and promises** (dues, contracts) | Phase 2 (`order.contracts`, `order.members`) |
 | **Personality revision under pressure** (`change`: pressure accounts, thresholds, turnings, refusals, drift) | Needs goals and dilemmas |
 | **Relationship investment and alternatives** (satisfaction, commitment) | Stable ties and recorded interactions are enough for M3 (§4.7) |
 | **Pursuit budgets** (bids per rung) | Needs bids from seeds. The consent rules, boundaries and retract are kept |
@@ -65,7 +84,7 @@ The first implementation rejects these with a plain finding ("not supported yet"
 | **Population refitting** | The index is immutable inside a lineage, so the fit is computed once (§7.4) |
 | **Structural pack migration** | The simulation data are pinned per lineage (§1.4); a structural change is a new lineage |
 | **Multi-window speculative runs** (a period above 1) | A span cannot see later settings or protections (E-05). Longer spans need deterministic invalidation first |
-| Routine acts (`serve`, `patrol`, collector visits), the debt ladder, lies | Need individual wants |
+| Routine acts (`serve`, `patrol`), the debt ladder, lies | Need the drive catalogue. The core's goals cover collector visits, guards, strikes, redress and calling in a debt (§7.10) |
 | District-remainder summaries | M3 districts are small: every incident takes a cell before its summary (§7.2) |
 | `city.tension`; police pressure as a dial; `city.flow` (rumour fractions, reach by recurrence); `order.contracts`; `order.members`; the protection market; regimes beyond exogenous arrival | Phase 2. M3 keeps the matrix, the regime modifier, the report draw, and a reach frozen at formation (§8.6) |
 | Unrest, infrastructure graphs, the slow district variable, far ties, covert effects, police styles | Phase 3 |
@@ -82,7 +101,8 @@ The first implementation rejects these with a plain finding ("not supported yet"
 - **Time.** `GameTime` is game seconds ([S0 §9.1](kernel.md#91-time)). `W` is the shared window, 600 s. A **boundary** is `t = k × W`. Every process runs **one window at a time**: the run for window `k` starts at boundary `k` and its outputs apply at boundary `k + 1`.
 - **Windows.** "Window" always means a simulation window of `W`; S2's seed windows and S3's slots are other things. **A later window is not a full window of elapsed time.** A child due in window `w + 1` happens between 1 s and `2W − 1` s after a parent in window `w`.
 - **Tier and phase.** A tier is a scheduling band of the kernel (0 city to 5 fine detail). A phase is when P3 says a part is built.
-- **Ids.** `city`, `director` and `v` are the kernel's roots. `s1 = H("root", worldSeed, "s1")` is S1's own record (§2.2). `port = H("root", worldSeed, "port")` creates raw game events. A process's creator id is `proc(id) = H("process", id)`. Pack ids: `xf.core.world@1`, `xf.kabuki.index@1`, `xf.kabuki.groups@1`, `xf.kabuki.norms@1`; fixtures use `xf.fixture`.
+- **Ids.** `city`, `director` and `v` are the kernel's roots. `s1 = H("root", worldSeed, "s1")` is S1's own record (§2.2). `port = H("root", worldSeed, "port")` creates raw game events. A process's creator id is `proc(id) = H("process", id)`. Pack ids: `xf.core.world@1`, `xf.kabuki.index@1`, `xf.kabuki.groups@1`, `xf.kabuki.norms@1`, `xf.core.goals@1` (v0.6: goal kinds, duties and act rates); fixtures use `xf.fixture`.
+- **The protagonist.** Where this page says V it means the engine's player-character root `v`, whoever plays it ([D-25](../decisions.md)). No rule here reads V's identity or history.
 - **Arithmetic** is S0's [§1.3](kernel.md#13-arithmetic) plus §1.2. Sums run in the order written, and sets in `Id` order.
 - **Numbers.** Rates are per game day unless a window is named. A "week" is 1,008 windows, a "day" 144, an "hour" 6.
 - **No names.** This page names no person in the repository's history. Characters of the game appear only as the game names them.
@@ -216,7 +236,7 @@ The registry of every key is §1.5. A draw that is not in the registry MUST NOT 
 
 ### 1.4 Pack data, tunables and the pinned version
 
-`S1Data` has the sections `time`, `shape` (hour and weekday shapes, pulses, the city rate table), `kinds`, `events` (offspring, delay bins, matrix, place kernel, heat weights, band thresholds, admission budgets), `people`, `ties`, `norms`, `stocks`, `ledger`, `groups`, `minds`, `feed` (windows kept per feed: 8), `gate` and `realisation`. **Every [tunable] on this page is a field of `S1Data`.** A pack MAY override a field. Fixtures use the defaults given here. A pack that omits a field takes the default.
+`S1Data` has the sections `time`, `shape` (hour and weekday shapes, pulses, the city rate table), `kinds` (with each kind's `fills`, `outcomes` and agent roles, §5.1), `events` (offspring, delay bins, matrix, place kernel, heat weights, band thresholds, admission budgets), `people`, `ties`, `norms`, `stocks`, `ledger`, `groups` (with seats and the intentions' duties), `goals` (v0.6: goal kinds, act tables, act rates, caps and durations, §7.10), `minds`, `feed` (windows kept per feed: 8), `gate` and `realisation`. **Every [tunable] on this page is a field of `S1Data`.** A pack MAY override a field. Fixtures use the defaults given here. A pack that omits a field takes the default.
 
 **The simulation-data version is pinned per lineage.** The lineage root record holds `sim`: the versions and hashes of `S1Data`, of every pack of §0.4, of the three table artifacts, of the world-index slice, of the recipe fit (§7.4) and of every process. An M3 lineage never changes it. Nothing mid-lineage reinterprets an identity: a pending child, a retained summary, a group state and a ledger item are all read under the version that made them. When the pinned versions are not available at load, S0's compatibility rule applies ([S0 §14.4](kernel.md#144-compatibility)): the record loads read-only with a plain message. S1 adds a migration only when a concrete update needs one.
 
@@ -233,7 +253,10 @@ Every draw S1 makes is in this table. After `"rng"` and the tag, `worldSeed` is 
 | | `"cnt"`, `d`, `k:s`, `part:i`, `i:i` | the spacing stream of the incident count |
 | | `"size"`, `d`, `k`, `i` · `"cell"`, `d`, `k`, `i` · `"t"`, `d`, `k`, `i` | size; the cell; the time within the window (events only) |
 | `order.norms` | `"enf"`, `d`, `norm:s`, `i` · `"rung"`, `d`, `norm`, `i` · `"ecell"`, `d`, `norm`, `i` · `"et"`, `d`, `norm`, `i` | the enforcement count; the rung; the cell; the time within the window |
+| | `"gact"`, `goal:id`, `i:i` · `"gact-t"`, `goal` | a goal's act stream (at most one act a window); the act's time within the window (§7.2, v0.6) |
 | `group.decide` | `"retal"`, `group:id`, `rival:i` | the retaliation check |
+| | `"punish"`, `group` · `"climb"`, `group`, `rung:i` · `"decide-t"`, `group` | the start check of `punish`; a rung climb; a decision event's time within its window (§7.8, v0.6) |
+| `scene.acts` | `"confront"`, `intent:id` | whether a hunt finds V in a cell this window (§7.9, v0.6) |
 
 **Identity draws**, `rand(tag, worldSeed, …)`, with no window:
 
@@ -253,6 +276,11 @@ Every draw S1 makes is in this table. After `"rng"` and the tag, `worldSeed` is 
 | `"ntype"`, `norm:s`, `resident` | a resident's threshold type for a norm |
 | `"bind"`, `community:s`, `entry:s`, `spot:s`, `ordinal:i`, `attempt:i` | binding a resident to a body |
 | `"accept"`, `tie`, `event` · `"tell"`, `teller`, `listener`, `item`, `window:i` · `"op"`, `teller`, `listener`, `item`, `hop:i` | a status change's acceptance; whether a telling happens; its operator |
+| `"outcome"`, `occ` | an occurrence's outcome: done, failed or prevented (§5.2a, v0.6) |
+| `"seat-b"`, `group:id`, `seat:i`, `succ:i`, `a:i` · `"seat-r"`, the same | a seat holder's block and its ordinal in it, attempt `a` (§7.8, v0.6) |
+| `"lean"`, `holder`, `group` | a seat holder's leaning among its group's drives |
+| `"duty-b"`, `decision:id`, `duty:s`, `slot:i`, `a:i` · `"duty-r"`, the same | a duty holder's block and ordinal, attempt `a` (§7.10, v0.6) |
+| `"post"`, `goal` | a post's cell, where a duty names several candidates |
 
 The kernel's own draws (`"g"`, `"tie"` of the Gumbel tie-break, `"item-t"`, `"item-p"`) are S0's. The `"kslice"` keys of the fixture slice generator (§3.2) belong to the generator. A window argument is always a window index, never an epoch.
 
@@ -286,6 +314,7 @@ interface S1Ctx {
   digest<X>(processId: string): X | undefined;   // V4-36: another process's digest as of the snapshot
   record(): Readonly<S1Record>;                  // the S1 record as of the snapshot (read-only)
   demanded(tier: Tier): DemandedNode[];          // V4-37: `scene.acts` only
+  observedAt(node: Id, t: GameTime): GameTime | undefined;   // V4-55: the earliest valid `observed` pin on the node (v0.6)
   produce(o: Occurrence): GateResult;            // §6
   log(e: LogEntry): void;                        // §2.3
 }
@@ -299,7 +328,8 @@ interface S1Result<S, D> { ops: S1Op[]; state: S; digest: D }
 type S1Op =
   | ProcessOp                                    // pin, withdraw, contribute, end-contribution, edge, end-edge, mint-event, mint-summary
   | { op: 'publish-item'; item: Id }             // §7.9: the one semantic publication of a completed summary item as an event Change
-  | { op: 'frame-open'; frame: FrameSpec }       // id, actor, level, parents, origin, payload, weight, own, focus, status, cause
+  | { op: 'frame-open'; frame: FrameSpec; retain?: boolean }   // id, actor, level, parents, origin, payload, weight, own, focus, status, cause;
+                                                               // retain: a retained frame (S0 V4-54), focus tier 0: S1's goal frames (§7.10)
   | { op: 'frame-status'; frame: Id; status: FrameStatus; cause: Id }
   | { op: 'observe'; observer: Id; node: Id; slot: SlotPath; at: GameTime; evidence?: Id }
   | { op: 'tell'; teller: Id; listener: Id; event: Id; operator: Operator | null }
@@ -349,10 +379,16 @@ interface S1Record {
   dirty: Array<{ carrier: Id; subject: Id; axis: string; seq: number }>;   // standings to re-evaluate at the next ledger run
   divLog: Record<string, Array<{ t: GameTime; value: 'none' | 'small' | 'large' }>>;   // by "believer|subject": transitions of the `divergence` read, at most 8 (§9.1)
   softExcluded: Id[];                              // tie threads a retract has switched off (§4.7)
+  roleGoals: Array<{ seq: number; frame: Id; owner: Id; seed: Id;             // v0.6: goal frames seeds opened on cast persons (§8.10)
+                     effects: Array<{ on: Id; effect: Effect }>; weight: number; op: 'open' | 'end'; at: GameTime }>;   // at most 64, oldest first
+  grudges: Array<{ seq: number; group: Id; belief: Id; act: Id; sev: number;  // v0.6: a group's beliefs that V acted against it (§8.9)
+                   op: 'set' | 'cleared' | 'settled'; at: GameTime }>;        // at most 64, oldest first
   log: LogEntry[];                                 // a ring of at most data.log.max (2048), oldest first
   seq: number;                                     // next log sequence number
 }
 ```
+
+`roleGoals` and `grudges` are written by policies and consumed by processes, each consumer with a cursor on `seq` in its own state, as `order.ledger` consumes `dirty`. An entry older than a consumer's cursor may be trimmed; if the oldest kept entry is newer than `cursor + 1`, the consumer logs `feed-gap`.
 
 A policy updates the record at relevance-dispatch time, inside the boundary being processed, in the kernel's dispatch order. The record is saved with the other states and restored on load.
 
@@ -379,7 +415,7 @@ interface LogEntry {
 }
 ```
 
-Reasons in use: gate refusals `excluded`, `floor-minor`, `floor-real`, `sex-tag`, `v-target`, `protected`; admission refusals `budget-m4`, `cap-window`, `no-cast`; corrections `game-dead`, `game-moved`, `game-covers`, `game-fact`; decisions `intent-start`, `intent-end`, `intent-idle`, `accept`, `tell`, `operator`; defects `calendar-overflow`, `ring-overflow`, `late-raw`, `read-violation`, `cap-hit`, `n-clamped`, `feed-gap`, `table-missing`, `walk-limit`, `bind-fallback`. The log is never shown to V.
+Reasons in use: gate refusals `excluded`, `floor-minor`, `floor-real`, `sex-tag`, `v-target`, `v-object`, `protected`; admission refusals `budget-m4`, `cap-window`, `cap-goal`, `no-cast`; corrections `game-dead`, `game-moved`, `game-covers`, `game-fact`; decisions `intent-start`, `intent-end`, `intent-idle`, `intent-leaderless`, `rung`, `seat-taken`, `seat-vacant`, `interregnum`, `goal-open`, `goal-end`, `goal-blocked`, `goal-cap`, `duty-unfilled`, `refusal-signal`, `refusal-answered`, `grudge`, `accept`, `tell`, `operator`; defects `calendar-overflow`, `ring-overflow`, `late-raw`, `read-violation`, `cap-hit`, `n-clamped`, `feed-gap`, `table-missing`, `walk-limit`, `bind-fallback`. The log is never shown to V.
 
 ## 3. Inputs
 
@@ -442,7 +478,7 @@ S1 never edits the slice. A cell that appears or disappears is a new lineage (§
 
 ### 3.3 Settings in force
 
-`SettingsView` is the `SettingsSet` in force at the snapshot ([S0 §14.2](kernel.md#142-records-and-branching)). S1 reads `cityScale` (multiplies every citywide rate and offspring mean, §7.2, and cannot lift a mean past its bound, §5.2); `classExclusions` and `content` ceilings (the gate and the zero rate of an excluded kind, §6; `content` is sensitive and never written to an S1 digest, log or export); `memoryScale` (recorded, inert until the memory machinery lands); not `tempo` (occurrence is not the director's).
+`SettingsView` is the `SettingsSet` in force at the snapshot ([S0 §14.2](kernel.md#142-records-and-branching)). S1 reads `cityScale` (multiplies every citywide rate and offspring mean, §7.2, and cannot lift a mean past its bound, §5.2); `classExclusions` and `content` ceilings (the gate and the zero rate of an excluded kind, §6; `content` is sensitive and never written to an S1 digest, log or export); `memoryScale` (recorded, inert until the memory machinery lands); and **`tempo` for one purpose only**: it bounds the reach of a `punish` intention against V (§7.8.1, [D-02](../decisions.md), [D-30](../decisions.md)), down to none at `off`. Nothing else in S1 reads `tempo`: the city's own occurrences are not the director's.
 
 **When a change takes effect.** A settings op, a new `observed` pin, a new `core:cast` edge or a new demand is stamped in some window `j`. The kernel applies it at boundary `j + 1` (S0 §9.4, step 2). It is in force for the run of window `j + 1` and every later one. **No window is ever computed under a setting or a protection that arrived after its run started, and no output is revised afterwards.** The settings in force at **production time** apply ([S0 §9.2](kernel.md#92-events)). Replayed history is never re-filtered.
 
@@ -543,7 +579,7 @@ anchor(person, track) = -floor(rand("anchor", person, track) * lenQ[track][s0][a
 
 ### 4.3 Archetypes, names and binding
 
-**Archetype.** `archetype` is a sampled enum slot with eight archetypes and the default `resident`: `street-vendor`, `gang-member`, `gang-leader`, `fixer`, `police`, `service-worker`, `young-street`, `elder`. In M3 it sets only a person's schedule (§4.5). `Table` rules by role: `vendor` and `shopkeeper` give `street-vendor`; `service` and `nightlife` `service-worker`; `gang` `gang-member`; `police` `police`; `student` `young-street` 0.6 and `resident` 0.4; `retired` `elder` 0.7 and `resident` 0.3; every other role `resident`. `gang-leader` and `fixer` are never sampled: canon assigns them. Archetypes are by role, never demographic (§12, the source lint).
+**Archetype.** `archetype` is a sampled enum slot with eight archetypes and the default `resident`: `street-vendor`, `gang-member`, `gang-leader`, `fixer`, `police`, `service-worker`, `young-street`, `elder`. In M3 it sets only a person's schedule (§4.5). `Table` rules by role: `vendor` and `shopkeeper` give `street-vendor`; `service` and `nightlife` `service-worker`; `gang` `gang-member`; `police` `police`; `student` `young-street` 0.6 and `resident` 0.4; `retired` `elder` 0.7 and `resident` 0.3; every other role `resident`. `gang-leader` and `fixer` are never sampled: canon assigns them. A resident who holds a leader's seat (§7.8) keeps its sampled archetype: leadership is the `xf:leads` edge, not the archetype, which sets only a schedule. Archetypes are by role, never demographic (§12, the source lint).
 
 **Names.** The pack's name registry gives `origin` weights by district and affiliation class (pack `Rule` contributions on `core:name.origin`, reading `affc` through the owner chain), and `given` and `family` conditioned on the origin (`enum-by`). Origin feeds no policy.
 
@@ -562,18 +598,24 @@ anchor(person, track) = -floor(rand("anchor", person, track) * lenQ[track][s0][a
 **Routines.** `where(person, t)` is a pure function, never ticked, and applies only to people the game does not place. A mirrored or game-placed person keeps the game's position.
 
 ```ts
-type Whereabouts = { cls: 'home' | 'work' | 'out' | 'away'; cell?: Id; cause: 'none' | 'ill' | 'closed' | 'between-jobs' | 'protected-present' };
+type Whereabouts = { cls: 'home' | 'work' | 'out' | 'away' | 'post'; cell?: Id;
+                     cause: 'none' | 'ill' | 'closed' | 'between-jobs' | 'protected-present' | 'goal' };
 function where(person: Id, t: GameTime): Whereabouts {
   const day = dayIndex(t), p = periodOf(t), arch = archetypeOf(person);
   let cls = schedule(arch)[p][invCum(schedule(arch)[p], rand("sched", person, day, p))];       // 'home' | 'work' | 'out'
   let cause = 'none';
-  if (protectedAt(person, t)) return { cls, cell: placeOf(person, cls, day, p), cause: 'protected-present' };   // never removed
+  const post = postAt(person, t);                                                  // v0.6: a goal's post covering t (§7.10), or undefined
+  if (protectedAt(person, t)) return post ? { cls: 'post', cell: post.cell, cause: 'goal' }
+                                          : { cls, cell: placeOf(person, cls, day, p), cause: 'protected-present' };   // never removed
   if (stateAt(person, 'health', t).state === 1) { cls = 'away'; cause = 'ill'; }
+  else if (post) return { cls: 'post', cell: post.cell, cause: 'goal' };          // at the post, whatever the schedule drew
   else if (cls === 'work' && stateAt(person, 'work', t).state === 1) { cls = 'home'; cause = 'between-jobs'; }
   else if (rand("absent", person, day) < absentP(arch)) { cls = 'away'; cause = closedCause(person, t) ?? 'none'; }
   return { cls, cell: placeOf(person, cls, day, p), cause };
 }
 ```
+
+**Posts** (v0.6). `postAt(person, t)` is the post of an active goal of the person (§7.10) whose window range holds `windowOf(t)` and whose periods hold `periodOf(t)`, read from the `people.goals` digest, which keeps every post for 1,008 windows after it ends. A post is recorded history: it is decided one window before it starts, never revised, and the same whichever later digest is read, so casting an occurrence again within the ring gives the same cast (S1-I-19). A post never changes a draw: the `sched` draw is made as before and only its answer is replaced. An ill person is away, post or not.
 
 `schedule(arch)[p]` is a weight triple (home, work, out) per period. `placeOf`: home is the resident's block; work is a workplace cell drawn once among the block, its `adj1` and (for market roles) the market cells among them, by `rand("work-place", person)`; out is a public cell among the block and `adj1` by `rand("out-place", person, day, p)`; away has none. `closedCause` returns `closed` when a regime closes the person's stall. `absentP` is 0.08 **[tunable]**. M3 defaults (home, work, out):
 
@@ -653,13 +695,43 @@ A boundary pin on the rung refuses without a draw. A fall is the NPC's own conse
 
 **Consent.** A boundary is a persistent `authored` or `observed` pin on the NPC's `boundary` slot (an enum set of rungs), with a reason. S1 never generates intimate scene content and refuses any occurrence carrying a `sex.*` tag (§6). A **retract** of V's soft-excludes the thread: the observed event `retract` with the tie id adds it to `softExcluded`, and no bid, event or frame is made for it, while the thread stays visible and editable. Absence alone has no cost, and nothing in S1 schedules offers to retain, builds a streak or applies guilt (§12). **No value of this section is shown to V:** they reach traces and the decision log only.
 
+### 4.8 Membership (v0.6)
+
+Who belongs to a group is answered by one function, so that every reader agrees.
+
+```ts
+function groupOf(p: Id, t: GameTime): Id | undefined {
+  if (isMirrored(p)) return liveMemberOf(p, t);          // the target of p's core:member-of edge valid at t (reconcile writes it, §8.8)
+  const f = affcOf(p);                                    // a resident: its profile's affiliation class (§4.2)
+  return f === 'A1' || f === 'A2' || f === 'A3' ? groupNode(districtOf(p), f) : undefined;   // H("val", district, "grp-" + f), §7.0
+}
+const isMember = (p, g, t) => alive(p, t) && groupOf(p, t) === g;
+```
+
+A resident's membership is implicit: it follows from the profile, is never stored, and does not change in M3 (membership dynamics are phase 2). It is `open` in visibility. **Indexes.** From a person, `groupOf` is one read. From a group, S1 enumerates only its **known members**: the holders of its seats (§7.8), the owners of goals that serve its intentions (§7.10), and mirrored members with a live edge, in `Id` order. Unopened residents are never enumerated by a reader; a group's other members exist only as counts (§4.2) until a draw names one.
+
+### 4.9 Items (v0.6)
+
+A minimal possession, for patterns that need someone to have something ([pattern language §13](../composite/pattern-language.md#13-proposed-specification-changes), S1-4).
+
+- **The kind.** `xf:item` (schema pack `xf.core.world@1`, extends nothing): slot `label` (text, assigned; never shown, S7 words it). S1 never mints an item in the core. Items are minted by seeds (a kit's stand-in, S2) and by packs.
+- **The holder.** `xf:held-by`, an edge from an item to an actor (a person or a group), attrs none, `Id` `H("edge", "xf:held-by", item, holder, from)` with `from` its start time. At most one is live per item. The item's first holder edge is written by whoever mints the item. Within S1, `city.events` is the only writer (§7.2): when it admits an occurrence with outcome `done` whose kind fills `transfer(what, from, to)` and whose `object` role names an item held by `from`, it ends that edge at the event's time and adds one to `to`, both with the event as cause.
+- **Reads.** `holds(who, item, t)`: `yes` if a `xf:held-by` edge from the item to `who` is valid at `t`, else `no`. The state filler of `hold` (§9.1a), searchable from the holder or the item.
+- **V.** An item V holds is never the object of an S1 act: taking from V is a harmful effect on V, which the gate refuses (§6).
+
 ## 5. The event catalogue
 
 ### 5.1 The kind registry
 
 Event kinds are pack data. An event's kind is the value of its `kind` slot (S0 §9.2), registered in the event-kind registry ([S0 §10.5](kernel.md#105-changes-and-matching)). Selectors and patterns match kinds through `where` predicates on that slot, never through schema `KindId`s. A registry entry `KindDef1` has: `name`; `family` (`city`, `order`, `social`, `mirror`, `raw`); `tags`; `effects` (pairs of a role name and an `Effect` of S0 §10.8); `producers` (process ids, policy names, `s2`, `port`); `sizes` (1 to 4 for city kinds, else `[1, 1]`); `classes` (the content listing: class, shown 1 to 3, reported 1 to 3; or `none: true`); `roles` (§5.4); `severity` and `pulse` (0 to 1: telling selection, §8.4, and salience, §8.3); `carrier` (channels and days: civic memory, the S2 `cosmetic` schema). City kinds add `hourShape`, `dayShape`, `pulses` (§7.1), `base` and `rw` (the flat term and the offender role weights, §5.4), `offspringFactor`, `delayBins` and `matrix` (§5.2).
 
-**Lints, at load.** A pack is refused, with the kind named, if: a kind has no producer, no carrier or no content listing; a city kind's **base** offspring mean (`offspringFactor × max over its sizes of n_m`, regime 1, `cityScale` 1) is `nMax` (0.85) or above; a rate is non-zero for a size outside the kind's `sizes`; a driver names an absent place dimension or the crime multiplier (dimension 12); a matrix row names an unknown kind; a kind has a name starting `meta:` and a producer in S1; a ladder has no rung with an empty or lowest class.
+**v0.6 adds four fields**, which S0's registry stores as `roles` and `fills` (S0 V4-51):
+- `fills`: the story functions the kind fills, as `FillDecl`s over its roles, with conditions on the outcome and on which roles are present (§5.2a). Registered with the kind, so a pattern finds every kind that fills a function without naming any ([pattern language §3.3](../composite/pattern-language.md#33-the-vocabulary-functions-links-and-relations));
+- `outcomes`: how an occurrence of the kind can fail or be prevented, and the effects of each outcome (§5.2a). A kind without it always has outcome `done`;
+- `agentRoles`: the roles in which a participant acts rather than undergoes (for `theft`, `aggressor`; for `response`, `protagonist`). An event with V in one of them is an **act of V's** (§8.9);
+- the tag `news`, on kinds whose events witnesses remember and tell although they have no effect (§8.3).
+
+**Lints, at load.** A pack is refused, with the kind named, if: a kind has no producer, no carrier or no content listing; a city kind's **base** offspring mean (`offspringFactor × max over its sizes of n_m`, regime 1, `cityScale` 1) is `nMax` (0.85) or above; a rate is non-zero for a size outside the kind's `sizes`; a driver names an absent place dimension or the crime multiplier (dimension 12); a matrix row names an unknown kind; a kind has a name starting `meta:` and a producer in S1; a ladder has no rung with an empty or lowest class; (v0.6) a fill names a role the kind does not have, a function the loaded vocabulary does not have, or an outcome the kind cannot reach; a kind lets `v` fill a role that is not an agent role, an informational role (`subject`, `told`, `object`) or one of the three protagonist-object roles of §6 step 3; a kind with a protagonist-object role has a producer other than `city.events` or `scene.acts`.
 
 ### 5.2 The ten city kinds (M3 data)
 
@@ -704,7 +776,85 @@ The dispersion is `k = 0.3`; at most 8 children. The delay bins, in windows, are
 
 **The interaction matrix** (the kind of a child by the parent's kind; weights are relative; a kind excluded by the player's lines is removed from every row, which is renormalised, §6): `theft`: `theft` 0.5, `police-action` 0.5. `assault`: `assault` 0.4, `police-action` 0.6. `gang-clash`: `gang-clash` 0.5, `police-action` 0.4, `disorder` 0.1. `shakedown`: `assault` 0.5, `police-action` 0.3, `shakedown` 0.2. `police-action`: `police-action` 0.75, `disorder` 0.25. `psycho-break`: `police-action` 1. `disorder`: `police-action` 0.6, `theft` 0.4. `accident`: `police-action` 0.8, `outage` 0.2. `outage`: `accident` 0.4, `theft` 0.4, `disorder` 0.2. `commerce`: `theft` 1.
 
-**Content listing** (the starter classes, shown / reported; S4's registry owns the final names), then severity, pulse and carrier (channels, days): `theft` `property` 1/1; 0.4; 0.3; people, 7. `assault` `harm.residents` 2/1; 0.7; 0.6; people, 14. `gang-clash` `harm.residents` 3/2 and `harm.groups` 2/1; 0.9; 0.8; people and place, 30. `shakedown` `property` 2/1 and `harm.residents` 1/1; 0.5; 0.4; people, 14. `police-action` `harm.residents` 2/1; 0.5; 0.4; people, 7. `psycho-break` `harm.residents` 3/2 and `dread` 2/1; 1.0; 0.9; media, 60. `disorder` `harm.residents` 2/1; 0.6; 0.6; media and place, 30. `accident` `harm.residents` 2/1; 0.5; 0.5; place, 7. `outage` none; 0.3; 0.4; place, 3. `commerce` none; 0.1; 0.1; people, 2.
+**Content listing** (the starter classes, shown / reported; S4's registry owns the final names), then severity, pulse and carrier (channels, days), for the city kinds (§5.3 lists the rest): `theft` `property` 1/1; 0.4; 0.3; people, 7. `assault` `harm.residents` 2/1; 0.7; 0.6; people, 14. `gang-clash` `harm.residents` 3/2 and `harm.groups` 2/1; 0.9; 0.8; people and place, 30. `shakedown` `property` 2/1 and `harm.residents` 1/1; 0.5; 0.4; people, 14. `police-action` `harm.residents` 2/1; 0.5; 0.4; people, 7. `psycho-break` `harm.residents` 3/2 and `dread` 2/1; 1.0; 0.9; media, 60. `disorder` `harm.residents` 2/1; 0.6; 0.6; media and place, 30. `accident` `harm.residents` 2/1; 0.5; 0.5; place, 7. `outage` none; 0.3; 0.4; place, 3. `commerce` none; 0.1; 0.1; people, 2.
+
+### 5.2a What each kind fills, and how it can fail (v0.6)
+
+**Fills.** Each kind declares the story functions its events fill (`fills`, §5.1; the functions are the composite's [vocabulary](../composite/vocabulary.json)). A fill's arguments name the kind's roles; `a|b` takes the first present; `@place` is the event's place. A fill with `when.outcome` applies only at those outcomes, and with `has` only when those roles are present. **One occurrence, one meaning:** raw `game.*` kinds fill nothing, because the derived mirror event that re-describes the same occurrence fills for it (§7.3).
+
+| Kind | Fills (default: at every outcome) |
+|---|---|
+| `theft` | done: `wrong(by: aggressor, to: victim)`; `transfer(what: item, from: victim, to: aggressor)`. prevented: `threaten(by: aggressor, to: victim)`; `protect(guard: guard, ward: victim)` |
+| `assault` | done: `wrong(by: aggressor, to: victim)`. prevented: `threaten(by: aggressor, to: victim)`; `protect(guard: guard, ward: victim)` |
+| `gang-clash` | `wrong(by: aggressor\|aggressor-group, to: victim\|victim-group)`; `compete(a: aggressor-group\|aggressor, b: victim-group\|victim, prize: @place)` |
+| `shakedown` | `demand(by: aggressor\|aggressor-group, of: victim)`. done: `comply(who: victim, to: aggressor\|aggressor-group)`; `transfer(from: victim, to: aggressor\|aggressor-group)`; `wrong(by: aggressor\|aggressor-group, to: victim)`. failed: `refuse(who: victim, to: aggressor\|aggressor-group)`. prevented: `refuse(who: victim, to: aggressor\|aggressor-group)`; `protect(guard: guard, ward: victim)` |
+| `police-action` | has responder and victim: `protect(guard: responder, ward: victim)`. has responder and target: `wrong(by: responder, to: target)` |
+| `psycho-break` | `wrong(by: aggressor, to: victim)` |
+| `disorder` | has victim: `wrong(by: participant, to: victim)` (M3 casts no victim, so a disorder fills nothing) |
+| `accident` | `befall(who: victim)` |
+| `outage`, `regime-start` | `befall(who: @place)` |
+| `commerce` | `transfer(from: giver, to: taker)` |
+| `enf.<norm>.word` | `demand(by: enforcer, of: target)`; `threaten(by: enforcer, to: target)` |
+| `enf.<norm>.shun`, `.beating` | done: `wrong(by: enforcer, to: target)` |
+| `enf.<norm>.fine` | done: `wrong(by: enforcer, to: target)`; `transfer(from: target, to: enforcer)` |
+| every `enf.*` | prevented: `protect(guard: guard, ward: target)` |
+| `tell` | `learn(who: listener, what: told)`; `expose(by: teller, what: told, to: listener)` when the state `conceal(what: told, from: listener)` held at the telling's time (the reader evaluates it, with `who` left open) |
+| `reply.accept`; `reply.decline` | `comply(who: replier, to: bidder)`; `refuse(who: replier, to: bidder)` (`reply` is four generated kinds, `reply.accept`, `reply.decline`, `reply.deflect` and `reply.none`, because an event has no free payload; the last two fill nothing) |
+| `gig-outcome`, `regime-end`, raw `game.*` | nothing |
+| `decide.<intent>` | `decide(group: group, what: object\|group)` |
+| `relent.<intent>` | nothing: the end of a group's course, a sign for the record and for S2's closing traces |
+| `succession` | `bind(a: successor, b: group)`; has predecessor: `sever(a: predecessor, b: group)` |
+| `presence` | `protect(guard: guard, ward: ward)`; `help(by: guard, to: ward)` |
+| `call-in` | `demand(by: creditor, of: debtor)`. done: `repay(debtor: debtor, creditor: creditor)`; `comply(who: debtor, to: creditor)`. failed: `refuse(who: debtor, to: creditor)`; `wrong(by: debtor, to: creditor)` (a broken obligation acts against the creditor's interest) |
+| `warning` | `threaten(by: warner, to: warned)` |
+| `price` | `threaten(by: warner, to: warned)`; `demand(by: warner, of: warned)` |
+| `search` | has asked: `ask(by: searcher, of: asked, what: sought)` |
+| `confront` | `threaten(by: confronter, to: confronted)` |
+
+The kinds that seeds and the port produce (`bid`, `disclosure`, `favour`, `conflict`, `repair`, `joint-activity`, `crisis`, `retract`, `promise`, `threat`, `confess`, `betrayal`, `expose`, `conceal`, `offer`, `response`, `seed-outcome`) declare their fills in S2's registration. S1 reads only these of their roles: `favour` (`giver`, `receiver`), `promise` (`promiser`, `promisee`), `repair` (`repairer`, `other`), `expose` and `confess` (`exposer` or `confessor`, `told`, `audience` or `listener`), and `response` (`protagonist`, `asker`) (§16.2).
+
+**Outcomes.** An occurrence of a kind with `outcomes` draws its outcome once, from its own `Id`, at the moment it is produced: at admission for events and goal acts (§7.2), at minting for enforcement (§7.5), at opening for items (§7.9). The draw is a pure function of the occurrence and of recorded state at its time, so re-minting or re-opening it gives the same outcome.
+
+```ts
+interface OutcomeRules {
+  prevent?: { ward: string; p: number };                  // the role a guard protects, and the chance when that person is guarded
+  fail?: { refusal: { refuser: string; demander: string } } | { chance: number };
+  effects: { done: Array<{ role: string; effect: Effect }>; failed: Array<{ role: string; effect: Effect }>;
+             prevented: Array<{ role: string; effect: Effect }> };
+}
+function outcomeOf(occ: Descriptor, cast: CastEntry[]): 'done' | 'failed' | 'prevented' {
+  const rules = outcomesOf(occ.kind);                                   // the kind's `outcomes`; none: always 'done'
+  if (rules === undefined) return 'done';
+  const u  = rand("outcome", occ.id);
+  const pP = rules.prevent && guarded(personIn(cast, rules.prevent.ward), occ.time) ? rules.prevent.p : 0;
+  const pF = rules.fail === undefined ? 0
+           : 'chance' in rules.fail ? rules.fail.chance
+           : pRefuse(personIn(cast, rules.fail.refusal.refuser), groupIn(cast, rules.fail.refusal.demander, occ.time), occ.time);
+  if (u < pP) return 'prevented';
+  if (u < pP + (1 - pP) * pF) return 'failed';                                  // two roundings, in this order
+  return 'done';
+}
+function pRefuse(r: Id, g: Id | undefined, t: GameTime): number {               // a demand of r by group g
+  const base = complies(r, 'fee', t) ? data.outcomes.refuseC : data.outcomes.refuseNC;    // 0.03 and 0.35 [tunable]
+  const backed = g !== undefined && groupOf(r, t) !== undefined && hostile(groupOf(r, t), g);
+  return clip01(base + (backed ? data.outcomes.backing : 0));                   // backing 0.3 [tunable]
+}
+```
+
+- `personIn(cast, role)` is the person cast in the role (undefined if none: then `guarded` and `pRefuse` give 0); `groupIn(cast, role, t)` is the group the role names, a person's `groupOf` or a `-group` participant's node.
+- `guarded(p, t)` (§7.10) is true when a guard's post covers `t` at the cell where `p` is: someone stands between `p` and harm. The guard joins the occurrence as its `guard` participant when it is prevented.
+- `complies(r, norm, t)` is §7.5's rule for `r`'s resident type, read from the `compliers` history of `r`'s district in the `order.norms` digest (§7.5): the mask in force in `t`'s window. `hostile(g1, g2)` reads `data.groups.hostile` (the Claws and The Mox are hostile).
+- **Reproducible.** An event's and a goal act's outcome is drawn once at admission and kept in its descriptor (`outcome`), so a re-mint from the ring restates it. An item's outcome is drawn when it is opened and again when its contributions are re-installed; every input (`guarded` from the posts, `complies` from the mask history, the cast) is recorded history as of the item's time and kept for the week the ring keeps the item, so both draws agree.
+- A **failed** occurrence was attempted and refused; a **prevented** one was stopped by a guard. Their effects are the table's: by default none, so a refused shakedown takes nothing and a prevented theft harms no one. Offspring are drawn whatever the outcome: a refusal can be answered (the matrix's `shakedown → assault`).
+
+| Kind | `prevent` | `fail` | Effects at `done`; `failed`; `prevented` |
+|---|---|---|---|
+| `shakedown` | ward `victim`, `p` 0.7 | refusal: refuser `victim`, demander `aggressor\|aggressor-group` | `take` on victim; none; `protect` on victim |
+| `theft`, `assault` | ward `victim`, `p` 0.5 | none | the kind's effects (§5.2); none; `protect` on victim |
+| `enf.<norm>.<rung>` | ward `target`, `p` 0.5 | none | the rung's effect (§5.3); none; `protect` on target |
+| `call-in` | none | chance 0.4 | `give` on creditor; none; none |
+
+All `p` and chances are **[tunable]**. Every other kind has outcome `done`.
 
 ### 5.3 The other kinds
 
@@ -712,8 +862,22 @@ The dispersion is `k = 0.3`; at most 8 children. The delay bins, in windows, are
 - **Order, `enf.<norm>.<rung>`** (producers `order.norms`, `port`): one kind per norm and rung of its ladder, **generated from the norm records at pack load**. Tags `enforcement` and `norm:<norm>`. The norm and rung are in the kind name because an event has no free payload (S0 §9.2). Effects by rung: `meet` (word), `take` (shun, fine), `expose` (public shaming), `harm` (beating). A pattern may match the tag.
 - **Mirror** (producer `city.mirror`): `gig-outcome` (size 1, no effects, class none), and the ten city kinds derived from raw events (§7.3), whose creator is the mirror process.
 - **Raw** (producer `port`): `game.death`, `game.combat.start`, `game.combat.end`, `game.heat.0 … 5`, `game.district`, `game.journal.finished`, `game.journal.failed`. Records of what the game did; never filtered or edited.
-- **Ties:** `reply` (producer `ties`); `bid`, `disclosure`, `favour`, `conflict`, `repair`, `joint-activity`, `crisis`, `retract` (producers `s2`, `port`: acts that seeds or V make; S1 consumes them).
-- **Social:** `tell` (producer `social`, §8.4) has **no effects**: its roles are `teller`, `listener` and `subject`, and the subject is an informational participant, not a target. `promise`, `threat`, `confess`, `betrayal`, `expose`, `conceal` come from `s2`; `expose` is the consequential disclosure and is governed by the targeting rules (§6).
+- **Ties:** `reply.accept`, `reply.decline`, `reply.deflect` and `reply.none` (producer `ties`; roles `replier`, `bidder`: the class of §4.7 is in the kind name); `bid`, `disclosure`, `favour`, `conflict`, `repair`, `joint-activity`, `crisis`, `retract` (producers `s2`, `port`: acts that seeds or V make; S1 consumes them).
+- **Social:** `tell` (producer `social`, §8.4) has **no effects**: its roles are `teller`, `listener`, `subject` (the person the told belief is about) and, from v0.6, `told` (the event it is about), and the subject and the told event are informational participants, not targets. `promise`, `threat`, `confess`, `betrayal`, `expose`, `conceal` come from `s2`; `expose` is the consequential disclosure and is governed by the targeting rules (§6). `promise` carries the tag `news` (§8.3): severity 0.5, pulse 0.4.
+- **Group** (v0.6; producer `group.decide`; family `group`; size 1; no effects; class none; severity 0.3, pulse 0.2; carrier people, 14). Generated at pack load from `data.groups.intents`, as the enforcement kinds are from the norms: `decide.<intent>` and `relent.<intent>` for each intention, roles `group` (the group node), `decider` (a seat holder) and `object` (informational: the rival group, the ward, or `v`). Also `succession`, roles `group`, `successor` and, if alive, `predecessor` (else `late`). A decision is the leadership committing the group; a relent is it standing down (§7.8). These are **lifecycle notices**, like the regime notices: they pass the gate and are never admitted or counted by a budget.
+- **Goal acts** (v0.6; producer `city.events`; family `goal`; size 1). The acts goals produce besides the city kinds they reuse (`shakedown`, `assault`, `theft`, §7.10):
+
+  | Kind | Roles | Effects | Tags | Class (shown / reported) | Severity; pulse; carrier |
+  |---|---|---|---|---|---|
+  | `presence` | `guard`, `ward` | `protect` on ward | | none | 0.2; 0.3; people, 7 |
+  | `call-in` | `creditor`, `debtor` | by outcome (§5.2a) | | `property` 1/1 | 0.3; 0.3; people, 7 |
+  | `warning` | `warner`, `warned` | none | `news`, `threat` | `threat` 1/1 | 0.6; 0.7; people, 14 |
+  | `price` | `warner`, `warned` | none | `news`, `threat` | `threat` 2/1 | 0.8; 0.8; people and place, 30 |
+  | `search` | `searcher`, `asked` (optional), `sought` | none | `news` | `threat` 1/1 | 0.5; 0.5; people, 14 |
+
+- **Scene** (v0.6; producer `scene.acts`; size 1): `confront`, roles `confronter` (1 to 3) and `confronted`; no effects; class `pursuit` 2/1; severity 0.9, pulse 0.9; carrier people, 30. An encounter in which members of a group find the protagonist (§7.9). It asserts no harm: what happens next is the game's record and the player's choice.
+
+`threat` and `pursuit` are starter class names, like the others; S4 owns the final ones. A player who sets either at ceiling 0 excludes those kinds (§6), and so, for `threat`, every intention against V (§7.8.1).
 
 A kind appears in the registry only when something can produce it. The kinds of the capabilities held back (§0.3) are registered when their process is built, and a pack that lists them earlier is refused by the lint. Every event S1 mints carries `causes`, `outcome` (`done` unless the occurrence failed or was prevented) and `served` where they exist ([S0 §9.2](kernel.md#92-events)). **A child is born in a later window than its parent** (§0.4). A derived mirror event takes the time of the raw event it re-describes (§7.3).
 
@@ -721,7 +885,8 @@ A kind appears in the registry only when something can produce it. The kinds of 
 
 ```ts
 interface RoleSpec {
-  role: string;                                     // aggressor, victim, target, hostile, responder, enforcer, giver, taker, participant
+  role: string;                                     // aggressor, victim, target, hostile, responder, enforcer, giver, taker, participant;
+                                                    // v0.6 adds item (the thing a theft moves), guard (who prevented it), and the roles of §5.3's new kinds
   source:
     | { from: 'offenders' }                         // the aggressor affiliation class of the descriptor's `sides.a`
     | { from: 'group'; side: 'A' | 'B' }            // a side of the occurrence's gang pair
@@ -769,9 +934,11 @@ function castOccurrence(d: Descriptor): CastEntry[] | 'no-cast' {
 
 **Group involvement is distinct from a personal role.** A role filled by a group node is named `<role>-group`, cites the group as its participant, has no age requirement and is not a floor role. It never stands in for an aggressor, victim, target or hostile **person**. Only the groups of `A1 … A3` have nodes, so an unfilled role of any other class is `no-cast`. A `parent` role keeps the **parent's participant**, so a police response protects the original victim and names the original aggressor. **V is never drawn.** The gate checks the cast again at production time (§6).
 
+**Goal acts have a fixed cast** (v0.6). A goal act's descriptor (§7.2) carries `fixed`: the goal's owner in the act's actor role and the goal's target, if a person, in its object role (§7.10). `castOccurrence` keeps `fixed` and draws only the roles it leaves open, with the same eligibility as above and the act's `Id` as `occ`: the victim of a collector's `shakedown` among the vendor and shopkeeper residents present at the post; the `asked` of a `search` among the adults present. It checks the fixed people too: each must be alive, adult and present at the act's cell at its time (`where`, §4.5), and a fixed person in a harm role must not be protected. A check that fails gives `no-cast`, and the act is not produced. `v` is never drawn and never fixed, except in the protagonist-object roles of a `punish` intention's acts (§6 step 3, §7.8.1).
+
 ### 5.5 Realisation candidates (data only)
 
-S1 does not spawn anyone. For each event of size m2 and above, and for each opened m1 item, it publishes the **routes** by which the incident could arrive in view; P8 chooses and executes. This is specified for P8 and is **outside M3's completion criteria**. A `RealisationRow` is `{ kind, placeType, period, route, cost, safeRadius, viewTest, perHour }`, with route one of `scanner-hustle`, `combat-event`, `dynamic-event`, `city-scene`, `chase`, `bridge-spawn`, `none` (the default: offscreen, with a trace). M3 ships five rows: `gang-clash` public evening and night → `dynamic-event`; `assault` public evening and night → `scanner-hustle`; `psycho-break` public any → `scanner-hustle`; `police-action` public any, size 2 and above → `chase`; `theft` public any → `city-scene`; each with `safeRadius` 30 m, `viewTest` true, `perHour` 2. **A retaliation aimed at V is never realised from this layer:** no row has an aim, and the V-exclusion of §6 refuses any event with V as a victim. `gameOwnedNow(cell)` is a dynamic read that only realisation and `scene.acts` may call; a lint forbids any coarse process from reading it (§12). With no feed it answers `maybe`.
+S1 does not spawn anyone. For each event of size m2 and above, and for each opened m1 item, it publishes the **routes** by which the incident could arrive in view; P8 chooses and executes. This is specified for P8 and is **outside M3's completion criteria**. A `RealisationRow` is `{ kind, placeType, period, route, cost, safeRadius, viewTest, perHour }`, with route one of `scanner-hustle`, `combat-event`, `dynamic-event`, `city-scene`, `chase`, `bridge-spawn`, `none` (the default: offscreen, with a trace). M3 ships six rows: `gang-clash` public evening and night → `dynamic-event`; `assault` public evening and night → `scanner-hustle`; `psycho-break` public any → `scanner-hustle`; `police-action` public any, size 2 and above → `chase`; `theft` public any → `city-scene`; each with `safeRadius` 30 m, `viewTest` true, `perHour` 2; and (v0.6) `confront` any place, any period → `bridge-spawn`, `safeRadius` 40 m, `viewTest` true, `perHour` 1: the confronters approach from out of view. **Only a `confront` is realised with V as its object** (§7.8.1, [D-30](../decisions.md)): no other row has an aim, and the V-exclusion of §6 refuses any event with V as a victim. A confront carries no harm; if the game's people then fight, the game's own events record it, and the mirror reads them (§7.3). `gameOwnedNow(cell)` is a dynamic read that only realisation and `scene.acts` may call; a lint forbids any coarse process from reading it (§12). With no feed it answers `maybe`.
 
 ## 6. The production gate
 
@@ -784,16 +951,21 @@ interface Occurrence {
   participants: Array<{ who: Id; role: string }>;
   effects: Array<{ on: Id; effect: Effect }>;
   creator: Id;
+  punish?: { group: Id; intent: Id; rung: 1 | 2 | 3 };   // v0.6: set only on the acts of a `punish` intention's duties (§7.8.1)
 }
-type GateReason = 'excluded' | 'floor-minor' | 'floor-real' | 'sex-tag' | 'v-target' | 'protected';
+type GateReason = 'excluded' | 'floor-minor' | 'floor-real' | 'sex-tag' | 'v-target' | 'v-object' | 'protected';
 type GateResult = { ok: true } | { ok: false; reason: GateReason };
 ```
 
 **The order of checks.** The first failure is the result and is logged (§2.3). A refusal is never silent.
 
 1. **Class exclusion.** If any class listed by the occurrence's kind has ceiling 0 or is in `classExclusions` in the settings in force (§3.3), the occurrence is refused: `excluded`. The same applies to everything that depends on it: its summary count, its items, its children.
-2. **The floors.** Roles `aggressor`, `victim`, `target` and `hostile` bind only persons whose `age-class` is `adult`. A missing or unavailable class counts as `minor`: `floor-minor`. A person marked real is never bound: `floor-real`. No occurrence carries a tag beginning `sex.`: `sex-tag`.
-3. **V-exclusion.** An effect in `{harm, kill, take, expose}` whose `on` is `v`, or a `victim` or `target` role bound to `v`: `v-target`. V may be an `aggressor` or `actor` only in a mirrored occurrence, which the gate does not see. **Informational roles are not harm.** The `subject` of a `tell` may be V or a protected person: a telling has no effect, so nothing here refuses it.
+2. **The floors.** Roles `aggressor`, `victim`, `target` and `hostile`, and (v0.6) every person role of a goal act or a `confront` other than the protagonist-object roles, bind only persons whose `age-class` is `adult`. A missing or unavailable class counts as `minor`: `floor-minor`. A person marked real is never bound: `floor-real`. No occurrence carries a tag beginning `sex.`: `sex-tag`.
+3. **V-exclusion.** An effect in `{harm, kill, take, expose}` whose `on` is `v`, or a `victim` or `target` role bound to `v`: `v-target`. V may be an `aggressor` or `actor` only in a mirrored occurrence, which the gate does not see. **Informational roles are not harm.** The `subject` of a `tell` may be V or a protected person, and so may the `object` of a decision: a telling or a decision has no effect, so nothing here refuses it. **The protagonist-object roles** (v0.6) `warned`, `sought` and `confronted` may bind `v` only when all of these hold, else `v-object` ([D-30](../decisions.md)):
+   - the occurrence carries `punish`, its kind is `warning` (rung 1), `price` (rung 2), `search` (rung 2 or 3) or `confront` (rung 3), and the named intention is active at that rung in the `group.decide` digest of the snapshot;
+   - the intention's grounding belief is still held (§7.8.1);
+   - for `price`, `search` and `confront`: an earlier `warning` or `price` of the same intention carries an `observed` pin valid at the occurrence's time (`observedAt`, S0 V4-55);
+   - the rung is within the cap that `tempo` sets in the settings in force (§7.8.1), and `tempo` is not `off`.
 4. **The protected set.** An effect in `{harm, kill, take, expose}` on a protected person (`protectedAt`, as of the occurrence's time), or a `victim` or `target` role bound to one: `protected`. An absence never removes a protected person (§4.5).
 
 **Lines are exclusion at production, not thinning.** A class at ceiling 0 gets a **zero rate** for its kinds, and the offspring matrix is renormalised without them, so the world holds none of it. The gate is the backstop. The `cityScale` dial scales the citywide rates and the offspring means together and is recorded in the settings op.
@@ -808,7 +980,7 @@ type GateResult = { ok: true } | { ok: false; reason: GateReason };
 
 Each process is described in the ODD order ([P3 §19.2](../p3-simulation-layer.md#192-the-first-implementation-sized-for-milestone-m3)): purpose and patterns; state; overview; design concepts; initialisation; input; submodels; agreement and validity (*conceptual*: are the mechanisms right; *verification*: does the code do what the page says; *operational*: is the output plausible). A pattern used to calibrate is never used to validate (§14.3).
 
-**Nodes S1 owns.** The schema pack gives the district slots `grp-A1`, `grp-A2`, `grp-A3` (owned nodes of kind `xf:group`, extending `core:group`, with a `standing-v` owned node of kind `xf:standing` and the `group-gap` slot), `circle-stalls` (an owned `xf:circle`, which extends `core:group` so that it can be a membership target, with `standing-v`), and `gap-<norm>` (assigned, temporal). A group is `H("val", district, "grp-" + f)` for the class `f` in `A1 … A3`. The district also carries `standing-v`.
+**Nodes S1 owns.** The schema pack gives the district slots `grp-A1`, `grp-A2`, `grp-A3` (owned nodes of kind `xf:group`, extending `core:group`, with a `standing-v` owned node of kind `xf:standing` and the `group-gap` slot), `circle-stalls` (an owned `xf:circle`, which extends `core:group` so that it can be a membership target, with `standing-v`), and `gap-<norm>` (assigned, temporal). A group is `H("val", district, "grp-" + f)` for the class `f` in `A1 … A3`. The district also carries `standing-v`. **Edge types S1 owns** (v0.6): `xf:leads` (person to group, attr `seat`; writer `group.decide`, §7.8) and `xf:held-by` (item to actor; writer `city.events`, §4.9).
 
 **Registered processes.** Every process has **period 1**. Application order at a boundary is by tier, then `id` ([S0 §9.4](kernel.md#94-evolution)). **Lag** is the publication lag (§9.4): an occurrence of window `w` is published by the boundary that ends window `w + lag`.
 
@@ -820,9 +992,10 @@ Each process is described in the ODD order ([P3 §19.2](../p3-simulation-layer.m
 | `city.mirror` | 1 | exact | 1 | `MirrorDigest` |
 | `order.ledger` | 1 | distribution | 0 | `LedgerDigest` |
 | `order.norms` | 1 | distribution | 0 | `NormsDigest` |
+| `people.goals` | 2 | exact | 0 | `GoalsDigest` (v0.6) |
 | `scene.acts` | 3 | count | 1 | `ActsDigest` |
 
-There is no `city.shape` and no `people.shape` process. Regimes, the m4 budget, service status and price belong to `city.events`, so that **one process owns every budget** (E-06). The population fit is a one-off computation (§7.4).
+There is no `city.shape` and no `people.shape` process. Regimes, the m4 budget, service status and price belong to `city.events`, so that **one process owns every budget** (E-06). The population fit is a one-off computation (§7.4). **Goals and their acts are split the same way** (v0.6): `people.goals` owns who wants what (§7.10); `city.events` owns whether and when the act happens, through its admission (§7.2); `group.decide` owns what groups decide and who leads them (§7.8). Each reads the others' digests of the previous window.
 
 ### 7.1 The shapes, the regimes and the service state (owned by `city.events`)
 
@@ -872,13 +1045,18 @@ interface EventsState {
   calendar: Record<Id, PendingChild[]>;                     // by district, sorted by (due, parent, index); at most 256 each
   ring: RingEntry[];                                        // the last WEEK windows, oldest first
   next: number;                                             // next feed sequence number
-  counters: { immigrants: number; children: number; thinned: number; refused: number; noCast: number; clamped: number };
+  goalActs: Record<Id, number[]>;                           // v0.6: by goal, the windows of its admitted acts in the last DAY windows
+  counters: { immigrants: number; children: number; thinned: number; refused: number; noCast: number; clamped: number; goalActs: number };
 }
 interface Descriptor {                                      // the one authoritative record of an occurrence
   id: Id; kind: string; size: number; w: number; time: GameTime; cell: Id;
   sides?: { a?: number; b?: number };                       // affiliation-class indices, drawn once (§5.4)
   parent?: Id; gen: number; chain: Id[];                    // the cause, the generation, the ancestors nearest first (at most genMax)
   public: boolean; witnesses: number;
+  fixed?: Array<{ role: string; who: Id }>;                 // v0.6: a goal act's fixed cast (§5.4)
+  served?: Id; causes?: Id[];                               // v0.6: a goal act's goal frame, and its goal's source
+  punish?: { group: Id; intent: Id; rung: 1 | 2 | 3 };      // v0.6: an act of a punish intention (§6)
+  outcome?: 'done' | 'failed' | 'prevented';                // v0.6: drawn once at admission (§5.2a); items have none until opened
 }
 interface PendingChild {
   parent: Id; index: number; due: number;
@@ -897,12 +1075,15 @@ interface EventFact {                                       // the typed fact of
   sides?: { a?: number; b?: number }; public: boolean; witnesses: number;
   parent?: Id; parentSize?: number; policeChild: boolean;   // `policeChild`: the occurrence drew a police-action child (known at birth)
   creator: 'sim' | 'mirror' | 'norms'; norm?: string; rung?: string; enforcer?: number;
+  outcome: 'done' | 'failed' | 'prevented';                 // v0.6 (§5.2a)
+  parties: Array<{ role: string; who: Id; group?: Id }>;    // v0.6: every participant, with each person's group at the event's time (groupOf, §4.8)
+  goal?: Id;                                                // v0.6: the goal frame a goal act served
 }
 interface EventsDigest extends DigestBase {
   bands: Record<Id, { band: number; since: number }>;       // state views: every cell with band > 0
   regimes: Array<{ id: Id; kind: string; scope: Id; start: number; size: number; effects: Record<string, number>; closes: string[]; priceShift: number }>;
   m4Open: number; services: Record<Id, 0 | 1 | 2 | 3>; price: Record<Id, 0 | 1 | 2 | 3>; calendarSize: Record<Id, number>;
-  facts: Feed<EventFact>;                                   // events of size 2 and above, as admitted (never items)
+  facts: Feed<EventFact>;                                   // events of size 2 and above, and (v0.6) every goal act, as admitted (never items)
   counts: Feed<{ district: Id; kind: string; size: number; n: number }>;      // every admitted incident, items included
   changes: Feed<Transition>;                                // band, status, regime and price transitions (§9.1)
 }
@@ -910,11 +1091,11 @@ interface EventsDigest extends DigestBase {
 
 The ring is capped at `data.events.ringMax` (20,000 entries **[tunable]**); the overflow drops the oldest windows and logs `ring-overflow`. It serves heat, `why` chains and re-minting a summary or event descriptor (S0 §9.3, G-6) for seven days. **Nothing a pending child needs lives only in the ring.**
 
-**3. A window, in order.** Window `w`: (1) read the settings and the digests of the snapshot; (2) **exits:** regime exits (§7.1); (3) **candidates:** regime arrivals, immigrants for each district and kind, due children from the calendar after their checks; (4) **admission:** events and regime arrivals in `(time, Id)` order; (5) **indexing:** admitted size-1 incidents become summary items, in their cells' summaries, with final identities and `sides`; (6) **offspring** of every admitted occurrence of generation below `genMax`; (7) heat, bands, service status and price; the ring is trimmed; the feed and the digest are written.
+**3. A window, in order.** Window `w`: (1) read the settings and the digests of the snapshot; (2) **exits:** regime exits (§7.1); (3) **candidates:** regime arrivals, immigrants for each district and kind, due children from the calendar after their checks, and (v0.6) **goal acts** for each active goal of the `people.goals` digest (below); (4) **admission:** events, goal acts and regime arrivals in `(time, Id)` order, each event and goal act drawing its **outcome** as it is admitted (§5.2a), and each admitted transfer of an item moving its holder edge (§4.9); (5) **indexing:** admitted size-1 incidents become summary items, in their cells' summaries, with final identities and `sides`; (6) **offspring** of every admitted occurrence of generation below `genMax`; (7) heat, bands, service status and price; the ring is trimmed; the feed and the digest are written.
 
 **4. Design concepts.** *Counts first.* *One descriptor per occurrence:* identity, time and place are assigned once and never re-derived. *One admission owner,* with declared order and persisted budgets. *Hot state is read off generative state:* the future of a cell's excitement is the pending calendar. *Demand independence:* nothing here reads V's position or any demand. *Static coverage:* the game's content lowers a cell's rate by a static figure, never by whether its community is active now.
 
-**5. Initialisation.** Empty calendar and ring, no regimes, `admit.m4Times = []`, every service `open`, every band quiet; the normalisers `M_k` are computed at load. **6. Input.** The index; `data.shape`, `data.events`, `data.kinds`; `ctx.settings`; digests: `city.mirror` (`cover`), `order.stocks` (`E`, `Y`, `fear`), `order.norms` (`noSnitch`), `group.decide` (`boost`, `pairBoost`).
+**5. Initialisation.** Empty calendar and ring, no regimes, `admit.m4Times = []`, every service `open`, every band quiet; the normalisers `M_k` are computed at load. **6. Input.** The index; `data.shape`, `data.events`, `data.kinds`, `data.goals`; `ctx.settings`; digests: `city.mirror` (`cover`), `order.stocks` (`E`, `Y`, `fear`), `order.norms` (`noSnitch`; the `compliers` history, for outcomes), `group.decide` (`boost`, `pairBoost`; the intentions, for the gate's punish check), `people.goals` (v0.6: the active goals and the posts).
 
 **7. Submodels.**
 
@@ -946,13 +1127,54 @@ A kind not allowed by the gate's class rule (§6) has `μ = 0`.
 
 *Due children.* At window `w` the children with `due = w` leave the calendar in `(due, parent, index)` order and are checked: (1) **game cover:** if the `city.mirror` digest's `cover` holds the same kind at the child's cell or its `adj1` cells (entries live for `data.events.coverLull`, 144 windows), the child is thinned, `game-covers`, logged as a correction; (2) **excluded now:** the kind is no longer allowed, dropped `excluded`; (3) **thinning:** `ratio = min(1, regimeMod(d, kind) / modBirth)`; if `ratio < 1` and `rand("thin", parent, index) ≥ ratio`, thinned, reason `regime`. A surviving child is **classified by its own size.** Size 2 or above: an event, `id = H("mint", proc, parent, "child/" + index)`, `time = startOf(w) + floor(rand("child", parent, index, "t") × W)`. Size 1: a summary item (indexing). Either way `gen = parentFacts.gen + 1`, `chain = [parent, …parentFacts.chain]` cut to `genMax`, and `sides` as the parent's, swapped for a retaliation (`kind' = kind = gang-clash`), none for `police-action`.
 
-*Admission.* One owner, one order. Events and regime arrivals are sorted by `(time, Id)` and admitted one at a time against **working** counters that start from the state and are committed with the run:
+*Goal acts* (v0.6). **A goal acts only through the city's own rates** ([pattern language §13](../composite/pattern-language.md#13-proposed-specification-changes), S1-3). It is a personal offender term: for one person and one target it adds a small rate of the act the goal wants, scaled by the same hour and day shapes, regimes and game coverage as the city's rates, and the act, if it comes, is drawn, cast, gated and admitted here like any other occurrence. No seed, policy or other process mints an act for a goal. For each goal `g` of the `people.goals` digest with state `active`, in `Id` order:
+
+```ts
+function goalAct(g: GoalView, w: number): Descriptor | undefined {
+  const t0 = startOf(w);
+  const k = g.acts.find(kind => allowedByClass(kind));                     // the first act kind the gate's class rule allows (§6)
+  if (k === undefined || actsToday(g.id, w) >= perDay(k)) return undefined; // goalActs[g]: admitted acts in windows w − DAY + 1 … w − 1
+  const at = where(g.owner, t0);                                           // a goal with a post is at its post (§4.5)
+  if (at.cls === 'away' || at.cell === undefined) return undefined;
+  const victim = g.item !== undefined ? holderOf(g.item, t0) : g.target;  // an item's holder at t0 (§4.9), else the target
+  if (g.item !== undefined && victim === v) return undefined;             // nothing is taken from V (§6)
+  if (victim !== undefined && isPerson(victim) && g.punish === undefined
+      && where(victim, t0).cell !== at.cell) return undefined;            // co-presence; a punish duty's target is V, whose position no coarse process reads
+  if (g.ward !== undefined && where(g.ward, t0).cell !== at.cell) return undefined;                             // a guard acts where its ward is
+  const d = districtOfCell(at.cell);
+  const mu = data.goals.rate[k] * g.motive * shapeOf(k, t0) * regimeMod(d, k) * (1 - (gameCoverage[at.cell][k] ?? 0)) * (W / 86400);
+  if (spacingCount(mu, i => procRand(w, "gact", g.id, i), 1) === 0) return undefined;     // at most one act a window
+  const id = H("mint", proc("city.events"), g.id, "act/" + w);
+  return { id, kind: k, size: 1, w, time: t0 + Math.floor(procRand(w, "gact-t", g.id) * W), cell: at.cell, gen: 0, chain: [],
+           public: publicOf(at.cell, id), witnesses: witnessesOf(at.cell, id), fixed: castOf(g, k), served: g.id,
+           causes: [g.source], punish: g.punish };
+}
+```
+
+`shapeOf(k, t)` is §7.1's `shape` for a city kind and 1 for the kinds of §5.3. `regimeMod` is 1 for a kind no regime lists. The products run left to right. `castOf` puts the owner in the kind's actor role and `victim` (or the ward) in its object role, and an item goal's item in `item`. `g.punish` is `{ group, intent, rung }` for a `punish` duty (its intention's decision and current rung, §7.10), else absent. The table is `data.goals.rate` and `data.goals.perDay` (all **[tunable]**):
+
+| Act kind | Rate per day | At most per goal per day | Actor role; object role; drawn roles (§5.4) |
+|---|---|---|---|
+| `shakedown` | 1 | 3 | `aggressor`; none; `victim` among vendors and shopkeepers present |
+| `assault` | 2 | 1 | `aggressor`; `victim` |
+| `theft` | 2 | 1 | `aggressor`; `victim` (the item's holder), `item` |
+| `presence` | 24 | 1 | `guard`; `ward` |
+| `call-in` | 1 | 1 | `creditor`; `debtor` |
+| `warning`, `price` | 12 | 1 | `warner`; `warned` |
+| `search` | 4 | 1 | `searcher`; `sought`; `asked` among adults present |
+
+**A goal act is an event, not a summary item,** although its size is 1: its people are known before it happens. It is an immigrant of the branching process (generation 0), carries its goal's source in `causes` and its goal frame in `served`, draws offspring like any admitted occurrence, appears in the `facts` feed with its `goal`, and is not in `counts`. Its `why` chain ends at its goal's source (§9.4).
+
+*Admission.* One owner, one order. Events, goal acts and regime arrivals are sorted by `(time, Id)` and admitted one at a time against **working** counters that start from the state and are committed with the run:
 
 ```ts
 for (const c of sorted) {
-  const cast = c.isRegime ? [] : castOccurrence(c.d);                        // §5.4
+  const cast = c.isRegime ? [] : castOccurrence(c.d);                        // §5.4; a goal act keeps its fixed cast
   if (cast === 'no-cast') { refuse(c, 'no-cast'); continue; }                 // logged and counted, not a budget
-  if (!c.isRegime && !ctx.produce(occurrenceOf(c, cast)).ok) continue;        // the gate, §6; it logs its own reason
+  const outcome = c.isRegime ? 'done' : outcomeOf(c.d, cast);                 // v0.6, §5.2a: drawn once, from the occurrence's Id
+  if (!c.isRegime && !ctx.produce(occurrenceOf(c, cast, outcome)).ok) continue;   // the gate, §6; effects follow the outcome
+  if (c.isGoalAct && goalCount[c.d.district] >= data.events.goalActsPerWindow) { refuse(c, 'cap-goal'); continue; }   // 4 [tunable]
+  if (c.isGoalAct) goalCount[c.d.district] = goalCount[c.d.district] + 1;
   if (c.size === 4 && w < m4Open(working)) {
     if (c.isRegime) c.size = 3;                                               // demoted: the regime starts as size 3 and uses no budget
     else { refuse(c, 'budget-m4'); continue; }
@@ -964,7 +1186,7 @@ for (const c of sorted) {
 }
 ```
 
-`m4Open = 0` with no times, `last + m4Spacing` with one, and `max(last + m4Spacing, secondLast + WEEK)` with two or more, with `m4Spacing = 432` windows **[tunable]**: at most 2 m4 occurrences a week and at least 3 days apart (M14-18). **A refused candidate changes no counter and draws no offspring.** The district counter counts only size-2-and-above occurrences admitted in this window, so it needs no persistence. Regime ends, mirrored events (§7.3) and norm enforcement events (§7.5) never pass through admission. A size-1 incident always passes it, subject to the class-exclusion check at birth; its persons are cast and gated when it is opened (§7.9).
+`m4Open = 0` with no times, `last + m4Spacing` with one, and `max(last + m4Spacing, secondLast + WEEK)` with two or more, with `m4Spacing = 432` windows **[tunable]**: at most 2 m4 occurrences a week and at least 3 days apart (M14-18). **A refused candidate changes no counter and draws no offspring.** The district counter counts only size-2-and-above occurrences admitted in this window, and `goalCount` only goal acts, so neither needs persistence. An admitted goal act adds `w` to `goalActs[g]`; entries older than a day are dropped, and a goal no longer in the digest loses its entry. Regime ends, mirrored events (§7.3) and norm enforcement events (§7.5) never pass through admission. A size-1 incident always passes it, subject to the class-exclusion check at birth; its persons are cast and gated when it is opened (§7.9).
 
 *Summaries and items.* The admitted size-1 incidents are grouped by `(cell, kind)`. Each group is one `core:summary` named `sum/<w>/<cell>/<kind>` with `from = startOf(w)`, `length = W`, `scope` the cell and `count` its size (an empty one is not minted). Items are indexed in the order **immigrants in `(district, kind, i)` order, then due children by `(parent Id, index)`**. Item `j` has the `Id` `H("mint", S, S, "item:" + j)` and the time `startOf(w) + floor(rand("item-t", S.id, j) × W)`; its place is the cell (V4-39, K-1). The item's `Descriptor` is built from these, and `sides` are drawn with `cast-f` and `cast-pair`. Every summary is scoped to one cell, so its count equals its items at its own scope.
 
@@ -1011,7 +1233,9 @@ A band computed after window `w` applies from window `w + 1`: its `since` is `w 
 
 *Reports.* `reportChance(d, witnessBonus) = r0 × (1 − Y) × (0.5 + 0.5·E) × (1 − fear) × (1 − noSnitch) × (1 + 0.1 × witnessBonus)`, with `E`, `Y`, `fear` from the `order.stocks` digest, `noSnitch` the `beh` of the norm `uniforms` from the `order.norms` digest, and `r0 = data.stocks.r0` (0.7 **[tunable]**), clamped to [0, 1]. The report is a separate draw. It feeds no dial in M3.
 
-*The feed.* Each admitted event becomes one `EventFact` (with `policeChild` and `parentSize`); each admitted incident of any size adds to `counts`; each band, status, regime and price change adds a `Transition`. Items are never in `facts`.
+*The feed.* Each admitted event and goal act becomes one `EventFact` (with `policeChild`, `parentSize`, and from v0.6 its `outcome`, its `parties` with their groups, and a goal act's `goal`); each admitted incident of any size adds to `counts`; each band, status, regime and price change adds a `Transition`. Items are never in `facts`.
+
+*Holders* (v0.6). When an admitted occurrence with outcome `done` fills `transfer` with an `item` participant whose live `xf:held-by` edge points at the transfer's `from` party, `city.events` ends that edge at the event's time and adds one to the `to` party (§4.9), cause the event. Otherwise no edge changes.
 
 **8. Agreement and validity.** `coarseFine`: **count**. A summary's count equals the number of its items; canon items are kept (M14-16, S0 F-7). *Conceptual:* opportunity is targets times offenders times (1 − guardians) times a stable propensity; incidents cluster in time by offspring; a heat band is the state of a cell's pending future. The model does not claim to reproduce real crime, only that the shapes transfer; the constants are tuned by feel and by the panel. *Verification:* SF1-I-1 to SF1-I-16, SF1-S-3 to SF1-S-5, S0 F-13, F-21, F-22 and F-7 on this process, SF1-E1, SF1-E2, SF1-E4. *Operational:* the pattern battery on 20 seeds; M14-17 as a panel on a week in Kabuki. Cost target: a window with nothing due in 0.2 ms native, 5 ms in the reference (§10.3).
 
@@ -1051,7 +1275,7 @@ interface MirrorDigest extends DigestBase {
 | `game.combat.end`, `game.district` | none: demand and context only | | |
 | `game.journal.finished` or `.failed` | `gig-outcome` | 1 | The entry as `entry`. `outcome` `done` or `failed`. The district's counter for the entry's family rises by one |
 
-The derived event has **creator** `proc(city.mirror)`; **cause** `[the raw event]`; **time** the raw event's time (K-7); **place** the raw event's cell if it has one, else its district; `outcome` `done` (`failed` for a failed journal entry); and the `Id` `H("mint", proc(city.mirror), raw, "mir")`. **A mirrored event is told from a simulated one by its creator** (S3's `EventView.creator`). Its `EventFact` carries `sides` (the affiliation-class indices of its sides, or of the victim and the actor of a death), `public` (a public place and at least `publicMinWitnesses` witnesses, §7.5) and `witnesses`.
+The derived event has **creator** `proc(city.mirror)`; **cause** `[the raw event]`; **time** the raw event's time (K-7); **place** the raw event's cell if it has one, else its district; `outcome` `done` (`failed` for a failed journal entry); and the `Id` `H("mint", proc(city.mirror), raw, "mir")`. **A mirrored event is told from a simulated one by its creator** (S3's `EventView.creator`). Its `EventFact` carries `sides` (the affiliation-class indices of its sides, or of the victim and the actor of a death), `public` (a public place and at least `publicMinWitnesses` witnesses, §7.5) and `witnesses`, and from v0.6 its `outcome` and its `parties` with their groups, so that group pulses and goals read a mirrored wrong as they read a simulated one.
 
 *Coverage.* For each derived event with a cell and a kind in `{gang-clash, assault, theft, police-action}`, a `cover` entry is added; `city.events` thins the pending children of the same kind there (§7.2). The `cover` view is not an event source: the groups read the `facts` feed. The mirror writes nothing about V: V's cell, district and wanted level are mirrored slots that `v.frames` reads (§8.2).
 
@@ -1096,8 +1320,9 @@ interface NormsState {
   v: 1;
   slots: Record<string, NormSlots>;                       // key: district Id + "|" + norm id
   seen: Id[];                                             // external enforcement events already taken as signals, at most 256
-  ring: Array<{ id: Id; w: number; time: GameTime; cell: Id; norm: string; rung: string; qe: number; qn: number }>;   // this process's events of the last week
+  ring: Array<{ id: Id; w: number; time: GameTime; cell: Id; norm: string; rung: string; qe: number; qn: number; refuser?: Id }>;   // this process's events of the last week; refuser: a targeted pending refuser (v0.6)
   next: number;                                           // next feed sequence number
+  cursors: { events: number };                            // v0.6: the city.events facts feed, for refusals
 }
 interface NormSlots {
   priv: number; beh: number; perc: number;               // 0 to 1
@@ -1105,34 +1330,43 @@ interface NormSlots {
   signal?: { value: number; event: Id; from: number };    // a public event's implication, and the first window it acts
   pub: number[];                                          // windows of public enforcement of this norm in the last 144, oldest first
   gap: 0 | 1 | 2; gapSince: number;                       // aligned, gap, wide
+  pending: Array<{ event: Id; refuser: Id; w: number }>;  // v0.6: public refusals not yet answered, oldest first, at most 16
+  compliers: Array<{ from: number; mask: number }>;       // v0.6: which of the 8 resident types comply, from window `from`; a new entry
+                                                          // only when the mask changes; the week's history, and the entry in force at its start
 }
 interface NormsDigest extends DigestBase {
-  norms: Record<Id, Record<string, { priv: number; beh: number; perc: number; vis: number; gap: number }>>;   // state view
+  norms: Record<Id, Record<string, { priv: number; beh: number; perc: number; vis: number; gap: number; pending: number;
+                                     compliers: NormSlots['compliers'] }>>;   // state view
   facts: Feed<EventFact>;                                 // enforcement events this process minted (creator 'norms', with norm, rung, enforcer)
   changes: Feed<Transition>;
 }
 ```
 
-**3. A window, in order,** per district and norm: (a) take the fresh external public events and set their signals; (b) enforce; (c) relax; (d) set the signals of this window's own public events; (e) band the gap.
+**3. A window, in order,** per district and norm: (a) take the fresh external public events and set their signals; (a′) (v0.6) take the fresh public refusals, and settle the refusals that have waited a day; (b) enforce; (c) relax; (d) set the signals of this window's own public events; (e) band the gap.
 
 **4. Design concepts.** *A norm is data:* a behaviour, a sector, enforcers, two threshold histograms (empirical: "I comply if enough others do"; normative: "if enough expect it"), a cost and a ladder. *`perc` is a perspective on the district, not world truth.* *Only a public act moves it.* A public act is one in a public place with enough witnesses who saw each other; a private act moves only its witnesses' beliefs (S0 F-25). `priv` is constant in M3 unless an author's effect moves it.
 
-**5. Initialisation.** `priv`, `beh`, `perc` from the norm record; `qe = beh`, `qn = perc`. No signal. `pub` empty. `gap = aligned`. **6. Input.** `data.norms`; the index; the kernel, by query, for enforcement events of this norm whose creator is not this process (the find-and-deduplicate rule of §7.3, with `seen`).
+**5. Initialisation.** `priv`, `beh`, `perc` from the norm record; `qe = beh`, `qn = perc`. No signal. `pub` and `pending` empty. `gap = aligned`. **6. Input.** `data.norms`; the index; the kernel, by query, for enforcement events of this norm whose creator is not this process (the find-and-deduplicate rule of §7.3, with `seen`); (v0.6) the `city.events` `facts` feed after its cursor, and the `group.decide` digest (a group in interregnum).
 
-**7. Submodels.** A norm record (`NormDef`) holds: `id`, `label`, `sector` (profile roles it applies to; none = every resident), `enforcer` (`A1`, `A2` or `A3` and roles), `share`, `taue` and `taun` (for the 8 resident types: their share and two thresholds), `priv0`, `beh0`, `perc0`, `visBase`, `nu`, `phiBase`, `phiPublic`, `eta`, `signalMemory`, `signalValue`, `enforcePerDay`, a weighted `ladder`, and `gapBands`. **Defaults:** `nu = 0.4` (the weight of visibility in the normative expectation `q_n`), `phiBase = 0.1`, `phiPublic = 0.6`, `eta = 0.058`, `signalMemory = 144` windows, `signalValue = 0.95`, `gapBands` gap `[0.10, 0.08]` and wide `[0.30, 0.25]` (enter, leave). M3 ships two norms, with `share` 1/8 each, `taue = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75]`, `taun = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]` for both:
+**7. Submodels.** A norm record (`NormDef`) holds: `id`, `label`, `sector` (profile roles it applies to; none = every resident), `enforcer` (`A1`, `A2` or `A3` and roles), `share`, `taue` and `taun` (for the 8 resident types: their share and two thresholds), `priv0`, `beh0`, `perc0`, `visBase`, `nu`, `phiBase`, `phiPublic`, `eta`, `signalMemory`, `signalValue`, `enforcePerDay`, a weighted `ladder`, `gapBands`, and (v0.6) `refusals`: the kinds and outcomes that refuse the norm's demand, with the refuser's and the demander's roles (`fee`: a `shakedown` with outcome `failed` or `prevented`, refuser `victim`, demander `aggressor|aggressor-group` of the enforcer's group; `uniforms`: none in M3). **Defaults:** `nu = 0.4` (the weight of visibility in the normative expectation `q_n`), `phiBase = 0.1`, `phiPublic = 0.6`, `eta = 0.058`, `signalMemory = 144` windows, `signalValue = 0.95`, `gapBands` gap `[0.10, 0.08]` and wide `[0.30, 0.25]` (enter, leave). M3 ships two norms, with `share` 1/8 each, `taue = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75]`, `taun = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]` for both:
 
 | Norm | Sector | Enforcer | `priv0`, `beh0`, `perc0` | `visBase` | `enforcePerDay` | Ladder weights (default ladder of §6) |
 |---|---|---|---|---|---|---|
 | `fee` ("pay the Friday fee") | `vendor`, `shopkeeper` | `A1`, roles `gang` | 0.35, 0.875, 0.85 | 0.5 | 3 | `word` 0.6, `shun` 0.25, `fine` 0.1, `beating` 0.05 |
 | `uniforms` ("do not talk to the uniforms") | every resident | `A1`, roles `gang` | 0.5, 0.75, 0.8 | 0.3 | 1 | `word` 0.7, `shun` 0.25, `beating` 0.05 |
 
-*Resident type.* `type(r) = invCum(share, rand("ntype", norm, r))`. A resident **complies** if `qe ≥ taue[type]` and `qn ≥ taun[type]`, with the slots' last `qe` and `qn`. The non-compliers are the residents enforcement targets.
+*Resident type.* `type(r) = invCum(share, rand("ntype", norm, r))`. A resident **complies** if `qe ≥ taue[type]` and `qn ≥ taun[type]`, with the slots' last `qe` and `qn`. The non-compliers are the residents enforcement targets. From v0.6 each run also records the **mask** of complying types (bit `j` set if type `j` complies with this run's `qe` and `qn`) as a `compliers` entry from `w + 1` when it differs from the one in force, and `complies(r, norm, t)` (§5.2a) is bit `type(r)` of the entry in force at `windowOf(t)`. An occurrence therefore reads the compliance its own window's snapshot held, however late it is opened or re-minted within the week.
 
 *The public tag.* An event is **public** if its place's `public` slot is `public` and its witness count is at least `data.norms.publicMinWitnesses` (5). An enforcement event's witnesses are `spacingCount(pop(cell)[p] × witFraction, i => rand("wit", id, i))`; an external event's are the length of its `witnesses` slot (or the replay line's count). A private act produces no input to the norm.
 
 *Fresh signals (a).* An external public enforcement event of this norm, not in `seen`, in `(time, Id)` order, sets `signal = { value: signalValue, event, from: w }` and appends `w` to `pub`. Each event is taken once: its `Id` goes into `seen`.
 
-*Enforcement (b).* `μ = enforcePerDay × (W / 86400) × (1 − beh) × min(1, enforcerShare / 0.05)`, with `beh` as the snapshot held it and `enforcerShare` the entry share of the enforcer's affiliation in the district. `N = spacingCount(μ, i => procRand(w, "enf", d, norm, i), 4)`. Each use `i`: the rung by `invCum` over the weights of the rungs the gate allows (§6), `procRand(w, "rung", d, norm, i)`; the cell among the district's public cells by `invCum` over `pop[p]`, `procRand(w, "ecell", d, norm, i)`; the time, `procRand(w, "et", d, norm, i)`. The event is of kind `enf.<norm>.<rung>`, named `enf/<w>/<d>/<norm>/<i>`, effects by the rung. Its enforcer is cast from the enforcer affiliation and roles, and its target from the norm's sector among adult `civilian` non-compliers, by the casting function of §5.4 with the `qe` and `qn` of its ring entry (so the cast is reproducible). It passes the gate, not admission: enforcement is order, bounded by its own ladder. If it is public it is queued as a signal for (d).
+*Refusals (a′)* (v0.6; [NRM-04](../craft/d15-people-networks-order.md), the composite's S1-8). Only enforcement moved a norm before: so a demand could be resisted only in private, and a squeeze could never break. A **public refusal left unanswered** is the opposite signal.
+1. **Take.** Each fact of the `city.events` feed after the cursor that matches one of the norm's `refusals` (its kind and outcome; the demander a member of the enforcer's group or that group), whose refuser is in the norm's sector, and which is **public** (§7.5's tag), appends `{ event, refuser, w }` to `pending`, in feed order. At the cap of 16 the oldest is dropped. A private refusal adds nothing, as a private act moves nothing.
+2. **Answered.** A pending refusal is answered, and dropped (logged `refusal-answered`), when an enforcement event of this norm with outcome `done` targets its refuser (step b prefers them).
+3. **Unanswered.** A pending refusal whose `w` is at least `sanctionWindow` (144 **[tunable]**, a game day) before the current window, still unanswered, is dropped and sets `signal = { value: refusalValue, event, from: w }` (`refusalValue` 0.2 **[tunable]**), acting in this window like a fresh external signal, and is logged `refusal-signal`. Of several in one window, the last by `(time, Id)` stands. A refusal signal does not count in `pub`: it shows that the demand can be refused, not that its enforcers are about.
+
+*Enforcement (b).* `μ = enforcePerDay × (W / 86400) × (1 − beh) × min(1, enforcerShare / 0.05)`, with `beh` as the snapshot held it and `enforcerShare` the entry share of the enforcer's affiliation in the district. From v0.6 two terms are added: `μ = μ + answerRate × (W / 86400) × |pending|` (`answerRate` 2 a day **[tunable]**), so that most public refusals are answered within the day, and the whole of `μ` is multiplied by `discipline` (0.5 **[tunable]** while the enforcer group is in interregnum, §7.8, else 1), so that a group with no settled head lets refusals stand. `N = spacingCount(μ, i => procRand(w, "enf", d, norm, i), 4)`. Each use `i`: the rung by `invCum` over the weights of the rungs the gate allows (§6), `procRand(w, "rung", d, norm, i)`; the cell among the district's public cells by `invCum` over `pop[p]`, `procRand(w, "ecell", d, norm, i)`; the time, `procRand(w, "et", d, norm, i)`. The event is of kind `enf.<norm>.<rung>`, named `enf/<w>/<d>/<norm>/<i>`, effects by the rung. Its enforcer is cast from the enforcer affiliation and roles, and its target from the norm's sector among adult `civilian` non-compliers, by the casting function of §5.4 with the `qe` and `qn` of its ring entry (so the cast is reproducible). From v0.6 the oldest pending refuser who is alive, adult and not protected at the event's time is the target instead, whatever their affiliation (a refusal is answered whoever made it). Its outcome is drawn as it is minted (§5.2a): a guarded target makes it `prevented`, which answers nothing. It passes the gate, not admission: enforcement is order, bounded by its own ladder. If it is public it is queued as a signal for (d).
 
 *The relaxation (c).* With `vis = min(1, visBase + |pub in the last 144 windows| / 4)`:
 
@@ -1155,7 +1389,7 @@ The first three steps iterate four times so that `beh` settles for the current `
 
 *The gap band (e).* `gap = |priv − perc|`. The band rises to `wide` (2) at `gap ≥ 0.30` and to `gap` (1) at `gap ≥ 0.10`; it falls from 2 when `gap < 0.25` (to 1, or to 0 if also `< 0.08`) and from 1 when `gap < 0.08`. A pin `gap-<norm>@w<w + 1>` is written on the district **only on change**: the S2 window predicate.
 
-**8. Agreement and validity.** `coarseFine`: **distribution** (the district slots against the behaviour of resident types opened at a scene, within 10 %). *Conceptual:* a norm is held up by what people think others do; a public act shows it; enforcement makes non-compliance visible; the thresholds are judgement. *Verification:* SF1-N-1 to SF1-N-7. *Operational:* M15-11 to M15-14 and the panel question of whether a norm feels enforced (P15-01).
+**8. Agreement and validity.** `coarseFine`: **distribution** (the district slots against the behaviour of resident types opened at a scene, within 10 %). *Conceptual:* a norm is held up by what people think others do; a public act shows it; enforcement makes non-compliance visible; a public refusal that goes unanswered shows that compliance is not universal; the thresholds are judgement. *Verification:* SF1-N-1 to SF1-N-10. *Operational:* M15-11 to M15-14 and the panel question of whether a norm feels enforced (P15-01).
 
 ### 7.6 `order.stocks`
 
@@ -1194,49 +1428,88 @@ Retention returns a stock to its baseline, so a district with no events stays wh
 
 ### 7.8 `group.decide`
 
-**1. Purpose and patterns.** It makes the Tyger Claws and The Mox of Kabuki actors in the smallest useful way: books that run out, grudges that build, four pressures each, and **two simple intentions that start, expire and are removed**. What a group wants reaches the city as a rate boost. Patterns: the divergence read, the hypocrisy seed material. Individual drives, concerns, goals and orders are later capabilities (§0.3).
+**1. Purpose and patterns.** It makes the Tyger Claws and The Mox of Kabuki actors in the smallest useful way: books that run out, grudges that build, four pressures each, **leaders** whose leanings bend what the group decides, and **intentions that start, expire and are removed**. Leadership decides and members act ([D-08](../decisions.md)): each decision is minted as an event attributed to a seat holder, and the members who carry it out are given duties by `people.goals` (§7.10). What a group wants reaches the city as a rate boost and through its members' visible acts. Under [D-30](../decisions.md) a group may also aim an intention at the protagonist (§7.8.1). Patterns: the divergence read, the hypocrisy seed material, a removal loosening order ([ORD-07](../craft/d15-people-networks-order.md)). Individual drives, member dilemmas, governance records and splits are later capabilities (§0.3).
 
 **2. State.** Tier 0, per group.
 
 ```ts
-interface GroupState { v: 1; groups: Record<Id, G>; cursors: { events: number; mirror: number } }
+interface GroupState { v: 2; groups: Record<Id, G>; cursors: { events: number; mirror: number; grudges: number } }
+interface Pulse { at: number; sev: number; latched: boolean; releasedAt?: number;
+                  rival?: number;                 // the rival's affiliation-class index (retribution)
+                  src?: Id }                      // v0.6: the fact that set it; for 'retribution-v', the grounding belief
+interface Seat { seat: number; holder: Id | null; since: number; succ: number; lean?: string }   // v0.6; seat 0 is the head
+interface Intent {
+  state: 'active'; id: Id;                        // v0.6: the decision event's Id
+  name: string; drive: string; since: number; expires: number;
+  rival?: number;                                 // retaliate
+  ward?: Id; wrongdoer?: Id;                      // v0.6: the member wronged and the person who did it, from the pulse's source fact
+  rung?: 1 | 2 | 3; rungSince?: number; grounds?: Id; warnings?: Id[];   // v0.6: punish (§7.8.1); warnings newest last, at most 4
+}
 interface G {
   aff: 'A1' | 'A2'; district: Id;
   books: { cash: number; burn: number; income: number };                // eurodollars; burn and income per game day
-  pulse: Record<string, { at: number; sev: number; latched: boolean; releasedAt?: number; rival?: number }>;   // the strongest pulse per drive
-  intent: { state: 'none' } | { state: 'idle'; drive: string; since: number }
-        | { state: 'active'; id: string; drive: string; since: number; expires: number; rival?: number }
-        | { state: 'cooling'; until: number };
+  pulse: Record<string, Pulse>;                   // the strongest pulse per drive; v0.6: 'retribution-v' holds the grudge against V
+  seats: Seat[];                                  // v0.6
+  interregnum?: { until: number; cause: Id };     // v0.6: no intention starts before `until`
+  intent: { state: 'none' } | { state: 'idle'; drive: string; since: number } | Intent | { state: 'cooling'; until: number };
+  lastPunish?: number;                            // v0.6: the window the group's last punish intention ended
   W: Record<string, number>; D: number; gapBand: 0 | 1 | 2;
 }
 interface GroupDigest extends DigestBase {
-  groups: Record<Id, { aff: string; U: Record<string, number>; W: Record<string, number>; D: number; intent: string; until?: number }>;   // state view
+  groups: Record<Id, { aff: string; U: Record<string, number>; W: Record<string, number>; D: number;
+                       seats: Array<{ seat: number; holder: Id | null }>; interregnum: boolean;          // v0.6
+                       intent: { name: string; id: Id; since: number; until: number; rung?: number; rival?: number;
+                                 ward?: Id; wrongdoer?: Id; grounds?: Id; warnings?: Id[] } | null }>;   // state view
   boost: Record<Id, Record<number, Record<string, number>>>;               // district → affiliation class → kind → boost
   pairBoost: Record<Id, Array<{ a: number; b: number; mult: number; until: number }>>;
-  changes: Feed<Transition>;
+  changes: Feed<Transition>;                      // gap, intention, rung and seat transitions
 }
 ```
 
-**3. Overview.** Per window, per group (in `Id` order): (1) consume the `city.events` and `city.mirror` feeds after the cursors; (2) books; (3) pulses; (4) pressures; (5) operative weights, divergence and gap band; (6) the intention lifecycle; (7) boosts and the digest. **No decision depends on demand:** the process calls no `demanded`, and member orders are a later capability whose realisation belongs in `scene.acts`.
+**3. Overview.** Per window, per group (in `Id` order): (1) consume the `city.events` and `city.mirror` feeds and the S1 record's `grudges` after the cursors; (2) books; (3) seats: removals, interregnum, successions; (4) pulses; (5) pressures; (6) operative weights, divergence and gap band; (7) the intention lifecycle, with `punish`'s rungs; (8) boosts, the digest, and the lifecycle notices (`decide.*`, `relent.*`, `succession`). **No decision depends on demand:** the process calls no `demanded` and reads no fine-tier event (§10.1).
 
-**4. Design concepts.** *Groups are actors* (D-08). *What a group wants reaches the city by weight:* an active intention adds a boost to the offender term of the matching kind in its district. *A group's grudge against V is a belief* that may raise an offer through S2; no S1 process aims an act at V (§12).
+**4. Design concepts.** *Groups are actors* (D-08). *Leadership decides:* seat holders bend the operative weights, and every decision names its decider. *Members act:* the duties of §7.10. *What a group wants reaches the city by weight* (a boost to the offender term of the matching kind in its district) *and by its members' acts.* *A group may act against V only under D-30* (§7.8.1): from its own belief about V's acts, warning first, within the proactivity setting.
 
-**5. Initialisation.** Groups from `xf.kabuki.groups@1`. Pulses empty, intention `none`.
+**5. Initialisation.** Groups from `xf.kabuki.groups@1`. Pulses empty, intention `none`, every seat drawn at `t = 0` with `succ = 0` (below).
 
 | Pack data | Tyger Claws (`A1`) | The Mox (`A2`) |
 |---|---|---|
 | Books (`cash`, `burn`, `income`) | 9,000; 300; 330 | 4,000; 150; 140 |
 | Per shakedown income | 25 | 0 |
 | Drives carried, with ethos | treasury 2, retribution 1, reputation 1.5, cohesion 1 | care_of_members 2, retribution 1, reputation 1, legitimacy 1.5 |
-| Intentions | `collect-fee`, `retaliate` | `protect-members`, `retaliate` |
+| Intentions | `collect-fee`, `retaliate`, `punish` | `protect-members`, `retaliate`, `punish` |
+| Seats (v0.6) | 3 | 2 |
+| Hostile to (v0.6) | The Mox | Tyger Claws |
 
-The ethos multipliers are **judgement** and need a review by someone who knows the lore. **6. Input.** The feeds of `city.events` and `city.mirror` (as `EventFact`) and the `city.events` `counts` feed; the index; `data.groups`.
+The ethos multipliers and seat counts are **judgement** and need a review by someone who knows the lore. **6. Input.** The feeds of `city.events` and `city.mirror` (as `EventFact`) and the `city.events` `counts` feed; the S1 record's `grudges` (§8.9); the `order.norms` digest (`beh` of the fee, for the books); `ctx.settings` (`tempo`, for `punish` only); the index; `data.groups`.
 
 **7. Submodels.**
 
-*Books.* Every window: `cash = cash + (income − burn) × W / 86400`. For each consumed window of the `counts` feed, a lump sum is added: `perShakedown × offenderShare(d, "shakedown", f) × n`, with `n` that window's shakedown incidents of the district over all sizes. `runway = burn > 0 ? cash / burn : ∞`, in days.
+*Books.* Every window: `cash = cash + (income − burn) × W / 86400`. For each consumed window of the `counts` feed, a lump sum is added: `perShakedown × offenderShare(d, "shakedown", f) × n × (1 − refusalShare(d))`, with `n` that window's shakedown incidents of the district over all sizes and `refusalShare(d) = (1 − beh) × refuseNC + beh × refuseC` (§5.2a), the expected share refused: an item's outcome is not known at the coarse tier. Each consumed `shakedown` fact that is a goal act with outcome `done` and a member of the group as aggressor adds `perShakedown`. `runway = burn > 0 ? cash / burn : ∞`, in days.
 
-*Pulses.* For each consumed fact, in feed order, with `sev = [0.3, 0.6, 0.9, 1.0][size − 1]` and `mine` the group's class index. A fact's victim side is known only for gang pairs and mirrored events (`sides.b`). A `gang-clash` or `assault` with `sides.b = mine` gives a `care_of_members` pulse (`u0` 0.7, `τ` 7 d), a `retribution` latched pulse with `rival = sides.a` if that is a gang class, and a `reputation` pulse (`u0` 0.7, `τ` 30 d) if public. A `gang-clash` with `sides.a = mine` and `sides.b` a gang class releases the latched `retribution` pulse toward that rival (`releasedAt` = the fact's time). A pulse for a drive the group does not carry is ignored. A new pulse replaces the stored one if its urgency now is larger. A latched pulse also ends by exhaustion after 90 days.
+*Seats* (v0.6; the composite's S1-6). Leadership is **state**, drawn once and changed only by removal and succession.
+- **How many.** `data.groups.seats` per group. Seat weights: the head 0.6; the other seats share 0.4 equally **[tunable]**.
+- **Who may hold one.** At time `t`, a resident of the group's district who is a member (`groupOf`, §4.8), alive, adult, aged 25 or more (`aband ≥ 2`), of profile role `gang`, and in no other seat. A pack MAY name mirrored canon holders, `data.groups.canonSeats: Array<{ gameKey; seat }>`: the seat is that person's while they are alive and a member.
+- **The draw.** `drawSeat(group, seat, succ, t)`: for attempt `a = 0 … 23`, the block is `invCum` over the district's grid cells in `cellIds` order with weights `headcount(c) × presence_f(c)` by `rand("seat-b", group, seat, succ, a)`, and the resident is `residentAt(block, floor(rand("seat-r", group, seat, succ, a) × residentCount(block)))`. The first eligible resident is the holder. After 24 failures the seat is vacant, logged `seat-vacant`.
+- **The edge.** A holder has an `xf:leads` edge to the group, `Id` `H("edge", "xf:leads", holder, group, since)`, attr `seat`, cause the group node at initialisation and the `succession` event after it. It ends when they leave the seat, cause the removal. The relation `leads(who, group)` reads it (§9.1a).
+- **Lean.** Each holder leans towards one of the group's carried drives, drawn once from its ethos: `lean = carried[invCum(ethosN in carried order, rand("lean", holder, group))]`. This is the leaders' term below: a new holder can change what the group decides.
+- **Removal.** At step 3 a holder is removed if, at `startOf(w)`, they are not alive (age, a death pin, a mirrored `alive = no`), or no longer a member (a mirrored affiliation change), or if a consumed fact of kind `police-action`, size 2 or more, outcome `done`, names them as `target` (an arrest takes them out of the seat). Logged `seat-vacant` with the cause.
+- **Interregnum.** Removing the head starts `interregnum = { until: w + interregnumW, cause }` (144 windows **[tunable]**). While it lasts no intention starts (logged `intent-leaderless` once); `order.norms` halves the group's enforcement (§7.5); and the group's boost for `assault` and `theft` rises by +0.3 **[tunable]**: discipline loosens and members act unrestrained ([ORD-07](../craft/d15-people-networks-order.md)). An active intention continues.
+- **Succession.** When the head's seat is vacated, the holder of the lowest-numbered held seat moves to it at once (`since = w + 1`). Every seat left vacant is drawn anew at the next window with `succ + 1`, at `t = startOf(w + 1)`; a draw that fails is retried, with `succ + 1` again, at each day boundary (`w mod DAY = 0`). A head with no other holder is drawn when the interregnum ends. Each new holder (not at initialisation) gets a `succession` event: participants `group`, `successor`, and `predecessor` if alive, else `late`; time `startOf(w) + floor(procRand(w, "decide-t", group) × W)`; cause the removal. Logged `seat-taken`.
+- **Harm to a holder** pulses as for any member, with severity × `leaderSev` (1.5 **[tunable]**, capped at 1), and always with a `reputation` pulse: an affront to the group, public or not.
+
+*Pulses* (v0.6: by function, the composite's S1-2). Pulses no longer read named kinds. For each consumed fact, in feed order, and each of its kind's fills that applies at its outcome (§5.2a) with function `wrong(by, to)`: let `gTo` and `gBy` be the groups of `to` and `by` (a person's group from the fact's `parties`; a `-group` participant's node), `mine` this group, and
+```ts
+sev = min(1, sizeSev[size − 1] * effectW(effect on to) * (isSeatHolder(to) ? leaderSev : 1))   // sizeSev [0.3, 0.6, 0.9, 1.0]
+// effectW: kill 1.5, harm 1, take 0.6, expose 0.6, none 0.5 (a broken obligation) [tunable]
+```
+- `gTo = mine` and `gBy ≠ mine`: a `care_of_members` pulse (`u0` 0.7, `τ` 7 d), and a `reputation` pulse (`u0` 0.7, `τ` 30 d) if the fact is public or `to` holds a seat. If `gBy` is another group of §7.0, also a latched `retribution` pulse with `rival` its class index. Each pulse's `src` is the fact. If `by` is `v`, no retribution pulse is set here: what V does reaches a group as its own belief (§8.9), and its pulse is `retribution-v`.
+- `gBy = mine` and `gTo` another group of §7.0: releases the latched `retribution` pulse toward `gTo`'s class (`releasedAt` the fact's time).
+- `gBy = gTo = mine`: nothing. A group's own discipline is not an affront to it.
+- A public refusal of a norm the group enforces (§7.5's `refusals`) gives a `reputation` pulse of severity 0.6: a defiance.
+- Each `grudges` entry after the cursor for this group: `set` gives a latched `retribution-v` pulse `{ sev, src: belief }`, replacing the stored one if its urgency now is larger; `cleared` or `settled` for the stored pulse's `src` releases it at the entry's time.
+
+A pulse for a drive the group does not carry is ignored. A new pulse replaces the stored one if its urgency now is larger. A latched pulse also ends by exhaustion after 90 days.
 
 *Pressures.* `U` is a pure function of the facts above and `t`, **derived and never pinned**:
 
@@ -1250,36 +1523,96 @@ const pulseU = (p, u0, tau, hold = 0) => {                      // p: the stored
 };
 ```
 
-`treasury`: `clip01(1 − runway / 30)`. `retribution`: `pulseU(pulse, 0.8, 14 d, 0.5)`. `care_of_members`: `max(0.1, pulseU(pulse, 0.7, 7 d))`. `reputation`: `max(0.2, pulseU(pulse, 0.7, 30 d))`. `cohesion` and `legitimacy`: constants 0.1 and 0.2.
+`treasury`: `clip01(1 − runway / 30)`. `retribution`: the larger of `pulseU(pulse.retribution, 0.8, 14 d, 0.5)` and (v0.6) `pulseU(pulse['retribution-v'], 0.8, 14 d, 0.5)`. `care_of_members`: `max(0.1, pulseU(pulse, 0.7, 7 d))`. `reputation`: `max(0.2, pulseU(pulse, 0.7, 30 d))`. `cohesion` and `legitimacy`: constants 0.1 and 0.2.
 
 *Operative weights and divergence.* For the carried drives `d`:
 
 ```ts
 ethosN(d) = ethos(d) / Σ_{d'} ethos(d')
 Un(d)     = U(d) / Σ_{d'} U(d')                          // 0 if the sum is 0
-W(d)      = 0.5 * ethosN(d) + 0.5 * Un(d)                // sums to 1
+leadN(d)  = Σ_{held seats s} seatWeight(s) * [lean(s) = d] / Σ_{held seats s} seatWeight(s)    // v0.6; ethosN(d) if no seat is held
+W(d)      = 0.4 * ethosN(d) + 0.4 * Un(d) + 0.2 * leadN(d)    // sums to 1 (v0.5: 0.5 and 0.5, no leaders)
 D         = 0.5 * Σ_d |ethosN(d) − W(d)|                 // divergence, exposed as a read
 w(d)      = (W(d) / max_d' W(d')) * (φ(d) + (1 − φ(d)) * U(d))     // the intention weight; φ: treasury 0.10, retribution 0, others 0.3
 ```
 
-A leaders' term returns with individual drives. **`W` feeds `w`, so the group's character reaches its decisions.** The gap band is `low` below 0.15, `mid` below 0.25, else `high`, with leave thresholds 0.13 and 0.23. A pin `group-gap@w<w + 1>` is written on the group node **only on change**. A divergence above `data.groups.divergenceMin` (0.25 **[tunable]**) is hypocrisy-seed material (S2 reads it through `groupGap`).
+**The leaders' term** (v0.6, as [P3 §8.6](../p3-simulation-layer.md#86-group-decisions) designed it): what the seat holders lean towards is a fifth of the group's operative weight, so a group led by someone who leans to `retribution` answers harm sooner, and a change of head can change what the group does. Sums run in carried-drive order. **`W` feeds `w`, so the group's character reaches its decisions.** The gap band is `low` below 0.15, `mid` below 0.25, else `high`, with leave thresholds 0.13 and 0.23. A pin `group-gap@w<w + 1>` is written on the group node **only on change**. A divergence above `data.groups.divergenceMin` (0.25 **[tunable]**) is hypocrisy-seed material (S2 reads it through `groupGap`).
 
-*The intention lifecycle.* A group holds at most one intention (`data.groups.intents`):
+*The intention lifecycle.* A group holds at most one intention (`data.groups.intents`). From v0.6 each lists the duties its members carry out (§7.10), so that every intention produces something that can be seen (the composite's S1-7):
 
-| Intention | Serves | Group | Duration | Cooling | Effect while active |
-|---|---|---|---|---|---|
-| `collect-fee` | treasury | Claws | 144 windows | 72 | `boost` of `shakedown` +1.0 |
-| `protect-members` | care_of_members | Mox | 144 | 72 | `boost` of `assault` −0.2 |
-| `retaliate` | retribution | both | 36 | 72 | a pair boost ×3 against `rival` for the duration |
+| Intention | Serves | Group | Duration | Cooling | Effect while active | Duties (§7.10) |
+|---|---|---|---|---|---|---|
+| `collect-fee` | treasury | Claws | 144 windows | 72 | `boost` of `shakedown` +1.0 | `collect` ×2: collectors at the market |
+| `protect-members` | care_of_members | Mox | 144 | 72 | `boost` of `assault` −0.2 | `guard` ×1, at the ward's place, if a ward is named |
+| `retaliate` | retribution | both | 36 | 72 | a pair boost ×3 against `rival` for the duration | `strike` ×1, at the wrongdoer if known, else a rival member |
+| `punish` | retribution | both | by `tempo` (§7.8.1) | 288 | none | by rung (§7.8.1) |
 
-1. **Start.** In state `none`, the drives with `w(d) ≥ θ_start` (0.35 **[tunable]**) are tried in descending `w` (ties by drive name). The first drive with a **feasible** intention starts it, active from the next window. An intention is feasible if the group lists it for that drive and, for `retaliate`, a latched unreleased pulse names a rival and the hazard draw passes: `procRand(w, "retal", group, rival) < hazard`, `hazard = h0 × (1 + 0.5 × [the harm was public])`, `h0 = 0.02`, drawn once per window while `retaliate` is the candidate.
+1. **Start.** In state `none`, with the head's seat held and no interregnum, the drives with `w(d) ≥ θ_start` (0.35 **[tunable]**) are tried in descending `w` (ties by drive name). The first drive with a **feasible** intention starts it, active from the next window. An intention is feasible if the group lists it for that drive and:
+   - for `retaliate`, a latched unreleased `retribution` pulse names a rival and the hazard draw passes: `procRand(w, "retal", group, rival) < hazard`, `hazard = h0 × (1 + 0.5 × [the harm was public])`, `h0 = 0.02`, drawn once per window while `retaliate` is the candidate;
+   - for `punish`, the conditions of §7.8.1;
+   - for `protect-members` and `retaliate`, the pulse's source fact gives the `ward` (the member wronged, if a person and alive) and the `wrongdoer` (the person who wronged them, if any).
+
+   When `retaliate` and `punish` are both candidates for `retribution`, the one whose pulse's urgency is larger now is tried first. **The decision is an event:** `decide.<intention>`, minted at `startOf(w) + floor(procRand(w, "decide-t", group) × W)`, participants `group`, `decider` (the holder of the lowest seat whose lean is the serving drive, else the head) and `object` (the rival's group node, the ward, or `v`); place the district; cause the pulse's source. The intention's `id` is this event's `Id`, and every duty and act it gives rise to traces back to it.
 2. **Idle.** If a drive is at or above `θ_start` and none of its intentions is feasible, the state becomes `idle` (logged `intent-idle`). It stays idle, without further logging, and returns to `none` once no drive is at or above `θ_stop` (0.20).
-3. **Progress.** An active intention only counts windows and publishes its boost each window.
-4. **End.** It ends at `expires` (outcome `done`), or earlier when its drive's `w(d)` falls below `θ_stop` (outcome `ended`). Its boost is removed from the next digest, `retaliate`'s pair boost with it. The state becomes `cooling` for the intention's cooling period, then `none`. Both outcomes are logged `intent-end`. There is no random success or failure in M3.
+3. **Progress.** An active intention counts windows, publishes its boost each window, and, for `punish`, may climb a rung (§7.8.1).
+4. **End.** It ends at `expires` (outcome `done`), or earlier when its drive's `w(d)` falls below `θ_stop` (outcome `ended`), or for `punish` by §7.8.1's rules. Its boost is removed from the next digest, `retaliate`'s pair boost with it, and its duties end (§7.10). A `relent.<intention>` event is minted (same time rule, participants as its decision, cause the ending fact or else the decision). The state becomes `cooling` for the intention's cooling period, then `none`. Every end is logged `intent-end`. There is no random success or failure: what the members' acts achieve is recorded by their own outcomes (§5.2a).
 
-*Boosts for the city.* `boost[d][f][kind]` is the sum of the effects of the group's active intentions, clamped to `[−0.5, 3]`; `pairBoost` lists the active `retaliate` boosts. `city.events` reads both (§7.2).
+*Boosts for the city.* `boost[d][f][kind]` is the sum of the effects of the group's active intentions and of an interregnum, clamped to `[−0.5, 3]`; `pairBoost` lists the active `retaliate` boosts. `city.events` reads both (§7.2).
 
-**8. Agreement and validity.** `coarseFine`: **exact**. *Conceptual:* a group has books that run out, grievances that build and a character that can differ from what it does; an intention is a bounded answer to the pressure that started it. *Verification:* SF1-G-1 to SF1-G-6. *Operational:* the divergence read on the two groups; a transcript panel on whether the Claws' week reads as a group with money worries and a code.
+**8. Agreement and validity.** `coarseFine`: **exact**. *Conceptual:* a group has books that run out, grievances that build, leaders who bend it, and a character that can differ from what it does; an intention is a bounded answer to the pressure that started it, carried out by members people can see. *Verification:* SF1-G-1 to SF1-G-12, SF1-D-1 to SF1-D-10. *Operational:* the divergence read on the two groups; a transcript panel on whether the Claws' week reads as a group with money worries, a code and someone in charge.
+
+### 7.8.1 Intentions against the protagonist (D-30)
+
+[D-30](../decisions.md): a group may decide, as a simulation process, to act against the protagonist: closing ranks, putting a price on their head, hunting them. This replaces v0.5's rule that no S1 process aims at V (S1-I-8), which read D-09 more narrowly than the maintainer decided. D-09 still holds: S1 models what a group **believes** the protagonist did, never what the protagonist feels or wants, and it never asserts harm to them. The intention is `punish`.
+
+**Grounds.** A group may hold `punish` only while it holds a **grievance**: a memorable belief `{ believer: group, subject: v, path: 'against', … }` that the `grievance` policy formed (§8.9) from an **act of V's** that the record holds (an event with `v` in an agent role, §5.1). The group came to believe it either because the act fell on its members or was seen by them, or because a member was told of it by a source outside S1's own telling (the port, the mirror or a seed). The belief is the intention's `grounds`; its severity sets the `retribution-v` pulse. **No grievance, no intention:** nothing in S1 or above it can start one by any other route.
+
+**Starting.** `punish` is feasible for `retribution` when all hold:
+1. `tempo` in force is not `off`, and the kind `warning` is not excluded by the content settings (§6), so that a warning can come first;
+2. the `retribution-v` pulse is latched and unreleased, and its `src` belief is still held;
+3. no `punish` of this group ended in the last `punishCooling` (288 windows **[tunable]**);
+4. the hazard draw passes: `procRand(w, "punish", group) < h0v × tempoScale × (1 + 0.5 × [the grounding act was public])`, `h0v` 0.02 **[tunable]**.
+
+It starts at rung 1, with `rungSince = w + 1`, `grounds` the belief, and `expires = w + 1 + duration`.
+
+**Reach scales with the proactivity setting** ([D-02](../decisions.md)), down to none at `off`:
+
+| `tempo` | `off` | `calm` | `steady` | `restless` |
+|---|---|---|---|---|
+| Highest rung | none: never starts | 1 | 2 | 3 |
+| `tempoScale` (start and climb hazards) | — | 0.5 | 1 | 1.5 |
+| `duration` | — | 288 windows | 576 | 1,008 |
+
+All **[tunable]**; P9 calibrates them against the raters' sense of fairness ([pattern language §16](../composite/pattern-language.md#16-open-questions), question 9).
+
+**Rungs.** Each rung's duties are carried out by members (§7.10). **Its first visible act is a warning.**
+
+| Rung | Name | Duties | What is seen |
+|---|---|---|---|
+| 1 | `cold`: closing ranks | `warn` ×1: a `warning` at a place V is known at | Word that the group is angry with V; members and the group's sector cold to V (S2 reads `punishing`, §9.1) |
+| 2 | `price`: word put out | `warn` ×1: a `price` (a threat and a demand to pay); `search` ×1 | A price named; people asking after V |
+| 3 | `hunt` | `search` ×2 | Members watching V's places, and an encounter if they find V (`confront`, §7.9) |
+
+**Climbing.** An active `punish` at rung `r` below the highest rung `tempo` allows climbs to `r + 1` at a window `w` when all hold:
+1. **the warning was perceived:** the rung's own warning act (rung 1's `warning`, rung 2's `price`) carries an `observed` pin valid at `startOf(w)` (`ctx.observedAt`, S0 V4-55);
+2. `w − rungSince ≥ rungDwell` (144 windows **[tunable]**);
+3. `w(retribution) ≥ θ_start`;
+4. `procRand(w, "climb", group, r) < climbP × tempoScale` (`climbP` 0.05 **[tunable]**).
+
+A climb sets `rung = r + 1` and `rungSince = w + 1`, is logged `rung` and publishes a `Transition`. **No harm-shaped act happens before a warning was perceived:** a `price`, a `search` and a `confront` all need an observed warning of the intention, and the gate refuses them otherwise (§6).
+
+**What "perceived" means.** S1 cannot see what the player was shown; layer 2 can. S2 pins a `warning` or `price` event `observed` when its warned-failure rule holds for it: the warning reached `confirmed`, or two `presented` deliveries of it went by different channels ([S2 §7.3](seeding.md#73-running-a-beat), §10.2). Until S2 does, the intention stays at rung 1, which harms no one, and expires (§16.2).
+
+**Ending.** The first of these ends it:
+- `paid`: the `grievance` policy records the grudge `settled` (§8.9): an act of V's filled `repay(debtor: v, creditor: x)` or `comply(who: v, to: x)`, with `x` the group, a seat holder or one of the intention's warners, and the act's causes include one of its warnings. V paid what the price asked;
+- `cleared`: the grounds belief was dropped (§8.9): the group no longer believes it;
+- `expired`: at `expires`;
+- `ended`: `w(retribution)` fell below `θ_stop`;
+- `setting`: `tempo` in force is `off`, or `warning` is excluded. A lower `tempo` that still allows the intention caps its rung instead: it drops to the new highest rung, and the duties above it end.
+
+Each end mints `relent.punish` (object `v`), logged `intent-end`, and sets `lastPunish`.
+
+**What it never does.** It puts no harmful effect on V and binds V to no victim or target role (the gate, §6). It reads only its group's beliefs, the record of V's acts and the settings: never V's position, feelings or drives. No seed and no director operation starts, climbs or ends it; the director may at most make its cause legible ([pattern language §8.3](../composite/pattern-language.md#83-the-protagonists-junctures)). If V is hurt in an encounter, that is the game's record, read back by the mirror (§7.3).
 
 ### 7.9 `scene.acts`
 
@@ -1293,14 +1626,15 @@ interface ActsState {
   prev: { w: number; cells: Id[] } | null;                 // the focus recorded in the previous run: demand at the occurrence time
   published: Array<{ item: Id; w: number; cell: Id }>;     // items already published as events: the last 512, and no older than the ring
   recent: Record<Id, number[]>;                            // by scene cell, the windows of opened items in the last hour
+  confronts: Record<Id, number>;                           // v0.6: by punish intention, the window of its last confront (§7.9 below)
 }
 ```
 
 `ActsDigest` holds the number opened and the scenes. `published` is bookkeeping: **"already published" is not "currently materialised".** The contributions an opened item carries are not state. They are installed in the kernel, and they regenerate (below).
 
-**3. Overview.** The run for window `k`: (1) read `ctx.demanded(3)` and the cells of the persons in `ctx.demanded(4)`; (2) open the items of window `k − 1` in the cells of `prev`; (3) re-install the contributions of published items in the cells now in focus; (4) record `prev = { w: k, cells }`.
+**3. Overview.** The run for window `k`: (1) read `ctx.demanded(3)` and the cells of the persons in `ctx.demanded(4)`; (2) open the items of window `k − 1` in the cells of `prev`; (3) re-install the contributions of published items in the cells now in focus; (4) (v0.6) the encounters of a hunt, below; (5) record `prev = { w: k, cells }`.
 
-**4. Design concepts.** It never catches up and never writes outside the focus. It adds information, never occurrences: opening an item changes no count and feeds no coarse process. It is the one process that reads `gameOwnedNow`. Window `k − 1` is complete and published at boundary `k`, because every process runs one window at a time. Opening uses the demand recorded for the window the item occurred in, and keys named by the item (its `Id`, which holds its original window), never by the opening window. **5. Initialisation.** `prev = null`; empty lists. **6. Input.** `demanded(3)`, `demanded(4)`; the summaries, the ring's `meta` and the items in scope; `presentAt`, `where`; `data.acts`.
+**4. Design concepts.** It never catches up and never writes outside the focus. It adds information, never occurrences: opening an item changes no count and feeds no coarse process. The one exception is a hunt's encounter with the protagonist (v0.6), which can only happen where V is, and which no coarse process reads either. It is the one process that reads `gameOwnedNow`. Window `k − 1` is complete and published at boundary `k`, because every process runs one window at a time. Opening uses the demand recorded for the window the item occurred in, and keys named by the item (its `Id`, which holds its original window), never by the opening window. **5. Initialisation.** `prev = null`; empty lists. **6. Input.** `demanded(3)`, `demanded(4)`; the summaries, the ring's `meta` and the items in scope; `presentAt`, `where`; `data.acts`; (v0.6) the `group.decide` and `people.goals` digests, V's mirrored `cell`, `ctx.observedAt` and `tempo`, for encounters.
 
 **7. Submodels.**
 
@@ -1311,9 +1645,10 @@ open(item):
   d     = descriptor(item)                         // kind, cell, kernel time, and meta from the ring: sides, parent, gen, chain
   cast  = castOccurrence(d)                        // §5.4: pure, keyed by the item's Id
   if (cast === 'no-cast') skip                     // the item stays unopened; logged
-  occ   = { kind, origin: 'sim', size: 1, window: d.w, cell: c, participants, effects, creator: proc('scene.acts') }
+  outcome = outcomeOf(d, cast)                     // v0.6, §5.2a: keyed by the item's Id, at the item's time
+  occ   = { kind, origin: 'sim', size: 1, window: d.w, cell: c, participants, effects (by outcome), creator: proc('scene.acts') }
   if (!ctx.produce(occ).ok) skip                   // the gate, now: a person who became protected since is refused
-  ops:  contribute (layer 'simulation', mode 'constrain', Const) the item's participants#count, participants[i].who and .role, effects, witnesses, outcome 'done'
+  ops:  contribute (layer 'simulation', mode 'constrain', Const) the item's participants#count, participants[i].who and .role, effects, witnesses, outcome
         publish-item { item }                      // the one semantic publication, an event Change; causes [d.parent] if any
   witnesses = presentAt(c, d.time, 60) minus participants, the first 12 by rand("present", c, person)
   published.push({ item, w: d.w, cell: c })
@@ -1325,13 +1660,141 @@ open(item):
 
 *The cap.* At most `data.acts.perHour` (20) items are opened per scene cell in any 6 consecutive windows (`recent`). Items beyond the cap are opened in a later window only if still in the recorded focus of their own window, else not at all. Nothing is caught up. *Witnesses and beliefs.* The `witness` policy (§8.3) runs for each event these steps publish, for the witnesses that are focal or observed, and for the carriers a witness belongs to.
 
-**8. Agreement and validity.** `coarseFine`: **count**: the items in a scene's focus, opened or not, equal the summary's count at that scope; opening adds nothing; the opened items are among the summary's items. *Conceptual:* the fine tier is generated from the coarse state, consistent with it. *Verification:* SF1-A-1 to SF1-A-5 and SF1-E1's twin runs with V in different cells. *Operational:* the template-written week in Kabuki, for panel P-C (§14.3).
+*Encounters of a hunt* (v0.6, [D-30](../decisions.md)). An encounter exists only where the protagonist is, so it is the one occurrence the fine tier mints. In the run for window `k`, after opening items, for each group whose `punish` intention is active at rung 3 in the `group.decide` digest (in group `Id` order):
+1. Let `c` be V's mirrored `cell` at `startOf(k) − 1` (the fine tier may read V's position; no coarse process does). If it is unavailable, nothing happens.
+2. The confronters are the owners of the intention's `search` goals whose post covers window `k − 1` at `c` or at a cell of `adj1(c)`, alive and adult, in `Id` order, at most 3. If there are none, nothing happens.
+3. A warning of the intention carries an `observed` pin valid at `startOf(k)`, and no `confront` of the intention was minted in the last 144 windows (`ActsState.confronts`).
+4. `procRand(k, "confront", intent) < pConfront × tempoScale` (`pConfront` 0.25 **[tunable]**).
+
+Then a `confront` is minted: time `startOf(k) − 1`, place `c`, participants the confronters as `confronter` and `v` as `confronted`, no effects, `punish` set; cause the intention's decision and its last `price`. It passes the gate (§6), which checks every D-30 condition again, is published once (lag 1, as items are) and is a realisation candidate (§5.5). **It asserts no harm.** Whether anyone is hurt is what the game then does, and the mirror records it (§7.3). No coarse process reads a confront (S1-I-5): the intention learns what came of it only through the game's events and V's acts. `ActsState` gains `confronts: Record<Id, number>`, the window of each intention's last confront, persisted with the state.
+
+**8. Agreement and validity.** `coarseFine`: **count**: the items in a scene's focus, opened or not, equal the summary's count at that scope; opening adds nothing; the opened items are among the summary's items. *Conceptual:* the fine tier is generated from the coarse state, consistent with it. *Verification:* SF1-A-1 to SF1-A-6, SF1-D-6 to SF1-D-8 and SF1-E1's twin runs with V in different cells. *Operational:* the template-written week in Kabuki, for panel P-C (§14.3).
+
+### 7.10 `people.goals` (v0.6)
+
+**1. Purpose and patterns.** It gives the city's people goals of their own, in the smallest form that lets stories grow out of what people want and do ([D-27](../decisions.md)): someone wronged wants redress; someone owed calls the debt in; a member carries out what the group decided; a person a seed cast pursues what the seed gave them. Without it, most open junctures of the composite's patterns can only be nudged by the director ([pattern language §15](../composite/pattern-language.md#15-break-it-yourself), attack 6). Each goal is a retained frame on its owner, acts only through `city.events`' goal-act rate (§7.2), and ends by a recorded event or a deadline. Patterns: bounded volume; counterfactual (remove one goal: its acts vanish and nothing upstream changes); demand independence. The drive catalogue, the concern generators and means scoring stay later capabilities (§0.3): the core opens goals from recorded facts by fixed rules.
+
+**2. State.** Tier 2.
+
+```ts
+type GoalKind = 'redress' | 'collect' | 'carry-out' | 'role';
+type Duty = 'collect' | 'guard' | 'strike' | 'warn' | 'search';
+interface GoalRec {
+  id: Id;                                  // the goal frame's Id; for a role goal, the seed's frame
+  kind: GoalKind; duty?: Duty; slot?: number;
+  owner: Id; target?: Id; ward?: Id; item?: Id;
+  source: Id;                              // the event, decision or frame that opened it
+  intent?: { group: Id; decision: Id; name: string; rung?: 1 | 2 | 3 };   // a carry-out goal's intention
+  acts: string[];                          // the act kinds, in preference order
+  motive: number;                          // 0 to 1, on the 1/64 grid
+  opened: number; expires?: number;        // windows; a role goal has no expiry of S1's
+  post?: { cell: Id; periods: number[] };
+  state: 'active' | 'blocked'; blocked?: 'target-protected' | 'owner-cast';
+}
+interface GoalsState {
+  v: 1;
+  goals: GoalRec[];                        // in Id order
+  posts: Array<{ person: Id; cell: Id; periods: number[]; from: number; until?: number; goal: Id }>;   // active, and ended within WEEK windows
+  dutied: Record<Id, number>;              // by intention (decision Id), the highest rung whose duties were given
+  seen: Id[];                              // seed and port events taken (favour, promise, repair), at most 256
+  debts: Array<{ event: Id; creditor: Id; debtor: Id; due: number }>;   // favours and promises not yet due, at most 64, by due window
+  cursors: { events: number; mirror: number; groups: number; roleGoals: number };
+  counters: { opened: number; ended: number; capped: number; unfilled: number };
+}
+interface GoalsDigest extends DigestBase {
+  goals: Array<GoalRec & { punish?: { group: Id; intent: Id; rung: 1 | 2 | 3 } }>;   // state view: the active and blocked goals, role goals included;
+                                                                                     // `punish` set on the duties of a punish intention
+  posts: GoalsState['posts'];              // state view: the history `where` reads (§4.5)
+  wards: Record<Id, Id[]>;                 // ward → its guards' goals: the `guarded` index
+  byTarget: Record<Id, Id[]>;              // target or ward → goals: the state-query index (§9.1a)
+  changes: Feed<Transition>;               // key `goal|<id>`: open, blocked, active, satisfied, abandoned
+}
+```
+
+**3. A window, in order.** (1) Consume, after the cursors: the `city.events` and `city.mirror` `facts` feeds; the `group.decide` digest's `changes` (intentions started, climbed, ended); the S1 record's `roleGoals`; and, by the find-and-deduplicate query of §7.3 with `seen`, the `favour`, `promise` and `repair` events whose creator is a seed or the port. (2) End goals. (3) Block and unblock. (4) Open goals, then apply the caps. (5) Posts. (6) Frame operations and the digest.
+
+**4. Design concepts.** *Goals come from what the record holds:* a wrong done, a debt incurred, a decision taken, a seed's role. *A goal is a frame,* so the kernel's relevance and cross-pressure see it, an act names it in `served`, and the frame's `cause` leads back to the goal's source. *Goals act only through production* (§7.2). *Demand independence:* every input is coarse-readable (§10.1); nothing a scene opens makes a goal. *Seeds own their casts:* a person a live seed casts holds only the seed's goal, and their S1 goals are blocked while they are cast.
+
+**5. Initialisation.** Everything empty. **6. Input.** As step (1), with `data.goals`, the index and `where`.
+
+**7. Submodels.**
+
+*Who may own a goal.* At time `t`: a generated resident, or a mirrored person who is not a canon character (not `quest-linked`, not the spine, not `essential`); alive and adult; never `v`; holding fewer than `perPerson` (2 **[tunable]**) S1 goals; and not cast by a live seed (`core:cast` valid at `t`), except for a role goal.
+
+*Where goals come from.* Each source opens at most one goal per (kind, owner, source).
+
+| Kind | Source | Owner | Target | Acts | Motive | Expires |
+|---|---|---|---|---|---|---|
+| `redress` (grievance) | A consumed fact of the `city.events` feed (an event of size 2 or more, or a goal act) or of the `city.mirror` feed, with outcome `done`, a fill `wrong(by, to)` whose `by` and `to` are persons other than `v`, putting `harm`, `kill` or `take` on `to` | `to`; if `to` was killed or cannot own a goal, the first member of `to`'s household by member index who can: a loss passes to kin ([BND-36](../craft/d02-relationships.md)) | `by` | `assault` | `sev` of the fact (§7.8's formula), q64 | 2,016 windows (14 days) |
+| `collect` (debt) | A `favour` (`receiver` owes `giver`) or `promise` (`promiser` owes `promisee`) between two persons who can own goals, neither `v`; kept in `debts` and opened `dueDays` later (favour 7, promise 3 **[tunable]**) unless a `repair` between them came first | the creditor | the debtor | `call-in` | 0.5 | 2,016 windows after opening |
+| `carry-out` (membership and role) | An intention's duty (§7.8), when the intention starts or climbs to a rung with duties | a member drawn per duty slot (below) | per duty | per duty | the intention's `w` at its start, q64 | when the intention ends, or its rung falls below the duty's |
+| `role` (a seed's role) | A `roleGoals` entry `open` (§8.10): a goal frame a seed opened on its cast person | the cast person | the first effect's `on` if it is a person other than `v`; if it is an item, the goal's `item` instead (whoever holds it when the act comes is the victim) | from the effect: `take` → `theft`, `harm` → `assault`, `protect` → `presence` (the `on` as ward); any other effect, or an `on` that is `v` or a selector, produces no act | the frame's weight | when the seed's frame ends (an `end` entry) |
+
+**V is never a goal's target**, except as the object of a `punish` duty (below), whose acts the gate checks against every D-30 condition (§6). A role goal aimed at V produces nothing in S1: harm to the protagonist from a seed is an obstacle the protagonist faces through layer 2, with ways out ([pattern language §8.3](../composite/pattern-language.md#83-the-protagonists-junctures)).
+
+*Duties.* The `carry-out` goals an intention gives (`data.groups.intents[x].duties`, **[tunable]**):
+
+| Duty | Intention, rung | Slots | Member's profile role | Target or ward | Post: cell; periods | Acts |
+|---|---|---|---|---|---|---|
+| `collect` | `collect-fee` | 2 | `gang` | none (victims drawn at the post) | a market cell of the district, by `invCum` over their `pop` in period D with `rand("post", goal)`; M, D | `shakedown` |
+| `guard` | `protect-members` | 1 | any | ward: the intention's ward | the ward's work cell (`placeOf(ward, 'work')`); the periods whose `work` weight in the ward's schedule is above 0 | `presence` |
+| `strike` | `retaliate` | 1 | `gang` | the intention's wrongdoer if alive, unprotected and a member of the rival; else a member of the rival drawn by the same attempts (keys `duty-b`, `duty-r` with `u = 'strike-target'`, over the rival's presence), alive, adult and unprotected | the target's work cell; the periods whose `work` weight in its schedule is above 0 | `assault` |
+| `warn` | `punish`, rungs 1 and 2 | 1 | `gang` | `v` | `knownPlaces(group)[0]`; D, E | `warning` at rung 1, `price` at rung 2 |
+| `search` | `punish`, rung 2 (1 slot) and rung 3 (2 slots) | as listed | `gang` | `v` | `knownPlaces(group)[slot mod n]`; E, N | `search` |
+
+- `knownPlaces(group)`: the cells, newest first, distinct, at most 3, of the act events behind the group's held grievances (§8.9) and, for a group that is a carrier, its items about V (§8.6), within its district. If there are none, the district's market cells by `pop`, the most public first. Every one is a recorded event's place: no duty reads V's position.
+- **Drawing a member** for slot `i` of duty `u` of the intention whose decision is `δ`: for attempt `a = 0 … 23`, the block is `invCum` over the group's district grid cells in `cellIds` order, weighted `headcount(c) × presence_f(c)`, by `rand("duty-b", δ, u, i, a)`; the resident is `residentAt(block, floor(rand("duty-r", δ, u, i, a) × residentCount(block)))`. The first who can own a goal, is a member, has the duty's profile role, holds no seat (leaders decide; members act), holds no other duty of this intention, and is not tied at layer 1 (§4.6) to the duty's target is the holder. For a `punish` duty, a member with a materialised tie to `v` is passed over too. After 24 failures the slot is unfilled, logged `duty-unfilled`. **No member is ever ordered against their own kin**, so no S1 duty produces a `Dilemma` in the core (§0.3).
+- A rung's duties are given once per rung (`dutied`). At a climb, the warn duty of the lower rung ends `satisfied` if its act was admitted, else `abandoned`, and the new rung's duties open.
+
+*Blocking.* A goal is `blocked` while its target is protected at `startOf(w)` and its acts carry a harmful effect (`target-protected`), or while its owner is cast by a live seed (`owner-cast`, S1 goals only). A blocked goal produces no act, ends its post, and returns to `active` (with a new post) when the condition clears. It is still a goal: a wish with nothing to do about it ([DRV-33](../craft/d01-motivation-drives.md)).
+
+*Ending.* At step (2), the first that applies:
+
+| Reason | When | Frame status; cause |
+|---|---|---|
+| `satisfied` | `redress`, `strike`: a consumed fact with outcome `done` fills `wrong(by: owner, to: target)`. `collect`: a `call-in` of the owner's with outcome `done`. `warn`: its act was admitted | `satisfied`; the fact |
+| `refused` | `collect`: its `call-in` failed. The failed act's `wrong` fill opens the creditor's `redress` in the same step: a broken debt becomes a grievance | `abandoned`; the fact |
+| `repaired` | `redress`, `collect`: a `repair` event between owner and target | `satisfied`; the repair |
+| `target-gone`, `owner-gone` | the target, or the owner, is dead or has left the district; the owner can no longer own a goal, for a reason other than being cast | `abandoned`; the reading's change or the fact |
+| `intent-end` | `carry-out`: its intention ended, or its rung fell below the duty's | `abandoned`; the `relent` event, or the climb |
+| `expired` | `w ≥ expires` | `abandoned`; the goal's source |
+| (role goals) | an `end` entry for the seed's frame. S1 never changes a seed's frame; it only stops producing acts for it | — |
+
+Each end is logged `goal-end` and adds a `Transition`.
+
+*Caps.* At most `perPerson` (2) S1 goals per owner and `perDistrict` (32 **[tunable]**) S1 goals in a district, duties included; role goals count against neither. A new goal beyond a cap replaces the goal of lowest motive (then the oldest, then the larger `Id`) if its own motive is higher; otherwise it is not opened. Either way logged `goal-cap`.
+
+*Posts.* A goal with a post adds `{ person: owner, cell, periods, from: w + 1, goal }` when it opens or unblocks; ending or blocking sets `until = w + 1`, so the post covers windows `from ≤ k < until`. A post decided in the run of window `w` never changes a window at or before `w`. Posts ended more than `WEEK` windows ago are dropped: by then nothing in the ring can be cast again (§4.5).
+
+*Frames.* Opening a goal of S1's emits, with `retain: true` (S0 V4-54):
+
+```ts
+frame-open {
+  id: H("mint", proc("people.goals"), source, "goal/" + kind + "/" + owner + "/" + (duty ?? "") + "/" + (slot ?? 0)),
+  actor: owner, level: 'goal', parents: [], origin: source, weight: motive, status: 'active', cause: source,
+  payload: { goal: { effects } },          // redress, strike: [{ on: target, effect: harm }]; collect: [{ on: target, effect: take }];
+                                           // guard: [{ on: ward, effect: protect }]; collect duty: [{ on: sector selector, effect: take }];
+                                           // warn, search: [{ on: v, effect: meet }]
+  own: { wants: target ? [{ scope: { nodes: [target] } }] : [], reactsTo: (target ?? ward) ? [{ scope: { nodes: [target ?? ward] } }] : [],
+         protects: ward ? [{ scope: { nodes: [ward] }, where: [{ '@effect': ['harm', 'kill', 'take', 'expose'] }] }] : [],
+         blockedBy: [], threatenedBy: [] },
+  focus: { nodes: [target ?? ward].filter(Boolean), tier: 0 },
+}
+```
+
+Blocking, unblocking and ending emit `frame-status` with the cause above. **What a reader sees:** the frame's opening, blocking and end as `frame` changes (S0 V4-53), with the frame's payload, origin and cause; each act as an event with `served` the frame and `causes` the source; the goal state reads of §9.1a, searchable from the owner, the target or the ward; and the digest's feed of goal transitions. A punish duty's frame wants only to meet V: S1's frames never put a harmful effect on V.
+
+*`guarded(p, t)`.* True if a goal in `wards[p]` has an owner alive at `t` whose `postAt(owner, t)` is the cell of `where(p, t)`. Read by outcomes (§5.2a) and by the `protect` state (§9.1a).
+
+**8. Agreement and validity.** `coarseFine`: **exact**. *Conceptual:* a goal is a wish with a recorded reason, carried by one person, bounded in number and time; it is acted on only when the city's routines bring the people together, and its acts can fail. *Verification:* SF1-Y-1 to SF1-Y-12. *Operational:* M3 iteration 3's nudge share ([pattern language §14.4](../composite/pattern-language.md#144-judging-threads-over-a-simulated-week)): the share of perceived junctures filled by goal acts rather than by nudges should rise against run 2, and the raters' "do the people in it act for their own reasons" should rise with it.
 
 ## 8. The policies
 
 A **policy** is event-driven. It runs behind a kernel hook or a relevance emission and keeps no schedule of its own. Its state is the S1 record (§2.2). Relevance emissions reach S1 in the kernel's order; S1 applies its own threshold on top of `θ_react` = 0.08: `data.minds.thetaS1` = 0.2 **[tunable]**.
 
-**The watch frame.** S1 holds one frame on the root `city`, `H("mint", city, city, "frame:s1-watch")`: level `situation`, weight 1, no parents, status `active`, focus `{ nodes: [], tier: 0 }`. Its `reactsTo` selectors are: events with a participant `v` in a role of an actor (V's acts); readings of the mirrored slots `alive`, `affiliation` and `quest-linked` of `xf:person` (so `reconcile` hears the game's corrections). A kind-level match is `r = 1 × 0.6 × 0.5 = 0.3`, above `θ_react`.
+**The watch frame.** S1 holds one frame on the root `city`, `H("mint", city, city, "frame:s1-watch")`: level `situation`, weight 1, no parents, status `active`, focus `{ nodes: [], tier: 0 }`. Its `reactsTo` selectors are: events with a participant `v` in a role of an actor (V's acts); readings of the mirrored slots `alive`, `affiliation` and `quest-linked` of `xf:person` (so `reconcile` hears the game's corrections); and from v0.6, `belief` changes whose subject is `v` (`grievance`, §8.9) and `frame` changes, matched through their actor binding (`seedGoals`, §8.10). A kind-level match is `r = 1 × 0.6 × 0.5 = 0.3`, above `θ_react`.
+
+**What policies may feed to coarse processes** (v0.6). A policy that writes the S1 record for a coarse process to read (`absorb`'s `dirty`, `grievance`'s and `seedGoals`' entries) reads only coarse-readable inputs (§10.1): V's acts, the game's readings and events, seed operations, and the facts of coarse processes. A telling S1's own `social` policy minted, or a belief it formed for a focal witness, depends on demand and never reaches a coarse process.
 
 ### 8.1 Pressures
 
@@ -1357,14 +1820,14 @@ When demand leaves a person, their step and situation frames close (`abandoned`,
 **The perception policy.** `knows` reads a mirrored slot only where its dimension is visible. The M3 policy marks visible: `alive` (of a seen body), `position` (for those present), appearance tags, whether someone is armed, and **affiliation where the look carries it** (gang-class affiliations). It does not mark drives, money or secret memberships.
 
 **Salience** is rated at formation, 0 to 3, one point each, at most 3:
-1. stakes: `matchStrength(observer, event) ≥ 0.5` (S0 V4-44): the strongest relevance of the event to the observer's authored frames;
+1. stakes: `matchStrength(observer, event) ≥ 0.5` (S0 V4-44): the strongest relevance of the event to the observer's authored frames and (v0.6) goal frames (§7.10);
 2. the event class's emotional pulse: `kind.pulse ≥ 0.6`;
 3. V's act touched a tie: a participant other than the observer has a tie with the observer at layer 2 or inner, or a materialised tie;
 4. V showed it mattered: the rule S3 owns. It is 0 in M3.
 
 **Memorable by rule:** salience 3, an event that violates a `protects` interest of an authored frame with pull at least 0.5, an open promise, or a betrayal. **No S1 decision reads a belief that is not memorable.** Telling selection and the `divergence` read use memorable beliefs only. Other beliefs are texture: they may fade (§8.5) and are not persisted, so a reload cannot change a decision (E-03).
 
-**What forms.** For an observed act (an event with an actor `a`, an effect `x`, a target `y`): a belief `{ believer: observer, subject: a, path: "did." + x, at: event.time, value: y, confidence: 1, evidence: [origin(event)], source: { by: 'observed', event }, formed: now, refreshed: now, memorable, salience }`, with `Id` `H("belief", observer, a, path, at)`. `origin(event)` is the canonical originating evidence (§8.6). For an intentional act, also an attribution belief (below). Unintentional events (no actor role, or kind `accident`) form a causal belief `path: "cause"`. The kernel merges and refuses duplicates by (believer, subject, path, at) (I-9). S1 decides a contradicting newcomer replaces the existing belief only if its confidence exceeds the existing one's by more than 0.1.
+**What forms.** For an observed act (an event with an actor `a`, an effect `x`, a target `y`): a belief `{ believer: observer, subject: a, path: "did." + x, at: event.time, value: y, confidence: 1, evidence: [origin(event)], source: { by: 'observed', event }, formed: now, refreshed: now, memorable, salience }`, with `Id` `H("belief", observer, a, path, at)`. `origin(event)` is the canonical originating evidence (§8.6). For an intentional act, also an attribution belief (below). Unintentional events (no actor role, or kind `accident`) form a causal belief `path: "cause"`. **News** (v0.6, the composite's S1-5): an event of a kind tagged `news` (a `promise`, a `warning`, a `price`, a `search`) has no effect to form a `did.<effect>` belief from, so it forms `{ subject: its first participant in an agent role, path: "did." + kind, value: the event's Id, … }`, otherwise as above. Knowledge of a plan or a threat is then a belief that can be told. A news belief about a `promise` is memorable by rule (an open promise). The kernel merges and refuses duplicates by (believer, subject, path, at) (I-9). S1 decides a contradicting newcomer replaces the existing belief only if its confidence exceeds the existing one's by more than 0.1.
 
 **Attribution** has one policy, `attr@1`. An observed intentional act forms a belief about the actor's reasons, path `reason`, a region over reason classes. The weight on disposition against situation is
 
@@ -1391,7 +1854,7 @@ score(b) = protectiveRelevance(b, listener) * severity(kind(e)) * closeness(tell
 p_tell   = base * max over b of score(b)           // base = 0.3 [tunable]; draw rand("tell", teller, listener, b.id, window) < p_tell
 ```
 
-`protectiveRelevance` is the strongest `protects` or `threatenedBy` relevance of the belief's event to the listener's authored frames (`matchStrength` restricted to those types). `closeness` is the tie's `strength`, or 0.1 for strangers who share a cell.
+`protectiveRelevance` is the strongest `protects` or `threatenedBy` relevance of the belief's event to the listener's authored frames and (v0.6) goal frames (`matchStrength` restricted to those types), with (v0.6) the `wants` and `reactsTo` relevance of a goal frame counted too, so that someone who wants a thing hears where it is going. `closeness` is the tie's `strength`, or 0.1 for strangers who share a cell.
 
 **One operator at most per hop,** drawn by `invCum([0.15, 0.10, 0.10, 0.65], rand("op", teller, listener, b.id, hop))` over `level`, `sharpen`, `assimilate`, none (**[tunable]**), up to a hop limit of 4:
 - `level` (loses detail): the told confidence is multiplied by 0.8 and the `reason` belief is not passed;
@@ -1404,7 +1867,7 @@ p_tell   = base * max over b of score(b)           // base = 0.3 [tunable]; draw
 
   The act's effect is recovered from the event the belief cites. A belief that isn't about reasons isn't bent.
 
-**The telling is a minted event** of kind `tell`, carrying its operator. **It has no effects.** Its participants are the `teller`, the `listener` and the `subject`, and the subject is an **informational participant**: a telling about V or about a protected person is ordinary communication and is not refused by the gate (§6). `expose` is reserved for an actual consequential disclosure, which seeds produce and the targeting rules govern. Events that policies mint (`tell`, `reply`) have creator `s1` and cause the source event, and the name `<kind>/<teller>/<other>/<short id>/<boundary index>`. The listener's belief has `source: { by: 'told', teller, event: tellingEvent }`, **`evidence` the teller's, unchanged**, and `confidence = min(b.confidence, 0.9) × 0.8`. A rumour therefore never corroborates itself (S0 F-9).
+**The telling is a minted event** of kind `tell`, carrying its operator. **It has no effects.** Its participants are the `teller`, the `listener`, the `subject` (the person the belief is about) and, from v0.6, `told` (the event the belief is about: an act, or a plan such as a `promise`), and the subject and the told event are **informational participants**: a telling about V or about a protected person is ordinary communication and is not refused by the gate (§6). A telling fills `learn` for the listener, and `expose` when what it tells was being kept from the listener (§5.2a). `expose` is reserved for an actual consequential disclosure, which seeds produce and the targeting rules govern. Events that policies mint (`tell`, `reply`) have creator `s1` and cause the source event, and the name `<kind>/<teller>/<other>/<short id>/<boundary index>`. The listener's belief has `source: { by: 'told', teller, event: tellingEvent }`, **`evidence` the teller's, unchanged**, and `confidence = min(b.confidence, 0.9) × 0.8`. A rumour therefore never corroborates itself (S0 F-9).
 
 **Volume rule.** A telling is minted as an event only when (a) the teller or the listener is in a root's focus at tier 3 or finer, or (b) the belief is about V, a live seed's cast or a canon person. Otherwise spread is coarse and appears as reach (phase 2). Outside focus S1 keeps social Changes to about ten per game hour for the whole city **[tunable]**. Lies are a later capability (§0.3).
 
@@ -1496,18 +1959,50 @@ Because the items are independent, the expected `r` and `q` of a resident equal 
 
 ### 8.7 `ties`
 
-The pure functions `tie`, `neighbours` and `bridge`, the materialisation rule and the tie record are §4.6 and §4.7. As a policy, `ties` also materialises a tie when a belief about it is formed or told or a seed casts through it; updates the NPC's regard from the typed events of the table of §4.7; classifies replies and mints the `reply` event; decides status changes by acceptance; and keeps the retract. Its only draw is `("accept", tie, event)`, and it reads no reputation ledger.
+The pure functions `tie`, `neighbours` and `bridge`, the materialisation rule and the tie record are §4.6 and §4.7. As a policy, `ties` also materialises a tie when a belief about it is formed or told or a seed casts through it; updates the NPC's regard from the typed events of the table of §4.7; classifies replies and mints the `reply.<class>` event (§5.3); decides status changes by acceptance; and keeps the retract. Its only draw is `("accept", tie, event)`, and it reads no reputation ledger.
 
 ### 8.8 `reconcile`
 
 The game is ground truth. `reconcile` runs when the watch frame hears a reading Change of a mirrored person's `alive`, `affiliation` or `quest-linked`. A load, a jump and a mirror correction are all just sources of such readings: after a load the kernel reads the game's state, which becomes `game` readings at the current time ([S0 §14.3](kernel.md#143-loading-is-replacement)), and where a reading differs it is a Change. **No policy reads the load class, a load count or the epoch.** `reconcile` does, in this order:
 
 1. **Diff** each assumption S1 holds about the changed person against the reading: a frame of a mirrored actor, a membership edge, a materialised tie edge.
-2. **Supersede what the game now contradicts.** If `alive` is no: `frame-status abandoned` (cause: the reading's change) on every active or blocked frame of the person; `end-edge` on their memberships and ties (the edge stays as history). If `affiliation` changed (a move, not a first reading or a reading restated after a load): end the old membership edge, and add the new one if a group stands for the new affiliation, cause `game`. The group is the one of the person's current district, from the mirrored position, if that district lists the affiliation (a position's district is the **innermost** district outline containing it: the slice gives each district an optional `polygon` and `zBand`, see [places](../../../knowledge/places.md)); otherwise the first simulated district, in `Id` order, that does. A person the game reads as dead joins nothing.
+2. **Supersede what the game now contradicts.** If `alive` is no: `frame-status abandoned` (cause: the reading's change) on every active or blocked frame of the person, except the goal frames `people.goals` retains, which that process ends itself at its next run (`owner-gone`, §7.10), so that each frame has one writer; `end-edge` on their memberships and ties (the edge stays as history). If `affiliation` changed (a move, not a first reading or a reading restated after a load): end the old membership edge, and add the new one if a group stands for the new affiliation, cause `game`. The group is the one of the person's current district, from the mirrored position, if that district lists the affiliation (a position's district is the **innermost** district outline containing it: the slice gives each district an optional `polygon` and `zBand`, see [places](../../../knowledge/places.md)); otherwise the first simulated district, in `Id` order, that does. A person the game reads as dead joins nothing.
 3. **Leave beliefs alone.** A belief is not truth. People may still believe the dead person lives. That divergence is story material, not an error. It is logged as a `divLog` transition (§9.1).
 4. **Log** every correction with reason `game-dead`, `game-moved` or `game-fact`. The log never reaches V.
 
 A pending child in a cell the game now covers is thinned by `city.events` itself (§7.2). After a **jump** the coarse tiers replay every missed boundary in order and the fine tiers regenerate from the coarse state (§10.2).
+
+### 8.9 `grievance`: a group's belief that V acted against it (v0.6)
+
+The ground of every intention against the protagonist ([D-30](../decisions.md), §7.8.1). It runs when the watch frame hears an act of V's (once per canonical origin, beside `absorb`, ignoring raw kinds) or a `belief` change whose subject is `v` (S0 V4-52). Everything it reads is coarse-readable (§8, §10.1).
+
+**An act of V's** is an event in the record with `v` in one of its kind's agent roles (§5.1): what V did, as the game reported it or as V answered a seed. Nothing else counts: not a belief with no such event in its evidence, not a telling S1 itself minted.
+
+**1. From the act.** For an act of V's that puts `harm`, `kill`, `take` or `expose` on a member of a group `G` of §7.0, on a seat holder of `G`, on `G` itself (a `-group` participant), or on an item `G` or a member holds, `G` learns of it if the one harmed is `G`'s (its members report up: confidence 0.9), or if an individuated witness of the act is a member (confidence 1.0). It sets the belief
+
+```ts
+{ id: H("belief", G, v, "against", act.time), believer: G, subject: v, path: "against", at: act.time,
+  value: origin(act) /* a ref */, confidence, evidence: [origin(act)], source: { by: 'observed', event: origin(act) },
+  memorable: true, salience: 3 }
+```
+
+with `sev = q64(min(1, sizeSev[size − 1] × effectW(effect) × (seat holder harmed ? leaderSev : 1)) × confidence)`, the formula and tables of §7.8. It appends `{ group: G, belief, act, sev, op: 'set' }` to `S1Record.grudges` and logs `grudge`.
+
+**2. From a member's belief.** A `belief` change `set` or `revised` whose believer `M` is a member or a seat holder of `G`, whose path is `did.harm`, `did.kill`, `did.take` or `did.expose`, and whose value is a member of `G`, `G` itself or `M`, also grounds a grievance, but only if:
+- its evidence includes an act of V's; and
+- its source event was created outside S1's own telling: by the port, the mirror or a seed (an authored belief, a seed's caused telling). This is how a misattribution reaches a group: a member is told, by a source the record holds, that V did what V did not quite do ([pattern language §8.3](../composite/pattern-language.md#83-the-protagonists-junctures)).
+
+The belief set is as in rule 1, with `source: { by: 'told', teller: M, event: the belief's source event }`, `evidence` the member's, unchanged, and `confidence = min(b.confidence, 0.9) × 0.8`.
+
+**3. Cleared.** When a `belief` change revises or drops the member's belief behind a told grievance (its `teller`), and the member no longer holds a grounded belief of rule 2 about the same act, the grievance is dropped (`belief-drop`) and a `cleared` entry appended. A grievance from rule 1 rests on what the group's own people suffered or saw, and is never cleared this way.
+
+**4. Settled.** An act of V's that fills `repay(debtor: v, creditor: x)` or `comply(who: v, to: x)`, with `x` the group, one of its seat holders or a warner of its active `punish`, and whose `causes` include one of that intention's warnings, appends a `settled` entry for the intention's grounds. The belief stays, as history; it grounds nothing more (a settled belief is skipped by `punish`'s feasibility).
+
+**Bounds.** At most 8 grievances per group about `v`; a ninth replaces the oldest settled or cleared one, else the one of lowest `sev`. A grievance is a memorable belief, persisted by S0 and outside fade (§8.5), like carrier evidence.
+
+### 8.10 `seedGoals`: the goals seeds give people (v0.6)
+
+`seedGoals` runs when the watch frame hears a `frame` change. If the frame is at level `goal`, its actor is a person, and one of its parents is a frame whose actor is a `core:seed` (a seed's role frame, [S2 §5.3](seeding.md#53-committing)), then: on its opening (`old: 'none'`) it appends `{ frame, owner: actor, seed, effects, weight, op: 'open' }` to `S1Record.roleGoals`; on its becoming `satisfied` or `abandoned`, an `end` entry. It reads the frame's record through the kernel at dispatch time, as a policy may. `people.goals` turns the entries into role goals (§7.10), so that **the act a seed's goal wants comes from the simulation, never from the seed** (S1-I-29). A seed's goal frame is an external operation, so this is coarse-readable.
 
 ## 9. What S1 exposes
 
@@ -1543,15 +2038,42 @@ interface ReadView { digest<D>(processId: string): D | undefined; value(n: Id, p
 | `bridge(who)` | `low` (under 0.3), `mid`, `high` (from 0.6) | foci shares (§4.6) | none for generated people | one entry | built |
 | `normGap(norm, scope)` | `aligned`, `gap`, `wide` | `NormsDigest` | `gap-<norm>` pins | `changes` `gap\|norm\|district` | built |
 | `tied(a, b, type)` | `yes` or `no` | the tie function; materialised edges | edges | the kernel's edge times | built for type `xf:tie` |
-| `divergence(believer, subject)` | `none`, `small`, `large`: `large` if any **memorable** belief of the believer about the subject's `alive` or `affiliation` differs from the mirrored reading, `small` if another memorable belief differs, else `none` | memorable beliefs, readings | readings Changes of the subject's `alive` and `affiliation`, **and `boundary: true`: belief changes emit no kernel Changes** | `S1Record.divLog`: an entry whenever S1 sets or drops such a belief or hears such a reading change (at most 8 per pair) | built |
+| `divergence(believer, subject)` | `none`, `small`, `large`: `large` if any **memorable** belief of the believer about the subject's `alive` or `affiliation` differs from the mirrored reading, `small` if another memorable belief differs, else `none` | memorable beliefs, readings | readings Changes of the subject's `alive` and `affiliation`; from v0.6, `belief` changes of the believer about the subject (S0 V4-52); and `boundary: true`, kept from v0.5 | `S1Record.divLog`: an entry whenever S1 sets or drops such a belief or hears such a reading change (at most 8 per pair) | built |
 | `depth(node)` | `open` if the node's demand tier is 3 or finer, else `closed` | demand | frame Changes | the kernel's frame Changes | built |
 | `groupGap(group)` | `low` (`D` under 0.15), `mid` (under 0.25), `high`: the divergence of §7.8, the hypocrisy seed's material | `GroupDigest` | **`group-gap` pins on the group** | `changes` `group-gap\|group` | built |
+| `leads(person, group)` (v0.6) | `yes` or `no`: the person holds a seat | `xf:leads` edges | edges | the kernel's edge times | to build |
+| `punishing(group, subject)` (v0.6) | `none`, `cold`, `price`, `hunt`: the group's `punish` intention and its rung; subject `v` only | `GroupDigest` | `decide.punish` and `relent.punish` events; **`boundary: true`** for rung climbs | `changes` `punish\|group` | to build |
+| `wants(person, kind?)` (v0.6) | `yes` or `no`: the person holds an active goal, of that kind if given | `GoalsDigest` | the goal frames' `frame` changes | `changes` `goal\|<id>` | to build |
+| `guarded(person)` (v0.6) | `yes` or `no`: §7.10's `guarded` at the time | `GoalsDigest`, `where` | the guard goals' `frame` changes; **`boundary: true`**, because a post covers only some periods | the posts' windows and periods | to build |
+| `holds(who, item)` (v0.6) | `yes` or `no` | `xf:held-by` edges | edges | the kernel's edge times | to build |
+
+### 9.1a State fillers for the story patterns (v0.6)
+
+The composite's matcher fills a pattern's **state** junctures from records, not from events ([pattern language §3.3](../composite/pattern-language.md#33-the-vocabulary-functions-links-and-relations)), and binds roles nothing has bound yet by a **bounded state query** that searches only along an index from an argument already bound ([§6.2a](../composite/pattern-language.md#62a-bounded-state-queries)). S1 registers each state filler it holds as a read with declared dependencies (S0 V4-51 leaves them to S1), with the arguments it can be searched from (`searchFrom`) and the Changes that make it true or false, so that matching stays incremental. Searches list candidates in record `Id` order, as the composite requires.
+
+| Function | S1's filler | `searchFrom`: the index | Changes that signal it | M3 |
+|---|---|---|---|---|
+| `hold(who, what)` | an `xf:held-by` edge (§4.9) | the holder's or the item's edges | `edge` changes | built with v0.6 |
+| `want(who, what)` | an active or blocked goal frame aimed at `what` (§7.10), or a seed's goal frame; a group's active intention and its object | from `who`: the kernel's frames by actor, the `GroupDigest` intention; from `what`: `GoalsDigest.byTarget` | `frame` changes (S0 V4-53); `decide.*` and `relent.*` events | v0.6 |
+| `pursue(who, target)` | an active goal frame (§7.10); a group's active intention (`collect-fee`, `retaliate`, `protect-members`, `punish`) and its object | as `want` | as `want` | v0.6 |
+| `protect(guard, ward)` | a guard goal with a post (§7.10); a group's `protect-members` and its ward; a membership whose group holds `protect-members` | from the guard: its goals; from the ward: `GoalsDigest.wards`, then `groupOf(ward)` | `frame` changes; `decide.protect-members`, `relent.protect-members` | v0.6 (`protected(node)` of §9.1 stays phase 2) |
+| `threaten(by, to)` | a goal frame whose effects include `harm`, `kill`, `take` or `expose` on `to` | from `by`: its frames; from `to`: `GoalsDigest.byTarget` | `frame` changes | v0.6 |
+| `obligate(debtor, creditor)` | an open `collect` goal (§7.10); a membership (debtor the member, creditor the group); a norm whose sector holds the debtor and whose enforcer is the creditor's group (the Friday fee) | from either: the goals by owner or target; `groupOf(debtor)`; the norms of the debtor's district | `frame` changes; edge changes for mirrored members | v0.6; contracts phase 2 |
+| `blame(who, of, for)` | a memorable belief of `who` whose value names `of` as the actor of `for`: a person's `did.*` belief, or a group's grievance (§8.9) | from `who`: the kernel's beliefs by believer | `belief` changes (S0 V4-52) | v0.6 |
+| `conceal(who, what, from)` | a divergence: `from`'s memorable belief differs from what `who` knows | from `who` or `from`: beliefs by believer | `belief` changes | as before |
+| `member(who, group)`, `leads(who, group)` | `groupOf` (§4.8); `xf:leads` | from `who`: one read; from `group`: its known members (§4.8) | edge changes; residents' membership never changes in M3 | v0.6 |
+| `tied(a, b)` | the tie function and materialised `xf:tie` edges | from either: the materialised edges, then the household | edge changes | built |
+| `befall(who)` (as a state) | a `health` spell in state ill (§4.2) | from `who` | none: evaluated when a search asks | built |
+| `compete(a, b)` | label transitions in one audience | from either | `label-<axis>` pins | built |
+| the `want` of a norm's non-complier | §7.5's `complies` false for the resident | from the resident | none: evaluated when a search asks | built |
+
+A filler whose row says "none" is never the reason a juncture becomes true on its own: it is checked only when another Change makes the juncture ready.
 
 The names of the four heat bands are S1's registry strings. S2's text ("quiet, simmering, hot") is an example, and S2 treats band names as registered strings (§16, S2-1).
 
 ### 9.2 Registries for S3
 
-- **`producers(kind)`** and `eventKind(name) → { tags, producers }`: the event-kind registry of §5, with each kind's producers (process ids, policy names, `s2`, `port`). A pattern naming a kind that nothing produces is refused by S3 at load.
+- **`producers(kind)`** and `eventKind(name) → { tags, producers, roles, fills, outcomes, agentRoles }` (the last four from v0.6): the event-kind registry of §5, with each kind's producers (process ids, policy names, `s2`, `port`) and what it fills (§5.2a). A pattern naming a kind that nothing produces is refused by S3 at load. A pattern needs no kind names at all: it finds every kind that fills a function from the `fills`.
 - **`isSpine(node)`** (§4.4).
 - **`aesthetic(node, feature)`**: `undefined` for every feature in M3. S3's `T_aes` is then 0.
 - S1's policies ignore `meta:` kinds (S3-I-14).
@@ -1562,11 +2084,11 @@ The names of the four heat bands are S1's registry strings. S2's text ("quiet, s
 
 ### 9.4 Publication lag, and what S7, P8, P9 and P10 read
 
-**Publication lag.** Every process declares its `lag` (§7.0): an occurrence of window `w` is published by the boundary that ends window `w + lag`. With one-window runs, `city.events`, `order.norms`, `order.stocks`, `order.ledger` and `group.decide` publish what they mint at the end of its own window (lag 0). The mirror derives from raw events applied at the start of its window, which were stamped in the window before (S0 §9.4 step 2), so its lag is one window. `scene.acts` opens the window before the one it runs in, so its lag is one window. **The longest declared lag is one window.** [S3 §6.1](procedural.md) holds emissions in a chronological buffer whose horizon is the current boundary less that lag, so a mirrored event with an earlier time is released before a simulated one with a later time that was published first. Late operations (`late-raw`) and events stamped earlier than the lag allows are defects, and are published when found.
+**Publication lag.** Every process declares its `lag` (§7.0): an occurrence of window `w` is published by the boundary that ends window `w + lag`. With one-window runs, `city.events` (goal acts included), `order.norms`, `order.stocks`, `order.ledger` and `group.decide` (its decisions, relents and successions included) publish what they mint at the end of its own window (lag 0); `people.goals` mints no events, only frame operations (lag 0). The mirror derives from raw events applied at the start of its window, which were stamped in the window before (S0 §9.4 step 2), so its lag is one window. `scene.acts` opens the window before the one it runs in, and dates an encounter in it, so its lag is one window. **The longest declared lag is one window.** [S3 §6.1](procedural.md) holds emissions in a chronological buffer whose horizon is the current boundary less that lag, so a mirrored event with an earlier time is released before a simulated one with a later time that was published first. Late operations (`late-raw`) and events stamped earlier than the lag allows are defects, and are published when found.
 
 - **S7: perspective reads.** Read-only views over the belief and event records: `commonGround(a, b)`; `witnessed(a)` and `told(a)` (the `Id`s of events behind `observed` and `told` beliefs of `a`), so that text is limited to what a speaker could know; `reportability(kind)` (`{ frequency: p_kind, welfare: severity }`). Every event keeps `causes`, `served`, `witnesses`, `place` and `outcome`.
 - **P8: realisation candidates.** `candidates(kind, place, period)` returns the matching `RealisationRow` (§5.5) with a cause on each; the default is `none`.
-- **P9 and P10: the evidence.** The decision log (§2.3); the pattern register (§14.3); per-process counters (`EventsState.counters`, calendar sizes, ring size, units used per run); and the **why chain** `why(event)`: the cause chain of a minted event, by `causes` and the descriptors' `chain`, to an immigrant or an authored cause in **at most `genMax` (4) links**. Ancestors older than the ring are returned as `Id`s only, marked `beyondRing`.
+- **P9 and P10: the evidence.** The decision log (§2.3); the pattern register (§14.3); per-process counters (`EventsState.counters`, calendar sizes, ring size, units used per run); and the **why chain** `why(event)`: the cause chain of a minted event, by `causes` and the descriptors' `chain`, to an immigrant or an authored cause in **at most `genMax` (4) links**. Ancestors older than the ring are returned as `Id`s only, marked `beyondRing`. From v0.6 a goal act is an immigrant whose `why` adds one more step, its reason: the goal it `served`, and that goal's source (the wrong, the debt, the decision, the seed's role), which has a chain of its own.
 
 ### 9.5 What S1 reads from S2 and S3
 
@@ -1582,6 +2104,13 @@ The roots are V, the director and live seeds. A root's focus reaches a node at a
 
 **Demand never changes a coarse process's output** (S1-I-5): no process of tier 0 to 2 reads demand, V's position or `gameOwnedNow`. The invariant is stated against **identical external observations and actions**. What V notices (an `observed` pin) and what V does are external operations, and they change the protected set and the beliefs, as they should. Merely opening more detail changes none of them: opening an item writes nothing a coarse process reads.
 
+**Coarse-readable inputs** (v0.6). Goals, grievances and leaders made the rule worth stating once. A process of tier 0 to 2, and a policy that writes the S1 record for one, reads events and beliefs only from:
+- the feeds of tier 0 to 2 processes and of the mirror (`city.events` facts, goal acts included; `city.mirror` facts; `order.norms` facts);
+- external operations: V's acts, the game's readings and raw events, seed operations (casts, a seed's events, its authored beliefs and goal frames), observations (`observed` pins);
+- the S1 record entries that policies write from these alone (`dirty`, `grudges`, `roleGoals`).
+
+It never reads an item `scene.acts` published, a `confront`, a telling S1's `social` policy minted, or a belief S1 formed for a focal witness: each of those exists because demand reached somewhere. An audit checks the declared read sets (§12).
+
 ### 10.2 Catch-up and the city's reply to V
 
 After an absence the coarse tiers replay every missed boundary in order, each within the hard limits, and read no demand. **When the work exceeds the budget, S1 lags and does not change a period.** The kernel stops between boundaries and resumes, and reads during catch-up answer as of the last processed boundary, flagged `catchingUp`. A jump reads the game's clock and is a session input, never a draw key. V's act at time `t` in window `k` is applied at boundary `k + 1`, processed in window `k + 1`, and its earliest child is due at `k + 2`: more than one and less than three windows after `t`.
@@ -1590,9 +2119,9 @@ After an absence the coarse tiers replay every missed boundary in order, each wi
 
 ### 10.3 Budgets
 
-These are **targets for P7**, not measurements. The first implementation is the TypeScript reference model; hot loops may move to the native core through `bun:ffi` after measuring, with the TypeScript version as the oracle (D-05, D-06). Every figure is **[tunable]**. A window boundary for all S1 processes, whole city, steady state: 1 ms native, 20 ms in TypeScript; with nothing due: 0.2 ms and 5 ms. Catch-up of one game night (144 windows): 150 ms and 3 s; of 30 game days: 4 s and 60 s. Opening a scene (one cell, up to 60 persons): 5 ms and 50 ms. `aggregate`, cached: 20 µs and 200 µs. `tie(a, b)`: 50 allowance units; `neighbours`: a hard cap of 5,000 units; S1's share of one window run: 4,000 units. World index load: 300 ms and 1 s; replay from the nearest snapshot on load: 1 s and 10 s.
+These are **targets for P7**, not measurements. The first implementation is the TypeScript reference model; hot loops may move to the native core through `bun:ffi` after measuring, with the TypeScript version as the oracle (D-05, D-06). Every figure is **[tunable]**. A window boundary for all S1 processes, whole city, steady state: 1 ms native, 20 ms in TypeScript; with nothing due: 0.2 ms and 5 ms. Catch-up of one game night (144 windows): 150 ms and 3 s; of 30 game days: 4 s and 60 s. Opening a scene (one cell, up to 60 persons): 5 ms and 50 ms. `aggregate`, cached: 20 µs and 200 µs. `tie(a, b)`: 50 allowance units; `neighbours`: a hard cap of 5,000 units; S1's share of one window run: 4,000 units. World index load: 300 ms and 1 s; replay from the nearest snapshot on load: 1 s and 10 s. (v0.6) `people.goals`, a window with 32 goals in a district: 0.2 ms and 5 ms; the goal-act candidates of `city.events`: at most one test per active goal per window, each two or three `where` evaluations (cached by revision and time); seat and duty draws: at most 24 attempts each, only when a seat falls vacant or an intention starts; grievances: one policy run per act of V's.
 
-Memory and size: S1 resident set, native / TypeScript, 24 MB / 120 MB; the pending calendar a fault limit of 256 per district (about 10 in steady state); the ring seven game days and 5 MB; at most 300 open persons, each with at most 40 memorable beliefs; at most 32 ledger items per (subject, axis, carrier); about 10 Changes per game hour from `city.events` and about 10 more social ones outside focus; S1's part of a save at most 2 MB, growing at most 100 KB per game day of continuous play.
+Memory and size: S1 resident set, native / TypeScript, 24 MB / 120 MB; the pending calendar a fault limit of 256 per district (about 10 in steady state); the ring seven game days and 5 MB; at most 300 open persons, each with at most 40 memorable beliefs; at most 32 ledger items per (subject, axis, carrier); (v0.6) at most 32 S1 goals and 4 goal acts a window per district, 2 goals per person, 8 grievances per group; about 10 Changes per game hour from `city.events` and about 10 more social ones outside focus; S1's part of a save at most 2 MB, growing at most 100 KB per game day of continuous play.
 
 ## 11. Persistence and reload
 
@@ -1601,11 +2130,11 @@ Memory and size: S1 resident set, native / TypeScript, 24 MB / 120 MB; the pendi
 | Persisted | Regenerates, identically |
 |---|---|
 | `ProcessState` of each process (§7), with its last digest and its outstanding batch | Residents, households, spells, traits, names, the recipe |
-| The S1 record: absorbed origins, dirty list, divergence log, soft exclusions, the decision log | Implicit ties, routines, `where`, `presentAt`, the cast of any occurrence |
-| State pins on temporal slots, and `committed` or `observed` pins | Pressures; strength of a tie |
-| Materialised ties and memberships (edges); regard edges | Beliefs that are not memorable; the contributions of an opened item |
-| Memorable beliefs, **including every carrier's retained items** | Events that are not canon (re-minted from the ring); items of a summary, from its descriptor |
-| Frames of demand roots and live seeds, with ancestors (S0 §7.3) | Frames of everyone else |
+| The S1 record: absorbed origins, dirty list, divergence log, soft exclusions, the decision log, and (v0.6) `roleGoals` and `grudges` | Implicit ties, routines, `where` (posts read from the persisted `people.goals` state), `presentAt`, the cast of any occurrence |
+| State pins on temporal slots, and `committed` or `observed` pins | Pressures; strength of a tie; a resident's membership (§4.8) |
+| Materialised ties and memberships (edges); regard edges; (v0.6) `xf:leads` and `xf:held-by` edges | Beliefs that are not memorable; the contributions of an opened item |
+| Memorable beliefs, **including every carrier's retained items** and (v0.6) every group's grievances | Events that are not canon (re-minted from the ring); items of a summary, from its descriptor; an occurrence's outcome (a keyed draw, §5.2a) |
+| Frames of demand roots and live seeds, with ancestors (S0 §7.3); (v0.6) the retained goal frames of `people.goals` (S0 V4-54) | Frames of everyone else |
 | `SettingsSet` ops in force; the lineage record's `sim` version pin (§1.4) | |
 
 **The retained dependency set.** Everything a pending or active thing needs in order to resume is enumerated here. Nothing depends on a record that §7.2's ring may drop.
@@ -1616,7 +2145,13 @@ Memory and size: S1 resident set, native / TypeScript, 24 MB / 120 MB; the pendi
 | A summary or event re-mint, `why`, heat | descriptor fields and per-item `meta` | the ring entry | seven days |
 | An opened item | its descriptor, from the ring entry; its cast, a pure function of the descriptor and recorded history (§5.4) | `ActsState.published` (`item`, `w`, `cell`) | 512 items, and while the ring holds it |
 | A carrier's item | the belief, and the canonical origin | the carrier's memorable beliefs; `S1Record.absorbed` | ledger eviction |
-| A group's intention | pressures, books, the intention state | `GroupState` (plain data; no frame) | its end |
+| A group's intention | pressures, books, the intention state; (v0.6) its decision event, ward, wrongdoer, rung, grounds and warnings | `GroupState` (plain data; no frame); the events it names are referenced, so kept with their facts (S0 §14.1, v4.15) | its end |
+| A seat (v0.6) | its holder, `since`, `succ`, lean | `GroupState.seats`; the `xf:leads` edge | the holder leaves |
+| A goal (v0.6) | its record; its frame; its post | `GoalsState` (plain data); the retained frame (S0 V4-54); `GoalsState.posts`, kept a week after the post ends | its end, and a week more for the post |
+| A goal act's re-mint (v0.6) | its descriptor with `fixed`, `served`, `causes`, `punish` | the ring entry (`event` carries the whole `Descriptor`) | seven days |
+| A pending refusal (v0.6) | the event, the refuser, the window | `NormSlots.pending` | answered, or a day |
+| A grievance (v0.6) | the belief and the act it rests on | the group's memorable beliefs; the act event, referenced by the belief's evidence | the bound of 8 |
+| An encounter's spacing (v0.6) | the window of the intention's last confront | `ActsState.confronts` | the intention ends |
 | R1's and a mirrored canon person's frames | the frame, its ancestors, the nodes in its focus | the kernel's retention roots (S0 §7.3) | the frame closes |
 | A norm's signal | the event, value and first window | `NormsState` | its memory ends |
 | A decision that read a belief | **memorable beliefs only** (§8.3) | the kernel | |
@@ -1629,13 +2164,21 @@ Memory and size: S1 resident set, native / TypeScript, 24 MB / 120 MB; the pendi
 
 **Twin runs** compare coarse against fine for each process's `coarseFine`, over at least 20 world seeds and several vantage pairs (S23-P9-06).
 
+**The three persistence principles** (v0.6, [S0 §14.1](kernel.md#141-what-is-persisted), v4.16) hold for everything v0.6 adds:
+- **The save chain is append-only truth.** Goal, seat, intention and refusal state is plain data in `ProcessState`, written with every save; edges (`xf:leads`, `xf:held-by`) and retained goal frames are kernel records whose every change a save writes; grievances are memorable beliefs.
+- **Recovery is replay.** Nothing new has a separate route back. A retained goal frame is restored by replaying its `FrameState` records, never re-opened, so a reload produces no `frame` change and no second relevance; an ended seat's edge is history replayed like any edge; an outcome is a keyed draw and comes back as the same value.
+- **A sweep drops only what recovery restores exactly.** A goal frame is a root while it is active or blocked, so no sweep touches it; once ended it is kept while an act's `served` refers to it, and after that recovery can restore it from its saved records. A post outlives its goal by a week so that re-casting anything the ring can still re-mint finds it (§4.5).
+
 ## 12. The honesty audits
 
 Static audits run at every build, over S1's registry, its declared read sets, its schema and its packs. They report to P9. Each has a fixture (SF1-Q-n). Zero findings is the pass.
 
 | Audit | Checks |
 |---|---|
-| **V-exclusion** | No S1 function emits a harmful effect (`harm`, `kill`, `take`, `expose`) or a victim or target role naming V; the gate backs it at run time (§6). No S1 function writes a pin, contribution or belief on a drive of V, or any slot of `v` except through the mirror |
+| **V-exclusion** | No S1 function emits a harmful effect (`harm`, `kill`, `take`, `expose`) or a victim or target role naming V; the gate backs it at run time (§6). No S1 function writes a pin, contribution or belief on a drive of V, or any slot of `v` except through the mirror. (v0.6) The only S1 functions that put `v` in a protagonist-object role (`warned`, `sought`, `confronted`) are `city.events`' goal acts for `punish` duties and `scene.acts`' encounters, and each sets `punish` on its occurrence; no S1 goal frame carries an effect on V other than `meet` |
+| **D-30 grounds** (v0.6) | `group.decide` starts `punish` only from a `retribution-v` pulse whose `src` is a held grievance; `grievance` forms a grievance only from an act of V's in the record and, for a told one, from a belief whose source event was created by the port, the mirror or a seed; no seed or director operation writes `punish` state (a lint over S2's and S3's write sets) |
+| **Coarse-readable inputs** (v0.6) | The declared read sets of every process of tier 0 to 2, and of `absorb`, `grievance` and `seedGoals`, name only the inputs of §10.1: no `scene.acts` item or encounter, no `social` telling, no belief formed for a focal witness |
+| **Goals act through production** (v0.6) | Every event with a `served` that names an S1 or seed goal frame was minted by `city.events` (or, for a `confront`, `scene.acts`); no policy and no seed mints an act for a goal |
 | **Firewall** | The declared read set of every S1 registry function excludes the director's beliefs about V and any orientation or bond evidence ([S12-P5-11](../craft/d12-player-model-trust.md)) |
 | **No load reads** | No S1 function reads the load class, a load count, the epoch, the play clock or the wall clock |
 | **Coarse independence** | No process of tier 0 to 2 reads `gameOwnedNow`, V's position, V's cell, or demand |
@@ -1643,7 +2186,7 @@ Static audits run at every build, over S1's registry, its declared read sets, it
 | **Source lint** | Attributes that feed any decision come only from affiliation shares, ethos, circumstance and spells. Heritage, gender and name origin are never inputs ([DRV-11](../craft/d01-motivation-drives.md); [S15-S1-06](../craft/d15-people-networks-order.md)). The audit lists every slot a derive reads |
 | **Schema order** | Every derive input, conditioned input, `enum-by` input, rule predicate and field base in `xf.core.world@1` reads only an earlier slot of its node or its owner chain (S0 §2.3). A failure refuses the schema |
 | **Kind listings** | Every event kind has producers, a carrier, a duration and a content-class listing (§5.1) |
-| **One writer, one admission owner** | No two processes write one (node, slot), mint one node family or write one edge type (§2.1). Only `city.events` changes `admit` state; the gate holds none |
+| **One writer, one admission owner** | No two processes write one (node, slot), mint one node family or write one edge type (§2.1): from v0.6, `xf:leads` is `group.decide`'s, `xf:held-by` is `city.events`', and each retained goal frame is `people.goals`' alone (`reconcile` leaves them, §8.8). Only `city.events` changes `admit` state; the gate holds none |
 | **Feeds** | Every read of a feed has a cursor in the reader's state; no state view is used as an event source (§2.2) |
 | **Keys** | Every draw is in the key registry (§1.5); none names the epoch, a load count or a clock |
 | **Arithmetic** | No `exp`, `pow`, `Math.log`, gamma or fused multiply-add in any decision. Only the functions of §1.2, with the table hashes of §1.2 |
@@ -1652,7 +2195,7 @@ Static audits run at every build, over S1's registry, its declared read sets, it
 
 ## 13. Invariants
 
-These are S1's own, beside the kernel's I-1 to I-16. **The kernel requirements K-1 to K-8 are supplied by S0 v4.10 (V4-39 to V4-46)** (§16.1).
+These are S1's own, beside the kernel's I-1 to I-16. **The kernel requirements K-1 to K-8 are supplied by S0 v4.10 (V4-39 to V4-46), N-1 to N-3 by S0 v4.11 (V4-47 to V4-49), and v0.6's needs by S0 v4.17 (V4-50 to V4-55)** (§16.1).
 
 | # | Invariant |
 |---|---|
@@ -1663,7 +2206,7 @@ These are S1's own, beside the kernel's I-1 to I-16. **The kernel requirements K
 | S1-I-5 | **Demand independence.** Given identical external observations and actions (readings, `observed` pins, V's acts, settings), the output of every process of tier 0 to 2 is the same whatever V's position, V's attention and the demand history. Opening more detail is not an observation and writes nothing a coarse process reads |
 | S1-I-6 | **One window, no two see each other.** Every process computes one window. A process reads other processes only through digests as of the snapshot, and never its own output within the run. No window is computed under an input that arrived after the run started |
 | S1-I-7 | **One writer.** Each state slot, node family and edge type has one writer. Production budgets are state of one process |
-| S1-I-8 | **V is never aimed at, never modelled.** No S1 output names V as a harmed party; no S1 state holds a model of V's feelings, desire or drives. The gate backs it |
+| S1-I-8 | **V is never harmed by S1 and never modelled; the city aims at V only under D-30** (v0.6, replacing "V is never aimed at"). No S1 output puts a harmful effect on V or binds V to a victim or target role. The only S1 occurrences whose object is V are the acts of a `punish` intention: it starts only from its group's held grievance, which rests on an act of V's in the record; its first act is a warning; nothing but that warning happens until a warning of it carries an `observed` pin; its highest rung is set by `tempo`, and it produces nothing at `off`. No S1 state holds a model of V's feelings, desires or drives. The gate backs it |
 | S1-I-9 | **One door, one owner.** Every new occurrence the simulation produces passes `produce`, which is stateless. Every size-2-and-above occurrence and size-4 regime is admitted by `city.events`, in `(time, Id)` order, against persisted budgets. Mirrored and replayed events are exempt and never re-filtered; lifecycle notices consume no budget |
 | S1-I-10 | **Counts agree.** A summary's count equals its items at its scope; opening an item adds nothing to any count. Every occurrence has one descriptor, and its identity, time and place are the ones the kernel reports |
 | S1-I-11 | **Causes precede effects.** A child is born in a **later window** than its parent and later in time; it can be less than `W` later. A derived mirror event has the time of its raw cause. Generations are capped, so every cause chain reaches an immigrant or an authored cause in at most `genMax` (4) links |
@@ -1684,6 +2227,12 @@ These are S1's own, beside the kernel's I-1 to I-16. **The kernel requirements K
 | S1-I-26 | **Feeds are consumed once.** A consumer reads a feed's windows after its cursor, in order; a state view is never an event source |
 | S1-I-27 | **Transitions.** A state pin takes effect at the boundary that applies it, and every registered read publishes timestamped value transitions with the initial value |
 | S1-I-28 | **One version.** The simulation data, tables and index of a lineage are pinned and never change inside it |
+| S1-I-29 | **Goals act through the simulation** (v0.6). Every act that serves a goal, S1's or a seed's, is an occurrence `city.events` drew through the goal-act rate, cast, gated and admitted (an encounter: `scene.acts`, gated). No seed, policy or other process mints one |
+| S1-I-30 | **Goals are grounded and bounded.** Every S1 goal has a recorded, coarse-readable source; its owner can own goals (§7.10); it is never `v`'s; at most 2 per person and 32 per district; a person a live seed casts holds only the seed's goal; no duty orders a member against someone tied to them at layer 1 |
+| S1-I-31 | **Leadership is state.** Each seat has at most one holder, a living adult member; holders change only by removal and succession, each recorded (an ended `xf:leads` edge, a `succession` event); no intention starts while the head's seat is vacant or in interregnum; every intention's start is a `decide.*` event naming its decider |
+| S1-I-32 | **Outcomes are keyed and honest.** An occurrence's outcome is a pure function of its `Id` and of recorded history as of its time; what it fills and what it effects follow its outcome; a refused or prevented occurrence takes and harms nothing |
+| S1-I-33 | **Refusals answer back.** A public refusal of a norm's demand that is not answered by an enforcement of that norm on the refuser within `sanctionWindow` sets a refusal signal; a private one sets nothing |
+| S1-I-34 | **Posts are history.** A post is decided before the window it covers and never revised, and is kept a week after it ends, so `where` and every cast that reads it answer the same whichever later digest they read |
 
 ## 14. Fixtures
 
@@ -1736,6 +2285,20 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 | SF1-I-15 | **The mean is bounded.** `cityScale` 5, a live `festival` and `crackdown` in one district, an m4 `disorder` parent | The unclamped mean `0.6 × 5 × 2.6 = 7.8` is clamped to `nMax = 0.85` and logged `n-clamped`. Over 1,000 cascades from one m4 root no chain exceeds 4 links |
 | SF1-I-16 | **One descriptor.** A size-3 parent with a child of size 1, and one of size 2; a size-1 parent with a child of size 1 | The size-1 children are items of the cell summary of their due window, with the kernel's `Id`, time (`item-t`) and place (the cell) and a `meta` parent link; the size-2 child is an event with `Id` `H("mint", proc, parent, "child/<index>")`, whatever the parent's size. For every one the descriptor's `id`, `time` and `cell` equal those the kernel reports on materialising it |
 
+| SF1-I-17 | **Items and holders** (v0.6, S1-4). A seed mints item `i` with `xf:held-by` to resident `h`; a role goal of resident `o` with `take` on `i` produces a `theft` goal act, `item = i`, victim `h`; then the same with outcome `prevented`; then a theft of an item `v` holds | `done`: the edge to `h` ends at the act's time and one to `o` starts, both with the act as cause; `holds(h, i)` is `no` after and `holds(o, i)` `yes`. `prevented`: no edge changes. The last is refused `v-target` and never produced |
+
+**Kinds, fills and outcomes (SF1-K, SF1-F)** (v0.6).
+
+| # | Setup | Expected |
+|---|---|---|
+| SF1-K-1 | **The fills lint.** The registry as shipped; then a pack whose `shakedown` fill names a role `collector` it lacks; one whose fill names a function the vocabulary lacks; one whose kind lets `v` be `victim` | The shipped registry loads with zero findings; each of the three is refused at load with the kind named |
+| SF1-K-2 | **Fills follow the outcome.** A size-2 `shakedown` with outcome `done`, `failed`, `prevented`; a `police-action` patrol with no victim; a `disorder` | `done`: `demand`, `comply`, `transfer`, `wrong`. `failed`: `demand`, `refuse` only. `prevented`: `demand`, `refuse`, `protect(guard, victim)` with the guard a participant. The patrol: `wrong(by: responder, to: target)` and no `protect`. The disorder: nothing |
+| SF1-K-3 | **One occurrence, one meaning.** A `game.death` and its derived `assault` | The raw event fills nothing; the derived one fills `wrong(by: aggressor, to: victim)` |
+| SF1-F-1 | **The outcome draw.** A `shakedown`, victim a non-complying GB member, aggressor a GA member (hostile): unguarded; then guarded; then a complying civilian victim | Unguarded: `pRefuse = 0.35 + 0.3 = 0.65`: `failed` exactly when `rand("outcome", occ) < 0.65`. Guarded: `prevented` for `u < 0.7`, `failed` for `0.7 ≤ u < 0.895`, `done` above (0.7, 0.195, 0.105). Complying civilian: `pRefuse = 0.03` |
+| SF1-F-2 | **Outcomes reproduce.** An admitted size-2 shakedown, re-minted from the ring after a reload; a size-1 shakedown item opened one window late, after the `compliers` mask changed in between, then reinstalled after a reload | The re-mint restates the descriptor's `outcome`. The item's outcome uses the mask in force in its own window, and the reinstalled contributions carry the same outcome. No draw is repeated with a different input |
+| SF1-F-3 | **Books count refusals.** `beh = 0.875` | `refusalShare = 0.125 × 0.35 + 0.875 × 0.03 = 0.07`, so a window's lump sum is `0.93` of v0.5's; a `done` collector goal act adds `perShakedown`; a `failed` one adds nothing |
+| SF1-F-4 | **A refusal harms no one.** A `failed` shakedown of a protected victim; a `prevented` theft | The shakedown is still refused by the gate (`protected`: a victim role); the theft carries `protect` on the victim and no `take`; neither moves an item |
+
 **The mirror (SF1-M).**
 
 | # | Setup | Expected |
@@ -1776,6 +2339,9 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 | SF1-N-5 | **The endpoints.** `beh = perc = 0`, then `beh = perc = 1`, no signal | Zero compliance is absorbing: `beh` and `perc` stay 0. Full compliance stays 1. Verified before any tuning |
 | SF1-N-6 | **Each signal once.** One external public event found in window `w`, and still in the query range at `w + 1`; one own public event minted in `w`; two public events in one window | The external event acts from `w` with `φ = 0.6`, then 0.1, and is taken once (`seen`); the own event's signal acts from `w + 1`; of two in one window the later by `(time, Id)` replaces the earlier |
 | SF1-N-7 | **Types.** 10,000 residents; an enforcement event | Type shares within sampling error of 1/8; the target of an enforcement event is a non-complier by the `qe`, `qn` of its ring entry, and re-minting it from that entry gives the same cast |
+| SF1-N-8 | **A refusal left unanswered** (v0.6, S1-8). `fee` at `beh = 0.875`, `perc = 0.85`, `vis = 0.5` (so `qn = 0.71`); one public refusal (a `shakedown` with outcome `failed`, 6 witnesses at a public cell) taken at window `w`, and no enforcement of its refuser before `w + 144` | At `w + 144` the entry is dropped and a refusal signal of 0.2 acts with `φ = 0.6`. The four passes give `qe` = 0.47, 0.37, 0.32, 0.27 and `beh` = 0.625, 0.5, 0.375, 0.375; then `perc = 0.85 + 0.058 × (0.27 − 0.85) = 0.81636`. Logged `refusal-signal`. `pub` is unchanged |
+| SF1-N-9 | **A refusal answered.** As SF1-N-8, with the refusal pending | Enforcement `μ = 0.0026042 + 2 × (600 / 86400) × 1 = 0.0164931` for the window; the next enforcement event's target is the refuser (whatever their affiliation); with outcome `done` the entry is dropped (`refusal-answered`) and no refusal signal is ever set; with outcome `prevented` (the refuser guarded) it stays pending |
+| SF1-N-10 | **Private refusals and loose discipline.** A refusal with 3 witnesses; and SF1-N-8's refusal while the enforcer group is in interregnum | The private one is never pending and changes nothing. In interregnum the whole `μ` is halved, so a public refusal is less often answered within its day |
 | SF1-O-1 | **Each row once.** One public enforcement fact, one answered incident, one unanswered public incident, one m2 shakedown, produced in window `w` | The facts are consumed in the window the cursor passes them and applied once; later windows apply none; a save between production and consumption neither drops nor repeats them |
 | SF1-O-2 | **Retention.** No events for 30 game days | `E`, `Y`, `L` stay at their baselines; after a +0.01 shock `E` decays back with factor 0.9966 a window |
 | SF1-O-3 | **Bounds and partition.** A soak of 100 game days, in one call and in many | Stocks in 0 to 1; identical histories |
@@ -1793,12 +2359,50 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 
 | # | Setup | Expected |
 |---|---|---|
-| SF1-G-1 | **Operative weights.** The Claws' four drives, ethos treasury 2, retribution 1, reputation 1.5, cohesion 1, `U = 0.2` for all | `ethosN(treasury) = 0.363636`; `W(treasury) = 0.5 × 0.363636 + 0.5 × 0.25 = 0.306818`; `Σ W = 1`; divergence `D = 0.0681818` |
+| SF1-G-1 | **Operative weights** (v0.6: the leaders' term). The Claws' four drives, ethos treasury 2, retribution 1, reputation 1.5, cohesion 1, `U = 0.2` for all. (a) every seat vacant; (b) three seats held, leaning treasury (head), reputation and treasury | `ethosN(treasury) = 0.363636`, `Un = 0.25` each. (a) `leadN = ethosN`: `W` = 0.318182, 0.209091, 0.263636, 0.209091 (treasury, retribution, reputation, cohesion); `Σ W = 1`; `D = 0.0545455`. (b) `leadN` = 0.8, 0, 0.2, 0: `W` = 0.405455, 0.172727, 0.249091, 0.172727; `Σ W = 1`; `D = 0.0418182` |
 | SF1-G-2 | **Books.** `cash 9,000`, `burn 300`, `income 330` | Runway 30 days, treasury `U = 0`. With `income 0`, after 15 days `cash = 4,500`, runway 15, `U = 0.5` |
 | SF1-G-3 | **Retribution.** A victim fact of size 2 | Latched pulse `0.8 × 0.6 = 0.48`; held at `0.24` until released; released by a retaliating clash, not by time |
 | SF1-G-4 | **The hazard.** `h0 = 0.02`; a public harm | `hazard = 0.02 × 1.5 = 0.03`; the check draws `procRand(w, "retal", group, rival)` |
-| SF1-G-5 | **The intention lifecycle.** The Claws with `income 0`; then a Mox with a latched pulse of no rival; then a drive that falls | `collect-fee` starts in the first window whose `w(treasury) ≥ 0.35` (about day 8.3), is active from the next, publishes `shakedown +1.0` every window, expires 144 windows later (`done`), is absent from the next digest, then `cooling` for 72 windows, then `none`. The Mox's `retaliate` is not feasible: state `idle`, logged once, no boost. An intention whose drive falls below 0.20 ends `ended` and its boost is removed |
+| SF1-G-5 | **The intention lifecycle.** The Claws with `income 0` and the head's seat held (the leans of SF1-G-1 b, or any: treasury stays the largest `W`, so `w(treasury) = 0.1 + 0.9 U`); then a Mox with a latched pulse of no rival; then a drive that falls | `collect-fee` starts in the first window whose `w(treasury) ≥ 0.35` (about day 8.3), is active from the next, publishes `shakedown +1.0` every window, expires 144 windows later (`done`), is absent from the next digest, then `cooling` for 72 windows, then `none`. The Mox's `retaliate` is not feasible: state `idle`, logged once, no boost. An intention whose drive falls below 0.20 ends `ended` and its boost is removed |
 | SF1-G-6 | **Demand independence.** Two runs with different demand | Identical group state, digest and decisions; the process makes no call to `demanded` |
+| SF1-G-7 | **Pulses by function** (v0.6, S1-2). FX-3 with `A1 = GA`, `A2 = GB`, hostile. (a) A size-2 `shakedown` by a GA member of a GB member, outcome `done`. (b) An `enf.fee.beating` by a GA enforcer of a GB member. (c) A size-2 `assault` by a GA member of another GA member. (d) The same as (a) with outcome `failed`. (e) A size-2 `assault` by `v` on a GB member | (a) GB: `care_of_members` (`sev = 0.6 × 0.6 = 0.36`), a latched `retribution` with `rival` GA's class, `src` the fact; a `reputation` pulse only if public. (b) With the GB member a pending public refuser (so enforcement may target them, §7.5): the same pulses, `sev = 0.3 × 1 = 0.3` (an enforcement event has size 1, effect `harm`). (c) Nothing for GA: its own discipline. (d) Nothing: a refused shakedown fills no `wrong`. (e) GB's `care_of_members`, no `retribution` (V's acts reach GB through §8.9) |
+| SF1-G-8 | **Seats.** FX-3; draw both groups' seats at `t = 0`; reload; draw again in a fresh engine | Each holder is a living adult GA (or GB) member of profile role `gang`, aged 25 or more, in one seat only; an `xf:leads` edge each, cause the group node; identical after the reload and in the fresh engine; a seat with no eligible member after 24 attempts is vacant and logged `seat-vacant` |
+| SF1-G-9 | **Removal and succession.** GA with three seats, the head a mirrored person (`canonSeats`); a `game.death` of the head with a GB member as actor and 3 witnesses, whose derived size-2 `assault` with effect `kill` is consumed in the run of window `w₀`; later a size-2 `police-action` with outcome `done` and a lieutenant as `target`, consumed at `w₁` | At `w₀`: the head's edge ends (cause the fact); seat 1's holder is the head from `w₀ + 1`, with a `succession` event (`successor`, `late`); seat 1 is drawn in the run of `w₀ + 1` with `succ 1`, with its own `succession`; `interregnum.until = w₀ + 144`; no intention starts before it (logged `intent-leaderless` once); GA's `fee` enforcement `μ` is halved and its `assault` and `theft` boost is +0.3 until then. GA's `care_of_members` and `reputation` pulses use `leaderSev`: `sev = min(1, 0.6 × 1.5 × 1.5) = 1`, and a latched `retribution` names GB. At `w₁`: the lieutenant leaves the seat (an arrest), a `succession` with `predecessor`; no interregnum |
+| SF1-G-10 | **Decisions are events.** SF1-G-5's `collect-fee` | One `decide.collect-fee` at its start window: participants `group`, `decider` (the holder of the lowest seat leaning `treasury`, else the head), no `object`; the intention's `id` is its `Id`; one `relent.collect-fee` at its end, cause the decision; both pass the gate and are counted by no budget |
+| SF1-G-11 | **Visible protection** (S1-7). The Mox, a GB member `m` harmed at size 2 by a GA member `x`; `protect-members` starts | `ward = m`, `wrongdoer = x`; `people.goals` gives one `guard` duty to a GB member with a post at `m`'s work cell in `m`'s work periods; a `presence` event (guard, ward `m`, effect `protect`) at most once a game day while both are there; while the guard is posted and `m` present, `guarded(m)` is yes |
+| SF1-G-12 | **Retaliation aimed at the wrongdoer.** SF1-G-11's harm with a GB `retaliate` instead | One `strike` duty with target `x`, posted at `x`'s work cell; any `assault` it produces has `x` as victim, `served` the strike's frame, `causes` the decision; a `wrong(by: striker, to: x)` with outcome `done` ends the duty `satisfied` and releases GB's latched retribution toward GA |
+
+**Goals (SF1-Y)** (v0.6). FX-3 with `A1 = GA`, `A2 = GB`, hostile, unless a row says otherwise.
+
+| # | Setup | Expected |
+|---|---|---|
+| SF1-Y-1 | **Redress opens.** A size-2 `assault`, outcome `done`, by resident `x` on resident `y`; then the same with `v` as aggressor; with `aggressor-group` instead of a person; with `y` cast by a live seed; and a size-1 `assault` item opened at the fine tier | A `redress` goal, owner `y`, target `x`, `acts ['assault']`, motive `q64(0.6 × 1) = 0.59375`, expires 2,016 windows after it opens; its frame is opened retained (focus tier 0, actor `y`, payload `harm` on `x`), heard as a `frame` change `none → active`. With `v`, a group, or the item: no goal. With `y` cast: the first member of `y`'s household by member index who can own a goal is the owner |
+| SF1-Y-2 | **The goal-act rate.** `y`'s goal with motive 0.75 (48/64), at a window starting Wednesday 22:00, no regime, coverage 0: `y` and `x` in one cell; then in different cells | Co-present: `μ = 2 × 0.75 × 1.1375 × 1 × 1 × (600 / 86400) = 0.0118490` (`shape(assault, Wed 22:00) = 1.17 / 1.0285714`), and an act exactly when `spacingCount(μ, …, 1) = 1`. Apart: no candidate and no draw. Never two acts in one window, nor two in a day |
+| SF1-Y-3 | **The act.** One admitted goal act of SF1-Y-2 | An `assault` event: `aggressor y`, `victim x` (both fixed), `served` the goal's frame, `causes` the source assault, generation 0, in the `facts` feed with its `goal` and not in `counts`; its outcome drawn; with `done` the goal ends `satisfied` and its frame is `satisfied` with the act as cause |
+| SF1-Y-4 | **Caps.** Three sources for one person; 33 for one district | The third replaces the lowest-motive goal if stronger, else is not opened; likewise the 33rd; each logged `goal-cap`. Role goals are counted by neither cap |
+| SF1-Y-5 | **A seed's goal acts through the city** (S1-3). A live seed's role goal frame on cast resident `o`: `take` on item `i` held by `h`; then one with `harm` on `v`; then the seed ends | `seedGoals` records the frame; `people.goals` holds a `role` goal with `acts ['theft']`, motive the frame's weight; a `theft` comes only from `city.events`' goal-act rate when `o` and `h` share a cell, and S1 never changes the seed's frame. The goal on `v` produces nothing. At the seed's end the role goal ends |
+| SF1-Y-6 | **A debt called in.** A seed's `favour`, giver `a`, receiver `b`, at `t₀` | A `collect` goal for `a` at `t₀ + 7` days (none if a `repair` between them came first). A `call-in` when they share a cell: `done` fills `repay` and `comply` and ends the goal `satisfied`; `failed` (when `rand("outcome", act) < 0.4`) fills `refuse` and `wrong(by: b, to: a)`, ends the goal `refused`, and opens `a`'s `redress` against `b` from the same fact |
+| SF1-Y-7 | **Blocking.** The owner of an active goal is cast by a seed; later the seed ends. A redress target whom V then meets | `owner-cast`: the frame `blocked`, the post ended, no act; back to `active`, with a new post, after the seed. `target-protected`: blocked while the observed pin holds, which is for good: a wish |
+| SF1-Y-8 | **Demand independence.** Two runs with V in different cells and different demand | Identical `people.goals` states, digests, goal frames and goal acts |
+| SF1-Y-9 | **Reload.** Save with three active goals and a post; load into a fresh engine under another epoch; run on; also run a forgetting sweep | No `frame` change on load; frames, posts and the next acts identical to the run without the save (S1-I-21); the sweep removes no active or blocked goal frame |
+| SF1-Y-10 | **Posts are history.** A guard posted at cell `c`, periods M and D, from window `w + 1`, ended at `w + 50`; an `assault` item at `c` in window `w + 3`, opened at `w + 4` and reinstalled at `w + 200` | `where(guard, t)` is `c` with cause `goal` in M and D of windows `w + 1` to `w + 49`, and its schedule's answer otherwise; the item's cast at `w + 4` and at `w + 200` is identical (the post is still in the digest's history) |
+| SF1-Y-11 | **Duty draws.** A `retaliate` against GA whose wrongdoer is GA member `x`; a `punish` of GA; a GA member tied at layer 1 to `x` and one with a materialised tie to `v` | Members drawn by `duty-b`/`duty-r` keyed by the decision, never seat holders; the strike is never given to `x`'s kin; the punish duties pass over the member tied to `v`; 24 failed attempts leave the slot unfilled, logged `duty-unfilled` |
+| SF1-Y-12 | **Carry-out goals end with their intention.** SF1-G-5's `collect-fee` | Two `collect` goals open in the window after the decision is published, each with a market post in M and D; collector `shakedown` acts there have `served` their frames and `causes` the decision; at the `relent` both end `intent-end` with it as cause |
+
+**Intentions against the protagonist (SF1-D)** (v0.6, [D-30](../decisions.md)). FX-3 with a market cell, `tempo` `restless` unless a row says otherwise. Where a row says "observed", the harness pins the event `observed` as S2 will (§16.2).
+
+| # | Setup | Expected |
+|---|---|---|
+| SF1-D-1 | **Grounds from an act.** A `game.death` of GA member `m` with actor `v`, 6 witnesses at a public cell, derived as a size-2 `assault` with effect `kill` | `grievance` sets GA's belief `against` (subject `v`, value the derived event's origin, `source` observed, confidence 0.9 since the dead was GA's), with `sev = q64(min(1, 0.6 × 1.5) × 0.9) = 0.8125`; a `belief` change `set`; a `grudges` entry; in the next GA run a latched `retribution-v` pulse with `src` the belief (`U` at once `0.8 × 0.8125 = 0.65`) |
+| SF1-D-2 | **Grounds from a telling.** A GA member's seed-authored memorable belief `did.take` about `v` whose evidence is a `response` of V's; the same with evidence holding no act of V's; the same formed by S1's own `social` telling | The first sets a told grievance (teller the member, evidence the member's, confidence `min(c, 0.9) × 0.8`); the second and third set nothing |
+| SF1-D-3 | **Start.** SF1-D-1 at `restless` | `punish` is feasible with hazard `0.02 × 1.5 × 1.5 = 0.045` a window; at its start a `decide.punish` (object `v`), rung 1, `expires` 1,009 windows on; one `warn` duty posted at the death's cell, periods D and E; its first goal act is a `warning` (warner, warned `v`), which the gate passes |
+| SF1-D-4 | **No climb unperceived.** SF1-D-3 run 1,200 windows with no observed pin; then again with the warning observed 20 windows after it is minted | Unperceived: rung 1 throughout, no `price`, `search` or `confront`; at `expires` it ends `expired` with a `relent.punish`. Observed: after `rungDwell` a climb is possible each window with chance `0.05 × 1.5 = 0.075`; rung 2's duties then open (a `price` warn and one `search`) |
+| SF1-D-5 | **Reach follows `tempo`.** SF1-D-1 at `off`, `calm`, `steady`; then a rung-3 intention when `tempo` drops to `calm`, and later to `off` | `off`: never starts. `calm`: never above rung 1. `steady`: never above rung 2. The drop to `calm`: rung 1 at the next run, the search duties `intent-end`. The drop to `off`: ends `setting` at the next run |
+| SF1-D-6 | **The gate** (§6 step 3). A `search` with `sought v` and no `punish`; one with `punish` but no observed warning; a `warning` naming an intention not active; a `confront` at rung 2; an `assault` with `v` as victim | `v-object`, `v-object`, `v-object`, `v-object`, `v-target`; nothing is produced |
+| SF1-D-7 | **An encounter.** Rung 3, the price observed, V's cell `c` at `startOf(k) − 1`, a `search` post at a cell of `adj1(c)` in window `k − 1` | A `confront` (confronters the posted searchers, `confronted v`, no effects, `punish` set) is minted exactly when `procRand(k, "confront", intent) < 0.25 × 1.5 = 0.375`, at most one in 144 windows; it is published once, has the `bridge-spawn` realisation row, and tier 0 to 2 states are identical with and without it |
+| SF1-D-8 | **Endings.** (a) A `response` of V's that fills `comply(who: v, to: warner)` with the `price` in its causes; (b) the teller of a told grievance has its authored belief revised away by a seed; (c) neither | (a) a `settled` grudge, the pulse released, the intention `paid`, a `relent.punish`; no new `punish` from that belief. (b) the grievance dropped (`cleared`), the intention ended `cleared`. (c) `expired` at `expires`. Each ends its duties `intent-end` and starts the 288-window cooling |
+| SF1-D-9 | **Never V's mind.** The audits over the shipped registry | No S1 state or read holds a value about V's feelings, desires or drives; `punish`'s and `grievance`'s declared read sets hold no `v.position`, `v.cell` (the encounter alone, at the fine tier, reads V's cell), demand or director belief |
+| SF1-D-10 | **Reload in the middle of a hunt.** SF1-D-4 (observed) saved at rung 2 with a climb due, reloaded under another epoch, play clock and wall clock | The same climb, duties, acts, encounters and end as without the reload |
 
 **Witness, social and fade (SF1-W).**
 
@@ -1811,6 +2415,8 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 | SF1-W-5 | **Fade.** A non-memorable belief refreshed at `t₀`; one memorable; the setting raised | Not dropped at `t₀ + 14 d` exactly; dropped at `+ 14 d + 1 s`; the memorable one kept; raising `memoryScale` changes nothing a stricter run dropped |
 | SF1-W-6 | **A telling is not harm.** A `tell` whose subject is V, and one whose subject is a protected canon person | Both are minted: no effect, an informational `subject`; the gate passes them. A consequential `expose` with V as the target is refused `v-target` |
 | SF1-W-7 | **Only memorable beliefs decide.** Forget every non-memorable belief of a focal person, and reload | No telling decision, `divergence` answer or S1 output changes |
+| SF1-W-8 | **News travels** (v0.6, S1-5). A seed's `promise` between `a` and `b` at a cell; a focal witness `w`; `w` tells `z`; then the same with an authored `conceal` of the promise from `z` | `w` holds a memorable `did.promise` belief about `a` whose value is the promise's `Id`. The telling is a `tell` with `told` the promise and `subject` `a`; it fills `learn(z, promise)`, and with the conceal also `expose(w, promise, z)`. `z`'s belief keeps `w`'s evidence |
+| SF1-W-9 | **Goal frames make things matter.** A person with a `redress` goal against `x` witnesses `x`'s act; a teller holds a belief about `x`'s whereabouts and the listener wants `x` | Salience's stakes point counts the goal frame; `protectiveRelevance` counts the listener's `wants` and `reactsTo`, so the telling's chance rises against the same case without the goal |
 
 **The gate, the reads and the audits (SF1-X, SF1-R, SF1-Q).**
 
@@ -1824,8 +2430,9 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 | SF1-R-1 | **The reads.** Each read of §9.1 before the first processed boundary, then after | `maybe`, then the answer; the unbuilt reads stay `maybe`; no read exposes a number |
 | SF1-R-2 | **Transitions.** `band(c)` over a window in which it rose; `normGap` over a window in which it fell | `[(from, quiet), (startOf(w + 1), elevated)]`, with the initial value first; the same shape for `normGap`; a `from` older than 8 windows answers `maybe` |
 | SF1-R-3 | **Complete invalidation.** A leaf's cell goes hot with every service unchanged; a group's gap band changes; a believer's memorable belief about a subject's `affiliation` is set | `refuge` is re-evaluated by the `band@w` pin; `groupGap` by the `group-gap` pin; `divergence` at the next boundary (`boundary: true`) and its `divLog` gains an entry; each answer changes at the transition time |
+| SF1-R-4 | **The v0.6 reads.** A `punish` that starts, climbs to rung 2 and relents; a guard posted in periods M and D; an item changing hands | `punishing(G, v)`: `none`, then `cold` at the decision's time, `price` at the climb's boundary, `none` at the relent; `guarded(m)` is `yes` only in M and D while `m` is at the post's cell; `holds` follows the edges; each with its initial value first |
 | SF1-Q-1 | **The audits.** The registry, schema and packs as shipped | Zero findings |
-| SF1-Q-2 | **The audits catch.** A function using `Math.exp`; a key naming the epoch; a tier-1 process reading `gameOwnedNow`; two writers of one slot; a second writer of an admission budget; a feed read with no cursor; a derive reading a later slot; a kind with V as a victim; a derive reading a heritage tag | Each is reported, and nothing else is |
+| SF1-Q-2 | **The audits catch.** A function using `Math.exp`; a key naming the epoch; a tier-1 process reading `gameOwnedNow`; two writers of one slot; a second writer of an admission budget; a feed read with no cursor; a derive reading a later slot; a kind with V as a victim; a derive reading a heritage tag; (v0.6) a seed write to `punish` state; a coarse process reading a `scene.acts` item; a policy minting an event with a `served` goal frame; `reconcile` setting the status of a retained goal frame; a `warning` minted outside `city.events` | Each is reported, and nothing else is |
 
 **The fine tier (SF1-A).**
 
@@ -1836,6 +2443,7 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 | SF1-A-3 | **No catch-up, recorded demand.** Demand absent at window `j`, present from `j + 1`; and present at `k − 1`, absent at `k` | Window `j`'s items are never opened; window `k − 1`'s items are opened at `k`, because they were in the recorded focus of their own window |
 | SF1-A-4 | **The gate.** A cast resolving to a minor in the role `victim`; a person who became protected between occurrence and opening | The item stays unopened; `floor-minor` or `protected` is logged |
 | SF1-A-5 | **Coarse against detail.** The items in focus, opened or not, against the summary's count; twin runs with V in different cells | Equal counts; identical tier 0 to 2 outputs; only `scene.acts`' output differs |
+| SF1-A-6 | **Items' outcomes at opening** (v0.6). SF1-A-1 with one item a `shakedown` | Its outcome is `outcomeOf` keyed by the item's `Id`, contributed with its other fields; a `failed` one carries no `take`; after a reload the reinstalled contributions are identical and nothing is published again |
 
 ### 14.2 End-to-end fixtures
 
@@ -1881,10 +2489,35 @@ Every fixture uses `worldSeed = H("fixture", <fixture id>)`, `W = 600`, the sche
 | The active goal | R1's goal frame is still active after the load, retained through S0 §7.3; no S1 decision depends on a non-memorable belief |
 | Published items | Items published before `b*` are not published again; those inside the ring are re-installed silently when their cell is in focus |
 
+**SF1-E5. The Friday fee under protection** (v0.6; the composite's [worked example 2](../composite/worked-examples.md#2-two-patterns-layered-over-kabuki) as a fixture). World seeds `H("fixture", "SF1-E5", i)`, `i = 0 … 19`; the Kabuki stand-in; the packs at their defaults; V's mirrored cell away from the market; two game weeks; runs A (one call), B (per-window calls) and D (three reloads), as in SF1-E1.
+
+| Check | Expected |
+|---|---|
+| Records | A, B and D byte-identical, `people.goals` and the goal frames included |
+| Collectors | Whenever `collect-fee` is active, its two collectors' `shakedown` goal acts happen only at their market posts in M and D, each with `served` a collector frame and `causes` the decision |
+| Protection | Whenever a GB member is wronged at size 2 or more, or by a goal act, GB's `care_of_members` rises from that fact; if `protect-members` starts, its guard's post is the ward's work cell, `presence` events follow at most daily, and shakedowns of the guarded ward are `prevented` with the frequency `p = 0.7` predicts (within sampling error over the seeds) |
+| Refusals | Every public `failed` or `prevented` fee shakedown is either answered by an enforcement of its refuser within 144 windows or sets a refusal signal; private ones set nothing |
+| Bounds | Goals per district never above 32, per person never above 2; goal acts never above 4 a window per district |
+| The protagonist | No harmful effect on `v`; no protagonist-object role anywhere, since V did nothing against either group |
+| Demand | A run with V's cell at the market differs from A only in `scene.acts`' output |
+
+**SF1-E6. A hunt, end to end** (v0.6, [D-30](../decisions.md)). World seeds `H("fixture", "SF1-E6", i)`, `i = 0 … 19`; the Kabuki stand-in. The replay script holds V's position and, at window 300, a `game.death` of a GA member with actor `v` at a market cell, 6 witnesses. The harness stands in for S2: it pins each `warning` and `price` `observed` 20 windows after it is minted, and at the first `price` it injects V's `response` complying with it, with the price in its causes, 300 windows later. Runs at `tempo` `restless`, `steady`, `calm` and `off`, each in one call, per window and with reloads.
+
+| Check | Expected |
+|---|---|
+| Grounds | A GA grievance from window 300's act in every run; at `off` no `decide.punish` ever |
+| Order | In every run that starts one: its first act with V as object is a `warning`; no `price` or `search` before the warning's observed pin; no `confront` before the `price`'s pin; at `calm` no `price`, at `steady` no `confront` |
+| Encounters | Every `confront` is in a window when V's cell is at or next to a `search` post, carries no effect, and is followed in no coarse state |
+| End | The injected response settles the grudge and ends the intention `paid`, with a `relent.punish`; with no response it ends `expired` or `ended` |
+| The protagonist | No S1 output puts a harmful effect on `v` or binds `v` to a victim or target role, in any run |
+| Identity | One call, per window and reloads give byte-identical records at each `tempo` |
+
 ### 14.3 Property tests, patterns and panels
 
 The reference model also checks, over generated scripts, logged named streams, and shrinking of failures ([dossier 23](../craft/d23-evaluation-testing.md) §12):
-- **S1-I-1 to S1-I-28** as properties, including random saves at boundaries and loads between any two windows;
+- **S1-I-1 to S1-I-34** as properties, including random saves at boundaries and loads between any two windows;
+- (v0.6) **goals and intentions under generated scripts:** random acts of V's against random groups at random `tempo` walks, with warnings observed at random lags or never: no `price`, `search` or `confront` ever precedes an observed warning of its intention, no rung exceeds the `tempo` in force, and no S1 output harms `v`; random removals of seat holders: every seat's holders form one unbroken record of edges and successions;
+- (v0.6) **counterfactual goals:** remove one goal's source from a script: its goal, frame and acts vanish, and every coarse output before its first act is unchanged;
 - **partition and reload:** random call groupings and random save and load points over generated external operation scripts, for every process;
 - **regeneration under random forgetting** of residents, households, items, scenes and casts;
 - **summary and item agreement** at each cell;
@@ -1919,7 +2552,11 @@ Where P3 was underspecified, inconsistent or could not be implemented as written
 | 11 | Open questions 7 and 8: the belief path and audiences of a ledger item | `rep-<axis>[i]` with bookkeeping of canonical origins; `vec [v, reach]`; three carriers (§8.6) | Satisfies I-9 and the cap, and counts one occurrence once |
 | 12 | §6.1: `regard(A → B)` as slots; §2.1: `order.stocks` without a baseline | An edge `xf:regard`; stocks with retention to a baseline `E ← ρE + (1 − ρ)E₀ + …` (§7.6) | An edge is visible to retention and the audit; without a baseline a quiet district's stocks decay to zero |
 | 13 | §10: the kinds S1 mints | Adds `gig-outcome` and the generated `enf.<norm>.<rung>` kinds; every kind has a producer (§5.3) | An event has no free payload, so the norm and rung are in the kind name |
-| 14 | §7.8: group drives, concerns, goals and member orders; §6.2 membership dynamics | Four pressures and two intentions per group with an explicit lifecycle; a fixed roster (§7.8) | The smallest useful M3 |
+| 14 | §7.8: group drives, concerns, goals and member orders; §6.2 membership dynamics | Four pressures and three intentions per group with an explicit lifecycle; a fixed roster (§7.8) | The smallest useful M3 |
+| 15 | §8.4: concerns from seven generators, goals chosen from a means library, commitment and reconsideration | **Four goal kinds opened by fixed rules from recorded facts** (redress, collect, carry-out, role), each a retained frame acting only through `city.events`' goal-act rate; the generators and the means library stay the later design (§7.10, §0.3) | What M3 iteration 3 needs is people acting on reasons the record holds; the full machinery needs the drive catalogue, and P3's frames on demand would break demand independence if their acts fed the coarse tiers |
+| 16 | §6.2, §8.6: a `leaders` slot on the group; leaders drawn by `H("gen", group, "leaders", i)` when needed; a leaders' weight of 0.2 | **Seats as state**, drawn once by keyed attempts from eligible members, an `xf:leads` edge each, a lean per holder as the leaders' weight, removal, interregnum and succession (§7.8) | A leader who was drawn only when needed could be a different person on a later draw; a seat must hold one person until something removes them |
+| 17 | §8.6: orders make goal frames on members, with a `pressure`, only for members in demand | **Duties**: an intention's members are drawn deterministically, whatever the demand, and given retained carry-out goals with posts; no pressure term and no order `Dilemma` in the core (§7.10) | Orders only for members in demand broke coarse demand independence (E-09); a duty is coarse and keyed |
+| 18 | §1 point 4, §8.6: the city never aims at V; a group's grudge against V only raises an offer through S2 | **D-30's `punish`** (§7.8.1); P3 now says the same | The maintainer's decision D-30 |
 
 ## 16. What S1 needs from the kernel and the other specifications
 
@@ -1932,11 +2569,28 @@ Where P3 was underspecified, inconsistent or could not be implemented as written
 - **N-2** (S0 §6.6, §9.4). An operation that restates a contribution identical to one in force (same `contributionId`) is a silent no-op. Why: regeneration of an opened item's contributions after a reload (§7.9).
 - **N-3** (S0 §9.4, §14.1). A process's last digest is persisted with its `ProcessState`. Why: feeds and cursors must survive a reload (§2.2).
 
-**Reference-model alignment, not S0 changes.** The reference model's `aggregate` stub returns `{ value, confidence }`; S0 states `{ value, mass, items }`. `coarseFine` and the declared read set are optional fields of `ProcessDef`. `ctx.own()` and `ctx.digest()` are absent today, and `ProcessOp` lacks the frame, `observe`, `tell`, belief and `publish-item` operations. **Schema (a pack, not the kernel):** S1 ships `xf.core.world@1`: the kinds of §4.1, §4.2 and §7.0, the edge types `xf:tie` and `xf:regard`, and the dimensions they need.
+S0 v4.11 supplies N-1 to N-3 (V4-47 to V4-49).
+
+**v0.6's needs, supplied by S0 v4.17.** None changes a result the reference model produces today with the new changes switched off.
+- **V4-50** a declared `data` record on `meta:` events (the composite's S0-1, for layer 3; S1 mints no `meta:` kind).
+- **V4-51** `roles` and `fills` in the event-kind registry, and `outcome` and `served` on the `event` change (§5.1, §5.2a; S0-2).
+- **V4-52** a `belief` change for memorable beliefs, which `grievance` hears (§8.9; S0-3).
+- **V4-53** a `frame` change when a frame opens, which `seedGoals` and the composite's matcher hear (§8.10).
+- **V4-54** retained frames: the goal frames of `people.goals`, which persist and are never re-opened on load (§7.10).
+- **V4-55** `observedAt(node, t)`, by which a `punish` intention knows its warning was perceived (§7.8.1).
+
+**Reference-model alignment, not S0 changes.** The reference model's `aggregate` stub returns `{ value, confidence }`; S0 states `{ value, mass, items }`. `coarseFine` and the declared read set are optional fields of `ProcessDef`. `ctx.own()` and `ctx.digest()` are absent today, and `ProcessOp` lacks the frame, `observe`, `tell`, belief and `publish-item` operations. **Schema (a pack, not the kernel):** S1 ships `xf.core.world@1`: the kinds of §4.1, §4.2, §4.9 and §7.0, the edge types `xf:tie`, `xf:regard`, `xf:leads` and `xf:held-by`, and the dimensions they need; and `xf.core.goals@1`, the goal tables of §7.10 and the duties of §7.8.
 
 ### 16.2 S2, S3 and others
 
 - **S2-1.** The reads of §9.1 give strings, not numbers. S2 treats band names as registered strings. `regime(scope)` answers the kind of the greatest live regime; `regimeIs(scope, kind)` answers `yes` or `no`. **S2-2.** S2 owes S1 the live casts (the protected set) and V's accepted offers and responses as observed events. **S2-3.** S2 §4.1's registered-read declaration is satisfied by the `deps` of §9.1; reads that answer `maybe` in M3 are unbuilt phases. **S2-4.** S2 evaluates a window's closing condition at each entry of a read's `transitions` (§9.1), from the initial value; a read with `boundary: true` is re-evaluated at every boundary, as a `believes` atom is.
+- **v0.6 asks of S2's next pass** (the second half of this spec pass):
+  - **S2-5.** When a delivery that cites an S1 `warning` or `price` event meets S2's warned-failure rule (confirmed, or presented twice on different channels, [S2 §7.3](seeding.md#73-running-a-beat)), S2 pins that event `observed`, with the delivery as evidence. Without it no `punish` intention climbs past rung 1 (§7.8.1).
+  - **S2-6.** A `response` of V's that answers an offer made from an S1 event (a `price`'s demand) lists that event in its `causes`, so that paying settles the grudge (§8.9).
+  - **S2-7.** S2 registers its kinds' `roles` and `fills`, with the role names S1 reads (§5.2a): `favour` (`giver`, `receiver`), `promise` (`promiser`, `promisee`), `repair` (`repairer`, `other`), `expose` and `confess` (`exposer` or `confessor`, `told`, `audience` or `listener`), `response` (`protagonist`, `asker`), and its kinds' agent roles.
+  - **S2-8.** A role goal is S2's: S2 opens it and ends it; S1 produces its acts (§7.10, §8.10). A seed that wants an act at once (a kit's minted event) still mints it as the seed's own beat; what S1 owes is that a goal's act, when the world produces it, is the world's.
+  - **S2-9.** S2 casts "a person who leads" through the `xf:leads` edge (`has-edge xf:leads → group`) or the `leads` read, and an item's holder through `xf:held-by`.
+- **v0.6 asks of S3's next pass.** The matcher reads `fills` from the registry, the state fillers of §9.1a with their `searchFrom` indexes, and `frame` and `belief` changes; a `punish` intention is the world's move, which the director neither nudges nor stops ([pattern language §8.3](../composite/pattern-language.md#83-the-protagonists-junctures)). The `hunted` shape's `caught` juncture, which the composite writes as `wrong(Claws, protagonist)`, is filled by a `confront` (`threaten`) or by the game's mirrored events, since S1 asserts no harm to V; the composite's `vocabulary.json` should map `tell`'s `learn` to the new `told` role and read `leads` from `xf:leads`.
 - **S3-1.** S3 reads `eventKind(name).producers`. `aesthetic` answers `undefined`; S3's `T_aes` is then 0. Enforcement kinds carry the tag `enforcement`. **S3-2.** S3 owes S1 the stated rule that it never reads inside S1's private state, and later the `memorable` rule for returns. S1 owes S3 events with `causes`, effects and participants, bounded at about ten Changes an hour for the city, and policies that ignore `meta:` kinds. **S3-3.** S1 declares each process's publication lag (§7.0, §9.4); the longest in M3 is one window, the horizon S3 §6.1 uses.
 - **S4:** the pack formats for kinds, norms and ladders, carriers, the judge table, rosters and group intentions; the content-class listing per kind; the `aesthetic` library. **S5 and P8:** the raw event kind names, the mirrored slots S1 reads, V's `cell`; a `community active` read per cell; the routes table's execution. **P7:** the measured budgets (§10.3). **S6:** the logical record of §11 as bytes.
 
@@ -1964,10 +2618,15 @@ For the [ledger](../foundation.md#9-the-reference-model-and-the-compromise-ledge
 | C-S1-25 | A process runs when its work is due | Every process runs every window | A measured session shows the cost and invalidation for longer spans is specified |
 | C-S1-26 | A scene is generated as it happens | Items are opened one window after they occur, from recorded demand | P8 needs events before their time |
 | C-S1-27 | Every belief can matter | No decision reads a belief that is not memorable | A story needs a forgotten belief to act |
+| C-S1-28 | People want things from their drives, concerns and values | Four goal kinds opened by fixed rules from recorded facts, with fixed act tables and rates (§7.10) | The nudge share of iteration 3 stays high, or raters find people act for no reason |
+| C-S1-29 | Leaders are people with their own contexts | A seat holder is a keyed draw with one lean (§7.8) | A story needs a leader's own wants beyond one drive |
+| C-S1-30 | An act fails for the reasons of the people in it | Fixed refusal and prevention chances from compliance, hostile backing and a guard (§5.2a) | Refusal or prevention rates read as arbitrary in the panels |
+| C-S1-31 | The people of a scene have goals too | Goals only from coarse-readable facts: nobody whom only the fine tier knows holds one (§10.1) | A focal person's lack of a reason shows in a scene that matters |
+| C-S1-32 | A group's case against V grows from everything its people hear | A grievance only from V's recorded acts and from tellings the record holds from outside S1's own telling (§8.9) | A thread needs rumour among the group's people to turn it against V |
 
 ### 17.2 Open items
 
-1. **Cell size and grid:** about 200 m clipped to the leaf, venues as own cells; the index build gives the count. 2. **The game-time ratio and the hours behind the period names:** unmeasured; every time constant is **[tunable]**. 3. **Binding keys:** readable and stable across loads? (§4.3; outside M3's criteria.) 4. **Is the minted-telling volume enough for the sifter?** Measure on the M3 transcripts. 5. **The mirror's period and the feed's latency and ordering,** with S5 and the bridge. 6. **The roster allowance** of 0.06, the headcount scale `ρ`, and the ethos, archetype, judge and view tables (lore review). 7. **The `no-cast` rate** in a district with few people present, and whether more roles need a group fallback. 8. **The retained `meta` size** per item, and whether the ring needs a byte budget. 9. **The m4 spacing** (432 windows) and weekly budget (2) are guesses against M14-18. 10. **N-1 to N-3 of §16.1** wait on S0.
+1. **Cell size and grid:** about 200 m clipped to the leaf, venues as own cells; the index build gives the count. 2. **The game-time ratio and the hours behind the period names:** unmeasured; every time constant is **[tunable]**. 3. **Binding keys:** readable and stable across loads? (§4.3; outside M3's criteria.) 4. **Is the minted-telling volume enough for the sifter?** Measure on the M3 transcripts. 5. **The mirror's period and the feed's latency and ordering,** with S5 and the bridge. 6. **The roster allowance** of 0.06, the headcount scale `ρ`, and the ethos, archetype, judge and view tables (lore review). 7. **The `no-cast` rate** in a district with few people present, and whether more roles need a group fallback. 8. **The retained `meta` size** per item, and whether the ring needs a byte budget. 9. **The m4 spacing** (432 windows) and weekly budget (2) are guesses against M14-18. 10. **N-1 to N-3 of §16.1** are supplied by S0 v4.11; v0.6's needs by S0 v4.17. 11. (v0.6) **D-30's bounds:** the rungs, hazards, durations and `tempo` scales of §7.8.1 are guesses, for P9 to calibrate against the raters' sense of fairness. 12. **Goal rates:** the act rates and caps of §7.10 against iteration 3's nudge share and volume. 13. **Seats:** how many, and whether The Mox, a collective, should seat by a different rule (ORD-05; lore review).
 
 ## 18. Review record
 
@@ -1976,6 +2635,7 @@ Reviews are recorded in the form the other specifications use: the round, the re
 | Round | Reviewer | Findings | Adopted | Notes |
 |---|---|---|---|---|
 | 1 | GPT-6 Astra | 20 (4 blockers, 14 important, 2 minor) and the over-engineering section | All 20 and the whole of the over-engineering section | Reviewed v0.1; answered by v0.2 |
+| Spec pass (v0.6) | This vertical, adopting the composite's proposals | 10 proposals (S1-1 to S1-10), and the brief's goals, leaders and D-30 | All 10, six as proposed and four changed; none rejected | Not an independent review; the next Astra or Sol review should read §7.8, §7.10 and §8.9 first |
 
 ### Round 1: GPT-6 Astra on v0.1
 
@@ -2004,3 +2664,22 @@ S0 v4.10 already supplied the eight kernel additions S1 asked for (K-1 to K-8); 
 | E-19 | The aggregate/resident equivalence is wrong | The resident adds the full conditional weight and displaces only when known; the aggregate is an approximation; masses are compared (§8.6, SF1-L-4) |
 | E-20 | Numerical artifacts and acceptance claims need tightening | Frozen table artifacts with hashes and a fixed `σ`; capping described accurately; impossible assertions corrected (§1.2, SF1-H-4, SF1-H-6, SF1-I-5, SF1-E1, §14.3) |
 | Cuts | Over-engineering | The core shrinks to the smallest useful M3 (§0.2); the drive catalogue, concern machinery, general means, dilemmas, personality revision, relationship extras, refitting, migration, speculative spans and the rest move to §0.3 |
+
+### Specification pass for v0.6: the composite's proposals
+
+The composite proposed ten changes to S1 ([pattern language §13](../composite/pattern-language.md#13-proposed-specification-changes)), found by decomposing its worked examples against v0.5. Each was checked against this page before it was settled: the composite's reading of v0.5 was right in every case (pulses read only `assault` and `gang-clash`; every occurrence was `done`; only enforcement moved a norm; `gang-leader` was canon's alone; no process aimed at V).
+
+| # | Proposal | Disposition | Where |
+|---|---|---|---|
+| S1-1 | Every kind declares the functions it fills | **Adopted, corrected.** Fills carry outcome and role conditions, so a refused shakedown fills `refuse` and not `comply`; raw kinds fill nothing, their derived mirror events fill for them; a `tell` names what it tells in a new `told` role, since `subject` is a person; `disorder` fills nothing until a victim is cast; `reply` becomes four kinds so that its class can condition a fill | §5.1, §5.2a |
+| S1-2 | Group pulses read `wrong` on a member, whatever the kind | **Adopted.** The release rule is generalised the same way; a group's own discipline pulses nothing; a wrong by V pulses care but reaches retribution only through the group's belief (§8.9); facts carry their parties' groups | §7.8 |
+| S1-3 | A goal a seed opens raises the matching kind's rate for that person, so the act comes from the simulation | **Adopted, changed in form.** Not a boost inside the class offender term, which would make casting read goals and change the city's base rates, but a **personal offender term**: a goal-act stream inside `city.events` with the same shapes, regimes, coverage, gate and admission, and a fixed cast. The same stream carries S1's own goals. A seed's goal aimed at V produces nothing in S1 | §7.2, §7.10, §8.10 |
+| S1-4 | A minimal `xf:item` with a holder edge | **Adopted.** S1 moves the holder on a done transfer and mints no items; taking from V stays refused | §4.9 |
+| S1-5 | A `tell` may carry a recorded plan; a telling of a concealed thing also fills `expose` | **Adopted.** Witnesses form beliefs about `news` events (a promise, a warning), which tellings carry in `told` | §8.3, §8.4, §5.2a |
+| S1-6 | A keyed leadership drawn from members, persistent once observed | **Adopted, changed.** Leadership is persistent from the draw, as state, not only once observed: a leader drawn anew on demand could be someone else. Seats with an `xf:leads` edge (one writer) rather than a membership role; the leaders' term; decisions as events naming their decider; removal, interregnum and succession | §7.8 |
+| S1-7 | Every intention produces at least one visible act | **Adopted** through duties: collectors at the market, a guard at the ward's place, a strike at the wrongdoer, warnings and searches | §7.8, §7.10 |
+| S1-8 | An unsanctioned public refusal is a norm signal of the opposite sign | **Adopted.** A refusal is answered if an enforcement of its refuser comes within a day (enforcement now seeks refusers), and otherwise sets a signal of 0.2; an interregnum halves enforcement | §7.5 |
+| S1-9 | Occurrences can fail or be prevented, by the victim's protection and the norm's state | **Adopted.** One keyed draw per occurrence; `prevented` when a guard is there, `failed` when the victim refuses (more often if not complying, and more again if backed by a hostile group); effects and fills by outcome; reproducible through the posts and the compliance history | §5.2a, §7.5 |
+| S1-10 | Group intentions against the protagonist under D-30 | **Adopted, made exact.** The grounds are a group belief resting on an act of V's in the record, told only from outside S1's own telling; the first act is a warning; climbing, and every act beyond the first warning, waits for a warning's `observed` pin, which S2 sets under its warned-failure rule; the reach and highest rung follow `tempo`, none at `off`; the gravest act, an encounter at the fine tier, asserts no harm; it ends on payment, a cleared belief, expiry, a fallen pressure or the setting | §7.8.1, §7.9, §8.9, §6 |
+
+**The brief's other items.** Individual goals (§7.10) take P3's design for the later capability and bring into the core only what can be grounded in coarse-readable facts: four kinds, from grievances (and kin), debts, membership with profile role, and seeds' roles. Ambition waits (§0.3): succession is a keyed draw. Leaders decide through the leaders' term and their named decisions (D-08). D-30 replaces S1-I-8 and P3 §1 point 4. Every new piece of state is listed with its persistence and recovery in §11.
