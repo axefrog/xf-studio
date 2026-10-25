@@ -289,6 +289,21 @@ Built once, used by every plan (STN-04). Arms A1 to A3 are the ones M3 needs.
 | **A9 Disclosure arms** | Told at start; page shown at end; never shown; told but not adapted (a deceptive arm; ETX-01) | T12-05 | S3; ethics checklist first |
 | **A10 Synthetic V policies** | The named policies of DST-10 | Tier 1 only | P10 |
 
+#### 5.4.1 The three M3 arms, defined
+
+M3 builds A1, A3 and A4 as follows ([the M3 harness](../../../projects/xf-story-engine/reference/src/m3/arms.ts)). The definitions come before the build so that the build cannot bend them.
+
+**A3, the Radiant-style baseline.** A stand-in for the shipped pattern of template-and-slot jobs, defined here and not copied from any one game's system.
+- **Templates.** A fixed list of eight job templates (delivery, recovery of a stolen item, escort, removal of a troublemaker, collection of a debt, a missing person, a tail, a small repair), each with the slots it needs (a client, sometimes a second person, a place, sometimes an item) and a reward tier. The list is written once, before any run, and is the same for every world.
+- **Selection.** Each time the arm is asked for a job, one template is drawn uniformly from those whose slots can be filled. The draw is keyed by the run's seed and the draw's index.
+- **Slot filling.** Each slot takes the nearest eligible resident or place: residents of V's own block first, then the blocks next to it, then those two steps away, the first eligible by the slot's role class. Ties go to the smaller identifier. The reward is the template's tier, scaled by the district's price level.
+- **What it does not read.** No cause chain, no event record, no history of V, no reputation, no norm and no heat. It reads the world only for who lives near V, what they do for a living, and where the venues are.
+- **Text.** The words are written for each template once and have the same register and length as the engine's kits. The names are real residents of the world, as they are for the engine.
+
+**A1, random within gates.** The engine run with its selection features switched off: the score weights and the diversity penalty are zero, so layer 3's ranked draw is a uniform draw (with its fixed seed) among the candidates that pass the same gates. Same kits, same patterns, same sifting; only the choice differs.
+
+**A4, authored.** R2's own offer, played with sowing off. Its words are rendered for different casts and story states.
+
 ### 5.5 Tier 2: transcript panels
 
 **The criteria sheet.** One item per quality, rated separately and never added (STN-01, PNL-05). Items start as pairs or forced choices where the question is comparative, and as seven-point scales where it is an experience.

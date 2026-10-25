@@ -138,7 +138,7 @@ export function r2Fragments(): Fragment[] {
 
 export function r2Texts(): TextUnit[] {
   return [
-    text('t-ff-ask', '{collector.name} came by the stall again. The Claws want their Friday fee and {stallholder.name} is short. Will you do something about it?', { voiceClass: 'npc' }),
+    text('t-ff-ask', '{stallholder.name} messages you: {collector.name} was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?', { voiceClass: 'npc' }),
     text('t-fore-pay', 'Cover what is owed.'),
     text('t-fore-broker', 'Offer to speak to {collector.name} for them.'),
     text('t-fore-standup', 'Tell {collector.name} the stalls are done paying.'),

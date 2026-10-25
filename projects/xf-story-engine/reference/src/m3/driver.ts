@@ -5,6 +5,7 @@
 //
 // The synthetic player (policy) is a function of what was shown and nothing else; it never reads a hidden state.
 
+import { rand, s as hs, i as hi } from '../id.ts';
 import type { Id } from '../types.ts';
 import { quietFrame } from '../procedural/data.ts';
 import type { SenseFrame } from '../procedural/types.ts';
@@ -62,6 +63,20 @@ export const policies: Record<string, Policy> = {
   ignore: { id: 'ignore', answer: () => ({ kind: 'null' }) },
 };
 
+/** Options of a run beside the world: whether V walks the district, and notes the transcript prints (named changes of the setting). */
+export interface RunExtra {
+  walk?: boolean;
+  notes?: string[];
+}
+
+/** A busier district: every kind's base rate times `k` (a named calibration of S1's data, for a run that needs more incidents). */
+export const density = (k: number): { name: string; apply: (d: import('../sim/data.ts').S1Data) => void } => ({
+  name: `incident rates x${k} (a busier Kabuki, to give the engine enough to tell)`,
+  apply: (d) => { for (const kind of Object.keys(d.shape.rate)) d.shape.rate[kind] = d.shape.rate[kind]!.map((x) => x * k) as [number, number, number, number]; },
+});
+
+const WALK = ['g1', 'g2', 'g3', 'g4', 'g6', 'g7', 'g8', 'g9', 'g11'];
+
 export class Run {
   readonly w: M3World;
   windowNo = 0;
@@ -70,7 +85,7 @@ export class Run {
   private seen = new Set<Id>();
   frame: (at: number) => SenseFrame = (at) => quietFrame(at);
 
-  constructor(readonly opts: WorldOpts, readonly state: StoryState, readonly policy: Policy = policies.decline!) {
+  constructor(readonly opts: WorldOpts, readonly state: StoryState, readonly policy: Policy = policies.decline!, readonly extra: RunExtra = {}) {
     this.w = buildWorld({ ...opts, s1: (d) => { opts.s1?.(d); for (const s of state.street) s.apply(d); } });
     this.settle();
     // the game's facts at the start: every fact of the table has a reading (a fact with none is `maybe`)
@@ -87,6 +102,12 @@ export class Run {
 
   /** One window: game time to its end, then its play seconds. */
   step(): void {
+    // V walks the district: a new block every game hour, chosen by a keyed draw, so that the fine tier opens around V
+    if (this.extra.walk && this.windowNo % 6 === 0) {
+      const cell = WALK[Math.floor(rand(hs('m3-walk'), hs(this.opts.name), hi(this.windowNo / 6)) * WALK.length)]!;
+      const t = this.windowNo * WINDOW;
+      this.w.replay.submit([{ t: t + 1, op: 'reading', node: 'v', slot: 'district', value: 'wat_kab' }, { t: t + 2, op: 'reading', node: 'v', slot: 'cell', value: cell }]);
+    }
     this.windowNo++;
     this.w.sim.k.settle({ to: this.windowNo * WINDOW });
     this.w.sim.k.dispatcher.drain();
