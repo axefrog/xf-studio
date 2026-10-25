@@ -285,7 +285,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "overlay.state",
     title: "Read the XF overlay's state",
     description:
-      "The XF overlay host (a test feature: XF's own panel drawn over the game, one diagnostic panel, no input yet): whether it is on in this build, hooked, drawing or why not (HDR, the back buffer's format, a missing engine address), the back buffer, the theme (dark or light, from the XF Studio's own colours), frames drawn and its CPU time per frame, whether it is hidden for a capture or yielding to Cyber Engine Tweaks' overlay, and which frame-generation modules the game has loaded. Changes nothing.",
+      "The XF overlay host (a test feature: XF's own panel drawn over the game, one diagnostic panel, no input yet): whether it is on in this build, hooked, drawing or why not (HDR, the back buffer's format, a missing engine address), the back buffer, the theme (dark or light, from the XF Studio's own colours), frames drawn and its CPU time per frame, whether it is hidden for a capture or yielding to Cyber Engine Tweaks' overlay, which frame-generation modules the game has loaded, and (0.8.22) the motion in force: the live dot's pulse and the settle on a change of state run or stand still (motion: effective full or reduced, with the [overlay] motion setting, Windows' animation-effects setting and the reason). Changes nothing.",
     permission: "read",
     input: obj({}),
     bridge: { method: "overlay.state" },

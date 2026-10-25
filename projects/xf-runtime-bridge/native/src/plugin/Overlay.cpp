@@ -45,6 +45,15 @@
 //     "XF Runtime Bridge", the status line is the one every surface shows (core/InkUi.cpp Summarize), the question is left
 //     to the ink panel and the CET window, and the diagnostic lines (with the moving bar) show only with
 //     [overlay] diagnostics.
+//
+// 0.8.22 (the Studio's "In-game surfaces", style guide section 09; core/overlay/ThemeTable.inc is generated from its table):
+//   * five fonts, one per type role (title and eyebrow in the display face at 15 and 11, body and label in the UI face at 13 and
+//     12, value in the mono face at 12), baked together in BuildFonts at start and after a resize and never in a frame; the panel
+//     draws the Studio's components (heading with the chamfered brand mark, status line, key-value rows, cards, bars on XfLine,
+//     chamfered chips with tracked capitals) from the palette and sizes LoadStyle looked up when it baked;
+//   * the pulse and the settle run on one clock (ImGui::GetTime), are functions of it (core/overlay/Motion.cpp) and stand still
+//     when the effective motion is reduced ([overlay] motion, Windows' animation-effects setting, frame generation);
+//   * nothing is allocated per frame beyond the visible rows: text goes through stack buffers and the window's draw list.
 
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/GpuApi/DeviceData.hpp>
@@ -222,6 +231,9 @@ struct Renderer
     std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
     PanelData panel;
     std::vector<std::string> frameGeneration;
+    // 0.8.22: the diagnostics card's two strings that don't change after start-up, made once in Initialise (nothing is built per frame).
+    std::string frameGenerationText = "none";
+    std::string formatText;
 };
 Renderer gR;
 
@@ -628,6 +640,15 @@ bool Initialise(int32_t aDeviceIndex)
     auto* sc = ReadFacts(aDeviceIndex, facts, desc);
     gR.frameGeneration = FrameGenerationModules();
     gHost->NoteFrameGeneration(gR.frameGeneration);
+    gR.frameGenerationText.clear();
+    for (const auto& name : gR.frameGeneration)
+    {
+        gR.frameGenerationText += (gR.frameGenerationText.empty() ? "" : ", ") + name;
+    }
+    if (gR.frameGenerationText.empty())
+    {
+        gR.frameGenerationText = "none";
+    }
     if (const auto refusal = xfb::overlay::RefusalFor(facts); !refusal.empty())
     {
         return Refuse(facts, refusal);
@@ -642,6 +663,7 @@ bool Initialise(int32_t aDeviceIndex)
     gR.queue = NativeOf(dd->directCommandQueue.Get());
     sc->swapChain.As(&gR.swapChain);
     gR.format = desc.Format;
+    gR.formatText = FormatName(desc.Format);
     gR.bufferCount = desc.BufferCount;
     gR.width = desc.Width;
     gR.height = desc.Height;
@@ -976,10 +998,11 @@ void KeyValue(const char* aLabel, const char* aValue, bool aFigure)
     auto* labelFont = gR.fonts.label ? gR.fonts.label : gR.fonts.body;
     auto* valueFont = aFigure ? (gR.fonts.value ? gR.fonts.value : gR.fonts.body) : gR.fonts.body;
     const float column = labelFont->LegacySize * 9.0f;
+    const float start = ImGui::GetCursorPosX(); // SameLine's offset is from the window's edge, so the card's padding is part of it
     ImGui::PushFont(labelFont, labelFont->LegacySize);
     ImGui::TextColored(c.textMuted, "%s", aLabel);
     ImGui::PopFont();
-    ImGui::SameLine(column + gR.metrics.itemSpacingX);
+    ImGui::SameLine(start + column + gR.metrics.itemSpacingX);
     ImGui::PushFont(valueFont, valueFont->LegacySize);
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextColored(c.text, "%s", aValue);
@@ -1144,14 +1167,9 @@ void DrawPanel(double aSeconds)
         KeyValue("Frames", value, true);
         std::snprintf(value, sizeof(value), "%.3f ms (max %.3f)", gHost->CpuMs(), gHost->CpuMsMax());
         KeyValue("CPU", value, true);
-        std::snprintf(value, sizeof(value), "%s \xC3\x97 %u, %u \xC3\x97 %u, sdr", FormatName(gR.format).c_str(), gR.bufferCount, gR.width, gR.height);
+        std::snprintf(value, sizeof(value), "%s \xC3\x97 %u, %u \xC3\x97 %u, sdr", gR.formatText.c_str(), gR.bufferCount, gR.width, gR.height);
         KeyValue("Back buffer", value, true);
-        std::string fg;
-        for (const auto& name : gR.frameGeneration)
-        {
-            fg += (fg.empty() ? "" : ", ") + name;
-        }
-        KeyValue("Frame generation", fg.empty() ? "none" : fg.c_str(), false);
+        KeyValue("Frame generation", gR.frameGenerationText.c_str(), false);
         std::snprintf(value, sizeof(value), "%s, %llu requests", gR.panel.scriptsLive ? "scripts live" : "scripts not live", static_cast<unsigned long long>(gR.panel.requests));
         KeyValue("Bridge", value, false);
         std::snprintf(value, sizeof(value), "%s, motion %s", xfb::overlay::ThemeName(gHost->Theme()), motion.effective);

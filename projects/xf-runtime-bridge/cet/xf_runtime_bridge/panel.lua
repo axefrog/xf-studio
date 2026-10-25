@@ -1048,11 +1048,12 @@ end
 -- One key-value row: the label (label role, XfTextMuted) in a column as wide as 9 em, then the value (value role for figures).
 local function keyValue(theme, which, label, value, figure)
   local column
+  local start = curX() -- SameLine's offset is from the window's edge, so the card's padding is part of it
   panel.inRole(theme, "label", function()
     column = ImGui.GetFontSize() * 9
     coloured(panel.colour(theme, which, "XfTextMuted", GREY), label)
   end)
-  ImGui.SameLine(column + panel.metric(theme, "ItemSpacingX", 8))
+  ImGui.SameLine(start + column + panel.metric(theme, "ItemSpacingX", 8))
   panel.inRole(theme, figure and "value" or "body", function()
     ImGui.PushTextWrapPos(wrapPos())
     coloured(panel.colour(theme, which, "Text", { 0.92, 0.92, 0.92, 1.0 }), tostring(value))
