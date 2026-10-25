@@ -93,7 +93,7 @@ test("eye makeup's layer menu: the layer's context entries, then its view's comm
       capability: at({ kind: "layer.edit", command: { kind: "reset", id: layer.id } }) },
     // Not a feature action: it opens a name popover first, so it carries the starters' own capability (here, before they load).
     { label: "Save shape as starter…", icon: "save", shortcut: undefined, hint: undefined, checked: undefined,
-      capability: ctx.starters.capability({ kind: "starters.save", layerId: layer.id, name: "Starter" }) },
+      capability: ctx.starters.capability({ kind: "starters.save", look: ctx.starters.look()!, layerId: layer.id, name: "Starter" }) },
   ]);
   // Choosing an entry dispatches through the facade.
   const mirror = own.items.find(item => item.kind === "action" && item.label === "Mirror across the face") as Extract<MenuItem, { kind: "action" }>;

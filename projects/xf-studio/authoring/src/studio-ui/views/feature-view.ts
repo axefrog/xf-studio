@@ -113,6 +113,7 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   readonly starters: {
     /** Whether the starters are there to list (cheap: asked on every panel update; `list` copies them). */
     ready(): boolean;
+    look(): NamedTargets["look"];
     list(): StarterListing | undefined;
     capability(action: StarterAction): StudioCapability;
   };

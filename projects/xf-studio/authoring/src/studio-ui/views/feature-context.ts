@@ -74,6 +74,7 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
     } satisfies FeatureViewContext["collection"]),
     starters: Object.freeze({
       ready: () => !!port.starters,
+      look: () => port.focus.targets().look,
       list: () => port.starters?.snapshot(),
       capability: action => port.authoring.capability(action as never),
     }),

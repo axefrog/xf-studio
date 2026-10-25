@@ -17,6 +17,7 @@ export function layerMenu(ctx: EyeMakeupViewContext, layerId: string): FeatureTa
   const recipe = ctx.facade.view().recipe(), index = recipe.layers.findIndex(layer => layer.id === layerId);
   const layer = recipe.layers[index];
   if (!layer) return undefined;
+  const look = ctx.starters.look();
   const target = { kind: "layer" as const, id: layerId }, { finishes, finishOf } = catalogues(ctx);
   const items: FeatureMenuItem<EyeMakeupAction>[] = [
     { kind: "action", label: "Move up", icon: "arrowUp", action: { kind: "layer.edit", command: { kind: "move", id: layerId, to: index + 1 } },
@@ -39,8 +40,8 @@ export function layerMenu(ctx: EyeMakeupViewContext, layerId: string): FeatureTa
     { kind: "action", label: "Reset shape and settings", icon: "reset", action: { kind: "layer.edit", command: { kind: "reset", id: layerId } },
       hint: `Keeps the name; Undo with ${shortcutLabel("shell.undo")}` },
     // The name is asked in the popover and checked there; the menu entry asks only whether a shape can be saved at all.
-    { kind: "run", label: "Save shape as starter…", icon: "save", capability: ctx.starters.capability({ kind: "starters.save", layerId, name: "Starter" }),
-      run: anchor => saveStarter(ctx, layerId, anchor) },
+    { kind: "run", label: "Save shape as starter…", icon: "save", capability: look ? ctx.starters.capability({ kind: "starters.save", look, layerId, name: "Starter" }) : { available: false, code: "missing_target", reason: "Choose a look first." },
+      run: anchor => saveStarter(ctx, layerId, anchor, look) },
   ];
   return { label: layer.name, detail: `Layer ${recipe.layers.length - index} of ${recipe.layers.length} from front`,
     title: `${layer.name} layer actions`, items };

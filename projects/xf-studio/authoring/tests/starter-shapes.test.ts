@@ -16,7 +16,7 @@ import { renameCommand, starterItems } from "../src/features/eye-makeup/view/sta
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { ShapeStarters, STARTER_DOCUMENT, STARTER_SCHEMA, type ShapeStartersDeps } from "../src/app/starters/shape-starters";
 import { StarterActions } from "../src/app/starters/starter-actions";
-import { curve, MAX_FEATHER, MIN_FEATHER, coverage, type Layer } from "../src/engines/layered-makeup/recipe";
+import { curve, MAX_FEATHER, MIN_FEATHER, coverage, layerCoverageSampler, MAX_FIELDS, type Layer } from "../src/engines/layered-makeup/recipe";
 import { layerWithShape, readStarterShape, shapeOfLayer, type StarterShape } from "../src/engines/layered-makeup/starter-shape";
 import { editLayers } from "../src/engines/layered-makeup/layer-stack";
 import { EYE_MAKEUP_REGION, newLayerTemplate, starterRecipe } from "../src/features/eye-makeup/region";
@@ -188,6 +188,36 @@ describe("the contributed starters", () => {
     expect(layerWithShape({ ...base, finish: "regular" }, bare).finish).toBe("regular");
     expect(shapeOfLayer({ ...base, finish: "glitter" }).finish).toBeUndefined();
     expect(shapeOfLayer({ ...base, finish: "regular" }).finish).toBe("regular");
+  });
+
+  test("saved deformation and coverage effects round-trip through storage and application", () => {
+    const source = layerWithShape(newLayerTemplate(), starter("lid-wash").shape);
+    source.fields = [{ id: "warp-a", u: .4, v: .24, du: .018, dv: -.012, radius: .04 },
+      { id: "warp-b", u: .375, v: .23, du: -.008, dv: .009, radius: .025 }];
+    source.effects = { mottle: { model: "mottle-1", amount: .4, grain: .5, clumping: .3, where: "everywhere", seed: 31 } };
+    const saved = readStarterShape(JSON.parse(JSON.stringify(shapeOfLayer(source))), newLayerTemplate(), MODELS)!;
+    expect(saved).toBeDefined();
+    const applied = layerWithShape(newLayerTemplate(), saved);
+    expect(applied.fields).toEqual(source.fields);
+    expect(applied.fields).not.toBe(source.fields);
+    const mottle = { skin: REGION.skin, spacing: { u: 1 / 2048, v: 1 / 2048 } };
+    const before = layerCoverageSampler(source, REGION.mirror, mottle), after = layerCoverageSampler(applied, REGION.mirror, mottle);
+    const unwarped = layerCoverageSampler({ ...source, fields: [] }, REGION.mirror, mottle);
+    let difference = 0, deformation = 0;
+    for (let y = 0; y < 128; y++) for (let x = 0; x < 256; x++) {
+      const u = .32 + x / 256 * .36, v = .19 + y / 128 * .1;
+      difference = Math.max(difference, Math.abs(before(u, v) - after(u, v)));
+      deformation = Math.max(deformation, Math.abs(before(u, v) - unwarped(u, v)));
+    }
+    expect(difference).toBeLessThan(1e-12);
+    expect(deformation).toBeGreaterThan(.1);
+    // Older/contributed starters without deformation still clear the target's fields and effects.
+    expect(layerWithShape(source, starter("lid-wash").shape).fields).toEqual([]);
+    expect(layerWithShape(source, starter("lid-wash").shape).effects).toBeUndefined();
+    for (const fields of [null, [{ ...source.fields[0], du: .101 }], Array.from({ length: MAX_FIELDS + 1 }, (_, i) => ({ ...source.fields[0], id: `f-${i}` })),
+      [source.fields[0], source.fields[0]]])
+      expect(readStarterShape({ ...saved, fields }, newLayerTemplate(), MODELS)).toBeUndefined();
+    expect(readStarterShape({ ...saved, effects: { mottle: { ...source.effects.mottle, amount: 2 } } }, newLayerTemplate(), MODELS)).toBeUndefined();
   });
 
   test("a shape that breaks the layer rules is not read", () => {
@@ -414,7 +444,7 @@ async function studioWithStarters(options: { looks?: StudioLookInput[] } = {}) {
     random: seededRandom(77), note: text => notes.push(text) });
   holder.starters = starters;
   await starters.load();
-  const actions = new StarterActions({ starters, feature: REGION.id, label: "Eye makeup", thumbnail: REGION.thumbnail, layer: id => studio.document.recipe.layers.find(layer => layer.id === id) });
+  const actions = new StarterActions({ starters, feature: REGION.id, label: "Eye makeup", thumbnail: REGION.thumbnail, layer: (ref, id) => { const shown = studio.lookEditor.ref(); return shown && shown.collection === ref.collection && shown.look === ref.look ? studio.document.recipe.layers.find(layer => layer.id === id) : undefined; } });
   studio.core.app.attach({ starters: actions, starterShapes: starters });
   return { studio, starters, actions, choice, notes };
 }
@@ -422,6 +452,25 @@ const pointsOf = (layer: Layer) => layer.points.map(point => [point.u, point.v])
 const shapePoints = (id: string) => pointsOf(layerWithShape(newLayerTemplate(), starter(id).shape));
 
 describe("in the application", () => {
+  test("a captured Save refuses a switched look with the same layer ID, and a removed layer", async () => {
+    const a = starterRecipe(), b = starterRecipe();
+    b.layers[0]!.points[0]!.u += .01;
+    const { studio, starters } = await studioWithStarters({ looks: [{ name: "A", recipe: a }, { name: "B", recipe: b }] });
+    const look = studio.lookEditor.ref()!, layerId = studio.document.recipe.layers[0]!.id;
+    const save = { kind: "starters.save" as const, look, layerId, name: "Captured A" };
+    expect(studio.core.app.capability(save).available).toBe(true);
+    const next = studio.owner.looksOf(look.collection).find(item => item.ref.look !== look.look)!;
+    studio.scene.setLook(next.ref);
+    expect(studio.document.recipe.layers[0]!.id).toBe(layerId);
+    expect(studio.core.app.capability(save)).toMatchObject({ available: false, code: "missing_target" });
+    expect(studio.core.app.dispatch(save)).toMatchObject({ ok: false, code: "missing_target" });
+    expect(starters.list().some(item => item.name === save.name)).toBe(false);
+    studio.scene.setLook(look);
+    studio.app.dispatch({ kind: "layer.edit", command: { kind: "remove", id: layerId } });
+    expect(studio.core.app.capability(save)).toMatchObject({ available: false, code: "missing_target" });
+    await studio.settle();
+  });
+
   test("Add layer starts from the default starter, a starter it names, and the default after Use for new layers", async () => {
     const { studio } = await studioWithStarters({ looks: [{ name: "Look", recipe: starterRecipe() }] });
     const layers = () => studio.document.recipe.layers;

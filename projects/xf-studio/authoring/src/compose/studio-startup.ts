@@ -328,7 +328,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: STUDIO_FRAGMENT_KNOWLEDGE });
   core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
   const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: region.label, thumbnail: region.thumbnail,
-    layer: id => core.document.recipe.layers.find(layer => layer.id === id) });
+    layer: (ref, id) => { const edited = lookEditor.ref();
+      return edited && sameLook(ref, edited) ? core.document.recipe.layers.find(layer => layer.id === id) : undefined; } });
   core.app.attach({ starters: starterActions, starterShapes });
   const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });

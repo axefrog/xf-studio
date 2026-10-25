@@ -95,7 +95,7 @@ export const ACTION_DESCRIPTORS = {
   // Starter shapes (app/starters/starter-actions.ts): which starter new layers and looks use, and the person's own (library documents through the
   // outbox). Deleting one is a tombstone; restoring it is the Undo notice's action. Adding a layer from a starter is `layer.edit`.
   "starters.setDefault": desc("workspace", "workspace", "none", { starter: target("string") }),
-  "starters.save": desc("layer", "library", "none", { layerId: target("string"), name: inputText(1, STARTER_NAME_LIMIT) }),
+  "starters.save": desc("layer", "library", "none", { look: TARGET_SCHEMA.look, layerId: target("string"), name: inputText(1, STARTER_NAME_LIMIT) }),
   "starters.rename": desc("workspace", "library", "none", { starter: target("string"), name: inputText(1, STARTER_NAME_LIMIT) }),
   "starters.delete": desc("workspace", "library", "recovery", { starter: target("string") }),
   "starters.restore": desc("workspace", "library", "recovery", { starter: target("string") }),

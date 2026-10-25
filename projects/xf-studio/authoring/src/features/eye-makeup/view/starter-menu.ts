@@ -74,12 +74,12 @@ function remove(ctx: EyeMakeupViewContext, item: StarterView) {
 }
 
 /** Save a layer's shape as the person's own starter: its name in the value popover (1 to 60 characters, the layer's name to start). */
-export function saveStarter(ctx: EyeMakeupViewContext, layerId: string, anchor: MenuAnchor) {
+export function saveStarter(ctx: EyeMakeupViewContext, layerId: string, anchor: MenuAnchor, look = ctx.starters.look()) {
   const layer = ctx.facade.view().recipe().layers.find(item => item.id === layerId);
-  if (!layer) return;
+  if (!layer || !look) return;
   openValuePopover({ kind: "text", label: "Name", value: layer.name.slice(0, 60), maxLength: 61 }, anchor, { title: "Save shape as starter", apply: "Save",
     hint: "Saves this layer's shape, softness and opacity as a starter of yours. Eye makeup's starters stay available.",
-    validate: value => ctx.starters.capability({ kind: "starters.save", layerId, name: String(value) }),
-    commit: value => { if (ctx.platform({ kind: "starters.save", layerId, name: String(value) }))
+    validate: value => ctx.starters.capability({ kind: "starters.save", look, layerId, name: String(value) }),
+    commit: value => { if (ctx.platform({ kind: "starters.save", look, layerId, name: String(value) }))
       ctx.feedback.toast("info", "Starters", `Saved “${String(value).trim()}”. Find it in the starter menu beside Add layer.`); } });
 }

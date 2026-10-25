@@ -105,7 +105,7 @@ Gesture proposals (sent inside a gesture session; the session owns the Undo step
 | Action | Scope | Effect | Undo | Inputs | Variants |
 |---|---|---|---|---|---|
 | `starters.setDefault` | workspace | workspace | none | starter: string |  |
-| `starters.save` | layer | library | none | layerId: string, name: string |  |
+| `starters.save` | layer | library | none | look: object, layerId: string, name: string |  |
 | `starters.rename` | workspace | library | none | starter: string, name: string |  |
 | `starters.delete` | workspace | library | recovery | starter: string |  |
 | `starters.restore` | workspace | library | recovery | starter: string |  |
