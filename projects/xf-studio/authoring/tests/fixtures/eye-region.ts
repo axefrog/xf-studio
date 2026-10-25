@@ -3,7 +3,8 @@
  * (`engines/layered-makeup/region.ts`), and these helpers pass eye makeup's (`features/eye-makeup/region.ts`)
  * exactly as the feature, the preview and the exporter do. Tests of other regions call the engine directly.
  */
-import { EYE_MAKEUP_REGION, initialRecipe, newLayerTemplate, starterRecipe } from "../../src/features/eye-makeup/region";
+import { EYE_MAKEUP_REGION, initialRecipe, newLayerTemplate as defaultLayerTemplate, starterRecipe } from "../../src/features/eye-makeup/region";
+import { EYE_STARTERS } from "../../src/features/eye-makeup/starters";
 import * as recipe from "../../src/engines/layered-makeup/recipe";
 import * as stack from "../../src/engines/layered-makeup/layer-stack";
 import * as actions from "../../src/engines/layered-makeup/recipe-actions";
@@ -22,7 +23,12 @@ import * as client from "../../src/legacy/eye-makeup/browser/raster-client";
 import * as stackRender from "../../src/engines/layered-makeup/render/makeup-stack";
 import * as port from "../../src/legacy/eye-makeup/authoring-eye-makeup";
 
-export { EYE_MAKEUP_REGION, initialRecipe, newLayerTemplate, starterRecipe };
+/**
+ * The layer the fixtures and their golden hashes were built on: the original wing contour, which new layers started from before starters
+ * (now the "Wing (original)" starter). `defaultLayerTemplate` is what a new layer starts as today.
+ */
+const newLayerTemplate = () => defaultLayerTemplate(EYE_STARTERS.find(item => item.id === "wing-original")!.shape);
+export { EYE_MAKEUP_REGION, initialRecipe, newLayerTemplate, defaultLayerTemplate, starterRecipe };
 export const EYE_REGION = EYE_MAKEUP_REGION;
 export const EYE_MIRROR = EYE_MAKEUP_REGION.mirror;
 export const EYE_SKIN = EYE_MAKEUP_REGION.skin;

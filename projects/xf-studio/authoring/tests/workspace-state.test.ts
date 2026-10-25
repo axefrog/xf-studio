@@ -3,7 +3,7 @@ import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type 
 import { readSavedV } from "../src/saves/save-reader";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { freshWorkspace, initialRecipe, newLayerTemplate } from "./fixtures/eye-region";
+import { freshWorkspace, initialRecipe, defaultLayerTemplate as newLayerTemplate } from "./fixtures/eye-region";
 import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 
 test("an absent browser workspace starts with one editable four-point makeup area", () => {

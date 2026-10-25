@@ -49,19 +49,19 @@ test("layer operations preserve identity, isolate copies, allow removal of the l
   expect(JSON.stringify(original)).toBe(originalText);
 });
 
-test("a new layer starts as a four-point upper-lid wash without changing saved or copied contours", () => {
+test("a new layer starts as the default starter's lid wash without changing saved or copied contours", () => {
   const original = initialRecipe(), saved = JSON.stringify(original), history = recipeHistory([]);
   history.checkpoint(() => original, [RECIPE_HISTORY.feature]);
   const added = editLayers(original, original.layers[0].id, { kind: "add", newId: "added-1" });
   const layer = added.recipe.layers[added.active];
-  expect(layer.points).toHaveLength(4);
+  expect(layer.points).toHaveLength(10);
   expect(layer.pathMode).toBe("bezier");
   expect(layer.points.every(point => point.handles?.mode === "symmetric")).toBe(true);
   expect(layer.fields).toEqual([]);
   expect(layer.symmetry).toBe(true);
-  expect(coverage(.37, .225, layer)).toBeGreaterThan(.4);
-  expect(coverage(.63, .225, layer)).toBe(coverage(.37, .225, layer));
-  expect(coverage(.37, .27, layer)).toBe(0);
+  expect(coverage(.4, .24, layer)).toBeGreaterThan(.4);
+  expect(coverage(.6, .24, layer)).toBe(coverage(.4, .24, layer));
+  expect(coverage(.4, .29, layer)).toBe(0);
   expect(JSON.stringify(original)).toBe(saved);
   expect(history.revert()?.[RECIPE_HISTORY.feature]).toEqual(parseRecipe(original));
   const blank = editLayers({ ...original, layers: [] }, undefined, { kind: "add", newId: "added-2" });
@@ -70,7 +70,7 @@ test("a new layer starts as a four-point upper-lid wash without changing saved o
   const duplicate = editLayers(added.recipe, layer.id, { kind: "duplicate", id: original.layers[0].id, newId: "copy-1" });
   expect(duplicate.recipe.layers[1].points).toEqual(original.layers[0].points);
   const reset = editLayers(duplicate.recipe, layer.id, { kind: "reset", id: original.layers[0].id });
-  expect(reset.recipe.layers[0].points).toHaveLength(4);
+  expect(reset.recipe.layers[0].points).toHaveLength(10);
   expect(reset.recipe.layers[0].id).toBe(original.layers[0].id);
   expect(reset.recipe.layers[0].name).toBe(original.layers[0].name);
 });
