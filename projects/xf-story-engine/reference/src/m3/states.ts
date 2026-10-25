@@ -1,5 +1,5 @@
 // The story states of M3: small hand-authored bundles of main-story facts from the curated table, and the street around V.
-// A state names real facts only (checked when a run starts), and varies
+// A state names real facts only (checked when a run starts) and no fact about the player's background, so that nothing hinges on who the player's character is (D-25). It varies
 // the street rather than the story: the gang's money, a crackdown, V's standing with the stalls.
 //
 // V's history is replayed as the game would report it. The ledger is calibrated for long histories, so a state with a
@@ -33,27 +33,27 @@ const crackdown = { name: 'regimes: a crackdown arrives daily', apply: (d: impor
 export const STATES: StoryState[] = [
   {
     id: 'S-prologue', note: 'the prologue is done and nothing after it: the seed must wait', history: none, street: [calm],
-    facts: { q000_done: 1, q000_street_kid_background: 1 },
+    facts: { q000_done: 1 },
   },
   {
     id: 'S-early-quiet', note: 'early in the story, a quiet street, a gang with money', history: none, street: [calm, clawsFlush],
-    facts: { q000_done: 1, q001_done: 1, q003_done: 1, q000_nomad_background: 1 },
+    facts: { q000_done: 1, q001_done: 1, q003_done: 1 },
   },
   {
     id: 'S-mid-squeezed', note: 'mid story, the gang is short of money, V has a name for helping people in public', history: acts('rescue', 24), street: [compressed, calm, clawsSqueezed],
-    facts: { q000_done: 1, q001_done: 1, q003_done: 1, q004_done: 1, q005_done: 1, q101_done: 1, q103_done: 1, q000_corpo_background: 1 },
+    facts: { q000_done: 1, q001_done: 1, q003_done: 1, q004_done: 1, q005_done: 1, q101_done: 1, q103_done: 1 },
   },
   {
     id: 'S-mid-crackdown', note: 'mid story, police pressing the district, V unknown to the stalls', history: none, street: [crackdown, clawsFlush],
-    facts: { q000_done: 1, q001_done: 1, q003_done: 1, q004_done: 1, q005_done: 1, q101_done: 1, q104_done: 1, q105_done: 1, q000_street_kid_background: 1 },
+    facts: { q000_done: 1, q001_done: 1, q003_done: 1, q004_done: 1, q005_done: 1, q101_done: 1, q104_done: 1, q105_done: 1 },
   },
   {
     id: 'S-late-wary', note: 'late in the story, the gang is squeezed and the stalls are wary of V', history: acts('harm', 24), street: [compressed, calm, clawsSqueezed],
-    facts: { q000_done: 1, q001_done: 1, q003_done: 1, q004_done: 1, q005_done: 1, q101_done: 1, q103_done: 1, q104_done: 1, q105_done: 1, q108_done: 1, q110_done: 1, q000_nomad_background: 1 },
+    facts: { q000_done: 1, q001_done: 1, q003_done: 1, q004_done: 1, q005_done: 1, q101_done: 1, q103_done: 1, q104_done: 1, q105_done: 1, q108_done: 1, q110_done: 1 },
   },
   {
     id: 'S-past-ponr', note: 'the point of no return has passed: the window is closed', history: none, street: [calm],
-    facts: { q000_done: 1, q001_done: 1, q005_done: 1, q115_point_of_no_return: 1, q000_corpo_background: 1 },
+    facts: { q000_done: 1, q001_done: 1, q005_done: 1, q115_point_of_no_return: 1 },
   },
 ];
 

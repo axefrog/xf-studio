@@ -1,12 +1,13 @@
 // Reference scenario R2 (M3): "The Friday Fee", an authored Kabuki storyline over what S1's core already simulates.
-// A market stallholder, a generated resident, is squeezed by the Tyger Claws' Friday fee and asks V what they will do.
-// V can help pay, broker a deal, stand up to the collector, or stay out of it. The seed reads the fee norm, the gang's
+// A market stallholder, a generated resident, is squeezed by the Tyger Claws' Friday fee and asks the player's character what they will do.
+// The player's character (the specs' `v` role; transcripts call it V for now) can help pay, broker a deal, stand up to the collector, or stay out of it. The seed reads the fee norm, the gang's
 // state, the stallholders' view of V (the reputation carrier) and the market's incident heat, through registered reads.
 //
 // It is written in S2 v1.10's core language the way Appendix A.4 writes R1: an expanded beat graph with no profile,
 // only core constructs, lint-clean at `ready`. One presentation slot is an author-fill stand-in (D-23): the
 // confrontation scene, with an implied partner that plays when no human-written scene is installed.
-// No main-story character is its focus; its facts are the quest-progress facts the context reads.
+// No main-story character is its focus, and nothing in it depends on who the player's character is: its text says "you", and
+// the only facts it reads are progress gates of the game's story, which hold for any protagonist.
 
 import { parsePred } from '../seeding/pred.ts';
 import type { Fragment, Pack, Pred, Seed, SeedInput, TextUnit } from '../seeding/types.ts';
@@ -39,7 +40,7 @@ export function r2Seed(over: Partial<SeedInput> = {}): SeedInput {
     level: 'gig',
     stakeScale: 'person',
     turns: [{ level: 'concern', who: 'stallholder', kind: 'standing', what: 'seedFact(stance) > 0' }],
-    purpose: { tags: ['pressure', 'fee', 'neighbourhood'], sentence: 'A stallholder is squeezed by the gang that collects on Fridays, and asks V what they will do.' },
+    purpose: { tags: ['pressure', 'fee', 'neighbourhood'], sentence: 'A stallholder is squeezed by the gang that collects on Fridays, and asks the player character what they will do.' },
     context: 'q000_done == 1',
     intent: { prohibitions: [], tone: ['grounded', 'wary'] },
     roles: {
@@ -66,7 +67,7 @@ export function r2Seed(over: Partial<SeedInput> = {}): SeedInput {
     windows: [
       {
         id: 'friday',
-        // V is out of the first stretch of the story, and the stalls are under strain over the fee: the offer is made while the norm is gapped
+        // the game's opening is over (a progress gate, true of any protagonist), and the stalls are under strain over the fee: the offer is made while the norm is gapped
         opens: { all: [parsePred('q001_done == 1'), feeStrained()] },
         closes: 'q115_point_of_no_return == 1',
         lead: 'preferred',
