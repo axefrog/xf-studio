@@ -13,4 +13,4 @@ Built from the quality bar of dossier 23 (5.2) and the criteria sheet (5.5). One
 
 Cards: 96 (24 per arm over 4 arms). Pairs: 96. Raters: 4, each with a different balanced order (the second is the first reversed).
 
-Decision rule: the engine beats the baseline when, over raters, its share of forced choices against A3 is above one half beyond the sign test (two-sided p < 0.05) on both questions, and its mean on "caused" and "pull" is above A3's. Selection (E against A1) is credited only if E beats A1 by the same rule; otherwise the simpler design stands (PNL-11). Detection (made_by) is reported by arm.
+Decision rule: the engine beats the baseline when its share of forced choices against A3 is above one half on both questions in every rater taken alone, and its mean on "caused" and "pull" is above A3's. The pooled counts are reported as counts: the raters judge the same items, so the pooled n is not a sample of independent choices and no significance test is run on it. Selection (E against A1) is credited only if E beats A1 by the same rule; otherwise the simpler design stands (PNL-11). Detection (made_by) is reported by arm.

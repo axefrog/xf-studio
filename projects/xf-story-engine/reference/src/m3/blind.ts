@@ -124,45 +124,25 @@ export interface RaterAnswer {
   critic?: string;
 }
 
-/** The two-sided exact binomial (sign) test for `wins` out of `n` against 0.5. */
-export function signTest(wins: number, n: number): number {
-  if (n === 0) return 1;
-  const logC = (k: number): number => {
-    let r = 0;
-    for (let i = 1; i <= k; i++) r += Math.log((n - k + i) / i);
-    return r;
-  };
-  const pk = (k: number): number => Math.exp(logC(k) + n * Math.log(0.5));
-  const obs = pk(wins);
-  let p = 0;
-  for (let k = 0; k <= n; k++) if (pk(k) <= obs + 1e-12) p += pk(k);
-  return Math.min(1, p);
-}
-
 export interface ArmScore { n: number; mean: Record<string, number>; detected: number; detectedOf: number }
+/** Forced choices of one pairing on one question: wins of the first arm (the alphabetically first of the two) out of n. */
+export interface PairCount { x: Arm; y: Arm; criterion: 'follow' | 'caused'; wins: number; n: number }
 export interface Score {
   raters: string[];
   arms: Record<string, ArmScore>;
-  /** For each pair of arms X over Y: the share of forced choices the first won, on each of the two questions, with the sign test. */
-  pairs: Array<{ x: Arm; y: Arm; criterion: 'follow' | 'caused'; wins: number; n: number; p: number }>;
+  /**
+   * For each pair of arms X over Y: the pooled count of forced choices the first won, on each of the two questions. The count is
+   * descriptive. No significance is attached: the same 24 items are judged by every rater, and the raters share a design, so the
+   * pooled n is not a sample of independent choices.
+   */
+  pairs: PairCount[];
+  /** The same counts for each rater alone, in the order of `raters`: the consistency of the direction across raters is the evidence. */
+  perRater: Array<{ rater: string; pairs: PairCount[] }>;
   /** The share of raters' per-card scores in which two raters of one card differ by 2 or more points, by criterion. */
   disagreement: Record<string, number>;
 }
 
-export function score(p: Packet, answers: RaterAnswer[]): Score {
-  const arms: Record<string, { sums: Record<string, number>; n: number; det: number; detOf: number }> = {};
-  for (const a of answers) {
-    for (const [id, c] of Object.entries(a.cards)) {
-      const arm = p.key[id]?.arm;
-      if (!arm) continue;
-      const row = (arms[arm] ??= { sums: {}, n: 0, det: 0, detOf: 0 });
-      row.n++;
-      for (const cr of CRITERIA) row.sums[cr.id] = (row.sums[cr.id] ?? 0) + (c[cr.id] ?? 0);
-      row.detOf++;
-      if (/program/i.test(c.made_by)) row.det++;
-    }
-  }
-  const armScores = Object.fromEntries(Object.entries(arms).map(([arm, r]) => [arm, { n: r.n, mean: Object.fromEntries(Object.entries(r.sums).map(([k, v]) => [k, Math.round((v / r.n) * 100) / 100])), detected: r.det, detectedOf: r.detOf }]));
+function pairCounts(p: Packet, answers: RaterAnswer[]): PairCount[] {
   const wins: Record<string, { w: number; n: number }> = {};
   for (const a of answers) {
     for (const [id, c] of Object.entries(a.pairs)) {
@@ -180,10 +160,26 @@ export function score(p: Packet, answers: RaterAnswer[]): Score {
       }
     }
   }
-  const pairs = Object.entries(wins).map(([key, v]) => {
+  return Object.entries(wins).sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, v]) => {
     const [x, y, criterion] = key.split('|') as [Arm, Arm, 'follow' | 'caused'];
-    return { x, y, criterion, wins: v.w, n: v.n, p: Math.round(signTest(v.w, v.n) * 1e4) / 1e4 };
+    return { x, y, criterion, wins: v.w, n: v.n };
   });
+}
+
+export function score(p: Packet, answers: RaterAnswer[]): Score {
+  const arms: Record<string, { sums: Record<string, number>; n: number; det: number; detOf: number }> = {};
+  for (const a of answers) {
+    for (const [id, c] of Object.entries(a.cards)) {
+      const arm = p.key[id]?.arm;
+      if (!arm) continue;
+      const row = (arms[arm] ??= { sums: {}, n: 0, det: 0, detOf: 0 });
+      row.n++;
+      for (const cr of CRITERIA) row.sums[cr.id] = (row.sums[cr.id] ?? 0) + (c[cr.id] ?? 0);
+      row.detOf++;
+      if (/program/i.test(c.made_by)) row.det++;
+    }
+  }
+  const armScores = Object.fromEntries(Object.entries(arms).map(([arm, r]) => [arm, { n: r.n, mean: Object.fromEntries(Object.entries(r.sums).map(([k, v]) => [k, Math.round((v / r.n) * 100) / 100])), detected: r.det, detectedOf: r.detOf }]));
   const dis: Record<string, { d: number; n: number }> = {};
   for (const cr of CRITERIA) dis[cr.id] = { d: 0, n: 0 };
   for (const c of p.cards) for (const cr of CRITERIA) {
@@ -191,7 +187,8 @@ export function score(p: Packet, answers: RaterAnswer[]): Score {
     for (let i = 0; i < vals.length; i++) for (let j = i + 1; j < vals.length; j++) { dis[cr.id]!.n++; if (Math.abs(vals[i]! - vals[j]!) >= 2) dis[cr.id]!.d++; }
   }
   return {
-    raters: answers.map((a) => a.rater), arms: armScores, pairs,
+    raters: answers.map((a) => a.rater), arms: armScores, pairs: pairCounts(p, answers),
+    perRater: answers.map((a) => ({ rater: a.rater, pairs: pairCounts(p, [a]) })),
     disagreement: Object.fromEntries(Object.entries(dis).map(([k, v]) => [k, v.n ? Math.round((v.d / v.n) * 100) / 100 : 0])),
   };
 }

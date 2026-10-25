@@ -40,8 +40,11 @@ if (answersDir !== '-' && existsSync(answersDir)) {
     const s = score(p, answers.map((x) => x.a));
     lines.push(`## Blind pass: ${answers.length} rater${answers.length === 1 ? '' : 's'} (${s.raters.join(', ')})`, '', '| Arm | Cards rated | ' + CRITERIA.map((c) => c.id).join(' | ') + ' | Called "program" |', '|---|---|' + CRITERIA.map(() => '---').join('|') + '|---|');
     for (const [arm, v] of Object.entries(s.arms)) lines.push(`| ${arm} ${ARM_NAMES[arm as Arm]} | ${v.n} | ${CRITERIA.map((c) => v.mean[c.id]).join(' | ')} | ${v.detected}/${v.detectedOf} |`);
-    lines.push('', 'Forced choices (the first arm of the row against the second; wins of the first, sign test two-sided):', '', '| First | Second | Question | Wins | Of | p |', '|---|---|---|---|---|---|');
-    for (const x of s.pairs.sort((a, b) => (a.x + a.y + a.criterion < b.x + b.y + b.criterion ? -1 : 1))) lines.push(`| ${x.x} | ${x.y} | ${x.criterion} | ${x.wins} | ${x.n} | ${x.p} |`);
+    const order = (a: { x: string; y: string; criterion: string }, b: { x: string; y: string; criterion: string }): number => (a.x + a.y + a.criterion < b.x + b.y + b.criterion ? -1 : 1);
+    lines.push('', 'Forced choices (the first arm of the row against the second; wins of the first over all raters). These are counts, not tests: every rater judges the same items and the raters share a design, so the pooled n is not a sample of independent choices and no significance is attached to it. The evidence is the direction, rater by rater:', '', '| First | Second | Question | Wins | Of |', '|---|---|---|---|---|');
+    for (const x of s.pairs.slice().sort(order)) lines.push(`| ${x.x} | ${x.y} | ${x.criterion} | ${x.wins} | ${x.n} |`);
+    lines.push('', 'Forced choices by rater (wins of the first arm of the row, of the count of each rater alone):', '', `| First | Second | Question | ${s.perRater.map((r) => r.rater).join(' | ')} |`, `|---|---|---|${s.perRater.map(() => '---').join('|')}|`);
+    for (const x of s.pairs.slice().sort(order)) lines.push(`| ${x.x} | ${x.y} | ${x.criterion} | ${s.perRater.map((r) => { const o = r.pairs.find((q) => q.x === x.x && q.y === x.y && q.criterion === x.criterion); return o ? `${o.wins} of ${o.n}` : 'n/a'; }).join(' | ')} |`);
     lines.push('', `Disagreement (share of rater pairs differing by 2 or more points): ${JSON.stringify(s.disagreement)}.`, '');
     for (const x of answers) if (x.a.critic) lines.push(`### Critic, ${x.a.rater}`, '', x.a.critic, '');
   }

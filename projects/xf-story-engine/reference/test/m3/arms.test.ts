@@ -6,7 +6,7 @@ import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { defaultData as l3Default } from '../../src/procedural/data.ts';
 import { TEMPLATES, radiantJob, randomWithinGates } from '../../src/m3/arms.ts';
-import { type Arm, type Hook, type RaterAnswer, buildPacket, cardsMarkdown, instructions, pairsMarkdown, score, signTest } from '../../src/m3/blind.ts';
+import { type Arm, type Hook, type RaterAnswer, buildPacket, cardsMarkdown, instructions, pairsMarkdown, score } from '../../src/m3/blind.ts';
 import { findings, skeleton, tells } from '../../src/m3/critic.ts';
 import { Run, policies } from '../../src/m3/driver.ts';
 import { R2_ID, r2Pack } from '../../src/m3/r2.ts';
@@ -43,6 +43,32 @@ describe('A3, the Radiant-style baseline', () => {
     const later = new Run({ name: 'a3-test', layer3: false, packs: [] }, stateById('S-early-quiet'), policies.decline!);
     later.runWindows(10);
     expect(radiantJob(later.w, (id) => later.nameOf(id), 'a3-test', 3)).toEqual(jobs[3]);
+  });
+
+  test('the declared slot rule: the nearest eligible resident and place, ties to the smaller identifier', () => {
+    const sim = run.w.sim;
+    const cell = sim.w.index.names!.g1!;
+    const c = sim.w.index.cells[cell]!;
+    const rings = [[cell], [...c.adj1].sort(), [...c.adj2].sort()];
+    const roles = new Set(['vendor', 'shopkeeper', 'service', 'nightlife', 'technician', 'labourer', 'retired']);
+    const eligible = (ring: string[], skip: string[] = []): string[] =>
+      ring.flatMap((b) => sim.people.residentsOfBlock(b)).filter((r) => { const v = sim.people.view(r); return v && v.aband >= 1 && roles.has(v.role) && run.nameOf(r) && !skip.includes(r); }).sort();
+    const nearest = rings.map((r) => eligible(r)).find((l) => l.length > 0)![0]!;
+    const words: Record<string, string> = { vendor: 'the market stalls', bar: 'a bar off the market', clinic: 'the clinic', safehouse: 'a safehouse', lodging: 'a capsule hotel', ripperdoc: 'the ripperdoc', 'fast-travel': 'the metro entrance' };
+    const venues: string[] = [];
+    for (const ring of rings) for (const sv of ring.flatMap((b) => sim.w.index.cells[b]!.services).sort((a, b) => (a.id < b.id ? -1 : 1))) if (words[sv.type] && !venues.includes(words[sv.type]!)) venues.push(words[sv.type]!);
+    const declared = Array.from({ length: 40 }, (_, i) => radiantJob(run.w, (id) => run.nameOf(id), 'a3-rule', i)!);
+    for (const j of declared) {
+      expect(j.names[0], 'client is the nearest eligible resident, smallest identifier').toBe(run.nameOf(nearest));
+      if (/from (the|a) /.test(j.text) || j.text.includes('near ')) expect(j.text.includes(venues[0]!), j.text).toBe(true);
+    }
+    // an escort walks from the nearest place to the next distinct one
+    const escort = declared.find((j) => j.template === 'escort');
+    if (venues.length > 1 && escort) expect(escort.text).toContain(`from ${venues[0]} to ${venues[1]}`);
+    // the rule the rated packet was built with is not this one: its client is a keyed pick among the first four
+    const rated = Array.from({ length: 40 }, (_, i) => radiantJob(run.w, (id) => run.nameOf(id), 'a3-rule', i, 'g1', 'rated-v1')!);
+    expect(new Set(rated.map((j) => j.names[0])).size).toBeGreaterThan(1);
+    expect(new Set(declared.map((j) => j.names[0])).size).toBe(1);
   });
 
   test('the templates are the eight the dossier names', () => {
@@ -111,13 +137,6 @@ describe('the blind packet', () => {
 });
 
 describe('the scorer', () => {
-  test('the sign test matches the exact binomial', () => {
-    expect(signTest(5, 10)).toBeCloseTo(1, 6);
-    expect(signTest(10, 10)).toBeCloseTo(2 / 1024, 6);
-    expect(signTest(9, 10)).toBeCloseTo(22 / 1024, 6);
-    expect(signTest(0, 0)).toBe(1);
-  });
-
   test('raters who prefer one arm give that arm the means and the pair wins', () => {
     const p = buildPacket(hooks(8), 'score', 2, [['E', 'A3']]);
     const mk = (name: string, lead: Arm): RaterAnswer => ({
@@ -133,7 +152,14 @@ describe('the scorer', () => {
     const row = s.pairs.find((x) => x.x === 'A3' && x.y === 'E' && x.criterion === 'follow')!;
     expect(row.wins).toBe(0);
     expect(row.n).toBe(16);
-    expect(row.p).toBeLessThan(0.001);
+    // pooled counts carry no significance claim (the items repeat across raters); the direction is read per rater
+    expect(Object.keys(row)).not.toContain('p');
+    expect(s.perRater.map((r) => r.rater)).toEqual(['r1', 'r2']);
+    for (const r of s.perRater) {
+      const own = r.pairs.find((x) => x.x === 'A3' && x.y === 'E' && x.criterion === 'follow')!;
+      expect(own.wins).toBe(0);
+      expect(own.n).toBe(8);
+    }
     expect(s.disagreement.caused).toBe(0);
   });
 });
