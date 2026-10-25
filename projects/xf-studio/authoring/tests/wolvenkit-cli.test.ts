@@ -3,15 +3,41 @@ import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classifyWolvenKitRun, isRuntimeMissing, runWolvenKit, runWolvenKitSync, WOLVENKIT_RUNTIME_MISSING_MESSAGE, wolvenKitIdentity,
-  wolvenKitIdentityKey, WolvenKitRunError } from "../src/host/wolvenkit-cli";
+  wolvenKitIdentityKey, WolvenKitRunError, judgeWolvenKitProbe } from "../src/host/wolvenkit-cli";
+import { readPeFileVersion, readPeProductVersion } from "../src/formats/pe-version";
 import { createWolvenKitVerifierTools } from "../src/legacy/eye-makeup/export/host/verifier-wolvenkit";
 import type { ProcessTreeResult } from "../src/host/process-tree";
 import { tempDir } from "./temp-dir";
+import { peVersionFixture } from "./fixtures/pe-version";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
 const result = (patch: Partial<ProcessTreeResult>): ProcessTreeResult => ({ exitCode: 0, stdout: "", stderr: "", stopped: null, ...patch });
 const failure = (run: () => unknown) => { try { run(); } catch (error) { return error as WolvenKitRunError; } throw Error("expected a failure"); };
+
+test("the CLI probe accepts the evaluated nightly exactly, with the required commands; unknown builds remain unsupported", () => {
+  const help = () => ({ status: 0, failed: false, text: "import export convert pack extract uncook unbundle" });
+  for (const version of ["8.17.4", "9.0.1", "10.0.0-beta.2-nightly.2026-10-25"])
+    expect(judgeWolvenKitProbe({ status: 0, failed: false, text: `WolvenKit.CLI ${version}\n` }, help)).toEqual({ ok: true, version });
+  for (const version of ["10.0.0", "10.0.0-beta.1", "10.0.0-beta.2", "10.0.0-beta.2-nightly.2026-10-26",
+    "10.0.0-beta.2-nightly.2026-10-25-extra", "10.0.0-beta.2-nightly.2026-10-25+other", "9.0.1-unknown", "9.0.10", "11.0.0"])
+    expect(judgeWolvenKitProbe({ status: 0, failed: false, text: `WolvenKit.CLI ${version}` }, help)).toMatchObject({ ok: false, code: "unsupported" });
+  expect(judgeWolvenKitProbe({ status: 0, failed: false, text: "10.0.0-beta.2-nightly.2026-10-25" },
+    () => ({ status: 0, failed: false, text: "convert" }))).toMatchObject({ ok: false, code: "commands" });
+});
+
+test("PE product versions retain nightly labels, and malformed string blocks cannot supply a version", () => {
+  const product = "10.0.0-beta.2-nightly.2026-10-25";
+  const image = peVersionFixture([10, 0, 0, 0], product);
+  const read = (offset: number, length: number) => image.subarray(offset, offset + length);
+  expect(readPeFileVersion(read)).toBe("10.0.0.0");
+  expect(readPeProductVersion(read)).toBe(product);
+  const key = Buffer.from(image).indexOf(Buffer.from("ProductVersion\0", "utf16le"));
+  new DataView(image.buffer, image.byteOffset, image.byteLength).setUint16(key - 4, 0xffff, true);
+  expect(readPeProductVersion(read)).toBeNull();
+  const fixedOnly = peVersionFixture([9, 0, 1, 0]);
+  expect(readPeProductVersion((offset, length) => fixedOnly.subarray(offset, offset + length))).toBeNull();
+});
 
 test("one success policy: exit code, unhandled exceptions, time limit and cancellation are typed", () => {
   expect(classifyWolvenKitRun("cli uncook", result({ stdout: "Uncooked 2/2 files." })).exitCode).toBe(0);

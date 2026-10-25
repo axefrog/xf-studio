@@ -109,6 +109,9 @@ class JsonWriter {
     const keys = new Set(Object.keys(object.fields));
     for (const [name] of props ?? []) keys.add(name);
     if (!this.options.omitDefaults) for (const name of learnedKeys(object.type)) keys.add(name);
+    // WolvenKit 9.x defaults this enum to NONE, 10.x to EYES. No consumer needs its meaning, and the resource does not name
+    // the tool's type-default policy. Preserve absence so reading and rewriting never invents a stored face region.
+    if (object.type === "MorphTargetMeshEntry" && !Object.hasOwn(object.fields, "faceRegion")) keys.delete("faceRegion");
     this.session.jsonNodes(keys.size + 1);
     this.session.enter();
     const out: Record<string, unknown> = { $type: object.type };

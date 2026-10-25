@@ -24,9 +24,10 @@ import { RedBuffer, type RedDocument, RedHandle, RedObject } from "./red-model";
  * well-formed resources are unchanged. 3: an array record is read to its end past a short count (a hair replacer pack's
  * `renderLODs`, as WolvenKit shows it; noted), and the defaults were learned again on 2,448 resources. 4: an omitted property
  * no sampled file left out reads as its class default, not the type's zero (`rtti-class-defaults.json`; `CHairProfile.sampleCount`
- * 64, PIPE-110), so answers and choice manifests made by version 3 are not reused.
+ * 64, PIPE-110), so answers and choice manifests made by version 3 are not reused. 5: omitted MorphTargetMeshEntry.faceRegion
+ * stays absent instead of acquiring WolvenKit 9.x's NONE default (10.x uses EYES); explicit enum values are unchanged.
  */
-export const NATIVE_READER_VERSION = 4;
+export const NATIVE_READER_VERSION = 5;
 
 function derive(object: RedObject, seen: Set<RedObject>, session: DecodeSession): void {
   if (seen.has(object)) return;

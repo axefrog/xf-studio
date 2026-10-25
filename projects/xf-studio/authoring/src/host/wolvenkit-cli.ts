@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
-import { readPeFileVersion } from "../formats/pe-version";
+import { readPeFileVersion, readPeProductVersion } from "../formats/pe-version";
 import { type LowPriority, raiseLowPriority, runProcessTree, type ProcessTreeResult } from "./process-tree";
 
 /**
@@ -33,7 +33,7 @@ export type WolvenKitRunOptions = {
 };
 
 /** WolvenKit versions whose command lines and outputs XF Studio's pipeline has been verified against. */
-export const SUPPORTED_WOLVENKIT_VERSIONS = ["8.17.4", "9.0.1"] as const;
+export const SUPPORTED_WOLVENKIT_VERSIONS = ["8.17.4", "9.0.1", "10.0.0-beta.2-nightly.2026-10-25"] as const;
 
 // .NET host failures: FrameworkMissingFailure (0x80008096) and the host library being absent (0x80008083).
 // Windows can report them as signed or unsigned 32-bit values.
@@ -116,10 +116,15 @@ function peVersion(path: string): string | null {
   try {
     handle = openSync(path, "r");
     const fd = handle;
-    const version = readPeFileVersion((offset, length) => {
+    const read = (offset: number, length: number) => {
       const bytes = new Uint8Array(length);
       return readSync(fd, bytes, 0, length, offset) === length ? bytes : null;
-    });
+    };
+    // A fixed PE version collapses every 10.0.0 prerelease to 10.0.0. Retain the ProductVersion label so discovery accepts
+    // only the evaluated nightly, and the native writer continues to refuse every version except its 9.0.1 oracle.
+    const product = readPeProductVersion(read);
+    if (product && /^\d+\.\d+\.\d+-[\da-zA-Z.-]+(?:\+[\da-zA-Z.-]+)?$/.test(product)) return product;
+    const version = readPeFileVersion(read);
     const match = version && /^(\d+)\.(\d+)\.(\d+)/.exec(version);
     return match ? `${match[1]}.${match[2]}.${match[3]}` : null;
   } catch { return null; }
@@ -153,8 +158,8 @@ const probeMemo = new Map<string, { result: WolvenKitProbeResult; until: number 
 
 type ProbeOutput = { status: number | null; text: string; failed: boolean };
 /** Pure: judge the `--version` and `--help` outputs. */
-function judgeProbe(version: ProbeOutput, help: () => ProbeOutput | Promise<ProbeOutput>): WolvenKitProbeResult | Promise<WolvenKitProbeResult> {
-  const found = new RegExp(`\\b(${SUPPORTED_WOLVENKIT_VERSIONS.map(value => value.replace(/\./g, "\\.")).join("|")})\\b`).exec(version.text);
+export function judgeWolvenKitProbe(version: ProbeOutput, help: () => ProbeOutput | Promise<ProbeOutput>): WolvenKitProbeResult | Promise<WolvenKitProbeResult> {
+  const found = new RegExp(`(?<![\\w.+-])(${SUPPORTED_WOLVENKIT_VERSIONS.map(value => value.replace(/\./g, "\\.")).join("|")})(?![\\w.+-])`).exec(version.text);
   if (isRuntimeMissing(version.status, version.text))
     return { ok: false, code: "runtime_missing", issue: WOLVENKIT_RUNTIME_MISSING_MESSAGE };
   if (version.failed || version.status !== 0 || !found)
@@ -190,7 +195,7 @@ export function probeWolvenKitCli(cli: string, now = Date.now()): WolvenKitProbe
     const result = spawnSync(cli, args, { encoding: "utf8", timeout: 15_000, windowsHide: true });
     return { status: result.status, text: `${result.stdout ?? ""}${result.stderr ?? ""}`, failed: !!result.error };
   };
-  return remember(`${cli}|${stamp(cli)}`, judgeProbe(run(["--version"]), () => run(["--help"])) as WolvenKitProbeResult, now);
+  return remember(`${cli}|${stamp(cli)}`, judgeWolvenKitProbe(run(["--version"]), () => run(["--help"])) as WolvenKitProbeResult, now);
 }
 
 const probesInFlight = new Map<string, Promise<WolvenKitProbeResult>>();
@@ -205,7 +210,7 @@ export function probeWolvenKitCliAsync(cli: string): Promise<WolvenKitProbeResul
       const result = await runProcessTree(cli, args, { timeoutMs: 15_000, keep: 16_000 });
       return { status: result.exitCode, text: result.stdout + result.stderr, failed: !!result.error || !!result.stopped };
     };
-    pending = (async () => remember(key, await judgeProbe(await run(["--version"]), () => run(["--help"])), Date.now()))()
+    pending = (async () => remember(key, await judgeWolvenKitProbe(await run(["--version"]), () => run(["--help"])), Date.now()))()
       .finally(() => probesInFlight.delete(key));
     probesInFlight.set(key, pending);
   }

@@ -32,7 +32,8 @@ const MAX_SHARED_DIFF_READS = 2;
 export interface MorphTargetInfo {
   readonly name: string;
   readonly region: string;
-  readonly faceRegion: string;
+  /** Stored enum text, or null when omitted. Tool versions disagree on its default; geometry does not use it. */
+  readonly faceRegion: string | null;
   readonly start: number;
   readonly mappingStart: number;
   readonly scale: readonly [number, number, number, number];
@@ -127,7 +128,8 @@ export function morphTargetLayout(root: RedObject, limits: MeshLimits = DEFAULT_
     if (diffsRead * DIFF_BYTES > diffs.size * MAX_SHARED_DIFF_READS || mappingRead > mapping.size * MAX_SHARED_DIFF_READS)
       throw new NativeMalformedError(`The morph target's targets read ${diffsRead} diffs of a ${diffs.size / DIFF_BYTES}-diff buffer, or overlap in their mapping.`);
     targets.push({ name: nameText(fieldOf(entry, "name")), region: nameText(fieldOf(entry, "regionName")),
-      faceRegion: String(fieldOf(entry, "faceRegion") ?? "FACE_REGION_NONE"), start: starts[t]!, mappingStart: mappingStarts[t]!,
+      // Read the stored field, not fieldOf's 9.x learned default. Omission cannot identify NONE versus EYES.
+      faceRegion: entry && Object.hasOwn(entry.fields, "faceRegion") ? String(entry.fields.faceRegion) : null, start: starts[t]!, mappingStart: mappingStarts[t]!,
       scale: vector4(scales[t]), offset: vector4(offsets[t]), diffs: perChunk.slice(0, chunks), mappings: perChunkMapping.slice(0, chunks),
       diffStarts, mappingStarts: chunkMappingStarts });
   }

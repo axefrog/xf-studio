@@ -19,6 +19,10 @@ import { DecodeSession } from "../src/native/limits";
 import { decodeGeometryFromPool, MESH_READ_LIMITS } from "../src/native/mesh-decode";
 import { dec4, DEFAULT_MESH_LIMITS, halfToFloat } from "../src/native/mesh-blob";
 import { meshGeometry, morphGeometry } from "../src/native/mesh-glb";
+import { morphTargetLayout } from "../src/native/morph-blob";
+import { readResourceJson } from "../src/native/resource-document";
+import { writeCr2wDocument } from "../src/native/write/cr2w-writer";
+import { learnedDefault } from "../src/native/red-defaults";
 import { InProcessDecoder, WorkerDecoder } from "../src/native/native-decode";
 import { classifyNativeFailure } from "../src/native/native-errors";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
@@ -144,7 +148,7 @@ function meshResource(o: MeshOptions): Uint8Array {
   return file.build();
 }
 
-type Target = { name: string; region: string; perChunk: { vertices: number[]; deltas: [number, number, number][]; normal?: number; stored?: number }[] };
+type Target = { name: string; region: string; faceRegion?: string; perChunk: { vertices: number[]; deltas: [number, number, number][]; normal?: number; stored?: number }[] };
 function morphResource(o: { chunks: ChunkSpec[]; baseMesh: string; targets: Target[] }): Uint8Array {
   const file = new Cr2wBuilder();
   const root: Prop[] = [];
@@ -177,7 +181,8 @@ function morphResource(o: { chunks: ChunkSpec[]; baseMesh: string; targets: Targ
     prop("baseBlob", "handle:IRenderResourceBlob", v.handle(baseBlob))]);
   const baseImport = file.import(o.baseMesh);
   root.push(prop("baseMesh", "rRef:CMesh", v.ref(baseImport)),
-    prop("targets", "array:MorphTargetMeshEntry", v.array(o.targets.map(t => v.struct([prop("name", "CName", v.cname(t.name)), prop("regionName", "CName", v.cname(t.region))])))),
+    prop("targets", "array:MorphTargetMeshEntry", v.array(o.targets.map(t => v.struct([prop("name", "CName", v.cname(t.name)), prop("regionName", "CName", v.cname(t.region)),
+      ...(t.faceRegion === undefined ? [] : [prop("faceRegion", "MorphTargetsFaceRegion", v.enum(t.faceRegion))])])))),
     prop("blob", "handle:IRenderResourceBlob", v.handle(blob)));
   return file.build();
 }
@@ -288,6 +293,39 @@ const morphTargets = (): Target[] => [
   // Chunk 0 counts a diff but no mapping (read as none, taking no room); chunk 1: one diff.
   { name: "h02", region: "mouth", perChunk: [{ vertices: [0], deltas: [[1023, 1023, 1023]], stored: 0 }, { vertices: [3], deltas: [[0, 1023, 0]] }] },
 ];
+
+for (const [label, regions] of [
+  ["explicit EYES", ["FACE_REGION_EYES"]],
+  ["explicit NONE", ["FACE_REGION_NONE"]],
+  // Same CR2W version/build: tool-default provenance cannot be recovered from the header. These are stored-property shapes,
+  // not claims about an omitted enum's game meaning: 9.x omits NONE; 10.x omits EYES.
+  ["9.x-style omission beside explicit EYES", [undefined, "FACE_REGION_EYES"]],
+  ["10.x-style omission beside explicit NONE", [undefined, "FACE_REGION_NONE"]],
+] as const) test(`faceRegion preserves ${label} without affecting deformation`, () => {
+  const chunks: ChunkSpec[] = [{ vertices: quad(), indices: [0, 1, 2] }, { vertices: quad(), indices: [0, 2, 3] }];
+  const targets = regions.map((faceRegion, i) => ({ ...morphTargets()[0]!, name: `h0${i}`, ...(faceRegion === undefined ? {} : { faceRegion }) }));
+  const bytes = morphResource({ chunks, baseMesh: "base\\m\\head.mesh", targets });
+  const model = read(bytes);
+  expect(morphTargetLayout(model.root).targets.map(t => t.faceRegion)).toEqual(regions.map(region => region ?? null));
+  expect(learnedDefault("MorphTargetMeshEntry", "faceRegion")).toBeUndefined();
+  const document = readResourceJson(bytes, fakeDecompress, { buffers: "base64" });
+  const entries = (document.Data.RootChunk as { targets: Record<string, unknown>[] }).targets;
+  entries.forEach((entry, i) => {
+    expect(Object.hasOwn(entry, "faceRegion")).toBe(regions[i] !== undefined);
+    if (regions[i] !== undefined) expect(entry.faceRegion).toBe(regions[i]);
+  });
+  const withoutRegions = read(morphResource({ chunks, baseMesh: "base\\m\\head.mesh", targets: targets.map(({ faceRegion, ...target }) => target) }));
+  expect(morphGeometry(model, null).glb).toEqual(morphGeometry(withoutRegions, null).glb);
+  // Re-encode through the unchanged production writer. It must not insert a region into an omitted entry, and its next write
+  // must be byte-identical (the synthetic source builder intentionally uses different table/header conventions).
+  if (regions[0] === undefined) {
+    const encode = (value: unknown) => writeCr2wDocument(value, data => data);
+    const rewritten = encode(document);
+    const reread = readResourceJson(rewritten, fakeDecompress, { buffers: "base64" });
+    expect(Object.hasOwn((reread.Data.RootChunk as { targets: object[] }).targets[0]!, "faceRegion")).toBe(false);
+    expect(encode(reread)).toEqual(rewritten);
+  }
+});
 
 test("a morph target becomes WolvenKit's GLB: sparse deltas, first mapping wins, padding and empty mappings, joints from the base mesh", () => {
   const chunks: ChunkSpec[] = [{ vertices: quad(), indices: [0, 1, 2] }, { vertices: quad(), indices: [0, 2, 3] }];

@@ -1,16 +1,17 @@
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { USER_FACING_JARGON } from "../src/app/alpha-availability";
 import type { DotNetInstall } from "../src/setup/host/dotnet-runtime";
-import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/setup/host/wolvenkit-setup-host";
+import { findWolvenKitOnPath, WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/setup/host/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "../src/setup/host/wolvenkit-setup-server";
 import { isWolvenKitSetupState, wolvenKitCard, wolvenKitConsent, wolvenKitLinkUrl, WolvenKitSetupActions, type WolvenKitSetupState } from "../src/setup/wolvenkit-setup";
 import { WOLVENKIT_RELEASE, type ManagedToolRelease } from "../src/setup/wolvenkit-release";
 import { WOLVENKIT_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { makeZip } from "./zip-fixture";
 import { tempDir } from "./temp-dir";
+import { peVersionFixture } from "./fixtures/pe-version";
 
 // A stand-in release: the same shape as WolvenKit's console ZIP, served by a local fixture server.
 const RUNTIMECONFIG = JSON.stringify({ runtimeOptions: { tfm: "net10.0", framework: { name: "Microsoft.NETCore.App", version: "10.0.0" } } });
@@ -57,6 +58,20 @@ function host(patch: Partial<WolvenKitSetupOptions> & { asset?: string } = {}) {
 }
 const leftovers = (root: string) => [...readdirSync(join(root, "downloads")), ...readdirSync(join(root, "wolvenkit")).filter(name => name.startsWith("."))];
 const plain = (state: WolvenKitSetupState) => { expect(USER_FACING_JARGON.test(state.message), state.message).toBe(false); return state; };
+
+test("PATH discovery finds only the evaluated 10.x nightly, retaining its prerelease identity and the stable download offer", () => {
+  const root = temporary(), unknown = join(root, "unknown"), evaluated = join(root, "evaluated");
+  mkdirSync(unknown); mkdirSync(evaluated);
+  writeFileSync(join(unknown, "WolvenKit.CLI.exe"), peVersionFixture([10, 0, 0, 0], "10.0.0-beta.2-nightly.2026-10-26"));
+  const executable = join(evaluated, "WolvenKit.CLI.exe"), version = "10.0.0-beta.2-nightly.2026-10-25";
+  // The apphost's numeric version alone cannot distinguish a nightly. The managed DLL supplies its full ProductVersion.
+  writeFileSync(executable, peVersionFixture([10, 0, 0, 0]));
+  writeFileSync(join(evaluated, "WolvenKit.CLI.dll"), peVersionFixture([10, 0, 0, 0], version));
+  expect(findWolvenKitOnPath({ PATH: unknown })).toBeNull();
+  expect(findWolvenKitOnPath({ PATH: [unknown, evaluated].join(delimiter) })).toEqual({ path: executable, version });
+  expect(plain(host({ configured: () => executable }).service.snapshot())).toMatchObject({ phase: "ready", source: "custom", version });
+  expect(WOLVENKIT_RELEASE.version).toBe("9.0.1");
+});
 
 test("with nothing set up, the offer says what, why, how big, from where and under which licence", () => {
   const { service } = host();

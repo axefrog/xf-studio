@@ -1,41 +1,58 @@
 # Game 2.31 baseline and WolvenKit 10 beta evaluation
 
-**Verdict: FAIL for the requested strict beta compatibility gate.** On 25 October 2026, both four-preset builds and independent verifiers passed, but only 14/16 unpacked members were identical between WolvenKit 9.0.1 and 10.0.0-beta.1. The beta remains an evaluation tool; stable defaults were not changed. No package was installed and no game was launched.
+**Verdict: accept 10.0.0-beta.2-nightly.2026-10-25 for reading game 2.5 under the decoded-equivalence criterion below.** The 26 October recheck on the still-installed game **2.31** reproduces beta.1 exactly: both four-preset builds and independent verifiers pass, 14/16 staged and unpacked members are byte-identical to 9.0.1, and the two differing members have exactly beta.1's recorded hashes. All differences are explained by WolvenKit's type-default or serialisation changes. The native reader now preserves an omitted `faceRegion`; the native writer and stable-download defaults are unchanged. This is readiness to read 2.5, not evidence from 2.5 archives or game rendering. No package was installed and no game was launched.
 
 ## Method and evidence boundaries
 
 The checked-in fixture is `experiments/005-preset-collection/editor-collection.json`, SHA-256 `8591c115d59915a4747f2586e874696d2108c842759942b4a9c1c02f4bfe4089`. The historical round trip uses the private Experiment 004 plate pair, checks its input hashes, builds with each CLI, independently verifies each archive, and compares every staged and unpacked member. The separate production Build uses a freshly cut base-game plate and the same fixture. `XFS_NATIVE_WRITER=off` keeps those reference Builds entirely on WolvenKit, including texture import. The native writer is tested separately.
 
-The game reports product version **2.31**, file version **3.0.5294808**. Bun is **1.4.4**; the native reader is version **4**, and the native writer targets WolvenKit **9.0.1** / WKit JSON **0.0.9**. Source revision: `f85983149448e63fcadac7f908f61868d650e933`, plus this uncommitted experiment. The beta runtimeconfig requests `Microsoft.NETCore.App` **10.0.0**; installed **10.0.13** satisfies it, and the CLI executed successfully.
+The game reports product version **2.31**, file version **3.0.5294808**. Bun is **1.4.4**; the original baseline used native reader version **4** (now **5**), and the native writer targets WolvenKit **9.0.1** / WKit JSON **0.0.9**. Original baseline source revision: `f85983149448e63fcadac7f908f61868d650e933`, plus the original experiment changes. The beta runtimeconfig requests `Microsoft.NETCore.App` **10.0.0**; installed **10.0.13** satisfies it, and the CLI executed successfully.
 
 Every WolvenKit batch, oracle, native build and capture attempt ran under the memory guard. Tool folders were copied into private scratch before execution, protecting the supplied installations from tool-side writes. Game and reference inputs were read only. Scratch was authorised inside the ignored `generated/scratch/` folder because the originally requested scratch path was outside the sandbox.
 
 Private evidence is in `generated/2-31-final/` (round trip, preview, plate, production package and logs), `generated/2-31-writer-production/` (production 9.0.1 capture and decoded comparison), and `generated/2-31-writer-recheck/` (repeatable writer comparisons and compression probe). The original aggregate is retained privately as `generated/2-31-final/baseline-source.json`. The original public baseline was **not asset-free**: it included the ordered vertex mapping, selected faces and triangle indices. [baseline.json](baseline.json) now uses schema 2: four identity hashes, equality flags and allow-listed section counts, canonical JSON byte lengths and SHA-256 hashes. No manifests, nested resource differences, mappings or per-element data are published. Detailed evidence stays ignored.
 
+## Nightly decision and evidence
+
+The new run is private `generated/2-31-beta2-nightly/`, invoked with `--steps roundtrip,reader` and the supplied read-only inputs. The entire runner used the 4 GB guard, with its existing smaller child guards; peak was **2.0 GB**, with no floor stop or retry. Private CLI copies and temporary files were removed by the runner. The nightly CLI executable SHA-256 is `0d0bffd4e32e24c2e08cd9be75dad7e611b18b988dd474e8b4db34ee5cb78814`; its managed DLL is `39ee9bc8f17bd75d9922eef1b2ce7f4229806581b9629d8c39f14e461828c3ee`. Its runtimeconfig requests .NET 10.0.0.
+
+**Acceptance criterion:** decoded members must be equivalent, with every byte difference fully explained by WolvenKit's type-default or serialisation changes; our reader must handle both explicit and omitted forms; our writer must remain unchanged. Any additional unexplained stored property, payload or buffer difference blocks acceptance. Strict byte equality and strict equality to 9.x's expanded JSON are retained as diagnostics, rather than being claimed as passing. The recheck still exits **1** for those diagnostics. This run found no additional blocking difference. After installing game 2.5, rerun against its actual resources; do not claim those files or rendering have already been tested.
+
+**Tool selection:** the shared CLI probe and PATH discovery accept exactly **10.0.0-beta.2-nightly.2026-10-25** when a person or setup points at it, for game 2.5. Other 10.x builds, including beta.1, are not allow-listed. PE `ProductVersion` preserves the full nightly identity; the fixed `10.0.0.0` field cannot distinguish builds. A real probe and PATH-discovery check against a private copy of the supplied nightly pass (`generated/nightly-probe/result.json`); synthetic tests reject unknown versions and missing commands. Automatic user downloads stay pinned to stable **9.0.1**. That pin moves when WolvenKit 10 is stable, or by a decision after the maintainer has updated.
+
 ## Beta binary differences
 
 All member paths are beneath `axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/`. The comparison criteria are member bytes, not whole-archive digests, which vary with index timestamps.
 
-| Member | 9.0.1 bytes / SHA-256 | Beta bytes / SHA-256 |
+| Member | 9.0.1 bytes / SHA-256 | Beta.1 and beta.2 nightly bytes / SHA-256 |
 |---|---|---|
 | `models/xfs_eye_plate.morphtarget` | 7130559 / `a059773c8958bfab1b317fb060c92d26c38dfe441e8c360e2129207171305cfc` | 7130324 / `e9aaa50b27745e26334e332fe5f6ba0c51fc9642117ed323d91428142f953864` |
 | `xfs_collection.app` | 2022 / `0018515589a5dbca57ccff3aa7f92e8a9cfe541f244bbf05dec6cc81f307944d` | 2101 / `74f6f7d8c197a8b0c2991fd49074926a3cc31b69dfdeeeafe2ed557c4944a666` |
 
-- The morph resource omits 21 explicitly stored `faceRegion: FACE_REGION_EYES` fields (target indices 0, 5, …, 100). Its decompressed buffers are identical. The beta reads the omission back as EYES; the existing native reader, learned against 9.0.1, reads the omitted default as NONE. This can affect classification on the older interpretation and requires compatibility review; it is not a harmless assembly-name change.
+- The morph resource omits 21 explicitly stored `faceRegion: FACE_REGION_EYES` fields (target indices 0, 5, …, 100). Its decompressed buffers are identical. WolvenKit 10 reads the omission back as EYES; reader version 4 inferred NONE from 9.x. Reader version 5 preserves omission, with no inferred enum. No product classification or deformation depends on `faceRegion`.
 - The `.app` explicitly writes `chunkMask: 9223372036854775807` in the template component and its component override, where 9.0.1 omitted it. The compiled-package buffer consequently differs. Those are the only stored-property differences identified by the native decoder.
-- JSON-only changes also include assembly version strings, `boundingBoxLocalBoundsOverride: -1`, texture `formatOverride: TEXFMT_NULL` and `astcQuality: ASTC_None`, and six `targetTextureDiffsData` array fields growing from zero to three elements on each of 105 targets. The twelve XBM members and mesh remain byte-identical despite their JSON shape changes.
+- JSON-only changes also include assembly version strings, `boundingBoxLocalBoundsOverride: -1`, texture `formatOverride: TEXFMT_NULL` and `astcQuality: ASTC_None`, and six `targetTextureDiffsData` array fields growing from zero to three elements on each of 105 targets. The twelve XBM members and mesh remain byte-identical despite their JSON shape changes. The mesh JSON's `localMaterialBuffer.rawData` summary hash also changes solely because its `Type` assembly version changes from 9.0.1.0 to 10.0.0.0; its nested `Data` is exactly equal (`generated/2-31-beta2-nightly/json-member-review.json`).
 
-The 9.0.1 native-reader oracle passes both tests (120 extracted resources and 14 resource-type JSON samples, 282 assertions). The beta passes the 120-resource extraction test but fails the JSON test at the hair `.app` sample: the added bounding-box default and `entSkinnedMeshComponent.chunkMask` changing from `9223372036854775807` to `18446744073709551615`. The existing test stops at that sample; this is not a complete inventory of beta JSON differences across all game resource types.
+The nightly recheck's 9.0.1 reader oracle passes both tests (120 extracted resources and 14 resource-type JSON samples; 269 assertions). The oracle now explicitly allows only missing `MorphTargetMeshEntry.faceRegion` against WolvenKit's invented NONE/EYES default, while still comparing every explicit value. It checks all 14 samples before reporting other mismatches. The nightly passes the 120-resource extraction test but fails strict expanded-JSON equality on four of the 14 samples, with **136** mismatch records (including duplicated component projections):
+
+- hair `.app` and head `.ent`: four added `boundingBoxLocalBoundsOverride: -1` values and four omitted `chunkMask` defaults changing from `9223372036854775807` to `18446744073709551615` across their compiled and derived component views;
+- earring `.morphtarget`: six `targetTextureDiffsData` fixed-array fields per target, **21 targets**, change from empty arrays to three default elements (126 records);
+- flat-normal `.xbm`: `formatOverride: TEXFMT_NULL` and `astcQuality: ASTC_None` appear (two records).
+
+These are the already-known WolvenKit default/JSON-shape changes, not newly stored fields in the read-only game resources. They remain visible as a strict oracle failure; no broad equivalence normalisation was added. This inventory covers these 14 samples, not all game resource types.
 
 ### Why the beta omits `faceRegion: EYES`
 
 WolvenKit 10.0.0-beta.1 changed its type definition, not only its writer. At WolvenKit's September source (9.x), `MorphTargetMeshEntry`'s constructor sets `FaceRegion = FACE_REGION_NONE` (255). At the `10.0.0-beta.1` tag that line is gone, so the property's default is the enum's value 0, `FACE_REGION_EYES`. The beta therefore omits EYES as a default [source: `WolvenKit.RED4/Types/Classes/MorphTargetMeshEntry.cs` and `Types/Enums/cp77enums.cs` at both revisions, read 25 October 2026].
 
 Whether the **game's** class default changed in 2.5 is unknown until 2.5 files are read. What follows for XF Studio:
-- **Our writer** writes `faceRegion` explicitly, which is safe under either default.
-- **Our native reader** reads an omitted `faceRegion` as NONE. If the game's own 2.5 resources omit EYES, the reader would misclassify them.
 
-After the update, the recheck's reader oracle must compare the game's 2.5 morph targets against WolvenKit 10's reading. If the default changed, the native reader takes its omitted-value default from the game version's type data. This is a question about the type default, not about compression or byte equality.
+- **Our writer is unchanged.** Its 9.0.1 write rules still store authored EYES explicitly; no writer class table, defaults or compression rules changed.
+- **Our reader preserves omission.** The stored `RedObject` already distinguishes absence. The geometry layout now exposes `faceRegion: null` for omission; `learnedDefault` refuses to infer it, and the JSON projection leaves the property absent. Explicit EYES and NONE remain their stored enum strings. Reader identity version 5 invalidates documents cached under the former rule.
+- **No product behavior depends on this enum.** The two read paths are the morph-layout metadata and the generic JSON/default projection. Deformation and morph matching use `name`/`regionName`, and the GLB exporter ignores `faceRegion`. The reader's RTTI snapshots retain their historical 9.x provenance; they are not a current engine-default claim.
+- **The header cannot identify the tool default.** Both tools' changed members report CR2W version **195**, build version **0** (header offsets 4 and 20). There is no established header-to-type-default mapping, and none is guessed. The game's 2.5 default remains unknown; preserving omission requires no such inference.
+
+Synthetic tests cover explicit EYES, explicit NONE, 9.x-style omission beside explicit EYES, and 10.x-style omission beside explicit NONE. All four produce unchanged deformation; omitted properties survive JSON and the unchanged native writer without insertion, and a subsequent native rewrite is byte-identical. This is omission preservation, not a claim that arbitrary source files re-encode byte for byte (the independent compression boundary below remains).
 
 ## Prepared preview and plate baseline
 
@@ -67,7 +84,7 @@ Core cache key: `128e061d0d87bd7c45bc77951af3e47a3997bacff316851647c249c165513d2
 
 Plate cache key: `53de4be766029f1f3d1cad1cfea163cac7d3246687161d7d4469d7272231b60b`. The cut has **1,620 vertices, 3,010 triangles, 105 morph targets and 73,164 retained morph-diff rows**. The manifest passes exact triangle, morph-row and quantization checks, native skin bytes in both mesh and embedded morph base, and equality of mesh/morph skin rows. Skin-row SHA-256: `ccb073c1447830fe675ce97de3782e121f85bab7ca68ee59fa1cde08f4eeea8b`. The complete ordered mapping (plate vertex i → head vertex ID), selected face IDs and compact triangles are private in the aggregate's `provenance.mapping`; the recipe vertex-ID hash is `5c37e3472aec37abf1f5b6ae1ddcbbeaab84bdb5b877b16e6bcefd0e4bb4f62b`.
 
-The beta-derived plate passes its own byte-correspondence verifier. That does not resolve its omitted morph-region properties or prove deformation/rendering in game. The source-resource revision gate may deliberately refuse a changed 2.5 head; do not weaken it just to get a green run.
+The beta-derived plate passes its own byte-correspondence verifier. That does not prove deformation/rendering in game; omitted morph-region properties are now preserved by the reader as described above. The source-resource revision gate may deliberately refuse a changed 2.5 head; do not weaken it just to get a green run.
 
 One repeatability limit: WolvenKit material JSON embeds `MaterialRepo`, an absolute run directory. Changing output location alone changes its digest, the preview core cache key and `preview-core.json`; an unchanged-game repeat showed identical GLB/texture output with only this path-sensitive metadata changing. Treat these expected location differences separately from source resource or geometry changes.
 
@@ -170,6 +187,10 @@ Compare member and source hashes first. Review location-sensitive material hashe
 The historical Python builder had a stale branding guard requiring `XF ` even though the production selector label is `XF`. It now accepts the same branded token boundary as production. This was necessary to run the existing fixture and does not change its resource plan.
 
 ## Validation and handoff
+
+The reader/nightly acceptance change passes guarded `bun run check` and `bun test --timeout 20000` on **all 20 test files importing changed source**: **184 passed, 5 skipped, 0 failures**, 1,504 assertions, 18.02 s, peak 0.6 GB under the 3 GB guard. This includes native reader/writer, PE-version, CLI probe, setup/discovery and architecture checks. The five optional real-data/download tests are skipped in that targeted run; the requested real reader comparisons ran separately in the recheck, with the known strict nightly JSON failure reported above. The supplied nightly's real CLI probe and PATH discovery pass on a private copy. Link and private-path checks pass. No commit, port change, game/MO2 write or game process action was made.
+
+Nightly evidence retained: **260 MiB** in `generated/2-31-beta2-nightly/`, plus tiny probe/validation logs. **257 MiB** of regenerable bake/input/export intermediates and the probe's CLI copy were removed. Preserve the new run and `generated/nightly-probe/result.json` at integration, alongside the earlier referenced baseline folders. The footprint report found no task-owned folder above 5 GB.
 
 The original baseline's `bun run check`, link checking (447 tracked Markdown files), tracked private-data scanning, and explicit privacy/link checks on the new files passed. The full suite attempt hit a 120 s browser-dependent hook timeout and was stopped. With optional browser oracles explicitly marked unavailable, the suite passed **3,788 tests, 178 skips, 0 failures** across 477 files in **516.47 s**, peak 3.0 GB under the 6 GB guard. The real-install reader/writer oracles were run separately with prerequisites required; their failures are reported above.
 

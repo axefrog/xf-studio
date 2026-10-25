@@ -20,6 +20,8 @@ const classTable = classDefaults as unknown as Record<string, Record<string, unk
 
 /** The known default of `type.property` (learned, else the class default; the class's own, else a base class's), or undefined. */
 export function learnedDefault(type: string, property: string): unknown {
+  // These tables record WolvenKit 9.x's NONE, but 10.x uses EYES. Neither is a version-independent resource fact.
+  if (type === "MorphTargetMeshEntry" && property === "faceRegion") return undefined;
   for (const name of baseClasses(type)) {
     const row = table[name];
     if (row && Object.hasOwn(row, property)) return row[property];

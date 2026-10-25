@@ -40,8 +40,8 @@ export function fixedFileVersion(resources: Uint8Array): string | null {
   return null;
 }
 
-/** The fixed file version of a PE image, or null when it has none or is not a PE file. */
-export function readPeFileVersion(read: ByteReader): string | null {
+/** The bounded resource section of a PE image, or null when it is missing or malformed. */
+function readPeResources(read: ByteReader): Uint8Array | null {
   const dos = read(0, 64);
   if (!dos || dos.length < 64 || dos[0] !== 0x4d || dos[1] !== 0x5a) return null;
   const peOffset = view(dos).getUint32(0x3c, true);
@@ -59,7 +59,34 @@ export function readPeFileVersion(read: ByteReader): string | null {
     const size = rows.getUint32(i * 40 + 16, true), pointer = rows.getUint32(i * 40 + 20, true);
     if (size === 0 || size > MAX_RESOURCE_BYTES) return null;
     const resources = read(pointer, size);
-    return resources ? fixedFileVersion(resources) : null;
+    return resources;
+  }
+  return null;
+}
+
+/** The fixed file version of a PE image, or null when it has none or is not a PE file. */
+export function readPeFileVersion(read: ByteReader): string | null {
+  const resources = readPeResources(read);
+  return resources ? fixedFileVersion(resources) : null;
+}
+
+/**
+ * ProductVersion from a version resource's String value (UTF-16LE, wValueLength in code units including the terminator).
+ * Unlike VS_FIXEDFILEINFO this retains prerelease labels. Bound each value by its String block and the resource section.
+ */
+export function readPeProductVersion(read: ByteReader): string | null {
+  const resources = readPeResources(read);
+  if (!resources) return null;
+  const keyBytes = new Uint8Array([..."ProductVersion\0"].flatMap(ch => [ch.charCodeAt(0), 0]));
+  const data = view(resources);
+  for (let key = indexOf(resources, keyBytes); key >= 0; key = indexOf(resources, keyBytes, key + 2)) {
+    if (key < 6) continue;
+    const start = key - 6, length = data.getUint16(start, true), count = data.getUint16(start + 2, true);
+    const valueAt = (key + keyBytes.length + 3) & ~3, end = valueAt + count * 2;
+    if (data.getUint16(start + 4, true) !== 1 || count < 2 || start + length > resources.length || end > start + length
+      || data.getUint16(end - 2, true) !== 0) continue;
+    const text = new TextDecoder("utf-16le").decode(resources.subarray(valueAt, end - 2));
+    if (text) return text;
   }
   return null;
 }

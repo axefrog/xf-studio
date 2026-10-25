@@ -76,7 +76,7 @@ oracleDescribe(available, "the native reader oracle needs XFS_RESOLVER_GAME_ROOT
     } finally { oodle.close(); rmSync(work, { recursive: true, force: true }); }
   }, 600_000);
 
-  test("the JSON of one resource per type equals WolvenKit's `uncook -s` output (hash-only names aside)", async () => {
+  test("the JSON of one resource per type equals WolvenKit's `uncook -s` output (hash-only names and unresolved faceRegion defaults aside)", async () => {
     const oodle = loadGameOodle(game);
     const work = tempDir("xfs-native-oracle-json-");
     const archives = readdirSync(content).filter(name => /^basegame_.*\.archive$/.test(name)).map(name => join(content, name));
@@ -85,15 +85,21 @@ oracleDescribe(available, "the native reader oracle needs XFS_RESOLVER_GAME_ROOT
       const written = walk(work);
       const opened = archives.map(path => NativeArchive.open(path, oodle.decompress));
       try {
+        const differences: { path: string; mismatches: ReturnType<typeof compareDocuments> }[] = [];
         for (const path of RESOURCES) {
           const hash = depotHash(path), json = written.get(`json:${hash}`);
           expect(json, path).toBeDefined();
           const bytes = opened.map(archive => archive.read(hash)).find(found => found);
           expect(bytes, path).toBeTruthy();
           const reference = trimBuffers(JSON.parse(readFileSync(json!, "utf8"))) as { Data: unknown };
-          const mismatches = compareDocuments(readResourceJson(bytes!, oodle.decompress).Data, reference.Data).filter(item => !isNameOnly(item));
-          expect(mismatches.slice(0, 5), path).toEqual([]);
+          const mismatches = compareDocuments(readResourceJson(bytes!, oodle.decompress).Data, reference.Data).filter(item => !isNameOnly(item)
+            // The reader deliberately preserves absence; neither tool's synthetic enum default belongs to the resource.
+            // Explicit values still compare. No other missing field or enum value is exempted.
+            && !(item.kind === "MorphTargetMeshEntry.faceRegion: missing"
+              && (item.reference === '"FACE_REGION_NONE"' || item.reference === '"FACE_REGION_EYES"')));
+          if (mismatches.length) differences.push({ path, mismatches });
         }
+        expect(differences).toEqual([]);
       } finally { for (const archive of opened) archive.close(); }
     } finally { oodle.close(); rmSync(work, { recursive: true, force: true }); }
   }, 600_000);
