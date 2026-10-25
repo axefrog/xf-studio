@@ -297,7 +297,6 @@ export function builtinTeardown(): Step[] {
     { label: "messages", do: "run", command: "ui.message", input: { clear: true }, on_fail: "continue" },
     { label: "ink-panel", do: "run", command: "ui.hud", input: { reset: true }, on_fail: "continue" },
     { label: "photo-mode", do: "run", command: "photo.exit", input: {}, when: { check: { do: "run", command: "game.status", input: {} }, match: { path: "phase", equals: "photo_mode" } }, on_fail: "continue" },
-    { label: "config", do: "config.restore", on_fail: "continue" },
   ] as Step[];
 }
 
@@ -324,6 +323,47 @@ export function nestIni(values: IniValues): Record<string, Record<string, string
     (out[name.slice(0, dot)] ??= {})[name.slice(dot + 1)] = value;
   }
   return out;
+}
+
+// ---- The commit monitor ----------------------------------------------------------------------------------
+
+/**
+ * The commit tripwire, owned by the batch: it reads the machine's free commit every everyMs on its own loop (so a
+ * long action can't hide a fall), and under the floor hands the game over once (session.handover), records the
+ * reason and aborts its signal, which the batch's plans run under, so active work stops. stop() ends it before the
+ * teardown, so no reading during cleanup can gate the restore.
+ */
+export class CommitMonitor {
+  reason: string | undefined;
+  lastFreeGb: number | null = null;
+  private readonly trip = new AbortController();
+  private readonly halt = new AbortController();
+  private loop: Promise<void> | undefined;
+  constructor(private readonly o: { host: Host; api: Pick<CommandApi, "run">; clock: PlanClock; floorGb: number; everyMs: number }) {}
+  get signal() {
+    return this.trip.signal;
+  }
+  start() {
+    this.loop ??= (async () => {
+      while (!this.halt.signal.aborted && !this.reason) {
+        const free = await this.o.host.freeCommitBytes().catch(() => null);
+        if (this.halt.signal.aborted) break;
+        this.lastFreeGb = free === null ? null : free / GB;
+        if (free !== null && free < this.o.floorGb * GB) {
+          this.reason = `The commit tripwire tripped: free commit ${(free / GB).toFixed(1)} GB is under the ${this.o.floorGb} GB floor. The runner handed the game over (session.handover) and stopped.`;
+          await this.o.api.run("session.handover", { note: "commit tripwire" }, { source: "session" }).catch(() => undefined);
+          this.trip.abort();
+          break;
+        }
+        await this.o.clock.sleep(this.o.everyMs, this.halt.signal);
+      }
+    })();
+    return this;
+  }
+  async stop() {
+    this.halt.abort();
+    await this.loop;
+  }
 }
 
 // ---- The executor ---------------------------------------------------------------------------------------
@@ -354,9 +394,8 @@ export class SessionExecutor implements Executor {
   refusals: { at: string; keys: string; reason: string }[] = [];
   stopReason: string | undefined;
   private rowDir: string;
-  private commitInFlight: Promise<void> | null = null;
-  private lastCommitRead = -Infinity;
-  lastFreeGb: number | null = null;
+  /** The batch's commit monitor (set by runBatch): a trip refuses every further action. */
+  monitor?: CommitMonitor;
 
   constructor(private readonly c: BatchContext, script: BatchScript) {
     this.testing = new TestSession(c.api, { ...script, fixtures: c.fixtures } as never, c.outDir, false, c.clock);
@@ -373,20 +412,6 @@ export class SessionExecutor implements Executor {
     mkdirSync(this.rowDir, { recursive: true });
   }
 
-  /** The commit tripwire, in the background: read every commitEveryMs; under the floor, hand the game over once and stop. */
-  private watchCommit() {
-    if (this.commitInFlight || this.c.clock.now() - this.lastCommitRead < (this.c.commitEveryMs ?? 10_000)) return;
-    this.lastCommitRead = this.c.clock.now();
-    this.commitInFlight = (async () => {
-      const free = await this.c.host.freeCommitBytes().catch(() => null);
-      this.lastFreeGb = free === null ? null : free / GB;
-      const floor = this.c.commitFloorGb ?? 4;
-      if (free !== null && free < floor * GB && !this.stopReason) {
-        this.stopReason = `The commit tripwire tripped: free commit ${(free / GB).toFixed(1)} GB is under the ${floor} GB floor. The runner handed the game over (session.handover) and stopped.`;
-        await this.c.api.run("session.handover", { note: "commit tripwire" }, { source: "session" }).catch(() => undefined);
-      }
-    })().finally(() => { this.commitInFlight = null; });
-  }
 
   private async echo(input: Record<string, unknown>) {
     if (!this.c.echo) return false;
@@ -410,8 +435,8 @@ export class SessionExecutor implements Executor {
   }
 
   async run(action: Action, context: ExecContext): Promise<Outcome> {
-    this.watchCommit();
-    if (this.stopReason) return { ok: false, code: "tripwire", message: this.stopReason, halt: this.stopReason };
+    const tripped = this.stopReason ?? this.monitor?.reason;
+    if (tripped) return { ok: false, code: "tripwire", message: tripped, halt: tripped };
     const kind = action.do;
     try {
       if (TEST_STEP_KINDS.has(kind)) {
@@ -488,8 +513,11 @@ export class SessionExecutor implements Executor {
           if (!this.c.config?.exists()) return { ok: false, code: "no_config", message: "The staged config.ini wasn't found (fixtures staged_mod)." };
           // Nested by section, so a match's path reads overlay.enabled.
           return { ok: true, value: nestIni(this.c.config.read()) };
-        case "config.restore":
-          return { ok: true, value: this.c.config?.restore() ?? { restored: false, reason: "no staged config" } };
+        case "config.restore": {
+          const restored = this.c.config?.restore() ?? { restored: false, reason: "no staged config" };
+          const fine = restored.restored || restored.reason === "unchanged by this run";
+          return { ok: fine, ...(fine ? {} : { code: "not_restored", message: restored.reason }), value: restored };
+        }
         case "actors.release_all": {
           const status = await this.c.api.run("npc.status", {}, { source: "session", signal: context.signal });
           if (!status.ok) return { ok: false, code: status.error.code, message: status.error.message };
@@ -750,6 +778,8 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     haltPatterns: [...DEFAULT_HALT_PATTERNS, ...((script.halt_patterns ?? fixtures.halt_patterns ?? []) as string[])] });
   const bindings = executor.bindings;
   const signal = options.signal ?? new AbortController().signal;
+  const monitor = new CommitMonitor({ host: options.host, api: options.api, clock, floorGb: typeof fixtures.commit_floor_gb === "number" ? fixtures.commit_floor_gb : 4, everyMs: options.commitEveryMs ?? 10_000 });
+  executor.monitor = monitor;
   const startedAt = new Date().toISOString();
   const records: RowRecord[] = [];
   // Set by stopWith (also from closures), so its type is declared wide.
@@ -773,7 +803,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   const fallbackPaths = { manifestPath: join(options.outDir, "manifest.json"), reportPath: join(options.outDir, "report.md") };
   const write = (setup?: PlanResult, teardown?: PlanResult, finished = false) => {
     try {
-      return writeReports(script, options, { startedAt, finished, halt, setup, teardown, rows: records, executor, config, interrupted: signal.aborted, attempt, previous, remaining: remaining(), cleanupErrors });
+      return writeReports(script, options, { startedAt, finished, halt, setup, teardown, rows: records, executor, config, configRestore, interrupted: signal.aborted, attempt, previous, remaining: remaining(), cleanupErrors });
     } catch (error) {
       const text = `the report couldn't be written: ${String((error as Error)?.message ?? error)}`;
       if (!cleanupErrors.includes(text)) cleanupErrors.push(text);
@@ -781,9 +811,11 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     }
   };
   let setup: PlanResult | undefined;
+  let configRestore: { restored: boolean; reason?: string } | undefined;
 
   // Everything that can change the game runs inside this try; the finally below always tears down, restores
   // config.ini and closes the connection, whatever was thrown.
+  monitor.start();
   try {
   log(`${script.title ?? script.name}: ${planned.rows.length} rows (attempt ${attempt})`);
   await executor.run({ do: "note", text: `XF session: ${script.title ?? script.name} (${planned.rows.length} rows)` }, { signal, deadline: clock.now() + 10_000, plan: "start", step: "start", attempt: 1, raw: { do: "note" } }).catch(() => undefined);
@@ -889,6 +921,9 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   const attemptCleanup = async (what: string, work: () => Promise<unknown>) => {
     try { await work(); } catch (error) { cleanupErrors.push(`${what}: ${String((error as Error)?.message ?? error)}`); }
   };
+  // The monitor stops first: a low reading during cleanup must not gate the teardown or the restore.
+  await attemptCleanup("commit monitor", () => monitor.stop());
+  if (monitor.reason) stopWith("tripwire", monitor.reason);
   await attemptCleanup("telemetry", () => telemetry.finish());
   const teardownPlan: Plan = { id: "teardown", steps: [...planned.teardown.steps.map((s) => ({ ...s, on_fail: "continue" as const })), ...builtinTeardown()] };
   executor.stopReason = undefined;
@@ -904,6 +939,16 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       teardown?.reports.push(...closed.reports);
     }
   });
+  // config.ini goes back directly, past the executor's stop gates, and its outcome is recorded either way.
+  if (config) {
+    try {
+      configRestore = config.restore();
+      if (!configRestore.restored && configRestore.reason !== "unchanged by this run") cleanupErrors.push(`config.ini wasn't restored: ${configRestore.reason}`);
+    } catch (error) {
+      configRestore = { restored: false, reason: String((error as Error)?.message ?? error) };
+      cleanupErrors.push(`config.ini wasn't restored: ${configRestore.reason}`);
+    }
+  }
   const paths = write(setup, teardown, true);
   const left = remaining();
   const resumePath = join(options.outDir, "resume.json");
@@ -929,6 +974,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
 type ReportState = {
   startedAt: string; finished: boolean; halt?: Halt; setup?: PlanResult; teardown?: PlanResult; rows: RowRecord[]; executor: SessionExecutor; config?: ConfigEditor;
   interrupted: boolean; attempt: number; previous: PreviousRun; remaining: string[]; cleanupErrors: string[];
+  configRestore?: { restored: boolean; reason?: string };
 };
 
 /** The detours a run took (retries, other routes, branches, fallbacks): the session's friction, found automatically. */
@@ -971,7 +1017,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
   const thisAttempt = {
     attempt: s.attempt, started_at: s.startedAt, ...(s.finished ? { finished_at: new Date().toISOString() } : { in_progress: true }), outcome,
     ...(s.halt ? { halt: s.halt } : {}), rows_run: s.rows.filter((r) => r.reason !== "not selected").map((r) => r.id), remaining: s.remaining,
-    telemetry: `telemetry/a${s.attempt}`, key_refusals: s.executor.refusals, detours: detoursOf(all), free_commit_gb: s.executor.lastFreeGb,
+    telemetry: `telemetry/a${s.attempt}`, key_refusals: s.executor.refusals, detours: detoursOf(all), free_commit_gb: s.executor.monitor?.lastFreeGb ?? null,
     ...(options.preflight ? { preflight: options.preflight } : {}),
     setup: s.setup ? { close: { outcome: s.setup.outcome, status: s.setup.status, reason: s.setup.reason }, reports: s.setup.reports } : null,
     teardown: s.teardown ? { close: { outcome: s.teardown.outcome, status: s.teardown.status }, reports: s.teardown.reports } : null,
@@ -980,7 +1026,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
   const manifest = {
     schema: REPORT_SCHEMA_3,
     script: { name: script.name, title: script.title, card: script.card, path: options.scriptPath, requires: script.requires ?? [] },
-    run: { attempts: attempts.length, outcome, counts, ...(s.halt ? { halt: s.halt } : {}), ...(s.cleanupErrors.length ? { cleanup_errors: s.cleanupErrors } : {}) },
+    run: { attempts: attempts.length, outcome, counts, ...(s.halt ? { halt: s.halt } : {}), ...(s.cleanupErrors.length ? { cleanup_errors: s.cleanupErrors } : {}), ...(s.configRestore ? { config_restore: s.configRestore } : {}) },
     attempts,
     rows: merged,
     notes: [
@@ -1016,7 +1062,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
     "",
     "## Config",
     "",
-    `- ${s.config ? (s.teardown ? "config.ini was restored by the teardown when this run had changed it (see the teardown's config step)" : "config.ini may still hold this run's values: the teardown hasn't run yet") : "no staged config.ini in the fixtures"}`,
+    `- ${!s.config ? "no staged config.ini in the fixtures" : !s.configRestore ? "config.ini may still hold this run's values: the run hasn't finished" : s.configRestore.restored ? "config.ini was restored to its state before the run" : s.configRestore.reason === "unchanged by this run" ? "config.ini was not changed by this run" : `config.ini was NOT restored: ${s.configRestore.reason}`}`,
     "",
   ];
   writeFileSync(reportPath, lines.join("\n"));
