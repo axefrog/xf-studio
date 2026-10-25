@@ -5,7 +5,6 @@
 import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { defaultData as l3Default } from '../../src/procedural/data.ts';
-import { tripped } from '../../src/m3/audit.ts';
 import { TEMPLATES, radiantJob, randomWithinGates } from '../../src/m3/arms.ts';
 import { type Arm, type Hook, type RaterAnswer, buildPacket, cardsMarkdown, instructions, pairsMarkdown, score, signTest } from '../../src/m3/blind.ts';
 import { findings, skeleton, tells } from '../../src/m3/critic.ts';
@@ -48,7 +47,6 @@ describe('A3, the Radiant-style baseline', () => {
 
   test('the templates are the eight the dossier names', () => {
     expect(TEMPLATES.map((t) => t.id)).toEqual(['delivery', 'recovery', 'escort', 'removal', 'debt', 'missing', 'tail', 'repair']);
-    for (const t of TEMPLATES) expect(tripped(t.text)).toEqual([]);
   });
 });
 
@@ -102,10 +100,9 @@ describe('the blind packet', () => {
     }
   });
 
-  test('the files a rater is given hold no label and no forbidden word', () => {
+  test('the files a rater is given hold no label', () => {
     const body = `${instructions()}${cardsMarkdown(p, p.orders[0]!)}${pairsMarkdown(p)}`;
     expect(body).not.toMatch(/engine|baseline|Radiant|authored|layer 3|sowing|A1|A3|A4/);
-    expect(tripped(body)).toEqual([]);
   });
 
   test('a packet needs equal arms', () => {

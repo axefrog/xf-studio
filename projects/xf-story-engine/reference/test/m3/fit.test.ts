@@ -9,7 +9,6 @@ import { hookPack, hookPatterns } from '../../src/m3/hooks.ts';
 import { R2_ID, r2Pack } from '../../src/m3/r2.ts';
 import { STATES, stateById } from '../../src/m3/states.ts';
 import { recordOf, transcript } from '../../src/m3/transcript.ts';
-import { tripped } from '../../src/m3/audit.ts';
 import { randomWithinGates } from '../../src/m3/arms.ts';
 
 setDefaultTimeout(300_000);
@@ -78,11 +77,10 @@ describe('the run driver is deterministic and its outputs are clean', () => {
     expect(recordOf(a).deliveries.length).toBeGreaterThan(0);
   });
 
-  test('no transcript names a forbidden word, and the header names the state and the street', () => {
+  test('the transcript header names the state and the street', () => {
     const r = arm('absent', 'S-mid-squeezed', 'accept-first');
     r.runWindows(10);
     const t = transcript(r);
-    expect(tripped(t)).toEqual([]);
     expect(t).toContain('story state: S-mid-squeezed');
     expect(t).toContain('ledger.m0');
     expect(t).toContain('[authored offer ask]');

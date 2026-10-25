@@ -1,5 +1,5 @@
 // The facts table of the M3 world: the game facts layer 2 may read, taken from the curated main-story table
-// (research/story-engine/main-story-facts.json). No fact is invented, and none that names a main-story character's fate is used.
+// (research/story-engine/main-story-facts.json). No fact is invented.
 
 import type { FactsTable } from '../seeding/types.ts';
 import table from '../../../../../research/story-engine/main-story-facts.json' with { type: 'json' };

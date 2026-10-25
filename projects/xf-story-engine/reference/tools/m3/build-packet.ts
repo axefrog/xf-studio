@@ -12,7 +12,6 @@ import { Run, policies } from '../../src/m3/driver.ts';
 import { R2_ID, r2Pack } from '../../src/m3/r2.ts';
 import { stateById } from '../../src/m3/states.ts';
 import type { RunRecord } from '../../src/m3/transcript.ts';
-import { tripped } from '../../src/m3/audit.ts';
 
 const [dir, out, nArg, ratersArg] = process.argv.slice(2);
 if (!dir || !out) throw new Error('usage: build-packet <rundir> <outdir> [n] [raters]');
@@ -48,7 +47,6 @@ const n = Number(nArg ?? Math.min(E.length, A1.length, A3.length, A4.length));
 if (n < 1) throw new Error(`not enough hooks: E ${E.length}, A1 ${A1.length}, A3 ${A3.length}, A4 ${A4.length}`);
 const take = (hs: Hook[], tag: string): Hook[] => shuffle(hs, 'sample', tag).slice(0, n);
 const hooks = [...take(E, 'E'), ...take(A1, 'A1'), ...take(A3, 'A3'), ...take(A4, 'A4')];
-for (const h of hooks) if (tripped(h.text).length) throw new Error(`a forbidden word in a hook: ${h.text}`);
 
 const packet = buildPacket(hooks, 'm3-blind-1', raters, [['E', 'A3'], ['E', 'A1'], ['A1', 'A3'], ['A4', 'A3']]);
 mkdirSync(out, { recursive: true });

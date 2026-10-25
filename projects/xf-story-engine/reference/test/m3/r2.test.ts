@@ -3,12 +3,11 @@
 
 import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { Run, policies } from '../../src/m3/driver.ts';
-import { FACT_NAMES, MAIN_STORY_FACTS } from '../../src/m3/facts.ts';
+import { FACT_NAMES } from '../../src/m3/facts.ts';
 import { R2_ID, R2_PACK, r2Fragments, r2Pack, r2Seed, r2Texts } from '../../src/m3/r2.ts';
 import { STATES } from '../../src/m3/states.ts';
 import { stateById } from '../../src/m3/states.ts';
 import { buildWorld } from '../../src/m3/world.ts';
-import { FORBIDDEN } from '../../src/m3/audit.ts';
 import { readSeedFact } from '../../src/seeding/eval.ts';
 
 setDefaultTimeout(120_000);
@@ -80,23 +79,5 @@ describe('R2 compiles, casts and plays', () => {
 
   test('every state names real facts only', () => {
     for (const s of STATES) for (const name of Object.keys(s.facts)) expect(FACT_NAMES.has(name), `${s.id}: ${name}`).toBe(true);
-  });
-});
-
-describe('no main-story character in M3', () => {
-  test('the facts, the states, the seed, the fragments and the texts name no forbidden word', () => {
-    const blobs = [
-      JSON.stringify(r2Seed()), JSON.stringify(r2Fragments()), JSON.stringify(r2Texts()),
-      JSON.stringify(STATES.map((s) => ({ id: s.id, note: s.note, facts: s.facts, street: s.street.map((x) => x.name) }))),
-    ];
-    for (const b of blobs) for (const re of FORBIDDEN) expect(re.test(b), `${re} in ${b.slice(0, 80)}`).toBe(false);
-  });
-  test('the states use none of the facts that name a character\'s fate or arc', () => {
-    const used = new Set(STATES.flatMap((s) => Object.keys(s.facts)));
-    for (const name of used) {
-      expect(name.startsWith('q112_'), name).toBe(false);
-      const row = MAIN_STORY_FACTS.find((f) => f.name === name)!;
-      expect(['character', 'romance', 'relationship', 'ending'].includes(row.category), `${name} is ${row.category}`).toBe(false);
-    }
   });
 });

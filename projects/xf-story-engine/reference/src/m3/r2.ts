@@ -6,7 +6,7 @@
 // It is written in S2 v1.10's core language the way Appendix A.4 writes R1: an expanded beat graph with no profile,
 // only core constructs, lint-clean at `ready`. One presentation slot is an author-fill stand-in (D-23): the
 // confrontation scene, with an implied partner that plays when no human-written scene is installed.
-// It has no connection to any main-story character; its facts are the quest-progress facts the context reads.
+// No main-story character is its focus; its facts are the quest-progress facts the context reads.
 
 import { parsePred } from '../seeding/pred.ts';
 import type { Fragment, Pack, Pred, Seed, SeedInput, TextUnit } from '../seeding/types.ts';

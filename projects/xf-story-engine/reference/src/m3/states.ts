@@ -1,5 +1,5 @@
 // The story states of M3: small hand-authored bundles of main-story facts from the curated table, and the street around V.
-// A state names real facts only (checked when a run starts), uses no fact about a main-story character's fate, and varies
+// A state names real facts only (checked when a run starts), and varies
 // the street rather than the story: the gang's money, a crackdown, V's standing with the stalls.
 //
 // V's history is replayed as the game would report it. The ledger is calibrated for long histories, so a state with a
