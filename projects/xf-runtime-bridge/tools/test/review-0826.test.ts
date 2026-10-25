@@ -5,6 +5,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runPlan, type Plan } from "../testing/plan.ts";
+import { SessionExecutor } from "../testing/batch.ts";
+import { windowsHost } from "../testing/host.ts";
 import { stagedConfigPath } from "../testing/config-ini.ts";
 import { fakeApi, fakeHost, go, script, STAGED_INI, stagedMod } from "./batch-fakes.ts";
 import { FakeClock } from "./fake-clock.ts";
@@ -52,6 +54,32 @@ describe("M10: the commit monitor interrupts a long action", () => {
     expect(clock.now()).toBeLessThan(20_000);
     expect(api.calls.filter((c) => c.name === "session.handover").length).toBe(1);
     expect(result.remaining).toEqual(["long", "next"]);
+  });
+});
+
+describe("H3: no host side effect after a cancel", () => {
+  for (const what of ["launch", "close"] as const) {
+    test(`a ${what} whose step was cancelled while the game's process was being read never happens`, async () => {
+      const clock = new FakeClock();
+      const stop = new AbortController();
+      const base = fakeHost({ running: what !== "launch" });
+      // The process read takes 5 s; the step is cancelled at 1 s.
+      const host = { ...base, gameProcess: async () => { await clock.sleep(5000); return what === "launch" ? null : { pid: 4242 }; } };
+      const executor = new SessionExecutor({ api: fakeApi(clock) as never, host, outDir: tempDir("xfb-review-"), fixtures: { mo2: { exe: "m", profile: "p", executable: "g" } }, clock, log: () => {}, echo: false }, script([]));
+      void clock.sleep(1000).then(() => stop.abort());
+      const result = await runPlan({ id: "p", steps: [{ do: `host.${what}` }] }, { executor, clock, signal: stop.signal });
+      await clock.sleep(10_000);
+      expect(result.status).toBe("cancelled");
+      expect(base.log.filter((l) => l.startsWith(what))).toEqual([]);
+    });
+  }
+
+  test("the real key sender checks the signal before anything else", async () => {
+    const stop = new AbortController();
+    stop.abort();
+    const sent = await windowsHost.pressKeys([0x75], "F6", stop.signal);
+    expect(sent.sent).toBe(false);
+    expect(sent.refused).toContain("cancelled");
   });
 });
 

@@ -385,6 +385,7 @@ export type BatchContext = {
 };
 
 const GB = 1024 ** 3;
+const CANCELLED: Outcome = { ok: false, code: "cancelled", message: "The step was cancelled before its side effect." };
 const HANDED_OVER = "The game was handed to the player (session.handover: the commit tripwire, the player or another tool), so every change is refused until session.resume. The batch stopped here.";
 
 /** Executes plan actions for the session runner; keeps each row's evidence and every refused key press. */
@@ -468,13 +469,16 @@ export class SessionExecutor implements Executor {
           const mo2 = this.c.fixtures.mo2 as { exe?: string; profile?: string; executable?: string; arguments?: string } | undefined;
           if (!mo2?.exe || !mo2.profile || !mo2.executable) return { ok: false, code: "fixture_missing", message: "The fixtures file needs mo2.exe, mo2.profile and mo2.executable to launch the game." };
           if ((await this.gamePid()) !== undefined) return { ok: false, code: "already_running", message: "The game is already running." };
-          const started = await this.c.host.launch({ exe: mo2.exe, profile: mo2.profile, executable: mo2.executable, arguments: mo2.arguments });
+          if (context.signal.aborted) return CANCELLED;
+          const started = await this.c.host.launch({ exe: mo2.exe, profile: mo2.profile, executable: mo2.executable, arguments: mo2.arguments }, context.signal);
+          if (!started.started) return context.signal.aborted ? CANCELLED : { ok: false, code: "launch_failed", message: started.command || "MO2 didn't start." };
           return { ok: true, value: { command: started.command } };
         }
         case "host.close": {
           const pid = await this.gamePid();
           if (pid === undefined) return { ok: true, value: { closed: true, was_running: false } };
-          if (!(await this.c.host.requestClose(pid))) return { ok: false, code: "no_window", message: "The game has no window to close." };
+          if (context.signal.aborted) return CANCELLED;
+          if (!(await this.c.host.requestClose(pid, context.signal))) return context.signal.aborted ? CANCELLED : { ok: false, code: "no_window", message: "The game has no window to close." };
           return await this.waitExit(pid, context);
         }
         case "host.wait_exit": {
@@ -484,7 +488,9 @@ export class SessionExecutor implements Executor {
         case "host.key": {
           const keys = this.keysFor(action);
           if ("error" in keys) return { ok: false, code: "no_key", message: keys.error };
-          const sent = await this.c.host.pressKeys(keys.vks, keys.label);
+          if (context.signal.aborted) return CANCELLED;
+          const sent = await this.c.host.pressKeys(keys.vks, keys.label, context.signal);
+          if (!sent.sent && context.signal.aborted) return CANCELLED;
           if (!sent.sent) {
             this.refusals.push({ at: context.step, keys: keys.label, reason: sent.refused ?? "refused" });
             return { ok: false, code: sent.refused?.includes("XFB_NO_INPUT") ? "input_disabled" : "not_foreground", message: `${keys.label} wasn't sent: ${sent.refused}`, value: sent };

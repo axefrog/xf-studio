@@ -22,14 +22,16 @@ export type KeyResult = { sent: boolean; keys: string; refused?: string; foregro
 export interface Host {
   /** The game's process, or null. */
   gameProcess(): Promise<{ pid: number } | null>;
+  // Every operation with a side effect takes the caller's signal and checks it again right before the effect:
+  // a cancelled step must never launch, close or press anything afterwards.
   /** Starts the game through MO2 (detached); answers at once. */
-  launch(spec: LaunchSpec): Promise<{ started: boolean; command: string }>;
+  launch(spec: LaunchSpec, signal?: AbortSignal): Promise<{ started: boolean; command: string }>;
   /** Asks the game's main window to close (CloseMainWindow); false when there was nothing to ask. */
-  requestClose(pid: number): Promise<boolean>;
+  requestClose(pid: number, signal?: AbortSignal): Promise<boolean>;
   /** The foreground window's process name (no extension), or null. */
   foreground(): Promise<string | null>;
   /** Presses keys (a chord: held in order, released in reverse) only while the game is the foreground window. */
-  pressKeys(vks: number[], label: string): Promise<KeyResult>;
+  pressKeys(vks: number[], label: string, signal?: AbortSignal): Promise<KeyResult>;
   window(pid: number): Promise<WindowState | null>;
   monitors(): Promise<Monitor[]>;
   /** The machine's free commit in bytes (commit limit less committed), or null when unreadable. */
@@ -145,21 +147,24 @@ export const windowsHost: Host = {
     const pid = Number(out.trim());
     return Number.isInteger(pid) && pid > 0 ? { pid } : null;
   },
-  async launch(spec) {
+  async launch(spec, signal) {
+    if (signal?.aborted) return { started: false, command: "" };
     // MO2's own command line keeps the profile even when MO2 is open, and --arguments replaces the configured ones.
     const args = ["-p", spec.profile, "run", "-e", spec.executable, ...(spec.arguments ? ["--arguments", spec.arguments] : [])];
     const child = spawn(spec.exe, args, { detached: true, stdio: "ignore" });
     child.unref();
     return { started: true, command: `ModOrganizer.exe ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}` };
   },
-  async requestClose(pid) {
+  async requestClose(pid, signal) {
+    if (signal?.aborted) return false;
     const { out } = await powershell(`$p = Get-Process -Id ${Number(pid)} -ErrorAction SilentlyContinue; if ($p) { $p.CloseMainWindow() } else { 'gone' }`);
     return out.trim() === "True";
   },
   async foreground() {
     return foregroundImage();
   },
-  async pressKeys(vks, label) {
+  async pressKeys(vks, label, signal) {
+    if (signal?.aborted) return { sent: false, keys: label, refused: "the step was cancelled" };
     if (process.env.XFB_NO_INPUT === "1") return { sent: false, keys: label, refused: "key input is switched off in this process (XFB_NO_INPUT=1)" };
     const front = foregroundImage();
     if (front?.toLowerCase() !== GAME_PROCESS.toLowerCase()) return { sent: false, keys: label, refused: `the foreground window is ${front ?? "nothing"}, not the game`, foreground: front };
@@ -168,7 +173,8 @@ export const windowsHost: Host = {
     const pressed: typeof records = [];
     try {
       for (const record of records) {
-        // Checked again right before each key goes down: a key must never land in another program.
+        // Checked again right before each key goes down: a key must never land in another program, nor after a cancel.
+        if (signal?.aborted) return { sent: false, keys: label, refused: "the step was cancelled part-way; nothing more was sent" };
         if (foregroundImage()?.toLowerCase() !== GAME_PROCESS.toLowerCase()) return { sent: false, keys: label, refused: "the game lost the foreground part-way; nothing more was sent", foreground: foregroundImage() };
         if ((user32!.SendInput(1, keyboardInput(record.scan, false, record.extended), INPUT_SIZE) as number) !== 1) return { sent: false, keys: label, refused: "Windows refused the key press" };
         pressed.push(record);
