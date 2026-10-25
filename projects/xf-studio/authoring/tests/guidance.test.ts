@@ -6,7 +6,7 @@ import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PREVIEW_SETUP_DESCRIPTORS } from 
 import { isProjectLink, LOCAL_PROJECT_PAGES, PROJECT_LINKS } from "../src/app/project-links";
 import { parseUIPreferences, UIPreferenceActions } from "../src/app/ui-preferences";
 import { AnchorRegistry, anchorCatalogue, anchorInfo, CONTROL_ANCHORS, isAnchorId, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
-import { keyTokens, parseHelp, plainText } from "../src/studio-ui/guidance/content";
+import { keyTokens, parseHelp, parseInlines, plainText } from "../src/studio-ui/guidance/content";
 import { conditionHolds, eventHappened, GUIDANCE_DESCRIPTORS, GuidanceService, type GuidanceEnvironment } from "../src/studio-ui/guidance/engine";
 import { exportableFinishClause, finishExportHelp } from "../src/studio-ui/guidance/finish-text";
 import { HELP_LINKS, HELP_TOPICS, helpReference, helpTopicsFor, searchTopics, searchTours } from "../src/studio-ui/guidance/help-topics";
@@ -457,4 +457,16 @@ test("Help covers every stable part of the Studio, with a page on what isn't in 
   for (const text of [limits.body, topics.get("camera")!.body, topics.get("character")!.body, ...studioTour.steps.map(step => `${step.content.title} ${step.content.body}`)])
     expect(text).not.toMatch(/\b(her|she|hers|herself)\b/i);
   expect(topics.get("camera")!.title).toBe("Camera & light");
+});
+
+
+test("tour Help references resolve to real topics and keep their readable label", () => {
+  const ids = new Set(HELP_TOPICS.map(topic => topic.id));
+  for (const tour of TOURS) for (const step of tour.steps) for (const block of parseHelp(step.content.body)) {
+    const inlines = block.kind === "p" ? block.inlines : block.items.flat();
+    for (const item of inlines) if (item.kind === "help") expect(ids.has(item.id)).toBe(true);
+  }
+  expect(parseInlines("See [[help:install|Installing your mod]].")).toEqual([
+    { kind: "text", text: "See " }, { kind: "help", id: "install", text: "Installing your mod" }, { kind: "text", text: "." }]);
+  expect(plainText("See [[help:install|Installing your mod]].")).toBe("See Installing your mod.");
 });

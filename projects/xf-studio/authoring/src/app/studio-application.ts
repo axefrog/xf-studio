@@ -142,8 +142,8 @@ type Services = { document: AuthoringDocument;
    * shape, renaming and deleting the person's own.
    */
   starters?: { capability(action: StarterAction): StudioCapability; dispatch(action: StarterAction): undefined };
-  /** Resolves a starter ID (absent: the default) into its shape, so `layer.edit` add and reset start from it. Without it they use the region's default. */
-  starterShapes?: Pick<ShapeStarters, "shapeOf">;
+  /** Resolves a starter ID (absent: the default) into its shape and name, so `layer.edit` add and reset start from it. Without it they use the region's default. */
+  starterShapes?: Pick<ShapeStarters, "get" | "defaultId">;
   /**
    * Whether the view, scene and `gen` an action names are still what they were resolved to (the target resolver's check, the same rule as
    * its captures', profiles design §3.3). Without it (a core no session holds) an action naming a scene's `gen` can't be checked, and is refused.
@@ -850,9 +850,10 @@ export class StudioApplication {
     const action = input as unknown as EyeMakeupAction;
     if (action.kind !== "layer.edit" || (action.command.kind !== "add" && action.command.kind !== "reset") || action.command.shape !== undefined
       || !this.services.starterShapes) return { action: input };
-    const shape = this.services.starterShapes.shapeOf(action.command.starter);
-    if (!shape) return { action: input, refused: missingTarget("That starter isn't available any more.") };
-    return { action: { ...action, command: { ...action.command, shape } } as unknown as A };
+    const starter = this.services.starterShapes.get(action.command.starter ?? this.services.starterShapes.defaultId());
+    const shape = starter?.shape;
+    if (!starter || !shape) return { action: input, refused: missingTarget("That starter isn't available any more.") };
+    return { action: { ...action, command: { ...action.command, shape, ...(action.command.kind === "add" ? { starterName: starter.name } : {}) } } as unknown as A };
   }
   private eyeMakeupSpec(action: EyeMakeupAction) {
     const route = this.routes.route(action.kind);

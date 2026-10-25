@@ -4,10 +4,10 @@ import { chordsLabel, KEY_BINDINGS } from "../../app/input-bindings";
  * Markdown-lite for tours and help topics (see `HelpContent`). Parsing is pure so tests can check
  * every token; the DOM renderer lives in `render.ts`.
  */
-export type Inline = Readonly<{ kind: "text"; text: string } | { kind: "strong"; text: string } | { kind: "key"; id: string; label: string }>;
+export type Inline = Readonly<{ kind: "text"; text: string } | { kind: "strong"; text: string } | { kind: "key"; id: string; label: string } | { kind: "help"; id: string; text: string }>;
 export type Block = Readonly<{ kind: "p"; inlines: readonly Inline[] } | { kind: "list"; items: readonly (readonly Inline[])[] }>;
 
-const TOKEN = /\*\*([^*]+)\*\*|\[\[key:([a-z0-9.-]+)\]\]/g;
+const TOKEN = /\*\*([^*]+)\*\*|\[\[key:([a-z0-9.-]+)\]\]|\[\[help:([a-z0-9.-]+)\|([^\]]+)\]\]/g;
 
 /** The chord text for a key binding, e.g. "Ctrl+Z" or "Ctrl+Shift+Z / Ctrl+Y". */
 export function keyLabel(id: string): string | undefined {
@@ -21,6 +21,7 @@ export function parseInlines(text: string): Inline[] {
   for (const match of text.matchAll(TOKEN)) {
     if (match.index! > at) out.push({ kind: "text", text: text.slice(at, match.index) });
     if (match[1] !== undefined) out.push({ kind: "strong", text: match[1] });
+    else if (match[3] !== undefined) out.push({ kind: "help", id: match[3], text: match[4] });
     else {
       const label = keyLabel(match[2]);
       // An unknown binding is a data error (tests reject it); show its ID rather than nothing.

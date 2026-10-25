@@ -11,7 +11,7 @@ import { readStarterShape, type StarterShape } from "./starter-shape";
  * requires it (its host supplies it, so replay is deterministic); these helpers still make one when absent.
  */
 export type LayerCommand =
-  | { kind: "add"; newId?: string; starter?: string; shape?: StarterShape }
+  | { kind: "add"; newId?: string; starter?: string; shape?: StarterShape; starterName?: string }
   | { kind: "duplicate"; id: string; newId?: string }
   | { kind: "remove"; id: string }
   | { kind: "reset"; id: string; starter?: string; shape?: StarterShape }
@@ -45,7 +45,7 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
     if (!command.newId) throw Error("A new layer needs its ID from the host.");
     layer.id = command.newId;
     if (layers.some(existing => existing.id === layer.id)) throw Error("That layer ID is already in use.");
-    layer.name = command.kind === "duplicate" ? `${layer.name.slice(0, 73)} (copy)` : newLayerName(layers);
+    layer.name = command.kind === "duplicate" ? `${layer.name.slice(0, 73)} (copy)` : newLayerName(layers, command.starterName ?? region.starters?.find(item => item.id === command.starter)?.name);
     if (command.kind === "add") layer.enabled = true;
     layers.splice(command.kind === "duplicate" ? index + 1 : layers.length, 0, layer);
     activeId = layer.id;
@@ -65,10 +65,17 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
 
 /**
  * A new layer's default name: "Layer N" for the next count, skipping a number another layer already carries, so adding after a removal
- * never names two layers alike (CORE-125; presets do the same, `newPresetName`).
+ * never names two layers alike (CORE-125; presets do the same, `newPresetName`). A starter uses its name,
+ * with a numeric suffix starting at 2 only when that name is already taken in this look.
  */
-export function newLayerName(layers: readonly { name: string }[]): string {
+export function newLayerName(layers: readonly { name: string }[], starterName?: string): string {
   const taken = new Set(layers.map(layer => layer.name));
+  if (starterName) {
+    if (!taken.has(starterName)) return starterName;
+    let n = 2;
+    while (taken.has(`${starterName.slice(0, 70)} ${n}`)) n++;
+    return `${starterName.slice(0, 70)} ${n}`;
+  }
   let n = layers.length + 1;
   while (taken.has(`Layer ${n}`)) n++;
   return `Layer ${n}`;
@@ -96,7 +103,7 @@ export function layerCapability(recipe: Recipe, action: LayerAction, region?: La
         (typeof command.newId !== "string" || !command.newId || recipe.layers.some(layer => layer.id === command.newId)))
       return refusal("invalid_value", "The new layer needs an unused ID.");
     // Layers are stored bottom-to-top: index 0 is the back, the last index the front.
-    const issue = command.kind === "move" ? positionIssue(command.to, recipe.layers.length,
+    const issue = command.kind === "add" && command.starterName !== undefined ? nameIssue(command.starterName, 60) : command.kind === "move" ? positionIssue(command.to, recipe.layers.length,
       { below: "This layer is already at the back.", above: "This layer is already at the front." }) :
       command.kind === "rename" ? nameIssue(command.name, 80) : undefined;
     if (issue) return refuse(issue);

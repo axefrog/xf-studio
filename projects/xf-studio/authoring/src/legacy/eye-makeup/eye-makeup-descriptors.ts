@@ -71,7 +71,7 @@ export const EYE_MAKEUP_DESCRIPTORS = {
   "field.setVector": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
   "layer.edit": desc(["layer", "collection"], "content", "part", { command: input("object") }, {
     // `add` and `reset` start the layer from a starter: the one `starter` names, else the default (`shape`: its resolved contour).
-    add: STARTER_FIELDS, duplicate: { id: target("string") }, remove: { id: target("string") },
+    add: { ...STARTER_FIELDS, starterName: { type: "string", required: false, from: "state", minLength: 1, maxLength: 60 } }, duplicate: { id: target("string") }, remove: { id: target("string") },
     reset: { id: target("string"), ...STARTER_FIELDS }, rename: { id: target("string"), name: inputText(1, 80) },
     move: { id: target("string"), to: input("integer", 0) } }),
   "layer.setEnabled": desc("layer", "content", "part", { id: target("string"), enabled: input("boolean") }),

@@ -234,6 +234,7 @@ test("Do it for me makes a ready look by registered actions, each undoable like 
   expect(world.eye.view().recipe().layers).toHaveLength(2);
   const classic = EYE_STARTERS.find(starter => starter.id === EYE_TOUR_LOOKS.second.starter)!.shape;
   expect(world.layer().points.length).toBe(classic.points.length);
+  expect(world.layer().name).toBe("Classic wing");
   expect(await runCommand(rt, button("second-look-style"))).toBe(true);
   expect(world.layer()).toMatchObject({ finish: EYE_TOUR_LOOKS.second.finish, color: EYE_TOUR_LOOKS.second.color });
   expect(world.refused).toEqual([]);
@@ -335,4 +336,13 @@ test("the controls the tour points at register their anchors, and Help lists the
   expect(app).toContain("guidance: { start: guidance.start, reach: guidance.reach, verifyFacts: guidance.verifyFacts");
   const tours: readonly Tour[] = TOURS;
   expect(tours.map(item => item.id)).toContain(EYE_TOUR_ID);
+});
+
+
+test("the closing callout keeps three checks and sends troubleshooting to Help", () => {
+  const body = tour.steps.find(step => step.id === "in-game")!.content.body;
+  expect(body.split("\n").filter(line => line.startsWith("- "))).toHaveLength(3);
+  expect(body).toContain("If the row isn't there: [[help:install|Installing your mod]] in Help.");
+  expect(body).not.toContain("RED4ext");
+  expect(body.split(/\s+/).length).toBeLessThan(110);
 });

@@ -27,7 +27,7 @@ const STATUS: Partial<Record<TourRecord, [string, "success" | "neutral"]>> = {
  * (generated from the input binding catalogue), plus links to the public knowledge pages and
  * the issue tracker. It reads only data and the UI preferences; tours start through the runner.
  */
-export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelController & { focusSearch(): void } {
+export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelController & { focusSearch(): void; openTopic(id: string): void } {
   const searchId = uid("help-search");
   const search = h("input", { id: searchId, class: "field help-search", type: "search", placeholder: "Search help, tours and shortcuts",
     "aria-label": "Search help", "aria-controls": `${searchId}-results`, autocomplete: "off", spellcheck: "false" });
@@ -108,7 +108,7 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     const query = search.value.trim();
     const tourCount = renderTours(query);
     const found = searchTopics(query, helpTopics);
-    topics.replaceChildren(...found.map(topic => h("details", { class: "help-topic", open: query ? true : undefined },
+    topics.replaceChildren(...found.map(topic => h("details", { class: "help-topic", "data-help-topic": topic.id, open: query ? true : undefined },
       h("summary", { text: topic.title }), h("div", { class: "help-topic-body" }, renderHelp(topic.body)))));
     const sections = helpReference(query);
     reference.replaceChildren(...sections.map(item => h("section", { class: "reference-section", "aria-label": item.title },
@@ -135,6 +135,13 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
       } else renderTours(search.value.trim());
       desktop?.render();
       renderUpdates();
+    },
+    openTopic(id: string) {
+      const topic = helpTopics.find(item => item.id === id);
+      if (!topic) return;
+      rendered = true; search.value = topic.title; render();
+      const summary = topics.querySelector<HTMLElement>(`[data-help-topic="${topic.id}"]`)?.querySelector<HTMLElement>("summary");
+      summary?.focus();
     },
     focusSearch() { if (!rendered) { rendered = true; render(); } search.focus(); search.select(); },
   };

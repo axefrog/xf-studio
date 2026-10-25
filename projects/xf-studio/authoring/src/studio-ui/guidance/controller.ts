@@ -120,7 +120,7 @@ const NAV_ACTIONS: Record<TourNavigation, GuidanceAction> = {
  * Wires the tour runner to the shell: the overlay, the one-time onboarding offer, the Escape key,
  * the palette commands and tour progress in the workspace's UI preferences.
  */
-export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) {
+export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: string): void }) {
   const port = rt.port;
   const record = (tourId: string, outcome: TourRecord) => {
     const action = { kind: "tours.record" as const, tourId, outcome };
@@ -142,6 +142,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     rect: target => target.kind === "anchor" ? rt.anchors.rect(target.anchor) : target.kind === "panel" ? rt.anchors.rect(panelAnchor(target.panel)) : undefined,
     press: button => void press(button),
     nav: action => navigate(action),
+    openTopic: id => { navigate(service.snapshot().active?.last ? "finish" : "skip"); options.openHelp(id); },
     // Dock changes (tab switches, floating, closing) don't touch the port; re-check anchors a few times a second.
     refresh: () => { service.observe(); paint(false); },
   });

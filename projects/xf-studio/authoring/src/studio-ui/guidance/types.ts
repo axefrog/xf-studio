@@ -11,7 +11,7 @@ import type { AnchorId } from "./anchors";
  */
 
 /**
- * Markdown-lite help text: blank lines separate paragraphs, lines starting "- " are bullets,
+ * Markdown-lite help text: `[[help:topic-id|Label]]` opens a Help topic from a tour; blank lines separate paragraphs, lines starting "- " are bullets,
  * **bold** is emphasis and `[[key:<binding id>]]` shows that key binding's current chord, so the
  * text can never drift from the input binding catalogue.
  */

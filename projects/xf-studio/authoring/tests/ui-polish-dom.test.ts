@@ -600,6 +600,24 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     h2.panel.spec.element.remove();
   });
 
+  test("a tour Help link opens its topic despite an earlier search, with the answer expanded and focused", async () => {
+    const { helpPanel } = await import("../src/studio-ui/guidance/help-panel");
+    const host = heldHost(), updates = new UpdateCheckActions(host.transport);
+    const rt = { port: { updates, about: { capability: () => ({ available: false }) }, desktopApp: { offered: () => false },
+      links: { open: async () => ({ ok: true }) } }, feedback: { toast() {} }, changed() {}, finishes: [], settings: { open() {} } };
+    const panel = helpPanel(rt as never, { tours: () => [], status: () => undefined, start: () => false });
+    panel.update(null as never);
+    const root = panel.spec.element as unknown as LightElement;
+    root.querySelector("input")!.value = "no matches";
+    panel.openTopic("install");
+    expect(root.querySelector("input")!.value).toBe("Installing your mod");
+    const topic = root.querySelector('[data-help-topic="install"]')!;
+    expect(topic.hasAttribute("open")).toBe(true);
+    expect(lightDocument.activeElement).toBe(topic.querySelector("summary"));
+    for (const name of ["ArchiveXL", "RED4ext", "redscript", "Nexus Mods"]) expect(text(topic)).toContain(name);
+    panel.spec.element.remove();
+  });
+
   test("Help's Check for updates: while it checks, the button says so and is unavailable, and the last detail stays", async () => {
     const { helpPanel } = await import("../src/studio-ui/guidance/help-panel");
     const host = heldHost(), updates = new UpdateCheckActions(host.transport);

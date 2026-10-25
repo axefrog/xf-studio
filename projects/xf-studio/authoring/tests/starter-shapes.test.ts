@@ -477,16 +477,20 @@ describe("in the application", () => {
     expect(studio.app.dispatch({ kind: "layer.edit", command: { kind: "add" } })).toMatchObject({ ok: true });
     expect(pointsOf(layers().at(-1)!)).toEqual(shapePoints("lid-wash"));
     expect(layers().at(-1)!.opacity).toBe(starter("lid-wash").shape.opacity!);
+    expect(layers().at(-1)!.name).toBe("Lid wash");
     expect(studio.app.dispatch({ kind: "layer.edit", command: { kind: "add", starter: "classic-wing" } })).toMatchObject({ ok: true });
     expect(pointsOf(layers().at(-1)!)).toEqual(shapePoints("classic-wing"));
     expect(layers().at(-1)!.feather).toBe(starter("classic-wing").shape.feather);
+    expect(layers().at(-1)!.name).toBe("Classic wing");
     expect(studio.app.dispatch({ kind: "starters.setDefault", starter: "crease-smoky" })).toMatchObject({ ok: true });
     studio.app.dispatch({ kind: "layer.edit", command: { kind: "add" } });
     expect(pointsOf(layers().at(-1)!)).toEqual(shapePoints("crease-smoky"));
+    expect(layers().at(-1)!.name).toMatch(/^Crease \/ smoky(?: 2)?$/);
     // The default doesn't follow use: adding from another starter leaves it where it was.
     studio.app.dispatch({ kind: "layer.edit", command: { kind: "add", starter: "lower-lash-smudge" } });
     studio.app.dispatch({ kind: "layer.edit", command: { kind: "add" } });
     expect(pointsOf(layers().at(-1)!)).toEqual(shapePoints("crease-smoky"));
+    expect(layers().at(-1)!.name).toMatch(/^Crease \/ smoky(?: 2)?$/);
     // A starter that is gone is refused, naming it.
     const gone = studio.app.dispatch({ kind: "layer.edit", command: { kind: "add", starter: "s-nothing" } });
     expect(gone).toMatchObject({ ok: false, code: "missing_target", message: "That starter isn't available any more." });
@@ -503,6 +507,9 @@ describe("in the application", () => {
     expect(own.shape).toEqual(shapeOfLayer(studio.document.recipe.layers[0]!));
     studio.app.dispatch({ kind: "layer.edit", command: { kind: "add", starter: own.id } });
     expect(pointsOf(studio.document.recipe.layers.at(-1)!)).toEqual(pointsOf(studio.document.recipe.layers[0]!));
+    expect(studio.document.recipe.layers.at(-1)!.name).toBe("My shape");
+    studio.app.dispatch({ kind: "layer.edit", command: { kind: "add", starter: own.id } });
+    expect(studio.document.recipe.layers.at(-1)!.name).toBe("My shape 2");
     studio.app.dispatch({ kind: "starters.setDefault", starter: "classic-wing" });
     studio.app.dispatch({ kind: "layer.edit", command: { kind: "reset", id: layerId } });
     expect(pointsOf(studio.document.recipe.layers[0]!)).toEqual(shapePoints("classic-wing"));
@@ -597,6 +604,12 @@ describe("the layer commands", () => {
     const base = { uv: "gltf-uv0-top-left" as const, layers: [] };
     const named = editLayers(base, undefined, { kind: "add", newId: "a", starter: "classic-wing" }, REGION).recipe.layers[0]!;
     expect(pointsOf(named)).toEqual(shapePoints("classic-wing"));
+    expect(named.name).toBe("Classic wing");
+    const twice = editLayers({ ...base, layers: [named] }, named.id, { kind: "add", newId: "again", starter: "classic-wing" }, REGION).recipe;
+    expect(twice.layers[1]!.name).toBe("Classic wing 2");
+    const renamed = editLayers(twice, named.id, { kind: "rename", id: named.id, name: "Classic wing 3" }, REGION).recipe;
+    const third = editLayers(renamed, named.id, { kind: "add", newId: "third", starter: "classic-wing" }, REGION).recipe;
+    expect(third.layers[2]!.name).toBe("Classic wing");
     const plain = editLayers(base, undefined, { kind: "add", newId: "b" }, REGION).recipe.layers[0]!;
     expect(pointsOf(plain)).toEqual(shapePoints("lid-wash"));
     expect(() => editLayers(base, undefined, { kind: "add", newId: "c", shape: { ...starter("lid-wash").shape, feather: 0 } as StarterShape }, REGION)).toThrow();

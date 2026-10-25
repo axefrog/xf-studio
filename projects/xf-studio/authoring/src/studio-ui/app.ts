@@ -125,7 +125,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     return (factory as (ctx: FeatureViewContext) => PanelController)(view.ctx);
   }).map(panel => catalogue.context(panel.spec.id).kind === "profile" ? panel : withEmptyChoices(rt, panel));
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
-  const help = byId.get("help") as PanelController & { focusSearch?(): void };
+  const help = byId.get("help") as PanelController & { focusSearch?(): void; openTopic?(id: string): void };
   // A view's panel ID (`view.<id>`) need not be an anchor's form; only the panels a tour can name are anchors.
   const anchorPanel = (panel: PanelController) => isAnchorId(panelAnchor(panel.spec.id)) ? rt.anchors.register(panelAnchor(panel.spec.id), panel.spec.element) : () => {};
   for (const panel of panels) anchorPanel(panel);
@@ -207,7 +207,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     port.views.withdraw(all.filter(id => !offered.has(id)));
   };
   withdrawUnoffered();
-  const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
+  const openHelp = (topic?: string) => { dock.reveal("help", false); requestAnimationFrame(() => topic ? help.openTopic?.(topic) : help.focusSearch?.()); };
   /**
    * Settings (UI-109) is summoned like any panel (`reveal`, dock/layout.ts `summonPanel`): with no home among the docked groups a closed
    * Settings opens floating, or where the person last had it; one already open is brought forward where it is, its group expanded if
@@ -219,7 +219,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     requestAnimationFrame(() => settingsPanel?.show?.(section));
   } };
   guidance = mountGuidance(rt, { openHelp });
-  const header = shellHeader(rt, theme, view, openHelp);
+  const header = shellHeader(rt, theme, view, () => openHelp());
   const status = statusBar(rt);
   const leaseNotice = workspaceNotice(rt);
   const setupCard = previewSetupCard(rt);

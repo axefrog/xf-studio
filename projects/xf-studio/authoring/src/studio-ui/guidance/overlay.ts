@@ -13,6 +13,20 @@ export type CalloutAction = { id: string; label: string; variant?: "primary" | "
 export type CalloutView = { eyebrow: string; title: string; body: string; note?: string; actions: CalloutAction[];
   progress?: { index: number; count: number } };
 
+// Track input once per document. Chromium can carry :focus-visible from a search input
+// through a pointer-triggered, deferred focus(), so the title also needs the actual input origin.
+const inputOrigins = new WeakMap<Document, { keyboard: boolean }>();
+function inputOrigin() {
+  let origin = inputOrigins.get(document);
+  if (!origin) {
+    origin = { keyboard: false };
+    const state = origin;
+    document.addEventListener("keydown", () => { state.keyboard = true; }, true);
+    document.addEventListener("pointerdown", () => { state.keyboard = false; }, true);
+    inputOrigins.set(document, origin);
+  }
+  return origin;
+}
 /**
  * The guidance callout: an eyebrow, a title, a content area and a row of custom buttons. It is a
  * non-modal dialog; the tour card and the onboarding offer both use it. Buttons are rebuilt only
@@ -26,10 +40,11 @@ export class Callout {
   private readonly note: HTMLElement;
   private readonly actions: HTMLElement;
   private readonly dots: HTMLElement;
+  private readonly origin = inputOrigin();
   private bodyKey = "";
   private actionKey = "";
   private runs = new Map<string, () => void>();
-  constructor(options: { className: string; closeLabel: string; onClose(): void; onKey?(event: KeyboardEvent): boolean }) {
+  constructor(private readonly options: { className: string; closeLabel: string; onClose(): void; openTopic?(id: string): void; onKey?(event: KeyboardEvent): boolean }) {
     const titleId = uid("guidance-title"), bodyId = uid("guidance-body");
     this.eyebrow = h("span", { class: "guidance-eyebrow" });
     this.title = h("h2", { class: "guidance-title", id: titleId, tabindex: "-1" });
@@ -42,13 +57,14 @@ export class Callout {
       "aria-labelledby": titleId, "aria-describedby": bodyId, hidden: true },
       h("header", { class: "guidance-head" }, this.eyebrow, close), this.title, this.body, this.note, h("footer", { class: "guidance-foot" }, this.dots, this.actions));
     this.element.addEventListener("keydown", event => {
+      this.title.removeAttribute("data-pointer-focus");
       if (options.onKey?.(event)) { event.preventDefault(); event.stopPropagation(); }
     });
   }
   update(view: CalloutView) {
     setText(this.eyebrow, view.eyebrow);
     setText(this.title, view.title);
-    if (view.body !== this.bodyKey) { this.bodyKey = view.body; this.body.replaceChildren(...renderHelp(view.body)); }
+    if (view.body !== this.bodyKey) { this.bodyKey = view.body; this.body.replaceChildren(...renderHelp(view.body, this.options.openTopic)); }
     setText(this.note, view.note ?? "");
     this.note.hidden = !view.note;
     const progress = view.progress;
@@ -80,10 +96,14 @@ export class Callout {
   show() { this.element.hidden = false; }
   hide() { this.element.hidden = true; }
   get visible() { return !this.element.hidden; }
-  focusTitle() { this.title.focus({ preventScroll: true }); }
+  focusTitle() {
+    setAttr(this.title, "data-pointer-focus", this.origin.keyboard ? undefined : "");
+    this.title.focus({ preventScroll: true });
+  }
   focusPrimary() {
     const primary = this.actions.querySelector<HTMLButtonElement>(".btn.primary:not(:disabled)") ?? this.actions.querySelector<HTMLButtonElement>(".btn:not(:disabled)");
-    (primary ?? this.title).focus({ preventScroll: true });
+    if (primary) primary.focus({ preventScroll: true });
+    else this.focusTitle();
   }
 }
 
@@ -121,12 +141,13 @@ export class TourOverlay {
     rect(target: StepTarget): AnchorRect | undefined;
     press(button: StepButton): void;
     nav(action: TourNavigation): void;
+    openTopic?(id: string): void;
     /** Called about four times a second while a tour runs. */
     refresh?(): void;
   }) {
     this.spotlight = h("div", { class: "guidance-spotlight", "aria-hidden": "true" });
     this.callout = new Callout({ className: "guidance-tour", closeLabel: "Skip tour", onClose: () => deps.nav("skip"),
-      onKey: event => this.key(event) });
+      openTopic: deps.openTopic, onKey: event => this.key(event) });
     this.element = h("div", { class: "guidance-layer", hidden: true }, this.spotlight, this.callout.element);
   }
   private key(event: KeyboardEvent) {
