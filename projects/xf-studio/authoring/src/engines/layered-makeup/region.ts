@@ -50,6 +50,8 @@ export type RegionWording = Readonly<{
 export interface LayeredMakeupRegion {
   /** The feature this region belongs to (its `FeatureId`). */
   readonly id: string;
+  /** The feature's name for people: the heading its starters are listed under. */
+  readonly label: string;
   /** The layer models this feature's layers may hold; every engine edit and read validates with it. */
   readonly models: LayerModelRegistry;
   readonly mirror: Mirror;
@@ -69,6 +71,11 @@ export interface LayeredMakeupRegion {
    * inside it, away from the surface's edge.
    */
   readonly area: UvWindow;
+  /**
+   * What a starter's thumbnail draws behind its outline, in the surface's UV: faint guide polylines (eye makeup: the lash line and the
+   * crease) and the rectangle shown.
+   */
+  readonly thumbnail: Readonly<{ window: UvWindow; guides: readonly (readonly (readonly [u: number, v: number])[])[] }>;
   /** The starters the feature contributes (read-only, in menu order) and the one a new layer takes when nothing else is chosen. */
   readonly starters: readonly ContributedStarter[];
   readonly defaultStarter: string;

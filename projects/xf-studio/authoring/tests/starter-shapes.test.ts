@@ -401,7 +401,7 @@ async function studioWithStarters(options: { looks?: StudioLookInput[] } = {}) {
     random: seededRandom(77), note: text => notes.push(text) });
   holder.starters = starters;
   await starters.load();
-  const actions = new StarterActions({ starters, feature: REGION.id, label: "Eye makeup", layer: id => studio.document.recipe.layers.find(layer => layer.id === id) });
+  const actions = new StarterActions({ starters, feature: REGION.id, label: "Eye makeup", thumbnail: REGION.thumbnail, layer: id => studio.document.recipe.layers.find(layer => layer.id === id) });
   studio.core.app.attach({ starters: actions, starterShapes: starters });
   return { studio, starters, actions, choice, notes };
 }

@@ -656,7 +656,8 @@ describe("the layer list says what the flag shows (UI-95)", () => {
       // The wash still has coverage where the plate ends (PREV-146).
       layerSurfaceEdge: (id: string) => new Float64Array(id === "c" ? [0.4, 0.18, 0.41, 0.18] : []),
       capability: () => ({ available: true }), contextCapability: () => ({ available: true }) };
-    const ctx = { facade, dispatch: () => true, platform: () => true, feedback: { toast() {}, announce() {} }, anchors: { register() {} }, links: { open: async () => ({ ok: true }) } };
+    const ctx = { facade, dispatch: () => true, platform: () => true, feedback: { toast() {}, announce() {} }, anchors: { register() {} }, links: { open: async () => ({ ok: true }) },
+      starters: { list: () => undefined, capability: () => ({ available: false, reason: "The starters are still loading." }) } };
     const panel = layersPanel(ctx as never);
     panel.update({ recipe, library: { draft: undefined }, locked: undefined, layer: recipe.layers[0] } as never);
     const rows = (panel.spec.element as unknown as LightElement).querySelectorAll(".item-main");

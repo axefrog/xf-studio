@@ -25,6 +25,7 @@ import { nameIssue } from "../../platform/api/validation-issues";
 import type { DocumentOutbox, OutboxEntry } from "../../platform/core/document-outbox";
 import { notifyAll } from "../../platform/core/listeners";
 import { hostRandom } from "../../platform/core/random";
+import { curve } from "../../engines/layered-makeup/recipe";
 import type { ContributedStarter, StarterShape } from "../../engines/layered-makeup/starter-shape";
 
 export const STARTER_DOCUMENT = "shape-starter";
@@ -44,6 +45,8 @@ export type StarterView = {
   readonly owner: { readonly kind: "feature"; readonly label: string } | { readonly kind: "user"; readonly revision: number; readonly createdAt: number; readonly savedAt: number };
   /** Absent: this build can't read the shape (a newer build's), so it can't be applied. */
   readonly shape?: StarterShape;
+  /** The shape's outline as a closed polygon in UV (its points tessellated), for a thumbnail; absent with the shape. */
+  readonly outline?: readonly { readonly u: number; readonly v: number }[];
   /** Whether new layers and new looks start from it now. */
   readonly isDefault: boolean;
   /** Why it can't be applied here, in plain words. */
@@ -157,7 +160,8 @@ export class ShapeStarters {
     const all = [...this.deps.contributed.map(item => ({ id: item.id, name: item.name, description: item.description, owner: { kind: "feature" as const, label: this.deps.label },
       shape: item.shape as StarterShape | undefined, unavailable: undefined as string | undefined })), ...own];
     const effective = chosen !== undefined && all.some(item => item.id === chosen && item.shape) ? chosen : this.deps.fallback;
-    return Object.freeze(all.map(({ unavailable, shape, ...rest }) => ({ ...rest, isDefault: rest.id === effective, ...(shape ? { shape } : {}), ...(unavailable ? { unavailable } : {}) })));
+    return Object.freeze(all.map(({ unavailable, shape, ...rest }) => ({ ...rest, isDefault: rest.id === effective, ...(shape ? { shape, outline: outlineOf(shape) } : {}),
+      ...(unavailable ? { unavailable } : {}) })));
   }
   private held(id: string): { value: unknown; revision: number } | null {
     const held = this.deps.outbox.document(ref(id));
@@ -267,3 +271,6 @@ export class ShapeStarters {
     throw Error("A new starter's ID couldn't be made: the source of randomness keeps repeating itself.");
   }
 }
+
+/** A shape's outline: its points tessellated as the engine draws them. */
+const outlineOf = (shape: StarterShape) => curve(structuredClone(shape.points) as never, 10).map(({ u, v }) => ({ u, v }));

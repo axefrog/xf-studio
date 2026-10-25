@@ -18,13 +18,17 @@ export type StarterAction =
   | { kind: "starters.restore"; starter: string };
 
 /** What a presentation reads: the starters in menu order, and which one new layers use. Detached; changes arrive through `subscribe`. */
-export type StarterListing = { readonly feature: string; readonly label: string; readonly starters: readonly StarterView[]; readonly defaultId: string };
+export type StarterListing = { readonly feature: string; readonly label: string; readonly starters: readonly StarterView[]; readonly defaultId: string;
+  /** What each starter's thumbnail draws behind its outline (the region's). */
+  readonly thumbnail: StarterThumbnail };
+export type StarterThumbnail = Readonly<{ window: { u0: number; u1: number; v0: number; v1: number }; guides: readonly (readonly (readonly [number, number])[])[] }>;
 export type StartersPort = { snapshot(): StarterListing; subscribe(listener: () => void): () => void };
 
 export type StarterActionsDeps = {
   readonly starters: ShapeStarters;
   readonly feature: string;
   readonly label: string;
+  readonly thumbnail: StarterThumbnail;
   /** The edited look's layer `id`, as the editor holds it now. */
   layer(id: string): Layer | undefined;
 };
@@ -57,7 +61,7 @@ export class StarterActions {
   }
   /** The presentation port over the starters. */
   port(): StartersPort {
-    const { starters, feature, label } = this.deps;
-    return Object.freeze({ snapshot: () => ({ feature, label, starters: starters.list(), defaultId: starters.defaultId() }), subscribe: (listener: () => void) => starters.subscribe(listener) });
+    const { starters, feature, label, thumbnail } = this.deps;
+    return Object.freeze({ snapshot: () => ({ feature, label, starters: starters.list(), defaultId: starters.defaultId(), thumbnail }), subscribe: (listener: () => void) => starters.subscribe(listener) });
   }
 }

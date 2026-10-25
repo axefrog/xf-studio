@@ -8,7 +8,7 @@ import { DEFAULT_STRENGTH_BLEND, type Layer, type Recipe } from "../../engines/l
 import type { LayeredMakeupRegion } from "../../engines/layered-makeup/region";
 import { EYE_MAKEUP_FEATURE, LAYER_MODELS } from "../../legacy/eye-makeup/recipe-schema";
 import { layerWithShape, type StarterShape } from "../../engines/layered-makeup/starter-shape";
-import { EYE_DEFAULT_STARTER, EYE_LANDMARKS, EYE_STARTERS } from "./starters";
+import { EYE_DEFAULT_STARTER, EYE_LANDMARKS, EYE_STARTERS, EYE_THUMBNAIL_WINDOW } from "./starters";
 
 /**
  * The historical four-layer sample recipe: an example and test fixture (the first build's startup recipe).
@@ -80,6 +80,7 @@ export const EYE_FINE_GLITTER_REGIONS: readonly FlakeRegion[] = Object.freeze([
 
 export const EYE_MAKEUP_REGION: LayeredMakeupRegion = Object.freeze({
   id: EYE_MAKEUP_FEATURE,
+  label: "Eye makeup",
   models: LAYER_MODELS,
   // The face's centre line: a symmetric layer paints both lids.
   mirror: Object.freeze({ axis: "u", centre: 0.5 }),
@@ -108,6 +109,7 @@ export const EYE_MAKEUP_REGION: LayeredMakeupRegion = Object.freeze({
   wording: Object.freeze({ area: "the eye UV area", surface: "the lid" }),
   /** The plate's UV rectangle (starters.ts `EYE_LANDMARKS`). */
   area: EYE_LANDMARKS.plate,
+  thumbnail: Object.freeze({ window: EYE_THUMBNAIL_WINDOW, guides: Object.freeze([EYE_LANDMARKS.lashLine, EYE_LANDMARKS.crease]) }),
   starters: EYE_STARTERS,
   defaultStarter: EYE_DEFAULT_STARTER,
   starter: starterRecipe,

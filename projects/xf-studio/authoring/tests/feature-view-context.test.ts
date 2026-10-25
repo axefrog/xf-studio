@@ -35,7 +35,7 @@ test("a feature view's context is its facade and the shell's services: no port, 
   const { shell, ctx, toasts } = fixture();
   expect(ctx.facade).toBe(shell.feature("eye-makeup"));
   expect(Object.keys(ctx).sort()).toEqual(["anchors", "changed", "collection", "dispatch", "easing", "facade", "facial", "feedback", "links", "modInstall", "openSettings", "platform", "presets", "range", "readiness",
-    "research", "reveal", "targetMenu", "targetSections", "undoAction", "uv"]);
+    "research", "reveal", "starters", "targetMenu", "targetSections", "undoAction", "uv"]);
   expect(Object.isFrozen(ctx)).toBe(true);
   // Eye makeup's Presets and Library panels (P2-v): the library's presentation operations only, frozen, no port.
   expect(Object.keys(ctx.collection).sort()).toEqual(["capability", "file", "fileCapability", "import", "menu", "menuCapability", "presetMenu", "refresh",
@@ -91,6 +91,9 @@ test("eye makeup's layer menu: the layer's context entries, then its view's comm
       }) },
     { label: "Reset shape and settings", icon: "reset", shortcut: undefined, hint: `Keeps the name; Undo with ${shortcutLabel("shell.undo")}`, checked: undefined,
       capability: at({ kind: "layer.edit", command: { kind: "reset", id: layer.id } }) },
+    // Not a feature action: it opens a name popover first, so it carries the starters' own capability (here, before they load).
+    { label: "Save shape as starter…", icon: "save", shortcut: undefined, hint: undefined, checked: undefined,
+      capability: ctx.starters.capability({ kind: "starters.save", layerId: layer.id, name: "Starter" }) },
   ]);
   // Choosing an entry dispatches through the facade.
   const mirror = own.items.find(item => item.kind === "action" && item.label === "Mirror across the face") as Extract<MenuItem, { kind: "action" }>;

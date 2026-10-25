@@ -56,11 +56,13 @@ test("rename, move and Undo preserve the selected point while a reset clamps it"
   expect(c.document.active).toBe(0);
   expect(c.document.selected).toBe(3);
   expect(previous).toHaveLength(4);
-  c.document.selected = 5;
+  // A reset takes the default starter's contour (Lid wash: ten points), so a selection past its last point clamps to it.
+  c.document.selected = 12;
   c.app.dispatch({ kind: "layer.edit", command: { kind: "reset", id } });
-  expect(c.document.selected).toBe(3);
+  expect(c.document.selected).toBe(9);
+  // Undo brings back the six-point layer, whose last point the selection clamps to.
   c.document.history.undo();
-  expect(c.document.selected).toBe(3);
+  expect(c.document.selected).toBe(5);
 });
 
 test("a new layer's ID comes from the host's ID source, so the applied action replays exactly", () => {

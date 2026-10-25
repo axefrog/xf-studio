@@ -59,7 +59,6 @@ import { createTrustedAuthoringCore } from "../app/trusted-authoring-core";
 import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./studio-registry";
-import { EYE_MAKEUP_MODULE } from "../features/eye-makeup";
 import { ShapeStarters } from "../app/starters/shape-starters";
 import { StarterActions } from "../app/starters/starter-actions";
 import { readStarterShape } from "../engines/layered-makeup/starter-shape";
@@ -208,7 +207,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The live feature's starter shapes (profiles design §6): its contributed ones and the person's own (library documents through the outbox),
   // and which one new layers and looks start from, kept in the workspace's feature memory.
   const region = STUDIO_COMPOSITION.region;
-  const starterShapes = new ShapeStarters({ documents: documents.documents, outbox: documents.outbox, feature: region.id, label: EYE_MAKEUP_MODULE.label,
+  const starterShapes = new ShapeStarters({ documents: documents.documents, outbox: documents.outbox, feature: region.id, label: region.label,
     contributed: region.starters, fallback: region.defaultStarter, read: shape => readStarterShape(shape, region.newLayer(), region.models),
     choice: { get: () => workspace.defaultStarter, set: id => { if (id === undefined) delete workspace.defaultStarter; else workspace.defaultStarter = id; } },
     writable: () => lease?.writable() ?? true, note: text => defaultNote(text),
@@ -328,7 +327,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The layout tabs' actions: the session's operations, and those naming a default (the modules' and the person's own).
   const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: STUDIO_FRAGMENT_KNOWLEDGE });
   core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
-  const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: EYE_MAKEUP_MODULE.label,
+  const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: region.label, thumbnail: region.thumbnail,
     layer: id => core.document.recipe.layers.find(layer => layer.id === id) });
   core.app.attach({ starters: starterActions, starterShapes });
   const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
