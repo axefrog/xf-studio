@@ -120,7 +120,11 @@ const MOUNTS: Record<string, Mount> = {
     const dial: DirectionDial = new DirectionDial({ label: "Direction", transaction: { edit: value => dial.update(value, { colour: "#fff2e9", others }) } });
     const others = [{ azimuth: 30, elevation: 5, colour: "#c6dafa" }, { azimuth: 150, elevation: 35, colour: "#e6eeff" }];
     dial.update({ azimuth: 329, elevation: 22 }, { colour: "#fff2e9", others });
-    return h("div", { style: "max-width:260px" }, dial.element); },
+    const unavailable = new DirectionDial({ label: "Direction · unavailable", reserveNote: true, transaction: { edit: () => {} } });
+    unavailable.update({ azimuth: 329, elevation: 22 }, { colour: "#fff2e9", others, disabled: true,
+      reason: "This workspace is open in another window." });
+    return h("div", { class: "row wrap gap-l" }, h("div", { style: "width:260px;max-width:100%" }, dial.element),
+      h("div", { style: "width:260px;max-width:100%" }, unavailable.element)); },
   "lib-bipolar": () => {
     const make = (label: string, ends: { negative: string; positive: string }, start: number, mixed = false) => {
       let value = start, isMixed = mixed;

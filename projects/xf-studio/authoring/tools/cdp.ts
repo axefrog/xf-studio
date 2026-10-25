@@ -8,6 +8,8 @@ import { lstat, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { createServer } from "node:net";
+import { randomUUID } from "node:crypto";
 import { localSettingsDirectory } from "../src/setup/host/local-settings-store";
 
 /** Windows will not delete a folder a just-ended process (Chrome and its helpers, the server) still holds, so removal is retried. */
@@ -67,25 +69,59 @@ export type Session = {
   close(): Promise<void>;
 };
 
+/** Refuse an occupied loopback port before spawning anything. Ownership is checked again after startup (the bind probe can race). */
+export async function assertPortAvailable(port: number): Promise<void> {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error(`Invalid capture port: ${port}`);
+  await new Promise<void>((ok, fail) => {
+    const probe = createServer();
+    probe.once("error", error => fail(Error(`Capture port ${port} is unavailable: ${error.message}`)));
+    probe.listen({ host: "127.0.0.1", port, exclusive: true }, () => probe.close(error => error ? fail(error) : ok()));
+  });
+}
+
 /**
  * A disposable-data authoring server. Its settings and install receipts live in that throwaway folder (host-state.ts), so nothing
  * a check does reaches the person's real settings, and it never adds a mod (INSTALL-01). `settings: "copy"` (the default) starts
  * it from a copy of the real settings, read once, so looks that need the game (the 3D head, hair, brows) still load.
  */
 export async function startServer(port: number, options: { settings?: "copy" | "empty" } = {}) {
-  const data = browserFolder("data");
-  // The server is killed by the script, not by us, so the folder goes when the script ends (whatever the way it ends).
-  process.once("exit", () => { try { rmSync(data, REMOVAL); } catch { /* still held; nothing more to do at exit */ } });
-  const real = join(localSettingsDirectory(), "settings.json");
-  if ((options.settings ?? "copy") === "copy" && existsSync(real)) copyFileSync(real, join(data, "settings.json"));
-  const server = Bun.spawn(["bun", "server.ts"], { cwd: root, env: { ...process.env, PORT: String(port), XFAS_DATA_DIR: data,
-    XFS_SETTINGS_DIR: "", XFS_MOD_INSTALL: "off" }, stdout: "pipe", stderr: "pipe" });
-  for (let i = 0; i < 120; i++) {
-    try { const response = await fetch(`http://127.0.0.1:${port}/health`); if (response.ok) return { server, data }; } catch { /* booting */ }
-    await Bun.sleep(250);
+  await assertPortAvailable(port);
+  const data = browserFolder("data"), run = randomUUID();
+  const cleanup = () => { try { rmSync(data, REMOVAL); } catch { /* still held; stale-folder sweep retries */ } };
+  process.once("exit", cleanup);
+  let server: Subprocess<"ignore", "pipe", "pipe"> | undefined;
+  try {
+    const real = join(localSettingsDirectory(), "settings.json");
+    if ((options.settings ?? "copy") === "copy" && existsSync(real)) copyFileSync(real, join(data, "settings.json"));
+    server = Bun.spawn([process.execPath, "server.ts"], { cwd: root, env: { ...process.env, PORT: String(port), XFAS_DATA_DIR: data,
+      XFS_SETTINGS_DIR: "", XFS_MOD_INSTALL: "off", XFS_CAPTURE_RUN: run,
+      // Override inherited caches: XFS_PREVIEW_CORE_CACHE, XFS_RESOLVER_CACHE, XFS_CHOICE_PREVIEW_CACHE,
+      // XFS_PACKAGE_PLATE_CACHE and XFS_EXPRESSIONS_GAME_CACHE. All are removed with this run's data.
+      XFS_PREVIEW_CORE_CACHE: join(data, "preview-cache"), XFS_RESOLVER_CACHE: join(data, "resolver-cache"),
+      XFS_CHOICE_PREVIEW_CACHE: join(data, "choice-previews"), XFS_PACKAGE_PLATE_CACHE: join(data, "eye-plate-cache"),
+      XFS_EXPRESSIONS_GAME_CACHE: join(data, "expressions-game-cache") }, stdout: "pipe", stderr: "pipe" });
+    const child = server;
+    void child.exited.then(() => { cleanup(); process.removeListener("exit", cleanup); });
+    for (let i = 0; i < 120; i++) {
+      if (child.exitCode !== null || child.killed) throw Error("Authoring server exited before startup");
+      let response: Response | undefined;
+      try { response = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000), redirect: "error" }); }
+      catch { /* booting */ }
+      if (response) {
+        const health = await response.json() as { capture?: { run: string; pid: number } };
+        if (!response.ok || health.capture?.run !== run || health.capture.pid !== child.pid)
+          throw Error(`Capture server endpoint on port ${port} does not belong to this run`);
+        if (child.exitCode !== null || child.killed) throw Error("Authoring server exited during startup");
+        return { server: child, data };
+      }
+      await Bun.sleep(250);
+    }
+    throw Error("Authoring server did not start");
+  } catch (error) {
+    if (server) { server.kill(); await server.exited; }
+    cleanup(); process.removeListener("exit", cleanup);
+    throw error;
   }
-  server.kill();
-  throw Error("Authoring server did not start");
 }
 
 export type PageTarget = { type: string; webSocketDebuggerUrl: string };
@@ -101,10 +137,11 @@ export async function waitForPageTarget(targets: () => Promise<PageTarget[] | nu
   const start = Date.now();
   let delay = limits.firstDelayMs, last = "Chrome's debugging port never answered";
   for (;;) {
+    if (!alive()) throw Error(`Chrome exited before it exposed a page target (${last})`);
     try {
       const listed = await targets();
       const page = listed?.find(target => target.type === "page");
-      if (page) return page;
+      if (page && alive()) return page;
       if (listed) last = `Chrome listed ${listed.length} target(s), none a page`;
     } catch (error) { last = `Chrome's debugging port didn't answer (${(error as Error)?.message ?? error})`; }
     if (!alive()) throw Error(`Chrome exited before it exposed a page target (${last})`);
@@ -114,6 +151,38 @@ export async function waitForPageTarget(targets: () => Promise<PageTarget[] | nu
     delay = Math.min(limits.maxDelayMs, Math.ceil(delay * 1.5));
   }
 }
+/** Only loopback endpoints on the expected port may be used, even if a target response supplies another URL. */
+export function debugEndpoint(value: string, port: number, kind: "browser" | "page"): string {
+  const url = new URL(value);
+  if (url.protocol !== "ws:" || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || Number(url.port) !== port ||
+      !url.pathname.startsWith(`/devtools/${kind}/`) || url.username || url.password)
+    throw Error("Chrome supplied an unexpected debugging endpoint");
+  return url.href;
+}
+
+/** Ask the browser endpoint for its OS process ID before using any page target; a port alone proves no ownership. */
+export async function verifyBrowserProcess(endpoint: string, pid: number): Promise<void> {
+  const socket = new WebSocket(endpoint);
+  try {
+    await new Promise<void>((ok, fail) => {
+      const timer = setTimeout(() => fail(Error("Chrome process identity timed out")), 2000);
+      const finish = (error?: Error) => { clearTimeout(timer); error ? fail(error) : ok(); };
+      socket.onopen = () => socket.send(JSON.stringify({ id: 1, method: "SystemInfo.getProcessInfo" }));
+      socket.onerror = () => finish(Error("Chrome process identity connection failed"));
+      socket.onclose = () => finish(Error("Chrome closed before reporting its process identity"));
+      socket.onmessage = event => {
+        try {
+          const result = JSON.parse(String(event.data));
+          if (result.id !== 1) return;
+          if (result.error || !result.result?.processInfo?.some((info: { type: string; id: number }) => info.type === "browser" && info.id === pid))
+            finish(Error("Chrome debugging endpoint does not belong to the spawned process"));
+          else finish();
+        } catch { finish(Error("Chrome returned an invalid process identity")); }
+      };
+    });
+  } finally { socket.close(); }
+}
+
 /** The debugging port a Chrome started with `--remote-debugging-port=0` chose (its profile's `DevToolsActivePort`), or null yet. */
 function activePort(profile: string): number | null {
   const file = join(profile, "DevToolsActivePort");
@@ -131,11 +200,14 @@ async function stopChrome(chrome: Subprocess, profile: string, keep = false): Pr
 /**
  * Start a throwaway headless Chrome and connect to its page. Without `debugPort`, Chrome picks a free debugging port itself (read from
  * its profile), so concurrent or back-to-back starts never collide on one. A start that exposes no page within its deadline, or exits,
- * is stopped and tried again with a fresh profile, a bounded number of times, then fails with a clear message.
+ * is stopped and tried again with a fresh profile, a bounded number of times, then fails with a clear message. Requested occupied
+ * ports are refused before spawning; the browser endpoint must report this child's PID before any page target is used.
  */
 async function startChrome(options: { width?: number; height?: number; debugPort?: number; args?: readonly string[]; profile?: string }) {
   const failures: string[] = [];
+  if (options.debugPort) await assertPortAvailable(options.debugPort);
   for (let attempt = 1; attempt <= PAGE_TARGET_LIMITS.attempts; attempt++) {
+    if (options.debugPort && attempt > 1) await assertPortAvailable(options.debugPort);
     const profile = options.profile ? (mkdirSync(options.profile, { recursive: true }), options.profile) : browserFolder("chrome");
     // Chrome's scoped_dir* scratch belongs to this profile too, so removing the profile also removes it after a crash or killed run.
     const temp = join(resolve(profile), "temp");
@@ -150,7 +222,12 @@ async function startChrome(options: { width?: number; height?: number; debugPort
     try {
       const page = await waitForPageTarget(async () => {
         const port = options.debugPort ?? activePort(profile);
-        return port ? await (await fetch(`http://127.0.0.1:${port}/json`)).json() as PageTarget[] : null;
+        if (!port) return null;
+        const version = await (await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000), redirect: "error" })).json() as { webSocketDebuggerUrl: string };
+        await verifyBrowserProcess(debugEndpoint(version.webSocketDebuggerUrl, port, "browser"), chrome.pid);
+        const targets = await (await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(1000), redirect: "error" })).json() as PageTarget[];
+        for (const target of targets) if (target.type === "page") debugEndpoint(target.webSocketDebuggerUrl, port, "page");
+        return targets;
       }, () => chrome.exitCode === null && !chrome.killed);
       return { chrome, profile, page };
     } catch (error) {

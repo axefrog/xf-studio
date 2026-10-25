@@ -290,7 +290,9 @@ const server = Bun.serve({
     if (request.method !== "GET" && request.method !== "HEAD")
       return new Response("Method not allowed", { status: 405 });
     if (url.pathname === "/health")
-      return Response.json({ app: "xf-studio", version: "0.1.0" });
+      return Response.json({ app: "xf-studio", version: "0.1.0",
+        // Isolated capture helpers must prove this health response came from the process they started.
+        ...(process.env.XFS_CAPTURE_RUN ? { capture: { run: process.env.XFS_CAPTURE_RUN, pid: process.pid } } : {}) });
     // Resolved character details have one source: the host's content-addressed store.
     if (url.pathname.startsWith(CHARACTER_ASSET_PREFIX)) return serveCharacterAsset(characterDetails, url.pathname, request.method, url.searchParams.has("background"));
     if (url.pathname.startsWith(GRADING_LUT_ASSET_PREFIX)) return serveGradingLut(gradingLut, url.pathname, request.method);
