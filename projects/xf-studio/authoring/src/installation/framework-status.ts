@@ -1,17 +1,29 @@
 /** What Settings › Game › Mod frameworks shows, derived from the read-only framework check (pure: no DOM, no host).
  *
  * One row per framework the check covers, for the route the person launches with: the version the game will load and where it comes
- * from, and a status. Only the frameworks XF Eye Artistry needs can be a problem; the others are listed as not needed. A problem's one
+ * from, and a status. Required frameworks come from every product the person builds; the others are listed as not needed. A problem's one
  * next step is the check's own plain sentence plus links to the framework's official release pages: the page never installs or
  * updates anything (AGENTS.md, "Don't touch users' core mod setups"). Words and rules: research/authoring/framework-version-check.md.
  */
-import { EYE_ARTISTRY_REQUIREMENTS, frameworkLinkId, FRAMEWORKS, showVersion, type FrameworkId, type FrameworkLink, type FrameworkLinkId,
-  type FrameworkProvider, type FrameworkRouteReport, type FrameworkVersionCheck, type InstalledFramework } from "./framework-catalogue";
+import { requirementsForProducts, frameworkVerdicts, frameworkLinkId, FRAMEWORKS, showVersion, type FrameworkId, type FrameworkLink, type FrameworkLinkId,
+  type FrameworkProduct, type FrameworkProvider, type FrameworkRouteReport, type FrameworkVersionCheck, type InstalledFramework } from "./framework-catalogue";
+
+import { frameworkInputKey, type FrameworkInputFields } from "./framework-check-watch";
+import type { InstallDetectionState } from "./install-detection-actions";
+
+/** Select only the report and failure belonging to these inputs. A report from another route is never a fallback. */
+export function frameworkStatusForInputs(fields: FrameworkInputFields | undefined, read: Readonly<InstallDetectionState>, products: readonly FrameworkProduct[] = []): FrameworkStatusView {
+  const key = fields ? frameworkInputKey(fields) : undefined;
+  const attempt = read.frameworkAttempt?.inputKey === key ? read.frameworkAttempt : undefined;
+  const check = key && read.frameworksInputKey === key && read.frameworks?.selectedRoute === fields?.launchRoute ? read.frameworks : undefined;
+  return frameworkStatusView({ gameChosen: !!fields?.gameRoot, check, checking: !!attempt?.pending, error: attempt?.error, products });
+}
 
 export type FrameworkRowStatus = "ok" | "too-old" | "missing" | "unreadable" | "not-needed";
 export type FrameworkRowView = {
   readonly id: FrameworkId;
   readonly name: string;
+  readonly neededFor: string | null;
   readonly status: FrameworkRowStatus;
   readonly badge: { readonly text: string; readonly tone: "success" | "warning" | "neutral" };
   /** The meta line's facts, in order: the version the game will load, where it comes from. */
@@ -40,6 +52,8 @@ export type FrameworkStatusInput = {
   readonly gameChosen: boolean;
   readonly check: FrameworkVersionCheck | undefined;
   readonly checking: boolean;
+  readonly error?: string;
+  readonly products?: readonly FrameworkProduct[];
 };
 
 export const FRAMEWORKS_CHECKING = "Checking your frameworks…";
@@ -56,13 +70,14 @@ function facts(installed: InstalledFramework | undefined): string[] {
     ...(installed.version && installed.versionSource === "mod-manager" ? ["version from Mod Organizer's list"] : [])];
 }
 
-function rowsOf(check: FrameworkVersionCheck, route: FrameworkRouteReport): FrameworkRowView[] {
-  const needed = new Set(EYE_ARTISTRY_REQUIREMENTS.map(requirement => requirement.framework));
+function rowsOf(route: FrameworkRouteReport, products: readonly FrameworkProduct[] = []): FrameworkRowView[] {
+  const requirements = requirementsForProducts(products), verdicts = frameworkVerdicts(route.frameworks, route.route, requirements);
+  const needed = new Set(requirements.map(requirement => requirement.framework));
   const ordered = [...FRAMEWORKS].sort((a, b) => Number(needed.has(b.id)) - Number(needed.has(a.id)));
   return ordered.map(definition => {
     const installed = route.frameworks.find(row => row.framework === definition.id);
-    const verdict = route.verdicts.find(row => row.framework === definition.id);
-    const minimum = (check.requirements.find(row => row.framework === definition.id)?.minimum) ?? verdict?.minimum;
+    const verdict = verdicts.find(row => row.framework === definition.id);
+    const minimum = (requirements.find(row => row.framework === definition.id)?.minimum) ?? verdict?.minimum;
     const status: FrameworkRowStatus = !verdict ? "not-needed" : verdict.status === "ok" ? "ok" : verdict.status === "outdated" ? "too-old"
       : verdict.status === "missing" ? "missing" : "unreadable";
     const badge = status === "ok" ? { text: "Up to date", tone: "success" as const }
@@ -71,7 +86,7 @@ function rowsOf(check: FrameworkVersionCheck, route: FrameworkRouteReport): Fram
           : status === "unreadable" ? { text: "Version unknown", tone: "warning" as const }
             : { text: FRAMEWORKS_NOT_NEEDED, tone: "neutral" as const };
     const problem = status === "too-old" || status === "missing" || status === "unreadable";
-    return { id: definition.id, name: definition.name, status, badge, facts: facts(installed), message: problem ? verdict?.message ?? null : null,
+    return { id: definition.id, name: definition.name, neededFor: needed.has(definition.id) ? `Needed for ${requirements.find(row => row.framework === definition.id)!.products!.join(" and ")}` : null, status, badge, facts: facts(installed), message: problem ? verdict?.message ?? null : null,
       notes: installed?.notes ?? [],
       links: problem ? definition.links.map(link => ({ id: frameworkLinkId(definition.id, link.label), label: link.label, name: `${definition.name} on ${link.label}` })) : [] };
   });
@@ -81,12 +96,13 @@ function rowsOf(check: FrameworkVersionCheck, route: FrameworkRouteReport): Fram
 export function frameworkStatusView(input: FrameworkStatusInput): FrameworkStatusView {
   const none = { checking: input.checking, rows: [] as FrameworkRowView[], attention: 0, foldable: false };
   if (!input.gameChosen) return { ...none, shown: false, tone: "info", line: "" };
+  if (input.error && !input.checking) return { ...none, shown: true, tone: "info", line: input.error };
   const check = input.check;
-  const route = check ? check.routes.find(row => row.route === check.selectedRoute) ?? check.routes[0] : undefined;
+  const route = check ? check.routes.find(row => row.route === check.selectedRoute) : undefined;
   if (!check || !route || !route.available)
     return { ...none, shown: true, tone: input.checking ? "checking" : "info",
       line: input.checking ? FRAMEWORKS_CHECKING : route?.problem ?? FRAMEWORKS_UNCHECKED };
-  const rows = rowsOf(check, route);
+  const rows = rowsOf(route, input.products);
   const attention = rows.filter(row => row.status === "too-old" || row.status === "missing" || row.status === "unreadable").length;
   return { shown: true, checking: input.checking, rows, attention, foldable: attention === 0,
     tone: input.checking ? "checking" : attention ? "attention" : "ready",

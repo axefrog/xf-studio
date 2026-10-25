@@ -11,6 +11,9 @@
  *   all-ok            every framework current (shown folded under "All frameworks up to date", and open)
  *   too-old           ArchiveXL 1.26.3 (the rows, the sentence, Nexus Mods and GitHub links)
  *   missing           redscript not installed
+ *   expressions-ok / expressions-too-old / expressions-missing
+ *                     an expression set created through the disposable library's owner; TweakXL current, too old, or absent
+ *   failed            a failed request for the current settings, with its plain message and Check again
  *   hidden-duplicate  a second, unused ArchiveXL in the Mod Organizer 2 list (a note under its row)
  *   checking          a check held open until released (the line and the button say so; earlier rows stay)
  *   no-game           no game folder chosen: the group is not shown
@@ -37,6 +40,10 @@ const WIDTHS = [900, 1600] as const, THEMES = ["light", "dark"] as const, HEIGHT
 const SETTLED: Record<string, string> = {
   "all-ok": `q('.framework-status')?.dataset.tone === 'ready' && !q('.framework-status').hidden`,
   "too-old": `q('.framework-status')?.dataset.tone === 'attention' && !q('.framework-status').hidden`,
+  "expressions-ok": `q('.framework-status')?.dataset.tone === 'ready' && !q('.framework-status').hidden`,
+  "expressions-too-old": `q('.framework-status')?.dataset.tone === 'attention' && !q('.framework-status').hidden`,
+  "expressions-missing": `q('.framework-status')?.dataset.tone === 'attention' && !q('.framework-status').hidden`,
+  failed: `q('.framework-status')?.dataset.tone === 'info' && q('.framework-status .framework-line')?.textContent.includes('couldn’t read')`,
   missing: `q('.framework-status')?.dataset.tone === 'attention' && !q('.framework-status').hidden`,
   "hidden-duplicate": `q('.framework-status')?.dataset.tone === 'ready' && !q('.framework-status').hidden`,
   checking: `q('.framework-status')?.dataset.tone === 'checking' && !q('.framework-status').hidden`,
@@ -87,7 +94,7 @@ try {
     await page.evaluate(`window.xfStudioFrameworkStatus.state(${JSON.stringify(state)})`);
     await page.waitFor(SETTLED[state] ?? "true", 30_000);
     // The all-fine state is shown folded, then open.
-    for (const open of state === "all-ok" ? [false, true] : [state === "hidden-duplicate" || state === "checking"]) {
+    for (const open of state === "all-ok" ? [false, true] : [state === "hidden-duplicate" || state === "checking" || state === "expressions-ok"]) {
       await fold(page, open);
       await page.wait(250);
       for (const width of WIDTHS) {
@@ -109,11 +116,11 @@ try {
           if (!group) throw Error(`No group to capture for ${tag}.`);
           await page.screenshot(resolve(out, `${tag}.png`), group);
           // The Mod package card's Game section, where it points here (the states that need attention).
-          if (state === "too-old" || state === "missing") {
+          if (["too-old", "missing", "expressions-too-old", "expressions-missing"].includes(state)) {
             await page.evaluate(`window.xfStudioShell.dock.reveal('package', false)`);
             await page.wait(100);
           }
-          const card = state === "too-old" || state === "missing" ? await clipOf(page, "document.querySelector('.package-progress')?.closest('.panel-content')?.querySelector(\"[data-view-key='section:Game']\")") : null;
+          const card = ["too-old", "missing", "expressions-too-old", "expressions-missing"].includes(state) ? await clipOf(page, "document.querySelector('.package-progress')?.closest('.panel-content')?.querySelector(\"[data-view-key='section:Game']\")") : null;
           if (card) await page.screenshot(resolve(out, `${tag}-package-card.png`), card);
           manifest.push({ state, theme, width, file: `${tag}.png`, ...(card ? { card: `${tag}-package-card.png` } : {}),
             line: await page.evaluate<string | null>(`(() => { const l = document.querySelector('.framework-status:not([hidden]) .framework-line'); return l ? [...l.children].find(c => !c.hidden)?.textContent?.trim() ?? null : null; })()`) });

@@ -35,6 +35,8 @@ export type FrameworkStatusRow = {
   /** The status, as a short fixed word or phrase on a badge. */
   readonly badge: { readonly text: string; readonly tone: "success" | "warning" | "neutral" };
   readonly status: string;
+  /** One short phrase naming the products that need this framework. */
+  readonly neededFor?: string | null;
   /** The meta line's facts, in order ("1.27.5", "from the game folder"). */
   readonly facts: readonly string[];
   /** What to do, for a framework that needs attention. */
@@ -142,6 +144,7 @@ export class FrameworkStatus {
       });
       return h("li", { class: "framework-row", "data-status": row.status, "data-framework": row.id },
         h("div", { class: "framework-name-line" }, h("strong", { class: "framework-name", text: row.name }), quiet ? null : badge(row.badge.text, row.badge.tone)),
+        row.neededFor && !quiet ? h("p", { class: "record-meta framework-needed", text: row.neededFor }) : null,
         h("p", { class: "record-meta framework-meta" }, ...meta),
         !quiet && row.message ? h("p", { class: "framework-message", text: row.message }) : null,
         links.length ? h("div", { class: "framework-links" }, ...links) : null,

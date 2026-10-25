@@ -32,7 +32,8 @@ export const EXPRESSIONS_FEATURE = "expressions";
 export const EXPRESSIONS_EXPORT: ExportInfo = Object.freeze({ exporterId: EXPRESSIONS_EXPORTER_ID, brand: "XF Expressions",
   selectorLabel: "Photo mode expressions", selector: "vanilla" });
 /** Framework versions the files are written for (the sources studied: ArchiveXL 1.27.3, TweakXL 1.11.4). */
-export const EXPRESSIONS_REQUIREMENTS = Object.freeze({ ArchiveXL: "1.27.3", TweakXL: "1.11.4" });
+import { EXPRESSIONS_REQUIREMENTS } from "../requirements";
+export { EXPRESSIONS_REQUIREMENTS } from "../requirements";
 /** "For sharing": XF rows start here, after filler rows that keep every index at its position. */
 export const SHARING_FIRST_INDEX = 1000;
 

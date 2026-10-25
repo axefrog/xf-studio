@@ -4,11 +4,11 @@ import { InstallDetectionActions, type InstallDetectionTransport } from "../inst
  * The page's detection service over `/api/install-detection`. `answer` lets a verification workspace answer a request itself (a specimen
  * check, compose/framework-status-verification.ts); returning undefined asks the host as usual.
  */
-export function createBrowserInstallDetection(answer?: (target: Parameters<InstallDetectionTransport>[0]) => ReturnType<InstallDetectionTransport> | undefined) {
-  return new InstallDetectionActions(async target => {
+export function createBrowserInstallDetection(answer?: (target: Parameters<InstallDetectionTransport>[0]) => ReturnType<InstallDetectionTransport> | undefined, inputs?: ConstructorParameters<typeof InstallDetectionActions>[1]) {
+  return new InstallDetectionActions(async (target, signal) => {
     const specimen = answer?.(target);
     if (specimen) return specimen;
-    const response = await fetch(`/api/install-detection?target=${target}`);
+    const response = await fetch(`/api/install-detection?target=${target}`, { signal });
     return { ok: response.ok, status: response.status, data: await response.json() };
-  });
+  }, inputs);
 }

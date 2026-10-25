@@ -144,16 +144,12 @@ export function gameSetupForm(rt: StudioRuntime) {
   const toolsElement = h("div", { class: "setup-section setup-tools" }, wolvenKitField);
   const saves = savesFolderField(rt, save);
   // Finding is read only and quick: done once when the form is first shown, and again on request.
-  let detected = false;
+  let discovering: AbortController | undefined;
   async function detect(force = false) {
-    if (detected && !force) return;
-    detected = true;
-    for (const kind of ["detect.gameInstalls", "detect.mo2Instances"] as const) {
-      // The framework check shares the detection service (one request at a time): wait for it rather than skip a step.
-      for (let waited = 0; port.installDetection.snapshot().busy && waited < 100; waited++) await new Promise(done => setTimeout(done, 20));
-      if (port.installDetection.capability({ kind }).available) await port.installDetection.dispatch({ kind });
-    }
-    rt.changed();
+    if (discovering) return;
+    const request = discovering = new AbortController();
+    try { await port.installDetection.discover({ force, signal: request.signal }); }
+    finally { if (discovering === request) discovering = undefined; rt.changed(); }
   }
 
   return {
@@ -164,6 +160,7 @@ export function gameSetupForm(rt: StudioRuntime) {
     tools: toolsElement,
     /** Find the game and mod manager, once (the first time Settings is shown). */
     detect: () => void detect(),
+    cancelDetection() { const request = discovering; discovering = undefined; request?.abort(); },
     /** Focus the first thing to choose in a group: the game folder or MO2 instance still missing, the saves folder, or WolvenKit. */
     focus(section: "game" | "saves" | "tools") {
       void detect();

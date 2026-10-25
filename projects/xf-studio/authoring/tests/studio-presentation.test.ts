@@ -1,5 +1,15 @@
+import { frameworkStatusVerification } from "../src/compose/framework-status-verification";
+import { watchFrameworkInputs } from "../src/installation/framework-check-watch";
 import { expect, test } from "bun:test";
 import { trustedFixture } from "./studio-presentation-fixture";
+import { InstallDetectionActions } from "../src/installation/install-detection-actions";
+import { LocalSetupActions } from "../src/setup/local-setup-actions";
+import type { LocalSetupView } from "../src/setup/local-settings";
+import { frameworkCheckFor } from "../src/installation/framework-fixtures";
+import { FRAMEWORKS_UNCHECKED } from "../src/installation/framework-status";
+import { PartPresetService, type PartPresetTransport } from "../src/library/part-presets";
+import type { PartPresetSet } from "../src/library/part-preset-sets";
+import { EXPRESSION_FRAMEWORK_REQUIREMENTS } from "../src/features/expressions/requirements";
 
 test("a view names its V and look without History's V kind prefix", () => {
   const { shell } = trustedFixture({ presentation: {
@@ -72,4 +82,106 @@ test("replacement presentation can perform current cross-surface workflows witho
   expect(shell.snapshot().preferences.theme).toBe("dark");
   expect(notifications).toBeGreaterThan(0);
   unsubscribe();
+});
+
+// The diagnostic uses real detection and library owners; presentation cannot revive a report for older settings.
+
+async function diagnosticFixture(presets?: PartPresetService) {
+  let fields = { gameRoot: "C:\\Game", launchRoute: "mo2", mo2Root: "C:\\MO2", mo2ProfileId: "Play" };
+  const setup = new LocalSetupActions(async (_method, body) => {
+    if (body) fields = { ...fields, ...(body as { fields: typeof fields }).fields };
+    return { ok: true, status: 200, data: { fields, source: "primary", revision: 1 } as LocalSetupView };
+  });
+  await setup.dispatch({ kind: "setup.refresh" });
+  let fail = false;
+  const detection = new InstallDetectionActions(async () => fail
+    ? { ok: false, status: 503, data: { code: "unavailable", error: "The selected game folder could not be read. Choose Check again." } }
+    : { ok: true, status: 200, data: frameworkCheckFor("all-ok") }, () => setup.snapshot().view?.fields);
+  const { shell } = trustedFixture({ presets, presentation: { localSetup: setup, installDetection: detection,
+    frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }] } });
+  return { shell, setup, detection, fail: () => { fail = true; } };
+}
+
+test("a failed re-check after any input change never presents the old MO2 report as ready", async () => {
+  for (const change of [{ gameRoot: "C:\\OtherGame" }, { launchRoute: "direct" as const }, { mo2Root: "C:\\OtherMO2" }, { mo2ProfileId: "Other" }]) {
+    const h = await diagnosticFixture();
+    await h.detection.dispatch({ kind: "detect.frameworkVersions" });
+    expect(h.shell.installDetection.snapshot().frameworkStatus.tone).toBe("ready");
+    await h.setup.dispatch({ kind: "setup.update", fields: change });
+    expect(h.shell.installDetection.snapshot().frameworkStatus).toMatchObject({ tone: "info", line: FRAMEWORKS_UNCHECKED, rows: [] });
+    h.fail(); await h.detection.dispatch({ kind: "detect.frameworkVersions" });
+    expect(h.shell.installDetection.snapshot().frameworkStatus).toMatchObject({ tone: "info", rows: [], foldable: false,
+      line: "The selected game folder could not be read. Choose Check again." });
+    expect(h.shell.installDetection.capability({ kind: "detect.frameworkVersions" }).available).toBe(true);
+  }
+});
+
+function presetOwner() {
+  let stored: PartPresetSet[] = [];
+  const unused = async (): Promise<never> => { throw Error("Unexpected fixture transport call"); };
+  const transport: PartPresetTransport = { list: unused, save: unused, rename: unused, delete: unused, updateSet: unused,
+    listSets: async () => structuredClone(stored),
+    createSet: async input => { const set = { ...input, id: crypto.randomUUID(), revision: 1, updatedAt: "", members: [] }; stored.push(set); return set; },
+    deleteSet: async id => { stored = stored.filter(set => set.id !== id); return { id }; },
+  };
+  return new PartPresetService(transport);
+}
+
+test("requirements follow the owner's expression-set list, including creation and deletion after the check", async () => {
+  const presets = presetOwner();
+  const h = await diagnosticFixture(presets);
+  const read = () => h.shell.installDetection.snapshot().frameworkStatus;
+  read(); await presets.execute({ kind: "partPresetSet.list", feature: "expressions" });
+  await h.detection.dispatch({ kind: "detect.frameworkVersions" });
+  expect(read().rows.find(row => row.id === "tweakxl")).toMatchObject({ status: "not-needed", neededFor: null });
+  const made = await presets.execute({ kind: "partPresetSet.create", feature: "expressions", name: "Faces" });
+  if (!made.ok || !made.set) throw Error("Fixture set not created");
+  expect(read().rows.find(row => row.id === "tweakxl")).toMatchObject({ status: "ok", neededFor: "Needed for expression sets" });
+  expect(read().rows.find(row => row.id === "archivexl")?.neededFor).toBe("Needed for XF Eye Artistry and expression sets");
+  await presets.execute({ kind: "partPresetSet.delete", feature: "expressions", id: made.set.id, revision: 1 });
+  expect(read().rows.find(row => row.id === "tweakxl")).toMatchObject({ status: "not-needed", neededFor: null });
+});
+
+test("a delayed successful report stays bound to the settings it started with", async () => {
+  const h = await diagnosticFixture();
+  let release!: () => void;
+  const detector = new InstallDetectionActions(async () => {
+    await new Promise<void>(done => { release = done; });
+    return { ok: true, status: 200, data: frameworkCheckFor("all-ok") };
+  }, () => h.setup.snapshot().view?.fields);
+  const { shell } = trustedFixture({ presentation: { localSetup: h.setup, installDetection: detector } });
+  const pending = detector.dispatch({ kind: "detect.frameworkVersions" });
+  await h.setup.dispatch({ kind: "setup.update", fields: { gameRoot: "C:\\AnotherGame" } });
+  release(); await pending;
+  expect(shell.installDetection.snapshot().frameworkStatus).toMatchObject({ tone: "info", rows: [], line: FRAMEWORKS_UNCHECKED });
+});
+
+test("the capture states run through the real setup, detection, watcher and library owners without a browser", async () => {
+  const h = await diagnosticFixture(), presets = presetOwner();
+  let hook!: ReturnType<typeof frameworkStatusVerification>;
+  const detection = new InstallDetectionActions(async target => {
+    const answer = hook.transport(target);
+    if (!answer) throw Error("A capture specimen unexpectedly asked the live host");
+    return answer;
+  }, () => h.setup.snapshot().view?.fields);
+  hook = frameworkStatusVerification({ setup: h.setup, detection: () => detection, presets: () => presets });
+  const { shell } = trustedFixture({ presets, presentation: { localSetup: h.setup, installDetection: detection,
+    frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }] } });
+  const read = () => shell.installDetection.snapshot().frameworkStatus;
+  await hook.state("all-ok");
+  const stop = watchFrameworkInputs(h.setup, detection);
+  try {
+    for (const state of hook.states) {
+      await hook.state(state);
+      if (state === "no-game") expect(read().shown).toBe(false);
+      else if (state === "failed") expect(read()).toMatchObject({ tone: "info", rows: [], line: "XF Studio couldn’t read your frameworks. Choose Check again to try once more." });
+      else if (state === "checking") {
+        expect(read().tone).toBe("checking"); hook.release();
+        await new Promise(done => setTimeout(done, 0));
+      } else {
+        expect(read().tone).toBe(["too-old", "missing", "expressions-too-old", "expressions-missing"].includes(state) ? "attention" : "ready");
+        expect(read().rows.find(row => row.id === "tweakxl")?.neededFor).toBe(state.startsWith("expressions-") ? "Needed for expression sets" : null);
+      }
+    }
+  } finally { hook.release(); stop(); }
 });

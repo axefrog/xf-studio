@@ -105,11 +105,11 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
   };
   const element = h("div", { class: "panel-content settings-panel" }, ...Object.entries(sections).flatMap(([id, content]) => id === "updates" ? [content, experimental] : [content]));
 
-  let shown = false, updatesShown = false;
+  let updatesShown = false;
   return {
     spec: { id: SETTINGS_PANEL, ...PANEL_META[SETTINGS_PANEL], element,
       // Finding the game and mod manager is read only and quick: done the first time Settings is shown.
-      visibility: visible => { if (visible && !shown) { shown = true; form.detect(); } } },
+      visibility: visible => { if (visible) form.detect(); else form.cancelDetection(); } },
     /** Bring a group into view and put focus on its first control (the first thing still to choose, in Game). */
     show(which: SettingsSection = "game", part?: string) {
       const target = sections[which];

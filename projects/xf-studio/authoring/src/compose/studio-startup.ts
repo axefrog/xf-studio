@@ -1,3 +1,4 @@
+import { EXPRESSION_FRAMEWORK_REQUIREMENTS } from "../features/expressions/requirements";
 import { polish5Verification } from "./polish5-verification";
 import { startersFixtures } from "./starters-verification";
 import { polish4Defaults, polish4Verification, type Polish4State } from "./polish4-verification";
@@ -243,8 +244,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   // Verification only: the framework check is answered by specimens (compose/framework-status-verification.ts).
-  const frameworkFixture = verification ? frameworkStatusVerification({ setup: localSetup, detection: () => installDetection }) : undefined;
-  const installDetection = createBrowserInstallDetection(frameworkFixture?.transport);
+  const frameworkFixture = verification ? frameworkStatusVerification({ setup: localSetup, detection: () => installDetection, presets: () => presets }) : undefined;
+  const installDetection = createBrowserInstallDetection(frameworkFixture?.transport, () => localSetup.snapshot().view?.fields);
   // The framework check reads the settings and a few installed files: it runs by itself as they change, so it is ready when it is looked at.
   watchFrameworkInputs(localSetup, installDetection);
   // Part-less modules' services (the Save Explorer, Poses), over their browser devices. The saves device reads the workspace's own saves
@@ -497,7 +498,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   const packageTransport = collectionTransport(`${base}/collections`);
   const polish5 = verification ? polish5Verification(packageTransport) : undefined;
   bootstrap = createTrustedStudioBootstrap({
-    core, preferences, localSetup, installDetection, modInstall, previewSetup, viewport: viewportDevice.attachment,
+    core, preferences, localSetup, installDetection,
+    frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }],
+    modInstall, previewSetup, viewport: viewportDevice.attachment,
     links: { open: async link => {
       try { await (host.openLink ? host.openLink(link) : openProjectLinkInNewTab(link)); return { ok: true }; }
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : "That page couldn't be opened. Try again." }; }

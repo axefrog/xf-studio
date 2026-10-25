@@ -1,3 +1,4 @@
+import type { PartPresetService } from "../src/library/part-presets";
 import type { WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { eyeCheck } from "./fixtures/package-results";
 import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
@@ -35,8 +36,9 @@ import { eyeMakeupPort } from "./fixtures/eye-region";
  * for the viewport pickers (default: the selected layer's first point).
  */
 export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>["hitAt"];
-  presentation?: Pick<Parameters<typeof createStudioPresentation<string>>[0], "panelInstance" | "scopeName" | "characterName" | "installDetection">;
+  presentation?: Pick<Parameters<typeof createStudioPresentation<string>>[0], "panelInstance" | "scopeName" | "characterName" | "installDetection" | "localSetup" | "frameworkProducts">;
   /** The window's workspace lease (profiles design §2.3); without it the window is the only one. */
+  presets?: PartPresetService;
   lease?: WorkspaceLease } = {}): {
   shell: StudioPresentationPort<string>; packageInput: () => PresetCollection | undefined;
   downloads: string[]; locations: string[]; outbox: DocumentOutbox } {
@@ -50,7 +52,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
   const viewServices = createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION, history);
   const app = new StudioApplication({ document, eyeMakeup, gestures, controls, quality, history,
-    ...viewServices, ...(options.lease ? { access: options.lease } : {}) }, STUDIO_REGISTRY);
+    ...viewServices, ...(options.presets ? { presets: options.presets } : {}), ...(options.lease ? { access: options.lease } : {}) }, STUDIO_REGISTRY);
   // The collection the scene shows: a working copy of one look in a library in memory (made at once; nothing is awaited).
   const store = openTestLibrary(), port = libraryPort(store), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
   outbox.open();

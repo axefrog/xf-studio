@@ -11,7 +11,7 @@ test("detection actions are catalogued read-only host requests", () => {
   expect(Object.keys(DETECTION_DESCRIPTORS).sort()).toEqual(["detect.frameworkVersions", "detect.gameInstalls",
     "detect.mo2Instances"]);
   for (const descriptor of Object.values(DETECTION_DESCRIPTORS))
-    expect(descriptor).toEqual({ scope: ["host"], effect: "read", payload: {}, async: true, cancellable: false });
+    expect(descriptor).toEqual({ scope: ["host"], effect: "read", payload: {}, async: true, cancellable: true });
   const actions = new InstallDetectionActions(null);
   expect(actions.descriptors()).toEqual(DETECTION_DESCRIPTORS);
   expect(actions.capability({ kind: "detect.gameInstalls" })).toEqual({ available: false,
@@ -83,4 +83,66 @@ test("the framework check reads host-owned settings only and publishes a detache
   const snapshot = actions.snapshot();
   (snapshot.frameworks as any).routes.length = 0;
   expect(actions.snapshot().frameworks?.routes).toHaveLength(1);
+});
+
+const mo2 = { schema: "xfs/mo2-instance-detection-1", supported: true, instances: [], issues: [], limitations: [] };
+const tick = () => new Promise<void>(done => setTimeout(done, 0));
+
+test("discovery waits through a 4.3 second framework check, runs both reads and only then caches completion", async () => {
+  const calls: string[] = [];
+  let finishCheck!: () => void, finishMo2!: () => void;
+  const actions = new InstallDetectionActions(async target => {
+    calls.push(target);
+    if (target === "frameworks") await new Promise<void>(done => { finishCheck = done; });
+    if (target === "mo2") await new Promise<void>(done => { finishMo2 = done; });
+    return { ok: true, status: 200, data: target === "frameworks" ? { schema: "xfs/framework-version-check-1" } as any : target === "games" ? games as any : mo2 as any };
+  });
+  const check = actions.dispatch({ kind: "detect.frameworkVersions" });
+  const discovery = actions.discover();
+  await new Promise(done => setTimeout(done, 4300));
+  expect(calls).toEqual(["frameworks"]);
+  expect(actions.snapshot().discoveryComplete).not.toBe(true);
+  finishCheck(); await check; await tick();
+  expect(calls).toEqual(["frameworks", "games", "mo2"]);
+  expect(actions.snapshot().discoveryComplete).not.toBe(true);
+  finishMo2(); expect(await discovery).toEqual({ ok: true });
+  expect(actions.snapshot().discoveryComplete).toBe(true);
+  await actions.discover(); expect(calls).toHaveLength(3);
+});
+
+test("cancelling queued discovery skips its reads and leaves the running check and the next discovery intact", async () => {
+  let release!: () => void;
+  const calls: string[] = [];
+  const actions = new InstallDetectionActions(async target => {
+    calls.push(target);
+    if (target === "frameworks") await new Promise<void>(done => { release = done; });
+    return { ok: true, status: 200, data: target === "games" ? games as any : target === "mo2" ? mo2 as any : { schema: "xfs/framework-version-check-1" } as any };
+  });
+  const check = actions.dispatch({ kind: "detect.frameworkVersions" });
+  const controller = new AbortController(), cancelled = actions.discover({ signal: controller.signal });
+  await tick(); controller.abort();
+  expect(await cancelled).toMatchObject({ ok: false, code: "cancelled" });
+  expect(actions.snapshot().busy).toBe("frameworks");
+  expect(actions.snapshot().discoveryComplete).not.toBe(true);
+  const next = actions.discover();
+  release(); await check; expect(await next).toEqual({ ok: true });
+  expect(calls).toEqual(["frameworks", "games", "mo2"]);
+});
+
+test("cancelling running discovery aborts its transport, never marks it complete, and allows a later retry", async () => {
+  let first = true;
+  const calls: string[] = [];
+  let signalSeen: AbortSignal | undefined;
+  const actions = new InstallDetectionActions(async (target, signal) => {
+    calls.push(target);
+    if (first) { first = false; signalSeen = signal; await new Promise((_, reject) => signal!.addEventListener("abort", () => reject(Error("aborted")), { once: true })); }
+    return { ok: true, status: 200, data: target === "games" ? games as any : mo2 as any };
+  });
+  const controller = new AbortController(), cancelled = actions.discover({ signal: controller.signal });
+  await tick(); controller.abort();
+  expect(await cancelled).toMatchObject({ ok: false, code: "cancelled" });
+  await tick(); expect(signalSeen?.aborted).toBe(true);
+  expect(actions.snapshot().discoveryComplete).not.toBe(true);
+  expect(await actions.discover()).toEqual({ ok: true });
+  expect(calls).toEqual(["games", "games", "mo2"]);
 });

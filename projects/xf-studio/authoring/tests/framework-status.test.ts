@@ -1,5 +1,3 @@
-// Settings › Game › Mod frameworks (the model, the keep-current watcher, the named release pages and the verification specimens). The
-// panel itself is exercised over the light DOM in tests/ui-polish-dom.test.ts.
 import { expect, test } from "bun:test";
 import { isProjectLink, PROJECT_LINKS } from "../src/app/project-links";
 import { frameworkInputKey, watchFrameworkInputs, type FrameworkWatchDetection, type FrameworkWatchSetup } from "../src/installation/framework-check-watch";
@@ -8,6 +6,10 @@ import { FRAMEWORK_SAMPLE_STATES, frameworkCheckFor, frameworkCheckSample, frame
 import { frameworkStatusView, FRAMEWORKS_ALL_GOOD, FRAMEWORKS_CHECKING, FRAMEWORKS_UNCHECKED } from "../src/installation/framework-status";
 import { frameworkStatusVerification } from "../src/compose/framework-status-verification";
 import { frameworkNote } from "../src/studio-ui/panels/framework-group";
+import { requirementsForProducts } from "../src/installation/framework-catalogue";
+import { EXPRESSION_FRAMEWORK_REQUIREMENTS, EXPRESSIONS_REQUIREMENTS } from "../src/features/expressions/requirements";
+// Settings › Game › Mod frameworks (the model, the keep-current watcher, the named release pages and the verification specimens). The
+// panel itself is exercised over the light DOM in tests/ui-polish-dom.test.ts.
 
 /** The Mod package card's line for a view (the card reads the application's derived status from the frame). */
 const pointer = (status: ReturnType<typeof frameworkStatusView>) => frameworkNote({ installDetection: { frameworkStatus: status } } as never);
@@ -99,7 +101,7 @@ test("the route the person launches with decides the rows", () => {
   const direct = { ...mo2, selectedRoute: "direct" as const, routes: [{ ...mo2.routes[0]!, route: "direct" as const }, ...mo2.routes] };
   // Selected "direct" picks the first route; the verdicts read as the route was reported.
   expect(view(direct).attention).toBe(1);
-  expect(frameworkStatusView({ gameChosen: true, check: { ...mo2, selectedRoute: "direct" }, checking: false }).rows).toHaveLength(6);
+  expect(frameworkStatusView({ gameChosen: true, check: { ...mo2, selectedRoute: "direct" }, checking: false }).rows).toHaveLength(0);
 });
 
 test("every framework has a Nexus Mods and a GitHub release page, named and opened by id (the page never supplies a URL)", () => {
@@ -177,10 +179,10 @@ test("every verification state is a check the real wording produces, and the hoo
   expect(view(frameworkCheckFor("hidden-duplicate")).rows.flatMap(item => item.notes)).toHaveLength(1);
 
   const updates: unknown[] = [];
-  let fields: { gameRoot: string | null } = { gameRoot: "D:\\Game" }, busy: string | null = null;
+  let fields: { gameRoot: string | null; launchRoute?: "mo2" | "direct" } = { gameRoot: "D:\\Game" }, busy: string | null = null;
   const dispatched: string[] = [];
   const hook = frameworkStatusVerification({
-    setup: { snapshot: () => ({ view: { fields } }) as never, dispatch: async action => { updates.push(action); fields = { gameRoot: (action as { fields: { gameRoot: string | null } }).fields.gameRoot }; return { ok: true }; } },
+    setup: { snapshot: () => ({ view: { fields } }) as never, dispatch: async action => { updates.push(action); fields = { ...fields, ...(action as { fields: Partial<typeof fields> }).fields }; return { ok: true }; } },
     detection: () => ({ snapshot: () => ({ busy }) as never, dispatch: async action => { dispatched.push(action.kind); return { ok: true }; } }) });
   // Not showing a state yet: the real host is asked.
   expect(hook.transport("frameworks")).toBeUndefined();
@@ -204,4 +206,25 @@ test("every verification state is a check the real wording produces, and the hoo
   expect(((await pending).data as unknown as { routes: { verdicts: { status: string }[] }[] }).routes[0]!.verdicts.every(item => item.status === "ok")).toBe(true);
   await expect(hook.state("nonsense" as never)).rejects.toThrow("Unknown state");
   busy = null;
+});
+
+
+test("product requirements include expression-set TweakXL even though the host's Eye Artistry verdicts do not", () => {
+  const products = [{ name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }];
+  const inspect = (check: ReturnType<typeof frameworkCheckFor>, include: boolean) => frameworkStatusView({ gameChosen: true, check, checking: false, products: include ? products : [] });
+  for (const state of ["expressions-too-old", "expressions-missing"] as const) {
+    const check = frameworkCheckFor(state);
+    expect(inspect(check, false).rows.find(row => row.id === "tweakxl")).toMatchObject({ status: "not-needed", neededFor: null });
+    const withSets = inspect(check, true);
+    expect(withSets.attention).toBe(1);
+    expect(withSets.rows.find(row => row.id === "tweakxl")).toMatchObject({ status: state === "expressions-too-old" ? "too-old" : "missing", neededFor: "Needed for expression sets" });
+    expect(withSets.rows.find(row => row.id === "tweakxl")?.message).toContain(`Expression sets need TweakXL ${EXPRESSIONS_REQUIREMENTS.TweakXL}`);
+    expect(withSets.rows.slice(0, 4).every(row => row.neededFor)).toBe(true);
+    expect(withSets.rows.slice(4).map(row => row.id)).toEqual(["codeware", "cet"]);
+  }
+  const current = inspect(frameworkCheckFor("expressions-ok"), true);
+  expect(current).toMatchObject({ tone: "ready", attention: 0 });
+  expect(current.rows.find(row => row.id === "archivexl")?.neededFor).toBe("Needed for XF Eye Artistry and expression sets");
+  const stronger = requirementsForProducts([{ name: "another product", requirements: [{ framework: "archivexl", minimum: "1.28.0", reason: "test" }] }, ...products]);
+  expect(stronger.find(row => row.framework === "archivexl")).toMatchObject({ minimum: "1.28.0", products: ["XF Eye Artistry", "another product", "expression sets"] });
 });

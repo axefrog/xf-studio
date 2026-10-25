@@ -46,7 +46,20 @@ export const frameworkLinkId = (framework: FrameworkId, label: FrameworkLink["la
 export const FRAMEWORK_LINK_URLS: Readonly<Record<FrameworkLinkId, string>> = Object.freeze(Object.fromEntries(
   FRAMEWORKS.flatMap(definition => definition.links.map(link => [frameworkLinkId(definition.id, link.label), link.url]))) as Record<FrameworkLinkId, string>);
 
-export interface FrameworkRequirement { readonly framework: FrameworkId; readonly minimum: string; readonly reason: string }
+export interface FrameworkRequirement { readonly framework: FrameworkId; readonly minimum: string; readonly reason: string; readonly products?: readonly string[] }
+export type FrameworkProduct = { readonly name: string; readonly requirements: readonly FrameworkRequirement[] };
+/** The strongest minimum per framework, keeping the products that need it. Eye Artistry is always included. */
+export function requirementsForProducts(products: readonly FrameworkProduct[] = []): FrameworkRequirement[] {
+  const combined = new Map<FrameworkId, FrameworkRequirement>();
+  for (const product of [{ name: EYE_MAKEUP_MOD.modName, requirements: EYE_ARTISTRY_REQUIREMENTS }, ...products]) {
+    for (const requirement of product.requirements) {
+      const previous = combined.get(requirement.framework);
+      const strongest = previous && compareVersions(previous.minimum, requirement.minimum) >= 0 ? previous : requirement;
+      combined.set(requirement.framework, { ...strongest, products: [...new Set([...(previous?.products ?? []), product.name])] });
+    }
+  }
+  return [...combined.values()];
+}
 /** Pinned minimums for the eye-makeup package. TweakXL, Codeware and CET are not needed by it. */
 export const EYE_ARTISTRY_REQUIREMENTS: readonly FrameworkRequirement[] = Object.freeze([
   { framework: "archivexl", minimum: "1.27.3", reason: "The package's selector, appearance and material wiring was designed and verified against the ArchiveXL 1.27.3 source; no earlier release has been checked." },
@@ -117,13 +130,15 @@ export function compareVersions(a: string, b: string): number {
 export const showVersion = (version: string) => version;
 
 /** Each required framework's verdict, in plain words that name the one next step. */
-export function frameworkVerdicts(frameworks: readonly InstalledFramework[], route: "direct" | "mo2"): FrameworkVerdict[] {
+export function frameworkVerdicts(frameworks: readonly InstalledFramework[], route: "direct" | "mo2", requirements: readonly FrameworkRequirement[] = EYE_ARTISTRY_REQUIREMENTS): FrameworkVerdict[] {
   const where = route === "mo2" ? "Update it in Mod Organizer 2 with the latest release from Nexus Mods or GitHub."
     : "Update it with the latest release from Nexus Mods or GitHub.";
-  return EYE_ARTISTRY_REQUIREMENTS.map(requirement => {
+  return requirements.map(requirement => {
     const definition = FRAMEWORKS.find(row => row.id === requirement.framework)!;
     const found = frameworks.find(row => row.framework === requirement.framework)!;
-    const needs = `${EYE_MAKEUP_MOD.modName} needs ${definition.name} ${showVersion(requirement.minimum)} or newer`;
+    const names = requirement.products?.join(" and ") ?? EYE_MAKEUP_MOD.modName;
+    const subject = names[0]!.toUpperCase() + names.slice(1);
+    const needs = `${subject} ${(requirement.products && requirement.products.length > 1) || names === "expression sets" ? "need" : "needs"} ${definition.name} ${showVersion(requirement.minimum)} or newer`;
     const base = { framework: definition.id, name: definition.name, minimum: requirement.minimum,
       installed: found.version, links: definition.links };
     if (!found.installed) return { ...base, status: "missing" as const,

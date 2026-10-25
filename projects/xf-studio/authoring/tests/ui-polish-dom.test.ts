@@ -151,7 +151,8 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
     // The presentation port adds the framework status to the detection snapshot (studio-presentation.ts).
     installDetection: { snapshot: () => { const read = detection.snapshot();
       return { ...read, frameworkStatus: frameworkStatusView({ gameChosen: !!setup.snapshot().view?.fields.gameRoot, check: read.frameworks, checking: read.busy === "frameworks" }) }; },
-      capability: (a: never) => detection.capability(a), dispatch: (a: never) => detection.dispatch(a) },
+      capability: (a: never) => detection.capability(a), dispatch: (a: never) => detection.dispatch(a),
+      discover: (options: Parameters<InstallDetectionActions["discover"]>[0]) => detection.discover(options) },
     modInstall: { snapshot: () => install.snapshot(), capability: (a: never) => install.capability(a), dispatch: (a: never) => install.dispatch(a) },
     diagnostics: { expected: (code?: string) => code === "package_build_unavailable", capability: () => ({ available: true }), snapshot: () => ({ mode: null }),
       dispatch: async () => ({ ok: true, message: "" }) },
@@ -979,6 +980,7 @@ describe("Settings › Game › Mod frameworks: what the game will load, and the
     expect(h.group.querySelector(".framework-list")!.hidden).toBe(false);
     expect(h.rows().map(row => text(row.querySelector(".framework-name")!))).toEqual(["ArchiveXL", "RED4ext", "redscript", "TweakXL", "Codeware", "Cyber Engine Tweaks"]);
     expect(h.group.querySelectorAll(".badge").map(item => text(item))).toEqual(["Up to date", "Up to date", "Up to date"]);
+    expect(h.group.querySelectorAll(".framework-needed").map(item => text(item))).toEqual(Array(3).fill("Needed for XF Eye Artistry"));
     expect(text(h.group.querySelector(".framework-unused-title")!)).toBe("Not needed for your mod");
     expect(h.group.querySelector(".framework-unused")!.hidden).toBe(false);
     expect(h.group.querySelector(".framework-unused-list")!.querySelectorAll(".framework-row")).toHaveLength(3);

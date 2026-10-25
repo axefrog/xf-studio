@@ -36,6 +36,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   status?: Pick<PresentationStatusSource, "snapshot" | "subscribe">;
   localSetup?: LocalSetupActions;
   installDetection?: InstallDetectionActions;
+  frameworkProducts?: Parameters<typeof createStudioPresentation<Slot>>[0]["frameworkProducts"];
   /** "Add to my mod manager" after Build (UI-82). */
   modInstall?: ModInstallActions;
   /** The 3D preview setup service the presentation drives (card, consent, head pane). */
@@ -118,7 +119,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
-    localSetup: options.localSetup, installDetection: options.installDetection, modInstall: options.modInstall, previewSetup: options.previewSetup,
+    localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, modInstall: options.modInstall, previewSetup: options.previewSetup,
     desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
     workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),
     ...(options.targets ? { targets: options.targets } : {}), ...(options.focus ? { focus: options.focus } : {}),

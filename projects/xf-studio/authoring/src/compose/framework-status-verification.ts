@@ -1,8 +1,9 @@
+import type { PartPresetService } from "../library/part-presets";
 import { FRAMEWORK_SAMPLE_STATES, frameworkCheckFor, type FrameworkSampleState } from "../installation/framework-fixtures";
 import type { InstallDetectionActions, InstallDetectionTransport } from "../installation/install-detection-actions";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
 
-type Shown = Exclude<FrameworkSampleState, "no-game" | "checking">;
+type Shown = Exclude<FrameworkSampleState, "no-game" | "checking" | "failed">;
 
 /**
  * Isolated visual specimens for Settings › Game › Mod frameworks (`?verify=1` only, tools/framework-status-look.ts): the framework
@@ -14,11 +15,12 @@ type Shown = Exclude<FrameworkSampleState, "no-game" | "checking">;
  * (a second, unused ArchiveXL in the Mod Organizer 2 list), "checking" (a check that stays open until `release()`) and "no-game".
  * Open Settings › Game first, and choose a game folder in the verification workspace if it has none.
  */
-export function frameworkStatusVerification(deps: { setup: Pick<LocalSetupActions, "snapshot" | "dispatch">; detection: () => Pick<InstallDetectionActions, "snapshot" | "dispatch"> }) {
-  let state: Shown | "checking" | "no-game" | "live" = "live", resolved: Shown = "all-ok", release: (() => void) | undefined, game: string | null = null;
+export function frameworkStatusVerification(deps: { setup: Pick<LocalSetupActions, "snapshot" | "dispatch">; detection: () => Pick<InstallDetectionActions, "snapshot" | "dispatch">; presets?: () => Pick<PartPresetService, "execute"> }) {
+  let state: Shown | "checking" | "no-game" | "failed" | "live" = "live", resolved: Shown = "all-ok", release: (() => void) | undefined, game: string | null = null, setId: string | undefined;
   /** The detection transport's override: the framework check only, and only while a state is showing. */
   const transport = (target: Parameters<InstallDetectionTransport>[0]): ReturnType<InstallDetectionTransport> | undefined => {
     if (target !== "frameworks" || state === "live" || state === "no-game") return undefined;
+    if (state === "failed") return Promise.resolve({ ok: false, status: 503, data: { code: "unavailable", error: "XF Studio couldn’t read your frameworks. Choose Check again to try once more." } });
     if (state === "checking") return new Promise(done => { release = () => { release = undefined; done({ ok: true, status: 200, data: frameworkCheckFor(resolved) }); }; });
     return Promise.resolve({ ok: true, status: 200, data: frameworkCheckFor(state) });
   };
@@ -34,6 +36,19 @@ export function frameworkStatusVerification(deps: { setup: Pick<LocalSetupAction
     release: () => release?.(),
     async state(name: FrameworkSampleState) {
       if (!(FRAMEWORK_SAMPLE_STATES as readonly string[]).includes(name)) throw Error(`Unknown state "${name}". Choose one of ${FRAMEWORK_SAMPLE_STATES.join(", ")}.`);
+      if (deps.presets) {
+        const owner = deps.presets();
+        if (name.startsWith("expressions-") && !setId) {
+          await owner.execute({ kind: "partPresetSet.list", feature: "expressions" });
+          const outcome = await owner.execute({ kind: "partPresetSet.create", feature: "expressions", name: "Framework review" });
+          if (!outcome.ok || !outcome.set) throw Error("Could not create the verification expression set.");
+          setId = outcome.set.id;
+        } else if (!name.startsWith("expressions-") && setId) {
+          const outcome = await owner.execute({ kind: "partPresetSet.delete", feature: "expressions", id: setId, revision: 1 });
+          if (!outcome.ok) throw Error(outcome.message);
+          setId = undefined;
+        }
+      }
       const current = deps.setup.snapshot().view?.fields.gameRoot ?? null;
       if (name === "no-game") {
         if (current) game = current;
@@ -44,13 +59,18 @@ export function frameworkStatusVerification(deps: { setup: Pick<LocalSetupAction
       // The state is set before the game folder comes back, so the watcher's own check is answered by the specimen too.
       if (!current && !game) throw Error("Choose a game folder in this verification workspace first (Settings › Game).");
       state = name;
-      if (name !== "checking") resolved = name;
+      if (name !== "checking" && name !== "failed") resolved = name;
+      // These specimens describe the MO2 route. Set it through the disposable setup owner before binding the request's inputs.
+      if (deps.setup.snapshot().view?.fields.launchRoute !== "mo2") {
+        const outcome = await deps.setup.dispatch({ kind: "setup.update", fields: { launchRoute: "mo2" } });
+        if (!outcome.ok) throw Error(outcome.message);
+      }
       if (!current) await settle(game);
       await idle();
       const run = deps.detection().dispatch({ kind: "detect.frameworkVersions" });
       if (name === "checking") return;
       const outcome = await run;
-      if (!outcome.ok) throw Error(outcome.message);
+      if (!outcome.ok && name !== "failed") throw Error(outcome.message);
     },
   };
 }

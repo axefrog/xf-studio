@@ -37,13 +37,15 @@ export function frameworkCheckSample(changes: Partial<Record<FrameworkId, Framew
 
 /** The states a person meets (the `?verify=1` hook `xfStudioFrameworkStatus.state(name)` names them). "checking" and "no-game" need no
  * check of their own: the first holds a request open, the second has no game folder. */
-export const FRAMEWORK_SAMPLE_STATES = ["all-ok", "too-old", "missing", "hidden-duplicate", "checking", "no-game"] as const;
+export const FRAMEWORK_SAMPLE_STATES = ["all-ok", "too-old", "missing", "expressions-ok", "expressions-too-old", "expressions-missing", "failed", "hidden-duplicate", "checking", "no-game"] as const;
 export type FrameworkSampleState = typeof FRAMEWORK_SAMPLE_STATES[number];
 
 export function frameworkCheckFor(state: Exclude<FrameworkSampleState, "no-game">): FrameworkVersionCheck {
   switch (state) {
     case "too-old": return frameworkCheckSample({ archivexl: { version: "1.26.3", provider: mod("ArchiveXL") } });
     case "missing": return frameworkCheckSample({ redscript: null });
+    case "expressions-too-old": return frameworkCheckSample({ tweakxl: { version: "1.11.3", provider: mod("TweakXL") } });
+    case "expressions-missing": return frameworkCheckSample({ tweakxl: null });
     // Mod Organizer uses the first copy in its list; a second, older ArchiveXL further down is never loaded.
     case "hidden-duplicate": return frameworkCheckSample({ archivexl: { version: "1.27.5", provider: mod("ArchiveXL"), hidden: ["Old ArchiveXL"] } });
     default: return frameworkCheckSample();

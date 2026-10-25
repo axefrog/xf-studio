@@ -228,9 +228,9 @@ export const REQUEST_DESCRIPTORS = {
 /** Read-only host detection. Results are private host metadata (absolute paths) for a setup view to
  * offer as choices; saving a choice goes through the separate local setup actions. */
 export const DETECTION_DESCRIPTORS = {
-  "detect.gameInstalls": request("host", "read"),
-  "detect.mo2Instances": request("host", "read"),
-  "detect.frameworkVersions": request("host", "read"),
+  "detect.gameInstalls": request("host", "read", {}, true),
+  "detect.mo2Instances": request("host", "read", {}, true),
+  "detect.frameworkVersions": request("host", "read", {}, true),
 } satisfies Record<InstallDetectionAction["kind"], RequestDescriptor>;
 
 /**
