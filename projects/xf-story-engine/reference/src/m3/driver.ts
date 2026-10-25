@@ -71,11 +71,27 @@ export interface RunExtra {
    * V is told of what happens where V stands (M3 run 2). S1 opens an incident into people only where a root's focus is (the fine tier, "seen up
    * close"), so every incident with named people happened where something was looking. With this on, the driver stands in for the game's report
    * of what V saw: for each incident that opened at the block V stood in, or at a block next to it (within earshot), when a sift pattern of the
-   * offer tier has matched it, it mints a `disclosure` event
-   * (the victim tells V), caused by the incident, with V as its listener. The pattern's second stage matches that event, so the V-link and
-   * the recorded cause that S3's gates 3 and 5 ask of an offer are in the record, not assumed. Off, the driver does nothing of the kind.
+   * offer tier has matched it, it mints a report (`witnessReport`): a `tell` event, the person it happened to telling V, naming the other
+   * people of the incident as its subjects and the incident as its cause. The pattern's second stage matches that report (the same people,
+   * and a cause of the first stage's kind), so the V-link and the recorded cause that S3's gates 3 and 5 ask of an offer are in the record,
+   * not assumed. The report is a passive observation: S1's witness, tie and absorb policies ignore a `tell`, so it forms no belief, no tie
+   * to V and no regard (`test/m3/witness.test.ts` compares the whole of S1's record with and without it). Off, the driver does nothing of the kind.
    */
   witness?: boolean;
+}
+
+/**
+ * The report of what V saw, as the replay line the game's feed would carry (`RunExtra.witness`): the person the incident happened to tells V
+ * (listener) about it, the other people of the incident are the subjects, and the incident is the report's cause and one of its subjects, so
+ * the report carries its source occurrence. The kind is `tell`, which S1 mints for one person telling another about someone and which no S1 policy turns into a tie,
+ * a belief or an absorbed act; a `disclosure` would (S1 4.7 gives it warmth and trust deltas, a tie and a disclosure count).
+ */
+export function witnessReport(t: number, place: Id, incident: Id, teller: Id, subjects: readonly Id[]): ReplayLine {
+  return {
+    t, op: 'event', kind: 'tell', place,
+    participants: [{ who: teller, role: 'teller' }, { who: 'v', role: 'listener' }, ...subjects.map((who) => ({ who, role: 'subject' })), { who: incident, role: 'subject' }],
+    causes: [incident],
+  };
 }
 
 /** A busier district: every kind's base rate times `k` (a named calibration of S1's data, for a run that needs more incidents). */
@@ -151,10 +167,9 @@ export class Run {
       if (!teller) continue;
       this.told.add(e.id);
       this.witnessed++;
-      this.w.replay.submit([{
-        t: this.windowNo * WINDOW + 1, op: 'event', kind: 'disclosure', place: ev.place,
-        participants: [{ who: teller.who, role: 'teller' }, { who: 'v', role: 'listener' }], causes: [ev.id],
-      }]);
+      // the others the incident bound (the pattern's own roles, in the order of its bindings) are the report's subjects
+      const subjects = Object.keys(e.bindings).sort().map((r) => e.bindings[r]!).filter((who) => who !== teller.who);
+      this.w.replay.submit([witnessReport(this.windowNo * WINDOW + 1, ev.place, ev.id, teller.who, subjects)]);
     }
   }
 

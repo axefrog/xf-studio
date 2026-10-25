@@ -3,10 +3,18 @@
 // the player's character about it, asks for something, and says what it is worth. The words are plain stand-ins written for the run, in the
 // voice of a message from a local.
 //
-// Every pattern has two stages: the incident, and the victim telling V (a `disclosure` event caused by the incident, with V as its listener).
+// Every pattern has two stages: the incident, and a report to V of what happened (a `tell` event, S1's own kind for one person telling another
+// about someone, with V as its listener, the people of the incident as its teller and subjects, and the incident itself as a subject and as its
+// cause). The report is a passive observation: S1's witness, tie and absorb policies ignore a `tell`, so it makes no tie to V and no regard, and
+// counts as no disclosure.
 // The second stage is what the engine asks of an offer: V-link (V takes part in a stage's event, S3 gate 5) and a recorded cause on the last
-// event (gate 3). S1 opens an incident into people only where V's focus is, so the incidents with named people are those V was near; the
-// harness reports V's being told (`RunExtra.witness`), as the game's own report of what V saw will.
+// event (gate 3). It must be the report of THIS kind of incident among THESE people: the teller and the subjects are the people the first stage
+// bound, and the incident the report names (as a subject, `?inc`, because S3's patterns match participants and effects, not a cause) must be of
+// the first stage's kind. So a report of another incident of the same victim (an accident after a theft) or of another aggressor's theft does
+// not complete the pattern. What S3 cannot say is that the report names the very event that opened the first stage: two incidents of one kind
+// among the same people are one match, and the driver reports the matched one (see `Run.tellV`); a bridge's report must name its incident too.
+// S1 opens an incident into people only where V's focus is, so the incidents with named people are those V was near; the harness reports V's
+// being told (`RunExtra.witness`), as the game's own report of what V saw will.
 //
 // The people are the ones the pattern binds (`subject`, `other`), so nothing in the words is a claim the world did not make. No kit names a
 // main-story character, and nothing depends on who the player's character is: the words say "you". Stakes and rewards are not a price list: the
@@ -21,12 +29,18 @@ import { type OfferKit, offerPack, offerPattern } from './kits.ts';
 const person: Role = { kind: 'core:person', onUnfilled: ['wait'] };
 const CLAWS = { path: 'affc', op: 'eq', arg: 2 } as const;
 const clawsPerson: Role = { ...person, must: [CLAWS] };
-const stage = (kind: string, who: Array<[string, string]>, effects: NonNullable<SiftPattern['stages'][number]['effects']> = []): SiftPattern['stages'][number] => ({
-  kind, who: who.map(([role, as]) => ({ role, as })), ...(effects.length ? { effects } : {}),
+const stage = (kind: string, who: Array<[string, string]>, effects: NonNullable<SiftPattern['stages'][number]['effects']> = [], where: SiftPattern['stages'][number]['where'] = []): SiftPattern['stages'][number] => ({
+  kind, who: who.map(([role, as]) => ({ role, as })), ...(effects.length ? { effects } : {}), ...(where.length ? { where } : {}),
 });
 const pp = { kind: 'core:person' } as const;
-/** The second stage of every offer pattern: the person it happened to tells V about it. */
-const told = (teller: string): SiftPattern['stages'][number] => stage('disclosure', [['teller', teller], ['listener', '?me']]);
+/** The occurrence a report names: an event of the first stage's kind. */
+const occurrence = (kind: string): SiftPattern['roles'][string] => ({ kind: 'core:event', where: [{ path: 'kind', op: 'eq', arg: kind }] });
+/**
+ * The second stage of every offer pattern: a report to V of the incident of the first stage. The teller is the person it happened to, the
+ * subjects are the other people the first stage bound, and `?inc` is the occurrence reported.
+ */
+const told = (teller: string, subjects: string[] = []): SiftPattern['stages'][number] =>
+  stage('tell', [['teller', teller], ['listener', '?me'], ...subjects.map((x): [string, string] => ['subject', x]), ['subject', '?inc']]);
 const WITHIN = 21_600;
 
 /** A collector's demand at a stall: the stall is left owing. */
@@ -34,8 +48,8 @@ export const FEE_SHORTFALL: OfferKit = {
   id: 'fee-shortfall', tags: ['fee'], sender: 'other', stakeOf: 'the stall',
   roles: { subject: clawsPerson, other: person },
   pattern: {
-    roles: { '?a': { kind: 'core:person', where: [CLAWS] }, '?v': pp, '?me': pp },
-    stages: [stage('shakedown', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'take' }]), told('?v')],
+    roles: { '?a': { kind: 'core:person', where: [CLAWS] }, '?v': pp, '?me': pp, '?inc': occurrence('shakedown') },
+    stages: [stage('shakedown', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'take' }]), told('?v', ['?a'])],
     within: WITHIN, once: ['?a', '?v'], tags: ['fee'], binds: { subject: '?a', other: '?v' },
   },
   opener: [
@@ -111,8 +125,8 @@ export const GOODS_BACK: OfferKit = {
   id: 'goods-back', tags: ['theft'], sender: 'other', stakeOf: 'the stolen goods',
   roles: { subject: person, other: person },
   pattern: {
-    roles: { '?a': pp, '?v': pp, '?me': pp },
-    stages: [stage('theft', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'take' }]), told('?v')],
+    roles: { '?a': pp, '?v': pp, '?me': pp, '?inc': occurrence('theft') },
+    stages: [stage('theft', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'take' }]), told('?v', ['?a'])],
     within: WITHIN, once: ['?a', '?v'], tags: ['theft'], binds: { subject: '?a', other: '?v' },
   },
   opener: [
@@ -185,8 +199,8 @@ export const ASSAULT_WHY: OfferKit = {
   id: 'assault-why', tags: ['assault'], sender: 'other', stakeOf: 'the victim\'s safety and work',
   roles: { subject: person, other: person },
   pattern: {
-    roles: { '?a': pp, '?v': pp, '?me': pp },
-    stages: [stage('assault', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'harm' }]), told('?v')],
+    roles: { '?a': pp, '?v': pp, '?me': pp, '?inc': occurrence('assault') },
+    stages: [stage('assault', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'harm' }]), told('?v', ['?a'])],
     within: WITHIN, once: ['?a', '?v'], tags: ['assault'], binds: { subject: '?a', other: '?v' },
   },
   opener: [
@@ -259,7 +273,7 @@ export const ACCIDENT_ERRAND: OfferKit = {
   id: 'accident-errand', tags: ['accident'], sender: 'other', stakeOf: 'the job',
   roles: { other: person },
   pattern: {
-    roles: { '?s': pp, '?me': pp },
+    roles: { '?s': pp, '?me': pp, '?inc': occurrence('accident') },
     stages: [stage('accident', [['victim', '?s']], [{ on: '?s', effect: 'harm' }]), told('?s')],
     within: WITHIN, once: ['?s'], tags: ['accident'], binds: { other: '?s' },
   },
@@ -326,8 +340,8 @@ export const CLASH_AFTERMATH: OfferKit = {
   id: 'clash-aftermath', tags: ['clash', 'gang'], sender: 'other', stakeOf: 'the victim\'s safety',
   roles: { subject: person, other: person },
   pattern: {
-    roles: { '?a': pp, '?v': pp, '?me': pp },
-    stages: [stage('gang-clash', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'harm' }]), told('?v')],
+    roles: { '?a': pp, '?v': pp, '?me': pp, '?inc': occurrence('gang-clash') },
+    stages: [stage('gang-clash', [['aggressor', '?a'], ['victim', '?v']], [{ on: '?v', effect: 'harm' }]), told('?v', ['?a'])],
     within: WITHIN, once: ['?a', '?v'], tags: ['clash', 'gang'], binds: { subject: '?a', other: '?v' },
   },
   opener: [
@@ -397,7 +411,7 @@ export const CROWD_SCUFFLE: OfferKit = {
   id: 'crowd-scuffle', tags: ['disorder'], sender: 'other', stakeOf: 'the market\'s peace',
   roles: { other: person },
   pattern: {
-    roles: { '?p': pp, '?me': pp },
+    roles: { '?p': pp, '?me': pp, '?inc': occurrence('disorder') },
     stages: [stage('disorder', [['participant', '?p']]), told('?p')],
     within: WITHIN, once: ['?p'], tags: ['disorder'], binds: { other: '?p' },
   },
