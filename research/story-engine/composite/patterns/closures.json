@@ -22,9 +22,19 @@
           "fn": "repay",
           "args": {"debtor": "?b", "creditor": "?a"},
           "optional": true,
-          "realise": [{"wait": true}, {"nudge": {}}]
+          "realise": [{"wait": true}, {"nudge": {}}],
+          "changes": [
+            {"ends": "obligate", "args": {"debtor": "?b", "creditor": "?a"}},
+            {"tie": {"a": "?a", "b": "?b"}, "move": "up"}
+          ]
         },
-        "repaid-in-kind": {"fn": "help", "args": {"by": "?b", "to": "?a"}, "optional": true, "realise": [{"wait": true}, {"nudge": {}}]}
+        "repaid-in-kind": {
+          "fn": "help",
+          "args": {"by": "?b", "to": "?a"},
+          "optional": true,
+          "realise": [{"wait": true}, {"nudge": {}}],
+          "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "up"}]
+        }
       },
       "edges": [
         {"from": "planted", "to": "returned", "link": "because", "shown": "must"},
@@ -135,7 +145,12 @@
       },
       "junctures": {
         "dispute": {"fn": "blame", "args": {"who": "?a", "of": "?b", "for": "?j"}},
-        "terms": {"fn": "repay", "args": {"debtor": "?b", "creditor": "?a"}, "realise": [{"wait": true}, {"offer": {}}]},
+        "terms": {
+          "fn": "repay",
+          "args": {"debtor": "?b", "creditor": "?a"},
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "up"}, {"belief": {"who": "?a", "about": "?b"}, "move": "revised"}]
+        },
         "renewed": {"fn": "bind", "args": {"a": "?a", "b": "?b"}, "optional": true},
         "newDuty": {"fn": "obligate", "args": {"debtor": "?b", "creditor": "?a"}, "optional": true}
       },
@@ -175,7 +190,8 @@
           "fn": "story",
           "args": {"pattern": "any", "outcome": "any"},
           "requires": [{"rel": "outcome-kind", "args": ["parked", "parked"]}],
-          "binds": {"anyParticipant": "?x"}
+          "binds": {"anyParticipant": "?x"},
+          "changes": [{"frame": {"of": "?x", "toward": "parked", "status": "blocked"}}]
         },
         "regrown": {
           "fn": "story",
@@ -219,10 +235,32 @@
       },
       "junctures": {
         "asked": {"fn": "ask", "args": {"by": "?cl", "of": "?p", "what": "any"}},
-        "declined": {"fn": "refuse", "args": {"who": "?p", "to": "?cl"}},
-        "helped": {"fn": "help", "args": {"by": "?o", "to": "?cl"}, "optional": true},
-        "hurt": {"fn": "befall", "args": {"who": "?cl"}, "optional": true},
-        "movedOn": {"fn": "choose", "args": {"who": "?cl"}, "optional": true}
+        "declined": {
+          "fn": "refuse",
+          "args": {"who": "?p", "to": "?cl"},
+          "changes": [{"belief": {"who": "?cl", "about": "?p"}, "move": "forms"}]
+        },
+        "helped": {
+          "fn": "help",
+          "args": {"by": "?o", "to": "?cl"},
+          "optional": true,
+          "changes": [
+            {"tie": {"a": "?cl", "b": "?o"}, "move": "up"},
+            {"frame": {"of": "?cl", "toward": "asked", "status": "satisfied"}}
+          ]
+        },
+        "hurt": {
+          "fn": "befall",
+          "args": {"who": "?cl"},
+          "optional": true,
+          "changes": [{"frame": {"of": "?cl", "toward": "asked", "status": "abandoned"}}]
+        },
+        "movedOn": {
+          "fn": "choose",
+          "args": {"who": "?cl"},
+          "optional": true,
+          "changes": [{"frame": {"of": "?cl", "toward": "asked", "status": "abandoned"}}]
+        }
       },
       "edges": [
         {"from": "asked", "to": "declined", "link": "answers"},
@@ -275,9 +313,16 @@
           "fn": "demand",
           "args": {"by": "?by", "of": "?doer", "what": "acted"},
           "optional": true,
-          "realise": [{"wait": true}, {"offer": {}}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"begins": "obligate", "args": {"debtor": "?doer", "creditor": "?by"}}]
         },
-        "struck": {"fn": "wrong", "args": {"by": "?by", "to": "?doer"}, "optional": true, "realise": [{"wait": true}]}
+        "struck": {
+          "fn": "wrong",
+          "args": {"by": "?by", "to": "?doer"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"standing": {"audience": "?by", "of": "?doer"}, "move": "down"}]
+        }
       },
       "edges": [
         {"from": "acted", "to": "cued", "link": "reveals"},

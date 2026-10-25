@@ -30,21 +30,32 @@
         "run": {
           "fn": "transfer",
           "args": {"what": "?x", "from": "?mk", "to": "?crew"},
-          "realise": [{"offer": {}}, {"refine": {"pattern": "xf.composite:complication"}}]
+          "realise": [{"offer": {}}, {"refine": {"pattern": "xf.composite:complication"}}],
+          "changes": [
+            {"ends": "hold", "args": {"who": "?mk", "what": "?x"}},
+            {"begins": "hold", "args": {"who": "?crew", "what": "?x"}}
+          ]
         },
         "crossed": {
           "fn": "story",
           "args": {"pattern": "xf.composite:betrayal", "outcome": "any"},
           "optional": true,
-          "binds": {"?bt": "?crew"}
+          "binds": {"?bt": "?crew"},
+          "changes": [{"tie": {"a": "?crew", "b": "?cl"}, "move": "down"}]
         },
-        "split": {"fn": "repay", "args": {"debtor": "?cl", "creditor": "?crew"}, "optional": true},
+        "split": {
+          "fn": "repay",
+          "args": {"debtor": "?cl", "creditor": "?crew"},
+          "optional": true,
+          "changes": [{"ends": "obligate", "args": {"debtor": "?crew", "creditor": "?cl"}}]
+        },
         "heat": {
           "fn": "story",
           "args": {"pattern": "xf.composite:reckoning", "outcome": "any"},
           "optional": true,
           "park": true,
-          "binds": {"?doer": "?crew", "?t": "?mk"}
+          "binds": {"?doer": "?crew", "?t": "?mk"},
+          "changes": [{"standing": {"audience": "?mk", "of": "?crew"}, "move": "down"}]
         }
       },
       "edges": [
@@ -124,7 +135,11 @@
         "?g2": {"kind": "actor", "note": "the side that wronged first"}
       },
       "junctures": {
-        "opened": {"fn": "wrong", "args": {"by": "?g2", "to": "?g1"}},
+        "opened": {
+          "fn": "wrong",
+          "args": {"by": "?g2", "to": "?g1"},
+          "changes": [{"tie": {"a": "?g1", "b": "?g2"}, "move": "down"}]
+        },
         "answered": {
           "fn": "story",
           "args": {"pattern": "xf.composite:grievance", "outcome": "avenged"},
@@ -151,13 +166,15 @@
           "fn": "story",
           "args": {"pattern": "xf.composite:settlement", "outcome": "settled"},
           "optional": true,
-          "binds": {"?a": "?g1", "?b": "?g2"}
+          "binds": {"?a": "?g1", "?b": "?g2"},
+          "changes": [{"tie": {"a": "?g1", "b": "?g2"}, "move": "up"}]
         },
         "bled": {
           "fn": "story",
           "args": {"pattern": "xf.composite:loss", "outcome": "lost"},
           "optional": true,
-          "binds": {"?l": "?g1", "?by": "?g2"}
+          "binds": {"?l": "?g1", "?by": "?g2"},
+          "changes": [{"standing": {"audience": "?g2", "of": "?g1"}, "move": "down"}]
         }
       },
       "edges": [
@@ -218,13 +235,19 @@
       },
       "junctures": {
         "grudge": {"fn": "blame", "args": {"who": "?h", "of": "?q", "for": "?j"}},
-        "decided": {"fn": "decide", "args": {"group": "?h", "what": "?q"}, "realise": [{"wait": true}]},
+        "decided": {
+          "fn": "decide",
+          "args": {"group": "?h", "what": "?q"},
+          "realise": [{"wait": true}],
+          "changes": [{"frame": {"of": "?h", "toward": "?q", "status": "opens"}}]
+        },
         "hunting": {"fn": "pursue", "args": {"who": "?h", "target": "?q"}},
         "sheltered": {
           "fn": "protect",
           "args": {"guard": "?sh", "ward": "?q"},
           "optional": true,
-          "realise": [{"wait": true}, {"offer": {}}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"tie": {"a": "?q", "b": "?sh"}, "move": "up"}]
         },
         "sold": {
           "fn": "story",
@@ -237,13 +260,18 @@
           "fn": "repay",
           "args": {"debtor": "?q", "creditor": "?h"},
           "optional": true,
-          "realise": [{"wait": true}, {"offer": {}}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"frame": {"of": "?h", "toward": "?q", "status": "satisfied"}}]
         },
         "cleared": {
           "fn": "expose",
           "args": {"by": "?cl", "what": "?j", "to": "?h"},
           "optional": true,
-          "realise": [{"wait": true}, {"offer": {}}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [
+            {"belief": {"who": "?h", "about": "?j"}, "move": "revised"},
+            {"frame": {"of": "?h", "toward": "?q", "status": "abandoned"}}
+          ]
         }
       },
       "edges": [
@@ -329,14 +357,22 @@
         "firstNo": {
           "fn": "refuse",
           "args": {"who": "?first", "to": "?pw"},
-          "requires": [{"rel": "public", "args": ["firstNo"]}, {"rel": "at", "args": ["firstNo", "?mk"]}]
+          "requires": [{"rel": "public", "args": ["firstNo"]}, {"rel": "at", "args": ["firstNo", "?mk"]}],
+          "changes": [{"belief": {"who": "?second", "about": "firstNo"}, "move": "forms"}]
         },
         "followed": {
           "fn": "refuse",
           "args": {"who": "?second", "to": "?pw"},
-          "requires": [{"rel": "distinct", "args": ["?second", "?first"]}, {"rel": "at", "args": ["followed", "?mk"]}]
+          "requires": [{"rel": "distinct", "args": ["?second", "?first"]}, {"rel": "at", "args": ["followed", "?mk"]}],
+          "changes": [{"standing": {"audience": "?first", "of": "?pw"}, "move": "down"}]
         },
-        "answer": {"fn": "decide", "args": {"group": "?pw", "what": "?mk"}, "optional": true, "realise": [{"wait": true}]},
+        "answer": {
+          "fn": "decide",
+          "args": {"group": "?pw", "what": "?mk"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"frame": {"of": "?pw", "toward": "?mk", "status": "opens"}}]
+        },
         "crushed": {
           "fn": "story",
           "args": {"pattern": "xf.composite:squeeze", "outcome": "crushed"},
@@ -347,7 +383,8 @@
           "fn": "decide",
           "args": {"group": "?pw", "what": "?mk"},
           "optional": true,
-          "fill": {"fixed": [{"kinds": ["group.decide intent-end of collect-fee"]}]}
+          "fill": {"fixed": [{"kinds": ["group.decide intent-end of collect-fee"]}]},
+          "changes": [{"frame": {"of": "?pw", "toward": "?mk", "status": "abandoned"}}]
         }
       },
       "edges": [

@@ -17,7 +17,7 @@ Told like that, it is one plot. In the pattern language it is five or six instan
 | Role | Who | Where they come from |
 |---|---|---|
 | Sender | Okoro, who runs a repair stall at the Kabuki market | An S1 resident, profile role `vendor`, cast by the courier kit's role query |
-| Recipient | Sato, a Tyger Claws lieutenant | **Must be a real person who leads.** S1 has no leader persons (§1.6), so today the kit casts a Claws `gang` resident and calls him a lieutenant, which the world doesn't back |
+| Recipient | Sato, a Tyger Claws lieutenant | **Must be a real person who leads.** S1 has no leader persons (§1.7), so today the kit casts a Claws `gang` resident and calls him a lieutenant, which the world doesn't back |
 | The thing | A sealed case | Minted by the kit as a stand-in `xf:item` held by Okoro (§13 S1-4) |
 | Leak | Danny, Okoro's nephew, who minds the stall at weekends | A resident in Okoro's household (S1's `household` focus) |
 | Interceptor | Rhee, who sells at the next stall and runs errands for The Mox | A `vendor` resident of affiliation class `TheMox`; tied to Danny by the `market` focus |

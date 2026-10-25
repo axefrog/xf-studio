@@ -115,16 +115,24 @@
         "order": {
           "fn": "demand",
           "args": {"by": "?g1", "of": "?m", "what": "?x"},
-          "requires": [{"rel": "violates", "args": ["order", "dutyB"]}]
+          "requires": [{"rel": "violates", "args": ["order", "dutyB"]}],
+          "changes": [{"frame": {"of": "?m", "toward": "?x", "status": "blocked"}}]
         },
         "drawn": {"fn": "ask", "args": {"by": "?m", "of": "?p", "what": "?x"}, "optional": true, "realise": [{"offer": {}}]},
-        "complied": {"fn": "wrong", "args": {"by": "?m", "to": "?x"}, "optional": true, "realise": [{"wait": true}]},
+        "complied": {
+          "fn": "wrong",
+          "args": {"by": "?m", "to": "?x"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"tie": {"a": "?m", "b": "?x"}, "move": "down"}]
+        },
         "refused": {"fn": "refuse", "args": {"who": "?m", "to": "?g1"}, "optional": true, "realise": [{"wait": true}]},
         "warned": {
           "fn": "expose",
           "args": {"by": "?m", "what": "order", "to": "?x"},
           "optional": true,
-          "realise": [{"wait": true}]
+          "realise": [{"wait": true}],
+          "changes": [{"belief": {"who": "?x", "about": "order"}, "move": "forms"}]
         },
         "fallout": {
           "fn": "sever",
@@ -223,7 +231,12 @@
           "realise": [{"wait": true}, {"offer": {}}, {"refine": {"pattern": "xf.composite:revelation"}}],
           "changes": [{"belief": {"who": "?u", "about": "?f"}, "move": "revised"}]
         },
-        "aftermath": {"fn": "sever", "args": {"a": "?u", "b": "?k"}, "optional": true}
+        "aftermath": {
+          "fn": "sever",
+          "args": {"a": "?u", "b": "?k"},
+          "optional": true,
+          "changes": [{"tie": {"a": "?u", "b": "?k"}, "move": "down"}]
+        }
       },
       "edges": [
         {"from": "hidden", "to": "spread", "link": "enables"},
@@ -297,7 +310,8 @@
         "round1": {
           "fn": "compete",
           "args": {"a": "?a", "b": "?b", "prize": "?p"},
-          "requires": [{"rel": "tied", "args": ["?a", "?b"]}, {"rel": "distinct", "args": ["?a", "?b"]}]
+          "requires": [{"rel": "tied", "args": ["?a", "?b"]}, {"rel": "distinct", "args": ["?a", "?b"]}],
+          "changes": [{"standing": {"audience": "?b", "of": "?a"}, "move": "up"}]
         },
         "smarts": {
           "fn": "want",
@@ -305,8 +319,20 @@
           "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "down"}]
         },
         "round2": {"fn": "compete", "args": {"a": "?b", "b": "?a", "prize": "?p"}, "realise": [{"wait": true}, {"offer": {}}]},
-        "foul": {"fn": "wrong", "args": {"by": "?b", "to": "?a"}, "optional": true, "realise": [{"wait": true}]},
-        "truce": {"fn": "bind", "args": {"a": "?a", "b": "?b"}, "optional": true, "realise": [{"wait": true}, {"offer": {}}]}
+        "foul": {
+          "fn": "wrong",
+          "args": {"by": "?b", "to": "?a"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "ends"}]
+        },
+        "truce": {
+          "fn": "bind",
+          "args": {"a": "?a", "b": "?b"},
+          "optional": true,
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "up"}]
+        }
       },
       "edges": [
         {"from": "round1", "to": "smarts", "link": "motive", "shown": "must"},
@@ -376,9 +402,16 @@
           "args": {"by": "?gd", "to": "?wd"},
           "v": "offer",
           "realise": [{"wait": true}, {"offer": {}}],
-          "join": "any"
+          "join": "any",
+          "changes": [{"tie": {"a": "?wd", "b": "?gd"}, "move": "up"}]
         },
-        "counter": {"fn": "wrong", "args": {"by": "?gd", "to": "?th"}, "optional": true, "realise": [{"wait": true}]},
+        "counter": {
+          "fn": "wrong",
+          "args": {"by": "?gd", "to": "?th"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"tie": {"a": "?gd", "b": "?th"}, "move": "down"}]
+        },
         "failed": {
           "fn": "sever",
           "args": {"a": "?wd", "b": "?gd"},
@@ -450,9 +483,27 @@
         },
         "tempted": {"fn": "want", "args": {"who": "?a", "what": "?ch"}},
         "drawn": {"fn": "ask", "args": {"by": "?a", "of": "?p", "what": "?ch"}, "optional": true, "realise": [{"offer": {}}]},
-        "took": {"fn": "comply", "args": {"who": "?a", "to": "?x"}, "optional": true, "realise": [{"wait": true}]},
-        "stayed": {"fn": "refuse", "args": {"who": "?a", "to": "?x"}, "optional": true, "realise": [{"wait": true}]},
-        "cost": {"fn": "sever", "args": {"a": "?a", "b": "?o"}, "optional": true, "park": true}
+        "took": {
+          "fn": "comply",
+          "args": {"who": "?a", "to": "?x"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"frame": {"of": "?a", "toward": "?ch", "status": "satisfied"}}]
+        },
+        "stayed": {
+          "fn": "refuse",
+          "args": {"who": "?a", "to": "?x"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"frame": {"of": "?a", "toward": "?ch", "status": "abandoned"}}]
+        },
+        "cost": {
+          "fn": "sever",
+          "args": {"a": "?a", "b": "?o"},
+          "optional": true,
+          "park": true,
+          "changes": [{"tie": {"a": "?a", "b": "?o"}, "move": "down"}]
+        }
       },
       "edges": [
         {"from": "duty", "to": "chance", "link": "enables"},
@@ -519,13 +570,23 @@
             {"wait": true},
             {"refine": {"pattern": "xf.composite:interception"}},
             {"refine": {"pattern": "xf.composite:heist"}}
+          ],
+          "changes": [
+            {"ends": "hold", "args": {"who": "?h", "what": "?x"}},
+            {"begins": "hold", "args": {"who": "?w", "what": "?x"}},
+            {"frame": {"of": "?w", "toward": "?x", "status": "satisfied"}}
           ]
         },
         "lost": {
           "fn": "transfer",
           "args": {"what": "?x", "from": "?h", "to": "?other"},
           "optional": true,
-          "requires": [{"rel": "distinct", "args": ["?other", "?w"]}]
+          "requires": [{"rel": "distinct", "args": ["?other", "?w"]}],
+          "changes": [
+            {"ends": "hold", "args": {"who": "?h", "what": "?x"}},
+            {"begins": "hold", "args": {"who": "?other", "what": "?x"}},
+            {"frame": {"of": "?w", "toward": "?x", "status": "blocked"}}
+          ]
         }
       },
       "edges": [
@@ -578,15 +639,27 @@
           "args": {"who": "?wr", "of": "?by", "for": "wronged"},
           "changes": [{"frame": {"of": "?wr", "toward": "?by", "status": "opens"}}]
         },
-        "avenged": {"fn": "wrong", "args": {"by": "?wr", "to": "?by"}, "optional": true, "realise": [{"wait": true}]},
+        "avenged": {
+          "fn": "wrong",
+          "args": {"by": "?wr", "to": "?by"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"tie": {"a": "?wr", "b": "?by"}, "move": "down"}]
+        },
         "restored": {
           "fn": "repay",
           "args": {"debtor": "?by", "creditor": "?wr"},
           "optional": true,
           "park": true,
-          "realise": [{"wait": true}, {"offer": {}}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"belief": {"who": "?wr", "about": "?by"}, "move": "revised"}]
         },
-        "forgiven": {"fn": "bind", "args": {"a": "?wr", "b": "?by"}, "optional": true}
+        "forgiven": {
+          "fn": "bind",
+          "args": {"a": "?wr", "b": "?by"},
+          "optional": true,
+          "changes": [{"tie": {"a": "?wr", "b": "?by"}, "move": "up"}]
+        }
       },
       "edges": [
         {"from": "wronged", "to": "held", "link": "motive", "shown": "must"},
@@ -658,9 +731,27 @@
           "optional": true,
           "realise": [{"offer": {}}]
         },
-        "paid": {"fn": "comply", "args": {"who": "?wk", "to": "?col"}, "optional": true, "realise": [{"wait": true}]},
-        "refused": {"fn": "refuse", "args": {"who": "?wk", "to": "?col"}, "optional": true, "realise": [{"wait": true}]},
-        "sanctioned": {"fn": "wrong", "args": {"by": "?col", "to": "?wk"}, "optional": true, "realise": [{"wait": true}]}
+        "paid": {
+          "fn": "comply",
+          "args": {"who": "?wk", "to": "?col"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"ends": "obligate", "args": {"debtor": "?wk", "creditor": "?pw"}}]
+        },
+        "refused": {
+          "fn": "refuse",
+          "args": {"who": "?wk", "to": "?col"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"belief": {"who": "?col", "about": "?wk"}, "move": "forms"}]
+        },
+        "sanctioned": {
+          "fn": "wrong",
+          "args": {"by": "?col", "to": "?wk"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"standing": {"audience": "?pw", "of": "?wk"}, "move": "down"}]
+        }
       },
       "edges": [
         {"from": "burden", "to": "rule", "link": "enables"},

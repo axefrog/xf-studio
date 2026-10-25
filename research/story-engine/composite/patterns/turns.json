@@ -23,16 +23,23 @@
           "fn": "wrong",
           "args": {"by": "?c", "to": "?a"},
           "optional": true,
-          "requires": [{"rel": "distinct", "args": ["?c", "?a"]}]
+          "requires": [{"rel": "distinct", "args": ["?c", "?a"]}],
+          "changes": [{"frame": {"of": "?a", "toward": "?g", "status": "blocked"}}]
         },
-        "mishap": {"fn": "befall", "args": {"who": "?a"}, "optional": true},
+        "mishap": {
+          "fn": "befall",
+          "args": {"who": "?a"},
+          "optional": true,
+          "changes": [{"frame": {"of": "?a", "toward": "?g", "status": "blocked"}}]
+        },
         "adjust": {
           "fn": "choose",
           "args": {"who": "?a"},
           "join": "any",
           "park": true,
           "v": "offer",
-          "realise": [{"wait": true}, {"offer": {}}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"frame": {"of": "?a", "toward": "?g", "status": "opens"}}]
         }
       },
       "edges": [
@@ -76,9 +83,23 @@
       },
       "junctures": {
         "wanted": {"fn": "want", "args": {"who": "?a", "what": "?x"}},
-        "gained": {"fn": "transfer", "args": {"what": "?x", "from": "?src", "to": "?a"}},
-        "turned": {"fn": "wrong", "args": {"by": "?src", "to": "?a"}, "optional": true},
-        "soured": {"fn": "befall", "args": {"who": "?a"}, "optional": true},
+        "gained": {
+          "fn": "transfer",
+          "args": {"what": "?x", "from": "?src", "to": "?a"},
+          "changes": [{"begins": "hold", "args": {"who": "?a", "what": "?x"}}]
+        },
+        "turned": {
+          "fn": "wrong",
+          "args": {"by": "?src", "to": "?a"},
+          "optional": true,
+          "changes": [{"tie": {"a": "?a", "b": "?src"}, "move": "down"}]
+        },
+        "soured": {
+          "fn": "befall",
+          "args": {"who": "?a"},
+          "optional": true,
+          "changes": [{"frame": {"of": "?a", "toward": "?x", "status": "abandoned"}}]
+        },
         "learned": {"fn": "learn", "args": {"who": "?a", "what": "gained"}, "join": "any"}
       },
       "edges": [
@@ -138,9 +159,14 @@
         "told": {
           "fn": "learn",
           "args": {"who": "?l", "what": "?f"},
-          "realise": [{"wait": true}, {"offer": {}}, {"nudge": {}}]
+          "realise": [{"wait": true}, {"offer": {}}, {"nudge": {}}],
+          "changes": [{"belief": {"who": "?l", "about": "?f"}, "move": "forms"}]
         },
-        "reframed": {"fn": "blame", "args": {"who": "?l", "of": "?k", "for": "?old"}},
+        "reframed": {
+          "fn": "blame",
+          "args": {"who": "?l", "of": "?k", "for": "?old"},
+          "changes": [{"tie": {"a": "?l", "b": "?k"}, "move": "down"}]
+        },
         "acts": {"fn": "pursue", "args": {"who": "?l", "target": "?k"}, "optional": true, "park": true}
       },
       "edges": [
@@ -211,14 +237,16 @@
           "optional": true,
           "join": "any",
           "requires": [{"rel": "member", "args": ["?a", "?ga"]}],
-          "realise": [{"wait": true}]
+          "realise": [{"wait": true}],
+          "changes": [{"frame": {"of": "?ga", "toward": "?b", "status": "opens"}}]
         },
         "struck": {
           "fn": "wrong",
           "args": {"by": "?a", "to": "?b"},
           "join": "any",
           "requires": [{"rel": "graver", "args": ["struck", "provoked"]}],
-          "realise": [{"wait": true}, {"nudge": {}}]
+          "realise": [{"wait": true}, {"nudge": {}}],
+          "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "down"}]
         }
       },
       "edges": [
@@ -417,14 +445,16 @@
           "args": {"who": "?ch", "to": "?p1"},
           "optional": true,
           "v": "offer",
-          "realise": [{"wait": true}, {"offer": {}}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"tie": {"a": "?ch", "b": "?p1"}, "move": "up"}, {"tie": {"a": "?ch", "b": "?p2"}, "move": "down"}]
         },
         "chose2": {
           "fn": "comply",
           "args": {"who": "?ch", "to": "?p2"},
           "optional": true,
           "v": "offer",
-          "realise": [{"wait": true}, {"offer": {}}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"tie": {"a": "?ch", "b": "?p2"}, "move": "up"}, {"tie": {"a": "?ch", "b": "?p1"}, "move": "down"}]
         }
       },
       "edges": [
@@ -489,7 +519,8 @@
           "fn": "learn",
           "args": {"who": "?i", "what": "plan"},
           "requires": [{"rel": "tied", "args": ["?i", "?leak"]}],
-          "realise": [{"wait": true}, {"construct": true}]
+          "realise": [{"wait": true}, {"construct": true}],
+          "changes": [{"belief": {"who": "?i", "about": "plan"}, "move": "forms"}]
         },
         "wanting": {"fn": "want", "args": {"who": "?i", "what": "?x"}},
         "shadow": {"fn": "pursue", "args": {"who": "?i", "target": "?car"}, "realise": [{"wait": true}, {"nudge": {}}]},
@@ -498,9 +529,21 @@
           "args": {"what": "?x", "from": "?car", "to": "?i"},
           "optional": true,
           "v": "offer",
-          "realise": [{"wait": true}, {"refine": {"pattern": "xf.composite:complication"}}]
+          "realise": [{"wait": true}, {"refine": {"pattern": "xf.composite:complication"}}],
+          "changes": [
+            {"ends": "hold", "args": {"who": "?car", "what": "?x"}},
+            {"begins": "hold", "args": {"who": "?i", "what": "?x"}}
+          ]
         },
-        "delivered": {"fn": "transfer", "args": {"what": "?x", "from": "?car", "to": "?to"}, "optional": true}
+        "delivered": {
+          "fn": "transfer",
+          "args": {"what": "?x", "from": "?car", "to": "?to"},
+          "optional": true,
+          "changes": [
+            {"ends": "hold", "args": {"who": "?car", "what": "?x"}},
+            {"begins": "hold", "args": {"who": "?to", "what": "?x"}}
+          ]
+        }
       },
       "edges": [
         {"from": "plan", "to": "known", "link": "enables"},
@@ -566,7 +609,13 @@
           "args": {"who": "?bl", "of": "?acc", "for": "wronged"},
           "requires": [{"rel": "distinct", "args": ["?acc", "?real"]}]
         },
-        "acted": {"fn": "wrong", "args": {"by": "?bl", "to": "?acc"}, "optional": true, "realise": [{"wait": true}]},
+        "acted": {
+          "fn": "wrong",
+          "args": {"by": "?bl", "to": "?acc"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"tie": {"a": "?bl", "b": "?acc"}, "move": "down"}]
+        },
         "cleared": {
           "fn": "expose",
           "args": {"by": "?cl", "what": "wronged", "to": "?bl"},
@@ -629,8 +678,20 @@
           "args": {"by": "?p2", "of": "?n", "what": "stood"},
           "requires": [{"rel": "distinct", "args": ["?p1", "?p2"]}]
         },
-        "held": {"fn": "refuse", "args": {"who": "?n", "to": "?p2"}, "optional": true, "realise": [{"wait": true}]},
-        "broke": {"fn": "comply", "args": {"who": "?n", "to": "?p2"}, "optional": true, "realise": [{"wait": true}]},
+        "held": {
+          "fn": "refuse",
+          "args": {"who": "?n", "to": "?p2"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"tie": {"a": "?o", "b": "?n"}, "move": "up"}, {"standing": {"audience": "?p2", "of": "?n"}, "move": "up"}]
+        },
+        "broke": {
+          "fn": "comply",
+          "args": {"who": "?n", "to": "?p2"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"standing": {"audience": "?p1", "of": "?n"}, "move": "down"}]
+        },
         "turned": {"fn": "turn", "args": {"who": "?n"}, "optional": true},
         "moved": {"fn": "turn", "args": {"who": "?o"}, "optional": true}
       },
