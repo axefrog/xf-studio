@@ -5,6 +5,8 @@
 
 import { type Arm, type Hook, ARM_NAMES, CRITERIA, buildPacket, cardsMarkdown, instructions, pairsMarkdown, shuffle } from './blind.ts';
 import { type SlotRule, radiantJob } from './arms.ts';
+import { OFFER_PACK } from './kits.ts';
+import { WIDE_NAMES } from '../sim/names.ts';
 import { Run, policies } from './driver.ts';
 import { R2_ID, r2Pack } from './r2.ts';
 import { stateById } from './states.ts';
@@ -21,6 +23,12 @@ export interface PacketManifest {
   a3Rule: SlotRule;
   /** The story states the A4 offers are played over, in turn. */
   a4States: string[];
+  /**
+   * Run 2 (M3 iteration 2): `names: 'wide'` builds the A3 and A4 worlds with the wide name registry of S1's pack, as the hook runs were, and
+   * `tier: 'offers'` takes only the offers (the hooks with an ask) of the engine arms. Absent, the packet is run 1's.
+   */
+  names?: 'wide';
+  tier?: 'offers';
   /** The hook runs, sorted by file name; each with the name and the hash its record carries. */
   runs: Array<{ file: string; name: string; hash: string }>;
 }
@@ -54,14 +62,15 @@ function checked(m: PacketManifest, records: Array<{ file: string; record: RunRe
 export function buildPacketFiles(m: PacketManifest, supplied: Array<{ file: string; record: RunRecord }>): PacketFiles {
   const records = checked(m, supplied);
   const sown = (prefix: string): Hook[] =>
-    records.filter((x) => x.file.startsWith(prefix)).flatMap((x) => x.record.deliveries.filter((d) => d.layer !== 'authored' && distinct(Object.values(d.names))).map((d): Hook => ({ arm: prefix === 'E-' ? 'E' : 'A1', text: d.words, meta: { run: x.record.name, template: d.template, clock: d.clock, tempo: x.record.tempo } })));
+    records.filter((x) => x.file.startsWith(prefix)).flatMap((x) => x.record.deliveries.filter((d) => d.layer !== 'authored' && (m.tier !== 'offers' || (d.what === 'offer' && d.template.startsWith(OFFER_PACK))) && distinct(Object.values(d.names))).map((d): Hook => ({ arm: prefix === 'E-' ? 'E' : 'A1', text: d.words, meta: { run: x.record.name, template: d.template, clock: d.clock, tempo: x.record.tempo } })));
   const E = sown('E-'), A1 = sown('A1-');
+  const wide = (d: import('../sim/data.ts').S1Data): void => { d.people.names = WIDE_NAMES; };
 
   // A4: R2's offer over fresh worlds and the states that make it
   const A4: Hook[] = [];
   for (let i = 0; A4.length < Math.max(E.length, A1.length, 24) + 8 && i < 120; i++) {
     const st = m.a4States[i % m.a4States.length]!;
-    const run = new Run({ name: `a4-${i}`, layer3: false, packs: [r2Pack()] }, stateById(st), policies.decline!);
+    const run = new Run({ name: `a4-${i}`, layer3: false, packs: [r2Pack()], ...(m.names === 'wide' ? { s1: wide } : {}) }, stateById(st), policies.decline!);
     run.runWindows(3);
     const ask = run.deliveries.find((d) => d.template === R2_ID && d.what === 'offer');
     if (ask && distinct(Object.values(ask.names))) A4.push({ arm: 'A4', text: ask.words, meta: { world: `a4-${i}`, state: st } });
@@ -70,7 +79,7 @@ export function buildPacketFiles(m: PacketManifest, supplied: Array<{ file: stri
   // A3: the Radiant-style generator over fresh worlds (V stands in a market block)
   const A3: Hook[] = [];
   for (let i = 0; A3.length < Math.max(E.length, A1.length, 24) + 8 && i < 400; i++) {
-    const run = new Run({ name: `a3-${Math.floor(i / 3)}`, layer3: false, packs: [] }, stateById('S-early-quiet'), policies.decline!);
+    const run = new Run({ name: `a3-${Math.floor(i / 3)}`, layer3: false, packs: [], ...(m.names === 'wide' ? { s1: wide } : {}) }, stateById('S-early-quiet'), policies.decline!);
     const job = radiantJob(run.w, (id) => run.nameOf(id), `a3-${Math.floor(i / 3)}`, i % 3, 'g1', m.a3Rule);
     if (job && distinct(job.names)) A3.push({ arm: 'A3', text: job.text, meta: { world: `a3-${Math.floor(i / 3)}`, template: job.template } });
   }
