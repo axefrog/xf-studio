@@ -17,6 +17,7 @@ import { clamp, invCum, q64 } from './arith.ts';
 import { RAW_KIND_NAMES, TIE_KIND_NAMES } from './kinds.ts';
 import type { Occurrence } from './occ.ts';
 import { recipeClasses } from './fit.ts';
+import { grievanceFromAct, grievanceFromBelief, seedGoals } from './grievance.ts';
 import type { Sim } from './sim.ts';
 
 export interface EventView {
@@ -79,6 +80,9 @@ export class Policies {
           { kind: 'xf:v-state', slot: 'cell' }, { kind: 'xf:journal', slot: 'tracked' }, { kind: 'xf:journal', slot: 'jstate' },
           // every event, for the witnesses to form beliefs
           { kind: 'core:event', slot: '*' },
+          // v0.6 (S1 8.9): a belief about V, which a group member's told grievance rests on, and (S1 8.10) the frames of people, which a seed's role goal is among
+          { slot: '*', scope: { nodes: [v] }, where: [{ path: '@role', op: 'eq', arg: 'subject' }] },
+          { kind: 'core:person', slot: '*', where: [{ path: '@role', op: 'eq', arg: 'actor' }] },
         ],
       },
     });
@@ -190,6 +194,10 @@ export class Policies {
       if (ev) this.heardEvent(ev);
     } else if (ch.c === 'reading') {
       this.heardReading(ch);
+    } else if (ch.c === 'belief') {
+      grievanceFromBelief(this, ch);
+    } else if (ch.c === 'frame') {
+      seedGoals(this, ch);
     } else if (ch.c === 'pin' && ch.slot === 'outcome') {
       // v0.6 (S1 8.6): a promise is absorbed once the record gives it an outcome
       const ev = this.viewEvent(ch.node);
@@ -201,6 +209,8 @@ export class Policies {
     if (ev.kind.startsWith('meta:')) return;
     this.witness(ev);
     this.absorb(ev);
+    // v0.6 (S1 8.9): what a group comes to believe of V's act; a raw record of what the game did is not an act of V's but the mirror's derived event re-describes it
+    if (!RAW.has(ev.kind)) grievanceFromAct(this, ev);
     this.sim.tiePolicy.hear(ev);
   }
 
@@ -502,7 +512,7 @@ export class Policies {
     return clamp(-ln(mine / all), cfg.diagMin, cfg.diagMax);
   }
 
-  private sizeOf(ev: EventView): number {
+  sizeOf(ev: EventView): number {
     for (const id of ['city.mirror', 'city.events']) {
       const dg = this.k.evolution.digestPeek<{ facts: { windows: Array<{ items: Array<{ id: Id; size: number }> }> } }>(id);
       for (const win of dg?.facts.windows ?? []) for (const f of win.items) if (f.id === ev.id) return f.size;
@@ -650,6 +660,8 @@ export class Policies {
     let corrected = false;
     if (slot === 'alive' && value === 'no') {
       for (const f of k.frames.framesOf(person)) {
+        // a retained goal frame is `people.goals`' alone (S1 8.8, 12): it ends the goal when its owner is gone
+        if (f.retain && f.level === 'goal') continue;
         if (f.status === 'active' || f.status === 'blocked') {
           k.frames.setStatus(f.id, 'abandoned', person);
           corrected = true;

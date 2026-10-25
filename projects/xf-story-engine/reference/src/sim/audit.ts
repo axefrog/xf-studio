@@ -139,13 +139,15 @@ export function observeWrites(sim: Sim): Record<string, Set<string>> {
 
 /** The writes each process declares (S1 2.1). The run's observed writes must lie inside them, and no two processes share one. */
 export const PROCESS_WRITES: Record<string, string[]> = {
-  'city.events': ['mint:ev', 'mint:child', 'mint:sum', 'mint:regime', 'pin:xf:cell.band', 'pin:xf:service.status', 'state:admit', 'state:calendar', 'state:ring', 'state:regimes'],
+  'city.events': ['mint:ev', 'mint:child', 'mint:sum', 'mint:regime', 'mint:act', 'edge:xf:held-by', 'pin:xf:cell.band', 'pin:xf:service.status', 'state:admit', 'state:calendar', 'state:ring', 'state:regimes', 'state:goalActs'],
   'order.stocks': ['state:stocks'],
   'city.mirror': ['mint:mir', 'state:seen'],
   'order.ledger': ['pin:xf:standing.label-*', 'state:labels'],
   'order.norms': ['mint:enf', 'pin:xf:district.gap-*', 'state:slots'],
   'group.decide': ['pin:xf:group.group-gap', 'state:groups', 'mint:decide', 'mint:relent', 'mint:succession', 'edge:xf:leads'],
-  'scene.acts': ['op:publish-item', 'contribute:time', 'contribute:place', 'contribute:kind', 'contribute:participants', 'contribute:effects', 'contribute:witnesses', 'contribute:causes', 'contribute:outcome', 'state:published'],
+  // `people.goals` writes the retained frame of each S1 goal and nothing else; the acts a goal produces are `city.events`' (S1 7.2, S1-I-29)
+  'people.goals': ['op:frame-open', 'op:frame-status', 'state:goals'],
+  'scene.acts': ['mint:confront', 'state:confronts', 'op:publish-item', 'contribute:time', 'contribute:place', 'contribute:kind', 'contribute:participants', 'contribute:effects', 'contribute:witnesses', 'contribute:causes', 'contribute:outcome', 'state:published'],
 };
 
 /** The state owned by the admission owner (S1 6, 7.2): only `city.events` changes it, and the gate holds none. */

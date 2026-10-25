@@ -26,6 +26,14 @@ export const KEY_REGISTRY: Record<string, { process?: string; args: string }> = 
   et: { process: 'order.norms', args: 'id s i' },
   retal: { process: 'group.decide', args: 'id i' },
   'decide-t': { process: 'group.decide', args: 'id' },
+  punish: { process: 'group.decide', args: 'id' },
+  climb: { process: 'group.decide', args: 'id i' },
+  gact: { process: 'city.events', args: 'id i' },
+  'gact-t': { process: 'city.events', args: 'id' },
+  confront: { process: 'scene.acts', args: 'id' },
+  post: { args: 'id' },
+  'duty-b': { args: 'id i i s i i' },
+  'duty-r': { args: 'id i i s i i' },
   'seat-b': { args: 'id i i i' },
   'seat-r': { args: 'id i i i' },
   lean: { args: 'id id' },
@@ -63,6 +71,9 @@ export function identityKeys(worldSeed: Id) {
   const ir = (tag: string, ...args: HArg[]): number => rand(hs(tag), hid(worldSeed), ...args);
   return {
     outcome: (occ: Id) => ir('outcome', hid(occ)),
+    post: (goal: Id) => ir('post', hid(goal)),
+    dutyB: (decision: Id, rung: number, entry: number, duty: string, slot: number, attempt: number) => ir('duty-b', hid(decision), hi(rung), hi(entry), hs(duty), hi(slot), hi(attempt)),
+    dutyR: (decision: Id, rung: number, entry: number, duty: string, slot: number, attempt: number) => ir('duty-r', hid(decision), hi(rung), hi(entry), hs(duty), hi(slot), hi(attempt)),
     seatB: (group: Id, seat: number, succ: number, a: number) => ir('seat-b', hid(group), hi(seat), hi(succ), hi(a)),
     seatR: (group: Id, seat: number, succ: number, a: number) => ir('seat-r', hid(group), hi(seat), hi(succ), hi(a)),
     lean: (holder: Id, group: Id) => ir('lean', hid(holder), hid(group)),
@@ -113,6 +124,11 @@ export function processKeys(pr: ProcRand) {
     et: (w: number, d: Id, norm: string, i: number) => pr(w, hs('et'), hid(d), hs(norm), hi(i)),
     retal: (w: number, group: Id, rival: number) => pr(w, hs('retal'), hid(group), hi(rival)),
     decideT: (w: number, group: Id) => pr(w, hs('decide-t'), hid(group)),
+    punish: (w: number, group: Id) => pr(w, hs('punish'), hid(group)),
+    climb: (w: number, group: Id, rung: number) => pr(w, hs('climb'), hid(group), hi(rung)),
+    gact: (w: number, goal: Id, i: number) => pr(w, hs('gact'), hid(goal), hi(i)),
+    gactT: (w: number, goal: Id) => pr(w, hs('gact-t'), hid(goal)),
+    confront: (w: number, intent: Id) => pr(w, hs('confront'), hid(intent)),
   };
 }
 export type ProcessKeys = ReturnType<typeof processKeys>;

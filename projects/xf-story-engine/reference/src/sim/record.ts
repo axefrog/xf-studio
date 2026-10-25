@@ -48,6 +48,40 @@ export interface S1Record {
    * silently when a save is loaded (SIM-03).
    */
   evidence: Record<Id, EvidenceFacts>;
+  /** v0.6 (S1 8.9): what groups came to believe of V's acts, in order, for `group.decide` to read after its cursor; at most 256. */
+  grudges: GrudgeEntry[];
+  grudgeSeq: number;
+  /** v0.6 (S1 8.10): the role goals seeds gave people, in order, for `people.goals` to read after its cursor; at most 256. */
+  roleGoals: RoleGoalEntry[];
+  roleGoalSeq: number;
+}
+
+/** A grievance of a group against V (S1 8.9): set from an act of V's, or cleared or settled. */
+export interface GrudgeEntry {
+  seq: number;
+  group: Id;
+  belief: Id;
+  act: Id;
+  sev: number;
+  op: 'set' | 'cleared' | 'settled';
+  /** The act's time for a set entry, the time the record changed for the others. */
+  at: GameTime;
+  /** Whether the act was public (a hazard input, S1 7.8.1). */
+  pub?: boolean;
+  /** For a grievance told to a member of the group (S1 8.9 rule 2): who told, and the belief that grounds it, so rule 3 can clear it. */
+  via?: { teller: Id; belief: Id };
+}
+
+/** A goal a seed's role frame gave a cast person (S1 8.10). */
+export interface RoleGoalEntry {
+  seq: number;
+  frame: Id;
+  owner: Id;
+  seed: Id;
+  effects: Array<{ on: unknown; effect: string }>;
+  weight: number;
+  op: 'open' | 'end';
+  at: GameTime;
 }
 
 /** A stretch of game time, from `from` to `to` (open when `to` is absent). */
@@ -88,7 +122,7 @@ export interface TieRecord {
 }
 
 export function emptyRecord(): S1Record {
-  return { v: 1, absorbed: {}, dirty: [], divLog: {}, ord: 0, tieLog: {}, divFloor: {}, softExcluded: [], log: [], seq: 0, dirtySeq: 0, tells: [], tieHistory: {}, protect: {}, evidence: {} };
+  return { v: 1, absorbed: {}, dirty: [], divLog: {}, ord: 0, tieLog: {}, divFloor: {}, softExcluded: [], log: [], seq: 0, dirtySeq: 0, tells: [], tieHistory: {}, protect: {}, evidence: {}, grudges: [], grudgeSeq: 0, roleGoals: [], roleGoalSeq: 0 };
 }
 
 /** A record as a save holds it, with every field a newer version added filled in. */

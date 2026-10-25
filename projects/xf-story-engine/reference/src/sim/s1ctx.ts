@@ -17,7 +17,7 @@ import type { Sim } from './sim.ts';
  * a save made under another version opens read-only instead of resuming old state under new code.
  */
 export const PROCESS_VERSIONS: Record<string, number> = {
-  'city.events': 5, 'group.decide': 4, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 3, 'order.norms': 4, 'scene.acts': 2,
+  'city.events': 6, 'group.decide': 5, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 3, 'order.norms': 4, 'scene.acts': 3, 'people.goals': 1,
 };
 
 export type CoarseFine = { kind: 'exact' } | { kind: 'count' } | { kind: 'distribution'; tolerance: string };
@@ -107,7 +107,7 @@ export function toProcessDef<S, D>(sim: Sim, p: S1Process<S, D>): ProcessDef {
         record: () => sim.record,
         demanded: (tier) => pctx.demanded(tier),
         produce(o) {
-          const r = sim.gate.produce(o, settings, T);
+          const r = sim.gate.produce(o, settings, T, sim.punishEnv());
           if (!r.ok) logs.push({ w: k, proc: p.id, kind: 'gate', reason: r.reason, refs: o.participants.map((x) => x.who).slice(0, 4) });
           return r;
         },

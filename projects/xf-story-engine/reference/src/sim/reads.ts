@@ -10,6 +10,8 @@ import type { Feed, Transition } from './occ.ts';
 import type { EventsDigest } from './proc-events.ts';
 import { BAND_NAMES, PRICE_NAMES } from './proc-events.ts';
 import type { GroupDigest } from './proc-groups.ts';
+import type { GoalsDigest } from './proc-goals.ts';
+import { guardOf } from './outcomes.ts';
 import type { LedgerDigest } from './ledger.ts';
 import type { NormsDigest } from './proc-norms.ts';
 import type { SimReadPort } from '../seeding/registries.ts';
@@ -273,10 +275,87 @@ export class Reads {
     };
     edgeRead('leads', 'xf:leads', (a) => (typeof a[0] === 'string' && typeof a[1] === 'string' ? { from: a[0], to: a[1] } : undefined));
     edgeRead('holds', 'xf:held-by', (a) => (typeof a[1] === 'string' && typeof a[0] === 'string' ? { from: a[1], to: a[0] } : undefined));
-    // the reads of the goals and of an intention against the protagonist: registered, `maybe` until the processes that answer them are built
-    this.unbuilt('wants', ev('people.goals'));
-    this.unbuilt('guarded', ev('people.goals'));
-    this.unbuilt('intentAgainst', ev('group.decide'));
+    // intentAgainst(group, subject) (S1 9.1, v0.6): `none`; `warned` (rung 1, its warning not yet perceived); `ranks`; `price`; `hunt`. Subject V only in the core
+    const isV = (x: unknown): boolean => x === 'v' || x === sim.w.v;
+    const againstNow = (a: unknown[]): string => {
+      const dg = this.dg<GroupDigest>('group.decide');
+      const g = typeof a[0] === 'string' ? dg?.groups[a[0]] : undefined;
+      if (!dg || !g || !isV(a[1])) return MAYBE;
+      const ag = dg.against[a[0] as string];
+      if (!ag) return 'none';
+      return ag.rung === 'ranks' && !ag.warned ? 'warned' : ag.rung;
+    };
+    this.fed('intentAgainst', { ...ev('group.decide'), interests: [{ kind: 'core:event', slot: '*' }], boundary: true }, 'group.decide',
+      (a) => (typeof a[0] === 'string' && isV(a[1]) ? `against|${a[0]}` : undefined), againstNow, (d: GroupDigest) => d?.changes);
+
+    // wants(person, kind?) (S1 9.1, v0.6): whether the person holds an active goal, of that kind if given; its transitions replay the goal feed
+    const wantsAt = (person: string, kind: unknown, states: Map<string, string>, owners: Map<string, { owner: string; kind: string }>): string => {
+      for (const [id, st] of states) {
+        const o = owners.get(id);
+        if (st === 'active' && o?.owner === person && (kind === undefined || o.kind === kind)) return 'yes';
+      }
+      return 'no';
+    };
+    const goalStates = (dg: GoalsDigest, t: GameTime): { states: Map<string, string>; owners: Map<string, { owner: string; kind: string }> } => {
+      const owners = new Map<string, { owner: string; kind: string }>(Object.entries(dg.recent));
+      const states = new Map<string, string>();
+      for (const g of dg.goals) { owners.set(g.id, { owner: g.owner, kind: g.kind }); states.set(g.id, g.state); }
+      // walk the feed backwards from the present to `t`: each transition after `t` gives back the state before it
+      const items = dg.changes.windows.flatMap((win) => win.items).sort((x, y) => (x.ord ?? 0) - (y.ord ?? 0) || x.t - y.t);
+      for (let i = items.length - 1; i >= 0; i--) {
+        const tr = items[i]!;
+        if (tr.t <= t) break;
+        const id = tr.key.slice(5);
+        if (tr.prev === null) states.delete(id);
+        else states.set(id, tr.prev === 'open' ? 'active' : tr.prev);
+      }
+      return { states, owners };
+    };
+    this.add({
+      name: 'wants', version: 1, deps: { ...ev('people.goals'), interests: [{ kind: 'core:person', slot: '*' }] },
+      eval: (a, t) => {
+        const dg = this.dg<GoalsDigest>('people.goals');
+        if (!dg || typeof a[0] !== 'string') return MAYBE;
+        const { states, owners } = goalStates(dg, t);
+        return wantsAt(a[0], a[1], states, owners);
+      },
+      transitions: (a, from, to) => {
+        const dg = this.dg<GoalsDigest>('people.goals');
+        if (!dg || typeof a[0] !== 'string') return [{ t: from, value: MAYBE }];
+        if (dg.changes.windows.length === 0 || from < dg.changes.windows[0]!.w * sim.data.time.W) return [{ t: from, value: MAYBE }];
+        const first = goalStates(dg, from);
+        const out: ReadTransition[] = [{ t: from, value: wantsAt(a[0], a[1], first.states, first.owners) }];
+        const times = [...new Set(dg.changes.windows.flatMap((win) => win.items.filter((tr) => tr.t > from && tr.t <= to).map((tr) => tr.t)))].sort((x, y) => x - y);
+        for (const t of times) {
+          const s2 = goalStates(dg, t);
+          const v = wantsAt(a[0], a[1], s2.states, s2.owners);
+          if (v !== out[out.length - 1]!.value) out.push({ t, value: v });
+        }
+        return out;
+      },
+    });
+
+    // guarded(person) (S1 9.1, v0.6): `guarded` of S1 7.10 at the time, from the post history alone; a post covers only some periods, so the read is re-evaluated at every boundary
+    const guardedAt = (person: string, t: GameTime): string => {
+      const dg = this.dg<GoalsDigest>('people.goals');
+      if (!dg) return MAYBE;
+      return guardOf(sim, person, t, { posts: dg.posts }) !== undefined ? 'yes' : 'no';
+    };
+    this.add({
+      name: 'guarded', version: 1, deps: { ...ev('people.goals'), interests: [{ kind: 'core:person', slot: '*' }], boundary: true },
+      eval: (a, t) => (typeof a[0] === 'string' ? guardedAt(a[0], t) : MAYBE),
+      transitions: (a, from, to) => {
+        if (typeof a[0] !== 'string') return [{ t: from, value: MAYBE }];
+        const W = sim.data.time.W;
+        const out: ReadTransition[] = [{ t: from, value: guardedAt(a[0], from) }];
+        // the value can change where a post begins or ends or a period turns: all on window starts
+        for (let t = (Math.floor(from / W) + 1) * W; t <= to && t - from <= 2016 * W; t += W) {
+          const v = guardedAt(a[0], t);
+          if (v !== out[out.length - 1]!.value) out.push({ t, value: v });
+        }
+        return out;
+      },
+    });
 
     // groupGap(group)
     this.fed('groupGap', { ...ev('group.decide'), interests: [{ kind: 'xf:group', slot: 'group-gap' }] }, 'group.decide',

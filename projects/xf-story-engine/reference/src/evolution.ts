@@ -37,7 +37,7 @@ export type ProcessOp =
     }
   | { op: 'end-contribution'; id: Id }
   | { op: 'edge'; type: string; from: Id; to: Id; attrs?: Record<string, Value>; valid?: { from?: GameTime; to?: GameTime }; /** The cause the edge names, and its `Id`, where the layer fixes either (S1 7.8 `xf:leads`); the process's own cause by default. */ cause?: Id; id?: Id }
-  | { op: 'end-edge'; id: Id }
+  | { op: 'end-edge'; id: Id; at?: GameTime }
   /** `creator` and `cause` default to the process's own Id, and name the node's identity (`H("mint", creator, cause, name)`). */
   | { op: 'mint-event'; spec: Omit<EventSpec, 'creator' | 'cause'> & { creator?: Id; cause?: Id } }
   | { op: 'mint-summary'; spec: Omit<SummarySpec, 'creator' | 'cause'> & { creator?: Id; cause?: Id } }
@@ -442,7 +442,7 @@ export class Evolution {
         break;
       }
       case 'end-edge':
-        k.endEdge(op.id, T);
+        k.endEdge(op.id, op.at ?? T);
         break;
       case 'mint-event':
         k.events.mintEvent({ ...op.spec, creator: op.spec.creator ?? cause, cause: op.spec.cause ?? cause });

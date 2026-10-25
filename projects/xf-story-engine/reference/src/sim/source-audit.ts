@@ -32,7 +32,7 @@ export function codeOf(text: string, strings: boolean | StringMode = 'blank'): s
   });
 }
 
-export const COARSE_FILES = ['proc-events.ts', 'proc-stocks.ts', 'proc-mirror.ts', 'proc-norms.ts', 'proc-groups.ts', 'ledger.ts'];
+export const COARSE_FILES = ['proc-events.ts', 'proc-stocks.ts', 'proc-mirror.ts', 'proc-norms.ts', 'proc-groups.ts', 'proc-goals.ts', 'ledger.ts'];
 const EXEMPT: Record<string, string[]> = {
   'make-tables.ts': ['arithmetic', 'keys', 'no-load-reads'],
   'port.ts': ['no-load-reads'],

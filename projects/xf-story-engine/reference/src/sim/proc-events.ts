@@ -12,6 +12,8 @@ import { H, id as hid, i as hi, mintedId, s as hs } from '../id.ts';
 import { itemTime } from '../summary.ts';
 import type { GameTime, Id } from '../types.ts';
 import { clamp, invCum, nbCount, spacingCount, splitCountR } from './arith.ts';
+import { applicableFills } from './fills.ts';
+import type { GoalView, GoalsDigest } from './proc-goals.ts';
 import type { Boosts } from './cast.ts';
 import type { KindName } from './data.ts';
 import { type CastEntry, type Descriptor, type DigestBase, type EventFact, type Feed, type PendingChild, type RingEntry, type Transition, pushTransitions, pushFeed } from './occ.ts';
@@ -50,7 +52,9 @@ export interface EventsState {
   /** The last week's windows, oldest first. */
   ring: RingEntry[];
   next: number;
-  counters: { immigrants: number; children: number; thinned: number; refused: number; noCast: number; clamped: number; overflow?: number };
+  /** v0.6 (S1 7.2): by goal, the windows of its admitted acts in the last `DAY` windows. */
+  goalActs: Record<Id, number[]>;
+  counters: { immigrants: number; children: number; thinned: number; refused: number; noCast: number; clamped: number; overflow?: number; goalActs?: number };
 }
 
 export interface EventsDigest extends DigestBase {
@@ -86,7 +90,7 @@ export function m4Open(times: readonly number[], spacing: number, week: number):
 }
 
 export function emptyEvents(): EventsState {
-  return { v: 1, regimes: [], services: {}, admit: { m4Times: [] }, bands: {}, calendar: {}, ring: [], next: 0, counters: { immigrants: 0, children: 0, thinned: 0, refused: 0, noCast: 0, clamped: 0 } };
+  return { v: 1, regimes: [], services: {}, admit: { m4Times: [] }, bands: {}, calendar: {}, ring: [], next: 0, goalActs: {}, counters: { immigrants: 0, children: 0, thinned: 0, refused: 0, noCast: 0, clamped: 0 } };
 }
 
 /** The next band (S1 7.2): after a dwell of a game day, rise to the highest band whose enter threshold is met, or fall while the leave threshold is not. */
@@ -109,6 +113,8 @@ interface Cand {
   cause?: Id;
   name?: string;
   cast?: CastEntry[];
+  /** v0.6: the goal whose act this is (S1 7.2). */
+  goal?: GoalView;
 }
 
 /** The heat of every cell: the pending future of a cell's neighbourhood (S1 7.2). Terms are summed in `(entry w, Id)` order, then pending in `(due, parent, index)` order. */
@@ -152,6 +158,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
   const W = sim.data.time.W;
   const DAY = 86400;
   const WEEK = (7 * DAY) / W;
+  const DAYW = DAY / W;
   const ev = sim.data.events;
   const procId = 'city.events';
   const proc = processCause(procId);
@@ -173,6 +180,15 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
       const changes: Transition[] = [];
       const districts = simulatedDistricts(sim.w.index);
       const prevDigest = c.digest<EventsDigest>(procId);
+      st.goalActs ??= {};
+      const goalsDigest = sim.k.evolution.digestPeek<GoalsDigest>('people.goals');
+      // the goals' acts of the last day are kept for the rate limit; a goal no longer in the digest loses its entry (S1 7.2)
+      const liveGoals = new Set((goalsDigest?.goals ?? []).map((g) => g.id));
+      for (const gid of Object.keys(st.goalActs)) {
+        const kept = st.goalActs[gid]!.filter((x) => x > w - DAYW);
+        if (kept.length === 0 || !liveGoals.has(gid)) delete st.goalActs[gid];
+        else st.goalActs[gid] = kept;
+      }
 
       // The inputs: the digests of the previous window, with the defaults of a lineage that has none yet.
       const mirror = c.digest<MirrorDigest>('city.mirror');
@@ -334,10 +350,71 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         }
       }
 
+      // 3d. goal acts (v0.6, S1 7.2): a goal acts only through the city's own rates, a personal offender term for one person and one target
+      const holders = new Map<Id, { holder: Id | undefined; edge?: Id; from?: GameTime }>();
+      /** The working holder map (S1 7.2, 4.9): item to holder, from the live xf:held-by edges of the snapshot, updated in admission order. */
+      const holderOf = (item: Id): { holder: Id | undefined; edge?: Id; from?: GameTime } => {
+        let h = holders.get(item);
+        if (h === undefined) {
+          sim.k.persistence.recoverIfSaved(item);
+          h = { holder: undefined };
+          for (const e of sim.k.store.edgesFrom(item)) {
+            if (e.type === 'xf:held-by' && e.valid.from <= T && (e.valid.to === undefined || T < e.valid.to)) h = { holder: e.to, edge: e.id, from: e.valid.from };
+          }
+          holders.set(item, h);
+        }
+        return h;
+      };
+      const isPersonNode = (n: Id): boolean => sim.people.view(n) !== undefined;
+      const goalAct = (g: GoalView): Descriptor | undefined => {
+        const act = g.acts.find((kind) => allowedKind(kind));
+        if (act === undefined) return undefined;
+        if ((st.goalActs[g.id] ?? []).length >= (sim.data.goals.perDay[act] ?? 1)) return undefined;
+        const at = sim.people.where(g.owner, T);
+        if (at.cls === 'away' || at.cell === undefined) return undefined;
+        // a goal with a post acts only while its owner stands at it: collectors work their market in the morning and by day, a warner waits where the group knows V is
+        if (g.post !== undefined && at.cls !== 'post') return undefined;
+        const victim = g.item !== undefined ? holderOf(g.item).holder : g.target;
+        if (g.item !== undefined && (victim === undefined || victim === sim.w.v)) return undefined;
+        // nothing is done to oneself; and a person must be where the owner is, unless a punish duty's target is V, whose position no coarse process reads
+        if (victim !== undefined && victim === g.owner) return undefined;
+        if (victim !== undefined && g.punish === undefined && isPersonNode(victim) && sim.people.where(victim, T).cell !== at.cell) return undefined;
+        if (g.ward !== undefined && sim.people.where(g.ward, T).cell !== at.cell) return undefined;
+        const district = sim.w.cell(at.cell).district;
+        const shape = sim.w.cityKindByName.has(act) ? sim.city.shape(act, T) : 1;
+        const mu = sim.data.goals.rate[act]! * g.motive * shape * regimeMod(district, act) * (1 - (sim.w.cell(at.cell).gameCoverage[act] ?? 0)) * (W / DAY);
+        if (spacingCount(mu, (i) => keys.gact(w, g.id, i), 1) === 0) return undefined;
+        const id = mintedId(proc, g.id, `act/${w}`);
+        const fixed: Array<{ role: string; who: Id }> = [];
+        const put = (role: string, who: Id | undefined): void => { if (who !== undefined) fixed.push({ role, who }); };
+        switch (act) {
+          case 'shakedown': put('aggressor', g.owner); break;
+          case 'assault': put('aggressor', g.owner); put('victim', victim); break;
+          case 'theft': put('aggressor', g.owner); put('victim', victim); put('item', g.item); break;
+          case 'presence': put('guard', g.owner); put('ward', g.ward); break;
+          case 'call-in': put('creditor', g.owner); put('debtor', victim); break;
+          case 'warning': case 'price': put('warner', g.owner); put('warned', victim); break;
+          case 'search': put('searcher', g.owner); put('sought', victim); break;
+        }
+        const d: Descriptor = {
+          id, kind: act, size: 1, w, time: T + Math.floor(keys.gactT(w, g.id) * W), cell: at.cell, gen: 0, chain: [], public: false, witnesses: 0, fixed, served: g.id,
+          causes: g.punish ? [g.source, g.punish.cause] : [g.source],
+        };
+        if (g.punish) d.punish = { group: g.punish.group, intent: g.punish.intent, rung: g.punish.rung };
+        return d;
+      };
+      for (const g of goalsDigest?.goals ?? []) {
+        if (g.state !== 'active') continue;
+        const d = goalAct(g);
+        if (d) cands.push({ isRegime: false, id: d.id, time: d.time, name: `act/${w}`, cause: g.id, d, goal: g });
+      }
+
       // (4) admission: one owner, one order, against working counters that are committed with the run
       cands.sort((x, y) => x.time - y.time || cmp(x.id, y.id));
       let m4Times = [...st.admit.m4Times];
       const perDistrict = new Map<Id, number>();
+      const goalCount = new Map<Id, number>();
+      const transfers: Array<{ id: Id; item: Id; from: Id; to: Id; time: GameTime; edge: Id | undefined; start: GameTime | undefined }> = [];
       const admitted: Cand[] = [];
       const parentSize = new Map<Id, number>();
       for (const cd of cands) {
@@ -353,10 +430,22 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
             st.counters.noCast++;
             continue;
           }
+          // the item a goal act names must still be where it was: the working holder map is checked in admission order (S1 7.2, 4.9)
+          const item = cast.find((e) => e.role === 'item')?.who;
+          if (item !== undefined && holderOf(item).holder !== cast.find((e) => e.role === 'victim')?.who) {
+            c.log({ w, proc: procId, kind: 'admission', reason: 'no-cast', refs: [d.id] });
+            st.counters.noCast++;
+            continue;
+          }
           cd.cast = cast;
           // the outcome is drawn once, here, from the occurrence's own Id (S1 5.2a, 7.2); the gate sees the effects that follow it
           sim.drawOutcome(d, cast, view);
           if (!c.produce(sim.occurrenceOf(d, cast, proc, 'sim')).ok) {
+            st.counters.refused++;
+            continue;
+          }
+          if (cd.goal !== undefined && (goalCount.get(sim.w.cell(d.cell).district) ?? 0) >= ev.goalActsPerWindow) {
+            c.log({ w, proc: procId, kind: 'admission', reason: 'cap-goal', refs: [cd.id] });
             st.counters.refused++;
             continue;
           }
@@ -378,6 +467,23 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         }
         if ((cd.isRegime ? cd.regime!.size : size) === 4) m4Times = [...m4Times, w].slice(-2);
         if (!cd.isRegime && size >= 2) perDistrict.set(dist, (perDistrict.get(dist) ?? 0) + 1);
+        if (cd.goal !== undefined) {
+          goalCount.set(dist, (goalCount.get(dist) ?? 0) + 1);
+          (st.goalActs[cd.goal.id] ??= []).push(w);
+          st.counters.goalActs = (st.counters.goalActs ?? 0) + 1;
+        }
+        // an admitted transfer of an item moves its holder in the working map, in admission order (S1 4.9)
+        if (!cd.isRegime && cd.d!.outcome === 'done') {
+          const kd0 = sim.w.kinds.get(cd.d!.kind);
+          const parts = cd.cast!.map((e) => ({ who: (e.who ?? e.group)!, role: e.role }));
+          for (const fl of applicableFills(kd0?.fills ?? [], 'done', parts, cd.d!.cell, cd.d!.id)) {
+            if (fl.fn !== 'transfer' || fl.args.what === undefined || fl.args.from === undefined || fl.args.to === undefined) continue;
+            const cur = holderOf(fl.args.what);
+            if (cur.holder !== fl.args.from) continue;
+            transfers.push({ id: cd.d!.id, item: fl.args.what, from: fl.args.from, to: fl.args.to, time: cd.d!.time, edge: cur.edge, start: cur.from });
+            holders.set(fl.args.what, { holder: fl.args.to, edge: H(hs('edge'), hs('xf:held-by'), hid(fl.args.what), hid(fl.args.to), hi(cd.d!.time)), from: cd.d!.time });
+          }
+        }
         admitted.push(cd);
         if (cd.child) parentSize.set(cd.id, cd.child.parentFacts.size);
       }
@@ -402,7 +508,13 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         minted.set(d.id, { name: cd.name!, cause: cd.cause! });
         castOf.set(d.id, cd.cast!);
         ops.push({ op: 'mint-event', spec: sim.eventSpecOf(d, cd.cast!, proc, cd.cause!, cd.name!) });
-        bump(countAgg, sim.w.cell(d.cell).district, d.kind, d.size);
+        for (const tr of transfers.filter((x) => x.id === d.id)) {
+          // the edge to the holder ends at the event's time and one to the new holder starts, both with the event as cause (S1 4.9)
+          if (tr.edge !== undefined) ops.push({ op: 'end-edge', id: tr.edge, at: tr.time });
+          ops.push({ op: 'edge', type: 'xf:held-by', from: tr.item, to: tr.to, valid: { from: tr.time }, cause: d.id, id: H(hs('edge'), hs('xf:held-by'), hid(tr.item), hid(tr.to), hi(tr.time)) });
+        }
+        // a goal act is not in the counts: it is an event, though its size is 1
+        if (cd.goal === undefined) bump(countAgg, sim.w.cell(d.cell).district, d.kind, d.size);
       }
 
       // (5) indexing: admitted size-1 incidents become the items of their cells' summaries, immigrants first, then due children
@@ -448,7 +560,9 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
       for (const d of [...occurrences, ...itemDescs]) {
         if (d.gen >= ev.genMax) continue;
         const district = sim.w.cell(d.cell).district;
-        const kd = sim.w.cityKindByName.get(d.kind)!;
+        // the kinds goals add (presence, call-in, warning, price, search) have no row in the matrix: no child
+        const kd = sim.w.cityKindByName.get(d.kind);
+        if (kd === undefined) continue;
         const raw = ev.offspring[d.size - 1]! * kd.offspringFactor * c.settings.cityScale * regimeMod(district, d.kind);
         const n = Math.min(ev.nMax, raw);
         if (raw > ev.nMax) {
@@ -504,6 +618,8 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
           parties: sim.partiesOf(sim.occurrenceOf(d, castOf.get(d.id) ?? [], proc, 'sim').participants, d.time),
           effects: sim.occurrenceOf(d, castOf.get(d.id) ?? [], proc, 'sim').effects,
         };
+        if (d.served !== undefined) f.goal = d.served;
+        if (d.punish !== undefined) f.punish = d.punish;
         if (d.sides) f.sides = d.sides;
         if (d.parent !== undefined) {
           f.parent = d.parent;

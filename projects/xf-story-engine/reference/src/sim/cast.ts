@@ -101,6 +101,7 @@ export class Casting {
       case 'responders':
         return v.affc === 1;
       case 'parent':
+      case 'fixed':
         return false;
     }
   }
@@ -121,10 +122,27 @@ export class Casting {
     const floor = this.w.data.gate.floorRoles;
     const district = this.districtOf(d.cell);
     const cls = recipeClasses(district);
-    const present = specs.some((s) => s.source.from !== 'parent') ? this.people.presentAt(d.cell, d.time, this.w.data.people.presentCap) : [];
+    const fixedRoles = new Set((d.fixed ?? []).map((f) => f.role));
+    const present = specs.some((s) => s.source.from !== 'parent' && s.source.from !== 'fixed' && !fixedRoles.has(s.role)) ? this.people.presentAt(d.cell, d.time, this.w.data.people.presentCap) : [];
     const out: CastEntry[] = [];
     const taken = new Set<Id>();
+    // v0.6 (S1 5.4): a goal act keeps its fixed cast, checked: each person other than V is alive, adult and where the act is, and not protected in a role of harm; V, fixed only in a protagonist-object role, is never checked
+    for (const f of d.fixed ?? []) {
+      if (f.role !== 'item' && f.who !== this.w.v) {
+        const pv = this.people.view(f.who);
+        if (!pv || !this.people.alive(f.who, d.time) || pv.ageClass !== 'adult') return 'no-cast';
+        const wh = this.people.where(f.who, d.time);
+        if (wh.cls === 'away' || wh.cell !== d.cell) return 'no-cast';
+        if (isHarmRole(kd, f.role, harm) && this.people.protectedAt(f.who, d.time)) return 'no-cast';
+      }
+      out.push({ role: f.role, who: f.who });
+      taken.add(f.who);
+    }
     for (const spec of specs) {
+      if (spec.source.from === 'fixed' || fixedRoles.has(spec.role)) {
+        if (out.filter((e) => e.role === spec.role).length < spec.count[0]) return 'no-cast';
+        continue;
+      }
       if (spec.source.from === 'parent') {
         for (const x of d.inherit ?? []) if (x.role === spec.role) out.push({ role: spec.role, who: x.who });
         continue;

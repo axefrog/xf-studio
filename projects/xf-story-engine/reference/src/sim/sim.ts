@@ -25,6 +25,7 @@ import { type WorldOptions, World } from './world.ts';
 import type { EventsState } from './proc-events.ts';
 import { eventsProcess } from './proc-events.ts';
 import { groupsProcess } from './proc-groups.ts';
+import { goalsProcess } from './proc-goals.ts';
 import { mirrorProcess } from './proc-mirror.ts';
 import { normsProcess } from './proc-norms.ts';
 import { stocksProcess } from './proc-stocks.ts';
@@ -38,6 +39,8 @@ import { Divergence } from './divergence.ts';
 import { Protection } from './protection.ts';
 import { Reads } from './reads.ts';
 import { type OutcomeView, type PostRec, outcomeOf, partiesOf } from './outcomes.ts';
+import type { GateEnv } from './gate.ts';
+import type { GroupDigest } from './proc-groups.ts';
 import type { LogDraft } from './occ.ts';
 import type { StocksDigest } from './proc-stocks.ts';
 import type { NormsDigest } from './proc-norms.ts';
@@ -100,6 +103,7 @@ export class Sim {
       isSpine: (n) => this.spine.has(n),
       defect: (kind, detail) => this.logNow({ w: this.windowNow(), proc: 'people', kind: 'defect', reason: kind, refs: [], key: detail }),
       protectedBefore: (n, t) => this.protection.protectedBefore(n, t),
+      postAt: (person, t) => this.postAt(person, t),
     };
     // The record's sink for the processes' log entries, the hooks that save and restore the record.
     this.k.evolution.sinks.set('s1', (entries) => {
@@ -122,7 +126,7 @@ export class Sim {
   // ---- registration ----
 
   private registerProcesses(only?: string[]): void {
-    const defs = [eventsProcess(this), groupsProcess(this), stocksProcess(this), mirrorProcess(this), ledgerProcess(this), normsProcess(this), actsProcess(this)].map((p) => toProcessDef(this, p as never));
+    const defs = [eventsProcess(this), groupsProcess(this), goalsProcess(this), stocksProcess(this), mirrorProcess(this), ledgerProcess(this), normsProcess(this), actsProcess(this)].map((p) => toProcessDef(this, p as never));
     for (const d of defs) {
       if (only && !only.includes(d.id)) continue;
       this.defs.set(d.id, d);
@@ -451,6 +455,46 @@ export class Sim {
     return { norms: read<NormsDigest>('order.norms'), posts: this.postsOf(read) };
   }
 
+  private postIdx: { posts: readonly PostRec[]; by: Map<Id, PostRec[]> } | undefined;
+
+  /**
+   * `postAt(person, t)` (S1 4.5): the person's post in the post history of the `people.goals` digest whose window range holds `windowOf(t)` and whose
+   * periods hold `periodOf(t)`. The digest is the last one applied, which is the snapshot every run reads, so a run, a read and a re-opened item agree.
+   */
+  postAt(person: Id, t: GameTime): { cell: Id } | undefined {
+    const posts = this.k.evolution.digestPeek<{ posts?: PostRec[] }>('people.goals')?.posts;
+    if (!posts || posts.length === 0) return undefined;
+    if (this.postIdx?.posts !== posts) {
+      const by = new Map<Id, PostRec[]>();
+      for (const p of posts) {
+        const list = by.get(p.person);
+        if (list) list.push(p);
+        else by.set(p.person, [p]);
+      }
+      this.postIdx = { posts, by };
+    }
+    const list = this.postIdx.by.get(person);
+    if (!list) return undefined;
+    const wt = Math.floor(t / this.data.time.W);
+    const period = this.people.periodOf(t);
+    for (const p of list) if (p.from <= wt && (p.until === undefined || wt < p.until) && p.periods.includes(period)) return { cell: p.cell };
+    return undefined;
+  }
+
+  /** What the gate reads of the intentions against V (S1 6): the snapshot's `group.decide` digest, the grievance a group still holds, and the observed pins. */
+  punishEnv(): GateEnv {
+    const k = this.k;
+    return {
+      intent: (group) => {
+        const a = k.evolution.digestPeek<GroupDigest>('group.decide')?.groups[group]?.active;
+        if (!a || a.name !== 'punish' || a.rung === undefined || a.grounds === undefined) return undefined;
+        return { id: a.id, rung: a.rung, grounds: a.grounds, warnings: a.warnings ?? [] };
+      },
+      held: (group, belief) => k.beliefs.activeOf(group).some((b) => b.memorable && b.id === belief),
+      observedAt: (node, t) => k.observedAt(node, t),
+    };
+  }
+
   /** The post history of `people.goals` (S1 7.10), read from its digest; empty where the process is not run. */
   postsOf(digest: <D>(id: string) => D | undefined): readonly PostRec[] | undefined {
     return digest<{ posts?: PostRec[] }>('people.goals')?.posts;
@@ -479,16 +523,18 @@ export class Sim {
       }
       for (const e of cast) if (e.role === ef.role || e.role === `${ef.role}-group`) effects.push({ on: (e.who ?? e.group)!, effect: ef.effect });
     }
-    return { kind: d.kind, origin, size: d.size, window: d.w, cell: d.cell, participants, effects, creator, tags: kd.tags };
+    return { kind: d.kind, origin, size: d.size, window: d.w, cell: d.cell, participants, effects, creator, tags: kd.tags, ...(d.punish ? { punish: d.punish } : {}) };
   }
 
   /** The `mint-event` spec of an admitted occurrence. */
   eventSpecOf(d: Descriptor, cast: CastEntry[], creator: Id, cause: Id, name: string) {
     const occ = this.occurrenceOf(d, cast, creator, 'sim');
-    const spec: { creator: Id; cause: Id; name: string; time: GameTime; kind: string; place: Id; participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }>; causes?: Id[]; outcome: 'done' | 'failed' | 'prevented' } = {
+    const spec: { creator: Id; cause: Id; name: string; time: GameTime; kind: string; place: Id; participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }>; causes?: Id[]; served?: Id; outcome: 'done' | 'failed' | 'prevented' } = {
       creator, cause, name, time: d.time, kind: d.kind, place: d.cell, participants: occ.participants, effects: occ.effects, outcome: d.outcome ?? 'done',
     };
-    if (d.parent !== undefined) spec.causes = [d.parent];
+    if (d.causes !== undefined) spec.causes = [...d.causes];
+    else if (d.parent !== undefined) spec.causes = [d.parent];
+    if (d.served !== undefined) spec.served = d.served;
     return spec;
   }
 

@@ -34,11 +34,11 @@ export type ResidentView = Readonly<{
   died?: GameTime;
 }>;
 
-export type WhereClass = 'home' | 'work' | 'out' | 'away';
+export type WhereClass = 'home' | 'work' | 'out' | 'away' | 'post';
 export interface Whereabouts {
   cls: WhereClass;
   cell?: Id;
-  cause: 'none' | 'ill' | 'closed' | 'between-jobs' | 'protected-present';
+  cause: 'none' | 'ill' | 'closed' | 'between-jobs' | 'protected-present' | 'goal';
 }
 
 export interface BlockInfo {
@@ -57,6 +57,8 @@ export interface PeopleHooks {
   defect(kind: string, detail: string): void;
   /** Whether a cast, an observation or a quest link protected the node at a time before now (the kernel's state and the record's spans). */
   protectedBefore?(node: Id, t: GameTime): boolean;
+  /** v0.6 (S1 4.5, 7.10): the post of the post history of `people.goals` that covers `t` (its window and its period), if the person has one. */
+  postAt?(person: Id, t: GameTime): { cell: Id } | undefined;
 }
 
 const NO_HOOKS: PeopleHooks = { closed: () => false, isSpine: () => false, defect: () => {} };
@@ -481,11 +483,15 @@ export class People {
     const weights = rows[p]!;
     let cls = (['home', 'work', 'out'] as const)[invCum(weights, this.keys.sched(res, day, p))] as WhereClass;
     let cause: Whereabouts['cause'] = 'none';
+    // v0.6 (S1 4.5): a goal's post covering `t`; the `sched` draw above is made as before and only its answer is replaced
+    const post = this.hooks.postAt?.(res, t);
     // protected as of `t`, not as of now: a person observed later was not retroactively present (S1 5.4 casts from recorded history as of the occurrence's own time)
-    if (this.protectedAt(res, t)) return { cls, cell: this.placeOf(v, cls, day, p), cause: 'protected-present' };
+    if (this.protectedAt(res, t)) return post ? { cls: 'post', cell: post.cell, cause: 'goal' } : { cls, cell: this.placeOf(v, cls, day, p), cause: 'protected-present' };
     if (this.stateAt(v, 'health', t).state === 1) {
       cls = 'away';
       cause = 'ill';
+    } else if (post) {
+      return { cls: 'post', cell: post.cell, cause: 'goal' };
     } else if (cls === 'work' && this.stateAt(v, 'work', t).state === 1) {
       cls = 'home';
       cause = 'between-jobs';

@@ -9,7 +9,7 @@ import type { Effect } from '../types.ts';
 import type { CityKindDef, ContentClass, S1Data } from './data.ts';
 import { type OutcomeRules, fillsOfEnforcement, fillsOfFixedKind, outcomeRulesOf } from './fills.ts';
 
-export type KindFamily = 'city' | 'order' | 'social' | 'mirror' | 'raw' | 'tie' | 'group';
+export type KindFamily = 'city' | 'order' | 'social' | 'mirror' | 'raw' | 'tie' | 'group' | 'goal' | 'scene';
 
 export interface RoleSpec {
   role: string;
@@ -18,7 +18,9 @@ export interface RoleSpec {
     | { from: 'group'; side: 'A' | 'B'; roles?: string[] }
     | { from: 'residents'; roles?: string[]; aff?: 'gang' }
     | { from: 'responders' }
-    | { from: 'parent'; role: string };
+    | { from: 'parent'; role: string }
+    /** v0.6 (S1 5.4): the person or thing a goal act's descriptor fixes (`Descriptor.fixed`); never drawn. */
+    | { from: 'fixed' };
   /** At most 4 persons in all per occurrence; a minimum of 0 makes the role optional. */
   count: [number, number];
   adult: boolean;
@@ -51,15 +53,30 @@ export const PRODUCERS = ['city.events', 'city.mirror', 'order.norms', 'order.st
 export const CITY_KIND_NAMES = ['theft', 'assault', 'gang-clash', 'shakedown', 'police-action', 'psycho-break', 'disorder', 'accident', 'outage', 'commerce'] as const;
 export const RAW_KIND_NAMES = ['game.death', 'game.combat.start', 'game.combat.end', 'game.heat.0', 'game.heat.1', 'game.heat.2', 'game.heat.3', 'game.heat.4', 'game.heat.5', 'game.district', 'game.journal.finished', 'game.journal.failed'] as const;
 export const TIE_KIND_NAMES = ['reply', 'bid', 'disclosure', 'favour', 'conflict', 'repair', 'joint-activity', 'crisis', 'retract'] as const;
+/** The acts goals produce besides the city kinds they reuse (S1 5.3, 7.10): produced by `city.events`, except the scene's `confront`. */
+export const GOAL_KIND_NAMES = ['presence', 'call-in', 'warning', 'price', 'search'] as const;
 export const SOCIAL_KIND_NAMES = ['tell', 'promise', 'threat', 'confess', 'betrayal', 'expose', 'conceal'] as const;
 
 const ROLE_SPECS = (kind: string, hasParent: boolean): RoleSpec[] => {
   const res = (role: string, count: [number, number], extra: Partial<RoleSpec['source']> = {}, adult = true): RoleSpec => ({ role, source: { from: 'residents', ...extra } as RoleSpec['source'], count, adult });
   switch (kind) {
     case 'theft':
+      // v0.6: the item a theft moves is fixed by a goal act's descriptor; an incident of the city's rates has none
+      return [{ role: 'aggressor', source: { from: 'offenders' }, count: [1, 1], adult: true }, res('victim', [1, 1]), { role: 'item', source: { from: 'fixed' }, count: [0, 1], adult: false }];
     case 'assault':
     case 'psycho-break':
       return [{ role: 'aggressor', source: { from: 'offenders' }, count: [1, 1], adult: true }, res('victim', [1, 1])];
+    case 'presence':
+      return [{ role: 'guard', source: { from: 'fixed' }, count: [1, 1], adult: true }, { role: 'ward', source: { from: 'fixed' }, count: [1, 1], adult: true }];
+    case 'call-in':
+      return [{ role: 'creditor', source: { from: 'fixed' }, count: [1, 1], adult: true }, { role: 'debtor', source: { from: 'fixed' }, count: [1, 1], adult: true }];
+    case 'warning':
+    case 'price':
+      return [{ role: 'warner', source: { from: 'fixed' }, count: [1, 1], adult: true }, { role: 'warned', source: { from: 'fixed' }, count: [1, 1], adult: false }];
+    case 'search':
+      return [{ role: 'searcher', source: { from: 'fixed' }, count: [1, 1], adult: true }, res('asked', [0, 1]), { role: 'sought', source: { from: 'fixed' }, count: [1, 1], adult: false }];
+    case 'confront':
+      return [{ role: 'confronter', source: { from: 'fixed' }, count: [1, 3], adult: true }, { role: 'confronted', source: { from: 'fixed' }, count: [1, 1], adult: false }];
     case 'accident':
       return [res('victim', [1, 1])];
     case 'gang-clash':
@@ -107,7 +124,7 @@ export function participantRoles(): string[] {
   for (const r of ['aggressor', 'victim', 'target', 'hostile', 'responder', 'enforcer', 'giver', 'taker', 'participant', 'teller', 'listener', 'subject', 'entry', 'actor',
     // v0.6 (S1 5.3, 5.4): the thing a theft moves, who prevented an act, what a telling is about, and the roles of the group and goal kinds
     'promiser', 'promisee', 'receiver', 'repairer', 'exposer', 'confessor', 'audience', 'protagonist', 'asker', 'replier', 'bidder',
-    'told', 'guard', 'item', 'group', 'decider', 'object', 'successor', 'predecessor', 'late', 'creditor', 'debtor', 'warner', 'warned', 'searcher', 'asked', 'sought', 'confronter', 'confronted']) roles.add(r);
+    'told', 'guard', 'ward', 'item', 'group', 'decider', 'object', 'successor', 'predecessor', 'late', 'creditor', 'debtor', 'warner', 'warned', 'searcher', 'asked', 'sought', 'confronter', 'confronted']) roles.add(r);
   for (const r of [...roles]) roles.add(`${r}-group`);
   return [...roles].sort();
 }
@@ -122,7 +139,7 @@ function rungKinds(data: S1Data): Array<{ norm: string; rung: string }> {
 export function allEventKindNames(data: S1Data): string[] {
   return [
     ...data.kinds.map((k) => k.name), 'regime-start', 'regime-end', ...rungKinds(data).map((x) => `enf.${x.norm}.${x.rung}`), 'gig-outcome',
-    ...RAW_KIND_NAMES, ...TIE_KIND_NAMES, ...SOCIAL_KIND_NAMES,
+    ...RAW_KIND_NAMES, ...TIE_KIND_NAMES, ...SOCIAL_KIND_NAMES, ...GOAL_KIND_NAMES, 'confront',
     // v0.6 (S1 5.3): a group's decisions, the ends of its courses and its successions, generated from `data.groups.intents`
     ...data.groups.intents.flatMap((i) => [`decide.${i.id}`, `relent.${i.id}`]), 'succession',
   ].filter((v, i, a) => a.indexOf(v) === i);
@@ -140,7 +157,10 @@ const cityRoleNames = (name: string, prevents: boolean): string[] => {
   if (name === 'theft') out.add('item');
   return [...out];
 };
-const AGENT_ROLES: Record<string, string[]> = { theft: ['aggressor'], assault: ['aggressor'], shakedown: ['aggressor'], 'gang-clash': ['aggressor'], 'psycho-break': ['aggressor'], 'police-action': ['responder'], tell: ['teller'] };
+const AGENT_ROLES: Record<string, string[]> = {
+  theft: ['aggressor'], assault: ['aggressor'], shakedown: ['aggressor'], 'gang-clash': ['aggressor'], 'psycho-break': ['aggressor'], 'police-action': ['responder'], tell: ['teller'],
+  presence: ['guard'], 'call-in': ['creditor'], warning: ['warner'], price: ['warner'], search: ['searcher'], confront: ['confronter'],
+};
 
 const city = (d: CityKindDef): KindDef1 => {
   const outcomes = outcomeRulesOf(d.name, d.effects);
@@ -186,6 +206,20 @@ export class KindRegistry {
       groupKind(`relent.${i.id}`, ['group', 'decider', 'object'], []);
     }
     groupKind('succession', ['group', 'successor', 'predecessor', 'late'], [{ fn: 'bind', args: { a: 'successor', b: 'group' } }, { fn: 'sever', args: { a: 'predecessor', b: 'group' }, when: { has: ['predecessor'] } }]);
+    // v0.6 (S1 5.3): the acts goals produce; size 1, produced by `city.events` (`confront` by `scene.acts`), cast from the goal's fixed people
+    const goalKind = (name: string, o: { producers?: string[]; family?: KindFamily; tags?: string[]; effects?: KindDef1['effects']; classes?: ContentClass[]; severity: number; pulse: number; carrier: KindDef1['carrier']; roleNames: string[]; outcomes?: OutcomeRules }): void => {
+      this.kinds.set(name, plain(name, o.family ?? 'goal', o.producers ?? ['city.events'], {
+        tags: o.tags ?? [], effects: o.effects ?? [], classes: o.classes ?? 'none', roles: ROLE_SPECS(name, false), severity: o.severity, pulse: o.pulse, carrier: o.carrier,
+        roleNames: o.roleNames, fills: fillsOfFixedKind(name) ?? [], ...(o.outcomes ? { outcomes: o.outcomes } : {}),
+      }));
+    };
+    goalKind('presence', { effects: [{ role: 'ward', effect: 'protect' }], severity: 0.2, pulse: 0.3, carrier: { channels: ['people'], days: 7 }, roleNames: ['guard', 'ward'] });
+    goalKind('call-in', { classes: [{ class: 'property', shown: 1, reported: 1 }], severity: 0.3, pulse: 0.3, carrier: { channels: ['people'], days: 7 }, roleNames: ['creditor', 'debtor'], outcomes: outcomeRulesOf('call-in', []) });
+    goalKind('warning', { tags: ['news', 'threat'], classes: [{ class: 'threat', shown: 1, reported: 1 }], severity: 0.6, pulse: 0.7, carrier: { channels: ['people'], days: 14 }, roleNames: ['warner', 'warned'] });
+    goalKind('price', { tags: ['news', 'threat'], classes: [{ class: 'threat', shown: 2, reported: 1 }], severity: 0.8, pulse: 0.8, carrier: { channels: ['people', 'place'], days: 30 }, roleNames: ['warner', 'warned'] });
+    goalKind('search', { tags: ['news'], classes: [{ class: 'threat', shown: 1, reported: 1 }], severity: 0.5, pulse: 0.5, carrier: { channels: ['people'], days: 14 }, roleNames: ['searcher', 'asked', 'sought'] });
+    // v0.6 (S1 5.3): the scene's encounter of a hunt: no effects, class `pursuit`
+    goalKind('confront', { producers: ['scene.acts'], family: 'scene', classes: [{ class: 'pursuit', shown: 2, reported: 1 }], severity: 0.9, pulse: 0.9, carrier: { channels: ['people'], days: 30 }, roleNames: ['confronter', 'confronted'] });
     this.kinds.set('gig-outcome', plain('gig-outcome', 'mirror', ['city.mirror']));
     for (const n of RAW_KIND_NAMES) this.kinds.set(n, plain(n, 'raw', ['port']));
     this.kinds.set('reply', plain('reply', 'tie', ['ties']));

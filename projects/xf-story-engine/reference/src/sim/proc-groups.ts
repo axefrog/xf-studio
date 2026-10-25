@@ -1,22 +1,23 @@
 // `group.decide` (S1 7.8): makes the Tyger Claws and The Mox of Kabuki actors in the smallest useful way: books that run out,
 // grudges that build, four pressures each, leaders in keyed seats whose leanings bend what the group decides, and intentions that
 // start, expire and are removed. What a group wants reaches the city as a rate boost. No decision depends on demand: the process calls
-// no `demanded`, and members carry an intention out through `people.goals` (a later build of the reference model).
+// no `demanded`, and members carry an intention out through `people.goals`.
 //
 // Pressures are derived (a pure function of timestamped facts and the query time) and never pinned (S1-I-20). Leadership is state:
 // drawn once, changed only by removal and succession, each recorded (an `xf:leads` edge, a `succession` event, S1-I-31).
 //
-// This build holds v0.6's seats, succession, interregnum, the pulses by function (the composite's S1-2), the decisions as events and the
-// refusal share of the books. The `punish` intention against the protagonist (D-30, S1 7.8.1) and the duties of S1 7.10 are not built.
+// This build holds v0.6's seats, succession, interregnum, the pulses by function (the composite's S1-2), the decisions as events, the
+// refusal share of the books and the `punish` intention against the protagonist (D-30, S1 7.8.1): from the group's own grievance only,
+// warning first, within the proactivity setting, bounded by the rungs. The duties of every intention are `people.goals`' (S1 7.10).
 
 import { H, i as hi, id as hid, mintedId, s as hs } from '../id.ts';
 import type { ProcessOp } from '../evolution.ts';
 import { processCause } from '../evolution.ts';
 import type { GameTime, Id } from '../types.ts';
-import { clip01, exptab, invCum } from './arith.ts';
+import { clip01, exptab, invCum, q64 } from './arith.ts';
 import type { GroupDef, IntentDef } from './data.ts';
 import { applicableFills } from './fills.ts';
-import { type DigestBase, type EventFact, type Feed, type Transition, feedAfter, pushTransitions } from './occ.ts';
+import { type DigestBase, type EventFact, type Feed, type Transition, feedAfter, pushFeed, pushTransitions } from './occ.ts';
 import { affOfGroup, groupOf, partiesOf } from './outcomes.ts';
 import type { EventsDigest } from './proc-events.ts';
 import type { MirrorDigest } from './proc-mirror.ts';
@@ -37,6 +38,8 @@ export interface Pulse {
   /** v0.6: the member wronged and the person who did it, from the fact (an intention's `ward` and `wrongdoer`). */
   ward?: Id;
   wrongdoer?: Id;
+  /** v0.6: for `retribution-v`, the act of V's the grievance rests on (S1 7.8.1). */
+  act?: Id;
 }
 
 /** A seat of a group (S1 7.8): seat 0 is the head. */
@@ -60,7 +63,13 @@ export interface Seat {
 export type Intent =
   | { state: 'none' }
   | { state: 'idle'; drive: string; since: number }
-  | { state: 'active'; id: string; name?: string; drive: string; since: number; expires: number; rival?: number; ward?: Id; wrongdoer?: Id; decider?: Id }
+  | {
+      state: 'active'; id: string; name?: string; drive: string; since: number; expires: number; rival?: number; ward?: Id; wrongdoer?: Id; decider?: Id;
+      /** The intention weight at its start, on the 1/64 grid: the motive of the duties it gives (S1 7.10). */
+      motive?: number;
+      /** `punish` (S1 7.8.1): its rung, the window the rung began, the rung entries so far, the grievance it rests on, and the warnings and prices admitted, newest last (at most 4) with their kinds. */
+      rung?: 1 | 2 | 3; rungSince?: number; entry?: number; grounds?: Id; cause?: Id; warnings?: Id[]; warnKinds?: string[];
+    }
   | { state: 'cooling'; until: number };
 
 export interface G {
@@ -71,6 +80,8 @@ export interface G {
   seats: Seat[];
   interregnum?: { until: number; cause: Id; logged?: boolean };
   intent: Intent;
+  /** The window the group's last `punish` intention ended (S1 7.8.1). */
+  lastPunish?: number;
   /** People who may hold no seat before `until` (after an arrest). */
   barred: Array<{ person: Id; until: number; cause: Id }>;
   W: Record<string, number>;
@@ -81,7 +92,7 @@ export interface G {
 export interface GroupState {
   v: 2;
   groups: Record<Id, G>;
-  cursors: { events: number; mirror: number; norms: number };
+  cursors: { events: number; mirror: number; norms: number; grudges: number };
   /** Canonical origins of the seed and port wrongs already taken, at most 256. */
   seen: Id[];
 }
@@ -96,13 +107,45 @@ export interface GroupDigest extends DigestBase {
     until?: number;
     seats: Array<{ seat: number; holder: Id | null }>;
     interregnum: boolean;
+    /** The group's district. */
+    district: Id;
     /** The active intention, if any (S1 7.8). */
-    active: { name: string; id: Id; since: number; until: number; rival?: number; ward?: Id; wrongdoer?: Id } | null;
+    active: { name: string; id: Id; since: number; until: number; rival?: number; ward?: Id; wrongdoer?: Id; motive?: number; rung?: 1 | 2 | 3; entry?: number; grounds?: Id; warnings?: Id[]; warnKinds?: string[] } | null;
   }>;
   /** District, then affiliation class index, then kind. */
   boost: Record<Id, Record<number, Record<string, number>>>;
   pairBoost: Record<Id, Array<{ a: number; b: number; mult: number; until: number }>>;
+  /** By group, its intention against V (S1 7.8.1): what S2 reads as `intentAgainst`. */
+  against: Record<Id, AgainstRec | null>;
+  /** The starts, climbs, drops and ends of intentions, for `people.goals` to give and end duties by (S1 7.10). */
+  lifecycle: Feed<IntentChange>;
   changes: Feed<Transition>;
+}
+
+/** The intention against V a group holds (S1 7.8.1). */
+export interface AgainstRec {
+  id: Id;
+  group: Id;
+  target: Id;
+  rung: 'ranks' | 'price' | 'hunt';
+  since: number;
+  expires: number;
+  warning?: Id;
+  warned: boolean;
+  cause: Id;
+}
+
+/** One change of a group's intention: its start, a climb or drop of rung, or its end, with what the change followed. */
+export interface IntentChange {
+  group: Id;
+  intent: Id;
+  name: string;
+  kind: 'start' | 'climb' | 'drop' | 'end';
+  rung?: number;
+  entry?: number;
+  /** The relent event of an end, the decision of the others. */
+  cause: Id;
+  w: number;
 }
 
 const DAY = 86400;
@@ -138,7 +181,8 @@ export function pressures(sim: Sim, def: GroupDef, g: G, t: GameTime): Record<st
   for (const d of carried) {
     switch (d) {
       case 'treasury': out[d] = clip01(1 - runway / cfg.treasuryDays); break;
-      case 'retribution': out[d] = pulseU(g.pulse.retribution, pc.retU0, pc.retTauDays * DAY, t, pc.retHold); break;
+      // v0.6: the larger of the grudge against a rival group and the one against V (S1 7.8)
+      case 'retribution': out[d] = Math.max(pulseU(g.pulse.retribution, pc.retU0, pc.retTauDays * DAY, t, pc.retHold), pulseU(g.pulse['retribution-v'], pc.retU0, pc.retTauDays * DAY, t, pc.retHold)); break;
       case 'care_of_members': out[d] = Math.max(cfg.constants.careMin, pulseU(g.pulse.care_of_members, pc.careU0, pc.careTauDays * DAY, t)); break;
       case 'reputation': out[d] = Math.max(cfg.constants.repMin, pulseU(g.pulse.reputation, pc.repU0, pc.repTauDays * DAY, t)); break;
       case 'cohesion': out[d] = cfg.constants.cohesion; break;
@@ -297,7 +341,7 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
           groups[id] = g;
         }
       }
-      return { v: 2, groups, cursors: { events: -1, mirror: -1, norms: -1 }, seen: [] };
+      return { v: 2, groups, cursors: { events: -1, mirror: -1, norms: -1, grudges: -1 }, seen: [] };
     },
 
     run(c: S1Ctx, w: number): S1Result<GroupState, GroupDigest> {
@@ -318,6 +362,11 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
       st.cursors.events = Math.max(fe.through, fc.through);
       st.cursors.mirror = fm.through;
       st.cursors.norms = fn.through;
+      // what the groups came to believe of V's acts (S1 8.9), after the cursor
+      const grudges = c.record().grudges.filter((e) => e.seq > st.cursors.grudges);
+      for (const e of grudges) st.cursors.grudges = Math.max(st.cursors.grudges, e.seq);
+      const lifecycle: IntentChange[] = [];
+      const outAgainst: GroupDigest['against'] = {};
       // the wrongs of seeds and of the port, found by query and taken once by their canonical origin (S1 7.8): a kit's minted beating or a replayed enforcement pulses like a simulated one
       const seen = new Set(st.seen);
       const queried: EventFact[] = [];
@@ -548,6 +597,16 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
             }
           }
         }
+        // each grudge entry after the cursor for this group (S1 7.8): `set` gives a latched `retribution-v` pulse, replacing the stored one if its urgency now is larger; `cleared` or `settled` release the pulse its belief set
+        for (const e of grudges) {
+          if (e.group !== id || !('retribution' in def.ethos)) continue;
+          const cur = g.pulse['retribution-v'];
+          if (e.op === 'set') {
+            const p: Pulse = { at: e.at, sev: e.sev, latched: true, src: e.belief, act: e.act };
+            if (e.pub) p.pub = true;
+            if (pulseReplaces(cur, p, cfg.pulses.retU0, cfg.pulses.retTauDays * DAY, cfg.pulses.retHold, T)) g.pulse['retribution-v'] = p;
+          } else if (cur && cur.src === e.belief && cur.releasedAt === undefined) cur.releasedAt = e.at;
+        }
         // a latched pulse also ends by exhaustion after 90 days
         for (const [drive, p] of Object.entries(g.pulse)) if (p.latched && T - p.at > cfg.latchExhaustDays * DAY && p.releasedAt === undefined) delete g.pulse[drive];
         // (5, 6) pressures, operative weights, divergence and the gap band
@@ -566,11 +625,35 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         const it = g.intent;
         const deciderOf = (serves: string): Id | undefined => g.seats.find((s) => s.holder !== null && s.lean === serves)?.holder ?? g.seats[0]!.holder ?? undefined;
         const objectOf = (i: Extract<Intent, { state: 'active' }>): Id | undefined => {
+          if (i.name === 'punish') return sim.w.v;
           if (i.name === 'retaliate' && i.rival !== undefined) {
             const a = (['A1', 'A2', 'A3'] as const)[i.rival - 2];
             return a === undefined ? undefined : sim.w.group(g.district, a);
           }
           return i.ward;
+        };
+        const tempo = c.settings.tempo;
+        const reach = tempo === 'off' ? undefined : cfg.punish.tempo[tempo];
+        const against = (i: Extract<Intent, { state: 'active' }>): string => (i.rung === 2 ? 'price' : i.rung === 3 ? 'hunt' : lastWarningObserved(i) ? 'ranks' : 'warned');
+        const lastWarning = (i: Extract<Intent, { state: 'active' }>): Id | undefined => i.warnings?.[i.warnings.length - 1];
+        const lastWarningObserved = (i: Extract<Intent, { state: 'active' }>): boolean => {
+          const x = lastWarning(i);
+          return x !== undefined && c.pctx.observedAt(x, T) !== undefined;
+        };
+        // the warnings and prices of the intention that were admitted (S1 7.8.1)
+        if (it.state === 'active' && it.name === 'punish') {
+          for (const f of facts) {
+            if (f.punish === undefined || f.punish.intent !== it.id || f.outcome !== 'done' || (f.kind !== 'warning' && f.kind !== 'price')) continue;
+            it.warnings = [...(it.warnings ?? []), f.id].slice(-4);
+            it.warnKinds = [...(it.warnKinds ?? []), f.kind].slice(-4);
+          }
+        }
+        const prevAgainst = it.state === 'active' && it.name === 'punish' ? against(it) : 'none';
+        const settledNow = grudges.filter((e) => e.group === id && e.op === 'settled');
+        const clearedNow = grudges.filter((e) => e.group === id && e.op === 'cleared');
+        const notice = (kindName: string, name: string, parts: Array<{ who: Id; role: string }>, cause: Id[]): Id => {
+          minted(id, `${kindName}/${name}/${w}`, `${kindName === 'decide' ? 'decide' : 'relent'}.${name}`, parts, cause, g.district);
+          return mintedId(proc, id, `${kindName}/${name}/${w}`);
         };
         let mayStart = true;
         if (it.state === 'cooling') {
@@ -578,18 +661,52 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
           if (w + 1 >= it.until) g.intent = { state: 'none' };
         } else if (it.state === 'active') {
           const idf = intentDef(it.name ?? it.id);
-          const stop = (op.w[it.drive] ?? 0) < cfg.thetaStop;
-          if (w + 1 >= it.expires || stop) {
-            const outcome = stop && w + 1 < it.expires ? 'ended' : 'done';
-            c.log({ w, proc: procId, kind: 'decision', reason: 'intent-end', key: `${id}|${it.name ?? it.id}|${outcome}`, refs: [id] });
-            // the end is an event: `relent.<intention>`, its participants those of its decision, its cause the decision (S1 7.8)
+          const punish = it.name === 'punish';
+          let reason: string | undefined;
+          let cause: Id = it.id;
+          if (punish) {
+            // the first of these ends it (S1 7.8.1)
+            const paid = settledNow.find((e) => e.belief === it.grounds);
+            const cleared = clearedNow.find((e) => e.belief === it.grounds) ?? (it.grounds !== undefined && !sim.k.beliefs.activeOf(id).some((b) => b.memorable && b.id === it.grounds) ? { act: it.id } : undefined);
+            if (paid) { reason = 'paid'; cause = paid.act; }
+            else if (cleared) reason = 'cleared';
+            else if (w + 1 >= it.expires) reason = 'expired';
+            else if ((op.w[it.drive] ?? 0) < cfg.thetaStop) reason = 'ended';
+            else if (reach === undefined || !sim.kindAllowed('warning', c.settings)) reason = 'setting';
+          } else if (w + 1 >= it.expires) reason = 'done';
+          else if ((op.w[it.drive] ?? 0) < cfg.thetaStop) reason = 'ended';
+          if (reason !== undefined) {
+            c.log({ w, proc: procId, kind: 'decision', reason: 'intent-end', key: `${id}|${it.name ?? it.id}|${reason}`, refs: [id] });
+            // the end is an event: `relent.<intention>`, its participants those of its decision, its cause the ending fact or else the decision (S1 7.8)
             const decider = it.decider ?? deciderOf(idf.serves);
             const parts: Array<{ who: Id; role: string }> = [{ who: id, role: 'group' }];
             if (decider !== undefined) parts.push({ who: decider, role: 'decider' });
             const obj = objectOf(it);
             if (obj !== undefined) parts.push({ who: obj, role: 'object' });
-            minted(id, `relent/${idf.id}/${w}`, `relent.${idf.id}`, parts, [it.id], g.district);
+            const relent = notice('relent', idf.id, parts, [cause]);
+            lifecycle.push({ group: id, intent: it.id, name: idf.id, kind: 'end', cause: relent, w });
+            if (punish) g.lastPunish = w;
             g.intent = { state: 'cooling', until: w + 1 + idf.cooling };
+          } else if (punish && reach !== undefined) {
+            // a lower `tempo` that still allows the intention caps its rung: a new rung entry; a higher one lets it climb by the rules below
+            if ((it.rung ?? 1) > reach.maxRung) {
+              it.rung = reach.maxRung;
+              it.rungSince = w + 1;
+              it.entry = (it.entry ?? 1) + 1;
+              c.log({ w, proc: procId, kind: 'decision', reason: 'rung', key: `${id}|${it.rung}`, refs: [id] });
+              lifecycle.push({ group: id, intent: it.id, name: 'punish', kind: 'drop', rung: it.rung, entry: it.entry, cause: it.id, w });
+            } else if ((it.rung ?? 1) < reach.maxRung) {
+              const r = it.rung ?? 1;
+              const own = it.warnKinds?.lastIndexOf(r === 1 ? 'warning' : 'price') ?? -1;
+              const perceived = own >= 0 && c.pctx.observedAt(it.warnings![own]!, T) !== undefined;
+              if (perceived && w - (it.rungSince ?? it.since) >= cfg.punish.rungDwell && (op.w[it.drive] ?? 0) >= cfg.thetaStart && c.keys.climb(w, id, r) < cfg.punish.climbP * reach.scale) {
+                it.rung = (r + 1) as 2 | 3;
+                it.rungSince = w + 1;
+                it.entry = (it.entry ?? 1) + 1;
+                c.log({ w, proc: procId, kind: 'decision', reason: 'rung', key: `${id}|${it.rung}`, refs: [id] });
+                lifecycle.push({ group: id, intent: it.id, name: 'punish', kind: 'climb', rung: it.rung, entry: it.entry, cause: it.id, w });
+              }
+            }
           }
           mayStart = false;
         }
@@ -606,37 +723,67 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
           } else {
             let started = false;
             for (const drive of cand) {
-              const idf = cfg.intents.find((i) => def.intents.includes(i.id) && i.serves === drive && i.groups.includes(g.aff));
-              if (!idf) continue;
-              let rival: number | undefined;
-              let src: Pulse | undefined;
-              if (idf.id === 'retaliate') {
-                const r = g.pulse.retribution;
-                if (!r || !r.latched || r.releasedAt !== undefined || r.rival === undefined) continue;
-                const hazard = cfg.h0 * (1 + cfg.hazardPublic * (r.pub ? 1 : 0));
-                if (!(c.keys.retal(w, id, r.rival) < hazard)) continue;
-                rival = r.rival;
-                src = r;
-              } else if (idf.id === 'protect-members') src = g.pulse.care_of_members;
-              // the decision is an event; the intention's id is its Id (S1 7.8)
-              const decisionId = mintedId(proc, id, `decide/${idf.id}/${w}`);
-              const ward = src?.ward;
-              const wrongdoer = src?.wrongdoer;
-              const active: Extract<Intent, { state: 'active' }> = { state: 'active', id: decisionId, name: idf.id, drive, since: w + 1, expires: w + 1 + idf.duration };
-              if (rival !== undefined) active.rival = rival;
-              if (ward !== undefined && (idf.id === 'protect-members' || idf.id === 'retaliate')) active.ward = ward;
-              if (wrongdoer !== undefined && idf.id === 'retaliate') active.wrongdoer = wrongdoer;
-              const decider = deciderOf(idf.serves);
-              if (decider !== undefined) active.decider = decider;
-              g.intent = active;
-              const parts: Array<{ who: Id; role: string }> = [{ who: id, role: 'group' }];
-              if (decider !== undefined) parts.push({ who: decider, role: 'decider' });
-              const obj = objectOf(active);
-              if (obj !== undefined) parts.push({ who: obj, role: 'object' });
-              minted(id, `decide/${idf.id}/${w}`, `decide.${idf.id}`, parts, src?.src !== undefined ? [src.src] : [], g.district);
-              c.log({ w, proc: procId, kind: 'decision', reason: 'intent-start', key: `${id}|${idf.id}`, refs: [id] });
-              started = true;
-              break;
+              // the intentions a group lists for the drive; when `retaliate` and `punish` both serve `retribution`, the one whose pulse's urgency is larger now is tried first
+              const listed = cfg.intents.filter((i) => def.intents.includes(i.id) && i.serves === drive && i.groups.includes(g.aff));
+              if (drive === 'retribution') {
+                const uR = pulseU(g.pulse.retribution, cfg.pulses.retU0, cfg.pulses.retTauDays * DAY, T, cfg.pulses.retHold);
+                const uV = pulseU(g.pulse['retribution-v'], cfg.pulses.retU0, cfg.pulses.retTauDays * DAY, T, cfg.pulses.retHold);
+                listed.sort((a, b) => (a.id === 'punish' ? uV : uR) < (b.id === 'punish' ? uV : uR) ? 1 : (a.id === 'punish' ? uV : uR) > (b.id === 'punish' ? uV : uR) ? -1 : 0);
+              }
+              for (const idf of listed) {
+                let rival: number | undefined;
+                let src: Pulse | undefined;
+                let duration = idf.duration;
+                if (idf.id === 'retaliate') {
+                  const r = g.pulse.retribution;
+                  if (!r || !r.latched || r.releasedAt !== undefined || r.rival === undefined) continue;
+                  const hazard = cfg.h0 * (1 + cfg.hazardPublic * (r.pub ? 1 : 0));
+                  if (!(c.keys.retal(w, id, r.rival) < hazard)) continue;
+                  rival = r.rival;
+                  src = r;
+                } else if (idf.id === 'punish') {
+                  // feasible only from a held grievance, within the proactivity setting, with the cooling over and the hazard drawn (S1 7.8.1)
+                  const rv = g.pulse['retribution-v'];
+                  if (reach === undefined || !sim.kindAllowed('warning', c.settings)) continue;
+                  if (!rv || !rv.latched || rv.releasedAt !== undefined || rv.src === undefined || !sim.k.beliefs.activeOf(id).some((b) => b.memorable && b.id === rv.src)) continue;
+                  if (g.lastPunish !== undefined && w - g.lastPunish < cfg.punish.cooling) continue;
+                  if (!(c.keys.punish(w, id) < cfg.punish.h0v * reach.scale * (1 + cfg.hazardPublic * (rv.pub ? 1 : 0)))) continue;
+                  src = rv;
+                  duration = reach.duration;
+                } else if (idf.id === 'protect-members') src = g.pulse.care_of_members;
+                // the decision is an event; the intention's id is its Id (S1 7.8)
+                const decisionId = mintedId(proc, id, `decide/${idf.id}/${w}`);
+                const ward = src?.ward;
+                const wrongdoer = src?.wrongdoer;
+                const active: Extract<Intent, { state: 'active' }> = { state: 'active', id: decisionId, name: idf.id, drive, since: w + 1, expires: w + 1 + duration, motive: q64(op.w[drive] ?? 0) };
+                if (rival !== undefined) active.rival = rival;
+                if (ward !== undefined && (idf.id === 'protect-members' || idf.id === 'retaliate')) active.ward = ward;
+                if (wrongdoer !== undefined && idf.id === 'retaliate') active.wrongdoer = wrongdoer;
+                if (idf.id === 'punish') {
+                  active.rung = 1;
+                  active.rungSince = w + 1;
+                  active.entry = 1;
+                  active.grounds = src!.src!;
+                  if (src!.act !== undefined) active.cause = src!.act;
+                  active.warnings = [];
+                  active.warnKinds = [];
+                }
+                const decider = deciderOf(idf.serves);
+                if (decider !== undefined) active.decider = decider;
+                g.intent = active;
+                const parts: Array<{ who: Id; role: string }> = [{ who: id, role: 'group' }];
+                if (decider !== undefined) parts.push({ who: decider, role: 'decider' });
+                const obj = objectOf(active);
+                if (obj !== undefined) parts.push({ who: obj, role: 'object' });
+                // the cause is the pulse's source: the fact, or for an intention against V the act its grounds rest on
+                const cause = idf.id === 'punish' ? src?.act : src?.src;
+                minted(id, `decide/${idf.id}/${w}`, `decide.${idf.id}`, parts, cause !== undefined ? [cause] : [], g.district);
+                lifecycle.push({ group: id, intent: decisionId, name: idf.id, kind: 'start', ...(idf.id === 'punish' ? { rung: 1 } : {}), entry: 1, cause: decisionId, w });
+                c.log({ w, proc: procId, kind: 'decision', reason: 'intent-start', key: `${id}|${idf.id}`, refs: [id] });
+                started = true;
+                break;
+              }
+              if (started) break;
             }
             if (!started && g.intent.state === 'none') {
               g.intent = { state: 'idle', drive: cand[0]!, since: w };
@@ -656,14 +803,32 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         if (g.interregnum) for (const kind of ['assault', 'theft']) b[kind] = Math.min(cfg.boostMax, Math.max(cfg.boostMin, (b[kind] ?? 0) + cfg.interregnumBoost));
         if (Object.keys(b).length === 0) delete boost[g.district]![mine];
         if (boost[g.district] && Object.keys(boost[g.district]!).length === 0) delete boost[g.district];
+        // the intention against V others read (S1 7.8.1) and its transitions: a change of what `intentAgainst` answers
+        const nowAgainst = now.state === 'active' && now.name === 'punish' ? against(now) : 'none';
+        if (nowAgainst !== prevAgainst) changes.push({ key: `against|${id}`, t: T + W, value: nowAgainst, prev: prevAgainst });
+        outAgainst[id] = now.state === 'active' && now.name === 'punish' && now.cause !== undefined
+          ? { id: now.id, group: id, target: sim.w.v, rung: (['ranks', 'price', 'hunt'] as const)[(now.rung ?? 1) - 1]!, since: now.since, expires: now.expires, ...(lastWarning(now) !== undefined ? { warning: lastWarning(now)! } : {}), warned: lastWarningObserved(now), cause: now.cause }
+          : null;
         outGroups[id] = {
           aff: g.aff, U, W: op.W, D: op.D, band: g.gapBand, intent: now.state === 'active' ? `active:${now.name ?? now.id}` : now.state, ...(now.state === 'active' ? { until: now.expires } : {}),
-          seats: g.seats.map((s) => ({ seat: s.seat, holder: s.holder })), interregnum: g.interregnum !== undefined,
-          active: now.state === 'active' ? { name: now.name ?? now.id, id: now.id, since: now.since, until: now.expires, ...(now.rival !== undefined ? { rival: now.rival } : {}), ...(now.ward !== undefined ? { ward: now.ward } : {}), ...(now.wrongdoer !== undefined ? { wrongdoer: now.wrongdoer } : {}) } : null,
+          seats: g.seats.map((s) => ({ seat: s.seat, holder: s.holder })), interregnum: g.interregnum !== undefined, district: g.district,
+          active: now.state === 'active'
+            ? {
+              name: now.name ?? now.id, id: now.id, since: now.since, until: now.expires, ...(now.rival !== undefined ? { rival: now.rival } : {}), ...(now.ward !== undefined ? { ward: now.ward } : {}), ...(now.wrongdoer !== undefined ? { wrongdoer: now.wrongdoer } : {}),
+              ...(now.motive !== undefined ? { motive: now.motive } : {}), ...(now.rung !== undefined ? { rung: now.rung } : {}), ...(now.entry !== undefined ? { entry: now.entry } : {}), ...(now.grounds !== undefined ? { grounds: now.grounds } : {}),
+              ...(now.warnings !== undefined ? { warnings: [...now.warnings] } : {}), ...(now.warnKinds !== undefined ? { warnKinds: [...now.warnKinds] } : {}),
+            }
+            : null,
         };
       }
       const prev = c.digest<GroupDigest>(procId);
-      return { ops, state: st, digest: { v: 1, through: w, groups: outGroups, boost, pairBoost, changes: pushTransitions(prev?.changes, w, changes, sim.data.feed.keep) } };
+      return {
+        ops, state: st,
+        digest: {
+          v: 1, through: w, groups: outGroups, boost, pairBoost, against: outAgainst,
+          lifecycle: pushFeed(prev?.lifecycle, w, lifecycle, sim.data.feed.keep), changes: pushTransitions(prev?.changes, w, changes, sim.data.feed.keep),
+        },
+      };
     },
   };
 }

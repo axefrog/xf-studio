@@ -49,6 +49,19 @@ export function fillsOfFixedKind(name: string): FillDecl[] | undefined {
     case 'tell':
       return [f('learn', { who: 'listener', what: 'told' }),
         f('expose', { by: 'teller', what: 'told', to: 'listener' }, { state: { fn: 'conceal', args: { what: 'told', from: 'listener' } } })];
+    case 'presence':
+      return [f('protect', { guard: 'guard', ward: 'ward' }), f('help', { by: 'guard', to: 'ward' })];
+    case 'call-in':
+      return [f('demand', { by: 'creditor', of: 'debtor' }), f('repay', { debtor: 'debtor', creditor: 'creditor' }, done), f('comply', { who: 'debtor', to: 'creditor' }, done),
+        f('refuse', { who: 'debtor', to: 'creditor' }, { outcome: ['failed'] }), f('wrong', { by: 'debtor', to: 'creditor' }, { outcome: ['failed'] })];
+    case 'warning':
+      return [f('threaten', { by: 'warner', to: 'warned' })];
+    case 'price':
+      return [f('threaten', { by: 'warner', to: 'warned' }), f('demand', { by: 'warner', of: 'warned' })];
+    case 'search':
+      return [f('ask', { by: 'searcher', of: 'asked', what: 'sought' }, { has: ['asked'] })];
+    case 'confront':
+      return [f('threaten', { by: 'confronter', to: 'confronted' })];
     case 'gig-outcome':
     case 'regime-end':
       return [];
@@ -78,6 +91,8 @@ export function outcomeRulesOf(name: string, effects: Array<{ role: string; effe
     case 'theft':
     case 'assault':
       return { prevent: { ward: 'victim', p: 0.5 }, effects: { done: effects, failed: [], prevented: [{ role: 'victim', effect: 'protect' }] } };
+    case 'call-in':
+      return { fail: { chance: 0.4 }, effects: { done: [{ role: 'creditor', effect: 'give' }], failed: [], prevented: [] } };
     default:
       if (enforcement) {
         return { prevent: { ward: 'target', p: 0.5 }, effects: { done: [{ role: 'target', effect: enforcement.rungEffect }], failed: [], prevented: [{ role: 'target', effect: 'protect' }] } };

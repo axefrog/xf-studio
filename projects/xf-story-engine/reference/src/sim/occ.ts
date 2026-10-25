@@ -27,6 +27,18 @@ export interface Descriptor {
   /** v0.6 (S1 5.2a): drawn once at admission (items have none until opened) and kept, so a re-mint from the ring restates it; and the guard of a prevented one. */
   outcome?: 'done' | 'failed' | 'prevented';
   guard?: Id;
+  /** v0.6 (S1 5.4, 7.2): a goal act's fixed cast, the goal frame it served and the causes it cites, and, for an act of a punish intention, which one (S1 6). */
+  fixed?: Array<{ role: string; who: Id }>;
+  served?: Id;
+  causes?: Id[];
+  punish?: PunishRef;
+}
+
+/** An act of a punish intention (S1 6, 7.8.1): its group, its intention (the decision's Id) and the rung it was given at. */
+export interface PunishRef {
+  group: Id;
+  intent: Id;
+  rung: 1 | 2 | 3;
 }
 
 export interface PendingChild {
@@ -87,6 +99,8 @@ export interface EventFact {
   goal?: Id;
   /** v0.6: the effects the occurrence put on its people (what the pulses weigh, S1 7.8). */
   effects?: Array<{ on: Id; effect: string }>;
+  /** v0.6: the intention an act of a punish duty belongs to (S1 7.8.1), so the group that decided it can count its warnings. */
+  punish?: PunishRef;
 }
 
 export type CastEntry = { role: string; who: Id; group?: undefined } | { role: string; group: Id; who?: undefined };
@@ -102,9 +116,11 @@ export interface Occurrence {
   effects: Array<{ on: Id; effect: Effect }>;
   creator: Id;
   tags?: string[];
+  /** v0.6 (S1 6): set only on the acts of a punish intention's duties. */
+  punish?: PunishRef;
 }
 
-export type GateReason = 'excluded' | 'floor-minor' | 'floor-real' | 'sex-tag' | 'v-target' | 'protected';
+export type GateReason = 'excluded' | 'floor-minor' | 'floor-real' | 'sex-tag' | 'v-target' | 'v-object' | 'protected';
 export type GateResult = { ok: true } | { ok: false; reason: GateReason };
 
 export interface LogEntry {

@@ -418,7 +418,7 @@ describe('the invariants of the simulation layer', () => {
   });
 
   test('S1-I-28 One version: the version of a process is pinned with its id; a save made under another version of any process loads read-only, and the same versions load', () => {
-    expect(Object.keys(PROCESS_VERSIONS).sort()).toEqual(['city.events', 'city.mirror', 'group.decide', 'order.ledger', 'order.norms', 'order.stocks', 'scene.acts']);
+    expect(Object.keys(PROCESS_VERSIONS).sort()).toEqual(['city.events', 'city.mirror', 'group.decide', 'order.ledger', 'order.norms', 'order.stocks', 'people.goals', 'scene.acts']);
     const make = () => Sim.create({ worldSeed: seedOf('S1-I-28v'), index: fx3Slice(), data: fxData(), only: ['city.events'] });
     const a = make();
     a.advance(3);
@@ -426,7 +426,7 @@ describe('the invariants of the simulation layer', () => {
     // every process takes its version from the one table
     const all = Sim.create({ worldSeed: seedOf('S1-I-28v'), index: fx3Slice(), data: fxData() });
     for (const [id, def] of all.defs) expect(def.version, id).toBe(PROCESS_VERSIONS[id]);
-    expect(all.defs.size).toBe(7);
+    expect(all.defs.size).toBe(8);
     const same = make();
     (same.k.persistence as unknown as { chain: Map<string, unknown> }).chain.set('A', rec);
     expect(same.k.persistence.load('A').readOnly).not.toBe(true);

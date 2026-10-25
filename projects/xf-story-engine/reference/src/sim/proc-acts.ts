@@ -17,6 +17,8 @@ import type { DigestBase } from './occ.ts';
 import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 import type { EventsState } from './proc-events.ts';
+import type { GroupDigest } from './proc-groups.ts';
+import type { GoalsDigest } from './proc-goals.ts';
 
 export interface ActsState {
   v: 1;
@@ -26,6 +28,8 @@ export interface ActsState {
   published: Array<{ item: Id; w: number; cell: Id; summary: Id; index: number }>;
   /** By scene cell, the windows of opened items in the last hour. */
   recent: Record<Id, number[]>;
+  /** v0.6 (S1 7.9): by `punish` intention, the window of its last `confront`. */
+  confronts: Record<Id, number>;
 }
 
 export interface ActsDigest extends DigestBase {
@@ -92,7 +96,7 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
 
   return {
     id: procId, version: PROCESS_VERSIONS[procId]!, tier: 3, coarseFine: { kind: 'count' }, lag: 1, demandLookback: 1,
-    init: () => ({ v: 1, prev: null, published: [], recent: {} }),
+    init: () => ({ v: 1, prev: null, published: [], recent: {}, confronts: {} }),
 
     run(c: S1Ctx, k: number): S1Result<ActsState, ActsDigest> {
       const st = c.own<ActsState>();
@@ -168,7 +172,49 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
           ops.push(...itemFieldOps(sim, d, cast, witnessesOf(d, persons), true));
         }
       }
-      // (4) record the focus of this window
+      // (4) the encounters of a hunt (v0.6, S1 7.9, D-30): the one occurrence the fine tier mints, because it exists only where V is
+      st.confronts ??= {};
+      const peek = <D>(id: string): D | undefined => sim.k.evolution.digestPeek<D>(id);
+      const gd = peek<GroupDigest>('group.decide');
+      const goalsDigest = peek<GoalsDigest>('people.goals');
+      const tempo = c.settings.tempo;
+      const activeIntents = new Set<Id>();
+      for (const [gnode, g] of Object.entries(gd?.groups ?? {}).sort((a, b) => cmp(a[0], b[0]))) {
+        const a = g.active;
+        if (!a || a.name !== 'punish') continue;
+        activeIntents.add(a.id);
+        if (a.rung !== 3 || tempo === 'off' || goalsDigest === undefined) continue;
+        // V's mirrored cell just before this window: the fine tier may read V's position, no coarse process does
+        const vcell = c.pctx.value(sim.w.vState, 'cell', T - 1);
+        if (typeof vcell !== 'string' || !sim.w.index.cells[vcell]) continue;
+        const near = new Set<Id>([vcell, ...sim.w.cell(vcell).adj1]);
+        const period = sim.people.periodOf(sim.windowStart(k - 1));
+        const searchers = goalsDigest.goals.filter((x) => x.duty === 'search' && x.intent?.decision === a.id).map((x) => x.id);
+        const owners = new Set<Id>();
+        for (const p of goalsDigest.posts) {
+          if (!searchers.includes(p.goal) || !near.has(p.cell) || !(p.from <= k - 1 && (p.until === undefined || k - 1 < p.until)) || !p.periods.includes(period)) continue;
+          const pv = sim.people.view(p.person);
+          if (pv && sim.people.alive(p.person, T) && pv.ageClass === 'adult') owners.add(p.person);
+        }
+        const confronters = [...owners].sort(cmp).slice(0, 3);
+        if (confronters.length === 0) continue;
+        // a warning of the intention was seen, and none was minted lately
+        if (!(a.warnings ?? []).some((x) => c.pctx.observedAt(x, T) !== undefined)) continue;
+        const last = st.confronts[a.id];
+        if (last !== undefined && k - last < cfg.confrontSpacing) continue;
+        if (!(c.keys.confront(k, a.id) < cfg.pConfront * sim.data.groups.punish.tempo[tempo].scale)) continue;
+        const participants = [...confronters.map((who) => ({ who, role: 'confronter' })), { who: sim.w.v, role: 'confronted' }];
+        const punish = { group: gnode, intent: a.id, rung: 3 as const };
+        const priceAt = (a.warnKinds ?? []).lastIndexOf('price');
+        const price = priceAt >= 0 ? a.warnings?.[priceAt] : undefined;
+        const causes = [a.id, ...(price !== undefined ? [price] : []), ...(a.grounds !== undefined ? [grievanceAct(sim, gnode, a.grounds)] : [])].filter((x): x is Id => x !== undefined);
+        const occ = { kind: 'confront', origin: 'sim' as const, size: 1, window: k, cell: vcell, participants, effects: [], creator: c.proc, tags: sim.w.kinds.get('confront')!.tags, punish };
+        if (!c.produce(occ).ok) continue;
+        ops.push({ op: 'mint-event', spec: { cause: a.id, name: `confront/${k}`, time: T - 1, kind: 'confront', place: vcell, participants, effects: [], causes, outcome: 'done' } });
+        st.confronts[a.id] = k;
+      }
+      for (const d of Object.keys(st.confronts)) if (!activeIntents.has(d)) delete st.confronts[d];
+      // (5) record the focus of this window
       st.prev = { w: k, cells: focus };
       st.published = st.published.filter((p) => k - p.w < sim.data.events.heatHorizon).slice(-512);
       for (const cell of Object.keys(st.recent)) {
@@ -178,6 +224,12 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
       return { ops, state: st, digest: { v: 1, through: k, opened, scenes: focus } };
     },
   };
+}
+
+/** The act a grievance rests on (S1 8.9): the belief's value, the canonical origin it cites. */
+function grievanceAct(sim: Sim, group: Id, belief: Id): Id | undefined {
+  const b = sim.k.beliefs.activeOf(group).find((x) => x.memorable && x.id === belief);
+  return typeof b?.value === 'string' ? b.value : undefined;
 }
 
 export type { Effect };

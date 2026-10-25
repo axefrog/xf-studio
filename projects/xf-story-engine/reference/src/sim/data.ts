@@ -98,6 +98,8 @@ export interface EventsData {
   m4Spacing: number;
   m4PerWeek: number;
   calendarCap: number;
+  /** v0.6 (S1 7.2): goal acts admitted in a district in one window. */
+  goalActsPerWindow: number;
   ringMax: number;
   witFraction: number;
   coverLull: number;
@@ -292,6 +294,15 @@ export interface LedgerData {
   tellerDiscount: number;
 }
 
+/** The duties an intention gives its members (S1 7.10): one entry per duty, with its slots and act by rung (rung 0 for an intention without rungs). */
+export type Duty = 'collect' | 'guard' | 'strike' | 'warn' | 'search';
+export interface DutyDef {
+  duty: Duty;
+  /** The profile role a member needs (`gang`), or `any`. */
+  role: string;
+  byRung: Array<{ rung: number; slots: number; act: string }>;
+}
+
 export interface IntentDef {
   id: string;
   serves: string;
@@ -301,6 +312,8 @@ export interface IntentDef {
   /** The boost this intention adds to the offender term of a kind while active; `retaliate` has a pair boost instead. */
   boost: Record<KindName, number>;
   pairMult?: number;
+  /** v0.6 (S1 7.8, 7.10): what the members carry out. */
+  duties?: DutyDef[];
 }
 
 export interface GroupDef {
@@ -342,6 +355,35 @@ export interface GroupsData {
   pulses: { sev: [number, number, number, number]; careU0: number; careTauDays: number; repU0: number; repTauDays: number; retU0: number; retTauDays: number; retHold: number };
   treasuryDays: number;
   constants: { cohesion: number; legitimacy: number; careMin: number; repMin: number };
+  /** v0.6 (S1 7.8.1, D-30): the hazard of starting `punish`, the cooling, the dwell and climb chance, and the reach and duration by `tempo`. */
+  punish: {
+    h0v: number; cooling: number; rungDwell: number; climbP: number; grievanceMax: number;
+    tempo: Record<'calm' | 'steady' | 'restless', { maxRung: 1 | 2 | 3; scale: number; duration: number }>;
+  };
+}
+
+/** `people.goals` (S1 7.10, v0.6): the goal-act rates and limits, the caps, the expiry and the debts. */
+export interface GoalsData {
+  /** Per day, by act kind. */
+  rate: Record<string, number>;
+  /** At most per goal per day, by act kind. */
+  perDay: Record<string, number>;
+  perPerson: number;
+  perDistrict: number;
+  /** Windows after which a goal of a source without its own end lapses (14 days). */
+  expires: number;
+  /** The motive of a broken obligation's redress and of a debt's call. */
+  brokenMotive: number;
+  debtMotive: number;
+  /** Days after which a favour and a promise are called in. */
+  dueDays: { favour: number; promise: number };
+  debtsMax: number;
+  seenMax: number;
+  /** The attempts of a member draw, and the cells `knownPlaces` lists. */
+  attempts: number;
+  knownPlaces: number;
+  /** The windows a post is kept after it ends. */
+  postKeep: number;
 }
 
 export interface MindsData {
@@ -417,7 +459,9 @@ export interface S1Data {
   vocabulary: string[];
   gate: GateData;
   realisation: RealisationRow[];
-  acts: { perHour: number; hourWindows: number; witnessCap: number };
+  acts: { perHour: number; hourWindows: number; witnessCap: number; pConfront: number; confrontSpacing: number };
+  /** v0.6 (S1 7.10). */
+  goals: GoalsData;
   log: { max: number };
   mirror: { cap: number; seenMax: number; publicMinWitnesses: number; deathGroupWitnesses: number; raw: string[] };
 }
@@ -533,7 +577,7 @@ export function defaultData(): S1Data {
       placeKernel: [1, 0.4, 0.15],
       heatSize: [1, 3, 9, 27], heatDist: [1.0, 0.4, 0.15], heatAge, heatPending: 0.5, heatHorizon: 1008,
       bandEnter: [2.0, 5.0, 12.0], bandLeave: [1.2, 3.2, 8.0], bandMinDwell: 144,
-      capPerWindow: 8, m4Spacing: 432, m4PerWeek: 2, calendarCap: 256, ringMax: 20000, witFraction: 0.05, coverLull: 144,
+      capPerWindow: 8, m4Spacing: 432, m4PerWeek: 2, calendarCap: 256, goalActsPerWindow: 4, ringMax: 20000, witFraction: 0.05, coverLull: 144,
       flatPropensity: false, propensityOverride: {}, rateScale: 1,
     },
     people: {
@@ -654,19 +698,25 @@ export function defaultData(): S1Data {
       effectW: { kill: 1.5, harm: 1, take: 0.6, expose: 0.6, none: 0.5 }, canonSeats: [],
       hostile: [['A1', 'A2']],
       groups: [
-        { seats: 3, aff: 'A1', books: { cash: 9000, burn: 300, income: 330 }, perShakedown: 25, ethos: { treasury: 2, retribution: 1, reputation: 1.5, cohesion: 1 }, intents: ['collect-fee', 'retaliate'] },
-        { seats: 2, aff: 'A2', books: { cash: 4000, burn: 150, income: 140 }, perShakedown: 0, ethos: { care_of_members: 2, retribution: 1, reputation: 1, legitimacy: 1.5 }, intents: ['protect-members', 'retaliate'] },
+        { seats: 3, aff: 'A1', books: { cash: 9000, burn: 300, income: 330 }, perShakedown: 25, ethos: { treasury: 2, retribution: 1, reputation: 1.5, cohesion: 1 }, intents: ['collect-fee', 'retaliate', 'punish'] },
+        { seats: 2, aff: 'A2', books: { cash: 4000, burn: 150, income: 140 }, perShakedown: 0, ethos: { care_of_members: 2, retribution: 1, reputation: 1, legitimacy: 1.5 }, intents: ['protect-members', 'retaliate', 'punish'] },
       ],
       intents: [
-        { id: 'collect-fee', serves: 'treasury', groups: ['A1'], duration: 144, cooling: 72, boost: { shakedown: 1.0 } },
-        { id: 'protect-members', serves: 'care_of_members', groups: ['A2'], duration: 144, cooling: 72, boost: { assault: -0.2 } },
-        { id: 'retaliate', serves: 'retribution', groups: ['A1', 'A2'], duration: 36, cooling: 72, boost: {}, pairMult: 3 },
+        { id: 'collect-fee', serves: 'treasury', groups: ['A1'], duration: 144, cooling: 72, boost: { shakedown: 1.0 }, duties: [{ duty: 'collect', role: 'gang', byRung: [{ rung: 0, slots: 2, act: 'shakedown' }] }] },
+        { id: 'protect-members', serves: 'care_of_members', groups: ['A2'], duration: 144, cooling: 72, boost: { assault: -0.2 }, duties: [{ duty: 'guard', role: 'any', byRung: [{ rung: 0, slots: 1, act: 'presence' }] }] },
+        { id: 'retaliate', serves: 'retribution', groups: ['A1', 'A2'], duration: 36, cooling: 72, boost: {}, pairMult: 3, duties: [{ duty: 'strike', role: 'gang', byRung: [{ rung: 0, slots: 1, act: 'assault' }] }] },
+        // `punish` (S1 7.8.1): its duration is set by `tempo`, and its duties by rung
+        { id: 'punish', serves: 'retribution', groups: ['A1', 'A2'], duration: 0, cooling: 288, boost: {}, duties: [
+          { duty: 'warn', role: 'gang', byRung: [{ rung: 1, slots: 1, act: 'warning' }, { rung: 2, slots: 1, act: 'price' }] },
+          { duty: 'search', role: 'gang', byRung: [{ rung: 2, slots: 1, act: 'search' }, { rung: 3, slots: 2, act: 'search' }] },
+        ] },
       ],
       thetaStart: 0.35, thetaStop: 0.2, h0: 0.02, hazardPublic: 0.5, divergenceMin: 0.25,
       gapBands: { low: 0.15, mid: 0.25, leaveLow: 0.13, leaveMid: 0.23 },
       phi: { treasury: 0.1, retribution: 0 }, boostMin: -0.5, boostMax: 3, groupModMin: 0.5, latchExhaustDays: 90,
       pulses: { sev: [0.3, 0.6, 0.9, 1.0], careU0: 0.7, careTauDays: 7, repU0: 0.7, repTauDays: 30, retU0: 0.8, retTauDays: 14, retHold: 0.5 },
       treasuryDays: 30, constants: { cohesion: 0.1, legitimacy: 0.2, careMin: 0.1, repMin: 0.2 },
+      punish: { h0v: 0.02, cooling: 288, rungDwell: 144, climbP: 0.05, grievanceMax: 8, tempo: { calm: { maxRung: 1, scale: 0.5, duration: 288 }, steady: { maxRung: 2, scale: 1, duration: 576 }, restless: { maxRung: 3, scale: 1.5, duration: 1008 } } },
       // phi for the other drives is 0.3 (a mixed pressure).
     },
     minds: {
@@ -692,15 +742,23 @@ export function defaultData(): S1Data {
     feed: { keep: 8 },
     outcomes: { refuseC: 0.03, refuseNC: 0.35, backing: 0.3 },
     vocabulary: ['hold', 'want', 'transfer', 'wrong', 'befall', 'help', 'sacrifice', 'obligate', 'repay', 'ask', 'demand', 'comply', 'refuse', 'learn', 'conceal', 'expose', 'blame', 'protect', 'threaten', 'pursue', 'decide', 'bind', 'sever', 'compete', 'turn', 'choose', 'story'],
-    gate: { floorRoles: ['aggressor', 'victim', 'target', 'hostile'], harmEffects: ['harm', 'kill', 'take', 'expose'] },
+    gate: { floorRoles: ['aggressor', 'victim', 'target', 'hostile', 'guard', 'ward', 'creditor', 'debtor', 'warner', 'searcher', 'asked', 'confronter'], harmEffects: ['harm', 'kill', 'take', 'expose'] },
     realisation: [
       { kind: 'gang-clash', placeType: 'public', periods: [2, 3], minSize: 1, route: 'dynamic-event', cost: 1, safeRadius: 30, viewTest: true, perHour: 2 },
       { kind: 'assault', placeType: 'public', periods: [2, 3], minSize: 1, route: 'scanner-hustle', cost: 1, safeRadius: 30, viewTest: true, perHour: 2 },
       { kind: 'psycho-break', placeType: 'public', periods: null, minSize: 1, route: 'scanner-hustle', cost: 1, safeRadius: 30, viewTest: true, perHour: 2 },
       { kind: 'police-action', placeType: 'public', periods: null, minSize: 2, route: 'chase', cost: 1, safeRadius: 30, viewTest: true, perHour: 2 },
       { kind: 'theft', placeType: 'public', periods: null, minSize: 1, route: 'city-scene', cost: 1, safeRadius: 30, viewTest: true, perHour: 2 },
+      // v0.6 (S1 5.5): the one act against the protagonist a seed may stage, with no harm in it: the confronters approach from out of view
+      { kind: 'confront', placeType: 'any', periods: null, minSize: 1, route: 'bridge-spawn', cost: 1, safeRadius: 40, viewTest: true, perHour: 1 },
     ],
-    acts: { perHour: 20, hourWindows: 6, witnessCap: 12 },
+    acts: { perHour: 20, hourWindows: 6, witnessCap: 12, pConfront: 0.25, confrontSpacing: 144 },
+    goals: {
+      rate: { shakedown: 1, assault: 2, theft: 2, presence: 24, 'call-in': 1, warning: 12, price: 12, search: 4 },
+      perDay: { shakedown: 3, assault: 1, theft: 1, presence: 1, 'call-in': 1, warning: 1, price: 1, search: 1 },
+      perPerson: 2, perDistrict: 32, expires: 2016, brokenMotive: 0.5, debtMotive: 0.5, dueDays: { favour: 7, promise: 3 }, debtsMax: 64, seenMax: 256,
+      attempts: 24, knownPlaces: 3, postKeep: 1008,
+    },
     log: { max: 2048 },
     mirror: {
       cap: 12, seenMax: 1024, publicMinWitnesses: 5, deathGroupWitnesses: 3,
