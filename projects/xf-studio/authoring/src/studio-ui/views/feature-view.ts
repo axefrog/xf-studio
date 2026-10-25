@@ -109,6 +109,8 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
    * (undefined before they load). Changes are `platform` actions (`starters.*`); adding a layer from one is the feature's own `layer.edit`.
    */
   readonly starters: {
+    /** Whether the starters are there to list (cheap: asked on every panel update; `list` copies them). */
+    ready(): boolean;
     list(): StarterListing | undefined;
     capability(action: StarterAction): StudioCapability;
   };

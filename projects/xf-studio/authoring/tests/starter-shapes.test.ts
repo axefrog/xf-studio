@@ -9,7 +9,10 @@
  * - **A new layer, a reset layer and a new look** start from the default (or the starter named); existing drafts are untouched.
  * - **A read-only window** refuses every starter action and adding a layer, with the window's reason.
  */
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { installLightDom, lightDocument, uninstallLightDom, type LightElement } from "./light-dom";
+import { closeMenus, openMenu } from "../src/studio-ui/menu";
+import { starterItems } from "../src/features/eye-makeup/view/starter-menu";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { ShapeStarters, STARTER_DOCUMENT, STARTER_SCHEMA, type ShapeStartersDeps } from "../src/app/starters/shape-starters";
 import { StarterActions } from "../src/app/starters/starter-actions";
@@ -538,5 +541,59 @@ describe("the layer commands", () => {
     const plain = editLayers(base, undefined, { kind: "add", newId: "b" }, REGION).recipe.layers[0]!;
     expect(pointsOf(plain)).toEqual(shapePoints("lid-wash"));
     expect(() => editLayers(base, undefined, { kind: "add", newId: "c", shape: { ...starter("lid-wash").shape, feather: 0 } as StarterShape }, REGION)).toThrow();
+  });
+});
+
+describe("the starters menu", () => {
+  let previousPage: unknown;
+  beforeAll(() => { installLightDom(); previousPage = globalThis.window; Object.assign(globalThis, { window: { innerWidth: 900, innerHeight: 900, addEventListener() {} } }); });
+  afterAll(() => { closeMenus(false); uninstallLightDom(); Object.assign(globalThis, { window: previousPage }); });
+
+  test("lists eye makeup's starters then Yours, each row with a thumbnail, the default marked, its star unavailable, long and same-named rows told apart", async () => {
+    const w = windowOn(); await w.starters.load();
+    const long = "Evening wing with a long name that wraps in a narrow menu";
+    created(w, long); created(w, "Twin"); created(w, "Twin");
+    w.starters.setDefault(w.starters.list().find(item => item.name === long)!.id);
+    const dispatched: unknown[] = [], platform: unknown[] = [];
+    const ctx = { facade: { capability: () => ({ available: true }) }, dispatch: (action: unknown) => { dispatched.push(action); return true; },
+      platform: (action: unknown) => { platform.push(action); return true; }, feedback: { announce() {}, toast() {} },
+      starters: { ready: () => true, list: () => undefined, capability: () => ({ available: true }) } };
+    const listing = { feature: REGION.id, label: "Eye makeup", starters: w.starters.list(), defaultId: w.starters.defaultId(), thumbnail: REGION.thumbnail };
+    const invoker = document.createElement("button"); lightDocument.body.append(invoker as never);
+    const items = starterItems(ctx as never, listing, invoker);
+    expect(items.filter(item => item.kind === "heading").map(item => (item as { label: string }).label)).toEqual(["Eye makeup", "Yours"]);
+    const menu = openMenu(items, invoker, { label: "Starter shapes", invoker })!.element as unknown as LightElement;
+    const rows = menu.querySelectorAll(".menu-item").filter(row => !row.classList.contains("menu-secondary") && row.querySelector(".menu-label"));
+    expect(rows.map(row => row.querySelector(".menu-label")!.textContent.replace("Default", ""))).toEqual(
+      ["Lid wash", "Classic wing", "Crease / smoky", "Lower-lash smudge", "Wing (original)", long, "Twin", "Twin", "Rename yours", "Delete yours"]);
+    // Every starter row has a thumbnail (an SVG outline over two guides) instead of an icon; the default alone has the Default tag.
+    const starterRows = rows.slice(0, 8);
+    expect(starterRows.every(row => row.querySelector(".menu-thumb")?.querySelector(".shape-thumb-outline"))).toBe(true);
+    expect(starterRows[0]!.querySelectorAll(".shape-thumb-guide")).toHaveLength(2);
+    expect(menu.querySelectorAll(".menu-tag").map(tag => tag.textContent)).toEqual(["Default"]);
+    expect(starterRows[5]!.querySelector(".menu-tag")?.textContent).toBe("Default");
+    // The stars: the default's is unavailable with the reason, the others set the default.
+    const stars = menu.querySelectorAll(".menu-secondary");
+    expect(stars).toHaveLength(8);
+    expect(stars[5]!.getAttribute("aria-disabled")).toBe("true");
+    expect(stars[5]!.getAttribute("data-reason")).toBe("Already the starter new layers use.");
+    expect(stars[0]!.getAttribute("aria-label")).toBe("Use Lid wash for new layers");
+    expect(stars[0]!.classList.contains("neutral")).toBe(true);
+    // The same-named pair is told apart by when each was saved; a row with a name of its own isn't.
+    expect(starterRows[6]!.querySelector(".menu-hint")?.textContent).toMatch(/^Saved /);
+    expect(starterRows[5]!.querySelector(".menu-hint")).toBeNull();
+    // Pressing a row adds a layer from it; pressing a star sets the default; neither does the other's work.
+    starterRows[1]!.click();
+    expect(dispatched).toEqual([{ kind: "layer.edit", command: { kind: "add", starter: "classic-wing" } }]);
+    expect(platform).toEqual([]);
+    const again = openMenu(items, invoker, { label: "Starter shapes", invoker })!.element as unknown as LightElement;
+    again.querySelectorAll(".menu-secondary")[2]!.click();
+    expect(platform).toEqual([{ kind: "starters.setDefault", starter: "crease-smoky" }]);
+    expect(dispatched).toHaveLength(1);
+    closeMenus(false);
+    // Without own starters there is no Yours section: menus offer what can be done and say nothing of what can't.
+    const alone = starterItems(ctx as never, { ...listing, starters: windowOn().starters.list() }, invoker);
+    expect(alone.filter(item => item.kind === "heading")).toHaveLength(1);
+    expect(alone.some(item => item.kind === "submenu")).toBe(false);
   });
 });

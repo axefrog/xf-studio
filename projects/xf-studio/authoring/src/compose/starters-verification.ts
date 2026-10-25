@@ -18,7 +18,7 @@ export function startersFixtures(starters: ShapeStarters, outbox: DocumentOutbox
     outbox.commit("starters.capture-time", [{ ...ref, value: { ...value, createdAt: base + seconds * 1000, savedAt: base + seconds * 1000 } }]);
     made.push(result.id);
   };
-  save("Evening wing with a long name that has to wrap in the narrow menu", "classic-wing", 5);
+  save("Evening wing with a long name that wraps in a narrow menu", "classic-wing", 5);
   save("Soft smudge", "lower-lash-smudge", 25);
   save("Soft smudge", "lower-lash-smudge", 85);
   starters.setDefault(made[0]!);

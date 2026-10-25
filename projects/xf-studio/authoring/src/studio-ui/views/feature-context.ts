@@ -73,6 +73,7 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       import: () => importCollection(rt),
     } satisfies FeatureViewContext["collection"]),
     starters: Object.freeze({
+      ready: () => !!port.starters,
       list: () => port.starters?.snapshot(),
       capability: action => port.authoring.capability(action as never),
     }),

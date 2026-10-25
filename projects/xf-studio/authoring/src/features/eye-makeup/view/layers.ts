@@ -126,7 +126,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
         return { id: layer.id, name: layer.name, meta: `${descriptor?.label ?? layer.finish} · ${pct(layer.opacity)}${layer.symmetry ? "" : " · one side"}` };
       }), active?.id);
       applyCapability(add, addLayerCapability(ctx));
-      applyCapability(starters, ctx.starters.list() ? addLayerCapability(ctx) : { available: false, reason: "The starter shapes are still loading." });
+      applyCapability(starters, ctx.starters.ready() ? addLayerCapability(ctx) : { available: false, reason: "The starter shapes are still loading." });
       applyCapability(duplicate, active ? ctx.facade.contextCapability({ kind: "layer", id: active.id },
         { kind: "layer.edit", command: { kind: "duplicate", id: active.id } }) : { available: false, reason: "Select a layer first." });
       applyCapability(more, active ? { available: true } : { available: false, reason: "Select a layer first." });
