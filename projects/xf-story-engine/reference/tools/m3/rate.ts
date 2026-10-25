@@ -32,5 +32,8 @@ const cards = new Set(need(/^### (H-\d+)/gm)), pairs = new Set(need(/^### (P-\d+
 const missingCards = [...cards].filter((c) => !(c in parsed.cards)), missingPairs = [...pairs].filter((p) => !(p in parsed.pairs));
 if (missingCards.length || missingPairs.length) throw new Error(`the reply leaves out ${missingCards.length} cards and ${missingPairs.length} pairs (see ${answer}.raw.txt)`);
 parsed.rater = rater;
+// which sheet this was (`rater-N.md`): with balanced sides the sheets have different left and right, and the scorer needs to know which
+const sheetNo = /rater-(\d+)\.md$/.exec(sheet.replace(/\\/g, '/'));
+if (sheetNo) (parsed as { sheet?: number }).sheet = Number(sheetNo[1]);
 writeFileSync(answer, JSON.stringify(parsed, null, 1));
 console.log(`${rater}: ${cards.size} cards, ${pairs.size} pairs, ${Math.round((Date.now() - t0) / 1000)} s`);

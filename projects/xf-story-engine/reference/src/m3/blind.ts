@@ -12,13 +12,30 @@ export const ARM_NAMES: Record<Arm, string> = { E: 'engine (ranked sowing)', A1:
 export interface Hook { arm: Arm; text: string; meta: Record<string, string | number> }
 export interface Card { id: string; text: string }
 export interface Pair { id: string; left: string; right: string }
+export type PairKey = Record<string, { leftArm: Arm; rightArm: Arm }>;
 export interface Packet {
   cards: Card[];
   /** One balanced order per rater, as card ids. */
   orders: string[][];
   pairs: Pair[];
   key: Record<string, { arm: Arm; meta: Hook['meta'] }>;
-  pairKey: Record<string, { leftArm: Arm; rightArm: Arm }>;
+  pairKey: PairKey;
+  /**
+   * Balanced sides (run 2's review fix): each rater's sheet has its own left and right. `pairsByRater[r]` holds the same pairs as `pairs` (same ids, same
+   * two cards) with the sides rater `r` sees, and `pairKeys[r]` says which arm is on which side there. `pairs` and `pairKey` are rater 0's. Absent, every
+   * rater sees `pairs` (run 1's packet, whose sides were drawn once for all raters).
+   */
+  pairsByRater?: Pair[][];
+  pairKeys?: PairKey[];
+}
+
+export interface PacketOptions {
+  /**
+   * Balance the sides of the forced choices: in each comparison exactly half of the pairs (one more or fewer when the count is odd) have the first arm on
+   * the left, for every rater; raters 0 and 1 see one orientation of every pair and raters 2 and 3 the opposite one (so two raters that are the same
+   * model, as the first and third are in run 2, see every pair mirrored).
+   */
+  balancedSides?: boolean;
 }
 
 const keyed = (seed: string, tag: string, ...n: number[]): number => rand(hs('m3-blind'), hs(seed), hs(tag), ...n.map(hi));
@@ -38,7 +55,7 @@ export function shuffle<T>(xs: readonly T[], seed: string, tag: string): T[] {
  * assigned in a shuffled order. Each rater's order is made of blocks that hold one card of each arm, shuffled inside each block,
  * so every arm is spread evenly through the sequence; the next rater's order is the previous one reversed.
  */
-export function buildPacket(hooks: Hook[], seed: string, raters: number, pairing: Array<[Arm, Arm]>): Packet {
+export function buildPacket(hooks: Hook[], seed: string, raters: number, pairing: Array<[Arm, Arm]>, opts: PacketOptions = {}): Packet {
   const arms = [...new Set(hooks.map((h) => h.arm))].sort() as Arm[];
   const per = arms.map((a) => hooks.filter((h) => h.arm === a));
   const n = per[0]!.length;
@@ -61,17 +78,32 @@ export function buildPacket(hooks: Hook[], seed: string, raters: number, pairing
   }
   const pairs: Pair[] = [];
   const pairKey: Packet['pairKey'] = {};
+  // balanced sides: a shuffle of the pair indexes of a comparison decides which half has the first arm on the right (rater 0's view)
+  const flips = (pi: number): boolean[] => {
+    if (!opts.balancedSides) return Array.from({ length: n }, (_, i) => keyed(seed, 'flip', pi, i) < 0.5);
+    const order = shuffle(Array.from({ length: n }, (_, i) => i), seed, `flip-${pi}`);
+    const out = new Array<boolean>(n).fill(false);
+    order.forEach((i, rank) => { out[i] = rank < Math.floor(n / 2); });
+    return out;
+  };
+  const base: boolean[][] = pairing.map((_, pi) => flips(pi));
   pairing.forEach(([x, y], pi) => {
     const xs = lists[x], ys = shuffle(lists[y], seed, `pair-${pi}`);
     for (let i = 0; i < n; i++) {
-      const flip = keyed(seed, 'flip', pi, i) < 0.5;
+      const flip = base[pi]![i]!;
       const id = `P-${String(pairs.length + 1).padStart(3, '0')}`;
       const left = flip ? ys[i]! : xs[i]!, right = flip ? xs[i]! : ys[i]!;
       pairs.push({ id, left, right });
       pairKey[id] = flip ? { leftArm: y, rightArm: x } : { leftArm: x, rightArm: y };
     }
   });
-  return { cards, orders, pairs: shuffle(pairs, seed, 'pair-order'), key, pairKey };
+  const pairOrder = shuffle(pairs, seed, 'pair-order');
+  if (!opts.balancedSides) return { cards, orders, pairs: pairOrder, key, pairKey };
+  // each rater's sides: raters 0 and 1 as drawn, raters 2 and 3 mirrored, and so on in twos
+  const mirrored = (r: number): boolean => Math.floor(r / 2) % 2 === 1;
+  const pairsByRater = Array.from({ length: raters }, (_, r) => pairOrder.map((x): Pair => (mirrored(r) ? { id: x.id, left: x.right, right: x.left } : { ...x })));
+  const pairKeys = Array.from({ length: raters }, (_, r): PairKey => Object.fromEntries(Object.entries(pairKey).map(([id, k]) => [id, mirrored(r) ? { leftArm: k.rightArm, rightArm: k.leftArm } : { ...k }])));
+  return { cards, orders, pairs: pairsByRater[0]!, key, pairKey: pairKeys[0]!, pairsByRater, pairKeys };
 }
 
 // ---- the sheet and the instructions ----
@@ -110,15 +142,18 @@ export function cardsMarkdown(p: Packet, order: string[]): string {
   return order.map((id) => `### ${id}\n\n${by.get(id)!.text}\n`).join('\n');
 }
 
-export function pairsMarkdown(p: Packet): string {
+/** The pairs sheet of rater `rater` (0-based): with balanced sides, that rater's own left and right. */
+export function pairsMarkdown(p: Packet, rater = 0): string {
   const by = new Map(p.cards.map((c) => [c.id, c]));
-  return p.pairs.map((x) => `### ${x.id}\n\nLeft: ${by.get(x.left)!.text}\n\nRight: ${by.get(x.right)!.text}\n`).join('\n');
+  return (p.pairsByRater?.[rater] ?? p.pairs).map((x) => `### ${x.id}\n\nLeft: ${by.get(x.left)!.text}\n\nRight: ${by.get(x.right)!.text}\n`).join('\n');
 }
 
 // ---- scoring ----
 
 export interface RaterAnswer {
   rater: string;
+  /** The sheet the rater was given (1-based, `rater-N.md`): which left and right its pairs were. Absent, the answer's place in the list. */
+  sheet?: number;
   cards: Record<string, { caused: number; legible: number; setting: number; pull: number; made_by: string; cue?: string }>;
   pairs: Record<string, { follow: 'left' | 'right'; caused: 'left' | 'right' }>;
   critic?: string;
@@ -142,11 +177,13 @@ export interface Score {
   disagreement: Record<string, number>;
 }
 
-function pairCounts(p: Packet, answers: RaterAnswer[]): PairCount[] {
+function pairCounts(p: Packet, answers: Array<{ a: RaterAnswer; sheet: number }>): PairCount[] {
   const wins: Record<string, { w: number; n: number }> = {};
-  for (const a of answers) {
+  for (const { a, sheet } of answers) {
+    // the left and right of this rater's own sheet
+    const keys = p.pairKeys?.[sheet - 1] ?? p.pairKey;
     for (const [id, c] of Object.entries(a.pairs)) {
-      const k = p.pairKey[id];
+      const k = keys[id];
       if (!k) continue;
       for (const crit of ['follow', 'caused'] as const) {
         const side = c[crit];
@@ -167,6 +204,7 @@ function pairCounts(p: Packet, answers: RaterAnswer[]): PairCount[] {
 }
 
 export function score(p: Packet, answers: RaterAnswer[]): Score {
+  const sheeted = answers.map((a, i) => ({ a, sheet: a.sheet ?? i + 1 }));
   const arms: Record<string, { sums: Record<string, number>; n: number; det: number; detOf: number }> = {};
   for (const a of answers) {
     for (const [id, c] of Object.entries(a.cards)) {
@@ -187,8 +225,8 @@ export function score(p: Packet, answers: RaterAnswer[]): Score {
     for (let i = 0; i < vals.length; i++) for (let j = i + 1; j < vals.length; j++) { dis[cr.id]!.n++; if (Math.abs(vals[i]! - vals[j]!) >= 2) dis[cr.id]!.d++; }
   }
   return {
-    raters: answers.map((a) => a.rater), arms: armScores, pairs: pairCounts(p, answers),
-    perRater: answers.map((a) => ({ rater: a.rater, pairs: pairCounts(p, [a]) })),
+    raters: answers.map((a) => a.rater), arms: armScores, pairs: pairCounts(p, sheeted),
+    perRater: sheeted.map((x) => ({ rater: x.a.rater, pairs: pairCounts(p, [x]) })),
     disagreement: Object.fromEntries(Object.entries(dis).map(([k, v]) => [k, v.n ? Math.round((v.d / v.n) * 100) / 100 : 0])),
   };
 }

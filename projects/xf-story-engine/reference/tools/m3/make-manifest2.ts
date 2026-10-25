@@ -13,7 +13,7 @@ const [dir, out, nArg, ratersArg, ...files] = process.argv.slice(2);
 if (!dir || !out || !nArg || !ratersArg || files.length === 0) throw new Error('usage: make-manifest2 <rundir> <out.json> <n> <raters> <run file>...');
 const records = files.map((file) => ({ file, record: JSON.parse(readFileSync(`${dir}/${file}`, 'utf8')) as RunRecord }));
 const manifest = manifestOf(records, {
-  seed: 'm3b-blind-1', n: Number(nArg), raters: Number(ratersArg), a3Rule: process.env.M3_A3_RULE === 'rated-v1' ? 'rated-v1' : 'declared', names: 'wide', tier: 'offers',
+  seed: 'm3b-blind-1', n: Number(nArg), raters: Number(ratersArg), a3Rule: process.env.M3_A3_RULE === 'rated-v1' ? 'rated-v1' : 'declared', names: 'wide', tier: 'offers', sides: 'balanced',
   a4States: ['S-early-quiet', 'S-mid-squeezed', 'S-mid-crackdown', 'S-late-wary'],
 });
 writeFileSync(out, JSON.stringify(manifest, null, 1) + '\n');

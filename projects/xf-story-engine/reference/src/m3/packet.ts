@@ -29,6 +29,8 @@ export interface PacketManifest {
    */
   names?: 'wide';
   tier?: 'offers';
+  /** `balanced`: each comparison has equal left and right for every rater, and raters 0 and 2 see every pair mirrored (see `PacketOptions`). Absent, run 1's draw. */
+  sides?: 'balanced';
   /** The hook runs, sorted by file name; each with the name and the hash its record carries. */
   runs: Array<{ file: string; name: string; hash: string }>;
 }
@@ -68,7 +70,7 @@ export function buildPacketFiles(m: PacketManifest, supplied: Array<{ file: stri
 
   // A4: R2's offer over fresh worlds and the states that make it
   const A4: Hook[] = [];
-  for (let i = 0; A4.length < Math.max(E.length, A1.length, 24) + 8 && i < 120; i++) {
+  for (let i = 0; A4.length < Math.max(E.length, A1.length, m.n) + 8 && i < 120; i++) {
     const st = m.a4States[i % m.a4States.length]!;
     const run = new Run({ name: `a4-${i}`, layer3: false, packs: [r2Pack()], ...(m.names === 'wide' ? { s1: wide } : {}) }, stateById(st), policies.decline!);
     run.runWindows(3);
@@ -78,7 +80,7 @@ export function buildPacketFiles(m: PacketManifest, supplied: Array<{ file: stri
 
   // A3: the Radiant-style generator over fresh worlds (V stands in a market block)
   const A3: Hook[] = [];
-  for (let i = 0; A3.length < Math.max(E.length, A1.length, 24) + 8 && i < 400; i++) {
+  for (let i = 0; A3.length < Math.max(E.length, A1.length, m.n) + 8 && i < 400; i++) {
     const run = new Run({ name: `a3-${Math.floor(i / 3)}`, layer3: false, packs: [], ...(m.names === 'wide' ? { s1: wide } : {}) }, stateById('S-early-quiet'), policies.decline!);
     const job = radiantJob(run.w, (id) => run.nameOf(id), `a3-${Math.floor(i / 3)}`, i % 3, 'g1', m.a3Rule);
     if (job && distinct(job.names)) A3.push({ arm: 'A3', text: job.text, meta: { world: `a3-${Math.floor(i / 3)}`, template: job.template } });
@@ -90,14 +92,14 @@ export function buildPacketFiles(m: PacketManifest, supplied: Array<{ file: stri
   const take = (hs: Hook[], tag: string): Hook[] => shuffle(hs, 'sample', tag).slice(0, n);
   const hooks = [...take(E, 'E'), ...take(A1, 'A1'), ...take(A3, 'A3'), ...take(A4, 'A4')];
 
-  const packet = buildPacket(hooks, m.seed, m.raters, [['E', 'A3'], ['E', 'A1'], ['A1', 'A3'], ['A4', 'A3']]);
+  const packet = buildPacket(hooks, m.seed, m.raters, [['E', 'A3'], ['E', 'A1'], ['A1', 'A3'], ['A4', 'A3']], { balancedSides: m.sides === 'balanced' });
   const files: Record<string, string> = {
-    'packet.json': JSON.stringify({ cards: packet.cards, orders: packet.orders, pairs: packet.pairs }, null, 1),
-    'key.json': JSON.stringify({ arms: ARM_NAMES, key: packet.key, pairKey: packet.pairKey, available, n }, null, 1),
+    'packet.json': JSON.stringify({ cards: packet.cards, orders: packet.orders, pairs: packet.pairs, ...(packet.pairsByRater ? { pairsByRater: packet.pairsByRater } : {}) }, null, 1),
+    'key.json': JSON.stringify({ arms: ARM_NAMES, key: packet.key, pairKey: packet.pairKey, ...(packet.pairKeys ? { pairKeys: packet.pairKeys } : {}), available, n }, null, 1),
     'instructions.md': instructions(),
   };
   packet.orders.forEach((order, r) => {
-    files[`rater-${r + 1}.md`] = `${instructions()}\n---\n\n## Cards\n\n${cardsMarkdown(packet, order)}\n---\n\n## Pairs\n\n${pairsMarkdown(packet)}`;
+    files[`rater-${r + 1}.md`] = `${instructions()}\n---\n\n## Cards\n\n${cardsMarkdown(packet, order)}\n---\n\n## Pairs\n\n${pairsMarkdown(packet, r)}`;
   });
   files['scoring-sheet.md'] = [
     '# Scoring sheet',

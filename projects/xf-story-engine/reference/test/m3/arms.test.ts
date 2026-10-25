@@ -137,6 +137,63 @@ describe('the blind packet', () => {
   });
 });
 
+describe('balanced sides (the review fix of run 2)', () => {
+  const pairing: Array<[Arm, Arm]> = [['E', 'A3'], ['E', 'A1'], ['A1', 'A3'], ['A4', 'A3']];
+  const p = buildPacket(hooks(24), 'sides', 3, pairing, { balancedSides: true });
+  const left = (pk: Record<string, { leftArm: Arm; rightArm: Arm }>, first: Arm, second: Arm): string[] =>
+    Object.entries(pk).filter(([, k]) => k.leftArm === first && k.rightArm === second).map(([id]) => id);
+
+  test('in each comparison exactly half of the pairs have the first arm on the left, for every rater', () => {
+    expect(p.pairsByRater).toHaveLength(3);
+    for (const pk of p.pairKeys!) for (const [x, y] of pairing) {
+      expect(left(pk, x, y)).toHaveLength(12);
+      expect(left(pk, y, x)).toHaveLength(12);
+    }
+  });
+
+  test('raters 1 and 3 (the two passes of one model) see every pair mirrored; the sheets agree with the keys; the pairs are the same pairs', () => {
+    const [a, b, c] = p.pairsByRater! as [typeof p.pairs, typeof p.pairs, typeof p.pairs];
+    const by = (xs: typeof p.pairs) => new Map(xs.map((x) => [x.id, x]));
+    for (const x of a) {
+      expect(by(c).get(x.id)).toEqual({ id: x.id, left: x.right, right: x.left });
+      expect(by(b).get(x.id)).toEqual(x);
+    }
+    for (const [r, pairs] of p.pairsByRater!.entries()) for (const x of pairs) {
+      expect(p.key[x.left]!.arm).toBe(p.pairKeys![r]![x.id]!.leftArm);
+      expect(p.key[x.right]!.arm).toBe(p.pairKeys![r]![x.id]!.rightArm);
+    }
+    // the sheet of each rater prints that rater's sides
+    expect(pairsMarkdown(p, 2)).not.toBe(pairsMarkdown(p, 0));
+    expect(pairsMarkdown(p, 1)).toBe(pairsMarkdown(p, 0));
+  });
+
+  test('an odd count differs by one, and the unbalanced packet (run 1) has no per-rater sides', () => {
+    const odd = buildPacket(hooks(5), 'odd', 2, [['E', 'A3']], { balancedSides: true });
+    expect([left(odd.pairKeys![0]!, 'E', 'A3').length, left(odd.pairKeys![0]!, 'A3', 'E').length].sort()).toEqual([2, 3]);
+    expect(buildPacket(hooks(5), 'odd', 2, [['E', 'A3']]).pairsByRater).toBeUndefined();
+  });
+
+  test('the scorer reads each answer against the sides of its own sheet: a rater who always takes the engine gives it every pair on every sheet', () => {
+    const answer = (sheet: number): RaterAnswer => {
+      const pk = p.pairKeys![sheet - 1]!;
+      return {
+        rater: `r${sheet}`, sheet,
+        cards: Object.fromEntries(p.cards.map((cd) => [cd.id, { caused: 4, legible: 4, setting: 4, pull: 4, made_by: 'person' }])),
+        pairs: Object.fromEntries(p.pairs.map((x) => [x.id, { follow: pk[x.id]!.leftArm === 'E' || (pk[x.id]!.rightArm !== 'E' && pk[x.id]!.leftArm === 'A4') ? 'left' : 'right', caused: pk[x.id]!.leftArm === 'E' || (pk[x.id]!.rightArm !== 'E' && pk[x.id]!.leftArm === 'A4') ? 'left' : 'right' }])),
+      };
+    };
+    const s = score(p, [answer(1), answer(2), answer(3)]);
+    for (const r of s.perRater) {
+      const own = r.pairs.find((x) => x.x === 'A3' && x.y === 'E' && x.criterion === 'follow')!;
+      expect(own.wins).toBe(0);
+      expect(own.n).toBe(24);
+    }
+    // read against sheet 1's sides instead, the third rater's answers would be mirrored and would not all go to the engine
+    const wrong = score(p, [{ ...answer(3), sheet: 1 }]);
+    expect(wrong.perRater[0]!.pairs.find((x) => x.x === 'A3' && x.y === 'E' && x.criterion === 'follow')!.wins).toBeGreaterThan(0);
+  });
+});
+
 describe('the scorer', () => {
   test('raters who prefer one arm give that arm the means and the pair wins', () => {
     const p = buildPacket(hooks(8), 'score', 2, [['E', 'A3']]);

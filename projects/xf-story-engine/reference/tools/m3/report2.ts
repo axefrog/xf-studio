@@ -53,7 +53,7 @@ lines.push('');
 // ---- the automatic critic (run 2 packet) ----
 const readPacket = (dir: string) => {
   const packet = JSON.parse(readFileSync(`${dir}/packet.json`, 'utf8')) as Pick<Packet, 'cards' | 'orders' | 'pairs'>;
-  const key = JSON.parse(readFileSync(`${dir}/key.json`, 'utf8')) as { key: Packet['key']; pairKey: Packet['pairKey']; n: number; available: Record<string, number> };
+  const key = JSON.parse(readFileSync(`${dir}/key.json`, 'utf8')) as { key: Packet['key']; pairKey: Packet['pairKey']; pairKeys?: Packet['pairKeys']; n: number; available: Record<string, number> };
   return { packet, key };
 };
 const p2 = readPacket(packetDir);
@@ -77,7 +77,7 @@ function loadAnswers(dir: string): RaterAnswer[] {
 const a2 = loadAnswers(answersDir);
 const p1 = readPacket(run1Packet);
 const a1 = loadAnswers(run1Answers);
-const full = (p: ReturnType<typeof readPacket>): Packet => ({ ...p.packet, key: p.key.key, pairKey: p.key.pairKey });
+const full = (p: ReturnType<typeof readPacket>): Packet => ({ ...p.packet, key: p.key.key, pairKey: p.key.pairKey, ...(p.key.pairKeys ? { pairKeys: p.key.pairKeys } : {}) });
 const s2 = a2.length ? score(full(p2), a2) : undefined;
 const s1 = a1.length ? score(full(p1), a1) : undefined;
 
