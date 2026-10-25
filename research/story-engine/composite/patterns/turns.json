@@ -180,7 +180,8 @@
         "reframed": {
           "reached": ["reframed"],
           "kind": "resolved",
-          "next": ["xf.composite:grievance", "xf.composite:betrayal", "xf.composite:misattribution"]
+          "next": ["xf.composite:grievance", "xf.composite:betrayal", "xf.composite:misattribution"],
+          "aftermath": {"junctures": ["acts"], "days": 7}
         }
       },
       "within": {"clock": "game", "days": 21},
@@ -320,7 +321,7 @@
         "act": {
           "fn": "wrong",
           "args": {"by": "?t", "to": "?bt"},
-          "join": "any",
+          "join": {"all": ["bond"], "any": ["offered", "threatened", "torn"]},
           "changes": [{"begins": "conceal", "args": {"who": "?t", "what": "act", "from": "?bt"}}]
         },
         "found": {
@@ -344,7 +345,8 @@
         "discovered": {
           "reached": ["found"],
           "kind": "resolved",
-          "next": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:hunted"]
+          "next": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:hunted"],
+          "aftermath": {"junctures": ["broken"], "days": 7}
         }
       },
       "within": {"clock": "game", "days": 21},
@@ -398,7 +400,8 @@
         "given": {
           "reached": ["gives"],
           "kind": "resolved",
-          "next": ["xf.composite:payoff", "xf.composite:debt", "xf.composite:test-of-creed"]
+          "next": ["xf.composite:payoff", "xf.composite:debt", "xf.composite:test-of-creed"],
+          "aftermath": {"junctures": ["served"], "days": 7}
         }
       },
       "within": {"clock": "game", "days": 7},
@@ -529,7 +532,7 @@
           "args": {"what": "?x", "from": "?car", "to": "?i"},
           "optional": true,
           "v": "offer",
-          "realise": [{"wait": true}, {"refine": {"pattern": "xf.composite:complication"}}],
+          "realise": [{"wait": true}, {"offer": {}}],
           "changes": [
             {"ends": "hold", "args": {"who": "?car", "what": "?x"}},
             {"begins": "hold", "args": {"who": "?i", "what": "?x"}}
@@ -560,9 +563,15 @@
         "intercepted": {
           "reached": ["taken"],
           "kind": "resolved",
-          "next": ["xf.composite:grievance", "xf.composite:misattribution", "xf.composite:hunted", "xf.composite:revelation"]
+          "next": ["xf.composite:grievance", "xf.composite:misattribution", "xf.composite:hunted", "xf.composite:revelation"],
+          "produces": [{"fn": "transfer", "args": {"what": "?x", "from": "?car", "to": "?i"}}]
         },
-        "delivered": {"reached": ["delivered"], "kind": "resolved", "next": ["xf.composite:payoff"]}
+        "delivered": {
+          "reached": ["delivered"],
+          "kind": "resolved",
+          "next": ["xf.composite:payoff"],
+          "produces": [{"fn": "transfer", "args": {"what": "?x", "from": "?by", "to": "?to"}}]
+        }
       },
       "within": {"clock": "game", "days": 3},
       "once": ["?i", "?x"],
@@ -571,7 +580,7 @@
       "links": {
         "chains": ["xf.composite:grievance", "xf.composite:misattribution", "xf.composite:hunted"],
         "layers": ["xf.composite:coveted", "xf.composite:rivalry", "xf.composite:feud"],
-        "refines": {"taken": ["xf.composite:complication"]}
+        "refines": {}
       },
       "traces": ["d04.QST-26", "d04.QST-31", "d06.GEN-06", "d03.FIT-41", "d09.AGY-23", "d07.DIR-41", "d07.DIR-45", "d20.ARV-04"],
       "risks": [
@@ -643,7 +652,7 @@
       "links": {
         "chains": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:settlement"],
         "layers": ["xf.composite:grievance", "xf.composite:interception", "xf.composite:revelation"],
-        "refines": {"cleared": ["xf.composite:revelation"]}
+        "refines": {}
       },
       "traces": ["DS-64", "d01.DRV-47", "d01.DRV-48", "d13.SRC-02", "d13.SRC-04", "d13.SRC-05", "d20.AGT-11", "d15.REP-04"],
       "risks": [
@@ -708,8 +717,18 @@
       ],
       "entry": ["stood"],
       "outcomes": {
-        "held": {"reached": ["held"], "kind": "resolved", "next": ["xf.composite:payoff"]},
-        "broke": {"reached": ["broke"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:betrayal"]}
+        "held": {
+          "reached": ["held"],
+          "kind": "resolved",
+          "next": ["xf.composite:payoff"],
+          "aftermath": {"junctures": ["moved"], "days": 7}
+        },
+        "broke": {
+          "reached": ["broke"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:betrayal"],
+          "aftermath": {"junctures": ["turned"], "days": 7}
+        }
       },
       "within": {"clock": "game", "days": 30},
       "once": ["?n"],

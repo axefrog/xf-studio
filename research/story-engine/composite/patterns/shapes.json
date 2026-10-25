@@ -26,11 +26,10 @@
         },
         "held": {"fn": "hold", "args": {"who": "?mk", "what": "?x"}},
         "crewed": {"fn": "obligate", "args": {"debtor": "?crew", "creditor": "?cl"}},
-        "legwork": {"fn": "learn", "args": {"who": "?crew", "what": "?x"}, "realise": [{"wait": true}, {"offer": {}}]},
+        "legwork": {"fn": "learn", "args": {"who": "?crew", "what": "?x"}},
         "run": {
           "fn": "transfer",
           "args": {"what": "?x", "from": "?mk", "to": "?crew"},
-          "realise": [{"offer": {}}, {"refine": {"pattern": "xf.composite:complication"}}],
           "changes": [
             {"ends": "hold", "args": {"who": "?mk", "what": "?x"}},
             {"begins": "hold", "args": {"who": "?crew", "what": "?x"}}
@@ -73,9 +72,15 @@
         "crossed": {
           "reached": ["crossed"],
           "kind": "failed",
-          "next": ["xf.composite:grievance", "xf.composite:hunted", "xf.composite:feud"]
+          "next": ["xf.composite:grievance", "xf.composite:hunted", "xf.composite:feud"],
+          "aftermath": {"junctures": ["heat"], "days": 7}
         },
-        "paid": {"reached": ["split"], "kind": "resolved", "next": ["xf.composite:reckoning"]}
+        "paid": {
+          "reached": ["split"],
+          "kind": "resolved",
+          "next": ["xf.composite:reckoning"],
+          "aftermath": {"junctures": ["heat"], "days": 7}
+        }
       },
       "within": {"clock": "game", "days": 14},
       "show": {"junctures": ["job", "run"], "edges": 2},
@@ -109,6 +114,10 @@
         "DS-14"
       ],
       "risks": [
+        {
+          "failure": "fail:template-in-disguise",
+          "note": "The job, crew, legwork, run and split sequence is a whole plot if run in order. Shapes are recognisers in v0: none of the heist's junctures is realised directly, and the director works only on its child instances (coveted, complication, interception, betrayal, payoff, reckoning)."
+        },
         {
           "failure": "fail:cliche",
           "note": "Every patron betrays you (QST-36). `crossed` is optional, budgeted and caused, never the default."
@@ -225,7 +234,7 @@
       "version": 1,
       "family": "shape",
       "scale": "concern",
-      "summary": "A group decides someone must pay, puts the word out, and the hunted look for shelter or a way to lift it.",
+      "summary": "A group decides someone must pay, warns and puts the word out, and the hunted look for shelter or a way to lift it.",
       "roles": {
         "?q": {"kind": "actor", "v": "may", "note": "the quarry"},
         "?h": {"kind": "group", "note": "the hunters"},
@@ -234,40 +243,44 @@
         "?cl": {"kind": "actor", "v": "may", "note": "who clears the quarry's name or pays the price"}
       },
       "junctures": {
-        "grudge": {"fn": "blame", "args": {"who": "?h", "of": "?q", "for": "?j"}},
+        "grudge": {
+          "fn": "blame",
+          "args": {"who": "?h", "of": "?q", "for": "?j"},
+          "requires": [{"rel": "observed-act", "args": ["?j", "?q"]}]
+        },
         "decided": {
           "fn": "decide",
           "args": {"group": "?h", "what": "?q"},
-          "realise": [{"wait": true}],
-          "changes": [{"frame": {"of": "?h", "toward": "?q", "status": "opens"}}]
+          "changes": [{"frame": {"of": "?h", "toward": "?q", "status": "opens"}}],
+          "note": "D-30: a group's own decision, as a simulation process (S1-10 when the quarry is the protagonist); never the director's"
+        },
+        "warned": {
+          "fn": "threaten",
+          "args": {"by": "?h", "to": "?q"},
+          "note": "D-30's perceivable warning: word put out, a message, a demand. No harmful act before it reached the quarry",
+          "changes": [
+            {"frame": {"of": "?q", "toward": "decided", "status": "opens"}, "when": {"npc": "?q"}},
+            {"exposure": {"to": "?q", "of": "decided"}, "when": {"protagonist": "?q"}}
+          ]
         },
         "hunting": {"fn": "pursue", "args": {"who": "?h", "target": "?q"}},
         "sheltered": {
           "fn": "protect",
           "args": {"guard": "?sh", "ward": "?q"},
           "optional": true,
-          "realise": [{"wait": true}, {"offer": {}}],
           "changes": [{"tie": {"a": "?q", "b": "?sh"}, "move": "up"}]
-        },
-        "sold": {
-          "fn": "story",
-          "args": {"pattern": "xf.composite:betrayal", "outcome": "any"},
-          "optional": true,
-          "binds": {"?bt": "?q"}
         },
         "caught": {"fn": "wrong", "args": {"by": "?h", "to": "?q"}, "optional": true},
         "paidOff": {
           "fn": "repay",
           "args": {"debtor": "?q", "creditor": "?h"},
           "optional": true,
-          "realise": [{"wait": true}, {"offer": {}}],
           "changes": [{"frame": {"of": "?h", "toward": "?q", "status": "satisfied"}}]
         },
         "cleared": {
           "fn": "expose",
           "args": {"by": "?cl", "what": "?j", "to": "?h"},
           "optional": true,
-          "realise": [{"wait": true}, {"offer": {}}],
           "changes": [
             {"belief": {"who": "?h", "about": "?j"}, "move": "revised"},
             {"frame": {"of": "?h", "toward": "?q", "status": "abandoned"}}
@@ -276,10 +289,11 @@
       },
       "edges": [
         {"from": "grudge", "to": "decided", "link": "motive"},
-        {"from": "decided", "to": "hunting", "link": "because", "shown": "must"},
+        {"from": "decided", "to": "warned", "link": "because", "shown": "must"},
+        {"from": "warned", "to": "hunting", "link": "enables"},
+        {"from": "warned", "to": "caught", "link": "enables", "shown": "must"},
         {"from": "hunting", "to": "caught", "link": "enables", "shown": "must"},
         {"from": "sheltered", "to": "caught", "link": "but"},
-        {"from": "sold", "to": "caught", "link": "enables"},
         {"from": "paidOff", "to": "caught", "link": "forecloses"},
         {"from": "cleared", "to": "caught", "link": "forecloses"}
       ],
@@ -296,12 +310,11 @@
       "escalation": ["decided", "caught"],
       "links": {
         "chains": ["xf.composite:settlement", "xf.composite:feud"],
-        "layers": ["xf.composite:protection", "xf.composite:feud", "xf.composite:misattribution"],
+        "layers": ["xf.composite:protection", "xf.composite:feud", "xf.composite:misattribution", "xf.composite:betrayal"],
         "refines": {
           "grudge": ["xf.composite:grievance", "xf.composite:misattribution"],
           "decided": ["xf.composite:escalation"],
           "sheltered": ["xf.composite:protection", "xf.composite:sacrifice"],
-          "sold": ["xf.composite:betrayal"],
           "caught": ["xf.composite:loss"],
           "paidOff": ["xf.composite:settlement"],
           "cleared": ["xf.composite:misattribution", "xf.composite:revelation"]
@@ -322,7 +335,7 @@
       "risks": [
         {
           "failure": "fail:unbounded-doom",
-          "note": "A hunt on the protagonist is bounded (AGY-30): no S1 process aims harm at the protagonist, every step towards them is an S2 seed with a portent and at least two ways out, and there are at least three routes to lift it (pay, clear, shelter)."
+          "note": "A hunt on the protagonist is a group's own process under D-30: it starts only from what the group believes the protagonist did (an observed act, or a telling of one), warns before the first harmful act, and reaches only as far as the proactivity setting allows (S1-10). Three routes lift it: pay, clear, shelter."
         },
         {
           "failure": "fail:invisible-cascade",
@@ -331,6 +344,10 @@
         {
           "failure": "fail:puppet",
           "note": "The decision is the group leadership's, by its drive weights and hazard draw (D-08), never the director's."
+        },
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "The group's belief is the group's (D-10); the engine still never states why the protagonist acted, and the protagonist can correct the belief (cleared)."
         }
       ]
     },
@@ -370,7 +387,6 @@
           "fn": "decide",
           "args": {"group": "?pw", "what": "?mk"},
           "optional": true,
-          "realise": [{"wait": true}],
           "changes": [{"frame": {"of": "?pw", "toward": "?mk", "status": "opens"}}]
         },
         "crushed": {

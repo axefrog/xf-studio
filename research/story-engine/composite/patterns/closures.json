@@ -105,7 +105,8 @@
         "lost": {
           "reached": ["lost"],
           "kind": "failed",
-          "next": ["xf.composite:grievance", "xf.composite:reckoning", "xf.composite:test-of-creed"]
+          "next": ["xf.composite:grievance", "xf.composite:reckoning", "xf.composite:test-of-creed"],
+          "aftermath": {"junctures": ["changed"], "days": 7}
         }
       },
       "within": {"clock": "game", "days": 7},
@@ -160,7 +161,14 @@
         {"from": "terms", "to": "newDuty", "link": "because"}
       ],
       "entry": ["dispute"],
-      "outcomes": {"settled": {"reached": ["terms"], "kind": "resolved", "next": ["xf.composite:debt", "xf.composite:payoff"]}},
+      "outcomes": {
+        "settled": {
+          "reached": ["terms"],
+          "kind": "resolved",
+          "next": ["xf.composite:debt", "xf.composite:payoff"],
+          "aftermath": {"junctures": ["renewed", "newDuty"], "days": 7}
+        }
+      },
       "within": {"clock": "game", "days": 21},
       "once": ["?a", "?b"],
       "show": {"junctures": ["terms"], "edges": 1},

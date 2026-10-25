@@ -26,7 +26,7 @@
           "args": {"debtor": "?d", "creditor": "?c"},
           "park": true,
           "v": "offer",
-          "realise": [{"wait": true}, {"offer": {}}, {"refine": {"pattern": "xf.composite:sacrifice"}}],
+          "realise": [{"wait": true}, {"offer": {}}],
           "changes": [
             {"ends": "obligate", "args": {"debtor": "?d", "creditor": "?c"}},
             {"tie": {"a": "?c", "b": "?d"}, "move": "up"}
@@ -64,9 +64,10 @@
           "xf.composite:divided-loyalty",
           "xf.composite:squeeze",
           "xf.composite:ambition-vs-obligation",
-          "xf.composite:protection"
+          "xf.composite:protection",
+          "xf.composite:sacrifice"
         ],
-        "refines": {"paid": ["xf.composite:sacrifice"]}
+        "refines": {}
       },
       "traces": [
         "d01.DRV-19",
@@ -156,11 +157,17 @@
       ],
       "entry": ["order"],
       "outcomes": {
-        "complied": {"reached": ["complied"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:loss"]},
+        "complied": {
+          "reached": ["complied"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:loss"],
+          "aftermath": {"junctures": ["fallout"], "days": 7}
+        },
         "refused": {
           "reached": ["refused"],
           "kind": "resolved",
-          "next": ["xf.composite:escalation", "xf.composite:test-of-creed"]
+          "next": ["xf.composite:escalation", "xf.composite:test-of-creed"],
+          "aftermath": {"junctures": ["fallout"], "days": 7}
         },
         "warned": {"reached": ["warned"], "kind": "resolved", "next": ["xf.composite:betrayal", "xf.composite:secret"]}
       },
@@ -228,8 +235,11 @@
           "fn": "expose",
           "args": {"by": "?t", "what": "?f", "to": "?u"},
           "park": true,
-          "realise": [{"wait": true}, {"offer": {}}, {"refine": {"pattern": "xf.composite:revelation"}}],
-          "changes": [{"belief": {"who": "?u", "about": "?f"}, "move": "revised"}]
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [
+            {"belief": {"who": "?u", "about": "?f"}, "move": "revised", "when": {"npc": "?u"}},
+            {"exposure": {"to": "?u", "of": "?f"}, "when": {"protagonist": "?u"}}
+          ]
         },
         "aftermath": {
           "fn": "sever",
@@ -249,7 +259,8 @@
         "exposed": {
           "reached": ["out"],
           "kind": "resolved",
-          "next": ["xf.composite:grievance", "xf.composite:betrayal", "xf.composite:misattribution"]
+          "next": ["xf.composite:grievance", "xf.composite:betrayal", "xf.composite:misattribution"],
+          "aftermath": {"junctures": ["aftermath"], "days": 7}
         },
         "bought": {
           "reached": ["leverage"],
@@ -264,7 +275,7 @@
       "links": {
         "chains": ["xf.composite:revelation", "xf.composite:betrayal", "xf.composite:misattribution", "xf.composite:debt"],
         "layers": ["xf.composite:divided-loyalty", "xf.composite:rivalry"],
-        "refines": {"out": ["xf.composite:revelation"]}
+        "refines": {}
       },
       "traces": [
         "DS-07",
@@ -402,7 +413,7 @@
           "args": {"by": "?gd", "to": "?wd"},
           "v": "offer",
           "realise": [{"wait": true}, {"offer": {}}],
-          "join": "any",
+          "join": {"all": ["covers"], "any": ["approach", "struck"]},
           "changes": [{"tie": {"a": "?wd", "b": "?gd"}, "move": "up"}]
         },
         "counter": {
@@ -435,7 +446,12 @@
           "kind": "resolved",
           "next": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:escalation"]
         },
-        "held": {"reached": ["answer"], "kind": "resolved", "next": ["xf.composite:payoff"]},
+        "held": {
+          "reached": ["answer"],
+          "kind": "resolved",
+          "next": ["xf.composite:payoff"],
+          "aftermath": {"junctures": ["counter"], "days": 7}
+        },
         "failed": {"reached": ["failed"], "kind": "failed", "next": ["xf.composite:loss", "xf.composite:grievance"]}
       },
       "within": {"clock": "game", "days": 7},
@@ -517,7 +533,12 @@
       ],
       "entry": ["chance"],
       "outcomes": {
-        "rose": {"reached": ["took"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:betrayal"]},
+        "rose": {
+          "reached": ["took"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:betrayal"],
+          "aftermath": {"junctures": ["cost"], "days": 7}
+        },
         "stayed": {"reached": ["stayed"], "kind": "resolved", "next": ["xf.composite:test-of-creed"]}
       },
       "within": {"clock": "game", "days": 14},
@@ -568,8 +589,13 @@
           "park": true,
           "realise": [
             {"wait": true},
-            {"refine": {"pattern": "xf.composite:interception"}},
-            {"refine": {"pattern": "xf.composite:heist"}}
+            {
+              "refine": {
+                "pattern": "xf.composite:interception",
+                "outcome": "delivered",
+                "binds": {"?x": "?x", "?by": "?h", "?to": "?w"}
+              }
+            }
           ],
           "changes": [
             {"ends": "hold", "args": {"who": "?h", "what": "?x"}},
@@ -607,7 +633,7 @@
       "links": {
         "chains": ["xf.composite:payoff", "xf.composite:grievance", "xf.composite:debt"],
         "layers": ["xf.composite:rivalry", "xf.composite:squeeze", "xf.composite:interception"],
-        "refines": {"moved": ["xf.composite:interception", "xf.composite:heist", "xf.composite:complication"]}
+        "refines": {"moved": ["xf.composite:interception"]}
       },
       "traces": ["d04.QST-05", "DS-56", "d03.FIT-10", "d09.R5-01", "d04.QST-21", "d01.DRV-33", "d01.DRV-22"],
       "risks": [

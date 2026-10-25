@@ -1469,7 +1469,7 @@
     {
       "id": "mech:skeleton-diversity",
       "type": "mechanism",
-      "label": "The sower penalises candidates whose thread would continue a recently seen skeleton",
+      "label": "The sower penalises candidates whose thread would continue a recently seen skeleton, read from a persisted ring in the layer-3 record",
       "where": "S3-5, pattern-language.md §8.4"
     },
     {
@@ -1680,7 +1680,7 @@
     {
       "id": "measure:recast-rate",
       "type": "measure",
-      "label": "R1: share of threads whose cascade skeleton is a near twin of an earlier one",
+      "label": "R1: share of threads whose canonical cascade skeleton is a near twin of an earlier one",
       "where": "pattern-language.md §14.2"
     },
     {
@@ -1716,7 +1716,7 @@
     {
       "id": "measure:errand-share",
       "type": "measure",
-      "label": "R7: share of threads that are a single coveted tension resolved by one offer",
+      "label": "R7: share of threads that are errands, classified by the protagonist's requested act and the perceived development, whichever patterns recognised them",
       "where": "pattern-language.md §14.2"
     },
     {
@@ -1844,6 +1844,54 @@
       "type": "measure",
       "label": "Hooks and twists with no anchor in what the protagonist was shown (S2 L-67)",
       "where": "S2 §2.8"
+    },
+    {
+      "id": "mech:bounded-state-query",
+      "type": "mechanism",
+      "label": "State junctures and requirements bind unbound roles by bounded queries along declared indexes, first passing candidate in record order",
+      "where": "S3-1, pattern-language.md §6.2a"
+    },
+    {
+      "id": "mech:aftermath-phase",
+      "type": "mechanism",
+      "label": "An outcome fixes the instance's result; its declared aftermath junctures can still match for a bounded window before it closes",
+      "where": "pattern-language.md §3.6, §6.4"
+    },
+    {
+      "id": "mech:refinement-contract",
+      "type": "mechanism",
+      "label": "A refinement names a child outcome that produces the parent juncture's function through an explicit role map; the lint rejects any other",
+      "where": "S3-4, S4-1, pattern-language.md §7.4"
+    },
+    {
+      "id": "mech:shapes-as-recognisers",
+      "type": "mechanism",
+      "label": "Shapes' junctures carry no realisations: the director works only on their child instances, so no shape runs as a whole plot",
+      "where": "pattern-language.md §7.3"
+    },
+    {
+      "id": "mech:skeleton-ring",
+      "type": "mechanism",
+      "label": "A bounded ring of recent thread skeletons in the layer-3 record, updated with its position in the same batch as the decisions that read it",
+      "where": "S3-8, pattern-language.md §8.4"
+    },
+    {
+      "id": "mech:canonical-tokens",
+      "type": "mechanism",
+      "label": "One skeleton token per perceived occurrence, from the occurrence alone, so recogniser coverage never moves the repetition measures",
+      "where": "pattern-language.md §14.1"
+    },
+    {
+      "id": "mech:protagonist-exposure",
+      "type": "mechanism",
+      "label": "Junctures whose actor may be the protagonist record exposure, never a belief; the lint rejects unguarded belief writes",
+      "where": "S4-1, pattern-language.md §3.5"
+    },
+    {
+      "id": "mech:group-intent-against-protagonist",
+      "type": "mechanism",
+      "label": "D-30: a group may act against the protagonist as a simulation process, from its belief about an observed act, warned first, bounded by the proactivity setting",
+      "where": "S1-10, pattern-language.md §8.3"
     }
   ],
   "edges": [
@@ -2008,6 +2056,35 @@
       "to": "d08.GRW-05",
       "type": "conflicts-with",
       "note": "Favouring people the protagonist knows concentrates the cast; settled by claims, yield and promotion caps"
-    }
+    },
+    {"from": "d06.MAP-08", "to": "mech:bounded-state-query", "type": "realised-by"},
+    {"from": "d06.GEN-02", "to": "mech:bounded-state-query", "type": "realised-by"},
+    {"from": "mech:bounded-state-query", "to": "fail:pool-blowup", "type": "prevents"},
+    {"from": "mech:bounded-state-query", "to": "fail:starvation", "type": "prevents"},
+    {"from": "d04.QST-37", "to": "mech:aftermath-phase", "type": "realised-by"},
+    {"from": "d10.CHG-14", "to": "mech:aftermath-phase", "type": "realised-by"},
+    {"from": "d08.UNT-08", "to": "mech:aftermath-phase", "type": "realised-by"},
+    {"from": "mech:aftermath-phase", "to": "fail:dangling-thread", "type": "prevents"},
+    {"from": "d03.FIT-37", "to": "mech:refinement-contract", "type": "realised-by"},
+    {"from": "d03.FIT-41", "to": "mech:refinement-contract", "type": "realised-by"},
+    {"from": "mech:refinement-contract", "to": "fail:template-in-disguise", "type": "prevents"},
+    {"from": "d04.QST-39", "to": "mech:shapes-as-recognisers", "type": "realised-by"},
+    {"from": "d06.GEN-03", "to": "mech:shapes-as-recognisers", "type": "realised-by"},
+    {"from": "mech:shapes-as-recognisers", "to": "fail:template-in-disguise", "type": "prevents"},
+    {"from": "d05.VAR-10", "to": "mech:skeleton-ring", "type": "realised-by"},
+    {"from": "d05.VAR-21", "to": "mech:skeleton-ring", "type": "realised-by"},
+    {"from": "mech:skeleton-ring", "to": "fail:recast-package", "type": "prevents"},
+    {"from": "d05.VAR-29", "to": "mech:canonical-tokens", "type": "realised-by"},
+    {"from": "d05.VAR-09", "to": "mech:canonical-tokens", "type": "realised-by"},
+    {"from": "mech:canonical-tokens", "to": "fail:recast-package", "type": "prevents"},
+    {"from": "DS-63", "to": "mech:protagonist-exposure", "type": "realised-by"},
+    {"from": "d13.SRC-01", "to": "mech:protagonist-exposure", "type": "realised-by"},
+    {"from": "mech:protagonist-exposure", "to": "fail:presumed-protagonist", "type": "prevents"},
+    {"from": "d09.AGY-23", "to": "mech:group-intent-against-protagonist", "type": "realised-by"},
+    {"from": "d09.AGY-30", "to": "mech:group-intent-against-protagonist", "type": "realised-by"},
+    {"from": "d07.DIR-41", "to": "mech:group-intent-against-protagonist", "type": "realised-by"},
+    {"from": "d09.AGY-22", "to": "mech:group-intent-against-protagonist", "type": "realised-by"},
+    {"from": "mech:group-intent-against-protagonist", "to": "fail:unbounded-doom", "type": "prevents"},
+    {"from": "mech:group-intent-against-protagonist", "to": "fail:punished-decline", "type": "prevents"}
   ]
 }

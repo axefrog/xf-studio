@@ -4,7 +4,7 @@
 
 Where this page says "the protagonist", the specifications say `v` ([D-25](../decisions.md)).
 
-**Read first:** [decisions](../decisions.md) D-03, D-07 to D-10 and D-25 to D-28; the [foundation](../foundation.md) §5 and §6; [DS-70](../design-seeds.md); [S2](../spec/seeding.md) §2 and §9; [S3](../spec/procedural.md) §6 and §7; the M3 [run 2 results](../../../projects/xf-story-engine/m3/run2/results.md).
+**Read first:** [decisions](../decisions.md) D-03, D-07 to D-10 and D-25 to D-30; the [foundation](../foundation.md) §5 and §6; [DS-70](../design-seeds.md); [S2](../spec/seeding.md) §2 and §9; [S3](../spec/procedural.md) §6 and §7; the M3 [run 2 results](../../../projects/xf-story-engine/m3/run2/results.md).
 
 ## Contents
 
@@ -59,7 +59,7 @@ A pattern's **roles** are variables (`?a`, `?debtor`) that its junctures share. 
 
 Roles are where intersection happens. Two instances that bind the same person to roles are touching; two that bind the same event to junctures are layered (§7.2).
 
-**The protagonist in a role.** The protagonist (`v`) may fill a role only where the role says `v: may`, and only through what the protagonist actually did or was offered ([D-09](../decisions.md)). No pattern assigns the protagonist a want, a belief or a feeling. A role whose junctures would harm the protagonist, or take from them, may bind the protagonist only through an offer the protagonist accepted, with the stake named in it ([S2 §2.9](../spec/seeding.md#29-offers-choices-responses-and-the-unattended-plan), L-15).
+**The protagonist in a role.** The protagonist (`v`) may fill a role only where the role says `v: may`, and only through what the protagonist actually did or was offered ([D-09](../decisions.md)). No pattern assigns the protagonist a want, a belief or a feeling. A role whose junctures would harm the protagonist, or take from them, may bind the protagonist in two ways only: through an offer the protagonist accepted, with the stake named in it ([S2 §2.9](../spec/seeding.md#29-offers-choices-responses-and-the-unattended-plan), L-15); or through a group's own decision under [D-30](../decisions.md), driven by what the group believes the protagonist did, warned before the first harmful act, and bounded by the proactivity setting (§8.3, §13 S1-10).
 
 ### 3.2 Junctures and functions
 
@@ -118,6 +118,8 @@ Edges carry the cascade. Each joins two junctures with a **link** that the world
 | `answers` | The later responds to the earlier | The later is a response, refusal or compliance whose cause is the earlier |
 | `forecloses` | If the earlier happens, the later can no longer | Checked when the earlier matches: the later becomes foreclosed (§5.1) |
 
+**`forecloses` is an effect, not a cause.** It takes no part in readiness or in link tests: when its source matches, its target is foreclosed, and that is all it does. Two alternatives that foreclose each other are therefore both ready once their real sources match, and whichever matches first closes the other.
+
 **The protagonist's acts.** Where the later juncture is filled by the protagonist's act, every link into it is tested as `answers`: the act responds to an offer or a delivery that cites the earlier filler. The engine never reads the protagonist's reasons ([D-09](../decisions.md)).
 
 `because` and `but` are the "therefore" and "but" of [QST-01](../craft/d04-quest-structure.md): every beat after the first links to its predecessor by a recorded cause or a recorded obstacle. A link the record cannot bear out keeps the later juncture open. Only the director can supply a missing link, by constructing an unobserved cause within the pattern's latitude (§8.1); it never asserts one.
@@ -136,13 +138,18 @@ Filling a juncture changes the world, and those changes are what later junctures
 | A standing moves | The stallholders' view of a vendor who refused the fee rises |
 | A membership joins, strains or exits | A crew member who warned the target is cast out |
 | A belief forms or is revised | The boss comes to believe the courier sold the package |
+| The protagonist is shown something | The protagonist learns who the package was for: an **exposure**, never a belief of the protagonist's |
 
 A juncture filled by the world already has these changes in the record (they are what made it match). A juncture realised by a seed must produce them through the seed's `leaves` and effects, and the lint checks that it does (§13 S2-1). The changes are also what keeps an instance honest: an outcome is only reached when its changes are recorded.
+
+**Beliefs and the protagonist.** A change may carry a guard, `when: { npc: ?r }` or `when: { protagonist: ?r }`, so that one juncture revises an NPC's belief when the role is an NPC and records an exposure when it is the protagonist: a secret's `out` does both, guarded. The lint rejects a belief change whose believer's role allows the protagonist (`v: may`) unless it is guarded `npc` ([D-09](../decisions.md)).
 
 ### 3.6 Outcomes, loose ends and negation
 
 - **Outcomes** are a pattern's named end states, each a set of junctures reached (and, for some, others foreclosed). An outcome is `resolved`, `failed` or `parked`, and lists the patterns it typically hands over to: those are hints for authors and tests, not requirements, because the matcher finds the next pattern by function (§7.1). An outcome with `after` applies only once its junctures have held for that long with no other outcome reached: that is how a pattern says "and nothing came of it", such as a refusal no sanction answered.
-- **Joins.** A juncture with several incoming edges needs all their sources matched before it is ready, unless it says `join: any`, as S2's beats do. Alternatives such as "a third party's act or plain bad luck" are two optional junctures joined with `any`.
+- **What an outcome produces.** An outcome may declare `produces`: function applications over the pattern's roles that its reached junctures establish together. An interception that ends `delivered` produces `transfer(what: ?x, from: ?by, to: ?to)`, though no single juncture is that transfer (the courier carried it between). This is the contract a refinement relies on (§7.4).
+- **Aftermath.** An outcome may list `aftermath` junctures: consequences that can only follow it, such as someone changed by watching a stand held, or a tie severed once a betrayal is found. Reaching the outcome fixes the result and mints the story event; the instance then stays in `aftermath` for at most `aftermath.days` (default 7 **[tunable]**), during which only those junctures can match, and then closes. Without this, a terminal outcome would make its own consequences unreachable.
+- **Joins.** A juncture with several incoming edges, not counting `forecloses`, needs all their sources matched before it is ready, unless it says `join: any`, as S2's beats do, or `join: { all: [...], any: [...] }`, which needs every source in `all` and at least one in `any`. Alternatives such as "a third party's act or plain bad luck" are two optional junctures joined with `any`; a protection is answered when the guard's cover holds (`all`) and either a threat or a strike came (`any`).
 - **Loose ends.** A juncture marked `park` that is still open when the instance closes becomes a loose end in the closure record ([S2 §6.4](../spec/seeding.md#64-closing-and-outcomes)), from which a later instance may grow ([GRW-07](../craft/d08-scale-threads-time.md)).
 - **Negation.** `unless` names a juncture that, if it matches between two given junctures, kills the instance, as S3's patterns already do ([S3 §6.3](../spec/procedural.md#63-handling-an-emission)).
 - **Time.** `within` bounds how long an instance may live between its first and last match, in game time.
@@ -200,8 +207,9 @@ interface Juncture {
   v?: 'never' | 'offer';               // may the protagonist's act fill it? Only through an offer
   optional?: boolean;                  // may be skipped without failing the pattern
   park?: boolean;                      // still open at closing: becomes a loose end
-  join?: 'all' | 'any';                // incoming edges: default all
+  join?: 'all' | 'any' | { all: JunctureKey[]; any: JunctureKey[] };   // incoming edges other than `forecloses`: default all
   binds?: Record<Var | 'anyParticipant', Var>;   // a `story` juncture: the child pattern's roles that are this pattern's roles
+  note?: string;
 }
 
 type Filler =
@@ -214,15 +222,30 @@ type Realisation =
   | { offer: { kit?: TemplateRef } }                       // a seed that reaches the protagonist
   | { nudge: { kit?: TemplateRef } }                       // a world-only seed, on unobserved state only
   | { construct: true }                                    // a past juncture: generate, then justify
-  | { refine: { pattern: PatternId; binds?: Record<Var, Var> } };   // a child instance; by default it shares roles of the same name
+  | { refine: { pattern: PatternId; outcome: string; binds: Record<Var, Var> } };   // a child whose outcome produces this juncture (§7.4)
 
 interface CausalEdge { from: JunctureKey; to: JunctureKey; link: LinkId; shown?: 'must' | 'should' }
 type LinkId = 'because' | 'motive' | 'enables' | 'but' | 'reveals' | 'answers' | 'forecloses';
 type RelReq = { rel: RelId; args: Array<Var | JunctureKey | string> } | { not: RelReq };
-interface Outcome { reached: JunctureKey[]; foreclosed?: JunctureKey[]; after?: { clock: 'game'; days: number }; kind: 'resolved' | 'failed' | 'parked'; next?: PatternId[] }
+interface Outcome {
+  reached: JunctureKey[]; foreclosed?: JunctureKey[];
+  after?: { clock: 'game'; days: number };           // applies only once reached has held this long (§3.6)
+  produces?: Array<{ fn: FnId; args: Record<string, Var> }>;   // what the outcome establishes, for refinement
+  aftermath?: { junctures: JunctureKey[]; days?: number };     // consequences that can match after the outcome
+  kind: 'resolved' | 'failed' | 'parked'; next?: PatternId[];
+}
+type Change = (
+  | { begins: FnId; args: Record<string, Var> } | { ends: FnId; args: Record<string, Var> }
+  | { frame: { of: Var; toward: Var | JunctureKey; status: 'opens' | 'blocked' | 'satisfied' | 'abandoned' } }
+  | { tie: { a: Var; b: Var }; move: 'up' | 'down' | 'ends' }
+  | { standing: { audience: Var; of: Var }; move: 'up' | 'down' }
+  | { member: { who: Var; of: Var }; move: 'joins' | 'strained' | 'exits' }
+  | { belief: { who: Var; about: Var | JunctureKey }; move: 'forms' | 'revised' }
+  | { exposure: { to: Var; of: Var | JunctureKey } }
+) & { when?: { npc: Var } | { protagonist: Var } };
 ```
 
-`Change` takes the forms of §3.5. `Part` is S2's ([§2.2](../spec/seeding.md#22-binding-status)). The bounds: at most 8 junctures and 12 edges per pattern; an acyclic edge graph, not counting `forecloses` edges (two alternatives foreclose each other); and at least one entry juncture that binds a person or a group (a human at the centre, [TEL-06](../craft/d06-sifting-tellability.md)).
+`Part` is S2's ([§2.2](../spec/seeding.md#22-binding-status)). The bounds: at most 8 junctures and 12 edges per pattern; an acyclic edge graph, not counting `forecloses` edges (two alternatives foreclose each other); at least one entry juncture that binds a person or a group (a human at the centre, [TEL-06](../craft/d06-sifting-tellability.md)); and, in a shape, no `realise` on any juncture (§7.3).
 
 **Story junctures bind roles.** A juncture whose function is `story` is filled by a `meta:story` event of the named pattern, and its `binds` says which of the child's roles are which of this pattern's: in the [feud](patterns/shapes.json), `answered` binds the grievance's wronged party to `?g1` and its wrongdoer to `?g2`, and `countered` binds them the other way round. `anyParticipant` binds the first person among the story event's participants, for closures that accept a story of any pattern. Without a binding, a child instance would be a story about other people.
 
@@ -250,21 +273,24 @@ Edges are always as written: they are the pattern's meaning. A pattern that need
 
 **A kit-level pattern.** The same debt with one role preferred and one juncture's realisation narrowed: "the creditor is preferably someone the protagonist has met; the demand, if the world doesn't make one, may be nudged through the creditor's call". This is what most procedural content looks like.
 
-**An authored story.** R2, "The Friday Fee" ([r2.ts](../../../projects/xf-story-engine/reference/src/m3/r2.ts)), read as a pattern. It realises the [squeeze](patterns/tensions.json) tension with most parts fixed:
+**An authored story.** R2, "The Friday Fee" ([r2.ts](../../../projects/xf-story-engine/reference/src/m3/r2.ts)), is written today as a seed. It casts a market stallholder and a Tyger Claws collector by role queries, opens its window when the fee norm's gap is strained, reads the stalls' view of the protagonist and the market's heat, presents the stallholder's offer (help pay, broker, stand up to the collector, stay out), follows the stance's exit and writes seed facts. It waits for no particular shakedown and has no exit for a sanction. Read through the language it sits at the authored end of the range for the [squeeze](patterns/tensions.json) tension, and a **proposed adaptation, R2′**, shows what joining the composite would take:
 
 ```
-squeeze  (fixed realisations)
-  ?pw   = the Tyger Claws of Kabuki          fixed
-  ?col  = a collector, cast: member of ?pw   open (cast by R2's role query)
-  ?wk   = a stallholder, cast: vendor role   open
-  burden:  obligate(debtor: ?wk, creditor: ?pw)   filled by the world: the Friday fee norm
-  rule:    demand(by: ?col, of: ?wk)              filled by the world: S1's shakedown or enf.fee.word
-  strain:  want(who: ?wk, what: burden)           filled by the world: the norm's gap, which R2 reads
-  asked:   ask(by: ?wk, of: protagonist)          fixed: R2's beat `ask`
-  paid / refused / sanctioned                     fixed: R2's exits, each realising one juncture
+squeeze, realised by R2′
+  ?pw      = the Tyger Claws of Kabuki                fixed
+  ?col, ?wk                                            bound from a matched shakedown's participants by the sowing
+                                                       overlay (S2 §1.3), instead of R2's free role queries
+  burden:  obligate(debtor: ?wk, creditor: ?pw)        filled by the world: the Friday fee norm
+  rule:    demand(by: ?col, of: ?wk)                   filled by the world: the matched shakedown (the event binding R2 lacks)
+  strain:  want(who: ?wk, what: burden)                filled by the world: the norm's mark on a non-complier
+  asked:   ask(by: ?wk, of: protagonist)               fixed: R2's beat `ask`
+  paid:    comply(who: ?wk, to: ?col)                  fixed: the `paid` exit, which would also mint the payment as an event
+  refused: refuse(who: ?wk, to: ?col)                  fixed: the `standup-scene` exit, which would also mint the refusal
+                                                       (a failed shakedown, §13 S1-9)
+  sanctioned                                           not in R2: left to the world (the collector's enforcement)
 ```
 
-Because R2's beats declare which junctures they realise (§13 S2-1), the collector's demand that R2 waits for is the same juncture a procedural [protection](patterns/tensions.json) instance can share (worked example 2). The authored story keeps every promise its author fixed; it simply becomes visible to the rest of the composite.
+R2′ needs three things R2 doesn't have: `realises` declarations on its beats (§13 S2-1), roles bound from a matched event through the overlay, and two exits that leave world events beside their seed facts. With them, the shakedown R2′ binds is the same juncture a procedural [protection](patterns/tensions.json) instance can share (worked example 2), and R2's fixed parts stay as its author wrote them.
 
 ### 4.3 What keeps a pattern from becoming a template in disguise
 
@@ -278,8 +304,8 @@ An **instance** is one reading of a pattern against the world. Each of its junct
 
 | State | Meaning |
 |---|---|
-| `open` | Not yet filled, and its predecessors are not all matched |
-| `ready` | Not yet filled; every edge into it has its source matched, so it may be filled next |
+| `open` | Not yet filled, and its join over incoming edges (not counting `forecloses`) is not yet satisfied |
+| `ready` | Not yet filled; its join over incoming edges other than `forecloses` is satisfied (§3.6), so it may be filled next |
 | `pending` | A seed the director sowed, or a child instance, is working towards it |
 | `matched` | Filled by a recorded event or a recorded state, and its incoming links are borne out |
 | `refined` | Filled by a child instance that reached an outcome (§7.4) |
@@ -293,8 +319,9 @@ The matched junctures are the instance's **past**: what the sifter found. The re
 | State | Meaning | Becomes |
 |---|---|---|
 | `forming` | Only entry junctures matched; not tellable yet | `live` when a second juncture matches with its link borne out, or when the instance touches someone the protagonist has met |
-| `live` | Has a past and a future: a candidate for the director | `resolved`, `parked` or `lapsed` |
-| `resolved` | An outcome was reached | Terminal; mints its `meta:story` event (§7.1) |
+| `live` | Has a past and a future: a candidate for the director | `aftermath`, `resolved`, `parked` or `lapsed` |
+| `aftermath` | An outcome was reached and fixed, and its story event minted (§7.1); only that outcome's aftermath junctures may still match | `resolved` (or `parked`, for a parked outcome) when they have all matched or the aftermath window ends |
+| `resolved` | An outcome was reached, and its aftermath, if any, has run | Terminal |
 | `parked` | Closed with `park` junctures still open, by a parked outcome or by `within` running out after the instance was perceived | Terminal; its loose ends are registered |
 | `lapsed` | Expired or foreclosed before the protagonist perceived anything of it | Terminal; leaves nothing but a tombstone if `once` |
 
@@ -325,28 +352,41 @@ For the pattern that owns the frame, with `now` the Change's game time:
 
 1. **Live instances first**, in creation order, from a snapshot taken before this Change:
    1. **Deadline.** If `now` is past `firstTime + within`, the instance ends (§6.4).
-   2. **Duplicate.** If this occurrence already fills one of the instance's junctures, skip the instance.
+   2. **Duplicate.** Each instance records, for every occurrence it consumed, the functions through which it used it. If this occurrence has nothing left to give the instance (a redelivered Change), skip the instance.
    3. **Unless.** If an `unless` juncture between two matched junctures matches, the instance dies (§6.4).
-   4. **Advance.** For each `ready` juncture, in key order: if the **fill test** succeeds and every incoming link tests yes (§6.3), the juncture is `matched`, its new bindings join the instance's, `forecloses` edges fire, the ready set is recomputed, and the outcomes are checked. **A Change fills at most one juncture of an instance**, with one bounded exception: an occurrence whose kind fills several functions may also fill the junctures its own match makes ready, each through a different function of its `fills` list (a paid shakedown is both the demand and the compliance). Links between junctures filled by the same occurrence hold by construction. A Change may also fill junctures of several instances: that is layering, and it is recorded (§7.2).
-2. **Start.** For each entry juncture, try the fill test with no bindings. On success: apply the **relevance gate** (§10.2), compute the instance identity (§5.3), check tombstones and the pool bounds, and create the instance with that juncture matched. Then run the **state probe**: every state juncture whose arguments are now all bound is tested once by a bounded kernel read. A debt that existed before its demand is a legitimate past, and the probe finds it.
+   4. **Advance.** For each `ready` juncture, in key order: if the **fill test** succeeds and every incoming link tests yes (§6.3), the juncture is `matched`, its new bindings join the instance's, `forecloses` edges fire, the ready set is recomputed, and the outcomes are checked. **A Change fills at most one juncture of an instance through each function its record fills.** An occurrence whose kind fills several functions (a paid shakedown is a demand, a compliance, a transfer and a wrong) may go on to fill the junctures its own match makes ready, one per function not yet used, in the order they become ready; links between junctures filled by the same occurrence hold by construction. This **multi-function advancement** is bounded by the number of functions the kind fills (four in M3) and runs for existing instances and for one the same Change has just started. A Change may also fill junctures of several instances: that is layering, and it is recorded (§7.2).
+2. **Start.** For each entry juncture, try the fill test with no bindings. On success: apply the **relevance gate** (§10.2), compute the instance identity (§5.3), check tombstones and the pool bounds, and create the instance with that juncture matched. Then run the multi-function advancement for the new instance with the same occurrence, and the bounded state queries (§6.2a).
 3. **States later.** A state juncture also matches when a later Change makes it true: an edge added, a frame opened, a belief-forming event.
 
 **The fill test** for juncture `j`, a Change `c` and the instance's bindings:
 1. `c`'s record fills `j.fn`: an event whose kind declares it, with its participant roles mapped to the function's arguments; or an edge, frame, belief-forming event or group intention that the function's state rules accept ([vocabulary](vocabulary.json)).
 2. Every argument already bound equals the mapped participant. Every unbound argument binds if the participant's kind fits the role and the role's `must` terms are yes.
-3. Every `requires` term is yes. A `maybe` counts as no, as in S3.
+3. Every `requires` term is yes, a term with unbound variables binding them by a bounded state query (§6.2a). A `maybe` counts as no, as in S3.
 4. If `j.fill` is fixed, the filler is one it names. A preferred `fill` doesn't restrict matching: the world may fill a juncture in a way nobody preferred. Preferences steer only what the director realises.
+
+### 6.2a Bounded state queries
+
+A state juncture, or a `requires` term, may name roles nothing has bound yet. `squeeze.rule` requires `member(?col, ?pw)` when only the collector is in the event, and when a strike starts a `protection` instance, the event names the ward but not the guard. A **bounded state query** binds them:
+
+1. **When.** At instance start, after the multi-function advancement; and again whenever a match binds a new variable. It covers every state juncture and every `requires` term with at least one bound argument.
+2. **Where it may look.** Only along an index the kernel or S1 already keeps from a bound argument: a membership or tie edge from either end, a holder edge from the holder or the thing, a frame from its actor, a group intention from its group, a belief from its believer. Each state function in the [vocabulary](vocabulary.json) lists the arguments it can be searched from (`searchFrom`); a relation is searched from its first bound argument. A term with no searchable bound argument is `maybe`, so it counts as no: its roles must come from an entry or an earlier juncture.
+3. **Candidates and choice.** The query lists at most `stateCandidates` records **[tunable 8]**, in record `Id` order. The first for which every other requirement of the juncture or term holds binds the variables. The order is total, so the choice is deterministic and needs no draw. If none passes, the juncture stays open, or the term is no.
+4. **Cost.** One bounded read per term per binding event, counted in the tick budget.
+
+A debt that existed before its demand is a legitimate past, and the query finds it from the debtor; the guard of a struck ward is found along the ward's membership.
 
 ### 6.3 Link tests
 
-The links of §3.4 are tested when the later juncture is tried, against the recorded fillers of the matched earlier junctures. Cause walks follow recorded `causes` and frame `cause` chains, at most 3 hops each **[tunable]**.
+The links of §3.4 other than `forecloses` are tested when the later juncture is tried, against the recorded fillers of the matched earlier junctures. Cause walks follow recorded `causes` and frame `cause` chains, at most 3 hops each **[tunable]**.
+
+**Links into a juncture matched early.** An entry juncture, or one filled by a state query, may be matched before the junctures with edges into it: a demand can start a debt instance before the debt itself is found. Those edges are tested when their sources match, against the juncture already matched, and a source whose link fails does not match.
 
 When the fill test succeeds but a link fails, the juncture stays `ready` and the instance keeps the candidate as a **near miss** (at most two per instance, newest kept). A near miss is where generate-then-justify applies: if the missing link's intermediate step is unobserved and the pattern's latitude allows it, the director may construct that step (§8.1, `construct`), after which the link holds and the juncture matches. The director never asserts a link without a recorded step that bears it out.
 
 ### 6.4 Outcomes, foreclosure and ending
 
-- **Outcomes** are checked after every match, in declaration order. The first whose `reached` junctures are all matched or refined, and whose `foreclosed` junctures are all foreclosed, ends the instance as `resolved`, or as `parked` if the outcome's kind is `parked`. An outcome with `after` is instead armed, and applies at the sweep once `after` has passed with no other outcome reached.
-- **Foreclosure.** A matched juncture's `forecloses` edges foreclose their targets. A juncture whose acting role is bound to someone who has died is foreclosed. When no outcome is still reachable, the instance ends.
+- **Outcomes** are checked after every match, in declaration order. The first whose `reached` junctures are all matched or refined, and whose `foreclosed` junctures are all foreclosed, fixes the outcome and mints the story event; the instance moves to `aftermath` if the outcome lists aftermath junctures, and otherwise closes as `resolved`, or as `parked` if the outcome's kind is `parked`. An outcome with `after` is instead armed, and applies at the sweep once `after` has passed with no other outcome reached.
+- **Foreclosure.** A matched juncture's `forecloses` edges foreclose their targets at once; that is their only effect. A juncture whose acting role is bound to someone who has died is foreclosed. When no outcome is still reachable, the instance ends.
 - **Ending without an outcome** (deadline, `unless`, nothing reachable): `parked` if the protagonist perceived any of it, with its `park` junctures registered as loose ends and a closing trace queued; otherwise `lapsed`, silently.
 - **The sweep** runs at each simulation window boundary, as S3's does, and only reclaims storage.
 
@@ -358,7 +398,7 @@ Every composition is found by the matcher alone. There is no catalogue of which 
 
 Two ways, both already in the record:
 - **A shared outcome filler.** The juncture that ends one instance is the entry juncture of another. When a debt instance ends `broken`, its `defaulted` juncture was filled by a recorded `wrong`; that same record is what starts a [grievance](patterns/tensions.json) instance, whose entry is `wrong(by, to)`. No new mechanism is needed: it is the shared filler.
-- **A story event.** When an instance resolves or parks, it mints a `meta:story` event, as S3's sifter does at completion ([§6.6](../spec/procedural.md#66-completion-and-hand-over)): participants are the bound roles, `causes` are the fillers of its matched junctures, and it carries its pattern and outcome (§13 S0-1). It fills the function `story(pattern, outcome)`. Closures and larger shapes match on these. This is the "composed patterns" capability S3 deferred, and the same idea as re-inserting a completed sifting pattern as a new event ([Lyu, Millard and Gibbins](../../../docs/community-credits.md#lyu-millard-and-gibbins-2025)).
+- **A story event.** When an instance reaches an outcome or parks, it mints a `meta:story` event, as S3's sifter does at completion ([§6.6](../spec/procedural.md#66-completion-and-hand-over)): participants are the bound roles, `causes` are the fillers of its matched junctures, and it carries its pattern, its outcome and what the outcome `produces` (§13 S0-1). It fills the function `story(pattern, outcome)`. Closures and larger shapes match on these. This is the "composed patterns" capability S3 deferred, and the same idea as re-inserting a completed sifting pattern as a new event ([Lyu, Millard and Gibbins](../../../docs/community-credits.md#lyu-millard-and-gibbins-2025)).
 
 **Bounds.** An instance never matches a story event of itself or of any instance in its own lineage, so chains are acyclic, and a lineage is at most 4 story events deep **[tunable]**. Chained instances belong to one thread (§11).
 
@@ -377,13 +417,15 @@ Growth follows the protagonist's attention, not the engine's ambition ([GRW-01](
 - an engine-grown arc needs at least two found ancestors in its lineage (S2's L-37);
 - engine-grown shapes stay within the stake-scale cap of the dial.
 
-So the four larger shapes in the library are never sown as units. They are recognised as the junctures fill, and only then does the director work on their open junctures.
+**Shapes are recognisers in v0.** A shape's junctures carry no realisations: the director never offers, nudges or constructs a shape's own juncture, so a heist's job, crew, legwork, run and split can never be run in order as a whole plot. The director works only on a shape's child instances (the tensions and turns that share its fillers, or whose story events fill its `story` junctures), each under its own gates. A live shape adds to the ranking of candidates that would advance it (F-15), names the thread's L1 skeleton, and chains through its own outcomes. The lint rejects a `realise` on a shape's juncture. Letting shapes realise junctures directly would need a contract that every successful path runs through child-pattern composition; that is open (§16).
 
 ### 7.4 Refinement: a juncture filled by a smaller pattern
 
-A juncture whose realisations include `refine` may be filled by a child instance instead of a single event. The child shares the parent's bound roles through its argument map, and its outcome must produce the parent juncture's function and changes: the finer reading agrees with the coarser one, as the [foundation](../foundation.md#4-rules) requires of every refinement (rule 2).
+A juncture whose realisations include `refine` may be filled by a child instance instead of a single event. The realisation names the child pattern, the child **outcome** that fills the juncture, and an explicit **role map** (`binds`, child role to parent role) that covers every argument of the parent juncture. The **contract**: the named outcome must `produce` the parent juncture's function, with arguments that map through `binds` onto the parent's, and every change the parent juncture declares must follow from that function or be recorded by the child's reached junctures. The finer reading then agrees with the coarser one, as the [foundation](../foundation.md#4-rules) requires of every refinement (rule 2).
 
-**Refinement follows relevance.** When the juncture's people or place are at a fine tier for the protagonist (the protagonist is there, or its people are focal), the director may open a child; otherwise the juncture is filled coarsely, by the world or by a nudge, and told as news if at all. The package taken from a courier the protagonist has never met is one theft event in a rumour. The package taken from the protagonist is a child instance: a follower noticed, a confrontation staged as an obstacle with several ways out, and whatever the protagonist does there. Depth is at most 3 **[tunable]**, and children close with their parent.
+The lint checks the contract statically and rejects a refinement that can't meet it. At run time the parent juncture becomes `refined` when the child reaches that outcome, with the child's story event as its filler; any other outcome of the child leaves the parent juncture open, or foreclosed if the child's outcome forecloses it. In v0 the library has one refinement that meets the contract: [coveted](patterns/tensions.json)'s `moved` (`transfer` from holder to wanter), refined by [interception](patterns/turns.json)'s `delivered`, which produces the transfer from sender to recipient. Pairings that looked like refinements but fail the contract (a debt paid through a sacrifice, a heist's run through a complication, a secret's exposure through a revelation) are layers instead: they share the act's filler rather than replace it.
+
+**Refinement follows relevance.** When the juncture's people or place are at a fine tier for the protagonist (the protagonist is there, or its people are focal), the director may open a child; otherwise the juncture is filled coarsely, by the world or by a nudge, and told as news if at all. A package delivered by a courier the protagonist has never met is one transfer event, told as news if at all. The same delivery carried by the protagonist is a child interception instance: a plan others can learn of, a follower noticed, and a confrontation, which is an obstacle seed with several ways out (an offer, not a further refinement). Depth is at most 3 **[tunable]**, and children close with their parent.
 
 ### 7.5 Intersections
 
@@ -425,7 +467,9 @@ A nudge is an S2 seed of a new form, with roles, goal frames, authored beliefs a
 
 - **Only the protagonist's own act fills them**: a response to an offer, an act the game reports, or a decline, a null path or a lapse, which fill the refusing side or the world's settling. Nothing is filled by assumption ([D-09](../decisions.md)).
 - **So no pattern is a single path for the protagonist.** A pattern that offers the protagonist a juncture says, through its edges and outcomes, what becomes ready or foreclosed on each stance. The package thread (worked example 1) has a continuation for every stance at every offer, and in most of them nobody puts a price on anyone's head.
-- **Harm or loss to the protagonist** happens only as an obstacle the protagonist faces with at least two affordances ([S2 §2.8](../spec/seeding.md#28-fragments-beats-and-links)), on a stake the protagonist accepted when it was named in an offer (L-15). The protagonist's response decides whether the juncture fills.
+- **Harm or loss to the protagonist** comes from two places only.
+  - **From a seed:** as an obstacle the protagonist faces with at least two affordances ([S2 §2.8](../spec/seeding.md#28-fragments-beats-and-links)), on a stake the protagonist accepted when it was named in an offer (L-15). The protagonist's response decides whether the juncture fills.
+  - **From a group's own decision**, under [D-30](../decisions.md): a group may act against the protagonist as a simulation process (closing ranks, a price, a hunt). It is driven only by what the group believes the protagonist did, a belief resting on an observed act of the protagonist's or a telling of one ([D-10](../decisions.md)); its first visible act is a warning the protagonist can perceive, and no harmful act follows until that warning reached `presented`; and its reach is bounded by the proactivity setting, down to none at `off` (§13 S1-10). It is the world's move: the director waits for it like any other, and never nudges it.
 - **An NPC's belief about the protagonist** may fill a juncture (`blame(who: boss, of: protagonist)`), as [D-22](../decisions.md) allows: it is the NPC's own belief, formed from an observed act or a told account, and the protagonist has a way to correct it.
 
 ### 8.4 Choosing what to act on
@@ -449,6 +493,8 @@ S3's features F-3, F-5, F-6 and F-11 stay. Four are added, kept raw in the decis
 
 **Diversity** extends S3's `dup` term: besides recent patterns and places, it counts recent **thread skeletons** (§14.1). A candidate whose thread would continue a skeleton prefix the protagonist has recently seen is penalised. The band composite and the keyed draw are S3's.
 
+**The skeletons it reads are persisted.** The layer-3 record keeps a **skeleton ring** of at most `skeletonRing` entries **[tunable 32]**, one per recent thread: the thread's `Id`, the hashes of its first L2 tokens (at most 8), and the `playTotal` of its last update, with a monotonic `skeletonSeq` as the update position. The ring is updated at each refresh from the exposure ledger, before the slot procedure runs, and the update is committed in the same staged batch as any sowing decision of that tick ([S0 §14.2a](../spec/kernel.md#142a-staged-batches-v46)), so a decision never ranks against a ring that a reload would not reproduce. Entries outlive the thread's instances in the pool. The decision log's copy of the tokens (S3-8) is for evaluation only and is never read by ranking.
+
 The winning juncture is realised by the first legal entry of its `realise` list after `wait`, subject to the dial (at tempo `off` the sower offers and nudges nothing, while authored seeds' own realisations still play, [D-03](../decisions.md)), the stake-scale cap and claim priority.
 
 ### 8.5 The escalation gate
@@ -462,6 +508,8 @@ A pattern's `escalation` list names the junctures that raise the stake scale (pe
 5. **Bounds.** The new scale is within the dial's cap (S3's `maxLevel`; engine-sown stakes at most `block`; bounded dooms, AGY-30) and the climax budget.
 
 If any fails, the instance stays where it is and ends by one of its outcomes, or parks at `within` with a closing trace. **This is where the director decides how far a thread escalates:** rung by rung, on the protagonist's pull and the world's own wanting actors, never towards a target length. Most threads stop low. That is intended: most errands should stay errands, and the ones that grow are the ones the player leaned into.
+
+The gate binds the director's realisations only. A group acting against the protagonist under D-30 is the world's move (§8.3): it is bounded by S1-10's conditions and the proactivity setting, and the director neither climbs it nor stops it, though it may make its cause legible.
 
 ## 9. Legibility
 
@@ -495,7 +543,8 @@ Each instance keeps a small ledger in the layer-3 record:
 | Generic entry functions (`wrong` fills every theft) | The relevance gate at start (§10.2); S3's per-pattern and total pool caps with eviction of the oldest `forming` instance; `once` tombstones. The lint warns when an entry juncture tests nothing but its function |
 | Forking | None. A juncture takes the first filler that passes, and a Change fills at most one juncture of an instance. Alternatives a forking matcher would keep are lost, as in S3 |
 | Finding layers | An index from bound node to live instances, read once per matched filler |
-| State probes | One bounded read per state juncture, once its arguments are bound |
+| State queries | At most `stateCandidates` records per term per binding event, along declared indexes only (§6.2a) |
+| Multi-function advancement | At most as many junctures per instance as the occurrence's kind fills functions (four in M3) |
 | Link tests | Cause walks of at most 3 hops over recorded `causes` and frame causes |
 | Refinement | Depth at most 3; children count in the pool; opened only at a fine tier |
 | Chaining | Story-event lineages at most 4 deep; no instance matches its own lineage |
@@ -542,7 +591,7 @@ The thread is the unit the director budgets (S3 §5.8) and the unit evaluation j
 | Layer | Stays | Changes | New |
 |---|---|---|---|
 | S0 kernel | All of it: events with `causes`, `served` and `outcome`; frames; `Dilemma`; beliefs; queries; retention | A `meta:story` event carries its pattern and outcome (S0-1); a `fills` contract for kinds (S0-2) | Nothing else: relations are registered reads |
-| S1 simulation | Processes, events, groups, norms, ties | Kinds declare `fills` (S1-1); group pulses read functions (S1-2); seed-opened goals act through the simulation (S1-3); items (S1-4); tellings can carry plans (S1-5); leaders (S1-6); visible acts for intentions (S1-7); refusals as norm signals (S1-8); failed outcomes (S1-9) | |
+| S1 simulation | Processes, events, groups, norms, ties | Kinds declare `fills` (S1-1); group pulses read functions (S1-2); seed-opened goals act through the simulation (S1-3); items (S1-4); tellings can carry plans (S1-5); leaders (S1-6); visible acts for intentions (S1-7); refusals as norm signals (S1-8); failed outcomes (S1-9); group intentions against the protagonist under D-30 (S1-10) | |
 | S2 seeding | The seed as the unit of delivery: casting, offers, beats, the arbiter, the exposure ledger, the lifecycle, the record, the lint, the fit report; the relationship ladder | `realises` (S2-1); implicit patterns (S2-2); `growsFrom` an instance (S2-3); the nudge form (S2-4); `juncture` intersections (S2-5); accepted offers mint promises (S2-6); loose ends name junctures (S2-7); job, heist, front and feud profiles become shapes (S2-8); kits declare `fills` (S2-9) | |
 | S3 procedural | The director, pacing, budgets, the schedule, the fitter's weights, the slot procedure, the pool's mechanics, the decision log | Patterns as graphs (S3-1); instances as candidates (S3-2); composition (S3-3); realisations (S3-4); new features and skeleton diversity (S3-5); the thread view (S3-7) | The director's per-juncture decision, the escalation gate and the legibility ledger (S3-4, S3-6) |
 | S4 packs | The pack format | Patterns, the vocabulary and kits' `fills` are pack data, with the pattern lint (S4-1) | |
@@ -592,11 +641,12 @@ None of these is applied. Each names the specification it belongs to and why.
 | S1-2 | Group pulses read functions, not named kinds: a `wrong` on a member pulses `care_of_members` and `retribution`, whatever kind filled it | Worked example 2: a shakedown or an enforcement beating of a member pulses nothing today, because pulses read only `assault` and `gang-clash` |
 | S1-3 | A goal frame a seed opens on a cast person raises the matching kind's rate for that person through the offender term, so the act, if it comes, comes from the simulation | §8.2's "no puppets"; worked example 1 found that `wait` has little to wait for while individual goals are a later capability |
 | S1-4 | A minimal `xf:item` kind with a time-varying `held-by` edge | `hold` and `transfer` need possession as a state (worked example 1) |
-| S1-5 | A `tell` may have a recorded `promise` event as its subject, so knowledge of a plan spreads like any other news | Worked example 1: "how did they know about the delivery?" must be a world fact |
+| S1-5 | A `tell` may have a recorded `promise` event as its subject, so knowledge of a plan spreads like any other news; a `tell` of a concealed subject also fills `expose` | Worked example 1: "how did they know about the delivery?" must be a world fact |
 | S1-6 | Each group has a keyed leadership: one or more members drawn from its residents with membership role `leader`, persistent once observed | Worked example 1: "it was for a crime boss" needs a real person who leads; today `gang-leader` is assigned only by canon, and `group.decide` has no leaders' term |
 | S1-7 | Every group intention produces at least one visible act kind (for `protect-members`, a presence at a member's place that fills `protect` and `help`) | Worked example 2: an active protection changes only an assault rate, so nothing the protagonist could see answers a threat to a member |
 | S1-8 | A public refusal of a norm's demand that goes unsanctioned within a window is a norm signal of the opposite sign to enforcement | Worked example 2: today only enforcement signals, so a squeeze can never break and the uprising shape can't form ([NRM-04](../craft/d15-people-networks-order.md)) |
 | S1-9 | Occurrences draw an `outcome` of `failed` or `prevented` (S0 events already carry it) from the victim's protection and the norm's state, and each kind declares what a failed outcome fills: a failed shakedown fills `refuse` | Worked example 2: a shakedown is always paid today, so `refuse` has no producer in the city |
+| S1-10 | **Group intentions against the protagonist** ([D-30](../decisions.md)): an intention kind (`punish`, with rungs for closing ranks, a price and a hunt) that may start only from the group's belief that the protagonist acted against it, where the belief rests on an observed act of the protagonist's or a telling of one; its first visible act is a warning (a threat, a demand, word put out), and no harmful act follows until the warning reached `presented`; its rate, reach and highest rung scale with the proactivity setting, with none at `off`; it ends by expiry, by payment, or when the belief is revised. It replaces S1-I-8 (no process aims harm at the protagonist) and P3 §1 point 4 in the next S1 pass | D-30; worked example 1's top rung, which needs a hunt the city runs |
 
 ### S2 (seeding)
 
@@ -616,20 +666,20 @@ None of these is applied. Each names the specification it belongs to and why.
 
 | # | Change | Reason |
 |---|---|---|
-| S3-1 | `SiftPattern` becomes the pattern form of §3.7: a graph of junctures, state junctures, and `Dilemma` and `meta:story` fillers. This lifts S3-L-7's refusal of dilemma, edge, belief and frame clauses. A first build can stop at events, edge and frame states, and 6 junctures | §3, §6 |
+| S3-1 | `SiftPattern` becomes the pattern form of §3.7: a graph of junctures, state junctures, and `Dilemma` and `meta:story` fillers, with `forecloses` as an effect only, bounded state queries (§6.2a), multi-function advancement for new and existing instances, and aftermath phases. This lifts S3-L-7's refusal of dilemma, edge, belief and frame clauses. A first build can stop at events, edge and frame states, and 6 junctures | §3, §6 |
 | S3-2 | Live instances with ready junctures are candidates; the single `telling` becomes per-juncture realisations | Telling before completion; lifts C-S3-12 (§5, §8) |
 | S3-3 | Composed patterns: a `meta:story` event at resolution and at parking, matched by other patterns, acyclic and depth-bounded | Lifts C-S3-15 (§7.1) |
-| S3-4 | The director's juncture realisation (offer, nudge, construct, refine) with gates 11 to 13 and the escalation gate | Lifts part of C-S3-3: fills by nudge and construction (§8) |
+| S3-4 | The director's juncture realisation (offer, nudge, construct, refine) with gates 11 to 13 and the escalation gate; refinement only through a role map and an outcome that produces the parent juncture; never on a shape's juncture | Lifts part of C-S3-3: fills by nudge and construction (§7.3, §7.4, §8) |
 | S3-5 | Features F-13 to F-16, and skeleton diversity in the sower | §8.4; D-27's ranking by what matters to people the protagonist knows |
 | S3-6 | The legibility ledger in the layer-3 record, read by gate 11, the escalation gate and the thread status | §9 |
 | S3-7 | The thread view links instances, the seeds realising them, chains and cross-causal layers | Lifts C-S3-11 in part; threads are the unit of evaluation (§11.2, §14) |
-| S3-8 | The decision log records each thread's skeleton tokens as they are perceived | §14 |
+| S3-8 | The layer-3 record keeps the skeleton ring (§8.4) with its update position, committed with the sowing decisions that read it; the decision log also records each thread's canonical tokens, for evaluation only | §8.4, §14 |
 
 ### S4 (packs) and P1 (the composite)
 
 | # | Change | Reason |
 |---|---|---|
-| S4-1 | Patterns and the function vocabulary are pack data, with a pattern lint: an acyclic graph; at most 8 junctures and 12 edges; an entry binding a person or group; known functions and relations; every variable bound by some juncture; every juncture the protagonist can fill has a continuation for each stance; the abstraction index reported; procedural patterns keep their roles open | §3.7, §4.3, §8.3 |
+| S4-1 | Patterns and the function vocabulary are pack data, with a pattern lint: an acyclic graph; at most 8 junctures and 12 edges; an entry binding a person or group; known functions and relations; every variable bound by some juncture; every juncture the protagonist can fill has a continuation for each stance; no belief change on a role that may be the protagonist unless guarded `npc`; every refinement meets the contract of §7.4; no `realise` on a shape's juncture; structured joins name real sources; no juncture reachable only after a terminal outcome unless it is that outcome's aftermath; the abstraction index reported; procedural patterns keep their roles open | §3.5 to §3.7, §4.3, §7.3, §7.4, §8.3 |
 | P1-1 | The composite gains a `pattern` node type and the edges `chains-to`, `layers-with` and `risks` (pattern to failure mode). Applied in this checkpoint, since P1 is a plan, not a specification | §17 and the [composite page](README.md) |
 
 ## 14. Measures for M3 iteration 3
@@ -638,25 +688,25 @@ D-28's test is the player's: a long run must not read as the same package of sto
 
 ### 14.1 The thread skeleton
 
-A thread's **skeleton** is computed from what the protagonist perceived (exposure `presented` or better), in the order it was perceived. Each perceived juncture gives one **token**:
+A thread's **skeleton** is computed from what the protagonist perceived (exposure `presented` or better), in the order it was perceived. It has **one token per perceived occurrence**, not per juncture: an event or state record that fills junctures of several instances in the thread (a layer, or a grievance and a misattribution both reading one wrong) gives one token. Each token is **canonical**, a function of the occurrence alone, so adding or removing a recogniser never changes it:
 
 ```
 token = fn(mask, mask, …) [<link] [/stance]
 ```
 
-- `fn` is the juncture's function;
-- each argument is **masked**: `P` the protagonist; `K1`, `K2` people the protagonist had perceived before the thread began; `N1`, `N2` people first perceived in it; `G1` groups; `I1` items; `L1` places; numbered by first appearance in the thread. Every name, faction, place, item, price and wording is masked, so a feud with one gang and the same feud with another is one skeleton;
-- `<link` is the type of the edge joining it to the earlier perceived juncture it follows from;
-- `/stance` is the protagonist's stance class, where the protagonist's act filled the juncture (help, bargain, oppose, refuse, ignore).
+- `fn` is the first function, in the vocabulary's `tokenPrecedence` order, among all the functions the occurrence's kind or state rule fills, whichever instances used it (a paid shakedown is `demand`, a theft `wrong`, a favour `help`);
+- its arguments are **masked**: `P` the protagonist; `K1`, `K2` people the protagonist had perceived before the thread began; `N1`, `N2` people first perceived in it; `G1` groups; `I1` items; `L1` places; numbered by first appearance in the thread. Every name, faction, place, item, price and wording is masked, so a feud with one gang and the same feud with another is one skeleton;
+- `<link` is the strongest link type, in the order `because`, `but`, `motive`, `reveals`, `enables`, `answers`, among the edges that join a juncture this occurrence fills to a juncture an earlier perceived occurrence fills;
+- `/stance` is the protagonist's stance class, where the protagonist's act is the occurrence (help, bargain, oppose, refuse, ignore).
 
-The skeleton ends with `end:<outcome kind>/<closure pattern>`.
+The skeleton ends with `end:<outcome kind>/<closing pattern>`. Which patterns recognised the thread is kept apart, in L1.
 
 **Three levels**, after dossier 5's abstraction ladder ([M-13](../craft/d05-units-variety.md)):
 
 | Level | What it keeps | Example |
 |---|---|---|
 | L1, shape | The patterns of the thread's instances, in order of first perception | `tension:debt › turn:escalation › closure:loss` |
-| L2, cascade | The juncture tokens, masked, with link types | `obligate(N1,K1) · demand(K1,N1)<motive · ask(N1,P) · refuse(P)/refuse · wrong(K1,N1)<answers · end:failed/loss` |
+| L2, cascade | The canonical occurrence tokens, masked, with link types | `obligate(N1,G1) · demand(G1,N1)<motive · ask(N1,P) · refuse(P,N1)/refuse · wrong(G1,N1)<answers · end:failed/loss` |
 | L3, surface | L2 plus effect classes, channels and the protagonist's stance at each offer | |
 
 ### 14.2 Repetition over a long run
@@ -665,13 +715,13 @@ Run at least 50 simulated play hours, or several simulated weeks, on several wor
 
 | # | Measure | How |
 |---|---|---|
-| R1 | **Recast rate** | Share of threads whose L2 skeleton lies within normalised edit distance δ of an earlier thread's in the same run. A substitution between tokens with the same function and link costs 0.5, any other 1, so that a recast with the roles shuffled still counts as near. δ **[calibrate]** (start 0.25). The headline measure |
+| R1 | **Recast rate** | Share of threads whose L2 skeleton lies within normalised edit distance δ of an earlier thread's in the same run. A substitution between tokens with the same function and link costs 0.5 (closing tokens count as the same function when their outcome kind matches), any other 1, so that a recast with the roles shuffled still counts as near. δ **[calibrate]** (start 0.25). The headline measure |
 | R2 | **Package size** | The smallest number of L2 clusters (single linkage at δ) covering 80 % of threads, and how it grows with play hours. D-28's failure is a curve that flattens near a small package |
 | R3 | **Effective number of kinds** | The Hill number of order 2 over L1 and over L2 classes, per 10 play hours (dossier 5 [M-4](../craft/d05-units-variety.md)) |
 | R4 | **Template rate** | Dossier 5's M-14 on the concatenated L2 token stream: the share of threads containing a mined template of length 3 to 6 repeated at least τ times |
 | R5 | **Next-juncture predictability** | Dossier 5's M-16: an order-1 to order-3 model over L2 tokens within threads, trained on the run so far; bits per token at 5, 10, 20 and 50 threads, against a shuffled copy. Falling bits mean the grammar is being learned ([HAB-07](../craft/d13-perception-curiosity.md), [VAR-09](../craft/d05-units-variety.md)) |
 | R6 | **Pooled templates** | Dossier 5's M-19: the share of world seeds whose runs contain each mined template ([VAR-30](../craft/d05-units-variety.md)) |
-| R7 | **Errand share** | The share of threads whose L1 is a single [coveted](patterns/tensions.json) tension resolved by one offer ([D-27](../decisions.md): errands are a minority) |
+| R7 | **Errand share** | A thread is an **errand** when the protagonist's first involvement in it is an ask whose requested act is to fetch, carry, deliver, retrieve, escort or collect (S2's skeleton feature `verb`, §2.11), and its perceived development beyond the ask has at most one occurrence the protagonist's own completion didn't make (a payment or a thanks is completion). Declined errands count. R7 is the share of threads that are errands. Beside it, the share of threads that *began* with an errand ask, whatever they grew into, shows how often errands grow. Both are independent of which patterns recognised the thread ([D-27](../decisions.md): errands are a minority) |
 
 **Baselines.** The same measures on run 2's hooks (each a one-juncture thread) and on decomposed authored side quests (dossier 5 §5.5). The engine is held to a margin from the authored baseline, not to an absolute number.
 
@@ -730,7 +780,7 @@ Ways this design could still produce repetitive or flat stories, after [P1 §2.6
 | 8 | **Coincidence overload.** The thief is the vendor's cousin, who is the collector's brother | Layers through ties are legal, and dense foci make ties common | Layers only through recorded ties, never constructed ones; a rater question on contrivance; the count of shared roles per thread against the base rate of ties |
 | 9 | **The same people in every thread.** The vendor everyone knows is in all of them | F-14 favours people the protagonist knows | Claims and the fitter's yield term; the promotion caps ([GRW-05](../craft/d08-scale-threads-time.md)); a cast concentration measure (Gini over people per thread) |
 | 10 | **Starvation.** Abstract patterns rarely fill, so the engine falls back to errands | Requirements too strict for the record S1 produces ([FIT-07](../craft/d03-fitting-casting.md)) | Pool fill rates per pattern; R7, the errand share |
-| 11 | **Templates in disguise.** Patterns written with everything fixed | An author, or a later library pass, over-specifies | The abstraction index in the lint (§4.3); R1 against A5 |
+| 11 | **Templates in disguise.** Patterns written with everything fixed, or a shape run in order as a plot | An author, or a later library pass, over-specifies; a director that could realise a shape's junctures | The abstraction index in the lint (§4.3); shapes as recognisers, with no realisations (§7.3); refinement only under its contract (§7.4); R1 against A5 |
 | 12 | **A learnable grammar.** After a few threads the player predicts "a stranger asks you to carry something, so it will be stolen" ([HAB-07](../craft/d13-perception-curiosity.md), [VAR-09](../craft/d05-units-variety.md)) | Each function has few realisations, and the same turns follow the same tensions | R5; a prediction task with raters (dossier 13 [M13-09](../craft/d13-perception-curiosity.md)); several outcomes per juncture, refinement at varying depth, closures that compete |
 | 13 | **Words bring the template back.** Varied structure, one wording per function ([VAR-28](../craft/d05-units-variety.md)) | Kits per function are few at first | Dossier 5's M-18 text homogeneity; several phrasings per beat function (S2's rendering contract) |
 | 14 | **Compliant and flat.** Every rule is met, every edge is shown, and nobody cares: the stakes belong to strangers | Legibility and variety are not stakes | F-3 and F-14 in ranking; the raters' pull question; [QST-21](../craft/d04-quest-structure.md)'s person-at-stake tag. **Only partly caught**: no measure here says a thread mattered |
@@ -743,10 +793,11 @@ What the attempt found: attacks 6 and 14 are the weakest. The first depends on S
 2. **What does the first-filler rule lose?** Run a forking matcher offline on a harness week and count the stories it finds that the bounded one misses.
 3. **What nudge share reads as authored?** Too many nudges is the ogre; too few starves the world. Set it from the ogre audit and the raters' "caused".
 4. **How much of iteration 3 depends on S1's changes?** Without individual goals, visible group acts and failed outcomes (S1-3, S1-7, S1-9), waits are thin and most open junctures are nudges. Iteration 3 could ship with S1-3's rate boost and S1-9 alone and measure the nudge share.
-5. **Should shapes be patterns at all,** or only recognisers ([QST-39](../craft/d04-quest-structure.md))? They are patterns here so that their open junctures can be worked on, and they are never sown as units. If they start to behave like templates (R1 against A5), demote them to recognisers.
+5. **Should shapes ever realise their own junctures?** In v0 they are recognisers (§7.3), as [QST-39](../craft/d04-quest-structure.md) advises. Letting the director work on a shape's own junctures would need a contract that every successful path runs through child-pattern composition, and evidence (R1 against A5) that it doesn't replay the shape as a plot.
 6. **Kits per function.** How many realisations each function needs before the text layer stops repeating (attack 13), and who writes them.
 7. **Premises.** Patterns could carry a stance on a pack's premise (S2 §2.3); a squeeze argues something about protection as a market. Left for when premises are used.
 8. **Belief Changes** (S0-3): kernel Change or S1 event. Either works for the matcher.
+9. **D-30's bound.** How the proactivity setting scales a group's intentions against the protagonist (rate, reach, highest rung), and how long a hunt may run, are S1-10's to set and P9's to calibrate against the raters' sense of fairness.
 
 ## 17. Comparisons and credits
 

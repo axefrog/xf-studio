@@ -21,7 +21,8 @@
       "states": [
         {"edge": "xf:held-by", "map": {"what": "from", "who": "to"}},
         {"read": "city.presence", "note": "a group holds a leaf area where its presence band is high"}
-      ]
+      ],
+      "searchFrom": ["who", "what"]
     },
     {
       "id": "want",
@@ -40,7 +41,8 @@
           "note": "a resident the norm marks as a non-complier (S1 order.norms) wants relief from it",
           "map": {"who": "the resident", "what": "the norm's obligation"}
         }
-      ]
+      ],
+      "searchFrom": ["who"]
     },
     {
       "id": "transfer",
@@ -54,14 +56,16 @@
       "form": "event",
       "args": {"by": "actor", "to": "actor"},
       "meaning": "`by` acts against an interest of `to`: harm, take, expose, kill, betray, break a promise. About interests, not morals: an arrest wrongs the arrested.",
-      "states": [{"read": "social.contract", "is": ["broken"], "map": {"by": "the party in breach", "to": "the other party"}}]
+      "states": [{"read": "social.contract", "is": ["broken"], "map": {"by": "the party in breach", "to": "the other party"}}],
+      "searchFrom": ["by", "to"]
     },
     {
       "id": "befall",
       "form": "event",
       "args": {"who": ["actor", "place"]},
       "meaning": "Misfortune with no agent: an accident, an illness, an outage.",
-      "states": [{"read": "s1.spell", "track": "health", "state": "ill"}]
+      "states": [{"read": "s1.spell", "track": "health", "state": "ill"}],
+      "searchFrom": ["who"]
     },
     {
       "id": "help",
@@ -92,7 +96,8 @@
           "note": "a favour received and not yet returned, within the reciprocity window (DRV-19)"
         }
       ],
-      "status": "In M3, `social.contract` is phase 2 and answers maybe: `obligate` is filled by favours, promises, memberships and norms."
+      "status": "In M3, `social.contract` is phase 2 and answers maybe: `obligate` is filled by favours, promises, memberships and norms.",
+      "searchFrom": ["debtor", "creditor"]
     },
     {
       "id": "repay",
@@ -140,7 +145,8 @@
       "states": [
         {"read": "social.divergence", "note": "`from`'s belief differs from the truth that `who` knows"},
         {"edge": "core:member-of", "visibility": ["secret", "deniable"]}
-      ]
+      ],
+      "searchFrom": ["who", "from"]
     },
     {
       "id": "expose",
@@ -154,7 +160,8 @@
       "form": "state",
       "args": {"who": "actor", "of": "actor", "for": "event"},
       "meaning": "`who` believes `of` caused `for`, true or not. A divergent blame is a misattribution.",
-      "states": [{"belief": "cause-of", "note": "a belief whose subject is the event and whose value names the believed actor"}]
+      "states": [{"belief": "cause-of", "note": "a belief whose subject is the event and whose value names the believed actor"}],
+      "searchFrom": ["who"]
     },
     {
       "id": "protect",
@@ -166,7 +173,8 @@
         {"read": "city.protected"},
         {"intent": "protect-members", "map": {"guard": "the group", "ward": "its members"}}
       ],
-      "status": "In M3, `city.protected` is phase 2 and answers maybe: `protect` is filled by frames, memberships and group intentions only."
+      "status": "In M3, `city.protected` is phase 2 and answers maybe: `protect` is filled by frames, memberships and group intentions only.",
+      "searchFrom": ["guard", "ward"]
     },
     {
       "id": "threaten",
@@ -178,7 +186,8 @@
           "frame-goal-effects": ["harm", "kill", "take", "expose"],
           "note": "a hostile goal aimed at `to` held as a state"
         }
-      ]
+      ],
+      "searchFrom": ["by", "to"]
     },
     {
       "id": "pursue",
@@ -191,7 +200,8 @@
           "intent": ["collect-fee", "retaliate", "protect-members"],
           "map": {"who": "the group", "target": "the intention's target or rival"}
         }
-      ]
+      ],
+      "searchFrom": ["who", "target"]
     },
     {
       "id": "decide",
@@ -227,7 +237,8 @@
           "read": "social.label",
           "note": "a standing band rising for one and falling for the other in the same audience within a window"
         }
-      ]
+      ],
+      "searchFrom": ["a", "b"]
     },
     {
       "id": "turn",
@@ -327,6 +338,11 @@
       "id": "violates",
       "args": ["juncture", "target"],
       "read": "the juncture's effect breaks an interest of the target frame or role under the conflict table"
+    },
+    {
+      "id": "observed-act",
+      "args": ["event", "actor"],
+      "read": "the event is an act of the actor's that someone witnessed, or the belief that names it rests on a telling of such a witness (D-30's ground for a group acting against the protagonist)"
     }
   ],
   "kindFills": {
@@ -366,7 +382,14 @@
     ],
     "enf.<norm>.beating": [{"fn": "wrong", "args": {"by": "enforcer", "to": "target"}}],
     "regime-start": [{"fn": "befall", "args": {"who": "place"}}],
-    "tell": [{"fn": "learn", "args": {"who": "listener", "what": "subject"}}],
+    "tell": [
+      {"fn": "learn", "args": {"who": "listener", "what": "subject"}},
+      {
+        "fn": "expose",
+        "args": {"by": "teller", "what": "subject", "to": "listener"},
+        "when": "a conceal state over the subject holds against the listener"
+      }
+    ],
     "promise": [
       {"fn": "obligate", "args": {"debtor": "promiser", "creditor": "promisee"}},
       {"fn": "bind", "args": {"a": "promiser", "b": "promisee"}}
@@ -427,5 +450,37 @@
         "when": "one of the two frames is a goal assigned by a group or a person"
       }
     ]
-  }
+  },
+  "stateQueries": "A state juncture or `requires` term with unbound arguments is filled by a bounded state query (pattern-language.md §6.2a): only from an argument listed in the function's `searchFrom` (or, for a relation, its first bound argument), at most `stateCandidates` records [tunable 8] in record Id order, the first that passes every other requirement binding the rest.",
+  "tokenPrecedence": [
+    "sacrifice",
+    "expose",
+    "conceal",
+    "blame",
+    "decide",
+    "demand",
+    "ask",
+    "refuse",
+    "comply",
+    "repay",
+    "threaten",
+    "wrong",
+    "transfer",
+    "help",
+    "obligate",
+    "bind",
+    "sever",
+    "compete",
+    "protect",
+    "pursue",
+    "learn",
+    "befall",
+    "turn",
+    "choose",
+    "hold",
+    "want",
+    "story"
+  ],
+  "tokenPrecedenceNote": "A skeleton token names one function per perceived occurrence: the first in this order among all the functions the occurrence's kind or state rule fills, whichever instances used it (pattern-language.md §14.1).",
+  "changeGuards": "A change may carry `when: { npc: ?r }` or `when: { protagonist: ?r }`. A belief change whose believer's role allows the protagonist must be guarded `npc`; for the protagonist the same juncture records an `exposure` (D-09)."
 }
