@@ -360,7 +360,7 @@ json ResidentFor(const OriginalLook& aLook, const std::string& aAppearance, cons
              {"community", aLook.hasStub ? json{{"spawner", aLook.spawner}, {"entry", aLook.entry}, {"ordinal", aLook.ordinal >= 0 ? json(aLook.ordinal) : json(nullptr)}} : json(nullptr)},
              {"ours", true}};
     out["note"] = community
-                      ? "xfc1: the game's own pair for a community NPC (spawner, entry name) plus the person's index in the community's fixed list; stable across a sector reload only if the game's list is [hypothesis: knowledge/crowd-adoption-and-identity.md, CA6 and CA7]"
+                      ? "xfc1: the game's own pair for a community NPC (spawner, entry name) plus the person's index in the community's fixed list. Diagnostic only: npc.substitute never replaces a community NPC; this key is for later true adoption, and its stability across a reload is [hypothesis: knowledge/crowd-adoption-and-identity.md, CA6 and CA7]"
                       : "xfr1: a hash of the record, the appearance and the spawn spot (to 0.1 m). A lane-crowd person has no key of the game's own; this one is ours.";
     out["scope"] = "ours, not the game's: a reload or a stream-out loses the actor until the engine brings it back with npc_spawn and the look in 'respawn'";
     return out;
@@ -422,15 +422,9 @@ void Service::BeginSwap(Swap& aSwap, const json& aV, const Ops& aOps)
     }
     catch (...)
     {
-        if (detached && aOps.reattachOriginal)
+        if (detached)
         {
-            try
-            {
-                aOps.reattachOriginal(aSwap.original);
-            }
-            catch (const std::exception&)
-            {
-            }
+            GiveBack(aSwap.original, aOps); // kept and retried when the game does not say it was given back
         }
         throw;
     }
@@ -460,6 +454,110 @@ void Service::BeginSwap(Swap& aSwap, const json& aV, const Ops& aOps)
     m_npcs[aSwap.who] = npc;
 }
 
+void Service::KeepReturning(const std::string& aEntity)
+{
+    std::scoped_lock _(m_mutex);
+    if (std::any_of(m_returns.begin(), m_returns.end(), [&](const Returning& r) { return r.entity == aEntity; }))
+    {
+        return;
+    }
+    if (m_returns.size() >= kMaxReturns)
+    {
+        // Bounded: the oldest is let go, loudly. The script registry still lists it, so the kill switch tries it once more.
+        Emit("npc.original_unreturned", "warn", "a held crowd person could not be given back and is no longer retried (too many waiting)",
+             {{"original", m_returns.front().entity}, {"reason", "queue_full"}, {"attempts", m_returns.front().attempts}});
+        m_returns.erase(m_returns.begin());
+    }
+    Returning pending;
+    pending.entity = aEntity;
+    m_returns.push_back(pending);
+}
+
+// True only after the game said the original was found and given back. Any other answer keeps the cleanup owned and retried.
+bool Service::GiveBack(const std::string& aEntity, const Ops& aOps)
+{
+    bool returned = false;
+    if (aOps.reattachOriginal)
+    {
+        try
+        {
+            returned = aOps.reattachOriginal(aEntity).value("reattached", false);
+        }
+        catch (const std::exception&)
+        {
+        }
+    }
+    if (!returned)
+    {
+        KeepReturning(aEntity);
+    }
+    return returned;
+}
+
+void Service::StepReturns(double aDt, const Ops& aOps)
+{
+    std::vector<std::string> tryNow;
+    {
+        std::scoped_lock _(m_mutex);
+        if (m_returns.empty())
+        {
+            return;
+        }
+        for (auto& pending : m_returns)
+        {
+            pending.age += aDt;
+            pending.sinceTry += aDt;
+            if (pending.sinceTry >= 4 * kPollSeconds)
+            {
+                pending.sinceTry = 0.0;
+                ++pending.attempts;
+                tryNow.push_back(pending.entity);
+            }
+        }
+    }
+    for (const auto& entity : tryNow)
+    {
+        bool returned = false;
+        if (aOps.reattachOriginal)
+        {
+            try
+            {
+                returned = aOps.reattachOriginal(entity).value("reattached", false);
+            }
+            catch (const std::exception&)
+            {
+            }
+        }
+        Returning done;
+        bool finished = false;
+        bool gaveUp = false;
+        {
+            std::scoped_lock _(m_mutex);
+            const auto it = std::find_if(m_returns.begin(), m_returns.end(), [&](const Returning& r) { return r.entity == entity; });
+            if (it == m_returns.end())
+            {
+                continue;
+            }
+            done = *it;
+            finished = returned;
+            gaveUp = !returned && it->age >= kReturnMaxS;
+            if (finished || gaveUp)
+            {
+                m_returns.erase(it);
+            }
+        }
+        if (finished)
+        {
+            Emit("npc.original_returned", "done", "a held crowd person was given back to the crowd", {{"original", entity}, {"attempts", done.attempts}, {"waited_s", std::round(done.age * 10) / 10}});
+        }
+        else if (gaveUp)
+        {
+            Emit("npc.original_unreturned", "warn", "a held crowd person could not be found to give back, and is no longer retried",
+                 {{"original", entity}, {"reason", "not_found"}, {"attempts", done.attempts}, {"waited_s", std::round(done.age * 10) / 10}});
+        }
+    }
+}
+
 void Service::FailSwap(const std::string& aWho, const std::string& aReason, const std::string& aDetail, const Ops& aOps)
 {
     Swap swap;
@@ -473,18 +571,9 @@ void Service::FailSwap(const std::string& aWho, const std::string& aReason, cons
         swap = *it;
         m_swaps.erase(it);
     }
-    bool returned = false;
-    if (swap.detached && aOps.reattachOriginal)
-    {
-        try
-        {
-            aOps.reattachOriginal(swap.original);
-            returned = true;
-        }
-        catch (const std::exception&)
-        {
-        }
-    }
+    // "Returned" is a positive answer from the game, nothing less; otherwise the cleanup stays owned and is retried (StepReturns).
+    const bool held = swap.detached;
+    const bool returned = held && GiveBack(swap.original, aOps);
     bool hasActor = false;
     {
         std::scoped_lock _(m_mutex);
@@ -494,8 +583,13 @@ void Service::FailSwap(const std::string& aWho, const std::string& aReason, cons
     {
         ReleaseOne(aWho, "despawn", "substitute_failed", aOps);
     }
-    Emit("npc.substitute_failed", "warn", aWho + "'s substitution didn't happen (" + aReason + ")",
-         {{"who", aWho}, {"original", swap.original}, {"reason", aReason}, {"detail", aDetail}, {"original_returned", returned}, {"waited_s", std::round(swap.age * 10) / 10}});
+    json data{{"who", aWho}, {"original", swap.original}, {"reason", aReason}, {"detail", aDetail}, {"original_held", held},
+              {"original_returned", held ? json(returned) : json(nullptr)}, {"waited_s", std::round(swap.age * 10) / 10}};
+    if (held && !returned)
+    {
+        data["return_pending"] = true; // retried for up to kReturnMaxS; npc.original_returned or npc.original_unreturned follows
+    }
+    Emit("npc.substitute_failed", "warn", aWho + "'s substitution didn't happen (" + aReason + ")", data);
 }
 
 json Service::Substitute(const json& aParams, const Ops& aOps)
@@ -577,6 +671,13 @@ json Service::Substitute(const json& aParams, const Ops& aOps)
     // The same eligibility as npc.pick (the game step refuses: npc_protected, npc_busy, too_far, npc_not_found).
     OriginalLook look = LookFromJson(aOps.readLook(entity));
     look.entity = entity;
+    // A community NPC (it carries the persistent stub the game's own scripts address) is never replaced: a quest can reserve an
+    // unmarked one, and the removal cannot be undone. The identity read stays, for the dry run to report and for later adoption.
+    const bool community = look.hasStub;
+    if (community && !dryRun)
+    {
+        throw MethodError("community_npc", "that person belongs to the game's community system (a regular at a bench, a stall or a doorway: a quest may be using them without marking them), and the removal can't be undone, so the bridge only replaces lane-crowd passers-by");
+    }
     auto match = MatchLook(look, castAsked);
     const auto camera = CameraFrom(v);
     const bool hidden = OutOfSight(camera, look.position, aOps);
@@ -601,6 +702,11 @@ json Service::Substitute(const json& aParams, const Ops& aOps)
     {
         const std::string appearance = match.appearance;
         out["dry_run"] = true;
+        out["substitutable"] = !community;
+        if (community)
+        {
+            out["refusal"] = {{"code", "community_npc"}, {"reason", "a community NPC is never replaced; this read is for diagnostics and for later adoption"}};
+        }
         out["respawn"] = RespawnFor(match.cast, appearance, look.position, look.yaw, reactions);
         out["resident"] = ResidentFor(look, appearance, look.position);
         out["undo"] = nullptr;
@@ -660,7 +766,7 @@ json Service::Substitute(const json& aParams, const Ops& aOps)
 
 void Service::StepSwaps(double aDt, const Ops& aOps)
 {
-    std::vector<std::string> due, spawning;
+    std::vector<std::string> due, spawning, expired;
     {
         std::scoped_lock _(m_mutex);
         if (m_swaps.empty())
@@ -676,6 +782,10 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
                 swap.sinceSpawn += aDt;
                 spawning.push_back(swap.who);
             }
+            else if (swap.age >= swap.maxWait)
+            {
+                expired.push_back(swap.who);
+            }
             else if (swap.sincePoll >= kPollSeconds)
             {
                 swap.sincePoll = 0.0;
@@ -683,19 +793,61 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
             }
         }
     }
+    // Deadlines first. They need no observation of V: a failed read may stop a swap from going forward, but never from being rolled
+    // back, so a held original is never kept held by a game that will not answer.
+    for (const auto& who : expired)
+    {
+        FailSwap(who, "never_hidden", "the original stayed in V's sight (or V could not be read) for as long as max_wait_s allowed; nothing was changed", aOps);
+    }
+    std::vector<std::string> stillSpawning;
+    for (const auto& who : spawning)
+    {
+        bool gone = false, appeared = false, late = false;
+        {
+            std::scoped_lock _(m_mutex);
+            const auto it = std::find_if(m_swaps.begin(), m_swaps.end(), [&](const Swap& w) { return w.who == who && w.spawning; });
+            if (it == m_swaps.end())
+            {
+                continue;
+            }
+            const auto held = m_npcs.find(who);
+            gone = held == m_npcs.end();
+            appeared = !gone && held->second.spawned;
+            late = it->sinceSpawn >= kSwapSpawnS;
+        }
+        if (gone)
+        {
+            FailSwap(who, "actor_gone", "the actor was released or lost before the swap finished", aOps);
+        }
+        else if (!appeared && late)
+        {
+            FailSwap(who, "not_spawned", "the actor did not appear within " + std::to_string(static_cast<int>(kSwapSpawnS)) + " s; the original was given back", aOps);
+        }
+        else
+        {
+            stillSpawning.push_back(who);
+        }
+    }
+
     json v;
     Camera camera;
-    if (!due.empty() || !spawning.empty())
+    bool observed = false;
+    if (!due.empty() || !stillSpawning.empty())
     {
         try
         {
             v = aOps.v();
             camera = CameraFrom(v);
+            observed = true;
         }
         catch (const std::exception&)
         {
-            return; // the next tick tries again
+            // Not read this time. Nothing that needs to know what V sees goes forward below; the deadlines above and the
+            // recheck's own timer below still run.
         }
+    }
+    if (observed)
+    {
         // V leaving normal play (a fight, a scene, a ride, a menu or photo mode) ends every swap: the original is given back.
         const auto busy = v.value("busy", std::string());
         const auto phase = v.value("phase", std::string("gameplay"));
@@ -716,9 +868,14 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
             return;
         }
     }
+
     // Waiting swaps: is the original out of V's sight now?
     for (const auto& who : due)
     {
+        if (!observed)
+        {
+            continue;
+        }
         Swap snapshot;
         {
             std::scoped_lock _(m_mutex);
@@ -728,11 +885,6 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
                 continue;
             }
             snapshot = *it;
-        }
-        if (snapshot.age >= snapshot.maxWait)
-        {
-            FailSwap(who, "never_hidden", "the original stayed in V's sight for " + std::to_string(static_cast<int>(snapshot.maxWait)) + " s; nothing was changed", aOps);
-            continue;
         }
         json reading;
         try
@@ -750,6 +902,11 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
         }
         auto look = LookFromJson(reading);
         look.entity = snapshot.original;
+        if (look.hasStub)
+        {
+            FailSwap(who, "community_npc", "the original turned out to be a community NPC; the bridge only replaces lane-crowd passers-by", aOps);
+            continue;
+        }
         if (!OutOfSight(camera, look.position, aOps))
         {
             std::scoped_lock _(m_mutex);
@@ -780,38 +937,82 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
             FailSwap(who, "spawn_failed", e.what(), aOps);
         }
     }
-    // Swaps whose actor was requested: the original goes the moment the actor stands there.
-    for (const auto& who : spawning)
+
+    // Swaps whose actor was requested: the original goes the moment the actor stands there and the original is not in V's sight.
+    for (const auto& who : stillSpawning)
     {
         Swap swap;
-        bool appeared = false, gone = false;
         Npc npc;
         {
             std::scoped_lock _(m_mutex);
             const auto it = std::find_if(m_swaps.begin(), m_swaps.end(), [&](const Swap& w) { return w.who == who && w.spawning; });
-            if (it == m_swaps.end())
+            const auto held = m_npcs.find(who);
+            if (it == m_swaps.end() || held == m_npcs.end() || !held->second.spawned)
             {
-                continue;
+                continue; // not there yet (the deadline above decides when to give up)
             }
             swap = *it;
-            const auto held = m_npcs.find(who);
-            gone = held == m_npcs.end();
-            if (!gone)
+            npc = held->second;
+        }
+        // The last look at the original before it is hidden for good: still a lane-crowd passer-by nobody protects, and (unless the
+        // swap was asked to happen in view) still outside V's sight. Anything that cannot be established waits, boundedly.
+        bool blocked = false;
+        std::string blockedWhy = "observation_failed";
+        json state = json::object();
+        if (aOps.originalState)
+        {
+            try
             {
-                appeared = held->second.spawned;
-                npc = held->second;
+                state = aOps.originalState(swap.original);
+            }
+            catch (const std::exception&)
+            {
+                blocked = true;
             }
         }
-        if (gone)
+        if (!blocked && state.value("found", true))
         {
-            FailSwap(who, "actor_gone", "the actor was released or lost before the swap finished", aOps);
-            continue;
-        }
-        if (!appeared)
-        {
-            if (swap.sinceSpawn >= kSwapSpawnS)
+            if (state.value("community", false))
             {
-                FailSwap(who, "not_spawned", "the actor did not appear within " + std::to_string(static_cast<int>(kSwapSpawnS)) + " s; the original was given back", aOps);
+                FailSwap(who, "community_npc", "the original is a community NPC; the bridge only removes lane-crowd passers-by", aOps);
+                continue;
+            }
+            if (state.contains("reasons") && state["reasons"].is_array() && !state["reasons"].empty())
+            {
+                FailSwap(who, "npc_protected", "the original became protected (" + state["reasons"].dump() + "); it was left alone", aOps);
+                continue;
+            }
+            if (!swap.inViewAllowed)
+            {
+                if (!observed)
+                {
+                    blocked = true;
+                }
+                else if (state.contains("position") && !OutOfSight(camera, ToVec(state["position"]), aOps))
+                {
+                    blocked = true;
+                    blockedWhy = "became_visible";
+                }
+            }
+        }
+        if (blocked)
+        {
+            bool rollBack = false;
+            {
+                std::scoped_lock _(m_mutex);
+                const auto it = std::find_if(m_swaps.begin(), m_swaps.end(), [&](const Swap& w) { return w.who == who; });
+                if (it != m_swaps.end())
+                {
+                    it->visibleFor += aDt;
+                    rollBack = it->visibleFor >= kSwapRevisibleS;
+                }
+            }
+            if (rollBack)
+            {
+                FailSwap(who, blockedWhy,
+                         blockedWhy == "became_visible" ? "the original was in V's sight when the actor appeared and stayed there; the actor was removed and the original given back"
+                                                         : "V or the original could not be read when the actor appeared; the actor was removed and the original given back",
+                         aOps);
             }
             continue;
         }
@@ -828,7 +1029,7 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
             }
             else
             {
-                FailSwap(who, "remove_refused", e.what(), aOps);
+                FailSwap(who, e.code == "community_npc" ? "community_npc" : "remove_refused", e.what(), aOps);
                 continue;
             }
         }
@@ -840,7 +1041,7 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
         const Vec3 at = npc.position;
         const double yaw = npc.yawKnown ? npc.yaw : swap.look.yaw;
         const auto confirmed = ConfirmLook(npc.lookMatch.is_null() ? swap.report : npc.lookMatch, swap.look, npc.appearanceNow, npc.variantNow, at, yaw);
-        const bool seen = !OutOfSight(camera, at, aOps);
+        const bool seen = observed && !OutOfSight(camera, at, aOps);
         {
             std::scoped_lock _(m_mutex);
             const auto held = m_npcs.find(who);
@@ -903,8 +1104,8 @@ void Service::StepRestores(double aDt, const Ops& aOps)
             reading = json{{"spawned", false}};
         }
         const bool spawned = reading.value("spawned", false);
-        const bool inCrowd = reading.value("in_crowd", false);
-        bool done = false;
+        const bool inCrowd = spawned && reading.value("in_crowd", false);
+        bool timedOut = false;
         double waited = 0.0;
         {
             std::scoped_lock _(m_mutex);
@@ -922,17 +1123,46 @@ void Service::StepRestores(double aDt, const Ops& aOps)
                 it->sent = true;
             }
             waited = it->age;
-            done = (spawned && inCrowd) || (it->sinceSpawned >= kRestoreJoinS) || it->age >= kRestoreMaxS;
-            if (done)
+            timedOut = it->sinceSpawned >= kRestoreJoinS || it->age >= kRestoreMaxS;
+            if (inCrowd)
             {
+                m_restores.erase(it); // ownership passes to the game only on a confirmed crowd membership
+            }
+        }
+        if (!inCrowd && !timedOut)
+        {
+            continue;
+        }
+        bool cancelled = false;
+        if (!inCrowd)
+        {
+            // Past the time limits a person who never joined is deleted (or its spawn request cancelled), never abandoned; a
+            // cancel that fails is retried a few times, and the kill switch removes whatever is left.
+            if (aOps.restoreCancel)
+            {
+                try
+                {
+                    cancelled = aOps.restoreCancel(restoring.entity).value("cancelled", false);
+                }
+                catch (const std::exception&)
+                {
+                }
+            }
+            std::scoped_lock _(m_mutex);
+            const auto it = std::find_if(m_restores.begin(), m_restores.end(), [&](const Restoring& r) { return r.entity == restoring.entity; });
+            if (it != m_restores.end())
+            {
+                if (!cancelled && ++it->cancelFails < 10)
+                {
+                    continue;
+                }
                 m_restores.erase(it);
             }
         }
-        if (done)
-        {
-            Emit("npc.restored", "done", "a fresh crowd person was left where the actor stood (" + std::string(inCrowd ? "in the crowd" : "not seen joining the crowd") + ")",
-                 {{"entity", restoring.entity}, {"spawned", spawned}, {"in_crowd", inCrowd}, {"waited_s", std::round(waited * 10) / 10}});
-        }
+        Emit("npc.restored", inCrowd ? "done" : "warn",
+             inCrowd ? std::string("a fresh crowd person was left where the actor stood (in the crowd)")
+                     : std::string("the fresh crowd person never joined the crowd and was ") + (cancelled ? "removed" : "not removable now (the kill switch removes it)"),
+             {{"entity", restoring.entity}, {"spawned", spawned}, {"in_crowd", inCrowd}, {"removed", cancelled}, {"waited_s", std::round(waited * 10) / 10}});
     }
 }
 } // namespace xfb::npc

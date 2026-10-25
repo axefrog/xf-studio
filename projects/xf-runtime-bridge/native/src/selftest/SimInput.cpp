@@ -24,10 +24,14 @@ SimInput::SimInput(Dispatcher& d, SimNpc& npc, EventLog& events, bool hooks, std
         if (!m_live() || m_dispatcher.IsKilled()) throw MethodError("game_loading", "Simulation gate closed.");
     });
     // No retail actor/input adapter in this host; state-machine/frame races have native fixtures.
-    d.Register({"supervisor.set", Access::WritePlayer, RunOn::BridgeThread, "Requires a retail actor adapter.", [this](const MethodContext& c) -> nlohmann::json {
+    // 0.8.19: Access::Write, as the plugin: the classes the entry needs (player for V, npc for an XF actor, plus each policy's) are checked below.
+    d.Register({"supervisor.set", Access::Write, RunOn::BridgeThread, "Requires a retail actor adapter.", [this](const MethodContext& c) -> nlohmann::json {
         if (!m_hooks) throw MethodError("test_hooks_off", "Supervisor test gate closed");
         const auto entry = supervisor::Parse(c.params);
         supervisor::RequireCapabilities(entry, c.callerWriteClasses);
+        const auto required = supervisor::RequiredWriteClasses(entry);
+        for (auto access : {Access::WritePlayer, Access::WriteWorld, Access::WriteNpc, Access::WriteDm})
+            if (required & WriteClassBit(access)) m_dispatcher.RequireWriteClass(access);
         throw MethodError("supervisor_unavailable", "Simulated host has no retail input/actor adapter; use supervisor core fixtures");
     }});
     d.Register({"supervisor.state", Access::Read, RunOn::BridgeThread, "Read inactive simulated supervisor.", [this](const MethodContext& c) {

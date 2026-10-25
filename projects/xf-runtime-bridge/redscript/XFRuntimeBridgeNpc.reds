@@ -84,6 +84,7 @@ public class XFNpcRegistry extends ScriptableSystem {
   private let m_voiceLines: array<Int32>; // lines from a voice with no body (npc.say without who)
   private let m_detached: array<EntityID>;  // 0.8.19: crowd people held still for a substitution (given back by the kill switch)
   private let m_restoring: array<EntityID>; // 0.8.19: fresh crowd people left by restore, until they are seen in the crowd
+  private let m_originals: array<EntityID>; // 0.8.19: the last crowd people read for a substitution, so one is found again by its own id wherever it is
 
   public static func Get() -> ref<XFNpcRegistry> {
     let game = GetGameInstance();
@@ -126,6 +127,36 @@ public class XFNpcRegistry extends ScriptableSystem {
 
   public func ForgetAll() -> Void {
     ArrayClear(this.m_entries);
+  }
+
+  public func Remember(id: EntityID) -> Void {
+    for held in this.m_originals {
+      if Equals(EntityID.ToDebugString(held), EntityID.ToDebugString(id)) { return; }
+    }
+    if ArraySize(this.m_originals) >= 16 {
+      ArrayErase(this.m_originals, 0);
+    }
+    ArrayPush(this.m_originals, id);
+  }
+
+  // A held or recently read original by the text of its id (the id npc_list gave), whether or not it is near V.
+  public func Original(text: String) -> EntityID {
+    for held in this.m_detached {
+      if Equals(EntityID.ToDebugString(held), text) { return held; }
+    }
+    for held in this.m_originals {
+      if Equals(EntityID.ToDebugString(held), text) { return held; }
+    }
+    let none: EntityID;
+    return none;
+  }
+
+  public func Detached() -> array<EntityID> {
+    return this.m_detached;
+  }
+
+  public func RestoringCount() -> Int32 {
+    return ArraySize(this.m_restoring);
   }
 
   public func AddDetached(id: EntityID) -> Void {
@@ -1548,6 +1579,22 @@ public abstract class XFNpc {
     return null;
   }
 
+  // The crowd person with this id wherever it is: by the id the registry remembers (the game's own lookup, whatever V's distance),
+  // else among the NPCs around V. A held original is given back through this, so a walk or a stream away never abandons it.
+  public static func Resolve(id: String) -> ref<ScriptedPuppet> {
+    let registry = XFNpcRegistry.Get();
+    if IsDefined(registry) {
+      let known = registry.Original(id);
+      if EntityID.IsDefined(known) {
+        let found = GameInstance.FindEntityByID(GetGameInstance(), known) as ScriptedPuppet;
+        if IsDefined(found) {
+          return found;
+        }
+      }
+    }
+    return XFNpc.Around(id);
+  }
+
   // The persistent stub every community NPC carries, as the game's own CheckStubData reads it (NPCPuppet.script:766-775):
   // {"spawner", "entry", "ordinal"} or "null". The ordinal is the puppet's index in the community's fixed entity list
   // (GetFixedEntityIdsFromSpawnerEntityID); -1 when the list does not hold it. A lane-crowd pedestrian has no stub.
@@ -1611,6 +1658,7 @@ public abstract class XFNpc {
     if Vector4.Distance(position, from) > 30.0 {
       return XFJson.Fail("too_far", "that NPC is more than 30 m from V");
     }
+    registry.Remember(puppet.GetEntityID());
     let recordId = puppet.GetRecordID();
     let record = TDBID.ToStringDEBUG(recordId);
     let className = puppet.GetClassName();
@@ -1632,7 +1680,7 @@ public abstract class XFNpc {
   // a hit, NPCPuppet.script:1990-2003). Not recycled while held (UnmarkDespawnCandidate, which the crowd system's own swap does).
   public static func DetachOriginal(cid: String, id: String) -> String {
     let registry = XFNpcRegistry.Get();
-    let puppet = XFNpc.Around(id);
+    let puppet = XFNpc.Resolve(id);
     if !IsDefined(puppet) || !IsDefined(registry) {
       return XFJson.Fail("npc_not_found", "that NPC isn't near V any more");
     }
@@ -1660,29 +1708,50 @@ public abstract class XFNpc {
     }
   }
 
+  // Found by its own id, wherever it is. A positive answer means it was found and given back; anything else leaves it owned in the
+  // registry (the caller retries, and the kill switch tries again).
   public static func ReattachOriginal(cid: String, id: String) -> String {
     let registry = XFNpcRegistry.Get();
-    let puppet = XFNpc.Around(id);
+    let puppet = XFNpc.Resolve(id);
     if IsDefined(puppet) {
       XFNpc.ReattachOne(puppet);
       if IsDefined(registry) { registry.RemoveDetached(puppet.GetEntityID()); }
       XFBridgeLog.Info(cid, "npc substitution gave the original " + id + " back to the crowd");
       return "{\"ok\":true,\"reattached\":true}";
     }
-    return "{\"ok\":true,\"reattached\":false}";
+    return "{\"ok\":true,\"reattached\":false,\"why\":\"the crowd person isn't found now (streamed out or removed); it stays owned and is tried again\"}";
+  }
+
+  // The original as it is now, for the checks just before its removal. A held crowd person is no longer a lane walker, so this does
+  // not ask for that; it reads what must still be true: nobody protects it, and it is not a community NPC.
+  public static func OriginalState(cid: String, id: String) -> String {
+    let puppet = XFNpc.Resolve(id);
+    if !IsDefined(puppet) {
+      return "{\"ok\":true,\"found\":false}";
+    }
+    let reasons = XFNpcCheck.Reasons(puppet);
+    let position = puppet.GetWorldPosition();
+    let heading = puppet.GetWorldYaw();
+    let stub = XFNpc.StubOf(puppet);
+    return "{\"ok\":true,\"found\":true,\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(heading) + ",\"reasons\":[" + reasons + "],\"community\":" + XFJson.Flag(!Equals(stub, "null")) + "}";
   }
 
   // Removes the original: held still, hidden for good and marked for the crowd system to recycle. Re-checks the protections first
   // (a person who became a quest participant meanwhile is left alone and the swap is undone).
   public static func RemoveOriginal(cid: String, id: String) -> String {
     let registry = XFNpcRegistry.Get();
-    let puppet = XFNpc.Around(id);
+    let puppet = XFNpc.Resolve(id);
     if !IsDefined(puppet) {
-      return XFJson.Fail("npc_not_found", "the original isn't near V any more");
+      return XFJson.Fail("npc_not_found", "the original isn't found any more");
     }
     let reasons = XFNpcCheck.Reasons(puppet);
     if StrLen(reasons) > 0 {
       return XFJson.Fail("npc_protected", "the original became protected (" + StrReplaceAll(reasons, "\"", "") + "), so it was left alone");
+    }
+    // The last word before the removal that cannot be undone: a community NPC (a quest can reserve one unmarked) is never hidden.
+    let stub = XFNpc.StubOf(puppet);
+    if !Equals(stub, "null") {
+      return XFJson.Fail("community_npc", "the original is a community NPC, so it was left alone");
     }
     let crowd = puppet.GetCrowdMemberComponent();
     if IsDefined(crowd) {
@@ -1706,6 +1775,9 @@ public abstract class XFNpc {
     let registry = XFNpcRegistry.Get();
     if !IsDefined(system) || !system.IsReady() || !IsDefined(registry) {
       return XFJson.Fail("not_ready", "the game can't spawn NPCs yet");
+    }
+    if registry.RestoringCount() >= 5 {
+      return XFJson.Fail("limit", "five fresh crowd people are still on their way to the crowd; no more are left");
     }
     let recordId = TDBID.Create(record);
     if !IsDefined(TweakDBInterface.GetCharacterRecord(recordId)) {
@@ -1733,6 +1805,26 @@ public abstract class XFNpc {
     registry.AddRestoring(id);
     XFBridgeLog.Info(cid, "npc restore left a fresh crowd person of " + record);
     return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + "}";
+  }
+
+  // A fresh crowd person that never joined the crowd: deleted, or its spawn request cancelled (Codeware's DeleteEntity does either).
+  public static func RestoreCancel(cid: String, entity: String) -> String {
+    let system = GameInstance.GetDynamicEntitySystem();
+    let registry = XFNpcRegistry.Get();
+    if !IsDefined(registry) {
+      return "{\"ok\":true,\"cancelled\":true,\"why\":\"nothing held\"}";
+    }
+    let id = registry.Restoring(entity);
+    if !EntityID.IsDefined(id) {
+      return "{\"ok\":true,\"cancelled\":true,\"why\":\"not held any more\"}";
+    }
+    if !IsDefined(system) {
+      return "{\"ok\":true,\"cancelled\":false}";
+    }
+    system.DeleteEntity(id);
+    registry.RemoveRestoring(id);
+    XFBridgeLog.Info(cid, "npc restore removed a fresh crowd person that never joined the crowd");
+    return "{\"ok\":true,\"cancelled\":true}";
   }
 
   public static func RestoreStep(cid: String, entity: String, send: Bool) -> String {
@@ -1827,21 +1919,19 @@ public abstract class XFNpc {
     if IsDefined(system) {
       system.DeleteTagged(n"xfs_npc");
     }
-    // 0.8.19: crowd people held for a substitution that did not finish go back to the crowd, and a restored crowd person that was
-    // not yet seen in the crowd is removed (one that joined is the game's now).
+    // 0.8.19: crowd people held for a substitution that did not finish go back to the crowd, each found by its own id wherever it is.
+    // One that cannot be found now stays owned in the registry and is reported, so the caller retries; a fresh crowd person not yet
+    // seen in the crowd is removed (one that joined is the game's now).
+    let unresolved = "";
     if IsDefined(registry) {
-      let held = registry.TakeDetached();
-      let player = XFPlayer.Player();
-      if IsDefined(player) {
-        let npcs = player.GetNPCsAroundObject(60.0);
-        for npc in npcs {
-          if IsDefined(npc) {
-            for id in held {
-              if Equals(EntityID.ToDebugString(npc.GetEntityID()), EntityID.ToDebugString(id)) {
-                XFNpc.ReattachOne(npc);
-              }
-            }
-          }
+      let held = registry.Detached();
+      for id in held {
+        let found = GameInstance.FindEntityByID(GetGameInstance(), id) as ScriptedPuppet;
+        if IsDefined(found) {
+          XFNpc.ReattachOne(found);
+          registry.RemoveDetached(id);
+        } else {
+          unresolved += (StrLen(unresolved) > 0 ? "," : "") + XFJson.Str(EntityID.ToDebugString(id));
         }
       }
       let restoring = registry.TakeRestoring();
@@ -1850,7 +1940,7 @@ public abstract class XFNpc {
       }
     }
     XFBridgeLog.Info(cid, "npc released all (" + reason + "): " + IntToString(released));
-    return "{\"ok\":true,\"released\":" + IntToString(released) + ",\"reason\":" + XFJson.Str(reason) + "}";
+    return "{\"ok\":true,\"released\":" + IntToString(released) + ",\"reason\":" + XFJson.Str(reason) + ",\"unresolved\":[" + unresolved + "]}";
   }
 
   public static func Poll(cid: String, whos: String) -> String {
@@ -1992,6 +2082,14 @@ public abstract class XFNpc {
 
   public static func RemoveOriginal(cid: String, id: String) -> String {
     return XFNpc.Missing();
+  }
+
+  public static func OriginalState(cid: String, id: String) -> String {
+    return XFNpc.Missing();
+  }
+
+  public static func RestoreCancel(cid: String, entity: String) -> String {
+    return "{\"ok\":true,\"cancelled\":true}";
   }
 
   public static func Restore(cid: String, record: String, appearance: String, x: Float, y: Float, z: Float, yaw: Float) -> String {

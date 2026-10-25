@@ -947,7 +947,7 @@ json Service::Status(const json& aParams) const
     {
         swaps.push_back(SwapJson(swap));
     }
-    return json{{"npcs", npcs}, {"hub", hub}, {"voice_lines", voices}, {"actors", ActorCount()}, {"casts", casts}, {"swaps", swaps}, {"restoring", m_restores.size()},
+    return json{{"npcs", npcs}, {"hub", hub}, {"voice_lines", voices}, {"actors", ActorCount()}, {"casts", casts}, {"swaps", swaps}, {"restoring", m_restores.size()}, {"returning", m_returns.size()},
                 {"limits", {{"actors", kMaxActors}, {"picks", kMaxPicks}, {"range_m", kMaxRangeM}}}};
 }
 
@@ -2010,7 +2010,11 @@ void Service::ReleaseOne(const std::string& aWho, const std::string& aHow, const
     json data{{"who", aWho}, {"how", aHow}};
     // 0.8.19: restore: an explicit release (no automatic reason: a fight, a handover, the kill switch, a load leave no one behind)
     // leaves a fresh crowd person where the actor stood, to be handed to the game's own crowd logic.
-    if (npc.restore && aReason.empty() && npc.known && !npc.originalRecord.empty() && aOps.restore)
+    if (npc.restore && aReason.empty() && npc.known && !npc.originalRecord.empty() && aOps.restore && m_restores.size() >= kMaxRestores)
+    {
+        data["restore_failed"] = "too many fresh crowd people are still on their way to the crowd (" + std::to_string(kMaxRestores) + "); none was left";
+    }
+    else if (npc.restore && aReason.empty() && npc.known && !npc.originalRecord.empty() && aOps.restore)
     {
         try
         {
@@ -2308,9 +2312,26 @@ void Service::ReleaseEverything(const std::string& aReason, const Ops& aOps)
         }
     }
     {
-        // A restored crowd person still on its way to the crowd is the game's by now, except under the kill switch's own path.
-        std::scoped_lock _(m_mutex);
-        m_restores.clear();
+        // A fresh crowd person still on its way to the crowd is not the game's yet: it is deleted (or its spawn cancelled), not forgotten.
+        std::vector<Restoring> pending;
+        {
+            std::scoped_lock _(m_mutex);
+            pending.swap(m_restores);
+        }
+        for (const auto& restoring : pending)
+        {
+            if (!aOps.restoreCancel)
+            {
+                continue;
+            }
+            try
+            {
+                aOps.restoreCancel(restoring.entity);
+            }
+            catch (const std::exception&)
+            {
+            }
+        }
     }
     std::vector<std::string> whos;
     {
@@ -2403,7 +2424,7 @@ json Service::ReleaseAllNow(const std::string& aReason, const Ops& aOps)
 bool Service::Active() const
 {
     std::scoped_lock _(m_mutex);
-    return !m_npcs.empty() || m_hub.has_value() || !m_voice.empty() || !m_swaps.empty() || !m_restores.empty();
+    return !m_npcs.empty() || m_hub.has_value() || !m_voice.empty() || !m_swaps.empty() || !m_restores.empty() || !m_returns.empty();
 }
 
 json Service::Holds() const
@@ -2441,6 +2462,7 @@ void Service::DropAll(const std::string& aReason)
         }
         m_swaps.clear();
         m_restores.clear();
+        m_returns.clear(); // the world, and the script registry with it, are gone
     }
     for (const auto& who : whos)
     {
@@ -2471,10 +2493,22 @@ json Service::RestoreAfterKill(const Ops& aOps)
             }
         }
         m_swaps.clear();
-        m_restores.clear();
+        m_restores.clear(); // the script deleted every fresh crowd person not yet in the crowd in the same step
         m_npcs.clear();
         m_hub.reset();
         m_voice.clear(); // the script hides its voice lines in the same step
+    }
+    // Originals the script could not find this time keep their cleanup owned and are retried (the tick does it even under the kill
+    // switch: a put-back step).
+    if (out.contains("unresolved") && out["unresolved"].is_array())
+    {
+        for (const auto& entity : out["unresolved"])
+        {
+            if (entity.is_string())
+            {
+                KeepReturning(entity.get<std::string>());
+            }
+        }
     }
     for (const auto& who : whos)
     {
@@ -2516,7 +2550,21 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
     }
     if (aInput.killed || !aInput.gateOpen || !Active())
     {
-        return; // the kill switch's restore releases; a closed gate waits
+        // The kill switch's restore releases; a closed gate waits. A held crowd person the restore could not find is still looked for.
+        if (aInput.killed && aInput.gateOpen)
+        {
+            bool owed = false;
+            {
+                std::scoped_lock _(m_mutex);
+                owed = !m_returns.empty();
+            }
+            if (owed)
+            {
+                RestoreScope restoring;
+                StepReturns(aDt, aOps);
+            }
+        }
+        return;
     }
     // Every game step the tick takes from here puts something back (a line hidden, a gesture ended, a hub withdrawn, a walk
     // stopped, a release), except a held facing's re-turn, which checks the write gate itself (TickInput::writesOpen).
@@ -2528,6 +2576,7 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
             NoteHandoverRelease();
         }
         ReleaseEverything(aInput.handedOver ? "handover" : "paused", aOps);
+        StepReturns(aDt, aOps);
         return;
     }
     // Timers: lines, gestures, the hub's and each motion's limit.
@@ -2705,6 +2754,7 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
     // 0.8.19: substitutions waiting for a hidden moment, or for their actor to appear, and restored crowd people on their way.
     StepSwaps(aDt, aOps);
     StepRestores(aDt, aOps);
+    StepReturns(aDt, aOps);
 }
 
 void Service::ExpireHub(const Ops& aOps)

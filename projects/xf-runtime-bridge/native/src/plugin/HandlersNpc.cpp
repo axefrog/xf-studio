@@ -151,6 +151,14 @@ npc::Ops OpsFor(const std::string& aCid)
         RED4ext::CString id(aId.c_str());
         return ScriptCall("XFNpc", "ReattachOriginal", {"String"}, {&id}, aCid);
     };
+    ops.originalState = [aCid](const std::string& aId) {
+        RED4ext::CString id(aId.c_str());
+        return ScriptCall("XFNpc", "OriginalState", {"String"}, {&id}, aCid);
+    };
+    ops.restoreCancel = [aCid](const std::string& aEntity) {
+        RED4ext::CString entity(aEntity.c_str());
+        return ScriptCall("XFNpc", "RestoreCancel", {"String"}, {&entity}, aCid);
+    };
     ops.removeOriginal = [aCid](const std::string& aId) {
         RED4ext::CString id(aId.c_str());
         return ScriptCall("XFNpc", "RemoveOriginal", {"String"}, {&id}, aCid);
@@ -245,10 +253,15 @@ json ReleaseNpcsForHandover(const std::string& aCid)
 
 void RestoreNpcAfterKill()
 {
-    if (!Service().Active())
+    // Always one step in the game, even when the bridge's own bookkeeping holds nothing: the script registry knows what it holds (a
+    // crowd person held for a substitution, a fresh crowd person on its way to the crowd) and the bookkeeping may have lost it.
+    try
     {
-        return;
+        log::Info("bridge.kill_released_npcs", SerializeJson(Service().RestoreAfterKill(OpsFor("kill-restore"))), "kill-restore");
     }
-    log::Info("bridge.kill_released_npcs", SerializeJson(Service().RestoreAfterKill(OpsFor("kill-restore"))), "kill-restore");
+    catch (const std::exception& e)
+    {
+        log::Warn("bridge.kill_released_npcs_failed", e.what(), "kill-restore");
+    }
 }
 } // namespace xfb::plugin

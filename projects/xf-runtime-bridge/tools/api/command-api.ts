@@ -363,7 +363,7 @@ export class CommandApi {
       return { ok: false, command: name, cid, error: { code: "bad_input", message: problems.join(" ") } };
     }
     const params = { ...input as Record<string, unknown> };
-    const required = [command.permission, ...(command.requiredPermissions?.(params) ?? [])];
+    const required = [command.primaryPermission?.(params) ?? command.permission, ...(command.requiredPermissions?.(params) ?? [])];
     const missing = options.allow && required.filter(permission => !options.allow!.includes(permission));
     if (missing?.length) return { ok: false, command: name, cid, error: { code: "permission_denied", message: `This policy needs: ${[...new Set(missing)].join(", ")}. Nothing was sent.` } };
     const when = params.when;

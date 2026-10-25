@@ -94,7 +94,9 @@ describe("catalogue", () => {
     for (const command of CATALOGUE.filter((c) => c.bridge)) {
       const method = command.bridge!.method;
       // The native access classes are the same as the tools' permission classes (RB-26).
-      const expected = command.permission;
+      // 0.8.19: a command whose admission follows its input (supervisor.set: V's entry needs the player class, an XF actor's the NPC
+      // class) is a plain native write; its handler checks the classes the entry needs, and the tools' primaryPermission mirrors that.
+      const expected = command.primaryPermission ? "write" : command.permission;
       expect(nativeAccess(pluginSource, method), `plugin ${method}`).toBe(expected);
       expect(nativeAccess(selftestSource, method) ?? nativeAccess(pluginSource, method), `selftest ${method}`).toBe(expected);
     }

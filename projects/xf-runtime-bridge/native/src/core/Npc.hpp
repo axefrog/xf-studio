@@ -110,6 +110,13 @@ inline constexpr double kSwapWaitMaxS = 120.0;
 inline constexpr double kSwapSpawnS = 12.0;    // the actor must have appeared this soon after its request, else the swap is undone
 inline constexpr double kRestoreMaxS = 15.0;   // a restored crowd person is watched this long for joining the crowd, then left to the game
 inline constexpr double kRestoreJoinS = 6.0;   // ... and counted as having joined (or not) this long after it appeared
+inline constexpr size_t kMaxRestores = 5;      // fresh crowd people waited on at once; more are refused (and none is ever abandoned: see StepRestores)
+// A held original that could not be given back at once is retried for this long (a streamed-out crowd person has nothing to return);
+// the retries are bounded in number too.
+inline constexpr double kReturnMaxS = 60.0;
+inline constexpr size_t kMaxReturns = 8;
+// The original became visible between the actor appearing and the removal: wait this long for it to look away, then roll back.
+inline constexpr double kSwapRevisibleS = 6.0;
 
 // --- the tables -------------------------------------------------------------------------------------
 
@@ -323,8 +330,12 @@ struct Ops
     std::function<json(const std::string& aId)> readLook;
     // 0.8.19: holds the original still while the actor appears (the game's own stop levers on the crowd member): {detached}.
     std::function<json(const std::string& aId)> detachOriginal;
-    // 0.8.19: gives a detached original back to the crowd (a swap that did not happen): {reattached}.
+    // 0.8.19: gives a detached original back to the crowd (a swap that did not happen): {reattached}. Found by its own id wherever
+    // it is; {reattached: false} means it could not be found or reached this time and the caller must try again.
     std::function<json(const std::string& aId)> reattachOriginal;
+    // 0.8.19: the original as it is now, for the checks just before its removal (it is held, so it is no longer asked to be a lane
+    // walker): {found, position, yaw, reasons: [protection reasons], community}. Changes nothing.
+    std::function<json(const std::string& aId)> originalState;
     // 0.8.19: removes the original (hidden for good and marked for the crowd system to recycle): {removed, method}. Refuses
     // npc_not_found when it is gone already.
     std::function<json(const std::string& aId)> removeOriginal;
@@ -334,6 +345,8 @@ struct Ops
     // 0.8.19: one look at a restored crowd person: {spawned, in_crowd}; aSend asks it to join the crowd now (once, when it first
     // appears).
     std::function<json(const std::string& aEntity, bool aSend)> restoreStep;
+    // 0.8.19: deletes a restored crowd person that never joined the crowd (or cancels its spawn request): {cancelled}.
+    std::function<json(const std::string& aEntity)> restoreCancel;
     // Sends (or, kind stop, cancels) an AI command on an actor: {sent, before: {position, yaw}} (place and stop report where
     // the actor was). Refuses npc_lost, not_walkable, no_ai.
     std::function<json(const std::string& aWho, const Command& aCommand)> command;
@@ -530,6 +543,7 @@ private:
         double age = 0.0, sinceSpawn = 0.0, sincePoll = 0.0;
         json report = nullptr;
         json hold = nullptr; // what the game said when the original was held (detached, in_crowd_after): the crowd-adoption rows' evidence
+        double visibleFor = 0.0; // 0.8.19: how long the original has been in V's sight since the actor appeared (the final recheck)
     };
     struct Restoring
     {
@@ -537,7 +551,16 @@ private:
         double age = 0.0;
         double sinceSpawned = -1.0; // -1: not seen yet
         double sinceStep = 1.0;
+        int cancelFails = 0;
         bool sent = false;
+    };
+    // 0.8.19: a held original that has not been given back yet. Cleanup ownership is kept, and retried, until a positive result.
+    struct Returning
+    {
+        std::string entity;
+        double age = 0.0;
+        double sinceTry = 0.0;
+        int attempts = 0;
     };
     struct HubHeld
     {
@@ -569,6 +592,10 @@ private:
     void FailSwap(const std::string& aWho, const std::string& aReason, const std::string& aDetail, const Ops& aOps);
     void StepSwaps(double aDt, const Ops& aOps);
     void StepRestores(double aDt, const Ops& aOps);
+    void StepReturns(double aDt, const Ops& aOps);
+    // Tries to give a held original back; true only after a positive answer. A failure is kept and retried (bounded).
+    bool GiveBack(const std::string& aEntity, const Ops& aOps);
+    void KeepReturning(const std::string& aEntity);
     json SwapJson(const Swap& aSwap) const;
     json NpcJson(const Npc& aNpc) const;
     void OnPoll(const json& aReading, const Ops& aOps, const TickInput& aInput);
@@ -595,6 +622,7 @@ private:
     std::vector<VoiceLine> m_voice; // lines from a voice with no body
     std::vector<Swap> m_swaps;
     std::vector<Restoring> m_restores;
+    std::vector<Returning> m_returns;
     // What the current handover released (the tick's safety net or ReleaseAllNow), for bridge.handover's answer.
     json m_handoverDone;
     void NoteHandoverRelease();

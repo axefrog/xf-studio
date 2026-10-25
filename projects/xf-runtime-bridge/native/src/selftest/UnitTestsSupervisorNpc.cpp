@@ -4,6 +4,7 @@
 // Runs with `xfb_selftest --unit-supervisor` and as part of `--unit`.
 #include "core/Supervisor.hpp"
 #include <cstdio>
+#include "core/GameThreadQueue.hpp"
 
 namespace
 {
@@ -176,6 +177,43 @@ int SupervisorNpcUnitTests()
     Check(ReadNpcObservation(json{{"who", "a2"}, {"valid", false}}, V()).lost, "an actor the registry cannot resolve is lost");
     Check(Observation{}.actor == "player:V", "an observation is V's unless it names an actor");
     Check(t.StateAll()["schema"] == "xfb/supervisor-state-2" && t.State("npc:a99")["active"] == false, "state reads one actor or all; an unknown actor is inactive");
+    {
+        // 0.8.19 (review): admission follows the actor. supervisor.set is a plain write (Access::Write) whose handler checks the classes the
+        // entry needs: with only the NPC class allowed, an actor's entry is admitted and V's refused.
+        Config config; config.allowWrites = true; config.writeClasses = npcBit | worldBit; config.maxRequestsPerSecond = 1000;
+        Session session; session.token = "admission"; GameThreadQueue queue; Dispatcher d(config, session, queue);
+        d.Register({"supervisor.set", Access::Write, RunOn::BridgeThread, "fixture of the plugin's admission", [&d](const MethodContext& c) {
+            const auto entry = Parse(c.params);
+            RequireCapabilities(entry, c.callerWriteClasses);
+            const auto required = RequiredWriteClasses(entry);
+            for (auto access : {Access::WritePlayer, Access::WriteWorld, Access::WriteNpc, Access::WriteDm})
+                if (required & WriteClassBit(access)) d.RequireWriteClass(access);
+            return json{{"armed", entry.actor.Key()}};
+        }});
+        auto call = [&](const json& entry, uint32_t claims) {
+            return json::parse(d.Handle(SerializeJson({{"v", 1}, {"token", session.token}, {"method", "supervisor.set"}, {"params", entry},
+                {"caller_write_classes", CallerClasses(claims)}}), 1).line);
+        };
+        const auto actor = call(NpcEntry("a2"), npcBit | worldBit);
+        Check(actor["ok"] == true && actor["result"]["armed"] == "npc:a2", "an actor's entry is admitted with the NPC class alone (no player class allowed)");
+        const auto player = call(PlayerEntry(), playerBit | worldBit | npcBit | WriteClassBit(Access::WriteDm));
+        Check(player["ok"] == false && player["error"]["code"] == "write_class_disabled", "V's entry still needs the player class");
+        auto pauseless = NpcEntry("a2"); pauseless["policy"]["not_in_combat"] = "release";
+        Check(call(pauseless, npcBit)["ok"] == true, "an actor's entry without pause needs the NPC class and nothing else");
+        const auto narrow = call(NpcEntry("a2"), npcBit);
+        Check(narrow["ok"] == false && narrow["error"]["code"] == "permission_denied", "...but its pause_world policy needs the caller to hold the world class");
+        config.writeClasses = worldBit;
+        Dispatcher closed(config, session, queue);
+        closed.Register({"supervisor.set", Access::Write, RunOn::BridgeThread, "fixture", [&closed](const MethodContext& c) {
+            const auto entry = Parse(c.params);
+            const auto required = RequiredWriteClasses(entry);
+            for (auto access : {Access::WritePlayer, Access::WriteWorld, Access::WriteNpc, Access::WriteDm})
+                if (required & WriteClassBit(access)) closed.RequireWriteClass(access);
+            return json::object();
+        }});
+        const auto refused = json::parse(closed.Handle(SerializeJson({{"v", 1}, {"token", session.token}, {"method", "supervisor.set"}, {"params", NpcEntry("a2")}}), 1).line);
+        Check(refused["ok"] == false && refused["error"]["code"] == "write_class_disabled", "with the NPC class off an actor's entry is refused by config");
+    }
     std::printf("SUPERVISOR NPC UNIT: %d checks, %d failures\n", checks, failures);
     return failures;
 }

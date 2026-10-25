@@ -11,6 +11,9 @@ import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
 import { CATALOGUE, findCommand } from "../api/catalogue.ts";
 import { NPC_REFUSALS, NPC_SUBSTITUTE_KINDS, NPC_WAIT_KINDS } from "../api/catalogue080npc.ts";
+import { commandAdmitted } from "../api/catalogue.ts";
+import { toolsFor } from "../mcp/server.ts";
+import { BridgeClient } from "../bridge-lib.ts";
 import { NPC_MESSAGES } from "../api/errors080npc.ts";
 import { validate } from "../api/schema.ts";
 import { WAIT_KINDS } from "../api/catalogue070.ts";
@@ -53,7 +56,8 @@ async function reset(api: CommandApi) {
   await bridge(api, "selftest.player", { busy: "", position: [100, 200, 10], yaw: 0 });
   for (const [id, position, yaw] of [["EntityID(9005)", [100, 192, 10], 0], ["EntityID(9006)", [98, 207, 10], 90]] as const) await bridge(api, "selftest.npc", { street: { id, position, yaw } });
 }
-const ids = { behind: "EntityID(9005)", community: "EntityID(9006)", vendor: "EntityID(9002)", workspot: "EntityID(9004)" };
+// community is a lane-crowd woman in front of V; stub is a community NPC (it carries the persistent stub), which is never replaced.
+const ids = { behind: "EntityID(9005)", community: "EntityID(9006)", stub: "EntityID(9007)", vendor: "EntityID(9002)", workspot: "EntityID(9004)" };
 async function street(api: CommandApi, id: string): Promise<Any> {
   return (await bridge(api, "selftest.npc", {})).street.find((n: Any) => n.id === id);
 }
@@ -66,7 +70,9 @@ describe("0.8.19 crowd substitution offline: the catalogue and the tables", () =
     expect((command as Any).refusals).toEqual([...NPC_REFUSALS["npc.substitute"]!]);
     for (const code of NPC_REFUSALS["npc.substitute"]!) expect(NPC_MESSAGES[code], code).toBeDefined();
     for (const kind of NPC_SUBSTITUTE_KINDS) expect(WAIT_KINDS).toContain(kind);
-    expect(NPC_SUBSTITUTE_KINDS).toEqual(["npc.substitute_started", "npc.substituted", "npc.substitute_failed", "npc.restored"]);
+    expect(NPC_SUBSTITUTE_KINDS).toEqual(["npc.substitute_started", "npc.substituted", "npc.substitute_failed", "npc.restored", "npc.original_returned", "npc.original_unreturned"]);
+    expect(NPC_REFUSALS["npc.substitute"]).toContain("community_npc");
+    expect(NPC_MESSAGES.community_npc).toContain("community");
     // The scenario runner reads NPC_WAIT_KINDS in one session.events call, which the bridge limits to 16 kinds.
     expect(NPC_WAIT_KINDS.length).toBeLessThanOrEqual(16);
     expect(CATALOGUE.filter((c) => c.name.startsWith("npc.")).map((c) => c.name)).toContain("npc.substitute");
@@ -82,9 +88,47 @@ describe("0.8.19 crowd substitution offline: the catalogue and the tables", () =
     const npc = readFileSync(join(projectDir, "native", "src", "core", "Npc.cpp"), "utf8");
     const substitute = readFileSync(join(projectDir, "native", "src", "core", "NpcSubstitute.cpp"), "utf8");
     expect(npc).toContain('{"npc.substitute", Access::WriteNpc,');
-    for (const code of ["look_unmatched", "already_substituting", "cast_unknown", "npc_not_found"]) expect(substitute).toContain(`"${code}"`);
+    for (const code of ["look_unmatched", "already_substituting", "cast_unknown", "npc_not_found", "community_npc"]) expect(substitute).toContain(`"${code}"`);
     expect(npc).toContain("kMaxActors");
     expect(readFileSync(join(projectDir, "native", "src", "core", "Npc.hpp"), "utf8")).toContain("kMaxActors = 5;");
+  });
+
+  test("review: held originals are found by their own id, fresh crowd people are bounded and cancelled, community NPCs are checked at the removal", () => {
+    const reds = readFileSync(join(projectDir, "redscript", "XFRuntimeBridgeNpc.reds"), "utf8");
+    const part = (from: string, to: string) => reds.split(from)[1]!.split(to)[0]!;
+    // Resolve: the registry's remembered id through the game's own lookup first, the radius around V only as a fallback.
+    const resolve = part("public static func Resolve(id: String)", "// The persistent stub every community NPC carries");
+    expect(resolve.indexOf("FindEntityByID")).toBeGreaterThan(-1);
+    expect(resolve.indexOf("FindEntityByID")).toBeLessThan(resolve.indexOf("XFNpc.Around(id)"));
+    for (const name of ["DetachOriginal", "ReattachOriginal", "RemoveOriginal", "OriginalState"]) {
+      const body = part(`public static func ${name}(cid: String, id: String)`, "  public static func ").split("\n  }\n")[0]!;
+      expect(body, name).toContain("XFNpc.Resolve(id)");
+      expect(body, name).not.toContain("XFNpc.Around(");
+    }
+    // The kill's cleanup resolves each held id itself, keeps the unresolved ones owned and reports them.
+    const all = part("public static func ReleaseAll(cid: String, reason: String)", "public static func Poll(");
+    expect(all).toContain("FindEntityByID");
+    expect(all).not.toContain("GetNPCsAroundObject");
+    expect(all).not.toContain("TakeDetached");
+    expect(all).toContain("unresolved");
+    // Reattach reports a positive result only when the person was found.
+    const reattach = part("public static func ReattachOriginal(cid: String, id: String)", "public static func OriginalState(");
+    expect(reattach).toMatch(/reattached.{1,4}true/);
+    expect(reattach).toMatch(/reattached.{1,4}false/);
+    // The removal that cannot be undone re-reads the community stub itself.
+    const remove = part("public static func RemoveOriginal(cid: String, id: String)", "public static func Restore(");
+    expect(remove.indexOf("community_npc")).toBeGreaterThan(-1);
+    expect(remove.indexOf("community_npc")).toBeLessThan(remove.indexOf("HideIrreversibly"));
+    // Fresh crowd people: five at most, cancellable, and ownership dropped only on a confirmed crowd membership.
+    expect(part("public static func Restore(cid: String", "RestoreCancel")).toContain("RestoringCount() >= 5");
+    expect(reds).toContain("public static func RestoreCancel(cid: String, entity: String)");
+    const step = part("public static func RestoreStep(cid: String", "public static func Release(cid: String, who: String, how: String)");
+    expect(step.indexOf("RemoveRestoring")).toBeGreaterThan(step.indexOf("if inCrowd"));
+    // The kill step runs even when the bridge's own bookkeeping holds nothing.
+    const handlers = readFileSync(join(projectDir, "native", "src", "plugin", "HandlersNpc.cpp"), "utf8");
+    const kill = handlers.split("void RestoreNpcAfterKill()")[1]!;
+    expect(kill).not.toContain("Service().Active()");
+    expect(kill).toContain("RestoreAfterKill");
   });
 
   test("the script side: the levers are the game's own, never the aggressive-crowd entry, density or settings", () => {
@@ -177,19 +221,21 @@ describe("0.8.19 npc.substitute against the self-test host's street", () => {
 
   test("dry run: the look, the match, the key and the respawn parameters; nothing held or spent", async () => {
     await reset(api);
-    const dry = await ok(api, "npc.substitute", { id: ids.community, dry_run: true });
-    expect(dry).toMatchObject({ dry_run: true, cast: "woman_corpo", undo: null });
+    const dry = await ok(api, "npc.substitute", { id: ids.stub, dry_run: true });
+    expect(dry).toMatchObject({ dry_run: true, cast: "woman_corpo", undo: null, substitutable: false });
+    expect(dry.refusal.code).toBe("community_npc"); // a dry run reports a community NPC, it never swaps one
     expect(dry.who).toBeUndefined();
     expect(dry.look_match).toMatchObject({ confirmed: false, level: null, expected_level: "exact", cast: "woman_corpo" });
     expect(dry.look_match.record.match).toBe("clone_of_same_record");
     expect(dry.look_match.not_matched.length).toBeGreaterThanOrEqual(3);
-    expect(dry.resident).toMatchObject({ kind: "community", key: "xfc1-EntityID_777_-bench_sitter-2", ours: true }); // the game's own pair, with the person's index
+    expect(dry.resident).toMatchObject({ kind: "community", key: "xfc1-EntityID_777_-bench_sitter-2", ours: true }); // the game's own pair, with the person's index (diagnostic)
+    expect(dry.original.community).toMatchObject({ entry: "bench_sitter", ordinal: 2 });
     expect(dry.resident.hash).toMatch(/^xfr1-[0-9a-f]{16}$/);
     const plain = await ok(api, "npc.substitute", { id: ids.behind, dry_run: true });
     expect(plain.resident.kind).toBe("crowd"); // a pure lane-crowd person has no key of the game's own: the hash
     expect(plain.resident.key).toBe(plain.resident.hash);
-    expect(dry.respawn).toMatchObject({ method: "npc.spawn", params: { cast: "woman_corpo", appearance: "citizen__corporat_wa_01", reactions: "quiet" } });
-    expect(dry.respawn.params.at).toEqual([98, 207, 10]);
+    expect(dry.respawn).toMatchObject({ method: "npc.spawn", params: { cast: "woman_corpo", appearance: "citizen__corporat_wa_02", reactions: "quiet" } });
+    expect(dry.respawn.params.at).toEqual([96, 204, 10]);
     const after = await bridge(api, "selftest.npc", {});
     expect(after.detaches).toBe(0);
     expect((await ok(api, "npc.status")).actors).toBe(0);
@@ -226,14 +272,14 @@ describe("0.8.19 npc.substitute against the self-test host's street", () => {
     expect(status.npcs[0]).toMatchObject({ who: "a1", substitute_of: ids.behind, resident: { key: swap.resident.key } });
   }, 30_000);
 
-  test("probe 2/3 for a community person: the game's own pair, the exact record, the colour variant reported", async () => {
+  test("probe 2/3 for a lane-crowd woman: the exact record, the colour variant reported, a hash key", async () => {
     await reset(api);
     const since = await latest(api);
     await bridge(api, "selftest.player", { yaw: 180 }); // she turns away: the person at (98, 207) is behind her now
     const swap = await ok(api, "npc.substitute", { id: ids.community });
     expect(swap).toMatchObject({ state: "spawning", cast: "woman_corpo" });
-    expect(swap.resident).toMatchObject({ kind: "community", key: "xfc1-EntityID_777_-bench_sitter-2" });
-    expect(swap.resident.hash).toMatch(/^xfr1-/);
+    expect(swap.resident).toMatchObject({ kind: "crowd", community: null });
+    expect(swap.resident.key).toMatch(/^xfr1-[0-9a-f]{16}$/);
     const done = await event(api, "npc.substituted", since, swap.who);
     expect(done.data.look_match.record.match).toBe("clone_of_same_record");
     expect(done.data.look_match.colour_variant).toMatchObject({ original: "red", actual: "", match: "different" });
@@ -253,7 +299,7 @@ describe("0.8.19 npc.substitute against the self-test host's street", () => {
     const done = await event(api, "npc.substituted", since, waiting.who);
     expect(done.data.in_view_at_swap).toBe(false);
     expect(done.data.waited_s).toBeGreaterThan(0);
-    expect(done.data.resident.key).toBe("xfc1-EntityID_777_-bench_sitter-2");
+    expect(done.data.resident.key).toMatch(/^xfr1-/);
     // In view, forced.
     await reset(api);
     const seen = await latest(api);
@@ -352,6 +398,99 @@ describe("0.8.19 npc.substitute against the self-test host's street", () => {
     await ok(api, "npc.release", { who: "all" });
   }, 30_000);
 
+  test("review 1: a community NPC is refused before anything is held or spent, in view or not", async () => {
+    await reset(api);
+    expect(await refused(api, "npc.substitute", { id: ids.stub })).toBe("community_npc");
+    expect(await refused(api, "npc.substitute", { id: ids.stub, in_view: true })).toBe("community_npc");
+    const report = await bridge(api, "selftest.npc", {});
+    expect(report.detaches).toBe(0);
+    expect(report.removals).toBe(0);
+    expect((await street(api, ids.stub)).removed).toBe(false);
+    expect((await ok(api, "npc.status")).actors).toBe(0);
+    // The plain lane-crowd person beside it is fine, and the refusal spent no handle.
+    expect((await ok(api, "npc.substitute", { id: ids.behind, dry_run: true })).substitutable).toBe(true);
+  }, 30_000);
+
+  test("review 2: a held original whose return the game does not confirm stays owned, is retried and is reported only when given back", async () => {
+    await reset(api);
+    await bridge(api, "selftest.npc", { remove_refuses: true, reattach_fails: 2 });
+    const since = await latest(api);
+    const attempt = await ok(api, "npc.substitute", { id: ids.behind });
+    const failed = await event(api, "npc.substitute_failed", since, attempt.who);
+    expect(failed.data).toMatchObject({ reason: "remove_refused", original_held: true, original_returned: false, return_pending: true });
+    expect((await street(api, ids.behind)).detached).toBe(true); // not given back yet, and not claimed to be
+    expect((await ok(api, "npc.status")).returning).toBe(1);
+    const back = await event(api, "npc.original_returned", since, undefined, 10_000);
+    expect(back.data.original).toBe(ids.behind);
+    expect((await street(api, ids.behind)).detached).toBe(false);
+    const report = await bridge(api, "selftest.npc", {});
+    expect(report.reattach_calls).toBeGreaterThanOrEqual(3);
+    expect((await ok(api, "npc.status")).returning).toBe(0);
+  }, 30_000);
+
+  test("review 3: a fresh crowd person who never joins the crowd is deleted, not abandoned", async () => {
+    await reset(api);
+    await bridge(api, "selftest.npc", { restore_never: true });
+    const since = await latest(api);
+    const swap = await ok(api, "npc.substitute", { id: ids.behind, restore: true });
+    await event(api, "npc.substituted", since, swap.who);
+    await ok(api, "npc.release", { who: swap.who, how: "despawn" });
+    const restored = await event(api, "npc.restored", since, undefined, 15_000);
+    expect(restored.data).toMatchObject({ in_crowd: false, removed: true });
+    const report = await bridge(api, "selftest.npc", {});
+    expect(report.cancels).toBe(1);
+    expect(report.street.some((n: Any) => n.fresh)).toBe(false);
+    expect((await ok(api, "npc.status")).restoring).toBe(0);
+  }, 40_000);
+
+  test("review 4: a V that cannot be read stops a swap going forward, never going back", async () => {
+    await reset(api);
+    const since = await latest(api);
+    const waiting = await ok(api, "npc.substitute", { id: ids.community, max_wait_s: 1 });
+    await bridge(api, "selftest.npc", { v_fails: true });
+    const failed = await event(api, "npc.substitute_failed", since, waiting.who);
+    expect(failed.data.reason).toBe("never_hidden");
+    await bridge(api, "selftest.npc", { v_fails: false });
+    // ...and with the actor there but V unreadable, nothing is removed and the swap is rolled back after a bounded wait.
+    await bridge(api, "selftest.npc", { spawn_never: true });
+    const mark = await latest(api);
+    const held = await ok(api, "npc.substitute", { id: ids.behind });
+    await bridge(api, "selftest.npc", { v_fails: true, spawn_now: held.who });
+    const rolled = await event(api, "npc.substitute_failed", mark, held.who, 15_000);
+    await bridge(api, "selftest.npc", { v_fails: false });
+    expect(rolled.data).toMatchObject({ reason: "observation_failed", original_returned: true });
+    const report = await bridge(api, "selftest.npc", {});
+    expect(report.removals).toBe(0);
+    expect((await street(api, ids.behind)).detached).toBe(false);
+  }, 40_000);
+
+  test("review 5: the original is checked again just before it is hidden: in sight it waits, and a stay in sight is rolled back", async () => {
+    await reset(api);
+    await bridge(api, "selftest.npc", { spawn_never: true });
+    let since = await latest(api);
+    const first = await ok(api, "npc.substitute", { id: ids.behind });
+    await bridge(api, "selftest.npc", { street: { id: ids.behind, position: [100, 210, 10] } }); // it walked into V's view
+    await bridge(api, "selftest.npc", { spawn_now: first.who });
+    await sleep(1500);
+    expect((await bridge(api, "selftest.npc", {})).removals).toBe(0);
+    expect((await ok(api, "npc.status")).swaps[0]).toMatchObject({ who: first.who, state: "spawning" });
+    await bridge(api, "selftest.npc", { street: { id: ids.behind, position: [100, 192, 10] } }); // it looks away again
+    const done = await event(api, "npc.substituted", since, first.who);
+    expect(done.data.in_view_at_swap).toBe(false);
+    expect((await bridge(api, "selftest.npc", {})).removals).toBe(1);
+    // Now one that stays in sight.
+    await reset(api);
+    await bridge(api, "selftest.npc", { spawn_never: true });
+    since = await latest(api);
+    const second = await ok(api, "npc.substitute", { id: ids.behind });
+    await bridge(api, "selftest.npc", { street: { id: ids.behind, position: [100, 210, 10] } });
+    await bridge(api, "selftest.npc", { spawn_now: second.who });
+    const rolled = await event(api, "npc.substitute_failed", since, second.who, 15_000);
+    expect(rolled.data).toMatchObject({ reason: "became_visible", original_returned: true });
+    expect((await bridge(api, "selftest.npc", {})).removals).toBe(0);
+    expect((await ok(api, "npc.status")).actors).toBe(0);
+  }, 60_000);
+
   test("probe 7/11: the kill switch gives held originals back and leaves no actor (last: it ends the host's bridge)", async () => {
     await reset(api);
     await bridge(api, "selftest.npc", { spawn_never: true });
@@ -362,4 +501,70 @@ describe("0.8.19 npc.substitute against the self-test host's street", () => {
     for (let i = 0; i < 80 && !host.log.some((l) => l.includes("bridge.kill_restored")); i++) await sleep(50);
     expect(host.log.some((l) => l.includes("bridge.kill_restored"))).toBe(true);
   }, 30_000);
+});
+
+describe("0.8.19 review 6: supervision of an XF actor needs NPC writes, not player writes", () => {
+  const actorEntry = (extra: Record<string, unknown> = {}) => ({
+    schema: "xfb/supervisor-entry-1",
+    actor: { kind: "npc", ref: "a1" },
+    goal: { kind: "idle_safe" },
+    invariants: ["alive", "not_lost"],
+    policy: { alive: "release", not_lost: "release", ...extra },
+  });
+  const playerEntry = { schema: "xfb/supervisor-entry-1", actor: { kind: "player", ref: "V" }, goal: { kind: "idle_safe" }, invariants: ["alive"], policy: { alive: "pause_world" } };
+
+  test("the tools admit by the actor: NPC permission for an actor, player permission for V, each plus its policies", async () => {
+    const set = findCommand("supervisor.set")!;
+    expect((set as Any).primaryPermission(actorEntry())).toBe("write-npc");
+    expect((set as Any).primaryPermission(playerEntry)).toBe("write-player");
+    expect((set as Any).requiredPermissions(actorEntry({ alive: "return_last_safe" }))).not.toContain("control"); // an actor's return is npc.place
+    expect((set as Any).requiredPermissions({ ...playerEntry, policy: { alive: "return_last_safe" } })).toContain("control");
+    expect(commandAdmitted(set, ["write-npc"])).toBe(true);
+    expect(commandAdmitted(set, ["read"])).toBe(false);
+    expect(toolsFor(CATALOGUE, ["read", "write-npc"]).map((t) => t.name)).toContain("supervisor_set");
+    expect(toolsFor(CATALOGUE, ["read", "write-player"]).map((t) => t.name)).toContain("supervisor_set");
+    expect(toolsFor(CATALOGUE, ["read", "write-world"]).map((t) => t.name)).not.toContain("supervisor_set");
+    const dir = tempDir("xfb-admit-");
+    writeFileSync(join(dir, "session.json"), JSON.stringify({ protocol: 1, sid: "s", pid: process.pid, pipe: "fixture", token: "t", started_at: new Date().toISOString(), allow_writes: true }));
+    let claims: Any = null, calls = 0;
+    const api = new CommandApi({ runtimeDir: dir, auditDir: dir, transport: async () => ({ call: async (_m, _p, _c, _t, grant) => { calls++; claims = grant; return { v: 1 as const, id: 1, cid: "a", ok: true as const, result: { active: true } }; }, close() {} }) });
+    try {
+      expect((await api.run("supervisor.set", actorEntry(), { allow: ["read", "write-npc"] })).ok).toBe(true);
+      expect(claims.caller_write_classes).toEqual(["npc"]); // the player class is neither needed nor claimed
+      const callsBefore = calls;
+      const noNpc = await api.run("supervisor.set", actorEntry(), { allow: ["read", "write-player"] });
+      expect(noNpc.ok).toBe(false);
+      expect(noNpc.ok ? "" : noNpc.error.code).toBe("permission_denied");
+      const noPlayer = await api.run("supervisor.set", playerEntry, { allow: ["read", "write-npc", "write-world"] });
+      expect(noPlayer.ok ? "" : noPlayer.error.code).toBe("permission_denied");
+      const noWorld = await api.run("supervisor.set", actorEntry({ not_lost: "pause_world" }), { allow: ["read", "write-npc"] });
+      expect(noWorld.ok ? "" : noWorld.error.code).toBe("permission_denied"); // each policy's own capability is still needed
+      expect(calls).toBe(callsBefore);
+    } finally { api.close(); }
+  });
+
+  test("the plugin registers supervisor.set as a plain write and checks the classes the entry really needs", () => {
+    const cpp = readFileSync(join(projectDir, "native", "src", "plugin", "Supervisor.cpp"), "utf8");
+    expect(cpp).toContain('d.Register({"supervisor.set", Access::Write,');
+    expect(cpp).not.toContain('"supervisor.set", Access::WritePlayer');
+    expect(cpp).toContain("RequiredWriteClasses(entry)");
+    const core = readFileSync(join(projectDir, "native", "src", "core", "Supervisor.cpp"), "utf8");
+    expect(core).toContain('entry.actor.kind == "npc" ? Access::WriteNpc : Access::WritePlayer');
+  });
+
+  test("against the host's admission: an actor's entry reaches the adapter with only the NPC class on; V's is refused by config", async () => {
+    const host = await startSelftestHost(["--allow-writes", "--allow-test-hooks", "--write-classes", "npc"]);
+    const client = new BridgeClient(host.session, 3000);
+    try {
+      await client.connect();
+      const actor = await client.call("supervisor.set", actorEntry(), "admit-actor", { caller_write_classes: ["npc"] });
+      expect(actor.error?.code).toBe("supervisor_unavailable"); // past admission: the simulated host has no retail adapter
+      const player = await client.call("supervisor.set", playerEntry, "admit-player", { caller_write_classes: ["player", "world"] });
+      expect(player.error?.code).toBe("write_class_disabled");
+      const world = await client.call("supervisor.set", actorEntry({ not_lost: "pause_world" }), "admit-world", { caller_write_classes: ["npc", "world"] });
+      expect(world.error?.code).toBe("write_class_disabled"); // world is off in this host's config
+      const state = await client.call("supervisor.state", {}, "admit-state");
+      expect(state.result).toMatchObject({ schema: "xfb/supervisor-state-2", active: false, count: 0, limit: 5 });
+    } finally { client.close(); await host.stop(); }
+  }, 60_000);
 });

@@ -110,14 +110,24 @@ struct SimNpc::State
         // 0.8.19: crowd people for npc.substitute. 9005 is a plain lane walker behind V (out of her sight at yaw 0), a man whose
         // record has no matching clone; 9006 a community NPC with a stub, a woman of the corpo family, in front of V.
         {"EntityID(9005)", "Character.Citizen_Street_Man_07", "NPCPuppet", {100.0, 192.0, 10.0}, true, {}, "", "street_ma_07_a", "", "Male", 0.0},
-        {"EntityID(9006)", "Character.CorpoWoman", "NPCPuppet", {98.0, 207.0, 10.0}, true, {}, "", "citizen__corporat_wa_01", "red", "Female", 90.0, "EntityID(777)", "bench_sitter", 2},
+        {"EntityID(9006)", "Character.CorpoWoman", "NPCPuppet", {98.0, 207.0, 10.0}, true, {}, "", "citizen__corporat_wa_01", "red", "Female", 90.0},
+        // A community NPC (it carries the persistent stub): listed and read, never replaced.
+        {"EntityID(9007)", "Character.CorpoWoman", "NPCPuppet", {96.0, 204.0, 10.0}, true, {}, "", "citizen__corporat_wa_02", "", "Female", 90.0, "EntityID(777)", "bench_sitter", 2},
     };
     std::string lookingAt;            // selftest.npc {looking_at: id}: the NPC V looks at (npc.substitute look_at)
     int32_t detaches = 0, reattaches = 0, removals = 0, restores = 0;
     std::string appearanceOverride;   // selftest.npc {appearance_override}: the engine falls back to this name for any spawn
     std::string variantOverride;
     bool removeRefuses = false;       // selftest.npc {remove_refuses}: removing the original is refused
-    bool spawnNever = false;          // selftest.npc {spawn_never}: an actor never appears
+    bool spawnNever = false;          // selftest.npc {spawn_never}: an actor never appears (spawn_now: who lets one in)
+    int32_t reattachFails = 0;        // selftest.npc {reattach_fails: n}: the next n reattach calls answer "not found now"
+    bool unresolvable = false;        // selftest.npc {unresolvable}: held originals cannot be found (reattach and the kill's step leave them held)
+    bool stateFails = false;          // selftest.npc {state_fails}: the original's state cannot be read
+    bool vFails = false;              // selftest.npc {v_fails}: V cannot be read
+    bool restoreNever = false;        // selftest.npc {restore_never}: a fresh crowd person never joins the crowd
+    int32_t cancelFails = 0;          // selftest.npc {cancel_fails: n}: the next n restore cancels fail
+    int32_t cancels = 0;
+    int32_t reattachCalls = 0;
     std::map<std::string, Actor> actors;
     std::map<int32_t, std::string> voiceLines; // voice lines showing: number -> "speaker|style"
     struct HubState
@@ -167,6 +177,13 @@ npc::Ops MakeOps(SimNpc::State* aState)
     auto* s = aState;
     npc::Ops ops;
     ops.v = [s] {
+        {
+            std::scoped_lock _(s->mutex);
+            if (s->vFails)
+            {
+                throw MethodError("not_ready", "simulated: V could not be read");
+            }
+        }
         auto p = s->hooks.player();
         p["phase"] = s->hooks.phase();
         p["camera"] = CameraOf(p);
@@ -528,8 +545,32 @@ npc::Ops MakeOps(SimNpc::State* aState)
         }
         throw MethodError("npc_not_found", "simulated: that NPC isn't near V any more");
     };
+    ops.originalState = [s](const std::string& aId) -> json {
+        std::scoped_lock _(s->mutex);
+        if (s->stateFails)
+        {
+            throw MethodError("not_ready", "simulated: the original could not be read");
+        }
+        for (const auto& n : s->street)
+        {
+            if (n.id == aId && !n.removed)
+            {
+                return json{{"found", true}, {"position", Arr(n.position)}, {"yaw", n.yaw}, {"reasons", n.reasons}, {"community", !n.stubSpawner.empty()}};
+            }
+        }
+        return json{{"found", false}};
+    };
     ops.reattachOriginal = [s](const std::string& aId) -> json {
         std::scoped_lock _(s->mutex);
+        ++s->reattachCalls;
+        if (s->unresolvable || s->reattachFails > 0)
+        {
+            if (s->reattachFails > 0)
+            {
+                --s->reattachFails;
+            }
+            return json{{"reattached", false}, {"why", "simulated: not found now"}};
+        }
         for (auto& n : s->street)
         {
             if (n.id == aId && n.detached)
@@ -583,28 +624,48 @@ npc::Ops MakeOps(SimNpc::State* aState)
                 {
                     n.sentJoin = true;
                 }
-                return json{{"spawned", true}, {"in_crowd", n.sentJoin}};
+                return json{{"spawned", true}, {"in_crowd", n.sentJoin && !s->restoreNever}};
             }
         }
         return json{{"spawned", false}};
     };
+    ops.restoreCancel = [s](const std::string& aEntity) -> json {
+        std::scoped_lock _(s->mutex);
+        if (s->cancelFails > 0)
+        {
+            --s->cancelFails;
+            return json{{"cancelled", false}};
+        }
+        const auto before = s->street.size();
+        s->street.erase(std::remove_if(s->street.begin(), s->street.end(), [&](const Street& n) { return n.fresh && n.id == aEntity; }), s->street.end());
+        if (s->street.size() != before)
+        {
+            ++s->cancels;
+        }
+        return json{{"cancelled", true}};
+    };
     ops.releaseAll = [s](const std::string& aReason) {
         std::scoped_lock _(s->mutex);
         const auto count = s->actors.size();
+        json unresolved = json::array();
         for (auto& n : s->street)
         {
-            if (n.detached)
+            if (n.detached && s->unresolvable)
+            {
+                unresolved.push_back(n.id); // stays held and owned: the caller retries
+            }
+            else if (n.detached)
             {
                 n.detached = false;
                 ++s->reattaches;
             }
         }
-        s->street.erase(std::remove_if(s->street.begin(), s->street.end(), [](const Street& n) { return n.fresh && !n.sentJoin; }), s->street.end());
+        s->street.erase(std::remove_if(s->street.begin(), s->street.end(), [s](const Street& n) { return n.fresh && (!n.sentJoin || s->restoreNever); }), s->street.end());
         s->actors.clear();
         s->voiceLines.clear();
         s->hub = SimNpc::State::HubState{};
         ++s->releasedAll;
-        return json{{"released", count}, {"reason", aReason}, {"simulated", true}};
+        return json{{"released", count}, {"reason", aReason}, {"unresolved", unresolved}, {"simulated", true}};
     };
     ops.poll = [s](const std::string& aWhos) {
         const auto player = s->hooks.player();
@@ -717,7 +778,9 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                                       n.removed = false;
                                       n.detached = false;
                                   }
-                                  s->detaches = s->reattaches = s->removals = s->restores = 0;
+                                  s->detaches = s->reattaches = s->removals = s->restores = s->cancels = s->reattachCalls = 0;
+                                  s->reattachFails = s->cancelFails = 0;
+                                  s->unresolvable = s->stateFails = s->vFails = s->restoreNever = false;
                               }
                               if (p.contains("looking_at"))
                               {
@@ -738,6 +801,39 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                               if (p.contains("spawn_never"))
                               {
                                   s->spawnNever = p["spawn_never"].get<bool>();
+                              }
+                              if (p.contains("spawn_now"))
+                              {
+                                  const auto it = s->actors.find(p["spawn_now"].get<std::string>());
+                                  if (it != s->actors.end())
+                                  {
+                                      it->second.spawnIn = 0.0;
+                                      it->second.spawned = true;
+                                  }
+                              }
+                              if (p.contains("reattach_fails"))
+                              {
+                                  s->reattachFails = p["reattach_fails"].get<int32_t>();
+                              }
+                              if (p.contains("unresolvable"))
+                              {
+                                  s->unresolvable = p["unresolvable"].get<bool>();
+                              }
+                              if (p.contains("state_fails"))
+                              {
+                                  s->stateFails = p["state_fails"].get<bool>();
+                              }
+                              if (p.contains("v_fails"))
+                              {
+                                  s->vFails = p["v_fails"].get<bool>();
+                              }
+                              if (p.contains("restore_never"))
+                              {
+                                  s->restoreNever = p["restore_never"].get<bool>();
+                              }
+                              if (p.contains("cancel_fails"))
+                              {
+                                  s->cancelFails = p["cancel_fails"].get<int32_t>();
                               }
                               if (p.contains("street"))
                               {
@@ -878,6 +974,8 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                                           {"reattaches", s->reattaches},
                                           {"removals", s->removals},
                                           {"restores", s->restores},
+                                          {"cancels", s->cancels},
+                                          {"reattach_calls", s->reattachCalls},
                                           {"voice_lines", voices},
                                           {"hub", {{"shown", s->hub.shown}, {"id", s->hub.id}, {"title", s->hub.title}, {"choices", s->hub.choices}, {"answer", s->hub.answer}}},
                                           {"released_all", s->releasedAll},
@@ -971,10 +1069,7 @@ void SimNpc::OnDetach()
 
 void SimNpc::RestoreAfterKill(json& aOut)
 {
-    if (!m_state->service.Active())
-    {
-        return;
-    }
+    // Always one step, even with nothing held natively (the script registry knows what it holds).
     aOut["npcs_released"] = m_state->service.RestoreAfterKill(MakeOps(m_state.get()));
 }
 

@@ -155,7 +155,10 @@ void RegisterSupervisor(Dispatcher& d)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
     d.SetSafetyCancellation(CancelSupervisor);
-    d.Register({"supervisor.set", Access::WritePlayer, RunOn::BridgeThread, "Arm a bounded safety supervisor entry for V or an XF actor.", [&d](const MethodContext& c) {
+    // Access::Write, not WritePlayer: admission is actor-aware (0.8.19). The write classes the entry really needs (RequiredWriteClasses:
+    // the player class for V's entry, the NPC class for an XF actor's, plus each selected policy's) are checked below, so an NPC-only
+    // entry does not need to be allowed to change the player.
+    d.Register({"supervisor.set", Access::Write, RunOn::BridgeThread, "Arm a bounded safety supervisor entry for V or an XF actor.", [&d](const MethodContext& c) {
         // Validate everything before replacing the current owner or its input watch.
         if (!Get().config.allowTestHooks) throw MethodError("test_hooks_off", "Supervisor test gate closed");
         const auto entry = supervisor::Parse(c.params);

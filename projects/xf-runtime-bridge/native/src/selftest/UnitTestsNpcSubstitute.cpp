@@ -77,6 +77,14 @@ struct Fake
     std::vector<std::string> restored;
     bool inCrowd = false;
     int nextEntity = 100;
+    // 0.8.19 (review fixes)
+    bool vThrows = false;                 // V cannot be read
+    bool stateThrows = false;             // the original's state cannot be read
+    int reattachFails = 0;                // the next n reattach calls answer "not found now"
+    std::set<std::string> unresolvable;   // originals that cannot be found: reattach answers false, the kill step leaves them held
+    bool restoreNever = false;            // a fresh crowd person never joins the crowd
+    int cancelFails = 0;                  // the next n restore cancels fail (a negative number: every one fails)
+    std::string removeCode = "npc_protected";
 
     static json Person(const std::string& aId, const std::string& aRecord, const std::string& aAppearance, const std::string& aGender, double aY, double aYaw = 90.0)
     {
@@ -115,7 +123,27 @@ struct Fake
     n::Ops Ops()
     {
         n::Ops ops;
-        ops.v = [this] { return v; };
+        ops.v = [this]() -> json {
+            if (vThrows)
+            {
+                throw xfb::MethodError("not_ready", "V could not be read");
+            }
+            return v;
+        };
+        ops.originalState = [this](const std::string& aId) -> json {
+            calls.push_back("originalState " + aId);
+            if (stateThrows)
+            {
+                throw xfb::MethodError("not_ready", "the original could not be read");
+            }
+            const auto it = street.find(aId);
+            if (it == street.end() || removed.count(aId))
+            {
+                return json{{"found", false}};
+            }
+            return json{{"found", true}, {"position", it->second["position"]}, {"yaw", it->second.value("yaw", 0.0)},
+                        {"reasons", it->second.contains("reasons") ? it->second["reasons"] : json::array()}, {"community", it->second.contains("stub")}};
+        };
         ops.pick = [this](const std::string& aWho, const std::string&) -> json {
             calls.push_back("pick " + aWho);
             return json{{"record", "Character.CorpoWoman"}, {"position", {0.0, -10.0, 0.0}}};
@@ -148,6 +176,14 @@ struct Fake
         };
         ops.reattachOriginal = [this](const std::string& aId) -> json {
             calls.push_back("reattach " + aId);
+            if (unresolvable.count(aId) || reattachFails > 0)
+            {
+                if (reattachFails > 0)
+                {
+                    --reattachFails;
+                }
+                return json{{"reattached", false}};
+            }
             held.erase(aId);
             return json{{"reattached", true}};
         };
@@ -155,7 +191,7 @@ struct Fake
             calls.push_back("remove " + aId);
             if (removeThrows)
             {
-                throw xfb::MethodError("npc_protected", "the original became protected");
+                throw xfb::MethodError(removeCode, "the original became protected");
             }
             removed.insert(aId);
             held.erase(aId);
@@ -178,12 +214,18 @@ struct Fake
         ops.releaseAll = [this](const std::string& aReason) -> json {
             calls.push_back("releaseAll " + aReason);
             npcs.clear();
-            for (const auto& id : held)
+            json unresolved = json::array();
+            for (const auto& id : std::set<std::string>(held))
             {
+                if (unresolvable.count(id))
+                {
+                    unresolved.push_back(id);
+                    continue;
+                }
                 calls.push_back("reattach " + id);
+                held.erase(id);
             }
-            held.clear();
-            return json{{"released", 1}};
+            return json{{"released", 1}, {"unresolved", unresolved}};
         };
         ops.command = [this](const std::string& aWho, const n::Command& aCommand) -> json {
             calls.push_back("command " + aWho + " " + aCommand.kind);
@@ -215,7 +257,19 @@ struct Fake
         };
         ops.restoreStep = [this](const std::string&, bool aSend) -> json {
             calls.push_back(std::string("restoreStep") + (aSend ? " send" : ""));
-            return json{{"spawned", true}, {"in_crowd", inCrowd || aSend}};
+            return json{{"spawned", true}, {"in_crowd", !restoreNever && (inCrowd || aSend)}};
+        };
+        ops.restoreCancel = [this](const std::string& aEntity) -> json {
+            calls.push_back("restoreCancel " + aEntity);
+            if (cancelFails != 0)
+            {
+                if (cancelFails > 0)
+                {
+                    --cancelFails;
+                }
+                return json{{"cancelled", false}};
+            }
+            return json{{"cancelled", true}};
         };
         return ops;
     }
@@ -519,11 +573,49 @@ void SwapTests()
         Check("reactions game: the civilian's own reactions (the _reactive clone), so it flinches as the crowd does (probe 6)", out["reactions"] == "game" && r.fake.Index("spawn a1 Character.xfs_actor_woman_corpo_reactive") >= 0);
     }
     {
+        // A community NPC is never replaced: the answer is a refusal before anything is held or spent; the dry run reports it.
         Rig r;
         r.fake.street["P-community"] = Fake::Person("P-community", "Character.CorpoWoman", "citizen__corporat_wa_01", "Female", -10.0);
         r.fake.street["P-community"]["stub"] = json{{"spawner", "EntityID(777)"}, {"entry", "bench_sitter"}, {"ordinal", 2}};
-        const auto out = r.service.Substitute(json{{"id", "P-community"}}, r.ops);
-        Check("resident: a community NPC's answer carries the game's own pair and the hash", out["resident"]["kind"] == "community" && out["resident"]["key"] == "xfc1-EntityID_777_-bench_sitter-2" && out["resident"]["hash"].get<std::string>().rfind("xfr1-", 0) == 0);
+        Check("community: refused community_npc before anything is held, spawned or removed", CodeOf([&] { r.service.Substitute(json{{"id", "P-community"}}, r.ops); }) == "community_npc" &&
+                                                                                                r.fake.Count("detach") == 0 && r.fake.Count("spawn") == 0 && r.fake.Count("remove") == 0);
+        Check("community: and in view too (the swap would only have waited)", CodeOf([&] { r.service.Substitute(json{{"id", "P-community"}, {"in_view", true}}, r.ops); }) == "community_npc");
+        const auto dry = r.service.Substitute(json{{"id", "P-community"}, {"dry_run", true}}, r.ops);
+        Check("community: a dry run still reads it - the identity pair, the hash - and says it is not substitutable",
+              dry["substitutable"] == false && dry["refusal"]["code"] == "community_npc" && dry["resident"]["kind"] == "community" && dry["resident"]["key"] == "xfc1-EntityID_777_-bench_sitter-2" &&
+                  dry["resident"]["note"].get<std::string>().find("never replaces a community NPC") != std::string::npos && dry["original"]["community"]["entry"] == "bench_sitter");
+        Check("community: no handle was spent", r.service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, r.ops)["who"] == "a1");
+        const auto plain = r.service.Substitute(json{{"id", "P-behind"}, {"dry_run", true}}, r.ops);
+        Check("community: a lane-crowd person is substitutable", plain["substitutable"] == true && !plain.contains("refusal"));
+    }
+    {
+        // ...and again while waiting, and again immediately before the removal.
+        Rig r;
+        r.service.Substitute(json{{"id", "P-front"}}, r.ops);
+        r.fake.street["P-front"]["stub"] = json{{"spawner", "S"}, {"entry", "E"}, {"ordinal", 0}};
+        Step(r.service, r.ops, 1.0);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("community: an original found to be a community NPC while waited for ends the wait, untouched", failed.size() == 1 && failed[0]["data"]["reason"] == "community_npc" && r.fake.Count("detach") == 0 && r.fake.Count("spawn") == 0);
+    }
+    {
+        Rig r;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.fake.street["P-behind"]["stub"] = json{{"spawner", "S"}, {"entry", "E"}, {"ordinal", 0}};
+        r.fake.Appear("a1", "citizen__corporat_wa_01");
+        Step(r.service, r.ops, 1.0);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("community: immediately before the removal it is checked again: nothing is hidden, the actor goes, the original is given back",
+              failed.size() == 1 && failed[0]["data"]["reason"] == "community_npc" && failed[0]["data"]["original_returned"] == true && r.fake.Count("remove ") == 0 && r.fake.held.empty() && r.fake.Index("release a1 despawn") >= 0);
+    }
+    {
+        Rig r;
+        r.fake.removeThrows = true;
+        r.fake.removeCode = "community_npc"; // the game step's own last word
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.fake.Appear("a1", "citizen__corporat_wa_01");
+        Step(r.service, r.ops, 1.0);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("community: the removal step refusing it ends the swap as community_npc", failed.size() == 1 && failed[0]["data"]["reason"] == "community_npc" && r.fake.held.empty());
     }
 }
 
@@ -661,6 +753,275 @@ void RestoreTests()
         Check("restore: ... which is out of V's sight, 15 m or more away", r.fake.Count("restore ") == 1 && r.fake.Index("release a1 despawn") >= 0);
     }
 }
+
+void ReturnTests()
+{
+    {
+        // A positive answer is what "returned" means; otherwise the cleanup stays owned and is retried.
+        Rig r;
+        r.fake.reattachFails = 2;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.service.Release(json{{"who", "a1"}}, r.ops); // the actor goes before the swap finishes
+        Step(r.service, r.ops, 0.6);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("return: a reattach the game does not confirm is not reported as returned, and the cleanup stays owned",
+              failed.size() == 1 && failed[0]["data"]["original_held"] == true && failed[0]["data"]["original_returned"] == false && failed[0]["data"]["return_pending"] == true &&
+                  r.service.Status(json::object())["returning"] == 1 && r.fake.held.count("P-behind") == 1);
+        Step(r.service, r.ops, 6.0);
+        const auto back = Events(r.log, "npc.original_returned");
+        Check("return: it is retried and reported only after a positive answer", back.size() == 1 && back[0]["data"]["original"] == "P-behind" && back[0]["data"]["attempts"].get<int>() >= 2 &&
+                                                                              r.fake.held.empty() && r.service.Status(json::object())["returning"] == 0);
+    }
+    {
+        Rig r;
+        r.fake.reattachFails = 1000000;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.service.Release(json{{"who", "a1"}}, r.ops);
+        Step(r.service, r.ops, n::kReturnMaxS + 3.0);
+        const auto gaveUp = Events(r.log, "npc.original_unreturned");
+        Check("return: retries are bounded in time, and giving up is said", gaveUp.size() == 1 && gaveUp[0]["data"]["reason"] == "not_found" && r.service.Status(json::object())["returning"] == 0 && Events(r.log, "npc.original_returned").empty());
+    }
+    {
+        // A refused spawn: the call refuses, and the original it held is not forgotten.
+        Rig r;
+        r.fake.spawnThrows = true;
+        r.fake.reattachFails = 1;
+        Check("return: a refused spawn still refuses the call", CodeOf([&] { r.service.Substitute(json{{"id", "P-behind"}}, r.ops); }) == "spawn_refused");
+        Check("return: ...and the held original stays owned until it is given back", r.service.Status(json::object())["returning"] == 1 && r.fake.held.count("P-behind") == 1);
+        Step(r.service, r.ops, 6.0);
+        Check("return: ...which it then is", r.fake.held.empty() && Events(r.log, "npc.original_returned").size() == 1);
+    }
+    {
+        // The retry list is bounded.
+        Rig r;
+        r.fake.reattachFails = 1000000;
+        for (int i = 0; i < 9; ++i)
+        {
+            const std::string id = "R" + std::to_string(i);
+            r.fake.street[id] = Fake::Person(id, "Character.CorpoWoman", "citizen__corporat_wa_01", "Female", -10.0);
+            const auto out = r.service.Substitute(json{{"id", id}}, r.ops);
+            r.service.Release(json{{"who", out["who"].get<std::string>()}}, r.ops);
+            r.service.Tick(0.3, {}, r.ops);
+        }
+        Check("return: at most kMaxReturns are kept, and letting one go is said", r.service.Status(json::object())["returning"] == n::kMaxReturns && Events(r.log, "npc.original_unreturned").size() == 1 &&
+                                                                                    Events(r.log, "npc.original_unreturned")[0]["data"]["reason"] == "queue_full");
+    }
+    {
+        // The kill switch: one step in the game even when the bookkeeping holds nothing; originals it cannot find stay owned.
+        Rig empty;
+        const auto none = empty.service.RestoreAfterKill(empty.ops);
+        Check("kill: the game step runs even when nothing is held natively", empty.fake.Index("releaseAll kill") >= 0 && none["forgotten"].empty());
+        Rig r;
+        r.fake.unresolvable.insert("P-behind");
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        const auto out = r.service.RestoreAfterKill(r.ops);
+        Check("kill: an original the script could not find is kept as owed", out["unresolved"].size() == 1 && r.service.Status(json::object())["returning"] == 1 && r.service.Active());
+        n::TickInput killed;
+        killed.killed = true;
+        r.service.Tick(1.3, killed, r.ops);
+        Check("kill: ...and is looked for again under the kill switch, without sending anything else", r.fake.Count("reattach P-behind") >= 1 && r.fake.Count("spawn") == 1);
+        r.fake.unresolvable.clear();
+        r.service.Tick(1.3, killed, r.ops);
+        Check("kill: ...until it is found and given back", r.fake.held.empty() && Events(r.log, "npc.original_returned").size() == 1 && r.service.Status(json::object())["returning"] == 0);
+        killed.gateOpen = false;
+        Rig closed;
+        closed.fake.unresolvable.insert("P-behind");
+        closed.service.Substitute(json{{"id", "P-behind"}}, closed.ops);
+        closed.service.RestoreAfterKill(closed.ops);
+        closed.fake.calls.clear();
+        closed.service.Tick(1.3, killed, closed.ops);
+        Check("kill: a closed script gate waits", closed.fake.Count("reattach") == 0);
+    }
+    {
+        Rig r;
+        r.fake.unresolvable.insert("P-behind");
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.service.RestoreAfterKill(r.ops);
+        n::TickInput gone;
+        gone.detaches = 1;
+        r.service.Tick(0.3, gone, r.ops);
+        gone.detaches = 2;
+        r.service.Tick(0.3, gone, r.ops);
+        Check("load: owed returns are dropped with the world", r.service.Status(json::object())["returning"] == 0);
+    }
+}
+
+void RestoreCleanupTests()
+{
+    auto restoring = [](Rig& r, const std::string& id, bool release = true) {
+        r.fake.street[id] = Fake::Person(id, "Character.CorpoWoman", "citizen__corporat_wa_01", "Female", -10.0);
+        const auto out = r.service.Substitute(json{{"id", id}, {"restore", true}}, r.ops);
+        const auto who = out["who"].get<std::string>();
+        r.fake.Appear(who, "citizen__corporat_wa_01");
+        Step(r.service, r.ops, 0.3);
+        if (release)
+        {
+            r.service.Release(json{{"who", who}, {"how", "despawn"}}, r.ops);
+        }
+        return who;
+    };
+    {
+        Rig r;
+        r.fake.restoreNever = true;
+        restoring(r, "Q0");
+        Step(r.service, r.ops, n::kRestoreJoinS + 2.0);
+        const auto restored = Events(r.log, "npc.restored");
+        Check("restore: a fresh crowd person who never joined is deleted, not abandoned, and ownership is not claimed passed", restored.size() == 1 && restored[0]["data"]["in_crowd"] == false && restored[0]["data"]["removed"] == true &&
+                                                                                                                              r.fake.Count("restoreCancel") == 1 && r.service.Status(json::object())["restoring"] == 0);
+    }
+    {
+        Rig r;
+        r.fake.restoreNever = true;
+        r.fake.cancelFails = 3;
+        restoring(r, "Q0");
+        Step(r.service, r.ops, n::kRestoreJoinS + 6.0);
+        const auto restored = Events(r.log, "npc.restored");
+        Check("restore: a cancel the game refuses is retried until it works", restored.size() == 1 && restored[0]["data"]["removed"] == true && r.fake.Count("restoreCancel") == 4);
+    }
+    {
+        Rig r;
+        r.fake.restoreNever = true;
+        r.fake.cancelFails = -1;
+        restoring(r, "Q0");
+        Step(r.service, r.ops, n::kRestoreJoinS + 12.0);
+        const auto restored = Events(r.log, "npc.restored");
+        Check("restore: ...a bounded number of times, and what is left is said", restored.size() == 1 && restored[0]["data"]["removed"] == false && r.fake.Count("restoreCancel") == 10 && r.service.Status(json::object())["restoring"] == 0);
+    }
+    {
+        Rig r;
+        restoring(r, "Q0");
+        Step(r.service, r.ops, 1.0);
+        Check("restore: one that joined the crowd is the game's: no cancel", Events(r.log, "npc.restored").size() == 1 && Events(r.log, "npc.restored")[0]["data"]["in_crowd"] == true && r.fake.Count("restoreCancel") == 0);
+    }
+    {
+        Rig r;
+        r.fake.restoreNever = true;
+        restoring(r, "Q0");
+        r.service.ReleaseAllNow("handover", r.ops);
+        Check("restore: a handover, a pause or a fight deletes the ones still on their way", r.fake.Count("restoreCancel") == 1 && r.service.Status(json::object())["restoring"] == 0);
+    }
+    {
+        Rig r;
+        r.fake.restoreNever = true;
+        for (int i = 0; i < n::kMaxRestores; ++i)
+        {
+            restoring(r, "Q" + std::to_string(i));
+        }
+        Check("restore: five are waited on at most", r.service.Status(json::object())["restoring"] == n::kMaxRestores);
+        r.fake.street["Q9"] = Fake::Person("Q9", "Character.CorpoWoman", "citizen__corporat_wa_01", "Female", -10.0);
+        const auto out = r.service.Substitute(json{{"id", "Q9"}, {"restore", true}}, r.ops);
+        r.fake.Appear(out["who"].get<std::string>(), "citizen__corporat_wa_01");
+        Step(r.service, r.ops, 0.3);
+        r.service.Release(json{{"who", out["who"].get<std::string>()}, {"how", "despawn"}}, r.ops);
+        const auto released = Events(r.log, "npc.released");
+        Check("restore: a sixth is refused, said in the release, and the release itself goes ahead",
+              r.fake.Count("restore ") == n::kMaxRestores && released.back()["data"].contains("restore_failed") && r.service.Status(json::object())["restoring"] == n::kMaxRestores);
+    }
+    {
+        Rig r;
+        r.fake.restoreNever = true;
+        restoring(r, "Q0");
+        n::TickInput closed;
+        const auto out = r.service.RestoreAfterKill(r.ops);
+        Check("restore: the kill's one step takes the rest, whatever the bookkeeping says", r.fake.Index("releaseAll kill") >= 0 && r.service.Status(json::object())["restoring"] == 0);
+        (void)out;
+        (void)closed;
+    }
+}
+
+void ObservationTests()
+{
+    {
+        // A failed read of V stops a swap going forward, never going back.
+        Rig r;
+        r.service.Substitute(json{{"id", "P-front"}, {"max_wait_s", 2}}, r.ops);
+        r.fake.vThrows = true;
+        Step(r.service, r.ops, 3.0);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("observation: a waiting swap still ends at max_wait_s when V cannot be read", failed.size() == 1 && failed[0]["data"]["reason"] == "never_hidden" && r.fake.Count("detach") == 0);
+    }
+    {
+        Rig r;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.fake.vThrows = true;
+        Step(r.service, r.ops, n::kSwapSpawnS + 2.0);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("observation: a held original is given back at the spawn deadline although V cannot be read",
+              failed.size() == 1 && failed[0]["data"]["reason"] == "not_spawned" && failed[0]["data"]["original_returned"] == true && r.fake.held.empty() && r.fake.Index("release a1 despawn") >= 0);
+    }
+    {
+        Rig r;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.fake.Appear("a1", "citizen__corporat_wa_01");
+        r.fake.vThrows = true;
+        Step(r.service, r.ops, n::kSwapRevisibleS - 2.0);
+        Check("observation: with the actor there but V unreadable nothing is removed", r.fake.Count("remove ") == 0 && Events(r.log, "npc.substituted").empty());
+        Step(r.service, r.ops, 4.0);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("observation: ...and the swap is rolled back after a bounded wait, not left held", failed.size() == 1 && failed[0]["data"]["reason"] == "observation_failed" && r.fake.held.empty() && r.fake.Count("remove ") == 0);
+    }
+    {
+        Rig r;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.fake.Appear("a1", "citizen__corporat_wa_01");
+        r.fake.stateThrows = true;
+        Step(r.service, r.ops, n::kSwapRevisibleS + 2.0);
+        Check("observation: the original's state unreadable is the same: nothing removed, rolled back", Events(r.log, "npc.substitute_failed").size() == 1 && r.fake.Count("remove ") == 0 && r.fake.held.empty());
+    }
+    {
+        // in_view asked: V's sight is not what decides, so an unreadable V does not stop it.
+        Rig r;
+        r.service.Substitute(json{{"id", "P-behind"}, {"in_view", true}}, r.ops);
+        r.fake.Appear("a1", "citizen__corporat_wa_01");
+        r.fake.vThrows = true;
+        Step(r.service, r.ops, 1.0);
+        Check("observation: in_view true completes without a reading of V", Events(r.log, "npc.substituted").size() == 1);
+    }
+}
+
+void RecheckTests()
+{
+    {
+        // The original is in V's sight when the actor appears: wait, then remove once it looks away.
+        Rig r;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.fake.street["P-behind"]["position"] = json::array({0.0, 10.0, 0.0}); // walked into view
+        r.fake.Appear("a1", "citizen__corporat_wa_01");
+        Step(r.service, r.ops, 2.0);
+        Check("recheck: an original in V's sight is not hidden: it waits", r.fake.Count("remove ") == 0 && Events(r.log, "npc.substituted").empty() && r.service.Status(json::object())["swaps"].size() == 1);
+        r.fake.street["P-behind"]["position"] = json::array({0.0, -10.0, 0.0});
+        Step(r.service, r.ops, 1.0);
+        const auto done = Events(r.log, "npc.substituted");
+        Check("recheck: ...and goes once V cannot see it", done.size() == 1 && r.fake.Count("remove P-behind") == 1);
+    }
+    {
+        Rig r;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.fake.street["P-behind"]["position"] = json::array({0.0, 10.0, 0.0});
+        r.fake.Appear("a1", "citizen__corporat_wa_01");
+        Step(r.service, r.ops, n::kSwapRevisibleS + 2.0);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("recheck: one that stays in sight is rolled back: the actor removed, the original given back, nothing hidden",
+              failed.size() == 1 && failed[0]["data"]["reason"] == "became_visible" && failed[0]["data"]["original_returned"] == true && r.fake.Count("remove ") == 0 && r.fake.held.empty() && r.fake.Index("release a1 despawn") >= 0);
+    }
+    {
+        Rig r;
+        r.service.Substitute(json{{"id", "P-front"}, {"in_view", true}}, r.ops);
+        r.fake.Appear("a1", "king_of_the_stoop_ma_012");
+        Step(r.service, r.ops, 1.0);
+        const auto done = Events(r.log, "npc.substituted");
+        Check("recheck: a swap asked to happen in view is not held back by it", done.size() == 1 && done[0]["data"]["in_view_at_swap"] == true);
+    }
+    {
+        Rig r;
+        r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
+        r.fake.street["P-behind"]["reasons"] = json::array({"quest"});
+        r.fake.Appear("a1", "citizen__corporat_wa_01");
+        Step(r.service, r.ops, 1.0);
+        const auto failed = Events(r.log, "npc.substitute_failed");
+        Check("recheck: an original that became protected is left alone, whatever V sees", failed.size() == 1 && failed[0]["data"]["reason"] == "npc_protected" && r.fake.Count("remove ") == 0 && r.fake.held.empty());
+    }
+}
 } // namespace
 
 int RunNpcSubstituteUnitTests()
@@ -672,5 +1033,9 @@ int RunNpcSubstituteUnitTests()
     LimitTests();
     TeardownTests();
     RestoreTests();
+    ReturnTests();
+    RestoreCleanupTests();
+    ObservationTests();
+    RecheckTests();
     return gFailures;
 }

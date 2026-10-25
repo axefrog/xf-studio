@@ -13,7 +13,7 @@ A checklist for one of the runtime bridge's prepared game sessions. It tests rou
 
 ## Probes
 
-The bridge commands for each probe, the pass boundaries as prepared for the session and the probes that stay partial are in the [test card's Crowd substitution (0.8.19) section](../../runtime/runtime-bridge-test-card.md#crowd-substitution-0819) (rows CRS1 to CRS11).
+The bridge commands for each probe, the pass boundaries as prepared for the session and the probes that stay partial are in the [test card's Crowd substitution (0.8.19) section](../../runtime/runtime-bridge-test-card.md#crowd-substitution-0819) (rows CRS1 to CRS15).
 
 Each probe records its evidence: the `npc.list` or `scene.read` rows, the actor ids, screenshots where the look matters, and the session log.
 

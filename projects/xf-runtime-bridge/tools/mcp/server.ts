@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult, type Tool } from "@modelcontextprotocol/sdk/types.js";
-import { findCommand, PERMISSIONS, toolName, type CommandDef, type Permission } from "../api/catalogue.ts";
+import { commandAdmitted, findCommand, PERMISSIONS, toolName, type CommandDef, type Permission } from "../api/catalogue.ts";
 import type { CommandApi, CommandOutcome } from "../api/command-api.ts";
 import { lockPath, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
 
@@ -67,7 +67,7 @@ function describe(command: CommandDef): string {
 /** The MCP tool list for a catalogue, in catalogue order. */
 export function toolsFor(commands: readonly CommandDef[], allow?: readonly Permission[]): Tool[] {
   return commands
-    .filter((command) => !allow || allow.includes(command.permission))
+    .filter((command) => commandAdmitted(command, allow))
     .map((command) => ({
       name: toolName(command),
       title: command.title,
@@ -112,7 +112,7 @@ const PIPE_FREE = new Set(["capture.screenshot", "capture.recrop", "capture.arme
 
 export function createMcpServer(api: CommandApi, options: McpServerOptions = {}): Server {
   const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
-  const allowed = (command: CommandDef | undefined) => !!command && (!options.allow || options.allow.includes(command.permission));
+  const allowed = (command: CommandDef | undefined) => !!command && commandAdmitted(command, options.allow);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: toolsFor(api.commands(), options.allow) }));
 

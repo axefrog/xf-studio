@@ -46,6 +46,8 @@ export const NPC_MESSAGES: Record<string, string> = {
   npc_dead: "That actor is dead; its body stays until it is released. Release it with npc_release (despawn, or dissolve once V can't see it).",
   look_unmatched:
     "The game didn't say whether that person is a woman or a man, so no XF actor can stand in. Name one with cast (npc_spawn's casts list them), or pick someone else. Nothing was changed.",
+  community_npc:
+    "That person belongs to the game's community system (a regular at a bench, a stall or a doorway, someone a quest may be using without marking them), and removing a person can't be undone, so the bridge only replaces passers-by of the street crowd. Pick another one. Nothing was changed.",
   already_substituting: "That person is being replaced already. Wait for npc.substituted, or release the actor (npc_release) to cancel it.",
   scenario_invalid: "The scene file isn't valid, so nothing ran. The message names each problem; fix the file and run it again (dry_run checks it without touching the game).",
 };

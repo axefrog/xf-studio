@@ -129,6 +129,13 @@ export type CommandDef = {
   permission: Permission;
   /** Additional capabilities selected by compound policy data, checked before any bridge call. */
   requiredPermissions?: (input: Record<string, unknown>) => readonly Permission[];
+  /**
+   * 0.8.19: the permission this particular input needs in place of `permission` (supervisor.set: an XF actor's entry needs the NPC
+   * class, V's the player class). `permission` stays the command's usual class for the reference and the tool's description.
+   */
+  primaryPermission?: (input: Record<string, unknown>) => Permission;
+  /** Permissions besides `permission` that admit some input, so the tool is offered to a caller who has only those. */
+  alsoAdmittedBy?: readonly Permission[];
   input: JsonSchema;
   /** How to undo a write, in plain words. */
   undo?: string;
@@ -1786,4 +1793,9 @@ export const CATALOGUE: readonly CommandDef[] = addWhen(applyCatalogue080([
 
 export function findCommand(name: string): CommandDef | undefined {
   return CATALOGUE.find((command) => command.name === name || toolName(command) === name);
+}
+
+/** Whether a caller who is allowed these permissions may be offered the command at all (some input of it may be admitted). */
+export function commandAdmitted(command: CommandDef, allow: readonly Permission[] | undefined): boolean {
+  return !allow || allow.includes(command.permission) || (command.alsoAdmittedBy ?? []).some((permission) => allow.includes(permission));
 }
