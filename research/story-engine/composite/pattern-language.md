@@ -623,7 +623,7 @@ Choices inside the form, with the same test:
 
 ## 13. Proposed specification changes
 
-None of these is applied. Each names the specification it belongs to and why.
+These proposals were taken up by the spec passes of 25 October 2026: S0 v4.17 and S1 v0.6 for the S0 and S1 items, S2 v1.11 and S3 v0.6 for the rest. Each spec's review record says which were adopted as proposed, changed or rejected, and why. The list stays here as the design's record.
 
 ### S0 (kernel)
 
