@@ -77,6 +77,8 @@ export async function profileStudio(options: {
   newId?: () => string;
   /** A profile lists the collections made here (the Studio's membership edit, in the same command). */
   profile?: boolean;
+  /** The part a new look starts from (the chosen starter's), as the composition root passes it. */
+  starterPart?: () => unknown;
 } = {}) {
   const library = options.library ?? openTestLibrary(), port = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(port, storage, { retryMs: 5 });
@@ -129,6 +131,7 @@ export async function profileStudio(options: {
   const targets = fixtureTargets(core, { scene, collection: () => application?.service.draftIdentity()?.collectionId });
   const app = named(core.app, targets);
   application = new CollectionApplication({ model: MODEL, owner, scene, transport, flushLook: () => lookEditor.commit(),
+    ...(options.starterPart ? { starterPart: options.starterPart } : {}),
     ...(profiles ? { membership: (collection: string) => profiles!.collectionMembership(profile!, collection) } : {}) }, core.document,
     app as unknown as StudioApplication, files);
   lookEditor.show(scene.look());

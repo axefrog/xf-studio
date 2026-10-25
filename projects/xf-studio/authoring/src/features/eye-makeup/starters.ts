@@ -39,11 +39,13 @@ export const EYE_LANDMARKS = Object.freeze({
  * a corner knot (`true`) has its arms along its neighbouring segments, so an end or a wing tip stays crisp.
  */
 function contour(points: readonly (readonly [number, number, true?])[]): Point[] {
+  // `+ 0` turns a negative zero into zero: a shape must read back equal after the library's JSON.
+  const z = (value: number) => value + 0;
   return points.map(([u, v, corner], i) => {
     const before = points[(i + points.length - 1) % points.length], after = points[(i + 1) % points.length];
-    if (corner) return { u, v, weight: 1, handles: { in: { u: (before[0] - u) / 3, v: (before[1] - v) / 3 }, out: { u: (after[0] - u) / 3, v: (after[1] - v) / 3 }, mode: "corner" as const } };
-    const out = { u: (after[0] - before[0]) / 6, v: (after[1] - before[1]) / 6 };
-    return { u, v, weight: 1, handles: { in: { u: -out.u, v: -out.v }, out, mode: "symmetric" as const } };
+    if (corner) return { u, v, weight: 1, handles: { in: { u: z((before[0] - u) / 3), v: z((before[1] - v) / 3) }, out: { u: z((after[0] - u) / 3), v: z((after[1] - v) / 3) }, mode: "corner" as const } };
+    const out = { u: z((after[0] - before[0]) / 6), v: z((after[1] - before[1]) / 6) };
+    return { u, v, weight: 1, handles: { in: { u: z(-out.u), v: z(-out.v) }, out, mode: "symmetric" as const } };
   });
 }
 const shape = (points: readonly (readonly [number, number, true?])[], feather: number, opacity: number): StarterShape => {
