@@ -25,7 +25,7 @@ export interface Host {
   // Every operation with a side effect takes the caller's signal and checks it again right before the effect:
   // a cancelled step must never launch, close or press anything afterwards.
   /** Starts the game through MO2 (detached); answers at once. */
-  launch(spec: LaunchSpec, signal?: AbortSignal): Promise<{ started: boolean; command: string }>;
+  launch(spec: LaunchSpec, signal?: AbortSignal): Promise<{ started: boolean; command: string; error?: string }>;
   /** Asks the game's main window to close (CloseMainWindow); false when there was nothing to ask. */
   requestClose(pid: number, signal?: AbortSignal): Promise<boolean>;
   /** The foreground window's process name (no extension), or null. */
@@ -151,9 +151,16 @@ export const windowsHost: Host = {
     if (signal?.aborted) return { started: false, command: "" };
     // MO2's own command line keeps the profile even when MO2 is open, and --arguments replaces the configured ones.
     const args = ["-p", spec.profile, "run", "-e", spec.executable, ...(spec.arguments ? ["--arguments", spec.arguments] : [])];
+    const command = `ModOrganizer.exe ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`;
+    // A missing or blocked executable fails asynchronously (ENOENT, EACCES): wait for spawn or error before answering.
     const child = spawn(spec.exe, args, { detached: true, stdio: "ignore" });
+    const error = await new Promise<string | null>((resolve) => {
+      child.once("spawn", () => resolve(null));
+      child.once("error", (e) => resolve(`${(e as NodeJS.ErrnoException).code ?? "error"}: ${e.message}`));
+    });
+    if (error) return { started: false, command, error };
     child.unref();
-    return { started: true, command: `ModOrganizer.exe ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}` };
+    return { started: true, command };
   },
   async requestClose(pid, signal) {
     if (signal?.aborted) return false;

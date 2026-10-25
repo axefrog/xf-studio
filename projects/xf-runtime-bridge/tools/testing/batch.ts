@@ -471,7 +471,7 @@ export class SessionExecutor implements Executor {
           if ((await this.gamePid()) !== undefined) return { ok: false, code: "already_running", message: "The game is already running." };
           if (context.signal.aborted) return CANCELLED;
           const started = await this.c.host.launch({ exe: mo2.exe, profile: mo2.profile, executable: mo2.executable, arguments: mo2.arguments }, context.signal);
-          if (!started.started) return context.signal.aborted ? CANCELLED : { ok: false, code: "launch_failed", message: started.command || "MO2 didn't start." };
+          if (!started.started) return context.signal.aborted ? CANCELLED : { ok: false, code: "launch_failed", message: `MO2 didn't start${started.error ? ` (${started.error})` : ""}: check mo2.exe in the fixtures.` };
           return { ok: true, value: { command: started.command } };
         }
         case "host.close": {

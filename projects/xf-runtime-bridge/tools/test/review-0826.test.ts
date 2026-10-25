@@ -165,6 +165,14 @@ describe("M7: a joint beat passes its children's control results up, and takes t
   });
 });
 
+describe("M8: a launch that can't start says so", () => {
+  test("a missing MO2 executable is a failed launch, not a success", async () => {
+    const result = await windowsHost.launch({ exe: join(tempDir("xfb-review-"), "no-such-ModOrganizer.exe"), profile: "p", executable: "g" });
+    expect(result.started).toBe(false);
+    expect(result.error).toContain("ENOENT");
+  });
+});
+
 describe("H1: exceptions never bypass the cleanup", () => {
   test("a report callback that throws doesn't skip the release or the close", async () => {
     const clock = new FakeClock();
