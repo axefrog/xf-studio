@@ -40,7 +40,7 @@ Each kit names each person once and speaks of them as "they", "the thief" or "th
 
 ### Ranking: what layer 3 weighs, and what was tuned
 
-Layer 2's fit hook weighs *who, which wording* (aesthetic terms are absent in M3, variety, yielding to live seeds); it never decides whether to sow. Layer 3's ranking weighs four features of a completed match, banded across the slot's candidates ([S3 6.5 and 7.4](../../../research/story-engine/spec/procedural.md#65-features-and-gates-for-a-match)): F3 stakes (distinct harmful effects), F5 personal link (V took part, 2, plus the people V has been shown), F6 irreversibility and F11 timeliness, then a diversity penalty for the same pattern or place sown lately.
+Layer 2's fit hook weighs *who, which wording* (aesthetic terms are absent in M3, variety, yielding to live seeds); it never decides whether to sow. Layer 3's ranking weighs four features of a completed match, banded across the slot's candidates ([S3 6.5 and 7.4](../../../../research/story-engine/spec/procedural.md#65-features-and-gates-for-a-match)): F3 stakes (distinct harmful effects), F5 personal link (V took part, 2, plus the people V has been shown), F6 irreversibility and F11 timeliness, then a diversity penalty for the same pattern or place sown lately.
 
 What the data showed: every offer pattern here carries one harmful effect, so F3 is constant among offers and skipped; F6 is zero everywhere and skipped; so among offers the ranking acts on F5, F11 and diversity only. Against texture, F5 is what matters: an offer exists only where V took part in a stage's event, so it carries at least 2 and a texture candidate usually none.
 
