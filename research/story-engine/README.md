@@ -77,6 +77,7 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 | [S1. Simulation layer](spec/simulation.md) | Exactly how the world runs for the first district: processes, policies, the event catalogue, the mirror, the production gate, and what it exposes |
 | [S2. Seed language and seeding layer](spec/seeding.md) | Exactly how seeds are written, compiled, cast, run, offered and persisted; its lint, fit report, invariants and fixtures |
 | [S3. Procedural engine](spec/procedural.md) | Exactly how layer 3 fits, paces, sifts and sows, for the core; its invariants and fixtures |
+| [The composite](composite/README.md) | The unified design graph, v0: 29 composable story patterns (tensions, turns, closures, larger shapes) with the principles, mechanisms, failure modes and measures they connect to; the [pattern language](composite/pattern-language.md) that defines them, with its proposed specification changes and the repetition measures for M3 iteration 3; and [worked examples](composite/worked-examples.md) |
 | [Quest corpus statistics](quest-corpus-statistics.md) | Node types, phase sizes, fact usage, branching, scenes per quest and graph shape of the game's authored quests, generated from the corpus database ([how it is built](../consumers/quest-corpus/scripts/README.md)) |
 | [Design seeds](design-seeds.md) | Fine-grained design points, each waiting for the plan that will absorb it |
 | [Runtime requirements](runtime-requirements.md) | The senses and verbs the system needs in game, and their status |

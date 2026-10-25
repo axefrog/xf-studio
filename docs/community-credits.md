@@ -1032,6 +1032,10 @@ NVIDIA's developer blog by Ike Nnoli, [“Deploy the First On-Device Small Langu
 
 Valve's Steamworks documentation, [Content Survey](https://partner.steamgames.com/doc/gettingstarted/contentsurvey). It separates AI content made before release from content generated while the game runs. For the second kind, developers must describe their guardrails. It informed how we plan to describe live generation.
 
+### Vladimir Propp
+
+Vladimir Propp, [*Morphology of the Folktale*](https://utpress.utexas.edu/9780292783768/) (1928; second English edition, University of Texas Press, 1968). Propp described tales by their functions, the acts that matter to the plot, defined apart from the characters who perform them. That separation informed how the Story Engine's composite masks a thread's skeleton to detect the same story recast with different people; the engine uses function sequences only to recognise and measure stories, never to generate them.
+
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.

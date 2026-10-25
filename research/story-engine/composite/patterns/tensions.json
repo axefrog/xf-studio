@@ -1,0 +1,720 @@
+{
+  "id": "xf.composite:family.tensions",
+  "type": "pattern-family",
+  "family": "tension",
+  "version": 1,
+  "status": "v0, 25 October 2026. Tensions: lasting states between people and groups that open threads. Form: pattern-language.md §3.7. Every role is open.",
+  "patterns": [
+    {
+      "id": "xf.composite:debt",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "concern",
+      "summary": "Someone owes someone else, and the debt comes due.",
+      "roles": {"?d": {"kind": "actor", "note": "the debtor"}, "?c": {"kind": "actor", "note": "the creditor"}},
+      "junctures": {
+        "owed": {"fn": "obligate", "args": {"debtor": "?d", "creditor": "?c"}},
+        "due": {
+          "fn": "want",
+          "args": {"who": "?c", "what": "owed"},
+          "changes": [{"frame": {"of": "?c", "toward": "owed", "status": "opens"}}]
+        },
+        "called": {"fn": "demand", "args": {"by": "?c", "of": "?d", "what": "owed"}, "realise": [{"wait": true}, {"nudge": {}}]},
+        "paid": {
+          "fn": "repay",
+          "args": {"debtor": "?d", "creditor": "?c"},
+          "park": true,
+          "v": "offer",
+          "realise": [{"wait": true}, {"offer": {}}, {"refine": {"pattern": "xf.composite:sacrifice"}}],
+          "changes": [
+            {"ends": "obligate", "args": {"debtor": "?d", "creditor": "?c"}},
+            {"tie": {"a": "?c", "b": "?d"}, "move": "up"}
+          ]
+        },
+        "defaulted": {
+          "fn": "wrong",
+          "args": {"by": "?d", "to": "?c"},
+          "form": "state",
+          "changes": [{"belief": {"who": "?c", "about": "?d"}, "move": "forms"}, {"tie": {"a": "?c", "b": "?d"}, "move": "down"}]
+        }
+      },
+      "edges": [
+        {"from": "owed", "to": "due", "link": "enables"},
+        {"from": "due", "to": "called", "link": "motive", "shown": "must"},
+        {"from": "called", "to": "paid", "link": "answers"},
+        {"from": "called", "to": "defaulted", "link": "answers"},
+        {"from": "paid", "to": "defaulted", "link": "forecloses"}
+      ],
+      "entry": ["owed", "called"],
+      "outcomes": {
+        "settled": {"reached": ["paid"], "kind": "resolved", "next": ["xf.composite:payoff"]},
+        "broken": {
+          "reached": ["defaulted"],
+          "kind": "failed",
+          "next": ["xf.composite:grievance", "xf.composite:escalation", "xf.composite:settlement"]
+        }
+      },
+      "within": {"clock": "game", "days": 30},
+      "once": ["?d", "?c"],
+      "show": {"junctures": ["called"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:settlement", "xf.composite:payoff"],
+        "layers": [
+          "xf.composite:divided-loyalty",
+          "xf.composite:squeeze",
+          "xf.composite:ambition-vs-obligation",
+          "xf.composite:protection"
+        ],
+        "refines": {"paid": ["xf.composite:sacrifice"]}
+      },
+      "traces": [
+        "d01.DRV-19",
+        "d01.DRV-20",
+        "d01.DRV-15",
+        "d01.DRV-12",
+        "d01.DRV-03",
+        "d02.BND-04",
+        "d04.QST-05",
+        "d06.TEL-05",
+        "d15.NRM-06"
+      ],
+      "risks": [
+        {
+          "failure": "fail:recast-package",
+          "note": "Debts that are always money read alike. Vary the currency (a favour returned, a promise, a member's dues) and what the creditor is to the debtor."
+        },
+        {
+          "failure": "fail:puppet",
+          "note": "A creditor who calls the debt for no reason: `due` is a want with a recorded cause, such as the creditor's own shortfall."
+        },
+        {"failure": "fail:presumed-protagonist", "note": "The protagonist owes only what an accepted offer named."}
+      ]
+    },
+    {
+      "id": "xf.composite:divided-loyalty",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "concern",
+      "summary": "One membership demands what another tie forbids, and the person in the middle must answer.",
+      "roles": {
+        "?m": {"kind": "person", "note": "the one in the middle"},
+        "?g1": {"kind": "actor", "note": "who demands: a gang, a boss, a family head"},
+        "?x": {"kind": "actor", "note": "who the demand would hurt, and whom ?m protects"},
+        "?lost": {"kind": "actor", "note": "whichever tie ?m loses: ?g1 or ?x"},
+        "?p": {
+          "kind": "person",
+          "v": "may",
+          "note": "someone drawn in: hired for the deed, asked to protect, asked to go between"
+        }
+      },
+      "junctures": {
+        "dutyA": {"fn": "obligate", "args": {"debtor": "?m", "creditor": "?g1"}},
+        "dutyB": {"fn": "protect", "args": {"guard": "?m", "ward": "?x"}},
+        "order": {
+          "fn": "demand",
+          "args": {"by": "?g1", "of": "?m", "what": "?x"},
+          "requires": [{"rel": "violates", "args": ["order", "dutyB"]}]
+        },
+        "drawn": {"fn": "ask", "args": {"by": "?m", "of": "?p", "what": "?x"}, "optional": true, "realise": [{"offer": {}}]},
+        "complied": {"fn": "wrong", "args": {"by": "?m", "to": "?x"}, "optional": true, "realise": [{"wait": true}]},
+        "refused": {"fn": "refuse", "args": {"who": "?m", "to": "?g1"}, "optional": true, "realise": [{"wait": true}]},
+        "warned": {
+          "fn": "expose",
+          "args": {"by": "?m", "what": "order", "to": "?x"},
+          "optional": true,
+          "realise": [{"wait": true}]
+        },
+        "fallout": {
+          "fn": "sever",
+          "args": {"a": "?m", "b": "?lost"},
+          "optional": true,
+          "park": true,
+          "changes": [{"member": {"who": "?m", "of": "?g1"}, "move": "strained"}]
+        }
+      },
+      "edges": [
+        {"from": "dutyA", "to": "order", "link": "enables"},
+        {"from": "dutyB", "to": "order", "link": "enables"},
+        {"from": "order", "to": "drawn", "link": "motive"},
+        {"from": "order", "to": "complied", "link": "answers", "shown": "must"},
+        {"from": "order", "to": "refused", "link": "answers", "shown": "must"},
+        {"from": "order", "to": "warned", "link": "reveals", "shown": "must"},
+        {"from": "complied", "to": "refused", "link": "forecloses"},
+        {"from": "refused", "to": "complied", "link": "forecloses"},
+        {"from": "complied", "to": "fallout", "link": "because"},
+        {"from": "refused", "to": "fallout", "link": "because"}
+      ],
+      "entry": ["order"],
+      "outcomes": {
+        "complied": {"reached": ["complied"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:loss"]},
+        "refused": {
+          "reached": ["refused"],
+          "kind": "resolved",
+          "next": ["xf.composite:escalation", "xf.composite:test-of-creed"]
+        },
+        "warned": {"reached": ["warned"], "kind": "resolved", "next": ["xf.composite:betrayal", "xf.composite:secret"]}
+      },
+      "within": {"clock": "game", "days": 10},
+      "once": ["?m", "?x"],
+      "show": {"junctures": ["order"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:secret", "xf.composite:betrayal", "xf.composite:grievance", "xf.composite:escalation"],
+        "layers": ["xf.composite:debt", "xf.composite:protection", "xf.composite:squeeze"],
+        "refines": {}
+      },
+      "traces": ["DS-61", "d15.DEF-01", "d15.DEF-05", "d02.BND-35", "d01.DRV-25", "d01.DRV-30", "d09.AGY-18", "d04.QST-21"],
+      "risks": [
+        {
+          "failure": "fail:puppet",
+          "note": "An order with no group intention or leader's frame behind it. The demand comes from S1's group state or a Dilemma, never from the director."
+        },
+        {
+          "failure": "fail:cliche",
+          "note": "Most cross-pressure is lived without a break (DEF-01): delay, fake compliance and quiet warnings should outnumber open defiance."
+        },
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "The protagonist is drawn in only by an offer, and never makes ?m's choice."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:secret",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "concern",
+      "summary": "Someone keeps something from someone it matters to, and others may come to know.",
+      "roles": {
+        "?k": {"kind": "actor", "note": "the keeper"},
+        "?u": {
+          "kind": "actor",
+          "note": "the one kept in the dark; may be the protagonist, for whom `out` is filled by exposure",
+          "v": "may"
+        },
+        "?f": {"kind": ["fact", "event"], "note": "what is kept"},
+        "?w": {"kind": "actor", "note": "a third who learns it"},
+        "?t": {"kind": "actor", "v": "may", "note": "who tells ?u in the end"}
+      },
+      "junctures": {
+        "hidden": {
+          "fn": "conceal",
+          "args": {"who": "?k", "what": "?f", "from": "?u"},
+          "requires": [{"rel": "concerns", "args": ["?f", "?u"]}]
+        },
+        "spread": {
+          "fn": "learn",
+          "args": {"who": "?w", "what": "?f"},
+          "optional": true,
+          "requires": [{"rel": "distinct", "args": ["?w", "?k"]}, {"rel": "distinct", "args": ["?w", "?u"]}]
+        },
+        "leverage": {
+          "fn": "demand",
+          "args": {"by": "?w", "of": "?k", "what": "?f"},
+          "optional": true,
+          "changes": [{"begins": "obligate", "args": {"debtor": "?k", "creditor": "?w"}}]
+        },
+        "out": {
+          "fn": "expose",
+          "args": {"by": "?t", "what": "?f", "to": "?u"},
+          "park": true,
+          "realise": [{"wait": true}, {"offer": {}}, {"refine": {"pattern": "xf.composite:revelation"}}],
+          "changes": [{"belief": {"who": "?u", "about": "?f"}, "move": "revised"}]
+        },
+        "aftermath": {"fn": "sever", "args": {"a": "?u", "b": "?k"}, "optional": true}
+      },
+      "edges": [
+        {"from": "hidden", "to": "spread", "link": "enables"},
+        {"from": "spread", "to": "leverage", "link": "motive"},
+        {"from": "hidden", "to": "out", "link": "enables"},
+        {"from": "out", "to": "aftermath", "link": "because", "shown": "must"}
+      ],
+      "entry": ["hidden"],
+      "outcomes": {
+        "exposed": {
+          "reached": ["out"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:betrayal", "xf.composite:misattribution"]
+        },
+        "bought": {
+          "reached": ["leverage"],
+          "after": {"clock": "game", "days": 14},
+          "kind": "parked",
+          "next": ["xf.composite:debt"]
+        }
+      },
+      "within": {"clock": "game", "days": 45},
+      "once": ["?k", "?u"],
+      "show": {"junctures": ["hidden"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:revelation", "xf.composite:betrayal", "xf.composite:misattribution", "xf.composite:debt"],
+        "layers": ["xf.composite:divided-loyalty", "xf.composite:rivalry"],
+        "refines": {"out": ["xf.composite:revelation"]}
+      },
+      "traces": [
+        "DS-07",
+        "DS-64",
+        "d06.TEL-09",
+        "d13.CUR-01",
+        "d13.CUR-03",
+        "d13.SRC-01",
+        "d04.QST-31",
+        "d10.PAY-16",
+        "d15.AGT-05",
+        "d15.MND-01",
+        "d15.MND-02"
+      ],
+      "risks": [
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "A secret the protagonist has no anchor in is no gap (CUR-01). The protagonist must perceive `hidden` before `out` is worth anything."
+        },
+        {
+          "failure": "fail:twist-without-anchor",
+          "note": "An exposure of something nobody had reason to wonder about reads as noise."
+        },
+        {"failure": "fail:coincidence", "note": "Whoever learns the secret needs a recorded route to it."}
+      ]
+    },
+    {
+      "id": "xf.composite:rivalry",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "concern",
+      "summary": "Two people who are alike and near each other compete for the same thing.",
+      "roles": {
+        "?a": {"kind": "actor", "note": "who wins the first round"},
+        "?b": {"kind": "actor", "note": "who loses it"},
+        "?p": {
+          "kind": ["person", "place", "item", "fact"],
+          "note": "the prize: a customer base, a spot, a boss's favour, a person's regard, standing in an audience"
+        }
+      },
+      "junctures": {
+        "round1": {
+          "fn": "compete",
+          "args": {"a": "?a", "b": "?b", "prize": "?p"},
+          "requires": [{"rel": "tied", "args": ["?a", "?b"]}, {"rel": "distinct", "args": ["?a", "?b"]}]
+        },
+        "smarts": {
+          "fn": "want",
+          "args": {"who": "?b", "what": "?p"},
+          "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "down"}]
+        },
+        "round2": {"fn": "compete", "args": {"a": "?b", "b": "?a", "prize": "?p"}, "realise": [{"wait": true}, {"offer": {}}]},
+        "foul": {"fn": "wrong", "args": {"by": "?b", "to": "?a"}, "optional": true, "realise": [{"wait": true}]},
+        "truce": {"fn": "bind", "args": {"a": "?a", "b": "?b"}, "optional": true, "realise": [{"wait": true}, {"offer": {}}]}
+      },
+      "edges": [
+        {"from": "round1", "to": "smarts", "link": "motive", "shown": "must"},
+        {"from": "smarts", "to": "round2", "link": "motive"},
+        {"from": "smarts", "to": "foul", "link": "motive"},
+        {"from": "smarts", "to": "truce", "link": "enables"},
+        {"from": "truce", "to": "foul", "link": "forecloses"},
+        {"from": "foul", "to": "truce", "link": "forecloses"}
+      ],
+      "entry": ["round1"],
+      "outcomes": {
+        "truce": {"reached": ["truce"], "kind": "resolved", "next": ["xf.composite:payoff"]},
+        "foul": {
+          "reached": ["foul"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:misattribution"]
+        },
+        "answered": {"reached": ["round2"], "kind": "resolved", "next": ["xf.composite:rivalry"]}
+      },
+      "within": {"clock": "game", "days": 21},
+      "once": ["?a", "?b"],
+      "show": {"junctures": ["round1"], "edges": 1},
+      "escalation": ["foul"],
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:misattribution"],
+        "layers": ["xf.composite:squeeze", "xf.composite:ambition-vs-obligation", "xf.composite:secret"],
+        "refines": {}
+      },
+      "traces": ["d02.BND-33", "d02.BND-13", "d01.DRV-05", "d01.DRV-43", "d08.GRW-10", "d20.AGT-01"],
+      "risks": [
+        {
+          "failure": "fail:recast-package",
+          "note": "Same-shaped rivalries everywhere (GRW-10). The prize and the audience must differ from one rivalry to the next."
+        },
+        {
+          "failure": "fail:runaway-escalation",
+          "note": "Most rivalries stay contests. A foul is a rung: it needs pull and a wanting actor."
+        },
+        {
+          "failure": "fail:cast-concentration",
+          "note": "Neighbours tie densely, so one popular stallholder can end up in every rivalry."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:protection",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "concern",
+      "summary": "Someone stands between another and harm, and the harm comes calling.",
+      "roles": {
+        "?gd": {
+          "kind": "actor",
+          "v": "may",
+          "note": "the guard: a gang that looks after its own, a family, a paid bodyguard"
+        },
+        "?wd": {"kind": "actor", "note": "the ward"},
+        "?th": {"kind": "actor", "note": "the threat"}
+      },
+      "junctures": {
+        "covers": {"fn": "protect", "args": {"guard": "?gd", "ward": "?wd"}},
+        "approach": {"fn": "threaten", "args": {"by": "?th", "to": "?wd"}},
+        "struck": {"fn": "wrong", "args": {"by": "?th", "to": "?wd"}, "optional": true},
+        "answer": {
+          "fn": "help",
+          "args": {"by": "?gd", "to": "?wd"},
+          "v": "offer",
+          "realise": [{"wait": true}, {"offer": {}}],
+          "join": "any"
+        },
+        "counter": {"fn": "wrong", "args": {"by": "?gd", "to": "?th"}, "optional": true, "realise": [{"wait": true}]},
+        "failed": {
+          "fn": "sever",
+          "args": {"a": "?wd", "b": "?gd"},
+          "optional": true,
+          "changes": [{"tie": {"a": "?wd", "b": "?gd"}, "move": "down"}]
+        }
+      },
+      "edges": [
+        {"from": "covers", "to": "answer", "link": "enables"},
+        {"from": "approach", "to": "answer", "link": "motive", "shown": "must"},
+        {"from": "struck", "to": "answer", "link": "motive"},
+        {"from": "approach", "to": "struck", "link": "enables"},
+        {"from": "struck", "to": "counter", "link": "motive"},
+        {"from": "struck", "to": "failed", "link": "because"},
+        {"from": "answer", "to": "failed", "link": "forecloses"}
+      ],
+      "entry": ["approach", "struck"],
+      "outcomes": {
+        "avenged": {
+          "reached": ["counter"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:escalation"]
+        },
+        "held": {"reached": ["answer"], "kind": "resolved", "next": ["xf.composite:payoff"]},
+        "failed": {"reached": ["failed"], "kind": "failed", "next": ["xf.composite:loss", "xf.composite:grievance"]}
+      },
+      "within": {"clock": "game", "days": 7},
+      "once": ["?wd", "?th"],
+      "show": {"junctures": ["approach"], "edges": 1},
+      "escalation": ["counter"],
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:sacrifice"],
+        "layers": ["xf.composite:squeeze", "xf.composite:debt", "xf.composite:divided-loyalty"],
+        "refines": {}
+      },
+      "traces": ["d01.DRV-41", "d01.DRV-38", "d02.BND-35", "d07.DIR-41", "d09.AGY-22", "d15.ORD-01", "d15.ORD-02"],
+      "risks": [
+        {
+          "failure": "fail:learned-grammar",
+          "note": "A guard who always comes is a promise with no tension: `failed` must stay reachable."
+        },
+        {"failure": "fail:presumed-protagonist", "note": "The protagonist guards only by accepting an offer."},
+        {
+          "failure": "fail:puppet",
+          "note": "A gang's answer comes from its care-of-members pulse in S1, not from the director."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:ambition-vs-obligation",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "concern",
+      "summary": "A chance to rise appears, and taking it breaks a duty to someone else.",
+      "roles": {
+        "?a": {"kind": "person", "note": "who is tempted"},
+        "?o": {"kind": "actor", "note": "who is owed the duty"},
+        "?x": {"kind": "actor", "note": "who offers the chance"},
+        "?ch": {"kind": ["person", "place", "item", "fact"], "note": "the chance: a post, a deal, a way out"},
+        "?p": {"kind": "person", "v": "may", "note": "someone asked to cover for ?a, or to talk ?a round"}
+      },
+      "junctures": {
+        "duty": {"fn": "obligate", "args": {"debtor": "?a", "creditor": "?o"}},
+        "chance": {
+          "fn": "ask",
+          "args": {"by": "?x", "of": "?a", "what": "?ch"},
+          "requires": [{"rel": "violates", "args": ["chance", "duty"]}]
+        },
+        "tempted": {"fn": "want", "args": {"who": "?a", "what": "?ch"}},
+        "drawn": {"fn": "ask", "args": {"by": "?a", "of": "?p", "what": "?ch"}, "optional": true, "realise": [{"offer": {}}]},
+        "took": {"fn": "comply", "args": {"who": "?a", "to": "?x"}, "optional": true, "realise": [{"wait": true}]},
+        "stayed": {"fn": "refuse", "args": {"who": "?a", "to": "?x"}, "optional": true, "realise": [{"wait": true}]},
+        "cost": {"fn": "sever", "args": {"a": "?a", "b": "?o"}, "optional": true, "park": true}
+      },
+      "edges": [
+        {"from": "duty", "to": "chance", "link": "enables"},
+        {"from": "chance", "to": "tempted", "link": "motive", "shown": "must"},
+        {"from": "tempted", "to": "drawn", "link": "motive"},
+        {"from": "tempted", "to": "took", "link": "motive"},
+        {"from": "chance", "to": "stayed", "link": "answers"},
+        {"from": "took", "to": "stayed", "link": "forecloses"},
+        {"from": "stayed", "to": "took", "link": "forecloses"},
+        {"from": "took", "to": "cost", "link": "because"}
+      ],
+      "entry": ["chance"],
+      "outcomes": {
+        "rose": {"reached": ["took"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:betrayal"]},
+        "stayed": {"reached": ["stayed"], "kind": "resolved", "next": ["xf.composite:test-of-creed"]}
+      },
+      "within": {"clock": "game", "days": 14},
+      "once": ["?a", "?x"],
+      "show": {"junctures": ["chance"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:betrayal", "xf.composite:test-of-creed"],
+        "layers": ["xf.composite:debt", "xf.composite:divided-loyalty", "xf.composite:rivalry"],
+        "refines": {}
+      },
+      "traces": ["d01.DRV-25", "d01.DRV-30", "d01.DRV-34", "d01.DRV-09", "d10.CHG-05", "d10.THM-05", "d10.THM-13"],
+      "risks": [
+        {
+          "failure": "fail:preachy",
+          "note": "Neither choice is the right one. The premise is never said in the system's voice (THM-13); both options carry costs of different kinds (THM-05)."
+        },
+        {"failure": "fail:puppet", "note": "The chance comes from someone with a reason to offer it."}
+      ]
+    },
+    {
+      "id": "xf.composite:coveted",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "goal",
+      "summary": "Someone wants a thing that someone else holds. Told as an offer, this is the fetch errand; it is one form among many.",
+      "roles": {
+        "?w": {"kind": "actor", "note": "who wants it"},
+        "?h": {"kind": "actor", "note": "who holds it"},
+        "?x": {"kind": ["item", "place", "person"], "note": "the thing"},
+        "?agent": {"kind": "person", "v": "may", "note": "someone asked to get it"},
+        "?other": {"kind": "actor", "note": "a third party who ends up with it"}
+      },
+      "junctures": {
+        "holds": {"fn": "hold", "args": {"who": "?h", "what": "?x"}},
+        "wants": {"fn": "want", "args": {"who": "?w", "what": "?x"}, "requires": [{"rel": "distinct", "args": ["?w", "?h"]}]},
+        "refused": {"fn": "refuse", "args": {"who": "?h", "to": "?w"}, "optional": true},
+        "asked": {
+          "fn": "ask",
+          "args": {"by": "?w", "of": "?agent", "what": "?x"},
+          "optional": true,
+          "realise": [{"offer": {}}],
+          "join": "any"
+        },
+        "moved": {
+          "fn": "transfer",
+          "args": {"what": "?x", "from": "?h", "to": "?w"},
+          "park": true,
+          "realise": [
+            {"wait": true},
+            {"refine": {"pattern": "xf.composite:interception"}},
+            {"refine": {"pattern": "xf.composite:heist"}}
+          ]
+        },
+        "lost": {
+          "fn": "transfer",
+          "args": {"what": "?x", "from": "?h", "to": "?other"},
+          "optional": true,
+          "requires": [{"rel": "distinct", "args": ["?other", "?w"]}]
+        }
+      },
+      "edges": [
+        {"from": "wants", "to": "moved", "link": "motive"},
+        {"from": "holds", "to": "moved", "link": "enables"},
+        {"from": "wants", "to": "asked", "link": "motive", "shown": "must"},
+        {"from": "refused", "to": "asked", "link": "motive"},
+        {"from": "lost", "to": "moved", "link": "forecloses"}
+      ],
+      "entry": ["wants"],
+      "outcomes": {
+        "gained": {"reached": ["moved"], "kind": "resolved", "next": ["xf.composite:payoff", "xf.composite:debt"]},
+        "lost": {"reached": ["lost"], "kind": "failed", "next": ["xf.composite:grievance", "xf.composite:interception"]}
+      },
+      "within": {"clock": "game", "days": 14},
+      "once": ["?w", "?x"],
+      "show": {"junctures": ["wants"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:payoff", "xf.composite:grievance", "xf.composite:debt"],
+        "layers": ["xf.composite:rivalry", "xf.composite:squeeze", "xf.composite:interception"],
+        "refines": {"moved": ["xf.composite:interception", "xf.composite:heist", "xf.composite:complication"]}
+      },
+      "traces": ["d04.QST-05", "DS-56", "d03.FIT-10", "d09.R5-01", "d04.QST-21", "d01.DRV-33", "d01.DRV-22"],
+      "risks": [
+        {
+          "failure": "fail:errand-dominance",
+          "note": "As an offer to the protagonist this is the fetch errand. It should be a minority of threads (R7), and most should grow only if the protagonist leans in."
+        },
+        {
+          "failure": "fail:flat-stakes",
+          "note": "A want with nothing at stake for anyone (TEL-05): `wants` should cite what ?w stands to lose."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:grievance",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "concern",
+      "summary": "Someone was wronged and holds it against the one who did it.",
+      "roles": {
+        "?wr": {"kind": "actor", "note": "the wronged"},
+        "?by": {"kind": "actor", "note": "the wrongdoer, as the wronged believes"}
+      },
+      "junctures": {
+        "wronged": {"fn": "wrong", "args": {"by": "?by", "to": "?wr"}},
+        "held": {
+          "fn": "blame",
+          "args": {"who": "?wr", "of": "?by", "for": "wronged"},
+          "changes": [{"frame": {"of": "?wr", "toward": "?by", "status": "opens"}}]
+        },
+        "avenged": {"fn": "wrong", "args": {"by": "?wr", "to": "?by"}, "optional": true, "realise": [{"wait": true}]},
+        "restored": {
+          "fn": "repay",
+          "args": {"debtor": "?by", "creditor": "?wr"},
+          "optional": true,
+          "park": true,
+          "realise": [{"wait": true}, {"offer": {}}]
+        },
+        "forgiven": {"fn": "bind", "args": {"a": "?wr", "b": "?by"}, "optional": true}
+      },
+      "edges": [
+        {"from": "wronged", "to": "held", "link": "motive", "shown": "must"},
+        {"from": "held", "to": "avenged", "link": "motive"},
+        {"from": "held", "to": "restored", "link": "motive"},
+        {"from": "held", "to": "forgiven", "link": "enables"},
+        {"from": "restored", "to": "avenged", "link": "forecloses"},
+        {"from": "avenged", "to": "forgiven", "link": "forecloses"}
+      ],
+      "entry": ["wronged"],
+      "outcomes": {
+        "avenged": {
+          "reached": ["avenged"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:escalation"]
+        },
+        "restored": {"reached": ["restored"], "kind": "resolved", "next": ["xf.composite:settlement"]},
+        "forgiven": {"reached": ["forgiven"], "kind": "resolved", "next": ["xf.composite:payoff"]}
+      },
+      "within": {"clock": "game", "days": 30},
+      "once": ["?wr", "?by"],
+      "show": {"junctures": ["wronged"], "edges": 1},
+      "escalation": ["avenged"],
+      "links": {
+        "chains": ["xf.composite:feud", "xf.composite:settlement", "xf.composite:escalation", "xf.composite:hunted"],
+        "layers": ["xf.composite:misattribution", "xf.composite:protection", "xf.composite:rivalry"],
+        "refines": {}
+      },
+      "traces": ["d01.DRV-18", "d01.DRV-42", "d01.DRV-04", "d02.BND-04", "d09.AGY-26", "d15.AGT-06"],
+      "risks": [
+        {
+          "failure": "fail:runaway-escalation",
+          "note": "Revenge every time. Violence is the rare end of a grievance (DRV-18); most fade with the relationship's worth or end in restitution."
+        },
+        {
+          "failure": "fail:puppet",
+          "note": "An intent to retaliate is not an act (DRV-42): an avenging act needs the group's retribution drive and its hazard draw, or the person's own frame."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:squeeze",
+      "type": "pattern",
+      "version": 1,
+      "family": "tension",
+      "scale": "concern",
+      "summary": "A power takes a cut from someone who can't easily refuse, and the burden builds.",
+      "roles": {
+        "?pw": {"kind": "group", "note": "the power: a gang collecting a fee, a landlord, a corporation"},
+        "?col": {"kind": "person", "note": "who collects"},
+        "?wk": {"kind": "person", "note": "who pays"},
+        "?p": {"kind": "person", "v": "may", "note": "someone asked to help"}
+      },
+      "junctures": {
+        "burden": {"fn": "obligate", "args": {"debtor": "?wk", "creditor": "?pw"}},
+        "rule": {
+          "fn": "demand",
+          "args": {"by": "?col", "of": "?wk", "what": "burden"},
+          "requires": [{"rel": "member", "args": ["?col", "?pw"]}]
+        },
+        "strain": {
+          "fn": "want",
+          "args": {"who": "?wk", "what": "burden"},
+          "changes": [{"frame": {"of": "?wk", "toward": "burden", "status": "blocked"}}]
+        },
+        "asked": {
+          "fn": "ask",
+          "args": {"by": "?wk", "of": "?p", "what": "burden"},
+          "optional": true,
+          "realise": [{"offer": {}}]
+        },
+        "paid": {"fn": "comply", "args": {"who": "?wk", "to": "?col"}, "optional": true, "realise": [{"wait": true}]},
+        "refused": {"fn": "refuse", "args": {"who": "?wk", "to": "?col"}, "optional": true, "realise": [{"wait": true}]},
+        "sanctioned": {"fn": "wrong", "args": {"by": "?col", "to": "?wk"}, "optional": true, "realise": [{"wait": true}]}
+      },
+      "edges": [
+        {"from": "burden", "to": "rule", "link": "enables"},
+        {"from": "rule", "to": "strain", "link": "motive"},
+        {"from": "strain", "to": "asked", "link": "motive", "shown": "must"},
+        {"from": "rule", "to": "paid", "link": "answers"},
+        {"from": "strain", "to": "refused", "link": "motive"},
+        {"from": "refused", "to": "sanctioned", "link": "answers", "shown": "must"},
+        {"from": "paid", "to": "refused", "link": "forecloses"}
+      ],
+      "entry": ["rule"],
+      "outcomes": {
+        "crushed": {
+          "reached": ["refused", "sanctioned"],
+          "kind": "failed",
+          "next": ["xf.composite:grievance", "xf.composite:loss", "xf.composite:uprising"]
+        },
+        "defied": {
+          "reached": ["refused"],
+          "after": {"clock": "game", "days": 7},
+          "kind": "resolved",
+          "next": ["xf.composite:uprising", "xf.composite:reckoning"]
+        },
+        "endured": {
+          "reached": ["paid"],
+          "after": {"clock": "game", "days": 7},
+          "kind": "parked",
+          "next": ["xf.composite:debt", "xf.composite:protection"]
+        }
+      },
+      "within": {"clock": "game", "days": 14},
+      "once": ["?wk", "?pw"],
+      "show": {"junctures": ["rule"], "edges": 1},
+      "escalation": ["sanctioned"],
+      "links": {
+        "chains": ["xf.composite:uprising", "xf.composite:grievance", "xf.composite:debt", "xf.composite:protection"],
+        "layers": ["xf.composite:protection", "xf.composite:rivalry", "xf.composite:divided-loyalty"],
+        "refines": {}
+      },
+      "traces": ["d01.DRV-55", "d01.DRV-37", "d01.DRV-20", "d15.NRM-02", "d15.NRM-04", "d15.NRM-06", "d15.ORD-02", "d04.QST-21"],
+      "risks": [
+        {
+          "failure": "fail:recast-package",
+          "note": "Run 2's Friday-fee card repeated word for word with the names swapped. Who is squeezed, what they lack and how they answer must vary."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "The norm gap is a district read nobody sees. A refusal reads as courage only if the protagonist has seen others pay."
+        },
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "The protagonist pays, backs a refusal or brokers only through an offer."
+        }
+      ]
+    }
+  ]
+}

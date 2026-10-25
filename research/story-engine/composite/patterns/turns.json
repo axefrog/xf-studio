@@ -1,0 +1,678 @@
+{
+  "id": "xf.composite:family.turns",
+  "type": "pattern-family",
+  "family": "turn",
+  "version": 1,
+  "status": "v0, 25 October 2026. Turns: short moves that change a thread's direction. Most refine a juncture of a tension or a shape. Form: pattern-language.md §3.7. Every role is open.",
+  "patterns": [
+    {
+      "id": "xf.composite:complication",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "step",
+      "summary": "Something gets in the way of a goal under way: a third party's act, or plain bad luck.",
+      "roles": {
+        "?a": {"kind": "actor", "v": "may", "note": "who is pursuing the goal"},
+        "?g": {"kind": ["person", "place", "item", "fact"], "note": "what the goal is about"},
+        "?c": {"kind": "actor", "note": "who gets in the way, if anyone"}
+      },
+      "junctures": {
+        "going": {"fn": "pursue", "args": {"who": "?a", "target": "?g"}},
+        "snag": {
+          "fn": "wrong",
+          "args": {"by": "?c", "to": "?a"},
+          "optional": true,
+          "requires": [{"rel": "distinct", "args": ["?c", "?a"]}]
+        },
+        "mishap": {"fn": "befall", "args": {"who": "?a"}, "optional": true},
+        "adjust": {
+          "fn": "choose",
+          "args": {"who": "?a"},
+          "join": "any",
+          "park": true,
+          "v": "offer",
+          "realise": [{"wait": true}, {"offer": {}}]
+        }
+      },
+      "edges": [
+        {"from": "going", "to": "snag", "link": "but", "shown": "must"},
+        {"from": "going", "to": "mishap", "link": "but", "shown": "must"},
+        {"from": "snag", "to": "adjust", "link": "motive"},
+        {"from": "mishap", "to": "adjust", "link": "motive"}
+      ],
+      "entry": ["going"],
+      "outcomes": {"overcome": {"reached": ["adjust"], "kind": "resolved", "next": ["xf.composite:payoff"]}},
+      "within": {"clock": "game", "days": 3},
+      "show": {"junctures": ["going"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:coveted", "xf.composite:grievance"],
+        "layers": ["xf.composite:rivalry", "xf.composite:interception"],
+        "refines": {}
+      },
+      "traces": ["d04.QST-01", "d04.QST-28", "d04.QST-29", "DS-56", "d07.DIR-42", "d06.TEL-10"],
+      "risks": [
+        {
+          "failure": "fail:learned-grammar",
+          "note": "Every job goes wrong, so the player stops being surprised. A complication is chosen at the rate the world produces snags, not on every errand."
+        },
+        {
+          "failure": "fail:puppet",
+          "note": "A snag with no cause (TEL-10): whoever gets in the way acts from their own frame."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:reversal",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "step",
+      "summary": "What was gained turns against the one who gained it.",
+      "roles": {
+        "?a": {"kind": "actor", "v": "may", "note": "who gains"},
+        "?x": {"kind": ["item", "place", "person", "fact"], "note": "what is gained"},
+        "?src": {"kind": "actor", "note": "where it came from"}
+      },
+      "junctures": {
+        "wanted": {"fn": "want", "args": {"who": "?a", "what": "?x"}},
+        "gained": {"fn": "transfer", "args": {"what": "?x", "from": "?src", "to": "?a"}},
+        "turned": {"fn": "wrong", "args": {"by": "?src", "to": "?a"}, "optional": true},
+        "soured": {"fn": "befall", "args": {"who": "?a"}, "optional": true},
+        "learned": {"fn": "learn", "args": {"who": "?a", "what": "gained"}, "join": "any"}
+      },
+      "edges": [
+        {"from": "wanted", "to": "gained", "link": "motive"},
+        {"from": "gained", "to": "turned", "link": "because"},
+        {"from": "gained", "to": "soured", "link": "because"},
+        {"from": "turned", "to": "learned", "link": "reveals", "shown": "must"},
+        {"from": "soured", "to": "learned", "link": "reveals", "shown": "must"}
+      ],
+      "entry": ["gained"],
+      "outcomes": {
+        "reversed": {
+          "reached": ["learned"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:misattribution", "xf.composite:reckoning"]
+        }
+      },
+      "within": {"clock": "game", "days": 10},
+      "show": {"junctures": ["gained", "learned"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:misattribution"],
+        "layers": ["xf.composite:coveted", "xf.composite:betrayal"],
+        "refines": {}
+      },
+      "traces": ["d13.HAB-06", "d04.QST-40", "d10.PAY-02", "d13.CUR-05", "d06.TEL-10"],
+      "risks": [
+        {
+          "failure": "fail:twist-without-anchor",
+          "note": "A twist lands only against an expectation the protagonist had time to form (HAB-06): `gained` must be perceived before `turned`."
+        },
+        {
+          "failure": "fail:cliche",
+          "note": "Every prize poisoned teaches the player to refuse prizes. Rare, and only from a cause the record holds."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:revelation",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "step",
+      "summary": "Someone learns a hidden fact that changes what an earlier event meant.",
+      "roles": {
+        "?l": {"kind": "actor", "note": "who learns"},
+        "?k": {"kind": "actor", "note": "who kept it hidden"},
+        "?f": {"kind": ["fact", "event"], "note": "the hidden fact"},
+        "?old": {"kind": "event", "note": "the earlier event it recasts"}
+      },
+      "junctures": {
+        "seen": {"fn": "learn", "args": {"who": "?l", "what": "?old"}},
+        "concealed": {
+          "fn": "conceal",
+          "args": {"who": "?k", "what": "?f", "from": "?l"},
+          "requires": [{"rel": "concerns", "args": ["?f", "?old"]}]
+        },
+        "told": {
+          "fn": "learn",
+          "args": {"who": "?l", "what": "?f"},
+          "realise": [{"wait": true}, {"offer": {}}, {"nudge": {}}]
+        },
+        "reframed": {"fn": "blame", "args": {"who": "?l", "of": "?k", "for": "?old"}},
+        "acts": {"fn": "pursue", "args": {"who": "?l", "target": "?k"}, "optional": true, "park": true}
+      },
+      "edges": [
+        {"from": "seen", "to": "told", "link": "enables"},
+        {"from": "concealed", "to": "told", "link": "enables"},
+        {"from": "told", "to": "reframed", "link": "reveals", "shown": "must"},
+        {"from": "reframed", "to": "acts", "link": "motive"}
+      ],
+      "entry": ["concealed", "told"],
+      "outcomes": {
+        "reframed": {
+          "reached": ["reframed"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:betrayal", "xf.composite:misattribution"]
+        }
+      },
+      "within": {"clock": "game", "days": 21},
+      "show": {"junctures": ["seen", "told"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:betrayal"],
+        "layers": ["xf.composite:secret", "xf.composite:misattribution"],
+        "refines": {}
+      },
+      "traces": [
+        "d13.CUR-01",
+        "d13.CUR-02",
+        "d13.CUR-03",
+        "d13.SRC-01",
+        "d06.TEL-09",
+        "d04.QST-36",
+        "d10.PAY-05",
+        "d20.XPL-13",
+        "d15.MND-01"
+      ],
+      "risks": [
+        {
+          "failure": "fail:twist-without-anchor",
+          "note": "The protagonist must have perceived the earlier event (`seen`), or the revelation recasts nothing for the player."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "A revelation told to someone else, out of the protagonist's sight, is someone else's story."
+        },
+        {
+          "failure": "fail:coincidence",
+          "note": "A constructed hidden fact must agree with every pin and with what the protagonist was shown (PAY-05)."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:escalation",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "goal",
+      "summary": "An answer raises the stakes: from words to harm, or from a person to the group behind them.",
+      "roles": {
+        "?a": {"kind": "actor", "note": "who answers"},
+        "?b": {"kind": "actor", "note": "who provoked"},
+        "?ga": {"kind": "group", "note": "?a's group, if the answer goes up to it"}
+      },
+      "junctures": {
+        "provoked": {"fn": "wrong", "args": {"by": "?b", "to": "?a"}, "optional": true},
+        "defied": {"fn": "refuse", "args": {"who": "?b", "to": "?a"}, "optional": true},
+        "decided": {
+          "fn": "decide",
+          "args": {"group": "?ga", "what": "?b"},
+          "optional": true,
+          "join": "any",
+          "requires": [{"rel": "member", "args": ["?a", "?ga"]}],
+          "realise": [{"wait": true}]
+        },
+        "struck": {
+          "fn": "wrong",
+          "args": {"by": "?a", "to": "?b"},
+          "join": "any",
+          "requires": [{"rel": "graver", "args": ["struck", "provoked"]}],
+          "realise": [{"wait": true}, {"nudge": {}}]
+        }
+      },
+      "edges": [
+        {"from": "provoked", "to": "decided", "link": "motive"},
+        {"from": "defied", "to": "decided", "link": "motive"},
+        {"from": "decided", "to": "struck", "link": "because", "shown": "must"},
+        {"from": "provoked", "to": "struck", "link": "motive"},
+        {"from": "defied", "to": "struck", "link": "motive"}
+      ],
+      "entry": ["provoked", "defied"],
+      "outcomes": {
+        "escalated": {
+          "reached": ["struck"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:hunted", "xf.composite:loss"]
+        },
+        "hanging": {
+          "reached": ["decided"],
+          "after": {"clock": "game", "days": 7},
+          "kind": "parked",
+          "next": ["xf.composite:hunted"]
+        }
+      },
+      "within": {"clock": "game", "days": 10},
+      "show": {"junctures": ["struck"], "edges": 1},
+      "escalation": ["decided", "struck"],
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:hunted"],
+        "layers": ["xf.composite:protection", "xf.composite:squeeze"],
+        "refines": {}
+      },
+      "traces": ["d01.DRV-15", "d01.DRV-42", "d07.DIR-41", "d07.DIR-45", "d10.CHG-08", "d09.AGY-30", "d15.ORD-05", "d15.MND-03"],
+      "risks": [
+        {
+          "failure": "fail:runaway-escalation",
+          "note": "Every provocation climbing to the top. Each rung passes the escalation gate: pull, a shown cause, a wanting actor, a portent, bounds."
+        },
+        {
+          "failure": "fail:puppet",
+          "note": "A group escalates by its leadership's decision in S1 (D-08), never by the director's."
+        },
+        {"failure": "fail:unbounded-doom", "note": "Engine-sown stakes stop at block scale (AGY-30)."}
+      ]
+    },
+    {
+      "id": "xf.composite:betrayal",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "goal",
+      "summary": "Someone trusted acts against the one who trusted them, for a reason the record holds.",
+      "roles": {
+        "?t": {"kind": "person", "note": "who betrays"},
+        "?bt": {"kind": "actor", "note": "who is betrayed"},
+        "?lure": {"kind": "actor", "note": "who offers or threatens"}
+      },
+      "junctures": {
+        "bond": {
+          "fn": "obligate",
+          "args": {"debtor": "?t", "creditor": "?bt"},
+          "requires": [{"rel": "trusts", "args": ["?bt", "?t", "mid"]}]
+        },
+        "offered": {"fn": "ask", "args": {"by": "?lure", "of": "?t", "what": "?bt"}, "optional": true},
+        "threatened": {"fn": "demand", "args": {"by": "?lure", "of": "?t", "what": "?bt"}, "optional": true},
+        "torn": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:divided-loyalty", "outcome": "any"},
+          "optional": true,
+          "binds": {"?m": "?t"}
+        },
+        "act": {
+          "fn": "wrong",
+          "args": {"by": "?t", "to": "?bt"},
+          "join": "any",
+          "changes": [{"begins": "conceal", "args": {"who": "?t", "what": "act", "from": "?bt"}}]
+        },
+        "found": {
+          "fn": "learn",
+          "args": {"who": "?bt", "what": "act"},
+          "park": true,
+          "realise": [{"wait": true}, {"offer": {}}]
+        },
+        "broken": {"fn": "sever", "args": {"a": "?bt", "b": "?t"}, "optional": true}
+      },
+      "edges": [
+        {"from": "bond", "to": "act", "link": "enables"},
+        {"from": "offered", "to": "act", "link": "motive"},
+        {"from": "threatened", "to": "act", "link": "motive"},
+        {"from": "torn", "to": "act", "link": "motive"},
+        {"from": "act", "to": "found", "link": "reveals", "shown": "must"},
+        {"from": "found", "to": "broken", "link": "motive"}
+      ],
+      "entry": ["offered", "threatened", "torn", "act"],
+      "outcomes": {
+        "discovered": {
+          "reached": ["found"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:hunted"]
+        }
+      },
+      "within": {"clock": "game", "days": 21},
+      "once": ["?t", "?bt"],
+      "show": {"junctures": ["act"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:secret", "xf.composite:feud"],
+        "layers": ["xf.composite:divided-loyalty", "xf.composite:heist", "xf.composite:reversal"],
+        "refines": {}
+      },
+      "traces": ["DS-62", "d04.QST-36", "d15.DEF-05", "d15.DEF-06", "d15.AGT-02", "d15.AGT-06", "d15.AGT-08", "d02.BND-04"],
+      "risks": [
+        {
+          "failure": "fail:cliche",
+          "note": "\"Every patron betrays you\" is worn (QST-36). Betrayals are budgeted (DEF-06, S1's betrayal budget) and need one of the declared causes: an offer, a threat or a dilemma."
+        },
+        {"failure": "fail:puppet", "note": "A defection without its recorded causes reads as a twist (DEF-05)."},
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "The engine never makes the protagonist the traitor. A betrayal of the protagonist lands only on stakes the protagonist accepted."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:sacrifice",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "step",
+      "summary": "Someone bears a cost so that another's need is met.",
+      "roles": {
+        "?s": {"kind": "actor", "note": "who gives something up"},
+        "?for": {"kind": "actor", "note": "who it is for"},
+        "?x": {"kind": ["person", "place", "item", "fact"], "note": "what ?for needs"}
+      },
+      "junctures": {
+        "need": {"fn": "want", "args": {"who": "?for", "what": "?x"}, "requires": [{"rel": "tied", "args": ["?s", "?for"]}]},
+        "gives": {
+          "fn": "sacrifice",
+          "args": {"who": "?s", "for": "?for"},
+          "changes": [{"tie": {"a": "?for", "b": "?s"}, "move": "up"}]
+        },
+        "served": {"fn": "help", "args": {"by": "?s", "to": "?for"}}
+      },
+      "edges": [
+        {"from": "need", "to": "gives", "link": "motive", "shown": "must"},
+        {"from": "gives", "to": "served", "link": "because"}
+      ],
+      "entry": ["need"],
+      "outcomes": {
+        "given": {
+          "reached": ["gives"],
+          "kind": "resolved",
+          "next": ["xf.composite:payoff", "xf.composite:debt", "xf.composite:test-of-creed"]
+        }
+      },
+      "within": {"clock": "game", "days": 7},
+      "show": {"junctures": ["need", "gives"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:payoff", "xf.composite:debt"],
+        "layers": ["xf.composite:protection", "xf.composite:debt"],
+        "refines": {}
+      },
+      "traces": ["d02.BND-36", "d10.PAY-15", "d10.THM-05", "d10.THM-06", "d10.CHG-10", "d10.CHG-11", "d01.DRV-41"],
+      "risks": [
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "The protagonist's stake is never sacrificed unless an accepted offer named it."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "A sacrifice nobody saw the need for is just a loss: the need must be perceived first (CHG-11)."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:closing-choice",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "goal",
+      "summary": "Someone can serve one of two claims but not both, and choosing closes the other.",
+      "roles": {
+        "?ch": {"kind": "actor", "v": "may", "note": "who chooses"},
+        "?p1": {"kind": "actor"},
+        "?p2": {"kind": "actor"},
+        "?x": {"kind": ["person", "place", "item", "fact"], "note": "what both claims want: a thing, a person, a night"}
+      },
+      "junctures": {
+        "claim1": {"fn": "ask", "args": {"by": "?p1", "of": "?ch", "what": "?x"}},
+        "claim2": {
+          "fn": "ask",
+          "args": {"by": "?p2", "of": "?ch", "what": "?x"},
+          "requires": [{"rel": "distinct", "args": ["?p1", "?p2"]}, {"rel": "violates", "args": ["claim2", "claim1"]}]
+        },
+        "chose1": {
+          "fn": "comply",
+          "args": {"who": "?ch", "to": "?p1"},
+          "optional": true,
+          "v": "offer",
+          "realise": [{"wait": true}, {"offer": {}}]
+        },
+        "chose2": {
+          "fn": "comply",
+          "args": {"who": "?ch", "to": "?p2"},
+          "optional": true,
+          "v": "offer",
+          "realise": [{"wait": true}, {"offer": {}}]
+        }
+      },
+      "edges": [
+        {"from": "claim1", "to": "chose1", "link": "answers"},
+        {"from": "claim2", "to": "chose2", "link": "answers"},
+        {"from": "claim1", "to": "chose2", "link": "enables"},
+        {"from": "claim2", "to": "chose1", "link": "enables"},
+        {"from": "chose1", "to": "chose2", "link": "forecloses"},
+        {"from": "chose2", "to": "chose1", "link": "forecloses"}
+      ],
+      "entry": ["claim1", "claim2"],
+      "outcomes": {
+        "first": {
+          "reached": ["chose1"],
+          "foreclosed": ["chose2"],
+          "kind": "resolved",
+          "next": ["xf.composite:settled-without-you", "xf.composite:grievance"]
+        },
+        "second": {
+          "reached": ["chose2"],
+          "foreclosed": ["chose1"],
+          "kind": "resolved",
+          "next": ["xf.composite:settled-without-you", "xf.composite:grievance"]
+        }
+      },
+      "within": {"clock": "game", "days": 3},
+      "show": {"junctures": ["claim1", "claim2"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:settled-without-you", "xf.composite:grievance"],
+        "layers": ["xf.composite:divided-loyalty", "xf.composite:rivalry"],
+        "refines": {}
+      },
+      "traces": ["d09.AGY-02", "d09.AGY-05", "d09.R5-28", "d09.AGY-26", "d04.QST-21", "d10.THM-05", "DS-11"],
+      "risks": [
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "A blind choice: the foresight must show that the options lead to different places (AGY-02)."
+        },
+        {"failure": "fail:recast-package", "note": "A fake choice: both options leave the same record (S2's L-06)."}
+      ]
+    },
+    {
+      "id": "xf.composite:interception",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "goal",
+      "summary": "Someone learns that a thing is on the move and goes after it.",
+      "roles": {
+        "?i": {"kind": "actor", "note": "who intercepts"},
+        "?x": {"kind": "item", "note": "what is carried"},
+        "?car": {"kind": "actor", "v": "may", "note": "who carries it"},
+        "?by": {"kind": "actor", "note": "who sent it"},
+        "?to": {"kind": "actor", "note": "who it is for"},
+        "?leak": {"kind": "person", "note": "who knew and told"}
+      },
+      "junctures": {
+        "plan": {"fn": "obligate", "args": {"debtor": "?car", "creditor": "?by"}},
+        "carried": {"fn": "hold", "args": {"who": "?car", "what": "?x"}},
+        "known": {"fn": "learn", "args": {"who": "?leak", "what": "plan"}},
+        "leaked": {
+          "fn": "learn",
+          "args": {"who": "?i", "what": "plan"},
+          "requires": [{"rel": "tied", "args": ["?i", "?leak"]}],
+          "realise": [{"wait": true}, {"construct": true}]
+        },
+        "wanting": {"fn": "want", "args": {"who": "?i", "what": "?x"}},
+        "shadow": {"fn": "pursue", "args": {"who": "?i", "target": "?car"}, "realise": [{"wait": true}, {"nudge": {}}]},
+        "taken": {
+          "fn": "transfer",
+          "args": {"what": "?x", "from": "?car", "to": "?i"},
+          "optional": true,
+          "v": "offer",
+          "realise": [{"wait": true}, {"refine": {"pattern": "xf.composite:complication"}}]
+        },
+        "delivered": {"fn": "transfer", "args": {"what": "?x", "from": "?car", "to": "?to"}, "optional": true}
+      },
+      "edges": [
+        {"from": "plan", "to": "known", "link": "enables"},
+        {"from": "known", "to": "leaked", "link": "enables"},
+        {"from": "leaked", "to": "shadow", "link": "enables"},
+        {"from": "wanting", "to": "shadow", "link": "motive"},
+        {"from": "carried", "to": "taken", "link": "enables"},
+        {"from": "shadow", "to": "taken", "link": "enables", "shown": "must"},
+        {"from": "delivered", "to": "taken", "link": "forecloses"},
+        {"from": "taken", "to": "delivered", "link": "forecloses"}
+      ],
+      "entry": ["plan", "wanting"],
+      "outcomes": {
+        "intercepted": {
+          "reached": ["taken"],
+          "kind": "resolved",
+          "next": ["xf.composite:grievance", "xf.composite:misattribution", "xf.composite:hunted", "xf.composite:revelation"]
+        },
+        "delivered": {"reached": ["delivered"], "kind": "resolved", "next": ["xf.composite:payoff"]}
+      },
+      "within": {"clock": "game", "days": 3},
+      "once": ["?i", "?x"],
+      "show": {"junctures": ["shadow"], "edges": 1},
+      "escalation": ["taken"],
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:misattribution", "xf.composite:hunted"],
+        "layers": ["xf.composite:coveted", "xf.composite:rivalry", "xf.composite:feud"],
+        "refines": {"taken": ["xf.composite:complication"]}
+      },
+      "traces": ["d04.QST-26", "d04.QST-31", "d06.GEN-06", "d03.FIT-41", "d09.AGY-23", "d07.DIR-41", "d07.DIR-45", "d20.ARV-04"],
+      "risks": [
+        {
+          "failure": "fail:coincidence",
+          "note": "An all-knowing interceptor. `leaked` needs a recorded route, a tie to someone who knew, found or constructed within latitude, and the protagonist can find it by three routes."
+        },
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "A thing is taken from the protagonist only through an obstacle with at least two ways out, on a stake the accepted offer named."
+        },
+        {
+          "failure": "fail:quantum-ogre",
+          "note": "The follower is nudged only while unobserved; once the protagonist has seen the street empty, it stays empty."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:misattribution",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "goal",
+      "summary": "Someone is blamed for a wrong another did.",
+      "roles": {
+        "?bl": {"kind": "actor", "note": "who blames"},
+        "?acc": {"kind": "actor", "v": "may", "note": "who is blamed"},
+        "?real": {"kind": "actor", "note": "who really did it"},
+        "?cl": {"kind": "actor", "v": "may", "note": "who brings the truth"}
+      },
+      "junctures": {
+        "wronged": {"fn": "wrong", "args": {"by": "?real", "to": "?bl"}},
+        "misread": {
+          "fn": "blame",
+          "args": {"who": "?bl", "of": "?acc", "for": "wronged"},
+          "requires": [{"rel": "distinct", "args": ["?acc", "?real"]}]
+        },
+        "acted": {"fn": "wrong", "args": {"by": "?bl", "to": "?acc"}, "optional": true, "realise": [{"wait": true}]},
+        "cleared": {
+          "fn": "expose",
+          "args": {"by": "?cl", "what": "wronged", "to": "?bl"},
+          "optional": true,
+          "park": true,
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"belief": {"who": "?bl", "about": "wronged"}, "move": "revised"}]
+        }
+      },
+      "edges": [
+        {"from": "wronged", "to": "misread", "link": "motive", "shown": "must"},
+        {"from": "misread", "to": "acted", "link": "motive"},
+        {"from": "misread", "to": "cleared", "link": "enables"},
+        {"from": "cleared", "to": "acted", "link": "forecloses"}
+      ],
+      "entry": ["misread"],
+      "outcomes": {
+        "cleared": {"reached": ["cleared"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:settlement"]},
+        "wronged-twice": {"reached": ["acted"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:feud"]}
+      },
+      "within": {"clock": "game", "days": 21},
+      "once": ["?bl", "?acc"],
+      "show": {"junctures": ["misread"], "edges": 1},
+      "escalation": ["acted"],
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:settlement"],
+        "layers": ["xf.composite:grievance", "xf.composite:interception", "xf.composite:revelation"],
+        "refines": {"cleared": ["xf.composite:revelation"]}
+      },
+      "traces": ["DS-64", "d01.DRV-47", "d01.DRV-48", "d13.SRC-02", "d13.SRC-04", "d13.SRC-05", "d20.AGT-11", "d15.REP-04"],
+      "risks": [
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "Without a counter-cue the truth is just an error (SRC-02): the real doer is findable by three routes, and a correction brings the replacement cause (SRC-05)."
+        },
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "Blame aimed at the protagonist is an NPC's belief under D-22, and the protagonist can correct it."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:test-of-creed",
+      "type": "pattern",
+      "version": 1,
+      "family": "turn",
+      "scale": "concern",
+      "summary": "A person's stand is pressed from two sides, and they hold or they turn.",
+      "roles": {
+        "?n": {"kind": "person", "note": "whose stand is tested"},
+        "?p1": {"kind": "actor", "note": "the first pressure"},
+        "?p2": {"kind": "actor", "note": "the second, independent pressure"},
+        "?o": {"kind": "person", "note": "someone changed by watching ?n hold"}
+      },
+      "junctures": {
+        "stood": {"fn": "refuse", "args": {"who": "?n", "to": "?p1"}},
+        "press1": {"fn": "demand", "args": {"by": "?p1", "of": "?n", "what": "stood"}},
+        "press2": {
+          "fn": "demand",
+          "args": {"by": "?p2", "of": "?n", "what": "stood"},
+          "requires": [{"rel": "distinct", "args": ["?p1", "?p2"]}]
+        },
+        "held": {"fn": "refuse", "args": {"who": "?n", "to": "?p2"}, "optional": true, "realise": [{"wait": true}]},
+        "broke": {"fn": "comply", "args": {"who": "?n", "to": "?p2"}, "optional": true, "realise": [{"wait": true}]},
+        "turned": {"fn": "turn", "args": {"who": "?n"}, "optional": true},
+        "moved": {"fn": "turn", "args": {"who": "?o"}, "optional": true}
+      },
+      "edges": [
+        {"from": "stood", "to": "press1", "link": "motive"},
+        {"from": "press1", "to": "held", "link": "motive"},
+        {"from": "press2", "to": "held", "link": "motive"},
+        {"from": "press1", "to": "broke", "link": "motive"},
+        {"from": "press2", "to": "broke", "link": "motive"},
+        {"from": "held", "to": "broke", "link": "forecloses"},
+        {"from": "broke", "to": "held", "link": "forecloses"},
+        {"from": "broke", "to": "turned", "link": "because", "shown": "must"},
+        {"from": "held", "to": "moved", "link": "because"}
+      ],
+      "entry": ["stood"],
+      "outcomes": {
+        "held": {"reached": ["held"], "kind": "resolved", "next": ["xf.composite:payoff"]},
+        "broke": {"reached": ["broke"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:betrayal"]}
+      },
+      "within": {"clock": "game", "days": 30},
+      "once": ["?n"],
+      "show": {"junctures": ["stood"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:payoff", "xf.composite:betrayal"],
+        "layers": ["xf.composite:squeeze", "xf.composite:divided-loyalty", "xf.composite:ambition-vs-obligation"],
+        "refines": {}
+      },
+      "traces": ["d10.CHG-02", "d10.CHG-05", "d10.CHG-07", "d10.CHG-09", "d10.CHG-11", "d10.CHG-14", "d10.CHG-15", "d10.PAY-15"],
+      "risks": [
+        {
+          "failure": "fail:puppet",
+          "note": "Change without pressure (CHG-05). Both pressures are recorded and independent of each other (CHG-07)."
+        },
+        {
+          "failure": "fail:recast-package",
+          "note": "Arcs that make everyone alike (CHG-15): most people hold, and change others."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "A change needs a witnessed before (CHG-11): `stood` must reach the protagonist."
+        }
+      ]
+    }
+  ]
+}
