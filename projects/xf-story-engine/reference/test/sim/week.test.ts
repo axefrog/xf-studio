@@ -10,7 +10,8 @@ import { restate, transfer } from './feed.ts';
 import { seedOf } from './helpers.ts';
 
 // Bun 1.4 gives the default set in test/setup.ts to the first test file only
-setDefaultTimeout(120_000);
+// the spec's week with two reloads takes longer than two minutes at S1_FULL scale
+setDefaultTimeout(process.env.S1_FULL === '1' ? 900_000 : 120_000);
 
 const W = 600;
 const FULL = process.env.S1_FULL === '1';
