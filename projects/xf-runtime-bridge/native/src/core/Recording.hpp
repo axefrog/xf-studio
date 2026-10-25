@@ -12,6 +12,7 @@ namespace xfb::recording
 using json = nlohmann::json;
 // One bounded owner. Producers copy bounded payloads; only Read encodes wire records.
 inline constexpr size_t kCapacity = 512, kPayload = 8192;
+inline constexpr double kUiHeartbeat = 2.0; // seconds between records of an unchanged UI snapshot
 double Now(); // QueryPerformanceCounter seconds, shared with tools via recorded calibration bounds.
 struct Ops
 {
@@ -61,7 +62,8 @@ private:
     std::atomic<uint64_t> m_cancelGeneration{0}, m_startedGeneration{0};
     std::atomic<unsigned> m_eventMask{0};
     std::atomic<uint64_t> m_ingressDropped{0};
-    double m_nextHeartbeat = 0;
+    double m_nextHeartbeat = 0, m_nextUiHeartbeat = 0;
+    std::string m_lastUi; // the polled UI snapshot last recorded: unchanged snapshots wait for a heartbeat
     std::filesystem::path m_root, m_output;
     std::thread m_writer;
     std::condition_variable_any m_wake;

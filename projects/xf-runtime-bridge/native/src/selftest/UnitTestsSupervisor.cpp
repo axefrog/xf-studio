@@ -26,6 +26,9 @@ int SupervisorUnitTests()
     bad = p; bad["policy"]["no_contact"] = "eval"; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["policy"].erase("alive"); Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["actor"]["ref"] = "anyone"; Refuses([&] { Parse(bad); }, "bad_params");
+    bad = p; bad["actor"]["ref"] = "v"; Check(Parse(bad).actor.ref == "V", "0.8.17: the V reference is case-insensitive and canonical");
+    bad = p; bad["actor"] = {{"kind", "npc"}, {"ref", "A12"}}; Check(Parse(bad).actor.ref == "a12", "0.8.17: NPC handles accept upper case");
+    bad = p; bad["actor"]["ref"] = "Vv"; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["goal"]["at"] = {0, 0}; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["tick_hz"] = 60; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["safe_after_s"] = .1; Refuses([&] { Parse(bad); }, "bad_params");

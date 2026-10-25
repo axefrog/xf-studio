@@ -150,7 +150,7 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     ++m_run; m_world = world; m_connection = connection; m_session = session;
     m_latest = m_ack = m_dropped = m_missed = m_samples = m_bytes = m_invalid = 0;
     m_start = m_next = now; m_until = now + static_cast<double>(duration); m_last = m_gap = m_end = 0;
-    m_ingressDropped.store(0); m_nextHeartbeat = now;
+    m_ingressDropped.store(0); m_nextHeartbeat = now; m_nextUiHeartbeat = 0; m_lastUi.clear();
     unsigned mask = 0; for (const auto& c : m_channels) mask |= EventBit(c); m_eventMask.store(mask);
     m_cap = cap; m_active = true; m_reason.clear(); m_startedGeneration.store(admitted);
     if (admitted != CancellationGeneration())
@@ -199,6 +199,16 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
         catch (const MethodError& e) { payload = {{"error", e.code}}; }
         catch (...) { payload = {{"error", "sample_failed"}}; }
         const double end = Now();
+        if (channel == "ui" && valid && payload.is_object())
+        {
+            // The polled UI snapshot is recorded when it changes, plus a heartbeat every kUiHeartbeat seconds that
+            // proves the observer is still reading; a still screen must not write 10 records a second.
+            auto text = SerializeJson(payload);
+            const bool changed = text != m_lastUi;
+            if (!changed && now + 1e-9 < m_nextUiHeartbeat) continue;
+            m_lastUi = std::move(text); m_nextUiHeartbeat = now + kUiHeartbeat;
+            payload["reason"] = changed ? "change" : "heartbeat";
+        }
         Append(channel, SerializeJson(payload), at, end, tick, valid);
         if (!m_active) break;
     }

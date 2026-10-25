@@ -2957,7 +2957,7 @@ Tools not yet sorted into an area above.
 | `schema` (required) | string | `xfb/supervisor-entry-1` | Versioned entry schema. |
 | `actor` (required) | object | the fields below | Actor identity, resolved afresh by its adapter. |
 | `actor.kind` (required) | string | `player`, `npc`, `spawn` | Actor adapter. |
-| `actor.ref` (required) | string | 1 to 16 characters | V, a returned NPC handle, or a spawned-object numeric handle. |
+| `actor.ref` (required) | string | 1 to 16 characters | V (v is accepted too), a returned NPC handle, or a spawned-object numeric handle. |
 | `goal` (required) | object | the fields below | hold_position requires at and a goal policy; idle_safe takes only kind. |
 | `goal.kind` (required) | string | `hold_position`, `idle_safe` | Goal to observe. |
 | `goal.at` | array of number | exactly 3 items; each -100000 to 100000 | World point [x, y, z]. |
@@ -3019,7 +3019,7 @@ No parameters.
 
 ### `game_catchup`
 
-**Catch up with the moving session.** Autonomous test recorder required. Read this at the start of each turn: source path/health/combat/heat/vehicle/busy changes, F/U/subtitle/voice callbacks, session events and alerts since a cursor, plus the existing current digest. First call supplies run; subsequent calls replay cursor verbatim. Compact by default (last 24 events per channel with omitted counts); detail returns all retained records. Loss/invalid sources are explicit; contact alerts require explicit receipts, partial car-hit entry and controller report paths are instrumented but uncommissioned, never full no-contact proof. Supervisor summaries reconcile both feeds across calls and include only this recorder run's world and source interval. Bounded reconciliation compaction is explicit incomplete history. Raw feeds remain available for audit. No second history store.
+**Catch up with the moving session.** Autonomous test recorder required. Read this at the start of each turn: source path/health/combat/heat/vehicle/busy changes, F/U/subtitle/voice callbacks, session events and alerts since a cursor, plus the existing current digest. The page can be behind real time (more: true, with a backlog object of records, events and seconds behind and a summary line saying so): v.current is then the newest V (from the digest, or the newest recorder sample marked stale), while v.latest, v.path and the counts describe only the page read. First call supplies run; subsequent calls replay cursor verbatim. Compact by default (last 24 events per channel with omitted counts); detail returns all retained records. Loss/invalid sources are explicit and describe the interval since the cursor, not the whole run; contact alerts require explicit receipts, partial car-hit entry and controller report paths are instrumented but uncommissioned, never full no-contact proof. Supervisor summaries reconcile both feeds across calls and include only this recorder run's world and source interval. Bounded reconciliation compaction is explicit incomplete history. Raw feeds remain available for audit. No second history store.
 
 - **Command:** `game.catchup`, run by the tools (it may call the bridge several times)
 - **Permission:** Look (`read`)
@@ -3054,6 +3054,11 @@ No parameters.
 | `cursor.supervisor_seen` | array of integer | at most 512 items; each 1 to 9007199254740991 | Bounded receipt identities reconciled across both feeds; preserve unchanged |
 | `cursor.supervisor_retired_through` | integer | 0 to 9007199254740991 | Receipt reconciliation compaction boundary |
 | `cursor.supervisor_reconciliation_lost` | boolean | `true`, `false` | Compaction made older reconciliation incomplete; preserve returned value |
+| `cursor.source_counters` | object | the fields below | Source loss counts at the cursor, so coverage gaps describe the interval since it; preserve returned value |
+| `cursor.source_counters.dropped` (required) | integer | 0 to 9007199254740991 | Recorder drops at the cursor |
+| `cursor.source_counters.invalid` (required) | integer | 0 to 9007199254740991 | Invalid samples at the cursor |
+| `cursor.source_counters.missed_deadlines` (required) | integer | 0 to 9007199254740991 | Missed sample deadlines at the cursor |
+| `cursor.source_counters.file_error` (required) | boolean | `true`, `false` | Native writer error at the cursor |
 | `detail` | boolean | `true`, `false` | Include all retained source records and events |
 | `now` | boolean | `true`, `false` | Include current digest, default true; false avoids another game-thread read |
 | `replay_files` | boolean | `true`, `false` | Recover older history from the native private chunks, default true; bounded 8 MiB/1024 rows per call, more requests the next page |

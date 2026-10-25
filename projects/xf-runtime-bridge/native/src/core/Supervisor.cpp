@@ -46,6 +46,10 @@ Entry ParseImpl(const json& p)
     if (p.value("schema", std::string()) != "xfb/supervisor-entry-1") throw MethodError("bad_params", "Expected xfb/supervisor-entry-1");
     const auto& a = p.at("actor"); Keys(a, {"kind", "ref"});
     Entry e; e.actor = {a.at("kind").get<std::string>(), a.at("ref").get<std::string>()};
+    // The V reference is case-insensitive ("V" or "v"); the entry and its receipts always carry the canonical "V".
+    // NPC handles are lower case ("a1"); "A1" is the same handle.
+    if (e.actor.kind == "player" && e.actor.ref == "v") e.actor.ref = "V";
+    if (e.actor.kind == "npc" && e.actor.ref.size() > 1 && (e.actor.ref[0] == 'A' || e.actor.ref[0] == 'P')) e.actor.ref[0] = static_cast<char>(e.actor.ref[0] + 32);
     const auto& kind = e.actor.kind; const auto& ref = e.actor.ref;
     if (!((kind == "player" && ref == "V") || (kind == "npc" && std::regex_match(ref, std::regex("[ap][0-9]{1,15}"))) ||
           (kind == "spawn" && std::regex_match(ref, std::regex("[1-9][0-9]{0,8}")))))

@@ -26,15 +26,43 @@ function adapter.stage(stage, token, detail)
   return receipt and receipt.accepted == true
 end
 -- Read-only U recording; all calls remain in the autonomous-only adapter.
-local elapsed, last = 0, {}
+-- A record is written only when the surface's observed state changes (reason "change"), plus a low-rate
+-- heartbeat per surface (reason "heartbeat") that proves the observer is still looking. An unchanged surface is
+-- not re-recorded at the 10 Hz look rate: that flooded the recorder (about 20 records/s) and put catch-up behind.
+local elapsed, last, lastSignature, lastEmitted = 0, {}, {}, {}
+local HEARTBEAT_S = 2.0
 function adapter.advance(dt) elapsed = elapsed + math.max(0, dt or 0) end
+-- A canonical, order-independent signature of an observed body (sorted keys, rounded numbers).
+local function signature(value, depth)
+  local kind = type(value)
+  if kind == "number" then return string.format("%.2f", value) end
+  if kind == "string" then return string.format("%q", value) end
+  if kind ~= "table" then return tostring(value) end
+  if (depth or 0) > 6 then return "?" end
+  local keys = {}
+  for key in pairs(value) do keys[#keys + 1] = key end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  local parts = {}
+  for _, key in ipairs(keys) do parts[#parts + 1] = tostring(key) .. "=" .. signature(value[key], (depth or 0) + 1) end
+  return "{" .. table.concat(parts, ",") .. "}"
+end
 function adapter.ui(surface, body)
   if surface ~= "cet_line" and surface ~= "cet_window" then return end
   if last[surface] and elapsed - last[surface] < 0.1 then return end
   local ok, enabled = pcall(function() return Game.XFBridge_RecordEnabled("ui") end)
-  if not ok or not enabled then return end
+  if not ok or not enabled then
+    -- Recorder off: the next run starts from a fresh baseline instead of waiting for a heartbeat.
+    lastSignature[surface], lastEmitted[surface] = nil, nil
+    return
+  end
   last[surface] = elapsed
-  body.event, body.surface, body.controller = "ui.consumer", surface, "CET.ImGui"
+  local current = signature(body)
+  local reason
+  if current ~= lastSignature[surface] then reason = "change"
+  elseif elapsed - (lastEmitted[surface] or -HEARTBEAT_S) >= HEARTBEAT_S then reason = "heartbeat"
+  else return end
+  lastSignature[surface], lastEmitted[surface] = current, elapsed
+  body.event, body.surface, body.controller, body.reason = "ui.consumer", surface, "CET.ImGui", reason
   body.clip_rect, body.pointer_hit_target = nil, nil
   body.geometry = "ImGui_current_draw"
   body.valid = body.drawn == false or type(body.rect) == "table"

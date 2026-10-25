@@ -129,6 +129,41 @@ int RecordingUnitTests()
     s.Start({{"channels", {"v"}}}, 500, 6, 3, "test");
     s.Tick(500, 6, 4, true, 1, ops);
     Check(!s.Read({{"run", 5}}, 500)["active"].get<bool>(), "new connection cancels owner");
+    {
+        // 0.8.17 (Borg 2): the polled UI snapshot is recorded on change plus a heartbeat, not every tick.
+        Service ui;
+        std::string screen = "still"; int uiReads = 0;
+        Ops uiOps; uiOps.guard = [] {};
+        uiOps.sample = [&](const std::string& channel, const std::vector<std::string>&) {
+            if (channel == "ui") { ++uiReads; return json{{"valid", true}, {"hud", screen}}; }
+            return json{{"valid", true}};
+        };
+        ui.Start({{"channels", {"ui", "v"}}, {"duration_s", 60}}, 1000, 1, 1, "ui-test");
+        for (int i = 0; i < 200; ++i) ui.Tick(1000 + i * 0.1, 1, 1, true, i, uiOps); // 20 s of an unchanged screen
+        auto first = ui.Read({{"run", 1}}, 1020);
+        Check(uiReads == 200, "ui: the snapshot is still read every tick");
+        int uiRecords = 0, vRecords = 0, changes = 0;
+        for (uint64_t since = 0; since < first["latest"].get<uint64_t>();)
+        {
+            const auto uiPage = ui.Read({{"run", 1}, {"since", since}}, 1020);
+            if (uiPage["records"].empty()) break;
+            for (const auto& r : uiPage["records"])
+            {
+                if (r["channel"] == "ui") { ++uiRecords; changes += r["data"]["reason"] == "change"; }
+                else ++vRecords;
+            }
+            since = uiPage["next"].get<uint64_t>();
+        }
+        Check(vRecords == 200, "ui: other channels keep their cadence");
+        Check(changes == 1 && uiRecords >= 10 && uiRecords <= 12, "ui: a still screen records once plus a heartbeat about every 2 s");
+        screen = "changed";
+        ui.Tick(1020, 1, 1, true, 201, uiOps);
+        const auto latest = ui.Read({{"run", 1}}, 1020)["latest"].get<uint64_t>();
+        const auto tail = ui.Read({{"run", 1}, {"since", latest - 2}}, 1020);
+        bool sawChange = false;
+        for (const auto& r : tail["records"]) sawChange |= r["channel"] == "ui" && r["data"]["reason"] == "change" && r["data"]["hud"] == "changed";
+        Check(sawChange, "ui: a changed snapshot is recorded at once");
+    }
     // Event ingress uses the same run/ring/cap and source QPC, without resampling each line.
     Service taps;
     taps.Start({{"channels", {"subtitles", "voice"}}}, 600, 7, 4, "tap-test");

@@ -2,6 +2,8 @@
 import { read, type Json, type TestApi } from "./windows.ts";
 import { replayRecording, type FileCursor } from "./recording-replay.ts";
 
+/** Source counters at the cursor: the baseline that makes coverage gaps describe the queried interval, not the whole run. */
+export type SourceCounters = { dropped: number; invalid: number; missed_deadlines: number; file_error: boolean };
 export type TimelineCursor = FileCursor & {
   schema: "xfb/timeline-cursor-1"; sid: string; run: number; world: number; record: number; event: number;
   last_v?: Json;
@@ -9,6 +11,7 @@ export type TimelineCursor = FileCursor & {
   supervisor_seen?: number[];
   supervisor_retired_through?: number;
   supervisor_reconciliation_lost?: boolean;
+  source_counters?: SourceCounters;
 };
 export type TimelineOptions = { run?: number; cursor?: TimelineCursor; detail?: boolean; signal?: AbortSignal; digest?: boolean; archive?: boolean };
 const seq = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
@@ -20,13 +23,15 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   if (saved && ((saved.supervisor_seen !== undefined && (!Array.isArray(saved.supervisor_seen) || saved.supervisor_seen.length > 512 || saved.supervisor_seen.some(v => !seq(v) || !v))) ||
     (saved.supervisor_retired_through !== undefined && !seq(saved.supervisor_retired_through)) ||
     (saved.supervisor_reconciliation_lost !== undefined && typeof saved.supervisor_reconciliation_lost !== "boolean"))) throw new Error("Invalid supervisor reconciliation cursor");
+  const sc = saved?.source_counters as Json | undefined;
+  if (sc !== undefined && !(sc && typeof sc === "object" && seq(sc.dropped) && seq(sc.invalid) && seq(sc.missed_deadlines) && typeof sc.file_error === "boolean")) throw new Error("Invalid source counter baseline");
   const run = saved?.run ?? options.run;
   if (!seq(run) || !run) throw new Error("Supply the recorder run on the first catch-up read");
   const info = await read(api, "bridge.info", {}, options.signal);
   if (saved && saved.sid !== info.sid) throw new Error("Timeline session changed; start a fresh cursor");
   const cursor: TimelineCursor = saved ? { ...saved } : { schema: "xfb/timeline-cursor-1", sid: info.sid, run, world: -1, record: 0, event: 0 };
   const records: Json[] = [], events: Json[] = [], alerts: Json[] = [], gaps: string[] = [];
-  let status: Json = {}, head: number | undefined, recordMore = false, eventMore = false;
+  let status: Json = {}, head: number | undefined, recordMore = false, eventMore = false, eventLatest = 0, newestReadS: number | undefined;
   let hostBefore = performance.now(), hostAfter = hostBefore;
   for (let pageNumber = 0; pageNumber < 105; pageNumber++) {
     const pageSince = cursor.record;
@@ -73,7 +78,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     }
     if (page.dropped || page.next - cursor.event !== page.events.length) gaps.push("session_history_lost");
     const advanced = page.next > cursor.event;
-    cursor.event = page.next; eventMore = cursor.event < head;
+    cursor.event = page.next; eventMore = cursor.event < head; eventLatest = page.latest;
     if (!eventMore || !advanced) break;
   }
   const counts: Json = {}, channels: Json = {}, path: number[][] = [], supervision: Json[] = [];
@@ -99,9 +104,13 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   let travelled = 0;
   let last = cursor.last_v, healthMin: number | null = null, healthMax: number | null = null;
   const changes: Json = { combat: 0, heat: 0, vehicle: 0, busy: 0 };
+  const invalidChannels = new Set<string>();
+  let lastVRow: Json | undefined;
   for (const row of records) {
     counts[row.channel] = (counts[row.channel] ?? 0) + 1;
-    if (!row.valid) { gaps.push("invalid_source"); continue; }
+    if (Number.isFinite(row.source_s)) newestReadS = Math.max(newestReadS ?? row.source_s, row.source_s);
+    // Invalid samples inside this queried interval (the cursor makes the interval start where the last call ended).
+    if (!row.valid) { gaps.push("invalid_source"); invalidChannels.add(row.channel); continue; }
     const v = row.data;
     if (v?.event?.startsWith("supervisor.") && v.event !== "supervisor.coverage" && !receiveSupervisor(v, "recorder", row.source_s)) continue;
     if (v?.event === "placement.traffic") alerts.push({ kind: "traffic_risk", seq: row.seq, source_s: row.source_s, ...v });
@@ -118,6 +127,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       continue;
     }
     if (!v) continue;
+    lastVRow = row;
     if (Array.isArray(v.position)) path.push(v.position);
     const health = v.vitals?.health;
     if (Number.isFinite(health)) { healthMin = Math.min(healthMin ?? health, health); healthMax = Math.max(healthMax ?? health, health); }
@@ -131,6 +141,9 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
         const before = key === "combat" ? last.vitals?.in_combat : last[key];
         const after = key === "combat" ? v.vitals?.in_combat : v[key];
         // Vehicle position moves every sample; compare identity/mounted state only.
+        // A missing baseline (a hand-made or older cursor with no value for this key) is unknown, never a change:
+        // only the baseline is established.
+        if (key === "vehicle" ? before?.mounted === undefined && before?.id === undefined : before === undefined) continue;
         const canonical = (x: any) => key === "vehicle" ? [x?.mounted, x?.id] : key === "heat" ? (typeof x === "string" ? x : JSON.stringify(x)) : x;
         if (JSON.stringify(canonical(before)) !== JSON.stringify(canonical(after))) {
           changes[key]++;
@@ -174,10 +187,31 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   const compact = (list: Json[]) => options.detail ? list : list.slice(-24);
   const omitted: Json = {};
   for (const key of Object.keys(channels)) if (Array.isArray(channels[key])) { omitted[key] = options.detail ? 0 : Math.max(0, channels[key].length - 24); channels[key] = compact(channels[key]); }
-  if (status.dropped || status.invalid || status.missed_deadlines || status.file_error) gaps.push("source_coverage_incomplete");
+  // Source loss counts are cumulative for the run; the gap is what grew since the cursor's baseline.
+  const baseline: SourceCounters = saved?.source_counters ?? { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false };
+  const counters: SourceCounters = { dropped: status.dropped ?? 0, invalid: status.invalid ?? 0, missed_deadlines: status.missed_deadlines ?? 0, file_error: !!status.file_error };
+  const coverageDelta = { dropped: Math.max(0, counters.dropped - baseline.dropped), invalid: Math.max(0, counters.invalid - baseline.invalid),
+    missed_deadlines: Math.max(0, counters.missed_deadlines - baseline.missed_deadlines), file_error: counters.file_error && !baseline.file_error };
+  if (coverageDelta.dropped || coverageDelta.invalid || coverageDelta.missed_deadlines || coverageDelta.file_error) gaps.push("source_coverage_incomplete");
+  // Only a fully read interval moves the baseline; while paging, the unread tail may hold the rest of the loss.
+  cursor.source_counters = recordMore ? baseline : counters;
+  // Where the reader stands against real time.
+  const behind = recordMore || eventMore;
+  const secondsBehind = !behind ? 0 : Number.isFinite(status.source_now_s) && newestReadS !== undefined ? Math.max(0, status.source_now_s - newestReadS) : null;
+  const backlog = { behind, records_behind: Math.max(0, (status.latest ?? 0) - cursor.record), events_behind: Math.max(0, eventLatest - cursor.event), seconds_behind: secondsBehind };
+  const nowDigest = options.digest === false ? undefined : await read(api, "game.digest", { events: 0, sky: false }, options.signal);
+  // v.current is the newest V there is; v.latest is the last V of the page just read, which is old while behind.
+  const current = nowDigest?.v !== undefined ? { source: "digest", sample: nowDigest.v }
+    : lastVRow ? { source: "recorder", seq: lastVRow.seq, source_s: lastVRow.source_s, stale: behind, sample: lastVRow.data } : null;
+  const unitsBehind = secondsBehind === null ? "an unknown time" : secondsBehind >= 90 ? `about ${Math.round(secondsBehind / 60)} min` : `about ${Math.round(secondsBehind)} s`;
+  const summary = behind
+    ? `Behind real time by ${backlog.records_behind} records (${unitsBehind}): this page is old. v.current is the newest V; v.latest, v.path and the counts describe the page only. Call again with the returned cursor to catch up.`
+    : "Caught up with the recorder.";
   return { schema: "xfb/catchup-1", cursor, complete: !gaps.length && !recordMore && !eventMore,
-    gaps: [...new Set(gaps)], more: recordMore || eventMore, source: { active: status.active, latest: status.latest, dropped: status.dropped, invalid: status.invalid, missed_deadlines: status.missed_deadlines },
-    v: { samples: counts.v ?? 0, path: options.detail ? path : path.length <= 2 ? path : Array.from({ length: Math.min(8, path.length) }, (_, i) => path[Math.round(i * (path.length - 1) / (Math.min(8, path.length) - 1))]),
+    summary, backlog, gaps: [...new Set(gaps)], coverage_delta: coverageDelta, invalid_channels: [...invalidChannels], more: behind,
+    source: { active: status.active, latest: status.latest, dropped: status.dropped, invalid: status.invalid, missed_deadlines: status.missed_deadlines, file_error: !!status.file_error },
+    v: { current, latest_stale: recordMore, latest_seq: lastVRow?.seq ?? null, latest_source_s: lastVRow?.source_s ?? null,
+       samples: counts.v ?? 0, path: options.detail ? path : path.length <= 2 ? path : Array.from({ length: Math.min(8, path.length) }, (_, i) => path[Math.round(i * (path.length - 1) / (Math.min(8, path.length) - 1))]),
       distance_m: travelled, path_points: path.length,
       health_min: healthMin, health_max: healthMax, changes, latest: last }, channels, counts,
     events: compact(events), alerts: compact(alerts), omitted: { ...omitted, events: options.detail ? 0 : Math.max(0, events.length - 24), alerts: options.detail ? 0 : Math.max(0, alerts.length - 24) },
@@ -192,5 +226,5 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       vehicle_contact_without_hit: "INCONCLUSIVE", controller_other_identity: "unavailable", history_complete: !gaps.length && !recordMore && !eventMore },
     contact_coverage: "Partial uncommissioned car-hit-entry and landing/wall controller reports when contacts selected; supporting ground included; never full no-contact proof",
     calibration, ...(options.detail ? { records } : {}),
-    ...(options.digest === false ? {} : { now: await read(api, "game.digest", { events: 0, sky: false }, options.signal) }) };
+    ...(nowDigest === undefined ? {} : { now: nowDigest }) };
 }

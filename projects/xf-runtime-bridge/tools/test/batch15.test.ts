@@ -502,7 +502,7 @@ describe("0.8.1 against the self-test host", () => {
     await ok(api, "inventory.unequip", { slot: "OuterChest" });
   });
 
-  test("the tools' version is 0.8.16", () => {
-    expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.16");
+  test("the tools' version is 0.8.17", () => {
+    expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.17");
   });
 });

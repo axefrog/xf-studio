@@ -2,6 +2,8 @@
 import { catchUp, type TimelineCursor } from "./timeline.ts";
 import { clock as defaultClock, type Clock, type Json, type TestApi } from "./windows.ts";
 
+// Channels whose rows can carry a named event; a polled-state sample (v, actors, camera) cannot hide one.
+const EVENT_CHANNELS = new Set(["subtitles", "voice", "face", "ui", "contacts", "supervisor"]);
 export type CaptureArm = { run: number; event: string; channel?: string; match?: Json; capture: "screenshot" | "burst" | "recrop"; args?: Json; delay_ms?: number; count?: number; expires_s?: number };
 type Active = { id: number; input: CaptureArm; cursor: TimelineCursor; until: number; remaining: number; stop: AbortController };
 export class EventCaptures {
@@ -21,6 +23,9 @@ export class EventCaptures {
       if (generation !== this.generation || pending.stop.signal.aborted) throw new Error("Capture arm was cancelled");
       if (!initial.source.active) throw new Error("Start a live recorder before arming a capture");
       initial.cursor.record = Math.max(initial.cursor.record, initial.source.latest);
+      // Coverage is judged from here on: loss or invalid data before the arm is history, not a reason to cancel it.
+      initial.cursor.source_counters = { dropped: initial.source.dropped ?? 0, invalid: initial.source.invalid ?? 0,
+        missed_deadlines: initial.source.missed_deadlines ?? 0, file_error: !!initial.source.file_error };
       const arm: Active = { id: pending.id, input, cursor: initial.cursor, until: this.clock.now() + (input.expires_s ?? 30) * 1000,
         remaining: input.count ?? 1, stop: pending.stop };
       this.active = arm; this.schedule(arm);
@@ -37,6 +42,24 @@ export class EventCaptures {
     if (this.timer) clearTimeout(this.timer);
     return this.status();
   }
+  /** Loss or invalid data in the interval this poll read, which began where the arm (or the previous poll) ended. */
+  private lossSinceArm(arm: Active, page: Json): string[] {
+    const lost: string[] = [];
+    const gaps: string[] = page.gaps ?? [];
+    for (const gap of gaps) if (gap !== "invalid_source" && gap !== "source_coverage_incomplete") lost.push(gap);
+    const delta: Json | undefined = page.coverage_delta;
+    if (gaps.includes("source_coverage_incomplete")) {
+      // Unknown composition cannot be excused; a known one is loss only when samples or the writer were lost.
+      if (!delta) lost.push("source_coverage_incomplete");
+      else if (delta.dropped || delta.missed_deadlines || delta.file_error) lost.push("source_coverage_incomplete");
+    }
+    if (gaps.includes("invalid_source")) {
+      const channels: string[] | undefined = page.invalid_channels;
+      const relevant = !channels || channels.some(c => arm.input.channel ? c === arm.input.channel : EVENT_CHANNELS.has(c));
+      if (relevant) lost.push("invalid_source");
+    }
+    return lost;
+  }
   private note(receipt: Json) { this.receipts.push(receipt); if (this.receipts.length > 32) this.receipts.shift(); }
   private schedule(arm: Active) {
     this.timer = setTimeout(() => { void this.poll(arm); }, 250);
@@ -52,7 +75,9 @@ export class EventCaptures {
       if (this.active !== arm) return;
       if (!page.source.active) { this.cancel("recorder_stopped"); return; }
       arm.cursor = page.cursor;
-      if (!page.complete) throw new Error(`Timeline coverage gap: ${page.gaps.join(", ")}`);
+      const lost = this.lossSinceArm(arm, page);
+      if (lost.length) throw new Error(`Timeline coverage gap: ${lost.join(", ")}`);
+      if (page.more) throw new Error("Timeline fell behind real time; the event could no longer be captured on time");
       const sources = [
         ...(page.records as Json[]).filter(r => r.valid).map(r => ({ ...r.data, channel: r.channel, event: r.data?.event, seq: r.seq, source_s: r.source_s })),
         ...(page.events as Json[]).map(e => ({ ...e.data, event: e.kind, seq: e.seq, source_s: e.source_s })),
