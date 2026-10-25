@@ -43,11 +43,14 @@ export const FEE_SHORTFALL: OfferKit = {
     { t: '{other.name}, who trades in the market, writes that the Claws sent {subject.name} for the Friday money, and there is not enough to give.' },
     { t: 'Message from {other.name}: {subject.name} had a hand out for the Claws again this morning, and I could not make the number.' },
     { t: '{other.name} on the line, short of breath: the Claws collector {subject.name} was at the till, and I told them to come back Friday.' },
+    { t: '{other.name} messages you from behind the counter: the Claws sent {subject.name} for this Friday\'s fee early, and I could not cover it.' },
+    { t: 'Heard from {other.name}, who sells in the market, that {subject.name} was at the till this morning with the Claws\' hand out and nothing in the till to put in it.' },
   ],
   ask: [
     { t: 'The Claws will want the fee from somebody by Friday, and it will be me. Cover the gap, speak to them for me, or tell them the stalls are done paying.' },
     { t: 'Someone has to square this before Friday or they send someone less patient. Pay it, bargain it down, or face the next collector yourself.' },
     { t: 'They will not let it lie. Will you cover what is owed, go and talk to them, or stand at the till when they come back?' },
+    { t: 'The Claws are patient until they are not. Pay what is owed, bargain for time, or let them know the stalls will not be squeezed again.' },
   ],
   clause: [
     { t: 'I cannot put eddies on it, but I will owe you, and I pay what I owe.' },
@@ -60,6 +63,15 @@ export const FEE_SHORTFALL: OfferKit = {
     { t: 'With the police all over the district the Claws are jumpy, so whatever you do, do it quietly.', when: ['crackdown'] },
     { t: 'They have collected from this row for years and know what each of us makes.', when: ['known'] },
     { t: 'I had never seen that collector before this month, so this is the Claws leaning on us harder.', when: ['strangers'] },
+    { t: 'I can only offer you a place behind the counter any time you come by, and my honest thanks.' },
+    { t: 'Prices are climbing and the fee never does, so I can spare one hundred and eighty toward it, plus my thanks.', when: ['priceHigh'] },
+    { t: 'Business is flat and goods are cheap, so I can offer sixty eddies and a discount on whatever you buy here.', when: ['priceLow'] },
+    { t: 'The whole row has heard what you did and will stand behind you.', when: ['trusted'] },
+    { t: 'I know nothing about you except that the Claws do not own you, which is more than I can say for most.', when: ['unknownV'] },
+    { t: 'The police are out in force, so the Claws will not push hard before the weekend, which gives you time.', when: ['crackdown'] },
+    { t: 'The stalls have started to say no among themselves, and a push from outside might tip it.', when: ['feePressed'] },
+    { t: 'They have known this row for years and know exactly whose till to lean on.', when: ['known'] },
+    { t: 'This one is new to the row, which means the Claws are testing us.', when: ['strangers'] },
   ],
   actions: [
     {
@@ -108,11 +120,14 @@ export const GOODS_BACK: OfferKit = {
     { t: 'Message from {other.name}: {subject.name} took my bag in the market crush, and nobody did a thing.' },
     { t: '{other.name} writes that {subject.name} worked the crowd and took a bag, and the bag has not turned up anywhere.' },
     { t: '{other.name} on the line: {subject.name} robbed me in the crowd by the market, and I want what was in the bag more than I want an apology.' },
+    { t: '{other.name} messages you: someone saw {subject.name} slip a hand into my bag at the market and walk off with it.' },
+    { t: '{other.name} writes that {subject.name} bumped into them by the stalls and left with a bag that was not theirs.' },
   ],
   ask: [
     { t: 'I want what was in it back. Find out who has it, lean on the thief\'s people until they hand it over, or cover the loss and I will square it with you later.' },
     { t: 'Can you get it back for me? Track down whoever has it, make it worth the thief\'s while to say where it went, or pay what it was worth and wait for my thanks.' },
     { t: 'I will take the goods or the value of them. Trace the bag, put pressure on the thief\'s crowd, or stand me the loss.' },
+    { t: 'Get the bag back to me, whatever shape it is in. Find who is holding it, lean on whoever put the thief up to it, or make good the loss yourself.' },
   ],
   clause: [
     { t: 'What was in the bag matters more to me than the money. There is no other copy.' },
@@ -124,6 +139,14 @@ export const GOODS_BACK: OfferKit = {
     { t: 'The police are too busy sweeping the district to look for a bag, so nobody else is going to.', when: ['crackdown'] },
     { t: 'The thief drinks with half the row, which is why nobody will say where the bag went.', when: ['known'] },
     { t: 'Nobody on the row had seen the thief before, so somebody must have given the nod.', when: ['strangers'] },
+    { t: 'There is a keepsake in it nobody else would want, and getting it back is worth more to me than the eddies.' },
+    { t: 'With prices what they are, the bag was worth five hundred new, and I will give two hundred for it back.', when: ['priceHigh'] },
+    { t: 'The bag was cheap and so is the reward, but there are fifty eddies and a free meal at my stall.', when: ['priceLow'] },
+    { t: 'Everyone on the row says you are the one to ask when something goes missing.', when: ['trusted'] },
+    { t: 'I do not know you, only that you are not part of whatever crowd has been working the market.', when: ['unknownV'] },
+    { t: 'The patrols are watching curfew, not pickpockets, so this is down to whoever will do it.', when: ['crackdown'] },
+    { t: 'The thief and I know the same people, so asking around myself would tell them I am looking.', when: ['known'] },
+    { t: 'The thief is no one from this row, which makes it a job for someone with no ties here.', when: ['strangers'] },
   ],
   actions: [
     {
@@ -171,11 +194,14 @@ export const ASSAULT_WHY: OfferKit = {
     { t: '{other.name} writes that {subject.name} beat them bloody near the market, and nobody will say what it was about.' },
     { t: 'Message from {other.name}: {subject.name} came at me in the street out of nowhere, and no one stepped in.' },
     { t: '{other.name} on the line, voice thick: {subject.name} did this, and it still makes no sense.' },
+    { t: '{other.name} messages you, mostly in fragments: {subject.name} hit me hard outside the market, and I have no idea what for.' },
+    { t: '{other.name} writes from a clinic cot that {subject.name} jumped them in the street, took nothing, and left.' },
   ],
   ask: [
     { t: 'Find out why they did it, or make sure they keep away from me, or just see me through the clinic.' },
     { t: 'Someone should learn what this was about, and someone should look after me while I cannot work. Ask around, have a word with the one who did it, or cover the clinic.' },
     { t: 'Will you ask around about why, face the one who did it, or see me home from the clinic?' },
+    { t: 'I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself.' },
   ],
   clause: [
     { t: 'I cannot afford to lose a week of work, and nobody else is going to chase this for me.' },
@@ -187,6 +213,14 @@ export const ASSAULT_WHY: OfferKit = {
     { t: 'The police will not follow this up, not while they have the whole district to lean on.', when: ['crackdown'] },
     { t: 'We used to drink together, so this was never a stranger\'s quarrel.', when: ['known'] },
     { t: 'I had never seen them before today, and that is what frightens me.', when: ['strangers'] },
+    { t: 'I have been here for years, and nobody has ever laid a hand on me before this.' },
+    { t: 'The clinic bill alone is four hundred and I am short, so I can offer one hundred and fifty out of what is left.', when: ['priceHigh'] },
+    { t: 'I do not have much, but there are forty eddies and a hot meal waiting any time you come by.', when: ['priceLow'] },
+    { t: 'You helped people around here before, and word has gotten round.', when: ['trusted'] },
+    { t: 'We have never met, and I would not ask if I had anyone else to turn to.', when: ['unknownV'] },
+    { t: 'With the NCPD busy elsewhere, this will go nowhere unless somebody takes it up.', when: ['crackdown'] },
+    { t: 'We have known each other for years, which makes this hurt more than a stranger\'s blow.', when: ['known'] },
+    { t: 'They were a stranger to me, which is why I cannot even guess at a reason.', when: ['strangers'] },
   ],
   actions: [
     {
@@ -233,10 +267,13 @@ export const ACCIDENT_ERRAND: OfferKit = {
     { t: '{other.name} messages you from a clinic bed: an accident in Kabuki put me here, and the day\'s work is going to waste.' },
     { t: 'Message from {other.name}: I was caught in that accident in Kabuki and I cannot stand yet.' },
     { t: '{other.name} writes from the clinic that the accident in the street left them unable to walk, with a job waiting.' },
+    { t: '{other.name} messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait.' },
+    { t: 'Message from {other.name}: the accident in Kabuki broke my leg, and the job I should be doing is going undone.' },
   ],
   ask: [
     { t: 'I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work.' },
     { t: 'I cannot make my run. Take the delivery for me, ask the client for more time, or take my shift at the bar.' },
+    { t: 'I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota.' },
   ],
   clause: [
     { t: 'It is only a parcel, but it pays my rent, and the client does not give second chances.' },
@@ -246,6 +283,12 @@ export const ACCIDENT_ERRAND: OfferKit = {
     { t: 'People trust you with their things around here, so I am trusting you with mine.', when: ['trusted'] },
     { t: 'You will not know me from anyone, but there is nobody else I can send.', when: ['unknownV'] },
     { t: 'The police are checking couriers across the district, so you will have to move carefully.', when: ['crackdown'] },
+    { t: 'It is a small thing, but small things keep me housed, and I have nobody else to ask.' },
+    { t: 'Courier rates are up, so there is two hundred and sixty in it for you, and a tip from the client.', when: ['priceHigh'] },
+    { t: 'Delivery work pays little now, but there are fifty eddies and a debt I will remember.', when: ['priceLow'] },
+    { t: 'You have a name for getting things done around here, and I am hoping that is true.', when: ['trusted'] },
+    { t: 'I have never seen you before, and still I would rather it was you than the people I know.', when: ['unknownV'] },
+    { t: 'Checkpoints have been tightened, so whoever carries the parcel needs a clean story.', when: ['crackdown'] },
   ],
   actions: [
     {
@@ -291,10 +334,13 @@ export const CLASH_AFTERMATH: OfferKit = {
     { t: '{other.name} messages you: {subject.name} and I ended up on opposite sides of a street fight in Kabuki, and I came off worse.' },
     { t: 'Message from {other.name}: {subject.name} went for me in the middle of a crew fight near the market, and I am still shaking.' },
     { t: '{other.name} writes that the crews clashed on the street and {subject.name} picked them out of it.' },
+    { t: '{other.name} messages you: {subject.name} swung at me in a fight between two crews near the market, and now I am a target.' },
+    { t: '{other.name} writes that the crews met on the street, {subject.name} went for them, and they have not slept since.' },
   ],
   ask: [
     { t: 'Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do.' },
     { t: 'I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me.' },
+    { t: 'I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking.' },
   ],
   clause: [
     { t: 'I have nothing the crews want, and that is exactly why I am afraid.' },
@@ -306,6 +352,14 @@ export const CLASH_AFTERMATH: OfferKit = {
     { t: 'With the police sweeping the district nobody will be looking at one more fight.', when: ['crackdown'] },
     { t: 'We used to run errands for the same people, so this is not a stranger\'s grudge.', when: ['known'] },
     { t: 'I had never seen them before the fight, so I do not know what I am supposed to have done.', when: ['strangers'] },
+    { t: 'I never joined a crew, and I do not know why they think I did.' },
+    { t: 'Rents are up and I have little, but there are two hundred and seventy eddies in it for you.', when: ['priceHigh'] },
+    { t: 'I have fifty eddies and a corner of my floor to give.', when: ['priceLow'] },
+    { t: 'The stalls say you are not afraid of crews, and that is what I need.', when: ['trusted'] },
+    { t: 'You owe me nothing and I cannot promise much, but I am asking because I have no one else.', when: ['unknownV'] },
+    { t: 'With patrols about, the crews are watching each other and nobody else, so a quiet word might still work.', when: ['crackdown'] },
+    { t: 'We drank at the same bar, so I know exactly how petty a grudge can get.', when: ['known'] },
+    { t: 'I do not know them at all, so I cannot guess what they think I did.', when: ['strangers'] },
   ],
   actions: [
     {
@@ -351,10 +405,13 @@ export const CROWD_SCUFFLE: OfferKit = {
     { t: '{other.name} messages you: a scuffle broke out in the Kabuki crowd and I was caught in the middle of it.' },
     { t: 'Message from {other.name}: the crowd by the market turned ugly, and I was in the thick of it before I knew what was happening.' },
     { t: '{other.name} writes that the street went from busy to a brawl in a minute, and they still do not know who started it.' },
+    { t: '{other.name} messages you: the crowd by the market went from calm to a brawl in seconds, and I still do not know why.' },
+    { t: 'Message from {other.name}: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me.' },
   ],
   ask: [
     { t: 'I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight.' },
     { t: 'Somebody wanted that crowd angry. Find out who, keep the corner calm, or see me through it.' },
+    { t: 'Whoever started it will do it again. Find out who, put yourself between them and the market, or help me get out of here.' },
   ],
   clause: [
     { t: 'It will happen again if nobody learns why, and next time I might not walk away.' },
@@ -364,6 +421,12 @@ export const CROWD_SCUFFLE: OfferKit = {
     { t: 'The row says you keep a cool head, which is what the corner needs.', when: ['trusted'] },
     { t: 'You do not know me, and that may be why somebody will talk to you.', when: ['unknownV'] },
     { t: 'The police are busy sweeping the district and will not care about one scuffle.', when: ['crackdown'] },
+    { t: 'I will tell you everything I saw, which was not much, and everything I heard, which was more.' },
+    { t: 'Everything costs more, but I can give you two hundred and forty to learn who paid for the trouble.', when: ['priceHigh'] },
+    { t: 'There is not much to give, only sixty eddies and my thanks.', when: ['priceLow'] },
+    { t: 'Everyone says you keep your head when others lose theirs.', when: ['trusted'] },
+    { t: 'You are new enough here that nobody will think you are on a side.', when: ['unknownV'] },
+    { t: 'The NCPD are running sweeps instead of watching the crowd, so someone else has to.', when: ['crackdown'] },
   ],
   actions: [
     {

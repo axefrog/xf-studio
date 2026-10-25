@@ -53,9 +53,9 @@ describe('the kits as data', () => {
       const texts = [...k.opener, ...k.ask, ...k.clause, ...k.actions.flatMap((a) => a.outcomes), ...k.declined].map((p) => p.t);
       for (const t of texts) for (const m of t.matchAll(/\{([a-z]+)\.name\}/g)) expect(roles.has(m[1]!), `${k.id}: ${m[1]}`).toBe(true);
       const frags = pack.fragments.filter((f) => f.id.startsWith(`${k.id}-ask-`));
-      expect(frags.length, k.id).toBeGreaterThanOrEqual(20);
+      expect(frags.length, k.id).toBeGreaterThanOrEqual(120);
     }
-    expect(pack.fragments.filter((f) => f.offer).length).toBeGreaterThanOrEqual(150);
+    expect(pack.fragments.filter((f) => f.offer).length).toBeGreaterThanOrEqual(900);
   });
 
   test('stakes are not a price list: the clause is chosen by the world, and a wording needs a condition of the world or is the fallback', () => {
@@ -72,11 +72,22 @@ describe('the kits as data', () => {
     expect(new Set(amounts).size).toBeGreaterThanOrEqual(8);
   });
 
-  test('the pairings use every ask and give each opener two', () => {
-    const ps = pairings(4, 3);
-    expect(ps.length).toBe(8);
-    expect(new Set(ps.map(([, j]) => j))).toEqual(new Set([0, 1, 2]));
+  test('the pairings use every ask and give each opener three (or all the asks, if fewer)', () => {
+    const ps = pairings(4, 4);
+    expect(ps.length).toBe(12);
+    expect(new Set(ps.map(([, j]) => j))).toEqual(new Set([0, 1, 2, 3]));
     expect(pairings(3, 2).length).toBe(6);
+  });
+
+  test('variety: a kit has a dozen openers-with-asks and many clauses, so one world gives dozens of different frames per kit', () => {
+    for (const k of KITS) {
+      expect(pairings(k.opener.length, k.ask.length).length, k.id).toBeGreaterThanOrEqual(15);
+      expect(k.clause.length, k.id).toBeGreaterThanOrEqual(13);
+      // two wordings of each condition it reads, so that a world that makes a condition true still has a choice of how to say it
+      const by = new Map<string, number>();
+      for (const c of k.clause) for (const w of c.when ?? []) by.set(w, (by.get(w) ?? 0) + 1);
+      for (const [w, n] of by) expect(n, `${k.id}: ${w}`).toBeGreaterThanOrEqual(w === 'known' || w === 'strangers' || w === 'feePressed' || w === 'crackdown' ? 1 : 2);
+    }
   });
 });
 
@@ -122,7 +133,7 @@ describe('the kits played', () => {
       for (const n of Object.values(offer.names)) expect(offer.words).toContain(n);
       // a cause (what happened), an ask (a request) and a stake or reward clause: three sentences at least
       expect(offer.words.split(/(?<=[.?!])\s+/).length).toBeGreaterThanOrEqual(3);
-      expect(offer.words).toMatch(/\?|Find|Cover|Carry|Watch|Pay|Take|Track|Trace|Ask|Will you|Can you|Someone|Somebody/);
+      expect(offer.words).toMatch(/\?|Find|Cover|Carry|Deliver|Watch|Pay|Take|Track|Trace|Ask|Will you|Can you|Someone|Somebody|Speak|Whoever|Get the bag/);
     });
   }
 

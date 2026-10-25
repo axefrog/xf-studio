@@ -4,7 +4,7 @@
 // A kit is written as parts, not as sentences. The account of the incident (the opener) and the request (the ask) each have several wordings.
 // A third part, the clause, says what the request is worth and what is at stake, and each of its wordings may be conditioned on the world: who
 // the people are, whether they know one another, what the district's prices are, how the stalls stand with V, how hard the fee norm is pressed,
-// whether the police are pressing the district. The builder writes a fragment for each opener with two of the asks and each clause. A beat's
+// whether the police are pressing the district. The builder writes a fragment for each opener with three of the asks and each clause. A beat's
 // alternates are then chosen by S2's rule: of the fragments whose `applies` holds, the most specific (most atoms) win, and the draw picks
 // among them. So the same kit reads differently in different situations, and the world, not a price list, sets the stakes and the reward.
 // Only the clause is conditioned: S2's rule keeps the most specific wording, so a conditioned opener would shut out its generic siblings.
@@ -99,7 +99,7 @@ export interface OfferKit {
 const text = (id: string, t: string, voiceClass: TextUnit['voiceClass']): TextUnit => ({ id, text: t, origin: 'authored', voiceClass });
 
 /** The pairs of opener and ask a kit writes: each opener with `per` of the asks, taken in turn, so that every ask is used. */
-export function pairings(openers: number, asks: number, per = 2): Array<[number, number]> {
+export function pairings(openers: number, asks: number, per = 3): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   for (let i = 0; i < openers; i++) for (let j = 0; j < Math.min(per, asks); j++) out.push([i, (i + j) % asks]);
   return out;

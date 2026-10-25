@@ -6,7 +6,8 @@
 //   played over fresh worlds and story states. The cards carry text only; `key.json` says which card is which arm and is never
 //   given to a rater.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { type PacketManifest, buildPacketFiles } from '../../src/m3/packet.ts';
 import type { RunRecord } from '../../src/m3/transcript.ts';
 
@@ -15,6 +16,8 @@ if (!manifestFile || !dir || !out) throw new Error('usage: build-packet <manifes
 const manifest = JSON.parse(readFileSync(manifestFile, 'utf8')) as PacketManifest;
 const records = manifest.runs.map((x) => ({ file: x.file, record: JSON.parse(readFileSync(`${dir}/${x.file}`, 'utf8')) as RunRecord }));
 const built = buildPacketFiles(manifest, records);
-mkdirSync(out, { recursive: true });
-for (const [name, text] of Object.entries(built.files)) writeFileSync(`${out}/${name}`, text);
+// (Bun on Windows throws EEXIST from a recursive mkdir of a folder that exists, so the folder is made only when it is missing)
+const outDir = resolve(out);
+if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+for (const [name, text] of Object.entries(built.files)) writeFileSync(`${outDir}/${name}`, text);
 console.log(JSON.stringify({ n: built.n, available: built.available, files: Object.keys(built.files).length }));
