@@ -978,7 +978,7 @@ describe("Settings › Game › Mod frameworks: what the game will load, and the
     expect(fold.getAttribute("aria-expanded")).toBe("true");
     expect(h.group.querySelector(".framework-list")!.hidden).toBe(false);
     expect(h.rows().map(row => text(row.querySelector(".framework-name")!))).toEqual(["ArchiveXL", "RED4ext", "redscript", "TweakXL", "Codeware", "Cyber Engine Tweaks"]);
-    expect(h.rows().map(row => text(row.querySelector(".badge")!))).toEqual(["OK", "OK", "OK", "Not needed for what you build", "Not needed for what you build", "Not needed for what you build"]);
+    expect(h.rows().map(row => text(row.querySelector(".badge")!))).toEqual(["Up to date", "Up to date", "Up to date", "Not needed for what you build", "Not needed for what you build", "Not needed for what you build"]);
     expect(text(h.rows()[0]!.querySelector(".framework-meta")!)).toBe("1.27.5 · from the Mod Organizer 2 mod “ArchiveXL”");
     expect(h.group.querySelectorAll(".link-button")).toHaveLength(0);
     expect(buttonNamed(h.group, "Check again")).toBeTruthy();

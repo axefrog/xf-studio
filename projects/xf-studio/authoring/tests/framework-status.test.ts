@@ -21,9 +21,9 @@ test("all fine: every framework has a row, the rows fold under one line, and not
   expect(v).toMatchObject({ shown: true, tone: "ready", line: FRAMEWORKS_ALL_GOOD, attention: 0, foldable: true, checking: false });
   // Needed frameworks first, then the ones the mod doesn't use, each with its version and where the game takes it from.
   expect(v.rows.map(item => [item.name, item.status, item.badge.text, item.facts.join(" · ")])).toEqual([
-    ["ArchiveXL", "ok", "OK", "1.27.5 · from the Mod Organizer 2 mod “ArchiveXL”"],
-    ["RED4ext", "ok", "OK", "1.30.0 · from the game folder"],
-    ["redscript", "ok", "OK", "0.5.31 · from the Mod Organizer 2 mod “redscript” · version from Mod Organizer's list"],
+    ["ArchiveXL", "ok", "Up to date", "1.27.5 · from the Mod Organizer 2 mod “ArchiveXL”"],
+    ["RED4ext", "ok", "Up to date", "1.30.0 · from the game folder"],
+    ["redscript", "ok", "Up to date", "0.5.31 · from the Mod Organizer 2 mod “redscript” · version from Mod Organizer's list"],
     ["TweakXL", "not-needed", "Not needed for what you build", "1.11.5 · from the Mod Organizer 2 mod “TweakXL”"],
     ["Codeware", "not-needed", "Not needed for what you build", "1.20.6 · from the Mod Organizer 2 mod “Codeware”"],
     ["Cyber Engine Tweaks", "not-needed", "Not needed for what you build", "1.37.1 · from the game folder"]]);

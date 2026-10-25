@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { InstallDetectionActions } from "../src/installation/install-detection-actions";
+import { frameworkCheckFor } from "../src/installation/framework-fixtures";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { INITIAL_LEASE, LEASE_MESSAGES, leaseTransition, WorkspaceLease, type LeaseClock, type WorkspaceLeaseAdapter } from "../src/app/workspace/workspace-lease";
@@ -612,4 +614,38 @@ test("Cancel returns a grant already in transit without writing or becoming edit
   await taking;
   expect(script.calls).toEqual(["takeOver", "release"]);
   expect(lease.snapshot()).toMatchObject({ phase: "read-only", writable: false, canTakeOver: true });
+});
+
+
+test("a read-only window can check frameworks again, with honest availability and no workspace edits", async () => {
+  const lease = new WorkspaceLease(scriptedAdapter(true).adapter, { clock: simulatedClock().clock });
+  await lease.start();
+  const requests: string[] = [];
+  let finish!: () => void;
+  const detection = new InstallDetectionActions(async target => {
+    requests.push(target);
+    await new Promise<void>(resolve => { finish = resolve; });
+    return { ok: true, status: 200, data: frameworkCheckFor("all-ok") };
+  });
+  const { shell } = trustedFixture({ lease, presentation: { installDetection: detection } });
+  const before = shell.snapshot().authoring.document;
+  const action = { kind: "detect.frameworkVersions" } as const;
+  expect(shell.installDetection.capability(action)).toEqual({ available: true });
+  const checked = shell.installDetection.dispatch(action);
+  expect(shell.installDetection.capability(action)).toEqual({ available: false, reason: "Detection is already running." });
+  finish();
+  expect(await checked).toEqual({ ok: true });
+  expect(shell.installDetection.snapshot().frameworks).toEqual(frameworkCheckFor("all-ok"));
+  expect(shell.installDetection.capability(action)).toEqual({ available: true });
+  const again = shell.installDetection.dispatch(action);
+  finish();
+  expect(await again).toEqual({ ok: true });
+  expect(requests).toEqual(["frameworks", "frameworks"]);
+  expect(shell.snapshot().authoring.document).toEqual(before);
+  expect(shell.workspace.snapshot().writable).toBe(false);
+  expect(shell.installDetection.capability({ kind: "detect.gameInstalls" })).toMatchObject({ available: false, code: "unavailable", reason: LEASE_MESSAGES.refused });
+  expect(await shell.localSetup.dispatch({ kind: "setup.refresh" })).toEqual({ ok: false, code: "unavailable", message: LEASE_MESSAGES.refused });
+  const unavailable = trustedFixture({ lease }).shell.installDetection;
+  expect(unavailable.capability(action)).toEqual({ available: false, reason: "Looking for your game isn't available here." });
+  expect(await unavailable.dispatch(action)).toMatchObject({ ok: false, code: "unavailable", message: "Looking for your game isn't available here." });
 });

@@ -244,3 +244,8 @@ Everything above starts from a game folder. Which store installed it changes onl
 ## Related pages
 
 [CC file chain](cc-file-chain.md) · [Archive and resource formats](archive-format.md) · [Vortex](vortex.md) · [Source discovery](../research/authoring/source-discovery-foundation.md) · [MO2 source resolution](../research/character-customization/mod-source-resolution.md) · [Brown liquorice collision](../research/eye-artistry/brown-liquorice-profile-overlap.md) · [Resolver validation](../research/character-customization/resolver-validation.md)
+
+
+## Framework version checks in read-only Studio windows
+
+**[source]** `detect.frameworkVersions` reads host settings, game marker files and PE version resources, MO2 configuration, profile `modlist.txt` and mod `meta.ini`. The host adapter opens files for reading, and `InstallDetectionActions` retains the report only in memory: no library, workspace or settings write is involved. The presentation therefore allows this action without the workspace lease, while retaining the detector's busy and unavailable reasons. See the [framework check contract](../research/authoring/framework-version-check.md). Evidence: `installation/host/install-detection-server.ts`, `installation/host/install-detection-host.ts`, `installation/framework-versions.ts`, `installation/install-detection-actions.ts` and `app/studio-presentation.ts` under the authoring source; regression in `tests/workspace-lease.test.ts` (26 October 2026). This is an offline check of what the next launch would load, not runtime proof.

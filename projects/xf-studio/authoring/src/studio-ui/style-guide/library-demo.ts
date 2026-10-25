@@ -367,7 +367,7 @@ const MOUNTS: Record<string, Mount> = {
   },
   "lib-framework-status": () => {
     // Sample states in the words the app uses (Settings › Game › Mod frameworks derives the real ones from the framework check).
-    const ok = (name: string, version: string, from: string): FrameworkStatusRow => ({ id: name, name, status: "ok", badge: { text: "OK", tone: "success" }, facts: [version, from], message: null, notes: [], links: [] });
+    const ok = (name: string, version: string, from: string): FrameworkStatusRow => ({ id: name, name, status: "ok", badge: { text: "Up to date", tone: "success" }, facts: [version, from], message: null, notes: [], links: [] });
     const unused = (name: string, version: string, from: string): FrameworkStatusRow => ({ ...ok(name, version, from), status: "not-needed", badge: { text: "Not needed for what you build", tone: "neutral" } });
     const links = (name: string, id: string) => [{ id: `framework-${id}-nexus`, label: "Nexus Mods", name: `${name} on Nexus Mods` }, { id: `framework-${id}-github`, label: "GitHub", name: `${name} on GitHub` }];
     const archive = ok("ArchiveXL", "1.27.5", "from the Mod Organizer 2 mod “ArchiveXL”"), red4ext = ok("RED4ext", "1.30.0", "from the game folder");

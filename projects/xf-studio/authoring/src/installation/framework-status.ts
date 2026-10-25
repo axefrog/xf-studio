@@ -65,7 +65,7 @@ function rowsOf(check: FrameworkVersionCheck, route: FrameworkRouteReport): Fram
     const minimum = (check.requirements.find(row => row.framework === definition.id)?.minimum) ?? verdict?.minimum;
     const status: FrameworkRowStatus = !verdict ? "not-needed" : verdict.status === "ok" ? "ok" : verdict.status === "outdated" ? "too-old"
       : verdict.status === "missing" ? "missing" : "unreadable";
-    const badge = status === "ok" ? { text: "OK", tone: "success" as const }
+    const badge = status === "ok" ? { text: "Up to date", tone: "success" as const }
       : status === "too-old" ? { text: `Too old (minimum ${showVersion(minimum ?? "")})`, tone: "warning" as const }
         : status === "missing" ? { text: "Missing", tone: "warning" as const }
           : status === "unreadable" ? { text: "Version unknown", tone: "warning" as const }

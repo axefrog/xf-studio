@@ -601,12 +601,15 @@ export function createStudioPresentation<Slot>(sources: {
     dispatch: async () => ({ ok: false, code: "unavailable", message: "Settings aren't available here." }),
   };
   const detection = sources.installDetection ?? new InstallDetectionActions(null);
+  // Framework detection only reads installed files and keeps its answer in memory; it needs no workspace lease.
+  const detectionDenied = (action: Parameters<InstallDetectionActions["capability"]>[0]) =>
+    action.kind === "detect.frameworkVersions" ? undefined : denied();
   const installDetection: StudioPresentationPort<Slot>["installDetection"] = {
     snapshot: () => {
       const read = detection.snapshot();
       return { ...read, frameworkStatus: frameworkStatusView({ gameChosen: !!localSetup.snapshot().view?.fields.gameRoot, check: read.frameworks, checking: read.busy === "frameworks" }) };
-    }, capability: action => detection.capability(action),
-    dispatch: action => detection.dispatch(action), descriptors: () => detection.descriptors(),
+    }, capability: action => detectionDenied(action) ?? detection.capability(action),
+    dispatch: action => detectionDenied(action) ? refusedAsync() : detection.dispatch(action), descriptors: () => detection.descriptors(),
   };
   const install = sources.modInstall ?? new ModInstallActions(null, () => []);
   const modInstall: StudioPresentationPort<Slot>["modInstall"] = {
@@ -669,7 +672,7 @@ export function createStudioPresentation<Slot>(sources: {
     // A save without a part saves the feature's live part, serialized with its own codec.
     presets: Object.freeze({ list: (feature: string) => a.presetList(feature), sets: (feature: string) => a.presetSets(feature), exports: () => a.presetExports(),
       capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),
-    installDetection: Object.freeze(leased(installDetection)), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
+    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     ...(sources.tabs ? { tabs: sources.tabs } : {}), ...(sources.starters ? { starters: sources.starters } : {}),
