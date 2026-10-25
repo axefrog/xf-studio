@@ -1,4 +1,5 @@
 import { polish5Verification } from "./polish5-verification";
+import { startersFixtures } from "./starters-verification";
 import { polish4Defaults, polish4Verification, type Polish4State } from "./polish4-verification";
 import { profileWorkspaceLease } from "../app/profiles/profile-window";
 import { layoutTabsPort } from "../app/profiles/tab-presentation";
@@ -569,6 +570,20 @@ async function start(host: StudioHost, root: HTMLElement) {
         if (port!.files.capability({ kind: "package.stop" }).available) await port!.files.execute({ kind: "package.stop" });
         polish5!.stopped();
       },
+    },
+    // Verification only (starter shapes, tools/starter-shapes-look.ts): the menu's own starters (a long name, a same-named pair, one the default),
+    // and the shown look holding one layer of a starter (every other layer removed), through the real actions.
+    xfStudioStarters: {
+      fixtures: () => startersFixtures(starterShapes, documents.outbox),
+      only: (starter: string) => {
+        const eye = port!.feature("eye-makeup")!;
+        for (const layer of [...eye.view().recipe().layers]) { const done = eye.dispatch({ kind: "layer.edit", command: { kind: "remove", id: layer.id } }); if (!done.ok) throw Error(done.message); }
+        const added = eye.dispatch({ kind: "layer.edit", command: { kind: "add", starter } });
+        if (!added.ok) throw Error(added.message);
+        return eye.view().recipe().layers.length;
+      },
+      /** The default, as the owner reports it now. */
+      defaultId: () => starterShapes.defaultId(),
     },
     xfStudioPolish4: {
       state: (state: Polish4State) => polishFixture!.state(state),
