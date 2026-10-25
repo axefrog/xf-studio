@@ -167,7 +167,7 @@ describe('SF1-O: the stocks', () => {
   const E0 = 0.5;
   const fact = (over: Partial<EventFact>): EventFact => ({
     id: H(hs('f'), hs(String(over.kind)), hs(String(over.creator))), kind: 'theft', size: 1, w: 0, time: 0, cell: H(hs('c')), district: '', public: false, witnesses: 0,
-    policeChild: false, creator: 'sim', ...over,
+    policeChild: false, creator: 'sim', outcome: 'done', parties: [], ...over,
   });
   const setup = (name: string, tweak?: (d: S1Data) => void) => {
     const sim = Sim.create({ worldSeed: seedOf(name), index: fx3Slice(), data: quietData(tweak), only: ['order.stocks'] });

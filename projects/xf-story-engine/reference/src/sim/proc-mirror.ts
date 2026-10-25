@@ -192,7 +192,7 @@ export function mirrorProcess(sim: Sim): S1Process<MirrorState, MirrorDigest> {
         const district = sim.w.index.cells[placeId] ? sim.w.cell(placeId).district : placeId;
         const f: EventFact = {
           id, kind, size, w, time: raw.time, cell: placeId, district, public: where.pub && wit.length >= cfg.publicMinWitnesses, witnesses: wit.length,
-          policeChild: false, creator: 'mirror',
+          policeChild: false, creator: 'mirror', outcome: outcome === 'failed' ? 'failed' : 'done', parties: sim.partiesOf(dParts, raw.time),
         };
         if (sides) f.sides = sides;
         facts.push(f);

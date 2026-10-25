@@ -52,6 +52,10 @@ export interface CityKindDef {
   delayWeights: number[];
   /** The kinds of its children and their relative weights. */
   matrix: Record<KindName, number>;
+  /** v0.6 (S1 5.1): the fills of the kind when a pack states them; absent, the core's table (S1 5.2a). Linted at load. */
+  fills?: Array<import('../event-kinds.ts').FillDecl>;
+  /** v0.6: roles in which a pack lets `v` be bound; linted at load (S1 5.1). */
+  allowV?: string[];
 }
 
 export interface RegimeDef {
@@ -224,6 +228,8 @@ export interface NormDef {
   enforcePerDay: number;
   ladder: Array<{ rung: string; weight: number }>;
   gapBands: { gap: [number, number]; wide: [number, number] };
+  /** v0.6 (S1 7.5): the kinds and outcomes that refuse the norm's demand, with the refuser's and the demander's roles. */
+  refusals?: Array<{ kind: string; outcomes: Array<'failed' | 'prevented'>; refuser: string; demander: string }>;
 }
 
 export interface NormsData {
@@ -233,6 +239,12 @@ export interface NormsData {
   /** Enforcement per norm: the cap on uses in one window. */
   enforceCap: number;
   relaxIters: number;
+  /** v0.6 (S1 7.5): windows a public refusal may wait for an answer, the signal an unanswered one sets, the answer rate per pending refusal per day, the cap on pending ones, and `discipline` in an interregnum. */
+  sanctionWindow: number;
+  refusalValue: number;
+  answerRate: number;
+  pendingCap: number;
+  discipline: number;
 }
 
 export interface StocksData {
@@ -300,6 +312,8 @@ export interface GroupDef {
 }
 
 export interface GroupsData {
+  /** v0.6: pairs of hostile groups (S1 5.2a, `pRefuse`'s backing, S1 7.8); hostility is symmetric. */
+  hostile: Array<['A1' | 'A2' | 'A3', 'A1' | 'A2' | 'A3']>;
   groups: GroupDef[];
   intents: IntentDef[];
   thetaStart: number;
@@ -343,6 +357,15 @@ export interface MindsData {
   protectsMemorable: number;
 }
 
+/** What decides an occurrence's outcome (S1 5.2a, v0.6): the refusal chances of a demand, and the backing of a hostile group. */
+export interface OutcomesData {
+  /** `pRefuse` of a complying resident, and of a non-complying one. */
+  refuseC: number;
+  refuseNC: number;
+  /** Added when the refuser belongs to a group hostile to the demander's. */
+  backing: number;
+}
+
 export interface GateData {
   /** The roles that bind adults only. */
   floorRoles: string[];
@@ -376,6 +399,10 @@ export interface S1Data {
   groups: GroupsData;
   minds: MindsData;
   feed: { keep: number };
+  /** v0.6 (S1 5.2a). */
+  outcomes: OutcomesData;
+  /** The functions of the loaded vocabulary (the composite's `vocabulary.json`), against which a kind's fills are linted (S1 5.1). */
+  vocabulary: string[];
   gate: GateData;
   realisation: RealisationRow[];
   acts: { perHour: number; hourWindows: number; witnessCap: number };
@@ -562,9 +589,10 @@ export function defaultData(): S1Data {
       bridgeFixer: { min: 0.6, foci: 3 },
     },
     norms: {
-      publicMinWitnesses: 5, rungs: ladder, enforceCap: 4, relaxIters: 4,
+      publicMinWitnesses: 5, rungs: ladder, enforceCap: 4, relaxIters: 4, sanctionWindow: 144, refusalValue: 0.2, answerRate: 2, pendingCap: 16, discipline: 0.5,
       norms: [
-        norm('fee', 'pay the Friday fee', ['vendor', 'shopkeeper'], 0.35, 0.875, 0.85, 0.5, 3, [['word', 0.6], ['shun', 0.25], ['fine', 0.1], ['beating', 0.05]]),
+        { ...norm('fee', 'pay the Friday fee', ['vendor', 'shopkeeper'], 0.35, 0.875, 0.85, 0.5, 3, [['word', 0.6], ['shun', 0.25], ['fine', 0.1], ['beating', 0.05]]),
+          refusals: [{ kind: 'shakedown', outcomes: ['failed', 'prevented'], refuser: 'victim', demander: 'aggressor|aggressor-group' }] },
         norm('uniforms', 'do not talk to the uniforms', null, 0.5, 0.75, 0.8, 0.3, 1, [['word', 0.7], ['shun', 0.25], ['beating', 0.05]]),
       ],
     },
@@ -610,6 +638,7 @@ export function defaultData(): S1Data {
       reachMin: 0.02, confidence: { witnessed: 1.0, institutional: 0.9 }, tellerDiscount: 1,
     },
     groups: {
+      hostile: [['A1', 'A2']],
       groups: [
         { aff: 'A1', books: { cash: 9000, burn: 300, income: 330 }, perShakedown: 25, ethos: { treasury: 2, retribution: 1, reputation: 1.5, cohesion: 1 }, intents: ['collect-fee', 'retaliate'] },
         { aff: 'A2', books: { cash: 4000, burn: 150, income: 140 }, perShakedown: 0, ethos: { care_of_members: 2, retribution: 1, reputation: 1, legitimacy: 1.5 }, intents: ['protect-members', 'retaliate'] },
@@ -647,6 +676,8 @@ export function defaultData(): S1Data {
       pulseMemorable: 0.6, salienceStakes: 0.5, salienceTie: 2, salienceMemorable: 3, protectsMemorable: 0.5,
     },
     feed: { keep: 8 },
+    outcomes: { refuseC: 0.03, refuseNC: 0.35, backing: 0.3 },
+    vocabulary: ['hold', 'want', 'transfer', 'wrong', 'befall', 'help', 'sacrifice', 'obligate', 'repay', 'ask', 'demand', 'comply', 'refuse', 'learn', 'conceal', 'expose', 'blame', 'protect', 'threaten', 'pursue', 'decide', 'bind', 'sever', 'compete', 'turn', 'choose', 'story'],
     gate: { floorRoles: ['aggressor', 'victim', 'target', 'hostile'], harmEffects: ['harm', 'kill', 'take', 'expose'] },
     realisation: [
       { kind: 'gang-clash', placeType: 'public', periods: [2, 3], minSize: 1, route: 'dynamic-event', cost: 1, safeRadius: 30, viewTest: true, perHour: 2 },

@@ -190,6 +190,10 @@ export class Policies {
       if (ev) this.heardEvent(ev);
     } else if (ch.c === 'reading') {
       this.heardReading(ch);
+    } else if (ch.c === 'pin' && ch.slot === 'outcome') {
+      // v0.6 (S1 8.6): a promise is absorbed once the record gives it an outcome
+      const ev = this.viewEvent(ch.node);
+      if (ev && ev.kind === 'promise') this.absorb(ev);
     }
   }
 
@@ -269,8 +273,16 @@ export class Policies {
         let memorable = self.memorableByRule(observer, ev, salience);
         // the cap of memorable beliefs a person holds is kept by not promoting further low-salience beliefs (S1 8.5)
         if (memorable && salience < sim.data.minds.salienceMemorable && k.beliefs.activeOf(observer).filter((b) => b.memorable).length >= sim.data.minds.memorableCap) memorable = false;
-        const actor = ev.participants.find((p) => ACTOR_ROLES.includes(p.role) && p.who !== observer);
+        const kd = sim.w.kinds.get(ev.kind);
+        const agentRoles = [...ACTOR_ROLES, ...(kd?.agentRoles ?? [])];
+        const actor = ev.participants.find((p) => agentRoles.includes(p.role) && p.who !== observer);
         const base = { at: ev.time, confidence: 1, evidence: [origin], source: { by: 'observed' as const, event: ev.id }, memorable, ...(salience ? { salience } : {}) };
+        // v0.6 (S1 8.3, S1-5): news (a promise, a warning) has no effect to form a `did.<effect>` belief from, so it forms `did.<kind>` about its agent, valued by the event: knowledge of a plan or a threat is then a belief that can be told
+        if (kd?.tags.includes('news')) {
+          const agent = ev.participants.find((p) => agentRoles.includes(p.role));
+          if (agent !== undefined && agent.who !== observer) out.push({ ...base, id: H(hs('belief'), hid(observer), hid(agent.who), hs(`did.${ev.kind}`), hs(String(ev.time))), subject: agent.who, path: `did.${ev.kind}`, value: ev.id });
+          return out;
+        }
         if (actor === undefined || ev.kind === 'accident') {
           const target = ev.effects[0]?.on ?? ev.place ?? ev.id;
           out.push({ ...base, id: H(hs('belief'), hid(observer), hid(target), hs('cause'), hs(String(ev.time))), subject: target, path: 'cause', value: ev.kind });
@@ -442,9 +454,11 @@ export class Policies {
       rec.tells = rec.tells.filter((x) => w - x < this.sim.data.acts.hourWindows);
       if (rec.tells.length >= m.tellsPerHour) return false;
     }
+    // v0.6 (S1 8.4): the telling names what it tells, the event the belief is about (an act, or a plan such as a promise), as `told`
+    const told = best.b.source.by === 'observed' ? best.b.source.event : best.b.evidence[0]!;
     // everything S1 produces passes the one gate before it is minted and before it takes any of the volume allowance (S1 6, S1-I-9)
     const occ: Occurrence = {
-      kind: 'tell', origin: 'policy', size: 1, window: w, participants: [{ who: teller, role: 'teller' }, { who: listener, role: 'listener' }, { who: best.b.subject, role: 'subject' }],
+      kind: 'tell', origin: 'policy', size: 1, window: w, participants: [{ who: teller, role: 'teller' }, { who: listener, role: 'listener' }, { who: best.b.subject, role: 'subject' }, { who: told, role: 'told' }],
       effects: [], creator: this.sim.w.s1,
     };
     const gated = this.sim.gate.produce(occ, k.settings.at(k.now), k.now);
@@ -461,7 +475,7 @@ export class Policies {
     const place = this.k.value(srcEvent, 'place');
     const teller_ = k.events.mintEvent({
       creator: this.sim.w.s1, cause: srcEvent, name, time: k.now, kind: 'tell', ...(typeof place === 'string' ? { place } : {}),
-      participants: [{ who: teller, role: 'teller' }, { who: listener, role: 'listener' }, { who: best.b.subject, role: 'subject' }], causes: [srcEvent], outcome: 'done',
+      participants: [{ who: teller, role: 'teller' }, { who: listener, role: 'listener' }, { who: best.b.subject, role: 'subject' }, { who: told, role: 'told' }], causes: [srcEvent], outcome: 'done',
     });
     k.beliefs.tellAs(teller, listener, best.b.id, teller_, operator);
     // the reason belief of the same act travels with it unless the telling levelled it
@@ -499,6 +513,8 @@ export class Policies {
   /** `absorb(event)`: runs once per canonical origin, for the events with V as an actor (S1 8.6). */
   absorb(ev: EventView): void {
     if (RAW.has(ev.kind) || ev.kind.startsWith('meta:')) return;
+    // v0.6 (S1 8.6): a plan made is neither kept nor broken: a promise with no outcome moves no reputation, and a missing outcome is never read as `done`
+    if (ev.kind === 'promise' && ev.outcome !== 'done' && ev.outcome !== 'failed') return;
     const v = this.sim.w.v;
     if (!ev.participants.some((p) => p.who === v && ACTOR_ROLES.includes(p.role))) return;
     const cfg = this.sim.data.ledger;

@@ -10,7 +10,10 @@ import { mintedId } from '../id.ts';
 import type { GameTime, Id } from '../types.ts';
 import { clip01, invCum, spacingCount } from './arith.ts';
 import type { NormDef } from './data.ts';
-import { type DigestBase, type EventFact, type Feed, type Transition, pushTransitions, pushFeed } from './occ.ts';
+import { type DigestBase, type EventFact, type Feed, type Transition, feedAfter, pushTransitions, pushFeed } from './occ.ts';
+import { type OutcomeView, complianceMask, groupOf, outcomeOf, partiesOf } from './outcomes.ts';
+import type { EventsDigest } from './proc-events.ts';
+import type { GroupDigest } from './proc-groups.ts';
 import type { CastEntry, Descriptor } from './occ.ts';
 import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
@@ -30,6 +33,10 @@ export interface NormSlots {
   pub: number[];
   gap: 0 | 1 | 2;
   gapSince: number;
+  /** v0.6 (S1 7.5): public refusals not yet answered, oldest first, at most 16. */
+  pending?: Array<{ event: Id; refuser: Id; w: number }>;
+  /** v0.6: which of the resident types comply, from window `from`; a new entry only when the mask changes (the week's history and the entry in force at its start). */
+  compliers?: Array<{ from: number; mask: number }>;
 }
 
 export interface NormsState {
@@ -39,12 +46,14 @@ export interface NormsState {
   /** External enforcement events already taken as signals, at most 256. */
   seen: Id[];
   /** This process's events of the last week. */
-  ring: Array<{ id: Id; w: number; time: GameTime; cell: Id; norm: string; rung: string; qe: number; qn: number }>;
+  ring: Array<{ id: Id; w: number; time: GameTime; cell: Id; norm: string; rung: string; qe: number; qn: number; refuser?: Id; outcome?: 'done' | 'failed' | 'prevented'; guard?: Id }>;
   next: number;
+  /** v0.6: the `city.events` facts feed, for refusals. */
+  cursors?: { events: number };
 }
 
 export interface NormsDigest extends DigestBase {
-  norms: Record<Id, Record<string, { priv: number; beh: number; perc: number; vis: number; gap: number }>>;
+  norms: Record<Id, Record<string, { priv: number; beh: number; perc: number; vis: number; gap: number; pending?: number; compliers?: Array<{ from: number; mask: number }> }>>;
   /** Enforcement events this process minted (creator `norms`, with norm, rung, enforcer). */
   facts: Feed<EventFact>;
   changes: Feed<Transition>;
@@ -99,7 +108,7 @@ export const complies = (sim: Sim, norm: NormDef, res: Id, qe: number, qn: numbe
 const classIndexOfAff = (aff: 'A1' | 'A2' | 'A3'): number => ({ A1: 2, A2: 3, A3: 4 })[aff];
 
 /** Cast an enforcement event: an enforcer of the enforcing affiliation and roles, a target among adult civilian non-compliers (S1 7.5). */
-export const castEnforcement = (sim: Sim, norm: NormDef, d: Descriptor, qe: number, qn: number, harm: boolean): CastEntry[] | 'no-cast' => {
+export const castEnforcement = (sim: Sim, norm: NormDef, d: Descriptor, qe: number, qn: number, harm: boolean, refuser?: Id): CastEntry[] | 'no-cast' => {
   const present = sim.people.presentAt(d.cell, d.time, sim.data.people.presentCap);
   const eligibleE: Id[] = [];
   const eligibleT: Id[] = [];
@@ -109,11 +118,23 @@ export const castEnforcement = (sim: Sim, norm: NormDef, d: Descriptor, qe: numb
     if (v.affc === classIndexOfAff(norm.enforcer.aff) && norm.enforcer.roles.includes(v.role)) eligibleE.push(r);
     else if (v.affc === 0 && (norm.sector === null || norm.sector.includes(v.role)) && !complies(sim, norm, r, qe, qn) && !(harm && sim.people.protectedAt(r, d.time))) eligibleT.push(r);
   }
-  if (eligibleE.length === 0 || eligibleT.length === 0) return 'no-cast';
+  if (eligibleE.length === 0) return 'no-cast';
+  // v0.6 (S1 7.5): the oldest pending refuser the run chose is the target instead, whatever their affiliation: a refusal is answered whoever made it
+  if (refuser === undefined && eligibleT.length === 0) return 'no-cast';
   const e = eligibleE[Math.floor(sim.ids.castWho(d.id, 'enforcer', 0) * eligibleE.length)]!;
-  const t = eligibleT[Math.floor(sim.ids.castWho(d.id, 'target', 0) * eligibleT.length)]!;
+  const t = refuser ?? eligibleT[Math.floor(sim.ids.castWho(d.id, 'target', 0) * eligibleT.length)]!;
   return [{ role: 'enforcer', who: e }, { role: 'target', who: t }];
 };
+
+const WEEK_WINDOWS = 1008;
+
+/**
+ * The mean number of enforcement events of a norm in a window (S1 7.5): `enforcePerDay` scaled by the shortfall of compliance and the enforcer's
+ * share, plus (v0.6) `answerRate` for each pending public refusal, the whole multiplied by `discipline` while the enforcing group is in interregnum.
+ */
+export function enforcementMean(norm: NormDef, cfg: { answerRate: number; discipline: number }, W: number, beh: number, share: number, pending: number, interregnum: boolean): number {
+  return (norm.enforcePerDay * (W / 86400) * (1 - beh) * Math.min(1, share / 0.05) + cfg.answerRate * (W / 86400) * pending) * (interregnum ? cfg.discipline : 1);
+}
 
 export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
   const procId = 'order.norms';
@@ -130,9 +151,9 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
     init: () => {
       const slots: NormsState['slots'] = {};
       for (const d of simulatedDistricts(sim.w.index)) {
-        for (const n of norms) slots[`${d.id}|${n.id}`] = { priv: n.priv0, beh: n.beh0, perc: n.perc0, qe: n.beh0, qn: n.perc0, pub: [], gap: 0, gapSince: 0 };
+        for (const n of norms) slots[`${d.id}|${n.id}`] = { priv: n.priv0, beh: n.beh0, perc: n.perc0, qe: n.beh0, qn: n.perc0, pub: [], gap: 0, gapSince: 0, pending: [], compliers: [{ from: 0, mask: complianceMask(n.share, n.taue, n.taun, n.beh0, n.perc0) }] };
       }
-      return { v: 1, slots, seen: [], ring: [], next: 0 };
+      return { v: 1, slots, seen: [], ring: [], next: 0, cursors: { events: -1 } };
     },
 
     run(c: S1Ctx, w: number): S1Result<NormsState, NormsDigest> {
@@ -158,12 +179,21 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
         })
         .sort((a, b) => a.time - b.time || cmp(a.id, b.id));
 
-      const eventDigest = c.digest<{ regimes: unknown }>('city.events');
-      void eventDigest;
+      const eventDigest = c.digest<EventsDigest>('city.events');
+      // v0.6 (S1 7.5): the `city.events` facts after the cursor, for public refusals (taken once, in feed order)
+      st.cursors ??= { events: -1 };
+      const fe = feedAfter(eventDigest?.facts, st.cursors.events);
+      if (fe.gap) c.log({ w, proc: procId, kind: 'defect', reason: 'feed-gap', key: 'city.events', refs: [] });
+      st.cursors.events = fe.through;
+      const groupDigest = c.digest<GroupDigest>('group.decide');
+      const view: OutcomeView = { norms: c.digest<NormsDigest>(procId), posts: sim.postsOf(c.digest) };
       for (const d of simulatedDistricts(sim.w.index)) {
         for (const norm of norms) {
           const key = `${d.id}|${norm.id}`;
           const s = st.slots[key] ?? (st.slots[key] = { priv: norm.priv0, beh: norm.beh0, perc: norm.perc0, qe: norm.beh0, qn: norm.perc0, pub: [], gap: 0, gapSince: 0 });
+          s.pending ??= [];
+          s.compliers ??= [{ from: 0, mask: complianceMask(norm.share, norm.taue, norm.taun, norm.beh0, norm.perc0) }];
+          const enforcerGroup = sim.w.group(d.id, norm.enforcer.aff);
           // (a) the fresh external public events set their signals
           for (const e of external) {
             if (!e.kind.startsWith(`enf.${norm.id}.`)) continue;
@@ -178,13 +208,37 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
               s.pub.push(w);
             }
           }
+          // (a') (v0.6, S1 7.5) the fresh public refusals of this norm are taken; the ones that have waited a day without an answer set the refusal signal
+          for (const f of fe.items) {
+            if (f.district !== d.id || !f.public) continue;
+            for (const rf of norm.refusals ?? []) {
+              if (f.kind !== rf.kind || !rf.outcomes.includes(f.outcome as 'failed' | 'prevented')) continue;
+              const refuser = f.parties.find((x) => x.role === rf.refuser)?.who;
+              const demander = rf.demander.split('|').map((r) => f.parties.find((x) => x.role === r)).find((x) => x !== undefined);
+              if (refuser === undefined || demander === undefined) continue;
+              if ((demander.group ?? demander.who) !== enforcerGroup) continue;
+              const rv = sim.people.view(refuser);
+              if (norm.sector !== null && !(rv && norm.sector.includes(rv.role))) continue;
+              s.pending.push({ event: f.id, refuser, w });
+              if (s.pending.length > cfg.pendingCap) s.pending.shift();
+            }
+          }
+          const waited = s.pending.filter((e) => w - e.w >= cfg.sanctionWindow);
+          if (waited.length > 0) {
+            s.pending = s.pending.filter((e) => w - e.w < cfg.sanctionWindow);
+            const last = waited[waited.length - 1]!;
+            s.signal = { value: cfg.refusalValue, event: last.event, from: w };
+            c.log({ w, proc: procId, kind: 'decision', reason: 'refusal-signal', refs: [last.event, last.refuser] });
+          }
           // (b) enforce, from the behaviour as the snapshot held it
           const pending: Array<{ id: Id; time: GameTime }> = [];
           const share = (() => {
             const aff = d.affOrder[classIndexOfAff(norm.enforcer.aff)]!;
             return (d.entry.byAff.find((b) => b.aff === aff)?.q ?? 0) / d.entry.total;
           })();
-          const mu = norm.enforcePerDay * (W / DAY) * (1 - s.beh) * Math.min(1, share / 0.05);
+          // v0.6: each pending refusal adds to the rate of enforcement, and a group in interregnum lets refusals stand (the whole rate is halved)
+          const interregnum = (groupDigest?.groups[enforcerGroup] as { interregnum?: boolean } | undefined)?.interregnum === true;
+          const mu = enforcementMean(norm, cfg, W, s.beh, share, s.pending.length, interregnum);
           const n = spacingCount(mu, (i) => c.keys.enf(w, d.id, norm.id, i), cfg.enforceCap);
           for (let i = 0; i < n; i++) {
             const allowed = norm.ladder.filter((r) => ceilingOf(c.settings, cfg.rungs.find((x) => x.name === r.rung)?.class ?? '') !== 0 || cfg.rungs.find((x) => x.name === r.rung)?.class === undefined);
@@ -199,7 +253,12 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
             const rungDef = cfg.rungs.find((x) => x.name === rung)!;
             const harm = sim.data.gate.harmEffects.includes(rungDef.effect);
             const desc: Descriptor = { id, kind: kindN, size: 1, w, time, cell, gen: 0, chain: [], public: false, witnesses: 0 };
-            const cast = castEnforcement(sim, norm, desc, s.qe, s.qn, harm);
+            // the oldest pending refuser who is alive, adult and not protected at the event's time is the target instead (v0.6)
+            const refuser = s.pending.find((e) => {
+              const rv = sim.people.view(e.refuser);
+              return rv !== undefined && rv.ageClass === 'adult' && sim.people.alive(e.refuser, time) && !sim.people.protectedAt(e.refuser, time);
+            })?.refuser;
+            const cast = castEnforcement(sim, norm, desc, s.qe, s.qn, harm, refuser);
             if (cast === 'no-cast') {
               c.log({ w, proc: procId, kind: 'admission', reason: 'no-cast', refs: [id] });
               continue;
@@ -207,25 +266,42 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
             const pmean = sim.w.cell(cell).pop[sim.people.periodOf(time)]! * sim.data.events.witFraction;
             desc.witnesses = spacingCount(pmean, (j) => sim.ids.wit(id, j));
             desc.public = sim.w.cell(cell).public === 'public' && desc.witnesses >= cfg.publicMinWitnesses;
+            // the outcome is drawn as the event is minted (S1 5.2a): a guarded target makes it `prevented`, which answers nothing
+            const oc = outcomeOf(sim, desc, cast, view);
+            const rules = sim.w.kinds.get(kindN)?.outcomes;
+            const effs = (rules?.effects[oc.outcome] ?? []).flatMap((x) => cast.filter((e) => e.role === x.role).map((e) => ({ on: e.who!, effect: x.effect })));
+            const participants = cast.map((e) => ({ who: (e.who ?? e.group)!, role: e.role }));
+            if (oc.guard !== undefined) participants.push({ who: oc.guard, role: 'guard' });
             const occ = {
               kind: kindN, origin: 'sim' as const, size: 1, window: w, cell,
-              participants: cast.map((e) => ({ who: (e.who ?? e.group)!, role: e.role })),
-              effects: cast.filter((e) => e.role === 'target').map((e) => ({ on: e.who!, effect: rungDef.effect })),
-              creator: proc, tags: ['enforcement', `norm:${norm.id}`],
+              participants, effects: effs, creator: proc, tags: ['enforcement', `norm:${norm.id}`],
             };
             if (!c.produce(occ).ok) continue;
-            ops.push({ op: 'mint-event', spec: { name, time, kind: kindN, place: cell, participants: occ.participants, effects: occ.effects, outcome: 'done' } });
-            st.ring.push({ id, w, time, cell, norm: norm.id, rung, qe: s.qe, qn: s.qn });
+            ops.push({ op: 'mint-event', spec: { name, time, kind: kindN, place: cell, participants: occ.participants, effects: occ.effects, outcome: oc.outcome } });
+            st.ring.push({ id, w, time, cell, norm: norm.id, rung, qe: s.qe, qn: s.qn, ...(refuser !== undefined ? { refuser } : {}), outcome: oc.outcome, ...(oc.guard !== undefined ? { guard: oc.guard } : {}) });
             facts.push({
               id, kind: kindN, size: 1, w, time, cell, district: d.id, public: desc.public, witnesses: desc.witnesses, policeChild: false, creator: 'norms',
-              norm: norm.id, rung, enforcer: classIndexOfAff(norm.enforcer.aff),
+              norm: norm.id, rung, enforcer: classIndexOfAff(norm.enforcer.aff), outcome: oc.outcome, parties: partiesOf(sim, occ.participants, time),
             });
+            // an enforcement with outcome `done` on a pending refuser answers it (v0.6)
+            if (oc.outcome === 'done') {
+              const target = cast.find((e) => e.role === 'target')?.who;
+              const hit = s.pending.findIndex((e) => e.refuser === target);
+              if (hit >= 0) {
+                c.log({ w, proc: procId, kind: 'decision', reason: 'refusal-answered', refs: [s.pending[hit]!.event, target!] });
+                s.pending.splice(hit, 1);
+              }
+            }
             if (desc.public) pending.push({ id, time });
           }
           // (c) relax
           s.pub = s.pub.filter((x) => w - x < 144);
           const vis = Math.min(1, norm.visBase + s.pub.length / 4);
           relax(s, norm, w, vis);
+          // (v0.6) the mask of complying types from the next window, when it differs from the one in force; the week's history and the entry in force at its start
+          const mask = complianceMask(norm.share, norm.taue, norm.taun, s.qe, s.qn);
+          if (s.compliers.length === 0 || s.compliers[s.compliers.length - 1]!.mask !== mask) s.compliers.push({ from: w + 1, mask });
+          while (s.compliers.length > 1 && s.compliers[1]!.from <= w + 1 - WEEK_WINDOWS) s.compliers.shift();
           // (d) this window's own public events set their signals, from the next window
           pending.sort((a, b) => a.time - b.time || cmp(a.id, b.id));
           for (const e of pending) {
@@ -252,7 +328,7 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
         out[d.id] = {};
         for (const norm of norms) {
           const s = st.slots[`${d.id}|${norm.id}`]!;
-          out[d.id]![norm.id] = { priv: s.priv, beh: s.beh, perc: s.perc, vis: Math.min(1, norm.visBase + s.pub.length / 4), gap: s.gap };
+          out[d.id]![norm.id] = { priv: s.priv, beh: s.beh, perc: s.perc, vis: Math.min(1, norm.visBase + s.pub.length / 4), gap: s.gap, pending: (s.pending ?? []).length, compliers: structuredClone(s.compliers ?? []) };
         }
       }
       const prev = c.digest<NormsDigest>(procId);

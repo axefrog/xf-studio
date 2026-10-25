@@ -189,6 +189,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
       };
 
       const allowedKind = (kind: string): boolean => sim.kindAllowed(kind, c.settings);
+      const view = sim.outcomeView(c.digest);
       // the modifiers of a window are those of the regimes live at its start, after the exits: a regime that arrives in this window changes
       // incidents from the next one (S1 7.1, 7.2)
       let liveAtStart: RegimeRec[] = [];
@@ -352,11 +353,13 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
             st.counters.noCast++;
             continue;
           }
+          cd.cast = cast;
+          // the outcome is drawn once, here, from the occurrence's own Id (S1 5.2a, 7.2); the gate sees the effects that follow it
+          sim.drawOutcome(d, cast, view);
           if (!c.produce(sim.occurrenceOf(d, cast, proc, 'sim')).ok) {
             st.counters.refused++;
             continue;
           }
-          cd.cast = cast;
         }
         const size = cd.isRegime ? cd.regime!.size : cd.d!.size;
         if (size === 4 && w < m4Open(m4Times, ev.m4Spacing, WEEK)) {
@@ -381,6 +384,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
       st.admit.m4Times = m4Times;
 
       const occurrences: Descriptor[] = [];
+      const castOf = new Map<Id, CastEntry[]>();
       const minted = new Map<Id, { name: string; cause: Id }>();
       for (const cd of admitted) {
         if (cd.isRegime) {
@@ -396,6 +400,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         sim.completeDescriptor(d);
         occurrences.push(d);
         minted.set(d.id, { name: cd.name!, cause: cd.cause! });
+        castOf.set(d.id, cd.cast!);
         ops.push({ op: 'mint-event', spec: sim.eventSpecOf(d, cd.cast!, proc, cd.cause!, cd.name!) });
         bump(countAgg, sim.w.cell(d.cell).district, d.kind, d.size);
       }
@@ -495,7 +500,8 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
       for (const d of occurrences) {
         const f: EventFact = {
           id: d.id, kind: d.kind, size: d.size, w, time: d.time, cell: d.cell, district: sim.w.cell(d.cell).district, public: d.public, witnesses: d.witnesses,
-          policeChild: police.has(d.id), creator: 'sim',
+          policeChild: police.has(d.id), creator: 'sim', outcome: d.outcome ?? 'done',
+          parties: sim.partiesOf(sim.occurrenceOf(d, castOf.get(d.id) ?? [], proc, 'sim').participants, d.time),
         };
         if (d.sides) f.sides = d.sides;
         if (d.parent !== undefined) {

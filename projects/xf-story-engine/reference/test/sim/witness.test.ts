@@ -312,7 +312,7 @@ describe('SF1-W-6: a telling is not harm', () => {
       const tell = k.store.idsOfKind('core:event').filter((x) => k.value(x, 'kind') === 'tell').pop()!;
       expect(k.value(tell, 'effects#count')).toBe(0);
       const roles = sim.policies.viewEvent(tell)!.participants.map((p) => `${p.role}`);
-      expect(roles).toEqual(['teller', 'listener', 'subject']);
+      expect(roles).toEqual(['teller', 'listener', 'subject', 'told']);
       expect(sim.policies.viewEvent(tell)!.participants[2]!.who).toBe(subject);
       const o = { kind: 'tell', origin: 'policy' as const, size: 1, window: 0, participants: sim.policies.viewEvent(tell)!.participants, effects: [], creator: sim.w.s1 };
       expect(sim.gate.produce(o, k.settings.at(k.now), k.now)).toEqual({ ok: true });
@@ -342,7 +342,7 @@ describe('SF1-W-6: a telling is not harm', () => {
       return produce(o, s, n);
     };
     expect(a.sim.policies.encounter(a.teller, a.listener, 10)).toBe(true);
-    expect(asked).toEqual([{ kind: 'tell', origin: 'policy', roles: ['teller', 'listener', 'subject'] }]);
+    expect(asked).toEqual([{ kind: 'tell', origin: 'policy', roles: ['teller', 'listener', 'subject', 'told'] }]);
     expect(a.tells().length).toBe(1);
     expect(a.sim.record.tells).toEqual([10]);
     // the gate refuses: no telling is minted, no volume is taken, nobody is told, and the refusal is in the log

@@ -25,6 +25,7 @@ export const KEY_REGISTRY: Record<string, { process?: string; args: string }> = 
   ecell: { process: 'order.norms', args: 'id s i' },
   et: { process: 'order.norms', args: 'id s i' },
   retal: { process: 'group.decide', args: 'id i' },
+  outcome: { args: 'id' },
   'cast-f': { args: 'id' },
   'cast-pair': { args: 'id' },
   'cast-n': { args: 'id s' },
@@ -57,6 +58,7 @@ export const KEY_REGISTRY: Record<string, { process?: string; args: string }> = 
 export function identityKeys(worldSeed: Id) {
   const ir = (tag: string, ...args: HArg[]): number => rand(hs(tag), hid(worldSeed), ...args);
   return {
+    outcome: (occ: Id) => ir('outcome', hid(occ)),
     castF: (occ: Id) => ir('cast-f', hid(occ)),
     castPair: (occ: Id) => ir('cast-pair', hid(occ)),
     castN: (occ: Id, role: string) => ir('cast-n', hid(occ), hs(role)),

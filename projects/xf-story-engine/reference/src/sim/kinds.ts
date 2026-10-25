@@ -4,8 +4,10 @@
 //
 // `lintKinds` is the load-time lint of S1 5.1: a pack is refused, with the kind named, when it breaks a rule.
 
+import type { FillDecl } from '../event-kinds.ts';
 import type { Effect } from '../types.ts';
 import type { CityKindDef, ContentClass, S1Data } from './data.ts';
+import { type OutcomeRules, fillsOfEnforcement, fillsOfFixedKind, outcomeRulesOf } from './fills.ts';
 
 export type KindFamily = 'city' | 'order' | 'social' | 'mirror' | 'raw' | 'tie';
 
@@ -36,6 +38,11 @@ export interface KindDef1 {
   severity: number;
   pulse: number;
   carrier: { channels: string[]; days: number };
+  /** v0.6 (S1 5.1, 5.2a): the participant role names its events use, the story functions it fills, how an occurrence can fail, the roles in which a participant acts. */
+  roleNames: string[];
+  fills: FillDecl[];
+  outcomes?: OutcomeRules;
+  agentRoles: string[];
 }
 
 /** Everything that can produce an event in the core (S1 5.1): the processes and policies of the core, layer 2 and the port. */
@@ -97,7 +104,9 @@ export function isHarmRole(kind: KindDef1 | undefined, role: string, harm: reado
 export function participantRoles(): string[] {
   const roles = new Set<string>();
   for (const k of CITY_KIND_NAMES) for (const hp of [false, true]) for (const r of ROLE_SPECS(k, hp)) roles.add(r.role);
-  for (const r of ['aggressor', 'victim', 'target', 'hostile', 'responder', 'enforcer', 'giver', 'taker', 'participant', 'teller', 'listener', 'subject', 'entry', 'actor']) roles.add(r);
+  for (const r of ['aggressor', 'victim', 'target', 'hostile', 'responder', 'enforcer', 'giver', 'taker', 'participant', 'teller', 'listener', 'subject', 'entry', 'actor',
+    // v0.6 (S1 5.3, 5.4): the thing a theft moves, who prevented an act, what a telling is about, and the roles of the group and goal kinds
+    'told', 'guard', 'item', 'group', 'decider', 'object', 'successor', 'predecessor', 'late', 'creditor', 'debtor', 'warner', 'warned', 'searcher', 'asked', 'sought', 'confronter', 'confronted']) roles.add(r);
   for (const r of [...roles]) roles.add(`${r}-group`);
   return [...roles].sort();
 }
@@ -116,12 +125,31 @@ export function allEventKindNames(data: S1Data): string[] {
   ].filter((v, i, a) => a.indexOf(v) === i);
 }
 
-const city = (d: CityKindDef): KindDef1 => ({
-  name: d.name, family: 'city', tags: d.tags, effects: d.effects, producers: ['city.events', 'city.mirror', 'scene.acts'], sizes: d.sizes,
-  classes: d.classes.length === 0 ? 'none' : d.classes, roles: ROLE_SPECS(d.name, false), severity: d.severity, pulse: d.pulse, carrier: d.carrier,
-});
+/** The role names a city kind's events use: those of its role specifications with a parent and without, a `-group` form where the role allows group involvement, and (v0.6) `guard` and `item`. */
+const cityRoleNames = (name: string, prevents: boolean): string[] => {
+  const out = new Set<string>();
+  for (const hp of [false, true]) for (const r of ROLE_SPECS(name, hp)) {
+    out.add(r.role);
+    if (r.groupOk) out.add(`${r.role}-group`);
+  }
+  if (name === 'disorder') out.add('victim');
+  if (prevents) out.add('guard');
+  if (name === 'theft') out.add('item');
+  return [...out];
+};
+const AGENT_ROLES: Record<string, string[]> = { theft: ['aggressor'], assault: ['aggressor'], shakedown: ['aggressor'], 'gang-clash': ['aggressor'], 'psycho-break': ['aggressor'], 'police-action': ['responder'], tell: ['teller'] };
+
+const city = (d: CityKindDef): KindDef1 => {
+  const outcomes = outcomeRulesOf(d.name, d.effects);
+  return {
+    name: d.name, family: 'city', tags: d.tags, effects: d.effects, producers: ['city.events', 'city.mirror', 'scene.acts'], sizes: d.sizes,
+    classes: d.classes.length === 0 ? 'none' : d.classes, roles: ROLE_SPECS(d.name, false), severity: d.severity, pulse: d.pulse, carrier: d.carrier,
+    roleNames: cityRoleNames(d.name, outcomes?.prevent !== undefined), fills: d.fills ?? fillsOfFixedKind(d.name) ?? [], ...(outcomes ? { outcomes } : {}), agentRoles: AGENT_ROLES[d.name] ?? [],
+  };
+};
 const plain = (name: string, family: KindFamily, producers: string[], extra: Partial<KindDef1> = {}): KindDef1 => ({
-  name, family, tags: [], effects: [], producers, sizes: [1, 1], classes: 'none', roles: [], severity: 0, pulse: 0, carrier: { channels: [], days: 0 }, ...extra,
+  name, family, tags: [], effects: [], producers, sizes: [1, 1], classes: 'none', roles: [], severity: 0, pulse: 0, carrier: { channels: [], days: 0 },
+  roleNames: [], fills: fillsOfFixedKind(name) ?? [], agentRoles: AGENT_ROLES[name] ?? [], ...extra,
 });
 
 /** The registry: a map from kind name to its entry, built from the pack data. */
@@ -142,20 +170,24 @@ export class KindRegistry {
       this.kinds.set(`enf.${norm}.${rung}`, plain(`enf.${norm}.${rung}`, 'order', ['order.norms', 'port'], {
         tags: ['enforcement', `norm:${norm}`], effects: [{ role: 'target', effect: r.effect }],
         classes: r.class ? [{ class: r.class, shown: r.shown ?? 1, reported: r.reported ?? 1 }] : 'none', roles,
+        roleNames: ['enforcer', 'target', 'guard'], fills: fillsOfEnforcement(rung), agentRoles: ['enforcer'],
+        ...(outcomeRulesOf(`enf.${norm}.${rung}`, [], { rungEffect: r.effect }) ? { outcomes: outcomeRulesOf(`enf.${norm}.${rung}`, [], { rungEffect: r.effect })! } : {}),
       }));
     }
     this.kinds.set('gig-outcome', plain('gig-outcome', 'mirror', ['city.mirror']));
     for (const n of RAW_KIND_NAMES) this.kinds.set(n, plain(n, 'raw', ['port']));
     this.kinds.set('reply', plain('reply', 'tie', ['ties']));
     for (const n of TIE_KIND_NAMES.filter((x) => x !== 'reply')) this.kinds.set(n, plain(n, 'tie', ['s2', 'port']));
-    this.kinds.set('tell', plain('tell', 'social', ['social']));
+    this.kinds.set('tell', plain('tell', 'social', ['social'], { roleNames: ['teller', 'listener', 'subject', 'told'] }));
     for (const n of SOCIAL_KIND_NAMES.filter((x) => x !== 'tell')) this.kinds.set(n, plain(n, 'social', ['s2']));
+    // v0.6 (S1 5.3, 8.3): a promise is news: witnesses remember and tell it although it has no effect; severity 0.5, pulse 0.4
+    this.kinds.set('promise', plain('promise', 'social', ['s2'], { tags: ['news'], severity: 0.5, pulse: 0.4, roleNames: ['promiser', 'promisee'], agentRoles: ['promiser'] }));
   }
 
-  /** `producers(kind)` and `eventKind(name)` for S3 (S1 9.2). */
-  eventKind(name: string): { tags: string[]; producers: string[] } | undefined {
+  /** `producers(kind)` and `eventKind(name)` for S3 (S1 9.2): from v0.6 with the roles, fills, outcomes and agent roles. */
+  eventKind(name: string): { tags: string[]; producers: string[]; roles: string[]; fills: FillDecl[]; outcomes?: OutcomeRules; agentRoles: string[] } | undefined {
     const k = this.kinds.get(name);
-    return k ? { tags: [...k.tags], producers: [...k.producers] } : undefined;
+    return k ? { tags: [...k.tags], producers: [...k.producers], roles: [...k.roleNames], fills: structuredClone(k.fills), ...(k.outcomes ? { outcomes: structuredClone(k.outcomes) } : {}), agentRoles: [...k.agentRoles] } : undefined;
   }
   producers(name: string): string[] {
     return this.kinds.get(name)?.producers ?? [];
@@ -174,12 +206,31 @@ export function lintKinds(data: S1Data): string[] {
   const names = new Set(data.kinds.map((k) => k.name));
   const known = new Set<string>(PRODUCERS);
   const reg = new KindRegistry(data);
+  const vocabulary = new Set(data.vocabulary);
   for (const k of reg.kinds.values()) {
+    // v0.6 (S1 5.1): a fill names a role the kind has, a function of the loaded vocabulary, and an outcome the kind can reach
+    for (const fl of k.fills) {
+      if (!vocabulary.has(fl.fn)) problems.push(`kind ${k.name}: the fill ${fl.fn} is not a function of the loaded vocabulary`);
+      const roles = new Set(k.roleNames);
+      const named = [...Object.values(fl.args).flatMap((a) => a.split('|')), ...(fl.when?.has ?? []), ...(fl.when?.lacks ?? []), ...Object.values(fl.when?.state?.args ?? {}).flatMap((a) => a.split('|'))];
+      for (const r of named) if (r !== '@place' && r !== '@self' && !roles.has(r)) problems.push(`kind ${k.name}: the fill ${fl.fn} names the role ${r}, which the kind does not have`);
+      for (const o of fl.when?.outcome ?? []) {
+        const reach = o === 'done' || (o === 'prevented' && k.outcomes?.prevent !== undefined) || (o === 'failed' && k.outcomes?.fail !== undefined);
+        if (!reach) problems.push(`kind ${k.name}: the fill ${fl.fn} needs the outcome ${o}, which the kind cannot reach`);
+      }
+    }
     if (k.producers.length === 0) problems.push(`kind ${k.name} has no producer`);
     for (const p of k.producers) if (!known.has(p)) problems.push(`kind ${k.name} names the producer ${p}, which is not supported yet`);
     if (!k.carrier) problems.push(`kind ${k.name} has no carrier`);
     if (k.classes === undefined) problems.push(`kind ${k.name} has no content listing`);
     if (k.name.startsWith('meta:') && k.producers.some((p) => p !== 's2' && p !== 'port')) problems.push(`kind ${k.name} starts with meta: and has a producer in S1`);
+  }
+  // v0.6 (S1 5.1): a kind may let `v` fill only an agent role, an informational role, or a protagonist-object role
+  const informational = new Set(['subject', 'told', 'object']);
+  const protagonistObject = new Set(['warned', 'sought', 'confronted']);
+  for (const d of data.kinds) {
+    const k = reg.get(d.name);
+    for (const r of d.allowV ?? []) if (!(k?.agentRoles.includes(r) || informational.has(r) || protagonistObject.has(r))) problems.push(`kind ${d.name} lets v be ${r}, which is not an agent role, an informational role or a protagonist-object role`);
   }
   // The core produces and casts the kinds of its own table (the role specifications and the producers are code, not data): a kind added to
   // the data would be given the core's producers and no roles, and would pass for a supported one (SIM-15). Anything else waits for its capability.

@@ -24,6 +24,9 @@ export interface Descriptor {
    * original aggressor). They are fixed when the child is born, so firing it never needs the parent's own cast (SPEC-NOTES 111).
    */
   inherit?: Array<{ role: string; who: Id }>;
+  /** v0.6 (S1 5.2a): drawn once at admission (items have none until opened) and kept, so a re-mint from the ring restates it; and the guard of a prevented one. */
+  outcome?: 'done' | 'failed' | 'prevented';
+  guard?: Id;
 }
 
 export interface PendingChild {
@@ -76,6 +79,12 @@ export interface EventFact {
   norm?: string;
   rung?: string;
   enforcer?: number;
+  /** v0.6 (S1 5.2a): the occurrence's outcome. */
+  outcome: 'done' | 'failed' | 'prevented';
+  /** v0.6: every participant, with each person's group at the event's time (S1 4.8); a `-group` participant carries its own node. */
+  parties: Array<{ role: string; who: Id; group?: Id }>;
+  /** v0.6: the goal frame a goal act served. */
+  goal?: Id;
 }
 
 export type CastEntry = { role: string; who: Id; group?: undefined } | { role: string; group: Id; who?: undefined };

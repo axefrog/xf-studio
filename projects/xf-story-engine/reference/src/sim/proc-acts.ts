@@ -73,7 +73,7 @@ export function itemFieldOps(sim: Sim, d: Descriptor, cast: CastEntry[], witness
   witnesses.forEach((wi, i) => put(d.id, `witnesses[${i}]`, wi));
   put(d.id, 'causes#count', d.parent !== undefined ? 1 : 0);
   if (d.parent !== undefined) put(d.id, 'causes[0]', d.parent);
-  put(d.id, 'outcome', 'done');
+  put(d.id, 'outcome', d.outcome ?? 'done');
   return ops;
 }
 
@@ -108,6 +108,7 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
         }
       }
       const focus = [...cells].sort(cmp);
+      const view = sim.outcomeView(c.digest);
       let opened = 0;
       // (2) open the items of window k - 1 in the cells of the focus recorded in the previous run
       if (st.prev !== null && st.prev.w === k - 1) {
@@ -136,6 +137,8 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
               c.log({ w: k, proc: procId, kind: 'admission', reason: 'no-cast', refs: [it.id] });
               continue;
             }
+            // v0.6 (S1 5.2a, 7.9): the item's outcome is drawn when it is opened, keyed by its Id, from the history as of its own time
+            sim.drawOutcome(d, cast, view);
             if (!c.produce(sim.occurrenceOf(d, cast, c.proc, 'sim')).ok) continue;
             const persons = cast.filter((e) => e.who !== undefined).map((e) => e.who!);
             const witnesses = witnessesOf(d, persons);
@@ -159,6 +162,7 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
           const d = itemDescriptor(sim, p.summary, p.index, p.w, cell, entry.kind, entry.meta[p.index]!);
           const cast = sim.casting.cast(d);
           if (cast === 'no-cast') continue;
+          sim.drawOutcome(d, cast, view);
           const persons = cast.filter((e) => e.who !== undefined).map((e) => e.who!);
           sim.k.summaries.materialise(p.summary, p.index);
           ops.push(...itemFieldOps(sim, d, cast, witnessesOf(d, persons), true));

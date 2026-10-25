@@ -37,6 +37,7 @@ import { VFrames } from './vframes.ts';
 import { Divergence } from './divergence.ts';
 import { Protection } from './protection.ts';
 import { Reads } from './reads.ts';
+import { type OutcomeView, type PostRec, outcomeOf, partiesOf } from './outcomes.ts';
 import type { LogDraft } from './occ.ts';
 import type { StocksDigest } from './proc-stocks.ts';
 import type { NormsDigest } from './proc-norms.ts';
@@ -79,6 +80,8 @@ export class Sim {
     this.w = World.create(opts);
     this.k = this.w.k;
     this.data = this.w.data;
+    // the event-kind registry of the kernel holds each kind with its roles and fills (S0 V4-51); S1's own registry adds what only S1 reads
+    for (const kd of this.w.kinds.kinds.values()) this.k.eventKinds.register({ name: kd.name, tags: kd.tags, producers: kd.producers, roles: kd.roleNames, fills: kd.fills });
     this.ids = identityKeys(this.k.worldSeed);
     this.people = new People(this.w, this.ids);
     this.casting = new Casting(this.w, this.people, this.ids);
@@ -439,12 +442,37 @@ export class Sim {
     return r < 0 ? 0 : r > 1 ? 1 : r;
   }
 
-  /** The occurrence the gate sees (S1 6). */
+  /**
+   * The digests an outcome reads (S1 5.2a): the compliance history of `order.norms` and the post history of `people.goals`, as of a snapshot
+   * (`digest`) or, with none given, as of the last processed boundary.
+   */
+  outcomeView(digest?: <D>(id: string) => D | undefined): OutcomeView {
+    const read = digest ?? (<D>(id: string): D | undefined => this.k.evolution.digestPeek<D>(id));
+    return { norms: read<NormsDigest>('order.norms'), posts: this.postsOf(read) };
+  }
+
+  /** The post history of `people.goals` (S1 7.10), read from its digest; empty where the process is not run. */
+  postsOf(digest: <D>(id: string) => D | undefined): readonly PostRec[] | undefined {
+    return digest<{ posts?: PostRec[] }>('people.goals')?.posts;
+  }
+
+  /** Draw the outcome of an occurrence once, from its own `Id` (S1 5.2a), and keep it, and the guard of a prevented one, in the descriptor. */
+  drawOutcome(d: Descriptor, cast: CastEntry[], view: OutcomeView): void {
+    const o = outcomeOf(this, d, cast, view);
+    d.outcome = o.outcome;
+    if (o.guard !== undefined) d.guard = o.guard;
+    else delete d.guard;
+  }
+
+  /** The occurrence the gate sees (S1 6): its effects follow its outcome (S1 5.2a), and the guard of a prevented one joins it. */
   occurrenceOf(d: Descriptor, cast: CastEntry[], creator: Id, origin: 'sim' | 'policy'): Occurrence {
     const kd = this.w.kinds.get(d.kind)!;
     const participants = cast.map((e) => ({ who: (e.who ?? e.group)!, role: e.role }));
+    if (d.guard !== undefined && d.outcome === 'prevented') participants.push({ who: d.guard, role: 'guard' });
     const effects: Array<{ on: Id; effect: Effect }> = [];
-    for (const ef of kd.effects) {
+    // an occurrence whose kind has outcome rules takes the effects of its outcome; every other kind has its kind's effects
+    const table = kd.outcomes !== undefined && d.outcome !== undefined ? kd.outcomes.effects[d.outcome] : kd.effects;
+    for (const ef of table) {
       if (ef.role === 'place') {
         effects.push({ on: d.cell, effect: ef.effect });
         continue;
@@ -457,11 +485,16 @@ export class Sim {
   /** The `mint-event` spec of an admitted occurrence. */
   eventSpecOf(d: Descriptor, cast: CastEntry[], creator: Id, cause: Id, name: string) {
     const occ = this.occurrenceOf(d, cast, creator, 'sim');
-    const spec: { creator: Id; cause: Id; name: string; time: GameTime; kind: string; place: Id; participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }>; causes?: Id[]; outcome: 'done' } = {
-      creator, cause, name, time: d.time, kind: d.kind, place: d.cell, participants: occ.participants, effects: occ.effects, outcome: 'done',
+    const spec: { creator: Id; cause: Id; name: string; time: GameTime; kind: string; place: Id; participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }>; causes?: Id[]; outcome: 'done' | 'failed' | 'prevented' } = {
+      creator, cause, name, time: d.time, kind: d.kind, place: d.cell, participants: occ.participants, effects: occ.effects, outcome: d.outcome ?? 'done',
     };
     if (d.parent !== undefined) spec.causes = [d.parent];
     return spec;
+  }
+
+  /** The fact's `parties` of an occurrence (S1 7.2). */
+  partiesOf(participants: ReadonlyArray<{ who: Id; role: string }>, t: GameTime): Array<{ role: string; who: Id; group?: Id }> {
+    return partiesOf(this, participants, t);
   }
 }
 

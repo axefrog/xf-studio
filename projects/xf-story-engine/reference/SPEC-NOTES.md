@@ -2086,3 +2086,23 @@ Findings from building the M3 harness over S1, S2 and S3 as they stand. None cha
 - **M3-08. S1's name pool is small.** Two residents can share a full name, so a card can name "Alex Reyes" twice. The packet builder drops any card that names two people by one name, in every arm.
 - **M3-09. The fit report's `fit` block and `settings.tempo` differ by construction with layer 3 attached.** S23-S2-10's key leaves them out (the harness's fit module); the verdict, windows, cast, draws, exits, timing, decline preview and cost agree.
 - **M3-10. With layer 3 attached, an open authored seed is released later, and a world-dependent beat can then select a different fragment, so the play is not identical to sowing off.** SF3-36 says R1's draws, cast, offer `Id`, outcome and closure are identical with layer 3 absent and differ only in release time. That holds for a seed whose beats do not read the world. R2's `paid` beat selects between `ff-paid-known` and `ff-paid-plain` on whether the stalls trust V, so when layer 3's pacing holds the first delivery (two hours here, at every tempo including `off`) and the world has moved on, the beat can select the other fragment. In the M3 run this happens in 1 of the 18 comparisons (S-mid-squeezed, accepting first); in 12 of the 18 the release is later; in 17 of 18 the selected fragments, the delivered words, the answers and the end state agree. The fit report agrees in all 18, which is what M3's criterion (S23-S2-10) asks for. S23-S2-10 and SF3-36 could say that the play is identical up to release time only for world-independent seeds, and that the fit report is the invariant. The harness compares selected fragments and delivered content (`semanticOfR2`) and leaves out only release times.
+
+## S0 v4.17 and S1 v0.6: the second build of the reference model
+
+Entries for what this build did and what the specifications left open. The numbering continues the lists above only in spirit: each entry here is named by the section it concerns.
+
+### Public operations added by this build (the recovery inventory)
+
+| Public operation | Recovery route |
+|---|---|
+| `affOfGroup` | pure data, supplied predicate environment or gated kernel delegation |
+| `compliesAt` | pure data, supplied predicate environment or gated kernel delegation |
+| `groupOf` | recoverIfSaved |
+| `guardOf` | pure data, supplied predicate environment or gated kernel delegation |
+| `hostile` | pure data, supplied predicate environment or gated kernel delegation |
+| `outcomeOf` | pure data, supplied predicate environment or gated kernel delegation |
+| `partiesOf` | pure data, supplied predicate environment or gated kernel delegation |
+| `pRefuse` | pure data, supplied predicate environment or gated kernel delegation |
+| `Sim.drawOutcome` | layer-owned data or gated kernel delegation |
+| `Sim.partiesOf` | layer-owned data or gated kernel delegation |
+
