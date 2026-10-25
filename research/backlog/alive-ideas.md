@@ -70,11 +70,12 @@
 
 ### V's life: ventures, standing and consequences
 
-The aim is a world where there is always something to do, where everything seems to have a life of its own, and where the vanilla systems are a small part of what runs. These examples show the range; each one waits for the current product to be finished (the 1.0 rule), and is discussed before it is built.
+The aim is a world where there is always something to do, where everything seems to have a life of its own, and where the vanilla systems are a small part of what runs. These examples show the range. One rule runs through them all: the game is played inside the game, so anything V does (a new identity included) happens there, never in an outside tool; each one waits for the current product to be finished (the 1.0 rule), and is discussed before it is built.
 
 - **Businesses V runs:** an electronics repair shop (customers arrive with jobs, parts cost money, word of mouth grows the trade); a rental empire of apartments (tenants, rent, repairs, disputes), later with V's own gang and henchmen to collect and protect.
+- **Ripperdoc sessions worth the lore.** Ripperdocs matter in the setting, and a visit could carry real weight instead of a quick cut: consultation and choice, the chair, anaesthesia (or not), the procedure itself with the doc working on V, recovery and side effects, and a doc whose skill, hygiene and loyalties matter (a back-alley doc is cheaper and riskier). The same scene serves cyberware, a new face and identity, and the dodgy implant that lets a rogue AI in.
 - **Lasting conflict:** a war with a gang that V can win, lose or have to lie low from; territory, retaliation and truces that persist across days.
-- **Permanent wanted status:** the police keep after V until she changes her identity and appearance. The police come to V's apartment and ransack it for evidence, and what they take or break stays taken and broken.
+- **Permanent wanted status:** the police keep after V until she changes her identity and appearance, in the game, at a ripperdoc. The police come to V's apartment and ransack it for evidence, and what they take or break stays taken and broken.
 - **Places the designers never built:** a network of under-city tunnels V discovers and explores, leading to areas that aren't in the base game.
 - **V's own AI:** V writes an AI and lets it loose on her enemies. Its counterpart is the rogue AI that invades V, perhaps through a ripperdoc's dodgy implant: a character with its own voice and goals that hops between hosts (V, NPCs, cars, the drone).
 - **V's own surveillance:** cameras V installs around the neighbourhood, feeding a wall of monitors in her apartment that show what's going on nearby.
@@ -96,7 +97,7 @@ More in the same vein, each grown from something already built or planned:
 | A persistent world record tied to the save (who owns what, who owes whom, what happened where) | businesses, rentals, gang war, wanted status, ransacked rooms | the Story Engine's record and XF Core's save ledger (planned) |
 | A simulated population with roles, factions, loyalty and routines | customers, tenants, henchmen, rival gangs, police | the Story Engine's level-of-detail simulation; the bridge's actors, crowd substitution and NPC direction |
 | Plans that anticipate outcomes, run at frame rate and report back | every staged moment: a raid, a collection, a customer visit, a henchman's job, an AI's attack | the bridge's plan module (agreement with the Story Engine, 26 October) |
-| Changing V's appearance and identity in game | permanent wanted status, laying low, disguise | the Studio's character editing (CC values) and live application through the bridge |
+| Changing V's appearance and identity **as an in-game activity**, at a ripperdoc (never by leaving the game for an editor) | permanent wanted status, laying low, disguise | the bridge's live appearance and character-creator writes; the Studio's part is general modding (authoring looks a ripperdoc could offer), not the place the change happens |
 | Persistent changes to places (props moved, taken or broken; decor added) | ransacked apartments, shop fit-outs, camera installs | "places that remember" (above); the bridge's props and doors |
 | New authored spaces streamed into the world | tunnels and hidden areas, V's shop | the Studio's world tools (phases W4–W5 in [world ideas](world-and-interactive-ideas.md)) |
 | Script-owned cameras rendered to in-world screens | the monitor wall; cockpit-style views | the bridge's camera control; community mods show script-owned cockpit cameras are possible |
