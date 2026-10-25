@@ -137,3 +137,129 @@ For the plugin host's design review (phases C1–C3). Each item names the rows a
 10. **The native part,** if one is needed, reaches events, the store and ticks, and calls redscript (and is called by it) through the C interface (H2).
 11. **Inspection commands** for agents: `story.state`, `story.why` and `story.seeds` (read). Sowing seeds live is lab-only (V12, [DS-26](design-seeds.md)).
 12. **A companion process** (H6, `companion@1`, supervised by the core): declared in the manifest (the executable inside the plugin's folder, its hash, any network use), launched and supervised by XF Core under H6's seven conditions, and connected through a pipe XF Core owns. Events, store calls and plugin commands are available over it at local-IPC speed, with every gate applied and only the external link's rate limit waived. XF Core's design §3.5 is reworded to "only XF Core opens links, including the one to a companion" (agreed with the bridge chat).
+
+## Scene execution: what the engine needs from the bridge's plan layer
+
+The bridge is building a plain-data, serialisable **plan** module (branch `claude/bridge-runner`): steps with a precondition, an action, anticipated outcomes, branches, retry, alternatives, a fallback and a deadline. Its first consumer is the bridge's tests; later consumers are supervisor actor policies, the Story Engine's scenes, and eventually a realtime controller, with execution in game at frame rate. This section is the Story Engine's answer on what its scenes need from that layer. It sits above the senses (S1 to S7) and verbs (V1 to V17), and below the seed language's staging rules ([S2 §2.21](spec/seeding.md#221-staging-in-the-world)).
+
+**The boundary in one line.** The engine decides *what is true and what happens next* at its tick, and the plan decides *how bodies carry it out* at frame rate. A plan never changes the record on its own: it performs, it observes, and it reports, and the engine folds what it reports into the record.
+
+### 1. What a scene decides at run time, and against which signals
+
+These are engine decisions, made at beat level from the plan's reports and the senses:
+
+| Decision | What it chooses | Signals |
+|---|---|---|
+| **Phase** | The scene's event state on the record's clock. It is authoritative, and it advances whether or not anyone watches | The record's clock; deadlines; the outcome S1 drew for the act |
+| **Rung** | How fully to realise the phase: performance, routine, residue, report or record. It falls as V's distance and attention fall, and rises without skipping or replaying | V's distance, view and line of sight (the witness sampler); actors present |
+| **Audience case** | `glance`, `stay`, `ifIgnored`, `ifWatched`, `ifJoined`, `dissolve` | V's dwell time, approach and attention |
+| **Answer to interference** | For each act of V's (bump, block, talk, scan, steal, threaten, attack, follow, photograph): continue, react, fold the act into the record, or release the scene | V's acts from the event feed; contact and proximity from the plan |
+| **Withdrawal** | Stop the scene because it is no longer legal or safe | A nudge legality check failing (S2 §2.25); the D-30 recheck failing (intention gone, tempo changed); combat, a vehicle, a vanilla scene or dialogue, or a quest reservation (C1); heat rising; an actor dying or streaming out |
+
+The plan decides locally, inside a step: pathing, avoiding obstacles, the **second attempt** when blocked (a blocked person trying another way is what makes a goal readable: dossier 20, and the focal card's `goal`, `obstacle` and `alt`), facing, bark timing, and which anticipated outcome actually happened.
+
+**Anticipated outcomes are the right shape.** A step's anticipated outcomes should map onto the scene's declared branches, so the plan reports which one happened. An **unanticipated** outcome is reported as such and takes the step's fallback. The engine then decides what it means for the record.
+
+### 2. Timing
+
+- **Frame-rate reflexes, in game:**
+  - collision and avoidance;
+  - turning to face V or a speaker;
+  - flinching or fleeing on gunfire, as the crowd does;
+  - holding a bark for at least its reading time (words ÷ 4 per second, plus half a second);
+  - stopping and giving a tell when V bumps or blocks;
+  - aborting on combat or hostility;
+  - keeping inside the scene's area.
+- **Beat level, at the engine's tick:** everything that changes the record, plus every rung, audience and interference decision. The arbiter ticks once a second, so the engine needs a report within about a second of the signal. Its next instruction lands within about a second after that.
+- **The rule:** a reflex may change how something looks, never what happened. "The thief ran" is a report; "the theft succeeded" is the engine's.
+
+### 3. Several actors
+
+- **A scene is a unit with a cast.** Joint beats are common:
+  - two people talking (facing, taking turns, each bark held its reading time);
+  - a collection at a stall (approach, demand, pay or refuse);
+  - a confrontation (approach, stop at speaking distance, deliver, leave).
+
+  A plan needs steps that synchronise several actors, and roles bound to actors so a substitute can take a role.
+- **Shared perception:** one blackboard per scene, read by every actor in it. It holds V's position, view and attention, each actor's state, and the scene's declared incident. Every actor reads the same snapshot each step, so two actors never disagree about whether V is watching.
+- **One report stream per scene,** not per actor, carrying the scene id and the step.
+- **Scale:** a scene uses up to 5 actors (the supervisor's limit today) and at most one declared incident (the bridge samples up to 4 at once).
+
+### 4. Failure semantics
+
+**A ladder, in order:**
+1. retry the step, a bounded number of times;
+2. an alternative inside the plan: another approach, slot or path;
+3. drop a rung: performance to routine, residue or report (an engine decision, unless a deadline or safety forces it);
+4. dissolve: actors leave the player's view and despawn out of sight;
+5. release: hand substituted crowd people back to the crowd, and stop directing everyone else.
+
+**What a scene guarantees when it gives up:**
+- **The truth, once.** One closing report says what was performed and what wasn't: completed, partial or abandoned, with the reason and the last step reached. The engine never records an effect the plan said didn't play. Only what was reported stands.
+- **No contradiction.** Anything visible that implies a fact (an item taken, a payment made) was either reported or never shown.
+- **A safe world.** No frozen bodies, no hostility left on, nobody stranded in view. Released crowd people walk on. The kill switch restores everything.
+- **Closed bookkeeping.** The declared incident is closed, so it ends in exactly one report, unwitnessed outcome or gap.
+
+### 5. Authoring
+
+- **The engine compiles plans; nobody writes one per scene.** The engine's realiser (P8) compiles each plan for the chosen rung from four inputs:
+  - a seed's beat;
+  - its stage block;
+  - the roles' focal cards;
+  - the place's stage kit.
+
+  The output is preconditions, actions, anticipated outcomes as the scene's branches, fallbacks and deadlines.
+- **Written once, by hand:**
+  - the **primitives** a plan is made of: approach and talk, a pickpocket's pass, paying at a stall, a shove, fleeing, following, waiting with an idle, leaving the area;
+  - the stage kits' choreography: slots, anchors, facings and required elements.
+
+  The bridge owns the primitives and the executor; the engine owns composition. A primitive is parameterised by roles, places and timings, and has no story knowledge.
+
+### 6. Save and load
+
+The engine's record is the truth ([S0 §14.1](spec/kernel.md)). A plan's own state is never saved in the game's save. What the engine needs:
+- **A load cancels every plan cleanly,** with one signal. Spawned and substituted actors are gone or released.
+- **Restart from a phase, not resume from inside a plan.** On recovery the engine re-derives each scene's phase from its record clock and restages it idempotently at a fitting rung (P2). Raising the rung after the event has ended never replays the performance (S2 §2.21). So the plan module needs an entry point that starts a scene at phase X at time t, not a mid-plan resume.
+- **Idempotent reports.** Each report is keyed by scene, plan and step, so a report sent twice counts once. A step that was performed but not reported before a load never happened, as far as the record knows.
+- **Saving mid-scene** takes the engine's checkpoint at a tick boundary (P5). The scene's phase is in it; the plan isn't.
+
+### 7. Three scenes for fixtures (no main characters)
+
+**A. A pickpocketing at the market.** Roles: a thief and a mark, both XF actors, with one declared incident (kind `theft`).
+- **Steps:**
+  1. The thief walks through the crowd to the mark at a stall.
+  2. The thief brushes past and lifts the item.
+  3. The thief walks off at a normal pace.
+  4. After 3 to 6 seconds the mark notices, pats their pockets, looks around and shouts.
+- **Rung:** a performance if V is within about 25 m with a line of sight. Otherwise residue (the mark searching their pockets), or a report later.
+- **If V interferes:**
+  - follows: the thief speeds up and tries another way;
+  - blocks: the thief stops, gives a tell and takes another path;
+  - attacks: the scene is released and the act folds into the record;
+  - scans: the scan gives a why anchor.
+- **Failure:**
+  - the mark streams out: drop to report;
+  - the thief is blocked twice: abandon and dissolve;
+  - the lift never played: the close says so, and the record holds an attempt, not a theft.
+
+**B. The Friday collection at a stall.** Roles: a Tyger Claws collector and a stallholder.
+- **Before staging,** the engine draws the outcome from S1: paid or refused. The plan performs it and never decides it.
+- **Steps:**
+  1. The collector approaches.
+  2. Demand and answer, in alternating barks, each held for its reading time.
+  3. Either a payment, or a refusal: a shove, a threat, and the collector leaves.
+- **Precondition:** no police within view. Otherwise the collector waits, idling nearby, until the deadline; then the scene dissolves.
+- **If V interferes:**
+  - talks to the collector: hand over to dialogue;
+  - draws a weapon: the collector backs off, and the threat becomes a fact in the record, which can start a grievance (D-30).
+
+**C. A warning under D-30.** Roles: two members of a group with an intention against the protagonist. V is the target, never an actor the plan directs.
+- **Preconditions:** V isn't in combat, a vehicle, a vanilla scene, dialogue or a reserved area.
+- **Steps:**
+  1. The two find V in V's cell and approach.
+  2. They stop at speaking distance.
+  3. They deliver the warning in two or three barks.
+  4. They leave.
+- **If V walks away:** they call after V once, then leave.
+- **If V attacks:** the plan ends and the game's own AI takes over. The scene asserts no harm.
+- **The guarantee that matters:** the close reports whether the warning was **presented**, meaning shown in view, or heard, for its reading time. D-30's whole gate depends on it: no harm follows a warning that was never presented.
