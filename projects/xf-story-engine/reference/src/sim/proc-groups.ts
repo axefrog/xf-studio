@@ -327,7 +327,9 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         // so it is a cache that a reload may lose without changing a result.
         const lowest = sim.windowStart(Math.max(0, w - 6));
         const found: Array<{ id: Id; time: GameTime }> = [];
-        for (const id of sim.k.persistence.discoveryIdsOfKind('core:event')) {
+        // every window looks at the live events; the first window of a session also looks at the saved ones, which a sweep may have taken out of memory
+        const candidates = settled.size === 0 ? sim.k.persistence.discoveryIdsOfKind('core:event') : [...sim.k.store.eachIdOfKind('core:event')];
+        for (const id of candidates) {
           if (settled.has(id) || seen.has(id)) continue;
           const h = sim.k.persistence.restoreReferencedHeader(id);
           if (!h || h.origin.by !== 'minted' || ownCreators.has(h.origin.creator) || /^item:\d+$/.test(h.origin.name)) { settled.add(id); continue; }

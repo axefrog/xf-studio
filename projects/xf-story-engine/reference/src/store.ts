@@ -199,6 +199,11 @@ export class Store {
     return n;
   }
 
+  /** The ids of a kind in no particular order, without copying or sorting: for a scan that sorts what it keeps. */
+  eachIdOfKind(kind: KindId): Iterable<Id> {
+    return this.headersByKind.get(kind) ?? [];
+  }
+
   idsOfKind(kind: KindId): Id[] {
     return [...(this.headersByKind.get(kind) ?? [])].sort();
   }
