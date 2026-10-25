@@ -266,6 +266,7 @@ flowchart TB
   - **The desktop app is single-instance.** A second launch brings the running window forward and quits, so two host processes never share `workspace.json`.
   - **Release order.** A release first ends any open gesture or control edit, committed as one Undo step. Then it refuses edits, drains, makes the last workspace write, and releases.
   - **What stays available.** A read-only window still reads the library and keeps diagnostics. Its UI preferences work in memory, but are never written while it is read-only.
+  - **Unsupported browsers fail closed.** Without Web Locks or BroadcastChannel, localhost opens read-only with one next step: use an up-to-date browser. It offers no takeover and writes no workspace or library changes. Other lease-startup failures also retain the write guard and show the disconnected notice. The desktop stream lease owns its host workspace file; it is not a fallback for browser-local storage.
   - **Workspace identity.** On localhost the workspace key is a per-browser ID. Fencing generations and the outbox keys use the same ID.
   - **Takeover restarts the page,** until scene runtimes (phase 4a) allow switching in place.
   - **Where the read-only message shows.** It is a full-width notice under the header (style-guide pattern `t-read-only-window`). Editing controls show as unavailable, with the reason.

@@ -10,7 +10,7 @@
  *
  * The workspace a localhost browser edits is its own (its `localStorage`), so its identity is a random ID kept beside it.
  */
-import { ReleaseUnsaved, WorkspaceLease, type LeaseClock, type WorkspaceLeaseAdapter } from "../workspace/workspace-lease";
+import { ReleaseUnsaved, UnsupportedWorkspaceLease, WorkspaceLease, type LeaseClock, type WorkspaceLeaseAdapter } from "../workspace/workspace-lease";
 
 /** The page clock's timers for the lease. */
 export const browserLeaseClock: LeaseClock = {
@@ -248,27 +248,37 @@ export function desktopWorkspaceLease(options: {
 /**
  * The localhost page's lease, started: the browser workspace's identity, its Web Lock and channel, and the host's generations
  * (`/api/workspace-lease`, the `?verify` one under `/api/verification`). `workspace` is the identity the outbox's keys and every
- * command's fence carry (`document-outbox-device.ts`). Null where the browser has no Web Locks (the window is then the only writer it
- * can know of).
+ * command's fence carry (`document-outbox-device.ts`). Without either browser API, the lease stays read-only.
+ * Startup failures also retain a lease that refuses writes, rather than dropping the write guard.
  */
 export async function startBrowserWorkspaceLease(options: { verification: boolean; send?: typeof fetch;
-  report?: (error: unknown) => void }): Promise<{ lease: WorkspaceLease; workspace: string } | null> {
-  if (typeof navigator === "undefined" || !navigator.locks || typeof BroadcastChannel === "undefined") return null;
-  const send = options.send ?? fetch;
-  const workspace = await browserWorkspaceIdentity(localStorage, navigator.locks, options.verification);
-  const path = `${options.verification ? "/api/verification" : "/api"}/workspace-lease`;
-  const adapter = browserWorkspaceLease({ workspace, locks: navigator.locks, channel: new BroadcastChannel(`xfs.workspace.${workspace}`),
-    session: sessionStorage,
-    async register(signal) {
-      const response = await send(path, { method: "POST", signal, credentials: "same-origin",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace }) });
-      if (!response.ok) return null;
-      const { generation } = await response.json() as { generation?: unknown };
-      return typeof generation === "number" ? generation : null;
-    } });
+  report?: (error: unknown) => void }): Promise<{ lease: WorkspaceLease; workspace: string }> {
+  let workspace = options.verification ? "browser-verification" : "browser";
   const life = new AbortController();
   addEventListener("pagehide", () => life.abort(), { once: true });
-  const lease = new WorkspaceLease(adapter, { clock: browserLeaseClock, signal: life.signal, report: options.report });
-  await lease.start();
-  return { lease, workspace };
+  const start = async (adapter: WorkspaceLeaseAdapter) => {
+    const lease = new WorkspaceLease(adapter, { clock: browserLeaseClock, signal: life.signal, report: options.report });
+    await lease.start();
+    return { lease, workspace };
+  };
+  try {
+    if (typeof navigator === "undefined" || !navigator.locks || typeof BroadcastChannel === "undefined")
+      throw new UnsupportedWorkspaceLease();
+    const send = options.send ?? fetch;
+    workspace = await browserWorkspaceIdentity(localStorage, navigator.locks, options.verification);
+    const path = `${options.verification ? "/api/verification" : "/api"}/workspace-lease`;
+    const adapter = browserWorkspaceLease({ workspace, locks: navigator.locks, channel: new BroadcastChannel(`xfs.workspace.${workspace}`),
+      session: sessionStorage,
+      async register(signal) {
+        const response = await send(path, { method: "POST", signal, credentials: "same-origin",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace }) });
+        if (!response.ok) return null;
+        const { generation } = await response.json() as { generation?: unknown };
+        return typeof generation === "number" ? generation : null;
+      } });
+    return await start(adapter);
+  } catch (error) {
+    return start({ acquire: async () => { throw error; }, takeOver: async () => { throw error; },
+      onReleaseRequested() {}, release: async () => {} });
+  }
 }

@@ -44,7 +44,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **In-game styling for the bridge surfaces: the spec has landed, and the build is with XF · Runtime bridge.** The style guide's section "In-game surfaces" holds the token table (`studio-ui/style-guide/in-game-theme.ts`, imported by `tools/overlay/theme.ts`), the type roles, the components, the pulse and settle motion, and the reduced-motion rule for the overlay panel, the CET window and line, and the ink panel. The bridge builds it, including replacing the ink answers' fast red/yellow flash with a hold and ease. The UI track reviews the in-game captures. *22 Oct; spec 26 Oct*
 - **Polish batch 3 leftovers** (polish-3 merged 24 Oct, `54b109bb`):
   - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there. They need a real V, so the coordinator takes them.
-- **The rest of [Small bugs and friction](#small-bugs-and-friction):** the browser-without-locks fallback and WebView2 security. *21 Oct*
+- **The rest of [Small bugs and friction](#small-bugs-and-friction):** WebView2 security. *21 Oct*
 - **"Your first eye makeup mod" guided tour** (low priority). A spotlight walk-through on the existing guidance system: make two eye makeup looks, then Package (Check, Build) and install the mod, ready to test in game. It offers "Do it for me" where a step is tedious, and finishes by saying plainly what to check in game. Start it after profiles phase 2's UI lands (the tab strip, and the Layouts and Modules menus going in P2-iv and P2-v), so its anchors don't move under it. *24 Oct*
 
 ### Next tracks (ranked)
@@ -297,7 +297,6 @@ Existing brow, lash, hair and piercing *preview context* is not permission to bu
 
 Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
 
-- **Browser without workspace-lock APIs.** Normal browser tabs and desktop windows already have one-writer leases (profiles phase 1). The browser adapter still returns no lease when Web Locks or BroadcastChannel is unavailable, permitting an unfenced writable fallback. Decide the supported-browser message and fail closed there; the standard localhost and desktop paths are covered by `tests/workspace-lease.test.ts`.
 - **WebView2 runs with `--disable-web-security`** (DESK-09): Electrobun's native wrapper hard-codes the flag and no setting removes it; the CSP, session cookie and navigation rules still hold. Raise it upstream, or bundle CEF at the cost of a much larger installer.
 
 ## Working rules for this queue

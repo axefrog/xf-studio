@@ -21,6 +21,7 @@ export type WorkspaceLeaseAction = { kind: "workspace.takeOver" } | { kind: "wor
 export type WorkspaceLeaseOutcome = { ok: true } | { ok: false; code: string; message: string };
 
 export const LEASE_MESSAGES = {
+  unsupported: "This browser lacks a feature XF Studio needs to keep two tabs from overwriting each other. Use an up-to-date browser to edit this workspace.",
   readOnly: "This workspace is open in another window.",
   takingOver: "Taking over from the other window…",
   waiting: "Waiting for the other window to finish saving. Close the other window to continue.",
@@ -44,10 +45,11 @@ export const LEASE_MESSAGES = {
  * - `taken-over`: this page now holds the lease after a takeover; the page restarts from the released workspace.
  * - `reconciling`: a release was sent but its answer was lost; this page may not write until the host (or the browser) says who
  *   holds the lease now.
+ * - `unsupported`: the browser lacks the APIs needed to guarantee one writer; no edits or takeover are allowed.
  * - `disconnected`: this page can't hold the lease safely (its host stream ended, or the host issued no generation); it writes nothing.
  */
 export type LeasePhase = "starting" | "holder" | "releasing" | "release-failed" | "reconciling" | "read-only" | "taking-over" | "waiting"
-  | "taken-over" | "disconnected";
+  | "taken-over" | "disconnected" | "unsupported";
 export type LeaseState = { readonly phase: LeasePhase; readonly generation: number | null };
 export type LeaseEvent =
   | { kind: "acquired"; generation: number }
@@ -61,13 +63,16 @@ export type LeaseEvent =
   | { kind: "release-uncertain" }
   | { kind: "still-held" }
   | { kind: "released" }
-  | { kind: "lost" };
+  | { kind: "lost" }
+  | { kind: "unsupported" };
 
 /**
  * A release that stopped before anything was released: this page's own last writes didn't land, so it still holds the lease. Any other
  * failure of `WorkspaceLeaseAdapter.release` leaves the outcome uncertain (the release may have been granted elsewhere).
  */
 export class ReleaseUnsaved extends Error {}
+/** The device cannot guarantee one writer in this browser. */
+export class UnsupportedWorkspaceLease extends Error {}
 
 /** The read-only view of the lease for the presentation. */
 export type WorkspaceLeaseSnapshot = {
@@ -92,6 +97,7 @@ const writing = (phase: LeasePhase) => phase === "holder" || phase === "release-
 /** The pure transition: an event that doesn't apply to the phase changes nothing. */
 export function leaseTransition(state: LeaseState, event: LeaseEvent): LeaseState {
   switch (event.kind) {
+    case "unsupported": return state.phase === "starting" ? { phase: "unsupported", generation: null } : state;
     case "acquired": return state.phase === "starting" ? { phase: "holder", generation: event.generation } : state;
     case "held-elsewhere": return state.phase === "starting" ? { phase: "read-only", generation: null } : state;
     case "takeover-requested": return state.phase === "read-only" ? { phase: "taking-over", generation: null } : state;
@@ -111,9 +117,9 @@ export function leaseTransition(state: LeaseState, event: LeaseEvent): LeaseStat
 export function leaseSnapshot(state: LeaseState): WorkspaceLeaseSnapshot {
   const messages: Partial<Record<LeasePhase, string>> = { "read-only": LEASE_MESSAGES.readOnly, "taking-over": LEASE_MESSAGES.takingOver,
     waiting: LEASE_MESSAGES.waiting, releasing: LEASE_MESSAGES.releasing, starting: LEASE_MESSAGES.starting,
-    "release-failed": LEASE_MESSAGES.releaseFailed, disconnected: LEASE_MESSAGES.disconnected, reconciling: LEASE_MESSAGES.reconciling };
+    "release-failed": LEASE_MESSAGES.releaseFailed, disconnected: LEASE_MESSAGES.disconnected, reconciling: LEASE_MESSAGES.reconciling, unsupported: LEASE_MESSAGES.unsupported };
   const refusal = writing(state.phase) ? "" : state.phase === "starting" ? LEASE_MESSAGES.starting
-    : state.phase === "disconnected" ? LEASE_MESSAGES.disconnected : state.phase === "reconciling" ? LEASE_MESSAGES.reconciling : LEASE_MESSAGES.refused;
+    : state.phase === "unsupported" ? LEASE_MESSAGES.unsupported : state.phase === "disconnected" ? LEASE_MESSAGES.disconnected : state.phase === "reconciling" ? LEASE_MESSAGES.reconciling : LEASE_MESSAGES.refused;
   return { phase: state.phase, writable: writing(state.phase), message: messages[state.phase] ?? "", canTakeOver: state.phase === "read-only",
     canRetry: state.phase === "release-failed", canCancel: state.phase === "waiting", refusal };
 }
@@ -232,7 +238,7 @@ export class WorkspaceLease {
     const signal = this.options.signal ?? new AbortController().signal;
     let held: { generation: number } | null;
     try { held = await this.adapter.acquire(signal); }
-    catch (error) { this.options.report?.(error); this.apply({ kind: "lost" }); return this.snapshot(); }
+    catch (error) { this.options.report?.(error); this.apply({ kind: error instanceof UnsupportedWorkspaceLease ? "unsupported" : "lost" }); return this.snapshot(); }
     if (held && !Number.isSafeInteger(held.generation)) { this.apply({ kind: "lost" }); return this.snapshot(); }
     this.apply(held ? { kind: "acquired", generation: held.generation } : { kind: "held-elsewhere" });
     return this.snapshot();
