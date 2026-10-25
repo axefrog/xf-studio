@@ -195,6 +195,25 @@ int IncidentUnitTests()
         auto r = s.Observe(Obs("gunshot", 225, 0, {Person("A", kAggressor, 0, 20)}, 50, 20), 2);
         list = L(s, {{"state", "open"}});
         Check(r.incident == "inc-2" && list["incidents"][0]["continues"] == "inc-1", "split: the next part names the one it continues");
+        // the observation that came at 221 s was assigned to the NEW part (inc-2 started at 221), not absorbed into the overlong one
+        Check(list["incidents"][0]["when"]["start_sim_s"] == 221.0 && L(s, {{"state", "closed"}})["incidents"][0]["when"]["end_sim_s"] == 210.0,
+              "split: the overlong incident ends at its last observation and the next observation starts the continuation");
+    }
+    {
+        // Review fix 4: the maximum duration is enforced as the clock advances, with no observation to trigger it.
+        Service s;
+        for (int i = 0; i < 11; ++i) s.Observe(Obs("gunshot", 100 + i * 11, 0, {Person("A", kAggressor, 0, 20)}, 50, 20), 1 + i * 0.01);
+        // last observation at 210 s; the incident began at 100 s
+        Check(s.Tick(219, 5).empty() && L(s)["open"] == 1, "split on the poll: 119 s is not yet 120");
+        const auto reports = s.Tick(220.5, 6);
+        Check(reports.size() == 1 && reports[0]["closed"] == "max_duration" && L(s)["open"] == 0, "split on the poll: a tick at 120 s closes and reports it without any new observation");
+        const auto next = s.Observe(Obs("gunshot", 221, 0, {Person("A", kAggressor, 0, 20)}, 50, 20), 7);
+        Check(next.accepted && next.incident == "inc-2" && L(s, {{"state", "open"}})["incidents"][0]["continues"] == "inc-1", "split on the poll: the next observation opens the continuation and keeps the link");
+        // a quiet incident is closed as quiet, not as overlong, even when both hold
+        Service q;
+        q.Observe(Obs("gunshot", 100, 0, {Person("A", kAggressor, 0, 20)}, 50, 20), 1);
+        const auto quiet = q.Tick(300, 2);
+        Check(quiet.size() == 1 && quiet[0]["closed"] == "quiet", "split on the poll: quiet takes precedence over overlong");
     }
     {
         // a lone voice request joins a nearby incident; four of them make a report on their own
@@ -347,20 +366,84 @@ int IncidentUnitTests()
         Check(L(s, {{"limit", 2}})["incidents"].size() == 2, "list: the limit");
     }
     {
+        // Review fix 1: past the minute's allowance a witnessed incident's report waits and goes out as the allowance recovers.
         Config c;
         c.maxReportsPerMinute = 2;
         Service s(c);
-        int reports = 0;
+        std::vector<json> delivered;
         for (int i = 0; i < 5; ++i)
         {
             s.Observe(Obs("gunshot", 1000.0 * i, i * 500.0, {Person(std::to_string(i + 100).c_str(), kAggressor, i * 500.0, 20)}, 50, 20), 10 + i);
-            reports += static_cast<int>(s.Tick(1000.0 * i + 100, 10 + i + 0.5).size());
+            for (auto& r : s.Tick(1000.0 * i + 100, 10 + i + 0.5)) delivered.push_back(r);
         }
-        Check(reports == 2 && s.GetStats().reportsDropped == 3, "bounds: reports over the rate are dropped and counted");
-        const auto dropped = L(s, {{"limit", 1}});
-        Check(dropped["incidents"][0]["report_dropped"] == true && dropped["incidents"][0]["reported"] == false, "bounds: the incident says its report was dropped");
-        s.Observe(Obs("gunshot", 9000, 0, {Person("late", kAggressor, 0, 20)}, 50, 20), 200);
-        Check(s.Tick(9100, 201).size() == 1, "bounds: the allowance returns after a minute");
+        Check(delivered.size() == 2 && s.GetStats().reports == 2 && s.GetStats().reportsQueued == 3, "queue: over the allowance, two go out and three wait");
+        Check(L(s)["pending_reports"] == 3 && s.Coverage()["pending_reports"] == 3, "queue: the pending count is visible in the list and the coverage");
+        const auto waiting = L(s, {{"limit", 1}});
+        Check(waiting["incidents"][0]["report_pending"] == true && waiting["incidents"][0]["reported"] == false && waiting["incidents"][0]["report_gap"] == false, "queue: the incident says its report is pending");
+        Check(s.Drain(30).empty(), "queue: nothing goes out while the allowance is spent");
+        const auto first = s.Drain(75); // the first two went out at 10.5 and 11.5: both are over a minute old
+        Check(first.size() == 2 && first[0]["incident"] == "inc-3" && first[1]["incident"] == "inc-4" && first[0]["delayed"] == true && first[0]["event"] == "witness.report",
+              "queue: as the allowance recovers the oldest wait goes first, marked delayed");
+        const auto last = s.Tick(5000, 140);
+        Check(last.size() == 1 && last[0]["incident"] == "inc-5" && s.GetStats().reportsDelayed == 3 && L(s)["pending_reports"] == 0, "queue: every witnessed incident got its report");
+        Check(L(s, {{"limit", 1}})["incidents"][0]["reported"] == true && L(s, {{"limit", 1}})["incidents"][0]["report_pending"] == false, "queue: the kept incident is updated when its report goes");
+        Check(s.GetStats().reportGaps == 0, "queue: no gap while the queue held them");
+        // a fresh incident with an empty queue and room goes straight out (order is kept: nothing overtakes the queue)
+        s.Observe(Obs("gunshot", 9000, 0, {Person("late", kAggressor, 0, 20)}, 50, 20), 300);
+        Check(s.Tick(9100, 301).size() == 1, "queue: the allowance returns after a minute");
+    }
+    {
+        // Review fix 1: when the queue is full too, a witness.gap names the incident; nothing is lost silently.
+        Config c;
+        c.maxReportsPerMinute = 1;
+        c.maxPendingReports = 2;
+        Service s(c);
+        std::vector<json> out;
+        for (int i = 0; i < 5; ++i)
+        {
+            s.Observe(Obs("gunshot", 1000.0 * i, i * 500.0, {Person(std::to_string(i + 100).c_str(), kAggressor, i * 500.0, 20)}, 50, 20), 10 + i);
+            for (auto& r : s.Tick(1000.0 * i + 100, 10 + i + 0.5)) out.push_back(r);
+        }
+        int reports = 0, gaps = 0;
+        for (const auto& r : out) (r["event"] == "witness.gap" ? gaps : reports)++;
+        Check(reports == 1 && gaps == 2 && s.GetStats().reportsQueued == 2 && s.GetStats().reportGaps == 2, "gap: one report, two waiting, the other two named in witness.gap events");
+        const auto& gap = out[1];
+        Check(gap["event"] == "witness.gap" && gap["schema"] == "xfb/witness-gap-1" && gap["incident"] == "inc-4" && gap["reason"] == "report_queue_full" && gap["modes"] == json::array({"saw", "heard"}) && gap["passive"] == true,
+              "gap: the event names the incident, why, and how V perceived it");
+        const auto flagged = L(s, {{"limit", 1}});
+        Check(flagged["incidents"][0]["report_gap"] == true && flagged["incidents"][0]["reported"] == false, "gap: the incident says its report was lost");
+        Check(s.Coverage()["report_gaps"] == 2 && s.Coverage()["pending_reports"] == 2, "gap: coverage counts the gaps");
+        // the two that waited are not lost: they still go out
+        const auto later = s.Drain(200);
+        Check(later.size() == 1 && later[0]["delayed"] == true, "gap: the queue still drains as the allowance returns");
+    }
+    {
+        // Review fix 2: admission is bounded per second, per entity and per kind, and every refusal is counted.
+        Config c;
+        c.maxBuiltPerSecond = 6;
+        c.maxWeakBuiltPerSecond = 3;
+        c.maxPerKeyPerSecond = 2;
+        Service s(c);
+        int vShots = 0;
+        for (int i = 0; i < 20; ++i) vShots += s.Admit("gunshot", "V", 50.1) ? 1 : 0;
+        Check(vShots == 2 && s.GetStats().tapDroppedRepeat == 18, "admit: a burst of V's own shots is held to two a second and counted as repeats");
+        Check(s.Admit("death", "victim-1", 50.2) && s.Admit("collision", "car-1", 50.3) && s.Admit("gunshot", "npc-1", 50.4) && s.Admit("melee", "npc-2", 50.5),
+              "admit: a separately witnessed death, collision, other shooter and blow are all let in after the burst");
+        Check(s.GetStats().tapDroppedCap == 0 && s.GetStats().tapAdmitted == 6, "admit: the burst did not use the cap");
+        Check(!s.Admit("death", "victim-2", 50.6) && s.GetStats().tapDroppedCap == 1, "admit: past the per-second total it is refused and counted as the cap");
+        Check(s.Admit("death", "victim-3", 51.1), "admit: the next second has a fresh allowance");
+        // weak kinds cannot take the whole allowance
+        Service w(c);
+        int weak = 0;
+        for (int i = 0; i < 6; ++i) weak += w.Admit("voice", "bark-" + std::to_string(i), 7.1) ? 1 : 0;
+        Check(weak == 3 && w.GetStats().tapDroppedWeak == 3, "admit: barks are held to the weak share and counted");
+        int strong = 0;
+        for (int i = 0; i < 4; ++i) strong += w.Admit("death", "d-" + std::to_string(i), 7.2) ? 1 : 0;
+        Check(strong == 3, "admit: the room kept for direct acts is still there after a storm of barks");
+        Check(!w.Admit("not_a_kind", "x", 7.3), "admit: an unknown kind of evidence is refused");
+        const auto cover = w.Coverage();
+        Check(cover["tap_admitted"] == 6 && cover["tap_dropped_weak"] == 3 && cover["tap_dropped_cap"] >= 1 && cover["tap_dropped_repeat"] == 0, "admit: the counters are in the coverage heartbeat");
+        Check(L(w)["stats"]["tap_dropped_weak"] == 3 && L(w)["config"]["max_per_key_per_s"] == 2, "admit: and in incidents.list");
     }
     {
         Config c;
@@ -471,7 +554,7 @@ int IncidentUnitTests()
     }
     {
         const auto cfg = ConfigJson(xfb::incidents::Config{});
-        Check(cfg["quiet_s"] == 12.0 && cfg["max_open_s"] == 120.0 && cfg["join_radius_m"] == 35.0 && cfg["see_range_m"] == 80.0 && cfg["max_open"] == 32 && cfg["max_reports_per_min"] == 20, "config: the documented defaults");
+        Check(cfg["quiet_s"] == 12.0 && cfg["max_open_s"] == 120.0 && cfg["join_radius_m"] == 35.0 && cfg["see_range_m"] == 80.0 && cfg["max_open"] == 32 && cfg["max_reports_per_min"] == 20 && cfg["max_pending_reports"] == 64 && cfg["max_built_per_s"] == 24 && cfg["max_weak_built_per_s"] == 12 && cfg["max_per_key_per_s"] == 2, "config: the documented defaults");
         Service s;
         const auto cover = s.Coverage();
         Check(cover["valid"] == true && cover["event"] == "incident.coverage" && cover["passive"] == true && cover["told_supported"] == false, "coverage: the recorder heartbeat's sample");

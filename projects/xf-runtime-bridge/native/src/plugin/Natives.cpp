@@ -915,6 +915,19 @@ void IncidentSeenNative(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool
     });
 }
 
+// XFBridge_IncidentAdmit(evidence: String, key: String) -> Bool   (0.8.20): whether the taps may build one more observation now. Bounded
+// per second, by evidence and by entity, and every refusal counted, so a burst cannot starve other evidence nor vanish unseen.
+void IncidentAdmitNative(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool* out, int64_t)
+{
+    RED4ext::CString evidence, key; RED4ext::GetParameter(frame, &evidence); RED4ext::GetParameter(frame, &key); frame->code++;
+    if (out) *out = false;
+    Guarded("XFBridge_IncidentAdmit", [&] {
+        if (evidence.Length() >= 24 || key.Length() >= 64) return;
+        const bool admitted = IncidentAdmit(ToStd(evidence), ToStd(key));
+        if (out) *out = admitted;
+    });
+}
+
 // Test-only ingress: arming/taking cannot invoke SaveAnyway or enqueue any CET action.
 void TestUiTake(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, RED4ext::CString* out, int64_t)
 {
@@ -1024,13 +1037,14 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_Record", &RecordIngress, "Bool", {"channel", "payload"});
         RegisterGlobal(rtti, "XFBridge_RecordIdentity", &RecordIdentity, "String", {"channel"});
         RegisterGlobal(rtti, "XFBridge_IncidentSeen", &IncidentSeenNative, "Bool", {"payload"});
+        RegisterGlobal(rtti, "XFBridge_IncidentAdmit", &IncidentAdmitNative, "Bool", {"evidence", "key"});
 #endif
         RegisterGlobal(rtti, "XFBridge_Event", &ProbeEvent, "Bool", {"kind", "data"});
         RegisterGlobal(rtti, "XFBridge_ProbeFlags", &ProbeFlags, "Int32", {});
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
         #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-        log::Info("rtti.register_types", "phase=post_register natives=34");
+        log::Info("rtti.register_types", "phase=post_register natives=35");
 #else
         log::Info("rtti.register_types", "phase=post_register natives=27");
 #endif

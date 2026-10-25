@@ -95,6 +95,10 @@ struct Config
     size_t maxParticipants = 16;
     int maxObservationsPerSecond = 40; // accepted per wall-clock second; the rest are counted, not kept
     size_t maxReportsPerMinute = 20;
+    size_t maxPendingReports = 64;      // reports over the minute's allowance wait here and go out as it recovers
+    int maxBuiltPerSecond = 24;         // observations the taps may build in a wall-clock second (Admit)
+    int maxWeakBuiltPerSecond = 12;     // of those, the weak kinds (barks, screams, bodies): the rest is kept for direct acts
+    int maxPerKeyPerSecond = 2;         // of one kind of evidence from one entity: a burst of V's shots cannot starve the rest
 };
 json ConfigJson(const Config& aConfig);
 
@@ -174,7 +178,9 @@ struct Stats
 {
     uint64_t observed = 0, accepted = 0, droppedRate = 0, droppedInvalid = 0, droppedNoPlace = 0;
     uint64_t opened = 0, closed = 0, merged = 0, evictedOpen = 0;
-    uint64_t reports = 0, reportsDropped = 0, unwitnessed = 0, belowScore = 0, participantsDropped = 0;
+    uint64_t reports = 0, reportsQueued = 0, reportsDelayed = 0, reportGaps = 0, unwitnessed = 0, belowScore = 0, participantsDropped = 0;
+    // The taps' admission (Admit): what was let through to be built, and what was not, by reason.
+    uint64_t tapAdmitted = 0, tapDroppedCap = 0, tapDroppedWeak = 0, tapDroppedRepeat = 0;
 };
 
 class Service
@@ -183,6 +189,12 @@ public:
     explicit Service(Config aConfig = Config());
 
     Outcome Observe(const Observation& aObservation, double aWallS);
+    // Whether the taps may build one more observation of this evidence from this entity now (before any work is done on it). Bounded
+    // per wall-clock second: maxBuiltPerSecond in all, maxWeakBuiltPerSecond of the weak kinds, maxPerKeyPerSecond of one key (the
+    // evidence and the entity). Every refusal is counted by reason in the stats.
+    bool Admit(const std::string& aEvidence, const std::string& aKey, double aWallS);
+    // Reports that waited for the minute's allowance and can go now (witness.report with delayed true).
+    std::vector<json> Drain(double aWallS);
     // The one-second poll: closes the incidents that went quiet. Reports of the ones it closed.
     std::vector<json> Tick(double aSimS, double aWallS);
     std::vector<json> CloseAll(const std::string& aReason);
@@ -223,7 +235,7 @@ private:
         double sawFirstSim = -1, heardFirstSim = -1, sawNearest = -1, heardNearest = -1, heardRadius = 0;
         std::string sawVia;
         bool vInvolved = false;
-        bool reported = false, reportDropped = false;
+        bool reported = false, reportPending = false, reportGap = false;
         uint64_t continues = 0;
         std::vector<uint64_t> merged;
     };
@@ -231,6 +243,10 @@ private:
     void AdvanceClock(double aSimS, std::vector<json>& aReports);
     void CloseEverything(const std::string& aReason, std::vector<json>& aReports);
     void CloseExpired(double aSimS, std::vector<json>& aReports);
+    void CloseOverlong(std::vector<json>& aReports);
+    void PurgeReportTimes();
+    void DrainPending(std::vector<json>& aReports);
+    json BuildReport(const Incident& aIncident) const;
     void Close(Incident& aIncident, const std::string& aReason, std::vector<json>& aReports);
     void MergeInto(Incident& aInto, Incident& aFrom);
     void Absorb(Incident& aIncident, const Observation& aObservation);
@@ -250,6 +266,15 @@ private:
     int64_t m_rateSecond = -1;
     int m_rateCount = 0;
     std::deque<double> m_reportTimes; // wall seconds of recent reports
+    struct Pending
+    {
+        uint64_t number;
+        json report;
+    };
+    std::deque<Pending> m_pending;    // witnessed incidents whose report waits for the allowance, oldest first
+    int64_t m_admitSecond = -1;
+    int m_admitTotal = 0, m_admitWeak = 0;
+    std::vector<std::pair<std::string, int>> m_admitKeys;
     double m_lastWall = 0;
     Stats m_stats;
 };

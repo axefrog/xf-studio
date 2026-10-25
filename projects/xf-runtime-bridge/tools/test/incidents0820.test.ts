@@ -45,7 +45,33 @@ describe("0.8.20 the command and the recorder channel", () => {
   test("the version is 0.8.20 in the build and the tools", () => {
     expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.20/);
     expect(JSON.parse(read("package.json")).version).toBe("0.8.20");
-    expect(natives).toContain("natives=34");
+    expect(natives).toContain("natives=35");
+  });
+});
+
+describe("0.8.20 review fixes in the taps", () => {
+  test("fix 3: a ray that hit with an invalid result is Unchecked, not clear", () => {
+    const ray = taps.slice(taps.indexOf("public func Ray(point: Vector4)"), taps.indexOf("// An XF actor's handle"));
+    const noHit = ray.indexOf("if !hit {"), invalid = ray.indexOf("if !TraceResult.IsValid(result) {");
+    expect(noHit).toBeGreaterThan(0);
+    expect(invalid).toBeGreaterThan(noHit);
+    expect(ray.slice(noHit, invalid)).toContain("return 0;");
+    expect(ray.slice(invalid, invalid + 60)).toContain("return 2;");
+    expect(ray).not.toContain("!hit || !TraceResult.IsValid(result)");
+    // and the core treats an unchecked ray as no sight (UnitTestsIncidents: "a ray that wasn't cast proves nothing")
+    expect(core).toContain("f.los != Los::Clear");
+  });
+  test("fix 2: every tap asks the plugin's admission before building anything, with its evidence and the entity", () => {
+    const begins = [...taps.matchAll(/XFIncidentTap\.Begin\(at, (\w+|"\w+"), (\w+)\)/g)].map(m => m[1]);
+    expect(begins.sort()).toEqual(['"combat"', '"death"', '"reprimand"', '"theft"', '"voice"', "evidence"].sort());
+    const begin = taps.slice(taps.indexOf("public static func Begin("), taps.indexOf("// One person or vehicle with V's samples"));
+    expect(begin.indexOf("Vector4.Distance(view.vPos, at) > 160.0")).toBeLessThan(begin.indexOf("XFBridge_IncidentAdmit"));
+    expect(begin.indexOf("XFBridge_IncidentAdmit")).toBeLessThan(begin.indexOf("return view;"));
+    // the plugin's side: registered, counted, and bounded by evidence and key
+    expect(natives).toContain('"XFBridge_IncidentAdmit"');
+    expect(core).toContain("++m_stats.tapDroppedRepeat");
+    expect(core).toContain("++m_stats.tapDroppedWeak");
+    expect(core).toContain("++m_stats.tapDroppedCap");
   });
 });
 
@@ -62,6 +88,7 @@ describe("0.8.20 the taps: autonomous only, wired to a registered native, passiv
     const text = autonomous.map(s => s.text).join("\n");
     expect(text).toContain("XFIncidentTap");
     expect(text).toContain("public static native func XFBridge_IncidentSeen(payload: String) -> Bool");
+    expect(text).toContain("public static native func XFBridge_IncidentAdmit(evidence: String, key: String) -> Bool");
     expect(() => assertNativeGlobals(autonomous, natives, true)).not.toThrow();
     // registered inside the autonomous-only block, so a normal DLL has no such native
     const block = natives.slice(natives.indexOf("#ifdef XFB_AUTONOMOUS_TEST_HOOKS\n        RegisterGlobal(rtti, \"XFBridge_TestUiTake\""));
@@ -85,7 +112,7 @@ describe("0.8.20 the taps: autonomous only, wired to a registered native, passiv
     // the one thing it does register is a delay callback that sends the simulation clock
     expect(code.match(/DelayCallback\(/g)!.length).toBe(2);
     // the only native it calls with data is the incident one, and reads are gated and bounded
-    expect(code.match(/XFBridge_\w+\(/g)!.filter(n => !["XFBridge_ProbeFlags(", "XFBridge_Live(", "XFBridge_IncidentSeen("].includes(n))).toEqual([]);
+    expect(code.match(/XFBridge_\w+\(/g)!.filter(n => !["XFBridge_ProbeFlags(", "XFBridge_Live(", "XFBridge_IncidentSeen(", "XFBridge_IncidentAdmit("].includes(n))).toEqual([]);
   });
   test("the world-object rule holds in the taps: every native's answer in a local before text is built", () => {
     expect(inlineNativeResults(taps, "XFRuntimeBridgeIncidents.reds")).toEqual([]);
@@ -98,7 +125,8 @@ describe("0.8.20 the taps: autonomous only, wired to a registered native, passiv
       expect(taps).toContain(`n"${bark}"`);
     expect(taps).not.toContain('n"fear_foll"'); // a stalking line, not a fright
     expect(taps).toContain("> 160.0"); // the distance gate
-    expect(taps).toContain("this.m_count >= 24"); // the per-second allowance
+    expect(taps).toContain("XFBridge_IncidentAdmit(evidence, key)"); // the per-second admission is the plugin's, counted
+    expect(taps).not.toContain("m_windowStart"); // no uncounted allowance of the script's own
     expect(taps).toContain("distance <= 80.0"); // rays only within the see range
   });
   test("the wire keys the taps send are the keys the core parses, and the evidence names agree", () => {
@@ -137,9 +165,49 @@ function fixture() {
   const report = (id: string, kind: string, modes: string[], extra: Json = {}) => ({ event: "witness.report", incident: id, kind, state: "closed", closed: "quiet", v_involved: false,
     participants: [{ entity: "1" }, { entity: "2" }], place: { position: [1, 2, 3], district_v: "Watson_Kabuki" }, when: { start_sim_s: 1, end_sim_s: 5 }, confidence: 0.8, perceived: { modes }, ...extra });
   const record = (data: Json, channel = "incidents") => rows.push({ seq: rows.length + 1, run: 1, session: "s", world_generation: 1, valid: true, source_s: 10 + rows.length, channel, data });
-  const session = (data: Json) => events.push({ seq: events.length + 1, kind: "witness.report", source_s: 10 + events.length, data });
+  const session = (data: Json, kind = "witness.report") => events.push({ seq: events.length + 1, kind, source_s: 10 + events.length, data });
   return { api, report, record, session };
 }
+
+describe("0.8.20 review fixes: catch-up counts what the incident tap could not show", () => {
+  const cover = (over: Json) => ({ event: "incident.coverage", valid: true, dropped_rate: 0, dropped_invalid: 0, tap_dropped_cap: 0, tap_dropped_weak: 0, tap_dropped_repeat: 0, report_gaps: 0, pending_reports: 0, ...over });
+  test("fix 2: evidence the plugin or the taps' admission refused makes the page incomplete, once, against the cursor's baseline", async () => {
+    const f = fixture();
+    f.record(cover({}));
+    f.record(cover({ tap_dropped_cap: 3, tap_dropped_repeat: 40 }));
+    const first = await catchUp(f.api, { run: 1, digest: false });
+    expect(first.gaps).toContain("incident_evidence_dropped");
+    expect(first.complete).toBe(false);
+    expect(first.incident_summary.coverage).toMatchObject({ evidence_dropped_by_tap: 3, evidence_dropped_by_plugin: 0, coalesced_repeats_total: 40 });
+    expect(first.cursor.incident_counters).toEqual({ dropped: 0, tap_dropped: 3, report_gaps: 0 });
+    f.record(cover({ tap_dropped_cap: 3, tap_dropped_repeat: 80 }));
+    const quiet = await catchUp(f.api, { cursor: first.cursor, digest: false });
+    expect(quiet.gaps).not.toContain("incident_evidence_dropped"); // repeats are coalesced, not lost; nothing new was refused
+    f.record(cover({ tap_dropped_cap: 3, dropped_rate: 2 }));
+    const again = await catchUp(f.api, { cursor: quiet.cursor, digest: false });
+    expect(again.gaps).toContain("incident_evidence_dropped");
+    expect(again.incident_summary.coverage.evidence_dropped_by_plugin).toBe(2);
+    expect(validate(findCommand("game.catchup")!.input, { cursor: again.cursor })).toEqual([]);
+    expect(validate(findCommand("game.catchup")!.input, { cursor: { ...again.cursor, incident_counters: { dropped: -1, tap_dropped: 0, report_gaps: 0 } } }).length).toBeGreaterThan(0);
+  });
+  test("fix 1: a witness.gap, or a growing report_gaps counter, is a visible gap with the incident named", async () => {
+    const f = fixture();
+    f.record(cover({}));
+    f.record({ event: "witness.gap", incident: "inc-9", kind: "street_fight", modes: ["saw"], reason: "report_queue_full" });
+    f.session({ incident: "inc-9", kind: "street_fight", reason: "report_queue_full" }, "witness.gap");
+    f.record(cover({ report_gaps: 1, pending_reports: 4 }));
+    const page = await catchUp(f.api, { run: 1, digest: false });
+    expect(page.gaps).toContain("incident_report_gap");
+    expect(page.incident_summary.coverage).toMatchObject({ report_gaps: 1, report_gap_incidents: ["inc-9"], reports_pending: 4 });
+    expect(page.complete).toBe(false);
+  });
+  test("a page with no incident channel adds no gaps and no baseline", async () => {
+    const f = fixture();
+    const page = await catchUp(f.api, { run: 1, digest: false });
+    expect(page.gaps).toEqual([]);
+    expect(page.cursor.incident_counters).toBeUndefined();
+  });
+});
 
 describe("0.8.20 catch-up mentions the witnessed incidents", () => {
   test("the recorder's whole report and the session event's short form are one incident each", async () => {

@@ -15,11 +15,32 @@ function supervisionByActor(supervision: any[]): Record<string, { violations: nu
   }
   return out;
 }
+export type IncidentCounters = { dropped: number; tap_dropped: number; report_gaps: number };
+const counterOf = (d: Json): IncidentCounters => ({ dropped: (d.dropped_rate ?? 0) + (d.dropped_invalid ?? 0), tap_dropped: (d.tap_dropped_cap ?? 0) + (d.tap_dropped_weak ?? 0), report_gaps: d.report_gaps ?? 0 });
+/**
+ * 0.8.20 (review): what the incident tap could not show in this interval, from the recorder's incident.coverage heartbeats (counters are
+ * the plugin's, cumulative) against the cursor's baseline. Evidence the plugin refused (rate, invalid) or the taps' admission refused
+ * (cap, weak kinds) and reports lost to a full queue are incompleteness: gaps. Repeats of one kind of evidence from one entity inside a
+ * second are coalesced, not lost, and are reported apart.
+ */
+export function incidentCoverage(records: Json[], events: Json[], baseline: IncidentCounters | undefined, gaps: string[]): { counters?: IncidentCounters; summary: Json } {
+  const rows = records.filter(r => r.channel === "incidents" && r.valid && r.data?.event === "incident.coverage");
+  const last = rows.at(-1)?.data;
+  const now = last ? counterOf(last) : undefined;
+  const start = baseline ?? (rows.length ? counterOf(rows[0]!.data) : undefined);
+  const delta = now && start ? { dropped: Math.max(0, now.dropped - start.dropped), tap_dropped: Math.max(0, now.tap_dropped - start.tap_dropped), report_gaps: Math.max(0, now.report_gaps - start.report_gaps) } : { dropped: 0, tap_dropped: 0, report_gaps: 0 };
+  const lostEvents = [...records.filter(r => r.channel === "incidents" && r.valid && r.data?.event === "witness.gap").map(r => r.data), ...events.filter(e => e.kind === "witness.gap").map(e => e.data)];
+  const gapIncidents = [...new Set(lostEvents.map(g => g?.incident).filter(Boolean))];
+  if (delta.dropped || delta.tap_dropped) gaps.push("incident_evidence_dropped");
+  if (delta.report_gaps || gapIncidents.length) gaps.push("incident_report_gap");
+  return { counters: now ?? baseline, summary: { evidence_dropped_by_plugin: delta.dropped, evidence_dropped_by_tap: delta.tap_dropped, report_gaps: Math.max(delta.report_gaps, gapIncidents.length),
+    report_gap_incidents: gapIncidents, reports_pending: last?.pending_reports ?? null, coalesced_repeats_total: last?.tap_dropped_repeat ?? null, coverage_rows: rows.length } };
+}
 /**
  * 0.8.20: the incidents V witnessed in the interval (witness.report), from the recorder's incidents channel (the whole report) and from
  * session.events (a short form, always on), each incident once. Passive: a report says what V perceived, nothing about anyone's ties.
  */
-export function witnessedIncidents(records: Json[], events: Json[], recording: boolean, complete: boolean, detail: boolean): Json {
+export function witnessedIncidents(records: Json[], events: Json[], recording: boolean, complete: boolean, detail: boolean, coverage?: Json): Json {
   const found = new Map<string, Json>();
   const add = (d: Json, source: string, at: unknown) => {
     if (!d || typeof d.incident !== "string") return;
@@ -52,7 +73,7 @@ export function witnessedIncidents(records: Json[], events: Json[], recording: b
   const shown = detail ? reports : reports.slice(-24);
   return { message: reports.length ? `while you were away: V witnessed ${reports.length} incident${reports.length === 1 ? "" : "s"} (${kinds})` : "while you were away: no witnessed incident reported",
     count: reports.length, by_kind: byKind, by_mode: { saw, heard, told: 0 }, v_involved: involved, reports: shown, omitted: reports.length - shown.length,
-    recorder_channel: recording, history_complete: complete,
+    recorder_channel: recording, history_complete: complete, ...(coverage ? { coverage } : {}),
     note: "Passive. Saw means a person other than V was in V's view, unoccluded by static geometry; heard means V was inside the stimulus' audible radius; was told is not sensed. Sampled when the game raised each event." };
 }
 
@@ -61,6 +82,8 @@ export type TimelineCursor = FileCursor & {
   schema: "xfb/timeline-cursor-1"; sid: string; run: number; world: number; record: number; event: number;
   last_v?: Json;
   contact_observed?: boolean; vehicle_hit_observed?: boolean;
+  /** 0.8.20: the plugin's incident counters at the cursor, so the next call reports what was refused since. */
+  incident_counters?: { dropped: number; tap_dropped: number; report_gaps: number };
   supervisor_seen?: number[];
   supervisor_retired_through?: number;
   supervisor_reconciliation_lost?: boolean;
@@ -80,6 +103,8 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     (saved.supervisor_reconciliation_lost !== undefined && typeof saved.supervisor_reconciliation_lost !== "boolean"))) throw new Error("Invalid supervisor reconciliation cursor");
   const sc = saved?.source_counters as Json | undefined;
   if (sc !== undefined && !(sc && typeof sc === "object" && seq(sc.dropped) && seq(sc.invalid) && seq(sc.missed_deadlines) && typeof sc.file_error === "boolean")) throw new Error("Invalid source counter baseline");
+  const ic = saved?.incident_counters as Json | undefined;
+  if (ic !== undefined && !(ic && typeof ic === "object" && seq(ic.dropped) && seq(ic.tap_dropped) && seq(ic.report_gaps))) throw new Error("Invalid incident counter baseline");
   if (saved && ((saved.last_v_seq !== undefined && !seq(saved.last_v_seq)) || (saved.last_v_source_s !== undefined && !Number.isFinite(saved.last_v_source_s)))) throw new Error("Invalid last V marker");
   const run = saved?.run ?? options.run;
   if (!seq(run) || !run) throw new Error("Supply the recorder run on the first catch-up read");
@@ -256,6 +281,8 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   if (supervision.some(v => v.event === "supervisor.gap")) gaps.push("supervisor_history_lost");
   cursor.contact_observed = saved?.contact_observed === true || contactObserved;
   cursor.vehicle_hit_observed = saved?.vehicle_hit_observed === true || vehicleHitObserved;
+  const incidentCover = incidentCoverage(records, events, saved?.incident_counters, gaps);
+  if (incidentCover.counters) cursor.incident_counters = incidentCover.counters;
   const coveredPaths = status.channels?.includes("contacts") ? ["PlayerPuppet.OnCarHitPlayer.entry", "AbstractLandEvents.OnEnter", "WallCollisionHelpers.GetWallCollision"] : [];
   cursor.last_v = last ? { position: last.position, vitals: { health: last.vitals?.health, in_combat: last.vitals?.in_combat },
     heat: typeof last.heat === "string" ? last.heat : JSON.stringify(last.heat),
@@ -312,7 +339,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       observed_since_cursor: contactObserved, observed_in_run: cursor.contact_observed, vehicle_hit_observed_in_run: cursor.vehicle_hit_observed,
       covered_paths: coveredPaths, commissioned: false, continuous: false, no_contact_proof: false,
       vehicle_contact_without_hit: "INCONCLUSIVE", controller_other_identity: "unavailable", history_complete: !gaps.length && !recordMore && !eventMore },
-    incident_summary: witnessedIncidents(records, events, !!status.channels?.includes("incidents"), !gaps.length && !recordMore && !eventMore, !!options.detail),
+    incident_summary: witnessedIncidents(records, events, !!status.channels?.includes("incidents"), !gaps.length && !recordMore && !eventMore, !!options.detail, incidentCover.summary),
     contact_coverage: "Partial uncommissioned car-hit-entry and landing/wall controller reports when contacts selected; supporting ground included; never full no-contact proof",
     calibration, ...(options.detail ? { records } : {}),
     ...(nowDigest === undefined ? {} : { now: nowDigest }) };

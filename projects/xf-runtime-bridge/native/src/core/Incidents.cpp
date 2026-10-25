@@ -192,7 +192,11 @@ json ConfigJson(const Config& aConfig)
             {"max_closed", aConfig.maxClosed},
             {"max_participants", aConfig.maxParticipants},
             {"max_observations_per_s", aConfig.maxObservationsPerSecond},
-            {"max_reports_per_min", aConfig.maxReportsPerMinute}};
+            {"max_reports_per_min", aConfig.maxReportsPerMinute},
+            {"max_pending_reports", aConfig.maxPendingReports},
+            {"max_built_per_s", aConfig.maxBuiltPerSecond},
+            {"max_weak_built_per_s", aConfig.maxWeakBuiltPerSecond},
+            {"max_per_key_per_s", aConfig.maxPerKeyPerSecond}};
 }
 
 std::optional<Observation> ParseObservation(const json& aWire, std::string& aWhy)
@@ -483,7 +487,8 @@ json Service::Describe(const Incident& aIncident) const
                 {"observations", aIncident.observations},
                 {"closed", aIncident.open ? json(nullptr) : json(aIncident.closeReason)},
                 {"reported", aIncident.reported},
-                {"report_dropped", aIncident.reportDropped},
+                {"report_pending", aIncident.reportPending},
+                {"report_gap", aIncident.reportGap},
                 {"continues", aIncident.continues ? json(IdText(aIncident.continues)) : json(nullptr)},
                 {"passive", true}};
     if (!aIncident.merged.empty())
@@ -496,6 +501,124 @@ json Service::Describe(const Incident& aIncident) const
         out["merged"] = std::move(merged);
     }
     return out;
+}
+
+void Service::PurgeReportTimes()
+{
+    while (!m_reportTimes.empty() && m_lastWall - m_reportTimes.front() > 60.0)
+    {
+        m_reportTimes.pop_front();
+    }
+}
+
+json Service::BuildReport(const Incident& aIncident) const
+{
+    auto report = Describe(aIncident);
+    report["event"] = "witness.report";
+    // The recorder keeps 8 KiB a record: a crowd of people shrinks to eight, then loses its positions.
+    if (SerializeJson(report).size() > 7000)
+    {
+        auto& list = report["participants"];
+        while (list.size() > 8)
+        {
+            list.erase(list.size() - 1);
+        }
+        report["truncated"] = true;
+    }
+    if (SerializeJson(report).size() > 7000)
+    {
+        for (auto& p : report["participants"])
+        {
+            p.erase("position");
+            p.erase("record");
+        }
+    }
+    return report;
+}
+
+void Service::DrainPending(std::vector<json>& aReports)
+{
+    PurgeReportTimes();
+    while (!m_pending.empty() && m_reportTimes.size() < m_config.maxReportsPerMinute)
+    {
+        auto entry = std::move(m_pending.front());
+        m_pending.pop_front();
+        m_reportTimes.push_back(m_lastWall);
+        entry.report["reported"] = true;
+        entry.report["report_pending"] = false;
+        entry.report["delayed"] = true;
+        for (auto& closed : m_closed)
+        {
+            if (closed.number == entry.number)
+            {
+                closed.reported = true;
+                closed.reportPending = false;
+            }
+        }
+        ++m_stats.reports;
+        ++m_stats.reportsDelayed;
+        aReports.push_back(std::move(entry.report));
+    }
+}
+
+std::vector<json> Service::Drain(double aWallS)
+{
+    std::vector<json> reports;
+    std::scoped_lock lock(m_mutex);
+    m_lastWall = aWallS;
+    DrainPending(reports);
+    return reports;
+}
+
+bool Service::Admit(const std::string& aEvidence, const std::string& aKey, double aWallS)
+{
+    std::scoped_lock lock(m_mutex);
+    const auto* info = FindEvidence(aEvidence);
+    if (!info)
+    {
+        ++m_stats.tapDroppedCap;
+        return false;
+    }
+    const auto second = static_cast<int64_t>(std::floor(aWallS));
+    if (second != m_admitSecond)
+    {
+        m_admitSecond = second;
+        m_admitTotal = 0;
+        m_admitWeak = 0;
+        m_admitKeys.clear();
+    }
+    const std::string key = aEvidence + ":" + aKey;
+    auto found = std::find_if(m_admitKeys.begin(), m_admitKeys.end(), [&](const auto& item) { return item.first == key; });
+    // Checked in this order so that a burst from one entity is counted as repeats, not as the cap, and never uses up the room
+    // other evidence needs.
+    if (found != m_admitKeys.end() && found->second >= m_config.maxPerKeyPerSecond)
+    {
+        ++m_stats.tapDroppedRepeat;
+        return false;
+    }
+    if (m_admitTotal >= m_config.maxBuiltPerSecond)
+    {
+        ++m_stats.tapDroppedCap;
+        return false;
+    }
+    const bool weak = info->weight < 1.0;
+    if (weak && m_admitWeak >= m_config.maxWeakBuiltPerSecond)
+    {
+        ++m_stats.tapDroppedWeak;
+        return false;
+    }
+    ++m_admitTotal;
+    m_admitWeak += weak ? 1 : 0;
+    if (found != m_admitKeys.end())
+    {
+        ++found->second;
+    }
+    else
+    {
+        m_admitKeys.emplace_back(key, 1);
+    }
+    ++m_stats.tapAdmitted;
+    return true;
 }
 
 void Service::Close(Incident& aIncident, const std::string& aReason, std::vector<json>& aReports)
@@ -513,41 +636,40 @@ void Service::Close(Incident& aIncident, const std::string& aReason, std::vector
     }
     else
     {
-        while (!m_reportTimes.empty() && m_lastWall - m_reportTimes.front() > 60.0)
-        {
-            m_reportTimes.pop_front();
-        }
-        if (m_reportTimes.size() >= m_config.maxReportsPerMinute)
-        {
-            aIncident.reportDropped = true;
-            ++m_stats.reportsDropped;
-        }
-        else
+        // A witnessed incident gets its report or a visible gap, never silence. Over the minute's allowance the report waits in a
+        // bounded queue and goes out as the allowance recovers; if the queue is full too, a witness.gap event names the incident.
+        PurgeReportTimes();
+        auto report = BuildReport(aIncident);
+        if (m_pending.empty() && m_reportTimes.size() < m_config.maxReportsPerMinute)
         {
             m_reportTimes.push_back(m_lastWall);
             aIncident.reported = true;
+            report["reported"] = true;
             ++m_stats.reports;
-            auto report = Describe(aIncident);
-            report["event"] = "witness.report";
-            // The recorder keeps 8 KiB a record: a crowd of people shrinks to eight, then loses its positions.
-            if (SerializeJson(report).size() > 7000)
-            {
-                auto& list = report["participants"];
-                while (list.size() > 8)
-                {
-                    list.erase(list.size() - 1);
-                }
-                report["truncated"] = true;
-            }
-            if (SerializeJson(report).size() > 7000)
-            {
-                for (auto& p : report["participants"])
-                {
-                    p.erase("position");
-                    p.erase("record");
-                }
-            }
             aReports.push_back(std::move(report));
+        }
+        else if (m_pending.size() < m_config.maxPendingReports)
+        {
+            aIncident.reportPending = true;
+            report["report_pending"] = true;
+            m_pending.push_back({aIncident.number, std::move(report)});
+            ++m_stats.reportsQueued;
+        }
+        else
+        {
+            aIncident.reportGap = true;
+            ++m_stats.reportGaps;
+            aReports.push_back({{"event", "witness.gap"},
+                                {"schema", "xfb/witness-gap-1"},
+                                {"incident", IdText(aIncident.number)},
+                                {"kind", KindName(Resolve(aIncident))},
+                                {"world", aIncident.world},
+                                {"modes", report["perceived"]["modes"]},
+                                {"v_involved", aIncident.vInvolved},
+                                {"reason", "report_queue_full"},
+                                {"queue_limit", m_config.maxPendingReports},
+                                {"note", "this incident was witnessed and its report was lost: the reports waiting for the minute's allowance filled the queue"},
+                                {"passive", true}});
         }
     }
     m_closed.push_back(aIncident);
@@ -604,6 +726,32 @@ void Service::AdvanceClock(double aSimS, std::vector<json>& aReports)
     }
     m_haveSim = true;
     CloseExpired(m_lastSim, aReports);
+    CloseOverlong(aReports);
+    DrainPending(aReports);
+}
+
+// An incident that has run for maxOpenS is closed as the clock advances (a tick or an observation, before that observation is
+// assigned), so the next part starts fresh and names it in continues.
+void Service::CloseOverlong(std::vector<json>& aReports)
+{
+    std::vector<Incident> over;
+    for (size_t i = 0; i < m_open.size();)
+    {
+        if (m_lastSim - m_open[i].startSim >= m_config.maxOpenS)
+        {
+            over.push_back(std::move(m_open[i]));
+            m_open.erase(m_open.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+        else
+        {
+            ++i;
+        }
+    }
+    std::sort(over.begin(), over.end(), [](const Incident& a, const Incident& b) { return a.number < b.number; });
+    for (auto& incident : over)
+    {
+        Close(incident, "max_duration", aReports);
+    }
 }
 
 std::vector<json> Service::Tick(double aSimS, double aWallS)
@@ -1031,12 +1179,6 @@ Outcome Service::Observe(const Observation& aObservation, double aWallS)
     out.accepted = true;
     out.incident = IdText(incident->number);
     ++m_stats.accepted;
-    if (incident->lastSim - incident->startSim >= m_config.maxOpenS)
-    {
-        Incident done = std::move(*incident);
-        m_open.erase(m_open.begin() + (incident - m_open.data()));
-        Close(done, "max_duration", out.reports);
-    }
     return out;
 }
 
@@ -1081,11 +1223,13 @@ json Service::List(const ListQuery& aQuery) const
             {"incidents", std::move(list)},
             {"open", m_open.size()},
             {"kept_closed", m_closed.size()},
+            {"pending_reports", m_pending.size()},
             {"world", m_world},
             {"sim_s", m_haveSim ? json(Round(m_lastSim)) : json(nullptr)},
             {"stats", {{"observed", s.observed}, {"accepted", s.accepted}, {"dropped_rate", s.droppedRate}, {"dropped_invalid", s.droppedInvalid},
                        {"dropped_no_place", s.droppedNoPlace}, {"opened", s.opened}, {"closed", s.closed}, {"merged", s.merged},
-                       {"evicted_open", s.evictedOpen}, {"reports", s.reports}, {"reports_dropped", s.reportsDropped},
+                       {"evicted_open", s.evictedOpen}, {"reports", s.reports}, {"reports_queued", s.reportsQueued}, {"reports_delayed", s.reportsDelayed}, {"report_gaps", s.reportGaps},
+                       {"tap_admitted", s.tapAdmitted}, {"tap_dropped_cap", s.tapDroppedCap}, {"tap_dropped_weak", s.tapDroppedWeak}, {"tap_dropped_repeat", s.tapDroppedRepeat},
                        {"unwitnessed", s.unwitnessed}, {"below_score", s.belowScore}, {"participants_dropped", s.participantsDropped}}},
             {"config", ConfigJson(m_config)},
             {"told", {{"supported", false}, {"note", "was told comes from dialogue and isn't sensed"}}},
@@ -1105,7 +1249,14 @@ json Service::Coverage() const
             {"dropped_rate", s.droppedRate},
             {"dropped_invalid", s.droppedInvalid},
             {"reports", s.reports},
-            {"reports_dropped", s.reportsDropped},
+            {"reports_queued", s.reportsQueued},
+            {"reports_delayed", s.reportsDelayed},
+            {"pending_reports", m_pending.size()},
+            {"report_gaps", s.reportGaps},
+            {"tap_admitted", s.tapAdmitted},
+            {"tap_dropped_cap", s.tapDroppedCap},
+            {"tap_dropped_weak", s.tapDroppedWeak},
+            {"tap_dropped_repeat", s.tapDroppedRepeat},
             {"evicted_open", s.evictedOpen},
             {"told_supported", false},
             {"passive", true}};

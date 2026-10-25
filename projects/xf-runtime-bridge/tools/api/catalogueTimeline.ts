@@ -30,6 +30,8 @@ const cursorSchema = { ...obj({ schema: oneOf("Cursor schema", ["xfb/timeline-cu
   supervisor_reconciliation_lost: bool("Compaction made older reconciliation incomplete; preserve returned value"),
   last_v_seq: int("Recorder sequence of the newest V sample seen; preserve returned value", 0, Number.MAX_SAFE_INTEGER),
   last_v_source_s: num("Source time of the newest V sample seen; preserve returned value"),
+  incident_counters: { ...obj({ dropped: int("Observations the plugin refused (rate, invalid) at the cursor", 0, Number.MAX_SAFE_INTEGER), tap_dropped: int("Observations the taps' admission refused (cap, weak kinds) at the cursor", 0, Number.MAX_SAFE_INTEGER),
+    report_gaps: int("Witnessed incidents whose report was lost at the cursor", 0, Number.MAX_SAFE_INTEGER) }, ["dropped", "tap_dropped", "report_gaps"]), description: "The incident counters at the cursor, so incompleteness describes the interval since it; preserve returned value" },
   source_counters: { ...obj({ dropped: int("Recorder drops at the cursor", 0, Number.MAX_SAFE_INTEGER), invalid: int("Invalid samples at the cursor", 0, Number.MAX_SAFE_INTEGER),
     missed_deadlines: int("Missed sample deadlines at the cursor", 0, Number.MAX_SAFE_INTEGER), file_error: bool("Native writer error at the cursor") },
     ["dropped", "invalid", "missed_deadlines", "file_error"]), description: "Source loss counts at the cursor, so coverage gaps describe the interval since it; preserve returned value" },

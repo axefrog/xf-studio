@@ -74,4 +74,7 @@ public static native func XFBridge_RecordIdentity(channel: String) -> String
 // Bridge 0.8.20: one observation, or a one-second tick, from the incident taps (core/Incidents.hpp): what V witnessed, as reports
 // tied to their incidents. Passive; answers whether the plugin took it.
 public static native func XFBridge_IncidentSeen(payload: String) -> Bool
+// Whether the taps may build one more observation of this evidence from this entity now (bounded per second, by evidence and by
+// entity; every refusal is counted in incidents.list's stats), asked before any work is done on it.
+public static native func XFBridge_IncidentAdmit(evidence: String, key: String) -> Bool
 // END XFB_AUTONOMOUS_TEST_HOOKS

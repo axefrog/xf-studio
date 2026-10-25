@@ -34,7 +34,8 @@
 //
 // V's perception of each observation is sampled here, when the game raises it: the distance, whether the person is inside the active
 // camera's view, and a static-geometry ray from the camera (as scene.read's occlusion). Bounded: the allow-list first, a distance gate,
-// at most 24 observations a second, at most four people each and one ray per person in view within 80 m.
+// the plugin's admission (at most 24 built a second, 12 of them weak kinds, 2 of one kind from one entity, every refusal counted),
+// at most four people each and one ray per person in view within 80 m.
 
 module XFRuntimeBridge
 
@@ -101,8 +102,13 @@ public class XFIncidentView {
     }
     let result: TraceResult;
     let hit = GameInstance.GetSpatialQueriesSystem(GetGameInstance()).SyncRaycastByCollisionGroup(this.from, point, n"Static", result, true, false);
-    if !hit || !TraceResult.IsValid(result) {
+    // A ray that hit nothing is clear. A ray that reports a hit but whose result is not valid tells us nothing about the line, so it
+    // is Unchecked (2) and cannot establish sight.
+    if !hit {
       return 0;
+    }
+    if !TraceResult.IsValid(result) {
+      return 2;
     }
     let at = Vector4.Vector3To4(result.position);
     let hx = at.X - this.from.X;
@@ -140,8 +146,6 @@ public abstract class XFIncidentWho {
 public class XFIncidentSystem extends ScriptableSystem {
   private let m_on: Bool;
   private let m_poll: ref<XFIncidentPoll>;
-  private let m_windowStart: Float;
-  private let m_count: Int32;
 
   public static func Get() -> ref<XFIncidentSystem> {
     let container = GameInstance.GetScriptableSystemsContainer(GetGameInstance());
@@ -164,20 +168,6 @@ public class XFIncidentSystem extends ScriptableSystem {
       this.m_poll.system = null;
       this.m_poll = null;
     }
-  }
-
-  // At most 24 observations in any second of simulation time; the plugin counts what it is shown, this bounds what is built.
-  public func Admit() -> Bool {
-    let sim = EngineTime.ToFloat(GameInstance.GetSimTime(this.GetGameInstance()));
-    if sim - this.m_windowStart >= 1.0 || sim < this.m_windowStart {
-      this.m_windowStart = sim;
-      this.m_count = 0;
-    }
-    if this.m_count >= 24 {
-      return false;
-    }
-    this.m_count += 1;
-    return true;
   }
 
   public func Poll() -> Void {
@@ -241,17 +231,18 @@ public abstract class XFIncidentTap {
   }
 
   // The view for an observation at a place, or null when it should not be built: the tap is off, V is not there, the place is farther
-  // than 160 m (the farthest radius of the stimuli it watches), or this second's allowance is spent.
-  public static func Begin(at: Vector4) -> ref<XFIncidentView> {
-    if !XFIncidentTap.On() {
+  // than 160 m (the farthest radius of the stimuli it watches), or the plugin's admission refuses it. The admission is bounded per
+  // second, by evidence and by entity (a burst of V's own shots cannot starve a death or a collision), and counts every refusal.
+  public static func Begin(at: Vector4, evidence: String, who: ref<GameObject>) -> ref<XFIncidentView> {
+    if !XFIncidentTap.On() || !IsDefined(who) {
       return null;
     }
     let view = XFIncidentView.Make();
     if !IsDefined(view) || Vector4.Distance(view.vPos, at) > 160.0 {
       return null;
     }
-    let system = XFIncidentSystem.Get();
-    if !IsDefined(system) || !system.Admit() {
+    let key = EntityID.ToDebugString(who.GetEntityID());
+    if !XFBridge_IncidentAdmit(evidence, key) {
       return null;
     }
     return view;
@@ -347,36 +338,71 @@ public abstract class XFIncidentTap {
     return IsDefined(record) ? record.Radius() : 0.0;
   }
 
+  // The evidence a stimulus from this sender is, or "" when it is not one (a person's CrowdIllegalAction, say).
+  public static func StimEvidence(type: gamedataStimType, fromVehicle: Bool) -> String {
+    let evidence = "";
+    switch type {
+      case gamedataStimType.Gunshot:
+      case gamedataStimType.SilencedGunshot:
+        evidence = "gunshot";
+        break;
+      case gamedataStimType.Explosion:
+        evidence = "explosion";
+        break;
+      case gamedataStimType.MeleeHit:
+        evidence = "melee";
+        break;
+      case gamedataStimType.CrimeWitness:
+        evidence = "crime";
+        break;
+      case gamedataStimType.CrowdIllegalAction:
+        evidence = fromVehicle ? "collision" : "";
+        break;
+      case gamedataStimType.VehicleHit:
+        evidence = fromVehicle ? "collision" : "vehicle_hit";
+        break;
+      case gamedataStimType.Scream:
+      case gamedataStimType.Terror:
+        evidence = "fear";
+        break;
+      case gamedataStimType.DeadBody:
+        evidence = "body";
+        break;
+      default:
+        break;
+    }
+    return evidence;
+  }
+
   // TriggerSingleBroadcast after the game's own handling. owner is the sender; contextOwner may be a weapon or the victim.
   public static func Stim(owner: ref<GameObject>, contextOwner: wref<GameObject>, type: gamedataStimType, radius: Float, data: stimInvestigateData) -> Void {
     if !IsDefined(owner) {
       return;
     }
     let at = owner.GetWorldPosition();
-    let view = XFIncidentTap.Begin(at);
+    let vehicle = owner as VehicleObject;
+    let evidence = XFIncidentTap.StimEvidence(type, IsDefined(vehicle));
+    if StrLen(evidence) == 0 {
+      return;
+    }
+    let view = XFIncidentTap.Begin(at, evidence, owner);
     if !IsDefined(view) {
       return;
     }
-    let vehicle = owner as VehicleObject;
-    let evidence = "";
     let who = "";
     switch type {
       case gamedataStimType.Gunshot:
       case gamedataStimType.SilencedGunshot:
-        evidence = "gunshot";
         who = XFIncidentTap.Fact(view, owner, IsDefined(vehicle) ? "vehicle" : "aggressor");
         break;
       case gamedataStimType.Explosion:
-        evidence = "explosion";
         who = XFIncidentTap.Fact(view, owner, "source");
         break;
       case gamedataStimType.MeleeHit:
         // Sent by the victim, with the attacker in the investigate data.
-        evidence = "melee";
         who = XFIncidentTap.Join(XFIncidentTap.Fact(view, data.attackInstigator as GameObject, "aggressor"), XFIncidentTap.Fact(view, owner, "victim"));
         break;
       case gamedataStimType.CrimeWitness:
-        evidence = "crime";
         if IsDefined(contextOwner) && contextOwner != owner && IsDefined(contextOwner as ScriptedPuppet) {
           who = XFIncidentTap.Join(XFIncidentTap.Fact(view, owner, "aggressor"), XFIncidentTap.Fact(view, contextOwner as GameObject, "victim"));
         } else {
@@ -384,24 +410,17 @@ public abstract class XFIncidentTap {
         }
         break;
       case gamedataStimType.CrowdIllegalAction:
-        // Only a vehicle's: a collision. A person's own is the game's reaction to something already seen here.
-        if !IsDefined(vehicle) {
-          return;
-        }
-        evidence = "collision";
+        // Only a vehicle's reaches here (StimEvidence): a collision. A person's own is the game's reaction to something already seen.
         who = XFIncidentTap.Fact(view, owner, "vehicle");
         break;
       case gamedataStimType.VehicleHit:
-        evidence = IsDefined(vehicle) ? "collision" : "vehicle_hit";
         who = XFIncidentTap.Fact(view, owner, IsDefined(vehicle) ? "vehicle" : "source");
         break;
       case gamedataStimType.Scream:
       case gamedataStimType.Terror:
-        evidence = "fear";
         who = XFIncidentTap.Fact(view, owner, "source");
         break;
       case gamedataStimType.DeadBody:
-        evidence = "body";
         who = XFIncidentTap.Join(XFIncidentTap.Fact(view, data.attackInstigator as GameObject, "aggressor"), XFIncidentTap.Fact(view, owner, "victim"));
         break;
       default:
@@ -416,7 +435,7 @@ public abstract class XFIncidentTap {
       return;
     }
     let at = victim.GetWorldPosition();
-    let view = XFIncidentTap.Begin(at);
+    let view = XFIncidentTap.Begin(at, "death", victim);
     if !IsDefined(view) {
       return;
     }
@@ -433,7 +452,7 @@ public abstract class XFIncidentTap {
       return;
     }
     let at = attacker.GetWorldPosition();
-    let view = XFIncidentTap.Begin(at);
+    let view = XFIncidentTap.Begin(at, "combat", attacker);
     if !IsDefined(view) {
       return;
     }
@@ -466,7 +485,7 @@ public abstract class XFIncidentTap {
         return;
     }
     let at = officer.GetWorldPosition();
-    let view = XFIncidentTap.Begin(at);
+    let view = XFIncidentTap.Begin(at, "reprimand", officer);
     if !IsDefined(view) {
       return;
     }
@@ -484,7 +503,7 @@ public abstract class XFIncidentTap {
       return;
     }
     let at = vehicle.GetWorldPosition();
-    let view = XFIncidentTap.Begin(at);
+    let view = XFIncidentTap.Begin(at, "theft", thief);
     if !IsDefined(view) {
       return;
     }
@@ -497,7 +516,7 @@ public abstract class XFIncidentTap {
       return;
     }
     let at = speaker.GetWorldPosition();
-    let view = XFIncidentTap.Begin(at);
+    let view = XFIncidentTap.Begin(at, "voice", speaker);
     if !IsDefined(view) {
       return;
     }

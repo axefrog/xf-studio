@@ -62,12 +62,16 @@ void Deliver(std::vector<json> aReports)
     auto& s = Get();
     for (auto& report : aReports)
     {
-        const std::string text = "V witnessed " + report["incident"].get<std::string>() + ": " + report["kind"].get<std::string>();
+        // A witness.gap is a witnessed incident whose report was lost: it goes to the same three places, as a warning.
+        const bool gap = report.value("event", std::string("witness.report")) == "witness.gap";
+        const std::string kind = gap ? "witness.gap" : "witness.report";
+        const std::string text = gap ? "V witnessed " + report["incident"].get<std::string>() + " but its report was lost (queue full)"
+                                     : "V witnessed " + report["incident"].get<std::string>() + ": " + report["kind"].get<std::string>();
         if (s.config.allowTestHooks)
         {
-            s.probeEvents.Push("witness.report", report, static_cast<int64_t>(win32::MonotonicMs()));
+            s.probeEvents.Push(kind, report, static_cast<int64_t>(win32::MonotonicMs()));
         }
-        s.events.Push("witness.report", "info", "incidents", text, Brief(report));
+        s.events.Push(kind, gap ? "warn" : "info", "incidents", text, gap ? report : Brief(report));
         RecordingIngress("incidents", SerializeJson(report));
     }
 }
@@ -75,6 +79,8 @@ void Deliver(std::vector<json> aReports)
 // The incidents of a world that has gone are closed (and reported if V perceived them) before anything of the new one counts.
 void SyncWorld()
 {
+    // Reports that waited for the minute's allowance go out on any contact with the service, not only on a tick.
+    Deliver(Incidents().Drain(recording::Now()));
     const auto world = World();
     if (world != Incidents().World())
     {
@@ -90,6 +96,21 @@ bool IncidentTapOn()
     auto& s = Get();
     return s.config.allowTestHooks && gTap.load() && s.bridge && !s.bridge->GetDispatcher().IsKilled();
 #else
+    return false;
+#endif
+}
+
+// Whether the taps may build one more observation of this evidence from this entity (core Service::Admit); false when the taps are off.
+bool IncidentAdmit(const std::string& aEvidence, const std::string& aKey)
+{
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    if (!IncidentTapOn() || !Get().scriptLayer.Ready() || aEvidence.size() > 24 || aKey.size() > 64)
+    {
+        return false;
+    }
+    return Incidents().Admit(aEvidence, aKey, recording::Now());
+#else
+    (void)aEvidence; (void)aKey;
     return false;
 #endif
 }
