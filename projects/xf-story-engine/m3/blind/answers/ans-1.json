@@ -1,0 +1,1160 @@
+{
+ "rater": "codex-gpt-6.1-sol",
+ "cards": {
+  "H-007": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-083": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-053": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name and fixed payout"
+  },
+  "H-019": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-087": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-016": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-082": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "occupation, endpoints, fixed delivery reward"
+  },
+  "H-058": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-033": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-090": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "occupation, endpoints, fixed delivery reward"
+  },
+  "H-088": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic escalation without a motive"
+  },
+  "H-055": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic escalation without a motive"
+  },
+  "H-032": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "standard incident bulletin"
+  },
+  "H-074": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "occupation, endpoints, fixed delivery reward"
+  },
+  "H-095": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-022": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "standard incident bulletin"
+  },
+  "H-028": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-063": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "standard incident bulletin"
+  },
+  "H-070": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-061": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "bare disappearance and fixed reward"
+  },
+  "H-023": {
+   "caused": 5,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "standard detention bulletin"
+  },
+  "H-001": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unexplained detention and stock indifference"
+  },
+  "H-017": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic gang member and unexplained demand"
+  },
+  "H-008": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-009": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-091": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name and endpoint slots"
+  },
+  "H-075": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-002": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-050": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unnamed goods and standard report wording"
+  },
+  "H-003": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-080": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "surveillance request without reason for interest"
+  },
+  "H-057": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-036": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name and fixed payout"
+  },
+  "H-040": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-029": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-065": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unnamed goods and standard report wording"
+  },
+  "H-067": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-086": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "object retrieval with stock tough wording"
+  },
+  "H-051": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-079": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-011": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-046": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic stolen object and fixed reward"
+  },
+  "H-062": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unexplained detention and stock indifference"
+  },
+  "H-014": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-081": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-018": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic gang member and unexplained demand"
+  },
+  "H-045": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-052": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-064": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unexplained detention and stock indifference"
+  },
+  "H-043": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name and fixed payout"
+  },
+  "H-026": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-030": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "standard incident bulletin"
+  },
+  "H-010": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "standard incident bulletin"
+  },
+  "H-096": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "vague promise that seeing them explains things"
+  },
+  "H-004": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-059": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic breakdown, deadline, fixed payout"
+  },
+  "H-006": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unexplained detention and stock indifference"
+  },
+  "H-094": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-049": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name and fixed payout"
+  },
+  "H-021": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-012": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-027": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic gang member and unexplained demand"
+  },
+  "H-089": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-035": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unexplained detention and stock indifference"
+  },
+  "H-020": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "standard incident bulletin"
+  },
+  "H-069": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-005": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-041": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic breakdown, deadline, fixed payout"
+  },
+  "H-013": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-078": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-056": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "generic accident bulletin without particulars"
+  },
+  "H-054": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "object retrieval with stock tough wording"
+  },
+  "H-039": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-084": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "generic accident bulletin without particulars"
+  },
+  "H-015": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name and endpoint slots"
+  },
+  "H-085": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic assault rumor and stock uncertainty"
+  },
+  "H-066": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-073": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "occupation, endpoints, fixed delivery reward"
+  },
+  "H-042": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unnamed goods and standard report wording"
+  },
+  "H-047": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "generic accident bulletin without particulars"
+  },
+  "H-031": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unexplained detention and stock indifference"
+  },
+  "H-038": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "occupation, endpoints, fixed delivery reward"
+  },
+  "H-071": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic assault rumor and stock uncertainty"
+  },
+  "H-037": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-044": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "occupation, endpoints, fixed delivery reward"
+  },
+  "H-034": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-068": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "person",
+   "cue": "concrete street image and clipped withholding"
+  },
+  "H-048": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "unnamed goods and standard report wording"
+  },
+  "H-024": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "bare disappearance and fixed reward"
+  },
+  "H-092": {
+   "caused": 5,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "person",
+   "cue": "specific witness perspective and quick escape"
+  },
+  "H-077": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-072": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unspecified accident and stock crowd reaction"
+  },
+  "H-093": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "formulaic message and closing request"
+  },
+  "H-025": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic breakdown, deadline, fixed payout"
+  },
+  "H-060": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  },
+  "H-076": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic warning with interchangeable names"
+  }
+ },
+ "pairs": {
+  "P-089": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-015": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-022": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-020": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-023": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-021": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-027": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-063": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-058": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-056": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-033": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-003": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-064": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-074": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-032": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-035": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-028": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-013": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-092": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-093": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-043": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-079": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-053": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-050": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-007": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-078": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-090": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-046": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-017": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-096": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-009": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-039": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-095": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-081": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-055": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-071": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-083": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-088": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-008": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-073": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-006": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-059": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-047": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-075": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-012": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-036": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-014": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-040": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-052": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-069": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-002": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-082": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-065": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-016": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-066": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-041": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-026": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-051": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-004": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-030": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-085": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-067": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-010": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-049": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-031": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-048": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-072": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-042": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-044": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-038": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-011": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-080": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-029": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-061": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-087": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-045": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-054": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-084": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-068": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-018": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-001": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-086": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-037": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-094": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-070": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-091": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-062": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-077": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-025": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-005": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-060": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-057": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-034": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-024": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-019": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-076": {
+   "follow": "left",
+   "caused": "left"
+  }
+ },
+ "critic": "Interchangeable names, repeated full names, fixed rewards, generic occupations, and identical sentence structures made most cards read as assembled. Repeated families included Friday extortion messages, sealed-case deliveries, accident notices, assault bulletins, and pocket warnings. The extortion cards still had a strong causal chain: recurring gang collection creates a shortage and prompts an appeal. Many other cards named an event without explaining anyone's motive. The pavement image and eyewitness bag theft felt more individually written, though those guesses are tentative."
+}

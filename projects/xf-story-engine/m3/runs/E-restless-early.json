@@ -1,0 +1,961 @@
+{
+ "version": 1,
+ "name": "w-early",
+ "state": "S-early-quiet",
+ "windows": 864,
+ "play": 86400,
+ "layer3": true,
+ "tempo": "restless",
+ "policy": "decline",
+ "deliveries": [
+  {
+   "id": "a68b1d7e9d983624db917672ac1dd079",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "ask",
+   "what": "offer",
+   "game": 7800,
+   "play": 1260,
+   "clock": "Mon 02:10",
+   "words": "Jordan Reyes messages you: Kenji Tanaka was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?",
+   "channel": "message",
+   "names": {
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "a268138703f692b4f391048f532089da",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "stay-out",
+   "what": "beat",
+   "game": 7800,
+   "play": 1290,
+   "clock": "Mon 02:10",
+   "words": "Jordan Reyes nodded, as if they had expected nothing else, and went back to the counter.",
+   "channel": "message",
+   "names": {
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   }
+  },
+  {
+   "id": "c8cabf028d5184b9855b7219b6a41f50",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "closing",
+   "what": "closing",
+   "game": 7800,
+   "play": 1291,
+   "clock": "Mon 02:10",
+   "words": "That Friday is over.",
+   "channel": "trace",
+   "names": {
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   }
+  },
+  {
+   "id": "96f05e8cdb2833adb7e385eaada0f0aa",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "coda",
+   "what": "coda",
+   "game": 8400,
+   "play": 1320,
+   "clock": "Mon 02:20",
+   "words": "The stalls opened and closed the way they always do, and the fee was paid or it was not.",
+   "channel": "message",
+   "names": {
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   }
+  },
+  {
+   "id": "af801e8985cd424d4294c01e09681b93",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 14400,
+   "play": 2375,
+   "clock": "Mon 04:00",
+   "words": "Kabuki: police detained Alex Reyes during a street sweep. No charge has been announced.",
+   "channel": "trace",
+   "names": {
+    "subject": "Alex Reyes"
+   }
+  },
+  {
+   "id": "ca7be5b6ec17d1c8826521f0655b0e10",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 43800,
+   "play": 7295,
+   "clock": "Mon 12:10",
+   "words": "Maria Hale says Haruto Sato lifted a bag in the Kabuki crowd and was gone before anyone moved.",
+   "channel": "trace",
+   "names": {
+    "subject": "Haruto Sato",
+    "other": "Maria Hale"
+   }
+  },
+  {
+   "id": "a6131e5d63fa4a751ba66472b2a390db",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 66000,
+   "play": 10947,
+   "clock": "Mon 18:20",
+   "words": "Watch your pockets: Kenji Sato is working the crowd again, and Kenji Mori found out first.",
+   "channel": "trace",
+   "names": {
+    "subject": "Kenji Sato",
+    "other": "Kenji Mori"
+   }
+  },
+  {
+   "id": "a47bbc8e6918cc2402fe99861b361e4a",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 91200,
+   "play": 15144,
+   "clock": "Tue 01:20",
+   "words": "An NCPD patrol pulled Yui Mori off the street in Kabuki. Nobody stopped to watch.",
+   "channel": "trace",
+   "names": {
+    "subject": "Yui Mori"
+   }
+  },
+  {
+   "id": "0254bc7987f9477bea6722dce92b8583",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 130800,
+   "play": 21730,
+   "clock": "Tue 12:20",
+   "words": "An NCPD patrol pulled Alex Reyes off the street in Kabuki. Nobody stopped to watch.",
+   "channel": "trace",
+   "names": {
+    "subject": "Alex Reyes"
+   }
+  },
+  {
+   "id": "99245b382a4dbdb2177e36c50642da2e",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 141000,
+   "play": 23436,
+   "clock": "Tue 15:10",
+   "words": "Watch your pockets: Jordan Reyes is working the crowd again, and Kenji Mori found out first.",
+   "channel": "trace",
+   "names": {
+    "subject": "Jordan Reyes",
+    "other": "Kenji Mori"
+   }
+  },
+  {
+   "id": "5620d2c4b4980ef7ade6b0f19168d1c9",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 183000,
+   "play": 30486,
+   "clock": "Wed 02:50",
+   "words": "Jordan Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Jordan Novak"
+   }
+  },
+  {
+   "id": "6d06c36b349810f0234b569185002756",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 211200,
+   "play": 35120,
+   "clock": "Wed 10:40",
+   "words": "Watch your pockets: Kenji Sato is working the crowd again, and Kenji Sato found out first.",
+   "channel": "trace",
+   "names": {
+    "subject": "Kenji Sato",
+    "other": "Kenji Sato"
+   }
+  },
+  {
+   "id": "9b37f7c43f75c04f7970e18a299845c8",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 222000,
+   "play": 36999,
+   "clock": "Wed 13:40",
+   "words": "An NCPD patrol pulled Maria Hale off the street in Kabuki. Nobody stopped to watch.",
+   "channel": "trace",
+   "names": {
+    "subject": "Maria Hale"
+   }
+  },
+  {
+   "id": "7b9751e075adf4f7c66c833823bdd0dd",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 244800,
+   "play": 40799,
+   "clock": "Wed 20:00",
+   "words": "Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Alex Hale"
+   }
+  },
+  {
+   "id": "18ae17f51321b343931d982bc4f12af7",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 278400,
+   "play": 46325,
+   "clock": "Thu 05:20",
+   "words": "Kabuki: a theft was reported by Maria Hale. Dmitri Novak is named as the person responsible. The goods have not been recovered.",
+   "channel": "trace",
+   "names": {
+    "subject": "Dmitri Novak",
+    "other": "Maria Hale"
+   }
+  },
+  {
+   "id": "f5c78ec4a94c942134c9b9f73f535ed5",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 301200,
+   "play": 50101,
+   "clock": "Thu 11:40",
+   "words": "Heard it from three people already: Kenji Mori went for Dmitri Reyes in the street. Thought you should know before it gets bigger.",
+   "channel": "trace",
+   "names": {
+    "subject": "Kenji Mori",
+    "other": "Dmitri Reyes"
+   }
+  },
+  {
+   "id": "1bb6146afbc424db24e7c53cf450e87a",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 338400,
+   "play": 56396,
+   "clock": "Thu 22:00",
+   "words": "Watch your pockets: Dmitri Hale is working the crowd again, and Yui Tanaka found out first.",
+   "channel": "trace",
+   "names": {
+    "subject": "Dmitri Hale",
+    "other": "Yui Tanaka"
+   }
+  },
+  {
+   "id": "184bed44c6d71d2c7e51e331fe60e31f",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 364800,
+   "play": 60782,
+   "clock": "Fri 05:20",
+   "words": "Kabuki: Haruto Mori was taken for treatment after an accident. No one else was injured.",
+   "channel": "trace",
+   "names": {
+    "subject": "Haruto Mori"
+   }
+  },
+  {
+   "id": "652758bb254f6cf8a185fb68529b27c7",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 399000,
+   "play": 66496,
+   "clock": "Fri 14:50",
+   "words": "Watch your pockets: Kenji Sato is working the crowd again, and Kenji Tanaka found out first.",
+   "channel": "trace",
+   "names": {
+    "subject": "Kenji Sato",
+    "other": "Kenji Tanaka"
+   }
+  },
+  {
+   "id": "e0ecb73dea92a75460bcbfe354d927c7",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 421800,
+   "play": 70228,
+   "clock": "Fri 21:10",
+   "words": "Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Alex Hale"
+   }
+  },
+  {
+   "id": "24567d8dc1cfffdc1061305bd7524143",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 445800,
+   "play": 74237,
+   "clock": "Sat 03:50",
+   "words": "Maria Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Maria Novak"
+   }
+  },
+  {
+   "id": "6c96787f64697e278b1dfbf9af38ef54",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 460800,
+   "play": 76769,
+   "clock": "Sat 08:00",
+   "words": "An NCPD patrol pulled Alex Hale off the street in Kabuki. Nobody stopped to watch.",
+   "channel": "trace",
+   "names": {
+    "subject": "Alex Hale"
+   }
+  },
+  {
+   "id": "621c84224795eb32911c19dac1810f42",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 493200,
+   "play": 82107,
+   "clock": "Sat 17:00",
+   "words": "Kabuki: Yui Sato was treated for injuries after an assault. Witnesses name Kenji Mori. No arrest has been made.",
+   "channel": "trace",
+   "names": {
+    "subject": "Kenji Mori",
+    "other": "Yui Sato"
+   }
+  }
+ ],
+ "instances": [
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 12,
+   "roles": {
+    "subject": "Kenji Mori",
+    "other": "Dmitri Reyes"
+   },
+   "draws": {
+    "cast:other": "817deeb5946d7cc7180508a5db5ea175",
+    "cast:subject": "c9550e46ac7f7a5ef6ac39967f213347",
+    "alt:tell:0": "f-beating-4"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 16,
+   "roles": {
+    "subject": "Alex Hale"
+   },
+   "draws": {
+    "cast:subject": "82ad2866fa76d2a7162ba80173c97c16",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 11,
+   "roles": {
+    "subject": "Dmitri Novak",
+    "other": "Maria Hale"
+   },
+   "draws": {
+    "cast:other": "8bccefec546e626dcbfce30c658d374e",
+    "cast:subject": "18c643b42529dcb12cd5adaa9f2f5162",
+    "alt:tell:0": "f-theft-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 18,
+   "roles": {
+    "subject": "Alex Hale"
+   },
+   "draws": {
+    "cast:subject": "b2b4a1d71d95defa9387de265e030d3a",
+    "alt:tell:0": "f-sweep-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 1,
+   "roles": {
+    "subject": "Alex Reyes"
+   },
+   "draws": {
+    "cast:subject": "aac45bf0866db192423f48c2c60bcaf2",
+    "alt:tell:0": "f-sweep-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 9,
+   "roles": {
+    "subject": "Maria Hale"
+   },
+   "draws": {
+    "cast:subject": "4f0c8bbe9760b44e750cdfa3abc33f65",
+    "alt:tell:0": "f-sweep-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 14,
+   "roles": {
+    "subject": "Haruto Mori"
+   },
+   "draws": {
+    "cast:subject": "c9f28f2aef944bdeb3bd226432769697",
+    "alt:tell:0": "f-accident-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 6,
+   "roles": {
+    "subject": "Jordan Reyes",
+    "other": "Kenji Mori"
+   },
+   "draws": {
+    "cast:other": "aeaa7e26332ee9ac4c1e3f4ec39a3858",
+    "cast:subject": "f929fbe159106705015203cca5db3d47",
+    "alt:tell:0": "f-theft-3"
+   }
+  },
+  {
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "state": "resolved",
+   "sowSeq": 0,
+   "roles": {
+    "market": "",
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   },
+   "draws": {
+    "cast:market": "9d11116bcf636409fdb9d8033e00f158",
+    "cast:stallholder": "51fbc371c4004696965fb8f426a3a89c",
+    "cast:collector": "ed9ebb268f1b8ff3f445e2e71adca372"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 5,
+   "roles": {
+    "subject": "Alex Reyes"
+   },
+   "draws": {
+    "cast:subject": "109ec25914f2989402d1ad54e483b036",
+    "alt:tell:0": "f-sweep-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 3,
+   "roles": {
+    "subject": "Kenji Sato",
+    "other": "Kenji Mori"
+   },
+   "draws": {
+    "cast:other": "8bcd44f4f26987b62602dcee0cfb2c09",
+    "cast:subject": "3d923c1138509823d85bad2b25798dd1",
+    "alt:tell:0": "f-theft-3"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 10,
+   "roles": {
+    "subject": "Alex Hale"
+   },
+   "draws": {
+    "cast:subject": "31546a650ac69d95382a63f1aa08f922",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 7,
+   "roles": {
+    "subject": "Jordan Novak"
+   },
+   "draws": {
+    "cast:subject": "572b02b78de38eff812aa5250226dd92",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 15,
+   "roles": {
+    "subject": "Kenji Sato",
+    "other": "Kenji Tanaka"
+   },
+   "draws": {
+    "cast:other": "770d3840b53400a77651c76a0528c142",
+    "cast:subject": "79c05ff09307dee4b2c0f3ace5ba5398",
+    "alt:tell:0": "f-theft-3"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 8,
+   "roles": {
+    "subject": "Kenji Sato",
+    "other": "Kenji Sato"
+   },
+   "draws": {
+    "cast:other": "b3122cd628dc0ec87fd4ca622f8fdc11",
+    "cast:subject": "3a4ce2f210104d880347aafa361f3f5e",
+    "alt:tell:0": "f-theft-3"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 4,
+   "roles": {
+    "subject": "Yui Mori"
+   },
+   "draws": {
+    "cast:subject": "07ce72b4b31a89b6f22113644bfab5c4",
+    "alt:tell:0": "f-sweep-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 13,
+   "roles": {
+    "subject": "Dmitri Hale",
+    "other": "Yui Tanaka"
+   },
+   "draws": {
+    "cast:other": "c73ccdc265598c0d9c79243b41407f61",
+    "cast:subject": "3f59659e28853feef68632f100666788",
+    "alt:tell:0": "f-theft-3"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 17,
+   "roles": {
+    "subject": "Maria Novak"
+   },
+   "draws": {
+    "cast:subject": "76f2021f9cb72f1d5f4a911b56459e34",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 19,
+   "roles": {
+    "subject": "Kenji Mori",
+    "other": "Yui Sato"
+   },
+   "draws": {
+    "cast:other": "dccfaf2a13fa25538c6a6390718b305b",
+    "cast:subject": "d3b4242662442b272629ec154d82c2b7",
+    "alt:tell:0": "f-beating-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 2,
+   "roles": {
+    "subject": "Haruto Sato",
+    "other": "Maria Hale"
+   },
+   "draws": {
+    "cast:other": "45e13c8545c72b56f50194f4783c40c6",
+    "cast:subject": "0369f48aef0cf360de7736ef504d7b64",
+    "alt:tell:0": "f-theft-0"
+   }
+  }
+ ],
+ "decisions": [
+  {
+   "at": 14400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.6572741380884277
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 43800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.4995028097033046
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 66000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.4508265152780097
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 91200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.6738838798240414
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 130800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.8604892040474863
+    },
+    "composite": 1
+   }
+  },
+  {
+   "at": 141000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.28085869946818887
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 183000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.39625029810496964
+    },
+    "composite": 1
+   }
+  },
+  {
+   "at": 211200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.19659955583063313
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 222000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.12451290092001199
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 244800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.1742680339177229
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 278400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.14601402004988812
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 301200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.2857823291259824
+    },
+    "composite": 1
+   }
+  },
+  {
+   "at": 338400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.18218777148930068
+    },
+    "composite": 1
+   }
+  },
+  {
+   "at": 364800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.11589412856736614
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 399000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.26925953627524307
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 421800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.38261916992896744
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 445800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.5972790620506581
+    },
+    "composite": 1
+   }
+  },
+  {
+   "at": 460800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.3509284983184676
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 493200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.3223543808855791
+    },
+    "composite": 0.25
+   }
+  }
+ ],
+ "hash": "89ecc8e97bc572dd94715ec31defed40"
+}

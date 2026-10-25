@@ -1,0 +1,277 @@
+{
+ "version": 1,
+ "name": "w-early",
+ "state": "S-early-quiet",
+ "windows": 864,
+ "play": 86400,
+ "layer3": true,
+ "tempo": "calm",
+ "policy": "decline",
+ "deliveries": [
+  {
+   "id": "a68b1d7e9d983624db917672ac1dd079",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "ask",
+   "what": "offer",
+   "game": 7800,
+   "play": 1260,
+   "clock": "Mon 02:10",
+   "words": "Jordan Reyes messages you: Kenji Tanaka was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?",
+   "channel": "message",
+   "names": {
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "a268138703f692b4f391048f532089da",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "stay-out",
+   "what": "beat",
+   "game": 11400,
+   "play": 1860,
+   "clock": "Mon 03:10",
+   "words": "Jordan Reyes nodded, as if they had expected nothing else, and went back to the counter.",
+   "channel": "message",
+   "names": {
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   }
+  },
+  {
+   "id": "c8cabf028d5184b9855b7219b6a41f50",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "closing",
+   "what": "closing",
+   "game": 11400,
+   "play": 1861,
+   "clock": "Mon 03:10",
+   "words": "That Friday is over.",
+   "channel": "trace",
+   "names": {
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   }
+  },
+  {
+   "id": "96f05e8cdb2833adb7e385eaada0f0aa",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "coda",
+   "what": "coda",
+   "game": 15000,
+   "play": 2460,
+   "clock": "Mon 04:10",
+   "words": "The stalls opened and closed the way they always do, and the fee was paid or it was not.",
+   "channel": "message",
+   "names": {
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   }
+  },
+  {
+   "id": "99245b382a4dbdb2177e36c50642da2e",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 141000,
+   "play": 23436,
+   "clock": "Tue 15:10",
+   "words": "Watch your pockets: Jordan Reyes is working the crowd again, and Kenji Mori found out first.",
+   "channel": "trace",
+   "names": {
+    "subject": "Jordan Reyes",
+    "other": "Kenji Mori"
+   }
+  },
+  {
+   "id": "af801e8985cd424d4294c01e09681b93",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 183000,
+   "play": 30486,
+   "clock": "Wed 02:50",
+   "words": "Kabuki: police detained Alex Reyes during a street sweep. No charge has been announced.",
+   "channel": "trace",
+   "names": {
+    "subject": "Alex Reyes"
+   }
+  },
+  {
+   "id": "9b37f7c43f75c04f7970e18a299845c8",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 222000,
+   "play": 36999,
+   "clock": "Wed 13:40",
+   "words": "An NCPD patrol pulled Maria Hale off the street in Kabuki. Nobody stopped to watch.",
+   "channel": "trace",
+   "names": {
+    "subject": "Maria Hale"
+   }
+  },
+  {
+   "id": "e0ecb73dea92a75460bcbfe354d927c7",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 445800,
+   "play": 74237,
+   "clock": "Sat 03:50",
+   "words": "Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Alex Hale"
+   }
+  }
+ ],
+ "instances": [
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 4,
+   "roles": {
+    "subject": "Alex Hale"
+   },
+   "draws": {
+    "cast:subject": "82ad2866fa76d2a7162ba80173c97c16",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 2,
+   "roles": {
+    "subject": "Alex Reyes"
+   },
+   "draws": {
+    "cast:subject": "aac45bf0866db192423f48c2c60bcaf2",
+    "alt:tell:0": "f-sweep-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 3,
+   "roles": {
+    "subject": "Maria Hale"
+   },
+   "draws": {
+    "cast:subject": "4f0c8bbe9760b44e750cdfa3abc33f65",
+    "alt:tell:0": "f-sweep-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 1,
+   "roles": {
+    "subject": "Jordan Reyes",
+    "other": "Kenji Mori"
+   },
+   "draws": {
+    "cast:other": "aeaa7e26332ee9ac4c1e3f4ec39a3858",
+    "cast:subject": "f929fbe159106705015203cca5db3d47",
+    "alt:tell:0": "f-theft-3"
+   }
+  },
+  {
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "state": "resolved",
+   "sowSeq": 0,
+   "roles": {
+    "market": "",
+    "stallholder": "Jordan Reyes",
+    "collector": "Kenji Tanaka"
+   },
+   "draws": {
+    "cast:market": "9d11116bcf636409fdb9d8033e00f158",
+    "cast:stallholder": "51fbc371c4004696965fb8f426a3a89c",
+    "cast:collector": "ed9ebb268f1b8ff3f445e2e71adca372"
+   }
+  }
+ ],
+ "decisions": [
+  {
+   "at": 141000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.28085869946818887
+    },
+    "composite": 1
+   }
+  },
+  {
+   "at": 183000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.10721571702992609
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 222000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.12451290092001199
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 445800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.2684797335090053
+    },
+    "composite": 1
+   }
+  }
+ ],
+ "hash": "1a6afdcbb07083f59753c43e0dc8f3b9"
+}

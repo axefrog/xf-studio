@@ -1,0 +1,8 @@
+# M3 run: fit-S-prologue
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "fit-S-prologue"
+story state: S-prologue (the prologue is done and nothing after it: the seed must wait)
+facts set (the rest read 0): q000_done
+street: regimes: none arrive
+layer 3: absent (sowing off); V's policy: decline
+span: 26 windows of ten minutes (0.2 game days), 2600 play seconds
+

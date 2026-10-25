@@ -159,3 +159,5 @@ integration. No game session is needed. All review fixes remain uncommitted for 
 | `reference/src/procedural/` | Layer 3: typed data, keys, copied views, fit, director, pattern/kit lint, sifter, sower, persistence and audits. `layer3.ts` composes them. |
 | `reference/test/`, `reference/test/s2/`, `reference/test/sim/` | One test file per subject; `fixtures.test.ts` indexes the acceptance fixtures; `synthetic.ts` is the schema and operation script behind the invariant and digest tests; `test/sim/` holds the S1 fixtures (`helpers.ts`, `feed.ts`, `gen.ts` and `records.ts` are shared tooling, not tests). |
 | `reference/SPEC-NOTES.md` | Interpretations of the specification, for its owner to confirm. |
+
+- The **M3 offline prototype** ([`m3/`](m3/README.md)): the authored seed R2 over Kabuki, layer 3's hooks at three proactivity settings, the control arms and a blind pass. The harness is `reference/src/m3/`. Its result: the authored seed fits and plays the same with sowing off and on; the engine's hooks did not beat the Radiant-style baseline, judged blind.

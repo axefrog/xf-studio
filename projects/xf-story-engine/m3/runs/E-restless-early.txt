@@ -1,0 +1,352 @@
+# M3 run: w-early
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "w-early"
+story state: S-early-quiet (early in the story, a quiet street, a gang with money)
+facts set (the rest read 0): q000_done, q000_nomad_background, q001_done, q003_done
+street: regimes: none arrive; Tyger Claws books: cash 30000
+setting: incident rates x8 (a busier Kabuki, to give the engine enough to tell)
+setting: arm E: layer 3 ranks and chooses
+V walks the district: a new block every game hour
+layer 3: attached, tempo restless; V's policy: decline
+span: 864 windows of ten minutes (6.0 game days), 86400 play seconds
+
+Mon 00:10  (a delivery was held (phase-settling).)
+Mon 00:10  (a delivery was held (hold-cleared).)
+Mon 00:10  (a delivery was held (lead-aim).)
+Mon 00:20  1 theft incident at v8 in this ten minutes.
+Mon 00:30  1 theft incident at v3 in this ten minutes.
+Mon 00:34  gang-clash (size 2) at g0 by Kenji Sato against Kenji Sato, with no cause in the record.
+Mon 00:50  1 gang-clash incident at g8 in this ten minutes.
+Mon 00:52  police-action (size 2) at v5 against Alex Reyes, with no cause in the record.
+Mon 01:20  1 theft incident at g11 in this ten minutes.
+Mon 02:10  [authored offer ask] Jordan Reyes messages you: Kenji Tanaka was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?  -> V: decline
+Mon 02:10  [authored beat stay-out] Jordan Reyes nodded, as if they had expected nothing else, and went back to the counter.
+Mon 02:10  [authored closing] That Friday is over.
+Mon 02:10  (a delivery was held (hold-cleared).)
+Mon 02:20  [authored coda] The stalls opened and closed the way they always do, and the fee was paid or it was not.
+Mon 02:20  1 assault incident at g0 in this ten minutes.
+Mon 02:30  1 assault incident at v2 in this ten minutes.
+Mon 03:00  1 gang-clash incident at g4 in this ten minutes.
+Mon 03:20  1 theft incident at v8 in this ten minutes.
+Mon 04:00  [procedural beat tell] Kabuki: police detained Alex Reyes during a street sweep. No charge has been announced.
+Mon 04:00  1 gang-clash incident at g0 in this ten minutes.
+Mon 04:00  (slot 0: slot-run.)
+Mon 04:00  (layer 3 sowed "sweep" from sweep (s=Alex Reyes); features F3=1 F5=0 F6=0 F11=0.66; composite 0.5 among 1 candidate; cause: 1 recorded event.)
+Mon 05:00  1 theft incident at v2 in this ten minutes.
+Mon 05:00  1 theft incident at v3 in this ten minutes.
+Mon 05:30  1 theft incident at v3 in this ten minutes.
+Mon 06:09  theft (size 2) at v2 by Haruto Sato against Maria Hale, with no cause in the record.
+Mon 06:30  1 police-action incident at g3 in this ten minutes.
+Mon 07:30  1 assault incident at g6 in this ten minutes.
+Mon 07:40  1 assault incident at g1 in this ten minutes.
+Mon 07:50  1 gang-clash incident at g11 in this ten minutes.
+Mon 09:40  1 accident incident at v3 in this ten minutes.
+Mon 10:30  1 assault incident at g10 in this ten minutes.
+Mon 11:01  theft (size 2) at g0 by Kenji Sato against Kenji Mori, with no cause in the record.
+Mon 11:50  1 police-action incident at g0 in this ten minutes.
+Mon 12:10  [procedural beat tell] Maria Hale says Haruto Sato lifted a bag in the Kabuki crowd and was gone before anyone moved.
+Mon 12:10  (slot 1: slot-run.)
+Mon 12:10  (layer 3 sowed "theft" from theft (a=Haruto Sato, v=Maria Hale); features F3=1 F5=0 F6=0 F11=0.5; composite 0.5 among 2 candidates; cause: 1 recorded event.)
+Mon 12:20  1 theft incident at v7 in this ten minutes.
+Mon 12:50  1 theft incident at g0 in this ten minutes.
+Mon 13:20  1 theft incident at g7 in this ten minutes.
+Mon 14:00  1 theft incident at g11 in this ten minutes.
+Mon 16:00  1 shakedown incident at g4 in this ten minutes.
+Mon 16:40  1 accident incident at g0 in this ten minutes.
+Mon 16:40  1 theft incident at g0 in this ten minutes.
+Mon 17:30  1 theft incident at g0 in this ten minutes.
+Mon 18:20  [procedural beat tell] Watch your pockets: Kenji Sato is working the crowd again, and Kenji Mori found out first.
+Mon 18:20  (slot 2: slot-run.)
+Mon 18:20  (layer 3 sowed "theft" from theft (a=Kenji Sato, v=Kenji Mori); features F3=1 F5=0 F6=0 F11=0.45; composite 0.5 among 1 candidate; cause: 1 recorded event.)
+Mon 18:40  1 accident incident at v3 in this ten minutes.
+Mon 19:20  1 police-action incident at g7 in this ten minutes.
+Mon 19:20  1 shakedown incident at v1 in this ten minutes.
+Mon 19:28  seen up close: police-action at g7 answered by Haruto Mori against Maria Hale.
+Mon 19:40  1 shakedown incident at v8 in this ten minutes.
+Mon 19:50  1 assault incident at v8 in this ten minutes.
+Mon 19:50  1 shakedown incident at g11 in this ten minutes.
+Mon 20:20  1 shakedown incident at g11 in this ten minutes.
+Mon 20:50  1 accident incident at g6 in this ten minutes.
+Mon 21:00  1 disorder incident at v3 in this ten minutes.
+Mon 21:40  1 theft incident at v3 in this ten minutes.
+Mon 22:25  police-action (size 2) at g9 against Yui Mori, with no cause in the record.
+Mon 22:40  1 theft incident at v3 in this ten minutes.
+Mon 23:10  1 accident incident at v3 in this ten minutes.
+Mon 23:20  1 gang-clash incident at g0 in this ten minutes.
+Mon 23:48  theft (size 2) at g11 by Jordan Reyes against Kenji Mori, with no cause in the record.
+Tue 01:10  1 gang-clash incident at g0 in this ten minutes.
+Tue 01:20  [procedural beat tell] An NCPD patrol pulled Yui Mori off the street in Kabuki. Nobody stopped to watch.
+Tue 01:20  (slot 3: slot-run.)
+Tue 01:20  (layer 3 sowed "sweep" from sweep (s=Yui Mori); features F3=1 F5=0 F6=0 F11=0.67; composite 0.5 among 3 candidates; cause: 1 recorded event.)
+Tue 02:10  1 theft incident at v2 in this ten minutes.
+Tue 03:20  1 assault incident at v3 in this ten minutes.
+Tue 04:10  1 theft incident at v3 in this ten minutes.
+Tue 04:20  1 assault incident at v2 in this ten minutes.
+Tue 04:40  1 assault incident at v2 in this ten minutes.
+Tue 04:50  1 theft incident at g7 in this ten minutes.
+Tue 05:20  1 theft incident at v2 in this ten minutes.
+Tue 06:40  1 theft incident at g1 in this ten minutes.
+Tue 08:50  1 assault incident at g5 in this ten minutes.
+Tue 10:08  theft (size 2) at g0 by Kenji Sato against Kenji Sato, with no cause in the record.
+Tue 11:21  police-action (size 2) at g0 against Alex Reyes, with no cause in the record.
+Tue 12:10  1 gang-clash incident at g2 in this ten minutes.
+Tue 12:10  1 theft incident at g0 in this ten minutes.
+Tue 12:20  [procedural beat tell] An NCPD patrol pulled Alex Reyes off the street in Kabuki. Nobody stopped to watch.
+Tue 12:20  1 gang-clash incident at v6 in this ten minutes.
+Tue 12:20  (slot 4: slot-run.)
+Tue 12:20  (layer 3 sowed "sweep" from sweep (s=Alex Reyes); features F3=1 F5=0 F6=0 F11=0.86; composite 1 among 4 candidates; cause: 1 recorded event.)
+Tue 12:25  disorder (size 2) at g4 among Jordan Novak among Kenji Mori among Jordan Novak among Dmitri Reyes, because of a police-action.
+Tue 12:30  1 assault incident at v3 in this ten minutes.
+Tue 13:20  1 shakedown incident at g0 in this ten minutes.
+Tue 13:30  1 theft incident at g7 in this ten minutes.
+Tue 14:20  1 gang-clash incident at g0 in this ten minutes.
+Tue 14:40  1 gang-clash incident at g0 in this ten minutes.
+Tue 15:10  [procedural beat tell] Watch your pockets: Jordan Reyes is working the crowd again, and Kenji Mori found out first.
+Tue 15:10  (slot 5: slot-run.)
+Tue 15:10  (layer 3 sowed "theft" from theft (a=Jordan Reyes, v=Kenji Mori); features F3=1 F5=0 F6=0 F11=0.28; composite 0.5 among 3 candidates; cause: 1 recorded event.)
+Tue 15:30  1 accident incident at g6 in this ten minutes.
+Tue 15:34  seen up close: accident at g6 against Alex Hale.
+Tue 16:40  1 commerce incident at g9 in this ten minutes.
+Tue 16:46  seen up close: commerce at g9 from Alex Novak to Yui Sato.
+Tue 17:20  1 shakedown incident at g11 in this ten minutes.
+Tue 17:40  1 theft incident at g0 in this ten minutes.
+Tue 17:41  accident (size 2) at g0 against Jordan Novak, with no cause in the record.
+Tue 17:50  1 theft incident at g7 in this ten minutes.
+Tue 18:14  theft (size 2) at g0 by Dmitri Novak against Maria Hale, with no cause in the record.
+Tue 19:10  1 theft incident at v3 in this ten minutes.
+Tue 19:30  1 accident incident at g0 in this ten minutes.
+Tue 19:50  1 theft incident at v3 in this ten minutes.
+Tue 21:10  1 theft incident at g0 in this ten minutes.
+Tue 21:20  1 accident incident at v3 in this ten minutes.
+Tue 21:20  1 police-action incident at g2 in this ten minutes.
+Tue 21:50  1 assault incident at v3 in this ten minutes.
+Tue 22:20  1 theft incident at g7 in this ten minutes.
+Tue 22:50  1 accident incident at v3 in this ten minutes.
+Tue 22:50  1 shakedown incident at g0 in this ten minutes.
+Tue 23:00  1 theft incident at v3 in this ten minutes.
+Tue 23:38  gang-clash (size 3) at g0 by Dmitri Novak against Haruto Tanaka, with no cause in the record.
+Tue 23:43  commerce (size 2) at v3 from Haruto Mori to Kenji Mori, with no cause in the record.
+Wed 00:00  1 gang-clash incident at v3 in this ten minutes.
+Wed 00:20  1 theft incident at v8 in this ten minutes.
+Wed 00:50  1 theft incident at v3 in this ten minutes.
+Wed 01:30  1 accident incident at v8 in this ten minutes.
+Wed 01:30  1 assault incident at g0 in this ten minutes.
+Wed 01:30  1 assault incident at v3 in this ten minutes.
+Wed 01:50  1 assault incident at v2 in this ten minutes.
+Wed 02:30  1 theft incident at g11 in this ten minutes.
+Wed 02:50  [procedural beat tell] Jordan Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Wed 02:50  (slot 6: slot-run.)
+Wed 02:50  (layer 3 sowed "accident" from accident (s=Jordan Novak); features F3=1 F5=0 F6=0 F11=0.4; composite 1 among 5 candidates; cause: 1 recorded event.)
+Wed 03:40  1 theft incident at v2 in this ten minutes.
+Wed 04:10  1 disorder incident at v2 in this ten minutes.
+Wed 04:20  1 assault incident at v2 in this ten minutes.
+Wed 04:30  1 assault incident at v2 in this ten minutes.
+Wed 04:30  1 gang-clash incident at v3 in this ten minutes.
+Wed 04:40  1 accident incident at g6 in this ten minutes.
+Wed 05:00  1 theft incident at v3 in this ten minutes.
+Wed 05:40  1 accident incident at g6 in this ten minutes.
+Wed 05:50  1 theft incident at g0 in this ten minutes.
+Wed 06:50  1 theft incident at v3 in this ten minutes.
+Wed 07:00  1 shakedown incident at g0 in this ten minutes.
+Wed 07:33  accident (size 2) at g0 against Haruto Mori, with no cause in the record.
+Wed 08:20  1 accident incident at g0 in this ten minutes.
+Wed 10:30  1 commerce incident at v8 in this ten minutes.
+Wed 10:40  [procedural beat tell] Watch your pockets: Kenji Sato is working the crowd again, and Kenji Sato found out first.
+Wed 10:40  (slot 7: slot-run.)
+Wed 10:40  (layer 3 sowed "theft" from theft (a=Kenji Sato, v=Kenji Sato); features F3=1 F5=0 F6=0 F11=0.2; composite 0.5 among 5 candidates; cause: 1 recorded event.)
+Wed 11:40  1 accident incident at g7 in this ten minutes.
+Wed 12:00  1 police-action incident at g4 in this ten minutes.
+Wed 12:29  commerce (size 2) at v3 from Kenji Tanaka to Haruto Mori, with no cause in the record.
+Wed 12:30  1 police-action incident at v3 in this ten minutes.
+Wed 13:00  1 commerce incident at g0 in this ten minutes.
+Wed 13:20  1 gang-clash incident at v2 in this ten minutes.
+Wed 13:40  [procedural beat tell] An NCPD patrol pulled Maria Hale off the street in Kabuki. Nobody stopped to watch.
+Wed 13:40  (slot 8: slot-run.)
+Wed 13:40  (layer 3 sowed "sweep" from sweep (s=Maria Hale); features F3=1 F5=0 F6=0 F11=0.12; composite 0 among 4 candidates; cause: 1 recorded event.)
+Wed 14:56  theft (size 2) at g6 by Yui Mori against Yui Tanaka, with no cause in the record.
+Wed 15:20  1 assault incident at g7 in this ten minutes.
+Wed 15:30  1 theft incident at v3 in this ten minutes.
+Wed 17:00  1 theft incident at g11 in this ten minutes.
+Wed 17:50  1 theft incident at g11 in this ten minutes.
+Wed 18:20  1 assault incident at g0 in this ten minutes.
+Wed 18:40  1 accident incident at g11 in this ten minutes.
+Wed 18:40  1 theft incident at g11 in this ten minutes.
+Wed 18:50  1 theft incident at g0 in this ten minutes.
+Wed 19:04  theft (size 2) at v2 by Dmitri Hale against Yui Tanaka, with no cause in the record.
+Wed 19:30  1 assault incident at v1 in this ten minutes.
+Wed 20:00  [procedural beat tell] Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Wed 20:00  (slot 9: slot-run.)
+Wed 20:00  (layer 3 sowed "accident" from accident (s=Alex Hale); features F3=1 F5=0 F6=0 F11=0.17; composite 0 among 5 candidates; cause: 1 recorded event.)
+Wed 20:30  1 theft incident at v3 in this ten minutes.
+Wed 20:40  1 accident incident at g0 in this ten minutes.
+Wed 20:40  1 assault incident at g7 in this ten minutes.
+Wed 20:40  seen up close: assault at g7 by Kenji Mori against Dmitri Reyes.
+Wed 21:10  1 accident incident at g11 in this ten minutes.
+Wed 22:00  1 theft incident at v9 in this ten minutes.
+Wed 22:05  gang-clash (size 2) at v1 aggressor-group TygerClaws victim-group TheMox, with no cause in the record.
+Wed 22:05  disorder (size 2) at v0 among Alex Reyes among Yui Tanaka, with no cause in the record.
+Wed 22:30  1 assault incident at g11 in this ten minutes.
+Wed 22:50  1 police-action incident at g6 in this ten minutes.
+Wed 23:10  1 theft incident at v7 in this ten minutes.
+Wed 23:40  1 assault incident at g4 in this ten minutes.
+Wed 23:50  psycho-break (size 3) at v2 by Dmitri Novak against Haruto Tanaka, with no cause in the record.
+Thu 00:00  1 assault incident at v7 in this ten minutes.
+Thu 00:30  1 disorder incident at g6 in this ten minutes.
+Thu 00:50  1 assault incident at v3 in this ten minutes.
+Thu 01:10  1 theft incident at g0 in this ten minutes.
+Thu 01:30  1 theft incident at v6 in this ten minutes.
+Thu 01:40  1 theft incident at v8 in this ten minutes.
+Thu 02:00  1 assault incident at g6 in this ten minutes.
+Thu 02:50  1 theft incident at g7 in this ten minutes.
+Thu 03:00  1 assault incident at v2 in this ten minutes.
+Thu 03:36  gang-clash (size 2) at g7 by Kenji Tanaka against Alex Hale, with no cause in the record.
+Thu 03:50  1 accident incident at g0 in this ten minutes.
+Thu 03:50  1 theft incident at g11 in this ten minutes.
+Thu 04:20  1 assault incident at g11 in this ten minutes.
+Thu 04:48  disorder (size 2) at v2 among Dmitri Novak among Haruto Mori among Haruto Sato, with no cause in the record.
+Thu 05:20  [procedural beat tell] Kabuki: a theft was reported by Maria Hale. Dmitri Novak is named as the person responsible. The goods have not been recovered.
+Thu 05:20  1 assault incident at g7 in this ten minutes.
+Thu 05:20  (slot 10: slot-run.)
+Thu 05:20  (layer 3 sowed "theft" from theft (a=Dmitri Novak, v=Maria Hale); features F3=1 F5=0 F6=0 F11=0.15; composite 0 among 5 candidates; cause: 1 recorded event.)
+Thu 05:50  1 accident incident at g7 in this ten minutes.
+Thu 05:50  1 theft incident at v3 in this ten minutes.
+Thu 06:10  1 gang-clash incident at g8 in this ten minutes.
+Thu 10:30  1 commerce incident at v3 in this ten minutes.
+Thu 10:40  1 theft incident at v3 in this ten minutes.
+Thu 11:30  1 theft incident at g0 in this ten minutes.
+Thu 11:40  [procedural beat tell] Heard it from three people already: Kenji Mori went for Dmitri Reyes in the street. Thought you should know before it gets bigger.
+Thu 11:40  1 police-action incident at v3 in this ten minutes.
+Thu 11:40  (slot 11: slot-run.)
+Thu 11:40  (layer 3 sowed "beating" from beating (a=Kenji Mori, v=Dmitri Reyes); features F3=1 F5=0 F6=0 F11=0.29; composite 1 among 4 candidates; cause: 1 recorded event.)
+Thu 12:10  1 theft incident at g2 in this ten minutes.
+Thu 12:20  1 gang-clash incident at g0 in this ten minutes.
+Thu 14:50  1 assault incident at g0 in this ten minutes.
+Thu 16:40  1 theft incident at g6 in this ten minutes.
+Thu 18:10  1 assault incident at g7 in this ten minutes.
+Thu 18:40  1 assault incident at v0 in this ten minutes.
+Thu 18:40  1 shakedown incident at v3 in this ten minutes.
+Thu 19:20  1 assault incident at g0 in this ten minutes.
+Thu 19:40  1 accident incident at v2 in this ten minutes.
+Thu 20:00  1 gang-clash incident at g7 in this ten minutes.
+Thu 20:08  seen up close: gang-clash at g7 by Haruto Tanaka against Alex Novak.
+Thu 20:20  1 theft incident at v8 in this ten minutes.
+Thu 20:30  1 theft incident at g3 in this ten minutes.
+Thu 22:00  [procedural beat tell] Watch your pockets: Dmitri Hale is working the crowd again, and Yui Tanaka found out first.
+Thu 22:00  (slot 12: slot-run.)
+Thu 22:00  (layer 3 sowed "theft" from theft (a=Dmitri Hale, v=Yui Tanaka); features F3=1 F5=0 F6=0 F11=0.18; composite 1 among 3 candidates; cause: 1 recorded event.)
+Thu 22:30  1 disorder incident at g0 in this ten minutes.
+Thu 22:33  theft (size 2) at g0 by Kenji Sato against Kenji Tanaka, with no cause in the record.
+Fri 01:12  gang-clash (size 2) at g0 by Alex Hale against Kenji Sato, with no cause in the record.
+Fri 01:20  1 theft incident at v2 in this ten minutes.
+Fri 01:40  1 accident incident at g5 in this ten minutes.
+Fri 02:20  1 police-action incident at g1 in this ten minutes.
+Fri 02:30  1 assault incident at g11 in this ten minutes.
+Fri 02:30  1 shakedown incident at g0 in this ten minutes.
+Fri 02:50  1 accident incident at v0 in this ten minutes.
+Fri 03:20  1 gang-clash incident at g0 in this ten minutes.
+Fri 03:20  1 theft incident at g0 in this ten minutes.
+Fri 03:26  gang-clash (size 3) at g0 by Kenji Sato victim-group Scavengers, with no cause in the record.
+Fri 04:00  1 assault incident at g11 in this ten minutes.
+Fri 04:11  gang-clash (size 2) at g8 by Haruto Sato against Dmitri Reyes, because of a gang-clash.
+Fri 04:27  disorder (size 2) at g0 among Haruto Tanaka among Haruto Tanaka, because of a gang-clash, before that a gang-clash.
+Fri 04:30  1 gang-clash incident at g1 in this ten minutes.
+Fri 05:00  1 gang-clash incident at g4 in this ten minutes.
+Fri 05:20  [procedural beat tell] Kabuki: Haruto Mori was taken for treatment after an accident. No one else was injured.
+Fri 05:20  1 theft incident at g6 in this ten minutes.
+Fri 05:20  (slot 13: slot-run.)
+Fri 05:20  (layer 3 sowed "accident" from accident (s=Haruto Mori); features F3=1 F5=0 F6=0 F11=0.12; composite 0 among 3 candidates; cause: 1 recorded event.)
+Fri 06:00  1 accident incident at g10 in this ten minutes.
+Fri 06:10  1 theft incident at g4 in this ten minutes.
+Fri 07:10  1 police-action incident at g11 in this ten minutes.
+Fri 08:30  1 gang-clash incident at g11 in this ten minutes.
+Fri 08:59  gang-clash (size 2) at g0 by Alex Hale against Kenji Sato, because of a gang-clash.
+Fri 10:10  1 commerce incident at g11 in this ten minutes.
+Fri 10:20  1 commerce incident at g9 in this ten minutes.
+Fri 10:20  1 theft incident at g7 in this ten minutes.
+Fri 11:00  1 theft incident at g6 in this ten minutes.
+Fri 11:29  accident (size 2) at v2 against Alex Hale, with no cause in the record.
+Fri 11:50  1 disorder incident at g4 in this ten minutes.
+Fri 12:30  1 shakedown incident at g4 in this ten minutes.
+Fri 12:50  1 police-action incident at g0 in this ten minutes.
+Fri 12:50  1 theft incident at v3 in this ten minutes.
+Fri 14:00  1 commerce incident at g0 in this ten minutes.
+Fri 14:00  1 police-action incident at g11 in this ten minutes.
+Fri 14:40  1 assault incident at g4 in this ten minutes.
+Fri 14:42  disorder (size 2) at g4 among Dmitri Novak among Kenji Sato, with no cause in the record.
+Fri 14:50  [procedural beat tell] Watch your pockets: Kenji Sato is working the crowd again, and Kenji Tanaka found out first.
+Fri 14:50  (slot 14: slot-run.)
+Fri 14:50  (layer 3 sowed "theft" from theft (a=Kenji Sato, v=Kenji Tanaka); features F3=1 F5=0 F6=0 F11=0.27; composite 0.5 among 3 candidates; cause: 1 recorded event.)
+Fri 15:50  1 disorder incident at g9 in this ten minutes.
+Fri 16:00  1 theft incident at v2 in this ten minutes.
+Fri 17:50  1 accident incident at v3 in this ten minutes.
+Fri 17:50  1 shakedown incident at g4 in this ten minutes.
+Fri 18:20  1 gang-clash incident at g0 in this ten minutes.
+Fri 18:40  1 shakedown incident at v3 in this ten minutes.
+Fri 20:20  1 assault incident at v3 in this ten minutes.
+Fri 20:30  1 theft incident at g6 in this ten minutes.
+Fri 20:54  police-action (size 2) at g0 against Alex Hale, with no cause in the record.
+Fri 21:10  [procedural beat tell] Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Fri 21:10  1 theft incident at g7 in this ten minutes.
+Fri 21:10  (slot 15: slot-run.)
+Fri 21:10  (layer 3 sowed "accident" from accident (s=Alex Hale); features F3=1 F5=0 F6=0 F11=0.38; composite 0.5 among 3 candidates; cause: 1 recorded event.)
+Fri 21:39  disorder (size 2) at g0 among Dmitri Hale among Yui Mori among Alex Novak among Maria Reyes, with no cause in the record.
+Fri 21:40  disorder (size 3) at v2 among Haruto Sato among Alex Novak among Alex Novak among Yui Mori, with no cause in the record.
+Fri 22:10  1 police-action incident at v3 in this ten minutes.
+Fri 22:20  1 theft incident at v8 in this ten minutes.
+Fri 22:40  1 accident incident at v0 in this ten minutes.
+Fri 23:40  1 accident incident at g0 in this ten minutes.
+Fri 23:47  accident (size 2) at g11 against Maria Novak, with no cause in the record.
+Fri 23:50  1 disorder incident at g7 in this ten minutes.
+Sat 01:30  1 assault incident at v3 in this ten minutes.
+Sat 01:51  gang-clash (size 3) at v3 aggressor-group TygerClaws against Jordan Hale, with no cause in the record.
+Sat 02:30  1 assault incident at g11 in this ten minutes.
+Sat 02:50  1 assault incident at v0 in this ten minutes.
+Sat 02:50  1 assault incident at v3 in this ten minutes.
+Sat 03:20  1 assault incident at v3 in this ten minutes.
+Sat 03:40  1 assault incident at g11 in this ten minutes.
+Sat 03:50  [procedural beat tell] Maria Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Sat 03:50  (slot 16: slot-run.)
+Sat 03:50  (layer 3 sowed "accident" from accident (s=Maria Novak); features F3=1 F5=0 F6=0 F11=0.6; composite 1 among 3 candidates; cause: 1 recorded event.)
+Sat 03:59  disorder (size 2) at g8 among Yui Tanaka among Maria Hale, because of a gang-clash, before that a gang-clash.
+Sat 04:23  assault (size 2) at g7 by Kenji Mori against Yui Sato, with no cause in the record.
+Sat 04:30  1 commerce incident at g9 in this ten minutes.
+Sat 05:00  1 theft incident at g9 in this ten minutes.
+Sat 05:40  1 gang-clash incident at g0 in this ten minutes.
+Sat 05:40  1 gang-clash incident at g7 in this ten minutes.
+Sat 05:46  seen up close: gang-clash at g7 by Haruto Sato against Maria Reyes.
+Sat 05:50  1 assault incident at v3 in this ten minutes.
+Sat 06:10  1 theft incident at g7 in this ten minutes.
+Sat 06:20  1 theft incident at g4 in this ten minutes.
+Sat 06:40  1 theft incident at g6 in this ten minutes.
+Sat 07:10  1 theft incident at g10 in this ten minutes.
+Sat 07:40  1 theft incident at g11 in this ten minutes.
+Sat 07:51  accident (size 3) at g11 against Alex Hale, with no cause in the record.
+Sat 08:00  [procedural beat tell] An NCPD patrol pulled Alex Hale off the street in Kabuki. Nobody stopped to watch.
+Sat 08:00  (slot 17: slot-run.)
+Sat 08:00  (layer 3 sowed "sweep" from sweep (s=Alex Hale); features F3=1 F5=0 F6=0 F11=0.35; composite 0.5 among 3 candidates; cause: 1 recorded event.)
+Sat 09:10  1 shakedown incident at g9 in this ten minutes.
+Sat 10:30  commerce (size 2) at g0 from Haruto Tanaka to Yui Mori, with no cause in the record.
+Sat 10:40  1 commerce incident at g4 in this ten minutes.
+Sat 10:40  1 police-action incident at g0 in this ten minutes.
+Sat 11:00  1 police-action incident at g0 in this ten minutes.
+Sat 11:16  assault (size 2) at g0 by Kenji Mori against Kenji Tanaka, with no cause in the record.
+Sat 12:40  1 theft incident at g0 in this ten minutes.
+Sat 13:20  1 assault incident at g0 in this ten minutes.
+Sat 13:50  1 assault incident at g0 in this ten minutes.
+Sat 14:40  1 theft incident at g0 in this ten minutes.
+Sat 15:30  1 police-action incident at g11 in this ten minutes.
+Sat 17:00  [procedural beat tell] Kabuki: Yui Sato was treated for injuries after an assault. Witnesses name Kenji Mori. No arrest has been made.
+Sat 17:00  (slot 18: slot-run.)
+Sat 17:00  (layer 3 sowed "beating" from beating (a=Kenji Mori, v=Yui Sato); features F3=1 F5=0 F6=0 F11=0.32; composite 0.25 among 3 candidates; cause: 1 recorded event.)
+Sat 18:10  1 assault incident at v7 in this ten minutes.
+Sat 18:10  1 shakedown incident at v3 in this ten minutes.
+Sat 18:40  1 assault incident at g0 in this ten minutes.
+Sat 19:00  1 assault incident at v3 in this ten minutes.
+Sat 19:10  1 gang-clash incident at g0 in this ten minutes.
+Sat 19:30  1 police-action incident at v5 in this ten minutes.
+Sat 20:00  1 accident incident at v3 in this ten minutes.
+Sat 20:16  gang-clash (size 2) at g4 by Kenji Sato against Jordan Reyes, with no cause in the record.
+Sat 20:30  1 theft incident at g7 in this ten minutes.
+Sat 21:00  1 disorder incident at v2 in this ten minutes.
+Sat 21:43  police-action (size 2) at g0 answered by Kenji Sato against Haruto Sato, with no cause in the record.
+Sat 23:00  1 accident incident at v3 in this ten minutes.
+Sat 23:01  gang-clash (size 2) at g0 by Haruto Sato against Kenji Mori, with no cause in the record.

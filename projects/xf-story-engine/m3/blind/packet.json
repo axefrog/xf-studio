@@ -1,0 +1,1264 @@
+{
+ "cards": [
+  {
+   "id": "H-001",
+   "text": "An NCPD patrol pulled Yui Mori off the street in Kabuki. Nobody stopped to watch."
+  },
+  {
+   "id": "H-002",
+   "text": "Watch your pockets: Dmitri Hale is working the crowd again, and Yui Tanaka found out first."
+  },
+  {
+   "id": "H-003",
+   "text": "Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-004",
+   "text": "Jordan Hale messages you: Haruto Tanaka was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-005",
+   "text": "Maria Hale messages you: Kenji Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-006",
+   "text": "An NCPD patrol pulled Alex Reyes off the street in Kabuki. Nobody stopped to watch."
+  },
+  {
+   "id": "H-007",
+   "text": "Watch your pockets: Kenji Sato is working the crowd again, and Kenji Tanaka found out first."
+  },
+  {
+   "id": "H-008",
+   "text": "Yui Sato messages you: Alex Novak was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-009",
+   "text": "Kenji Tanaka messages you: Kenji Mori was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-010",
+   "text": "Kabuki: Yui Sato was treated for injuries after an assault. Witnesses name Kenji Mori. No arrest has been made."
+  },
+  {
+   "id": "H-011",
+   "text": "Watch your pockets: Yui Tanaka is working the crowd again, and Kenji Mori found out first."
+  },
+  {
+   "id": "H-012",
+   "text": "Maria Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-013",
+   "text": "Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-014",
+   "text": "Alex Reyes messages you: Dmitri Hale was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-015",
+   "text": "Kenji Tanaka has to cross Kabuki after dark and does not want to go alone. Walk with Kenji Tanaka from a bar off the market to the metro entrance. 250 eddies."
+  },
+  {
+   "id": "H-016",
+   "text": "Maria Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-017",
+   "text": "Alex Novak wants Maria Reyes, a gang member, out of the neighbourhood. Convince them. 1000 eddies."
+  },
+  {
+   "id": "H-018",
+   "text": "Alex Reyes wants Dmitri Reyes, a gang member, out of the neighbourhood. Convince them. 1000 eddies."
+  },
+  {
+   "id": "H-019",
+   "text": "Watch your pockets: Dmitri Hale is working the crowd again, and Yui Tanaka found out first."
+  },
+  {
+   "id": "H-020",
+   "text": "Kabuki: Alex Reyes was treated for injuries after an assault. Witnesses name Kenji Mori. No arrest has been made."
+  },
+  {
+   "id": "H-021",
+   "text": "Watch your pockets: Jordan Reyes is working the crowd again, and Kenji Mori found out first."
+  },
+  {
+   "id": "H-022",
+   "text": "Kabuki: Maria Novak was treated for injuries after an assault. Witnesses name Kenji Mori. No arrest has been made."
+  },
+  {
+   "id": "H-023",
+   "text": "Kabuki: police detained Alex Reyes during a street sweep. No charge has been announced."
+  },
+  {
+   "id": "H-024",
+   "text": "Alex Reyes has not heard from Dmitri Novak in three days. Find out where Dmitri Novak went. 500 eddies."
+  },
+  {
+   "id": "H-025",
+   "text": "The terminal at Kenji Tanaka's stall near the ripperdoc has died. Get it running before the evening crowd. 250 eddies."
+  },
+  {
+   "id": "H-026",
+   "text": "Haruto Sato messages you: Maria Hale was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-027",
+   "text": "Yui Tanaka wants Alex Novak, a gang member, out of the neighbourhood. Convince them. 1000 eddies."
+  },
+  {
+   "id": "H-028",
+   "text": "Yui Mori was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-029",
+   "text": "Watch your pockets: Jordan Reyes is working the crowd again, and Kenji Mori found out first."
+  },
+  {
+   "id": "H-030",
+   "text": "Kabuki: Maria Novak was treated for injuries after an assault. Witnesses name Kenji Mori. No arrest has been made."
+  },
+  {
+   "id": "H-031",
+   "text": "An NCPD patrol pulled Maria Hale off the street in Kabuki. Nobody stopped to watch."
+  },
+  {
+   "id": "H-032",
+   "text": "Kabuki: Jordan Hale was treated for injuries after an assault. Witnesses name Maria Hale. No arrest has been made."
+  },
+  {
+   "id": "H-033",
+   "text": "Jordan Novak messages you: Yui Mori was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-034",
+   "text": "Jordan Novak messages you: Yui Tanaka was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-035",
+   "text": "An NCPD patrol pulled Alex Reyes off the street in Kabuki. Nobody stopped to watch."
+  },
+  {
+   "id": "H-036",
+   "text": "Kenji Tanaka owes Dmitri Novak money and has stopped answering. Collect it from Kenji Tanaka, who drinks near a bar off the market. You keep a cut: 500 eddies."
+  },
+  {
+   "id": "H-037",
+   "text": "Alex Reyes messages you: Kenji Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-038",
+   "text": "Jordan Novak, a technician, has a sealed case that has to get from a bar off the market to Haruto Mori before closing. 250 eddies on delivery, no questions."
+  },
+  {
+   "id": "H-039",
+   "text": "Alex Hale messages you: Jordan Novak was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-040",
+   "text": "Haruto Mori messages you: Yui Mori was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-041",
+   "text": "The terminal at Maria Novak's stall near the metro entrance has died. Get it running before the evening crowd. 250 eddies."
+  },
+  {
+   "id": "H-042",
+   "text": "Kabuki: a theft was reported by Maria Hale. Dmitri Novak is named as the person responsible. The goods have not been recovered."
+  },
+  {
+   "id": "H-043",
+   "text": "Maria Novak owes Alex Hale money and has stopped answering. Collect it from Maria Novak, who drinks near the ripperdoc. You keep a cut: 500 eddies."
+  },
+  {
+   "id": "H-044",
+   "text": "Jordan Reyes, a service worker, has a sealed case that has to get from the market stalls to Alex Novak before closing. 250 eddies on delivery, no questions."
+  },
+  {
+   "id": "H-045",
+   "text": "Kenji Sato messages you: Kenji Mori was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-046",
+   "text": "Someone took Haruto Tanaka's jacket near the metro entrance. Haruto Tanaka wants it back and does not care how. 500 eddies when it is returned."
+  },
+  {
+   "id": "H-047",
+   "text": "Kabuki: Haruto Mori was taken for treatment after an accident. No one else was injured."
+  },
+  {
+   "id": "H-048",
+   "text": "Kabuki: a theft was reported by Kenji Sato. Jordan Hale is named as the person responsible. The goods have not been recovered."
+  },
+  {
+   "id": "H-049",
+   "text": "Dmitri Hale owes Kenji Mori money and has stopped answering. Collect it from Dmitri Hale, who drinks near a bar off the market. You keep a cut: 500 eddies."
+  },
+  {
+   "id": "H-050",
+   "text": "Kabuki: a theft was reported by Haruto Tanaka. Kenji Mori is named as the person responsible. The goods have not been recovered."
+  },
+  {
+   "id": "H-051",
+   "text": "Watch your pockets: Kenji Mori is working the crowd again, and Jordan Hale found out first."
+  },
+  {
+   "id": "H-052",
+   "text": "Watch your pockets: Haruto Tanaka is working the crowd again, and Kenji Sato found out first."
+  },
+  {
+   "id": "H-053",
+   "text": "Maria Hale owes Dmitri Novak money and has stopped answering. Collect it from Maria Hale, who drinks near the ripperdoc. You keep a cut: 500 eddies."
+  },
+  {
+   "id": "H-054",
+   "text": "Someone took Jordan Novak's credstick near a bar off the market. Jordan Novak wants it back and does not care how. 500 eddies when it is returned."
+  },
+  {
+   "id": "H-055",
+   "text": "Heard it from three people already: Kenji Mori went for Dmitri Reyes in the street. Thought you should know before it gets bigger."
+  },
+  {
+   "id": "H-056",
+   "text": "Kabuki: Haruto Mori was taken for treatment after an accident. No one else was injured."
+  },
+  {
+   "id": "H-057",
+   "text": "Kenji Mori messages you: Haruto Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-058",
+   "text": "Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-059",
+   "text": "The terminal at Maria Novak's stall near a bar off the market has died. Get it running before the evening crowd. 250 eddies."
+  },
+  {
+   "id": "H-060",
+   "text": "Watch your pockets: Haruto Tanaka is working the crowd again, and Jordan Novak found out first."
+  },
+  {
+   "id": "H-061",
+   "text": "Yui Mori has not heard from Kenji Tanaka in three days. Find out where Kenji Tanaka went. 500 eddies."
+  },
+  {
+   "id": "H-062",
+   "text": "An NCPD patrol pulled Haruto Tanaka off the street in Kabuki. Nobody stopped to watch."
+  },
+  {
+   "id": "H-063",
+   "text": "Kabuki: Kenji Sato was treated for injuries after an assault. Witnesses name Yui Mori. No arrest has been made."
+  },
+  {
+   "id": "H-064",
+   "text": "An NCPD patrol pulled Alex Hale off the street in Kabuki. Nobody stopped to watch."
+  },
+  {
+   "id": "H-065",
+   "text": "Kabuki: a theft was reported by Haruto Tanaka. Kenji Mori is named as the person responsible. The goods have not been recovered."
+  },
+  {
+   "id": "H-066",
+   "text": "Alex Hale messages you: Kenji Mori was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-067",
+   "text": "Maria Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-068",
+   "text": "Dmitri Novak put Jordan Hale on the pavement outside the market. Nobody saw why, and nobody is saying."
+  },
+  {
+   "id": "H-069",
+   "text": "Jordan Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-070",
+   "text": "Jordan Hale messages you: Yui Tanaka was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-071",
+   "text": "Word at the stalls is that Kenji Tanaka hit Dmitri Hale hard enough to need the clinic. The rest is guesswork."
+  },
+  {
+   "id": "H-072",
+   "text": "Alex Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-073",
+   "text": "Jordan Reyes, a service worker, has a sealed case that has to get from the ripperdoc to Kenji Sato before closing. 250 eddies on delivery, no questions."
+  },
+  {
+   "id": "H-074",
+   "text": "Haruto Mori, a shopkeeper, has a sealed case that has to get from the ripperdoc to Jordan Reyes before closing. 250 eddies on delivery, no questions."
+  },
+  {
+   "id": "H-075",
+   "text": "Jordan Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-076",
+   "text": "Watch your pockets: Yui Tanaka is working the crowd again, and Yui Mori found out first."
+  },
+  {
+   "id": "H-077",
+   "text": "Yui Sato messages you: Kenji Mori was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-078",
+   "text": "Dmitri Novak messages you: Yui Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-079",
+   "text": "Haruto Sato messages you: Yui Mori was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-080",
+   "text": "Alex Reyes thinks Dmitri Novak is meeting someone at the ripperdoc. Follow Dmitri Novak and report who it is. 500 eddies."
+  },
+  {
+   "id": "H-081",
+   "text": "Jordan Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on."
+  },
+  {
+   "id": "H-082",
+   "text": "Kenji Mori, a labourer, has a sealed case that has to get from the market stalls to Kenji Tanaka before closing. 250 eddies on delivery, no questions."
+  },
+  {
+   "id": "H-083",
+   "text": "Kenji Mori messages you: Kenji Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-084",
+   "text": "Kabuki: Alex Hale was taken for treatment after an accident. No one else was injured."
+  },
+  {
+   "id": "H-085",
+   "text": "Word at the stalls is that Maria Reyes hit Kenji Mori hard enough to need the clinic. The rest is guesswork."
+  },
+  {
+   "id": "H-086",
+   "text": "Someone took Dmitri Novak's credstick near a bar off the market. Dmitri Novak wants it back and does not care how. 500 eddies when it is returned."
+  },
+  {
+   "id": "H-087",
+   "text": "Alex Reyes messages you: Yui Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-088",
+   "text": "Heard it from three people already: Kenji Mori went for Dmitri Reyes in the street. Thought you should know before it gets bigger."
+  },
+  {
+   "id": "H-089",
+   "text": "Dmitri Reyes messages you: Maria Novak was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-090",
+   "text": "Yui Sato, a club worker, has a sealed case that has to get from the ripperdoc to Yui Mori before closing. 250 eddies on delivery, no questions."
+  },
+  {
+   "id": "H-091",
+   "text": "Jordan Reyes has to cross Kabuki after dark and does not want to go alone. Walk with Jordan Reyes from a bar off the market to the ripperdoc. 250 eddies."
+  },
+  {
+   "id": "H-092",
+   "text": "Maria Hale says Haruto Sato lifted a bag in the Kabuki crowd and was gone before anyone moved."
+  },
+  {
+   "id": "H-093",
+   "text": "Jordan Novak messages you: Alex Novak was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-094",
+   "text": "Yui Sato messages you: Dmitri Novak was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-095",
+   "text": "Maria Novak messages you: Kenji Tanaka was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?"
+  },
+  {
+   "id": "H-096",
+   "text": "Haruto Sato robbed Dmitri Hale in the Kabuki crowd. If you see either of them, you will know why."
+  }
+ ],
+ "orders": [
+  [
+   "H-007",
+   "H-083",
+   "H-053",
+   "H-019",
+   "H-087",
+   "H-016",
+   "H-082",
+   "H-058",
+   "H-033",
+   "H-090",
+   "H-088",
+   "H-055",
+   "H-032",
+   "H-074",
+   "H-095",
+   "H-022",
+   "H-028",
+   "H-063",
+   "H-070",
+   "H-061",
+   "H-023",
+   "H-001",
+   "H-017",
+   "H-008",
+   "H-009",
+   "H-091",
+   "H-075",
+   "H-002",
+   "H-050",
+   "H-003",
+   "H-080",
+   "H-057",
+   "H-036",
+   "H-040",
+   "H-029",
+   "H-065",
+   "H-067",
+   "H-086",
+   "H-051",
+   "H-079",
+   "H-011",
+   "H-046",
+   "H-062",
+   "H-014",
+   "H-081",
+   "H-018",
+   "H-045",
+   "H-052",
+   "H-064",
+   "H-043",
+   "H-026",
+   "H-030",
+   "H-010",
+   "H-096",
+   "H-004",
+   "H-059",
+   "H-006",
+   "H-094",
+   "H-049",
+   "H-021",
+   "H-012",
+   "H-027",
+   "H-089",
+   "H-035",
+   "H-020",
+   "H-069",
+   "H-005",
+   "H-041",
+   "H-013",
+   "H-078",
+   "H-056",
+   "H-054",
+   "H-039",
+   "H-084",
+   "H-015",
+   "H-085",
+   "H-066",
+   "H-073",
+   "H-042",
+   "H-047",
+   "H-031",
+   "H-038",
+   "H-071",
+   "H-037",
+   "H-044",
+   "H-034",
+   "H-068",
+   "H-048",
+   "H-024",
+   "H-092",
+   "H-077",
+   "H-072",
+   "H-093",
+   "H-025",
+   "H-060",
+   "H-076"
+  ],
+  [
+   "H-076",
+   "H-060",
+   "H-025",
+   "H-093",
+   "H-072",
+   "H-077",
+   "H-092",
+   "H-024",
+   "H-048",
+   "H-068",
+   "H-034",
+   "H-044",
+   "H-037",
+   "H-071",
+   "H-038",
+   "H-031",
+   "H-047",
+   "H-042",
+   "H-073",
+   "H-066",
+   "H-085",
+   "H-015",
+   "H-084",
+   "H-039",
+   "H-054",
+   "H-056",
+   "H-078",
+   "H-013",
+   "H-041",
+   "H-005",
+   "H-069",
+   "H-020",
+   "H-035",
+   "H-089",
+   "H-027",
+   "H-012",
+   "H-021",
+   "H-049",
+   "H-094",
+   "H-006",
+   "H-059",
+   "H-004",
+   "H-096",
+   "H-010",
+   "H-030",
+   "H-026",
+   "H-043",
+   "H-064",
+   "H-052",
+   "H-045",
+   "H-018",
+   "H-081",
+   "H-014",
+   "H-062",
+   "H-046",
+   "H-011",
+   "H-079",
+   "H-051",
+   "H-086",
+   "H-067",
+   "H-065",
+   "H-029",
+   "H-040",
+   "H-036",
+   "H-057",
+   "H-080",
+   "H-003",
+   "H-050",
+   "H-002",
+   "H-075",
+   "H-091",
+   "H-009",
+   "H-008",
+   "H-017",
+   "H-001",
+   "H-023",
+   "H-061",
+   "H-070",
+   "H-063",
+   "H-028",
+   "H-022",
+   "H-095",
+   "H-074",
+   "H-032",
+   "H-055",
+   "H-088",
+   "H-090",
+   "H-033",
+   "H-058",
+   "H-082",
+   "H-016",
+   "H-087",
+   "H-019",
+   "H-053",
+   "H-083",
+   "H-007"
+  ],
+  [
+   "H-090",
+   "H-055",
+   "H-033",
+   "H-088",
+   "H-022",
+   "H-074",
+   "H-095",
+   "H-032",
+   "H-070",
+   "H-028",
+   "H-061",
+   "H-063",
+   "H-017",
+   "H-001",
+   "H-023",
+   "H-008",
+   "H-002",
+   "H-075",
+   "H-009",
+   "H-091",
+   "H-003",
+   "H-080",
+   "H-057",
+   "H-050",
+   "H-065",
+   "H-029",
+   "H-040",
+   "H-036",
+   "H-086",
+   "H-051",
+   "H-067",
+   "H-079",
+   "H-011",
+   "H-062",
+   "H-046",
+   "H-014",
+   "H-052",
+   "H-081",
+   "H-045",
+   "H-018",
+   "H-064",
+   "H-026",
+   "H-030",
+   "H-043",
+   "H-096",
+   "H-059",
+   "H-010",
+   "H-004",
+   "H-021",
+   "H-094",
+   "H-049",
+   "H-006",
+   "H-035",
+   "H-012",
+   "H-027",
+   "H-089",
+   "H-069",
+   "H-005",
+   "H-041",
+   "H-020",
+   "H-054",
+   "H-013",
+   "H-056",
+   "H-078",
+   "H-015",
+   "H-039",
+   "H-084",
+   "H-085",
+   "H-073",
+   "H-042",
+   "H-047",
+   "H-066",
+   "H-037",
+   "H-038",
+   "H-071",
+   "H-031",
+   "H-044",
+   "H-034",
+   "H-068",
+   "H-048",
+   "H-077",
+   "H-024",
+   "H-092",
+   "H-072",
+   "H-025",
+   "H-093",
+   "H-076",
+   "H-060",
+   "H-007",
+   "H-083",
+   "H-053",
+   "H-019",
+   "H-082",
+   "H-058",
+   "H-016",
+   "H-087"
+  ],
+  [
+   "H-087",
+   "H-016",
+   "H-058",
+   "H-082",
+   "H-019",
+   "H-053",
+   "H-083",
+   "H-007",
+   "H-060",
+   "H-076",
+   "H-093",
+   "H-025",
+   "H-072",
+   "H-092",
+   "H-024",
+   "H-077",
+   "H-048",
+   "H-068",
+   "H-034",
+   "H-044",
+   "H-031",
+   "H-071",
+   "H-038",
+   "H-037",
+   "H-066",
+   "H-047",
+   "H-042",
+   "H-073",
+   "H-085",
+   "H-084",
+   "H-039",
+   "H-015",
+   "H-078",
+   "H-056",
+   "H-013",
+   "H-054",
+   "H-020",
+   "H-041",
+   "H-005",
+   "H-069",
+   "H-089",
+   "H-027",
+   "H-012",
+   "H-035",
+   "H-006",
+   "H-049",
+   "H-094",
+   "H-021",
+   "H-004",
+   "H-010",
+   "H-059",
+   "H-096",
+   "H-043",
+   "H-030",
+   "H-026",
+   "H-064",
+   "H-018",
+   "H-045",
+   "H-081",
+   "H-052",
+   "H-014",
+   "H-046",
+   "H-062",
+   "H-011",
+   "H-079",
+   "H-067",
+   "H-051",
+   "H-086",
+   "H-036",
+   "H-040",
+   "H-029",
+   "H-065",
+   "H-050",
+   "H-057",
+   "H-080",
+   "H-003",
+   "H-091",
+   "H-009",
+   "H-075",
+   "H-002",
+   "H-008",
+   "H-023",
+   "H-001",
+   "H-017",
+   "H-063",
+   "H-061",
+   "H-028",
+   "H-070",
+   "H-032",
+   "H-095",
+   "H-074",
+   "H-022",
+   "H-088",
+   "H-033",
+   "H-055",
+   "H-090"
+  ]
+ ],
+ "pairs": [
+  {
+   "id": "P-089",
+   "left": "H-005",
+   "right": "H-091"
+  },
+  {
+   "id": "P-015",
+   "left": "H-006",
+   "right": "H-059"
+  },
+  {
+   "id": "P-022",
+   "left": "H-025",
+   "right": "H-068"
+  },
+  {
+   "id": "P-020",
+   "left": "H-091",
+   "right": "H-047"
+  },
+  {
+   "id": "P-023",
+   "left": "H-092",
+   "right": "H-073"
+  },
+  {
+   "id": "P-021",
+   "left": "H-031",
+   "right": "H-043"
+  },
+  {
+   "id": "P-027",
+   "left": "H-055",
+   "right": "H-064"
+  },
+  {
+   "id": "P-063",
+   "left": "H-090",
+   "right": "H-021"
+  },
+  {
+   "id": "P-058",
+   "left": "H-051",
+   "right": "H-024"
+  },
+  {
+   "id": "P-056",
+   "left": "H-003",
+   "right": "H-038"
+  },
+  {
+   "id": "P-033",
+   "left": "H-029",
+   "right": "H-003"
+  },
+  {
+   "id": "P-003",
+   "left": "H-086",
+   "right": "H-055"
+  },
+  {
+   "id": "P-064",
+   "left": "H-018",
+   "right": "H-035"
+  },
+  {
+   "id": "P-074",
+   "left": "H-018",
+   "right": "H-087"
+  },
+  {
+   "id": "P-032",
+   "left": "H-028",
+   "right": "H-050"
+  },
+  {
+   "id": "P-035",
+   "left": "H-062",
+   "right": "H-020"
+  },
+  {
+   "id": "P-028",
+   "left": "H-023",
+   "right": "H-032"
+  },
+  {
+   "id": "P-013",
+   "left": "H-038",
+   "right": "H-030"
+  },
+  {
+   "id": "P-092",
+   "left": "H-066",
+   "right": "H-027"
+  },
+  {
+   "id": "P-093",
+   "left": "H-053",
+   "right": "H-037"
+  },
+  {
+   "id": "P-043",
+   "left": "H-085",
+   "right": "H-016"
+  },
+  {
+   "id": "P-079",
+   "left": "H-086",
+   "right": "H-009"
+  },
+  {
+   "id": "P-053",
+   "left": "H-041",
+   "right": "H-028"
+  },
+  {
+   "id": "P-050",
+   "left": "H-061",
+   "right": "H-016"
+  },
+  {
+   "id": "P-007",
+   "left": "H-024",
+   "right": "H-075"
+  },
+  {
+   "id": "P-078",
+   "left": "H-038",
+   "right": "H-008"
+  },
+  {
+   "id": "P-090",
+   "left": "H-074",
+   "right": "H-078"
+  },
+  {
+   "id": "P-046",
+   "left": "H-021",
+   "right": "H-068"
+  },
+  {
+   "id": "P-017",
+   "left": "H-046",
+   "right": "H-069"
+  },
+  {
+   "id": "P-096",
+   "left": "H-082",
+   "right": "H-093"
+  },
+  {
+   "id": "P-009",
+   "left": "H-074",
+   "right": "H-029"
+  },
+  {
+   "id": "P-039",
+   "left": "H-056",
+   "right": "H-006"
+  },
+  {
+   "id": "P-095",
+   "left": "H-036",
+   "right": "H-077"
+  },
+  {
+   "id": "P-081",
+   "left": "H-040",
+   "right": "H-024"
+  },
+  {
+   "id": "P-055",
+   "left": "H-027",
+   "right": "H-002"
+  },
+  {
+   "id": "P-071",
+   "left": "H-059",
+   "right": "H-072"
+  },
+  {
+   "id": "P-083",
+   "left": "H-080",
+   "right": "H-014"
+  },
+  {
+   "id": "P-088",
+   "left": "H-089",
+   "right": "H-044"
+  },
+  {
+   "id": "P-008",
+   "left": "H-050",
+   "right": "H-036"
+  },
+  {
+   "id": "P-073",
+   "left": "H-083",
+   "right": "H-061"
+  },
+  {
+   "id": "P-006",
+   "left": "H-001",
+   "right": "H-080"
+  },
+  {
+   "id": "P-059",
+   "left": "H-054",
+   "right": "H-011"
+  },
+  {
+   "id": "P-047",
+   "left": "H-092",
+   "right": "H-042"
+  },
+  {
+   "id": "P-075",
+   "left": "H-033",
+   "right": "H-025"
+  },
+  {
+   "id": "P-012",
+   "left": "H-052",
+   "right": "H-061"
+  },
+  {
+   "id": "P-036",
+   "left": "H-052",
+   "right": "H-065"
+  },
+  {
+   "id": "P-014",
+   "left": "H-010",
+   "right": "H-082"
+  },
+  {
+   "id": "P-040",
+   "left": "H-071",
+   "right": "H-012"
+  },
+  {
+   "id": "P-052",
+   "left": "H-086",
+   "right": "H-022"
+  },
+  {
+   "id": "P-069",
+   "left": "H-080",
+   "right": "H-071"
+  },
+  {
+   "id": "P-002",
+   "left": "H-054",
+   "right": "H-058"
+  },
+  {
+   "id": "P-082",
+   "left": "H-043",
+   "right": "H-079"
+  },
+  {
+   "id": "P-065",
+   "left": "H-025",
+   "right": "H-020"
+  },
+  {
+   "id": "P-016",
+   "left": "H-027",
+   "right": "H-012"
+  },
+  {
+   "id": "P-066",
+   "left": "H-043",
+   "right": "H-056"
+  },
+  {
+   "id": "P-041",
+   "left": "H-084",
+   "right": "H-069"
+  },
+  {
+   "id": "P-026",
+   "left": "H-081",
+   "right": "H-058"
+  },
+  {
+   "id": "P-051",
+   "left": "H-088",
+   "right": "H-036"
+  },
+  {
+   "id": "P-004",
+   "left": "H-032",
+   "right": "H-015"
+  },
+  {
+   "id": "P-030",
+   "left": "H-001",
+   "right": "H-007"
+  },
+  {
+   "id": "P-085",
+   "left": "H-059",
+   "right": "H-026"
+  },
+  {
+   "id": "P-067",
+   "left": "H-084",
+   "right": "H-091"
+  },
+  {
+   "id": "P-010",
+   "left": "H-067",
+   "right": "H-041"
+  },
+  {
+   "id": "P-049",
+   "left": "H-007",
+   "right": "H-082"
+  },
+  {
+   "id": "P-031",
+   "left": "H-048",
+   "right": "H-075"
+  },
+  {
+   "id": "P-048",
+   "left": "H-076",
+   "right": "H-096"
+  },
+  {
+   "id": "P-072",
+   "left": "H-053",
+   "right": "H-060"
+  },
+  {
+   "id": "P-042",
+   "left": "H-022",
+   "right": "H-013"
+  },
+  {
+   "id": "P-044",
+   "left": "H-060",
+   "right": "H-047"
+  },
+  {
+   "id": "P-038",
+   "left": "H-002",
+   "right": "H-010"
+  },
+  {
+   "id": "P-011",
+   "left": "H-062",
+   "right": "H-053"
+  },
+  {
+   "id": "P-080",
+   "left": "H-057",
+   "right": "H-090"
+  },
+  {
+   "id": "P-029",
+   "left": "H-063",
+   "right": "H-072"
+  },
+  {
+   "id": "P-061",
+   "left": "H-015",
+   "right": "H-064"
+  },
+  {
+   "id": "P-087",
+   "left": "H-041",
+   "right": "H-094"
+  },
+  {
+   "id": "P-045",
+   "left": "H-031",
+   "right": "H-088"
+  },
+  {
+   "id": "P-054",
+   "left": "H-074",
+   "right": "H-023"
+  },
+  {
+   "id": "P-084",
+   "left": "H-015",
+   "right": "H-045"
+  },
+  {
+   "id": "P-068",
+   "left": "H-073",
+   "right": "H-042"
+  },
+  {
+   "id": "P-018",
+   "left": "H-013",
+   "right": "H-090"
+  },
+  {
+   "id": "P-001",
+   "left": "H-017",
+   "right": "H-019"
+  },
+  {
+   "id": "P-086",
+   "left": "H-004",
+   "right": "H-046"
+  },
+  {
+   "id": "P-037",
+   "left": "H-011",
+   "right": "H-030"
+  },
+  {
+   "id": "P-094",
+   "left": "H-034",
+   "right": "H-017"
+  },
+  {
+   "id": "P-070",
+   "left": "H-048",
+   "right": "H-017"
+  },
+  {
+   "id": "P-091",
+   "left": "H-039",
+   "right": "H-073"
+  },
+  {
+   "id": "P-062",
+   "left": "H-044",
+   "right": "H-096"
+  },
+  {
+   "id": "P-077",
+   "left": "H-049",
+   "right": "H-070"
+  },
+  {
+   "id": "P-025",
+   "left": "H-035",
+   "right": "H-019"
+  },
+  {
+   "id": "P-005",
+   "left": "H-049",
+   "right": "H-063"
+  },
+  {
+   "id": "P-060",
+   "left": "H-081",
+   "right": "H-046"
+  },
+  {
+   "id": "P-057",
+   "left": "H-049",
+   "right": "H-065"
+  },
+  {
+   "id": "P-034",
+   "left": "H-067",
+   "right": "H-051"
+  },
+  {
+   "id": "P-024",
+   "left": "H-076",
+   "right": "H-044"
+  },
+  {
+   "id": "P-019",
+   "left": "H-085",
+   "right": "H-018"
+  },
+  {
+   "id": "P-076",
+   "left": "H-095",
+   "right": "H-054"
+  }
+ ]
+}

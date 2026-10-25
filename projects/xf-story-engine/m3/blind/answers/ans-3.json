@@ -1,0 +1,1160 @@
+{
+ "rater": "claude-sonnet",
+ "cards": {
+  "H-090": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stock courier errand, role label, 'no questions'"
+  },
+  "H-055": {
+   "caused": 5,
+   "legible": 4,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "person",
+   "cue": "gossip voice, but text repeats exactly elsewhere"
+  },
+  "H-033": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-088": {
+   "caused": 5,
+   "legible": 4,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "person",
+   "cue": "gossip voice, but text repeats exactly elsewhere"
+  },
+  "H-022": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "news-report template with name slots"
+  },
+  "H-074": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stock courier errand, role label, 'no questions'"
+  },
+  "H-095": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-032": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "news-report template with name slots"
+  },
+  "H-070": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-028": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-061": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "'Find out where X went. 500 eddies' formula"
+  },
+  "H-063": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "news-report template with name slots"
+  },
+  "H-017": {
+   "caused": 3,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'a gang member' label, 'Convince them', 1000 eddies"
+  },
+  "H-001": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated NCPD line, 'Nobody stopped to watch'"
+  },
+  "H-023": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bulletin template, no hook"
+  },
+  "H-008": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-002": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-075": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-009": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-091": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic escort job, place slots"
+  },
+  "H-003": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-080": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "tail-and-report job formula"
+  },
+  "H-057": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-050": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "report template, 'goods have not been recovered'"
+  },
+  "H-065": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "report template, 'goods have not been recovered'"
+  },
+  "H-029": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-040": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-036": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "debt-collection template, 'You keep a cut'"
+  },
+  "H-086": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "'does not care how' recovery formula"
+  },
+  "H-051": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-067": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-079": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-011": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-062": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated NCPD line, 'Nobody stopped to watch'"
+  },
+  "H-046": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "'does not care how' recovery formula"
+  },
+  "H-014": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-052": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-081": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-045": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-018": {
+   "caused": 3,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'a gang member' label, 'Convince them', 1000 eddies"
+  },
+  "H-064": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated NCPD line, 'Nobody stopped to watch'"
+  },
+  "H-026": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-030": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "news-report template with name slots"
+  },
+  "H-043": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "debt-collection template, 'You keep a cut'"
+  },
+  "H-096": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'you will know why' is vague filler"
+  },
+  "H-059": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stall/terminal fix with place slots"
+  },
+  "H-010": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "news-report template with name slots"
+  },
+  "H-004": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-021": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-094": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-049": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "debt-collection template, 'You keep a cut'"
+  },
+  "H-006": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated NCPD line, 'Nobody stopped to watch'"
+  },
+  "H-035": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated NCPD line, 'Nobody stopped to watch'"
+  },
+  "H-012": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-027": {
+   "caused": 3,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'a gang member' label, 'Convince them', 1000 eddies"
+  },
+  "H-089": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-069": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-005": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-041": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stall/terminal fix with place slots"
+  },
+  "H-020": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "news-report template with name slots"
+  },
+  "H-054": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "'does not care how' recovery formula"
+  },
+  "H-013": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-056": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "bland bulletin, 'No one else was injured'"
+  },
+  "H-078": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-015": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic escort job, place slots"
+  },
+  "H-039": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-084": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "bland bulletin, 'No one else was injured'"
+  },
+  "H-085": {
+   "caused": 5,
+   "legible": 4,
+   "setting": 6,
+   "pull": 6,
+   "made_by": "person",
+   "cue": "'The rest is guesswork', street rumour voice"
+  },
+  "H-073": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stock courier errand, role label, 'no questions'"
+  },
+  "H-042": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "report template, 'goods have not been recovered'"
+  },
+  "H-047": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "bland bulletin, 'No one else was injured'"
+  },
+  "H-066": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-037": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-038": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stock courier errand, role label, 'no questions'"
+  },
+  "H-071": {
+   "caused": 5,
+   "legible": 4,
+   "setting": 6,
+   "pull": 6,
+   "made_by": "person",
+   "cue": "'The rest is guesswork', street rumour voice"
+  },
+  "H-031": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated NCPD line, 'Nobody stopped to watch'"
+  },
+  "H-044": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stock courier errand, role label, 'no questions'"
+  },
+  "H-034": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-068": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 6,
+   "pull": 6,
+   "made_by": "person",
+   "cue": "'nobody is saying' implies a hidden story"
+  },
+  "H-048": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "report template, 'goods have not been recovered'"
+  },
+  "H-077": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-024": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "'Find out where X went. 500 eddies' formula"
+  },
+  "H-092": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "person",
+   "cue": "'gone before anyone moved' specific detail"
+  },
+  "H-072": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-025": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 6,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stall/terminal fix with place slots"
+  },
+  "H-093": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-076": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-060": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-007": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-083": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  },
+  "H-053": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "debt-collection template, 'You keep a cut'"
+  },
+  "H-019": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "'Watch your pockets' frame with name slots"
+  },
+  "H-082": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "stock courier errand, role label, 'no questions'"
+  },
+  "H-058": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-016": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 4,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "repeated accident line, nothing to act on"
+  },
+  "H-087": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "same Friday-fee sentence with swapped names"
+  }
+ },
+ "pairs": {
+  "P-089": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-015": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-022": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-020": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-023": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-021": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-027": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-063": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-058": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-056": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-033": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-003": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-064": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-074": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-032": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-035": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-028": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-013": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-092": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-093": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-043": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-079": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-053": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-050": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-007": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-078": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-090": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-046": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-017": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-096": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-009": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-039": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-095": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-081": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-055": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-071": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-083": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-088": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-008": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-073": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-006": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-059": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-047": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-075": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-012": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-036": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-014": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-040": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-052": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-069": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-002": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-082": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-065": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-016": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-066": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-041": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-026": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-051": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-004": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-030": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-085": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-067": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-010": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-049": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-031": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-048": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-072": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-042": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-044": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-038": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-011": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-080": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-029": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-061": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-087": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-045": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-054": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-084": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-068": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-018": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-001": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-086": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-037": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-094": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-070": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-091": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-062": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-077": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-025": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-005": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-060": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-057": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-034": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-024": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-019": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-076": {
+   "follow": "left",
+   "caused": "left"
+  }
+ },
+ "critic": "The cards that read as generated were the ones built from a fixed sentence frame with only names and place nouns swapped: the Friday-fee message ('was at the stall again for the Friday fee the Claws collect, and I am short'), the 'Watch your pockets: X is working the crowd again, and Y found out first' line, the Kabuki bulletin forms ('was treated for injuries after an assault. Witnesses name...', 'a theft was reported by... The goods have not been recovered'), the identical accident line ('the street crowded round for a minute and then moved on'), the NCPD patrol line, and the job-board errands (sealed case, escort, terminal repair, debt collection, 'Find out where X went', 'a gang member, out of the neighbourhood. Convince them'). The errands share a payment pattern of 250, 500 or 1000 eddies and a stock verb. Names are drawn from a small pool of first and last names and are often crossed in ways that make little sense, such as a stall owner and a Claws collector who are both ordinary named individuals, or one name appearing in many cards. Several cards repeat verbatim. The ones that read as written for the situation are the rumour and gossip cards ('Word at the stalls... The rest is guesswork', 'Nobody saw why, and nobody is saying', 'lifted a bag... gone before anyone moved'), because they carry a specific detail or a voice and leave a gap you would want to chase. The accident and 'taken for treatment' bulletins are the flattest: no cause, no action, no local texture."
+}

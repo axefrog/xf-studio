@@ -1,0 +1,1171 @@
+{
+ "arms": {
+  "E": "engine (ranked sowing)",
+  "A1": "random within gates",
+  "A3": "Radiant-style baseline",
+  "A4": "authored seed R2"
+ },
+ "key": {
+  "H-006": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:sweep",
+    "clock": "Tue 12:20",
+    "tempo": "restless"
+   }
+  },
+  "H-069": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Tue 05:30",
+    "tempo": "restless"
+   }
+  },
+  "H-019": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Thu 22:00",
+    "tempo": "restless"
+   }
+  },
+  "H-032": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Mon 13:10",
+    "tempo": "restless"
+   }
+  },
+  "H-047": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Fri 05:20",
+    "tempo": "restless"
+   }
+  },
+  "H-050": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Tue 10:50",
+    "tempo": "restless"
+   }
+  },
+  "H-031": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:sweep",
+    "clock": "Wed 13:40",
+    "tempo": "restless"
+   }
+  },
+  "H-085": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Fri 04:40",
+    "tempo": "restless"
+   }
+  },
+  "H-063": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Sat 09:30",
+    "tempo": "restless"
+   }
+  },
+  "H-029": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Tue 15:10",
+    "tempo": "restless"
+   }
+  },
+  "H-013": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Fri 21:10",
+    "tempo": "restless"
+   }
+  },
+  "H-058": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Wed 20:00",
+    "tempo": "restless"
+   }
+  },
+  "H-067": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Wed 18:50",
+    "tempo": "restless"
+   }
+  },
+  "H-012": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Sat 03:50",
+    "tempo": "restless"
+   }
+  },
+  "H-010": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Sat 17:00",
+    "tempo": "restless"
+   }
+  },
+  "H-068": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Sat 20:10",
+    "tempo": "restless"
+   }
+  },
+  "H-030": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Mon 16:10",
+    "tempo": "restless"
+   }
+  },
+  "H-001": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:sweep",
+    "clock": "Tue 01:20",
+    "tempo": "restless"
+   }
+  },
+  "H-062": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:sweep",
+    "clock": "Fri 00:20",
+    "tempo": "restless"
+   }
+  },
+  "H-055": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Thu 11:40",
+    "tempo": "restless"
+   }
+  },
+  "H-075": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Wed 02:50",
+    "tempo": "restless"
+   }
+  },
+  "H-076": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Sat 06:40",
+    "tempo": "restless"
+   }
+  },
+  "H-052": {
+   "arm": "E",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Fri 19:10",
+    "tempo": "restless"
+   }
+  },
+  "H-092": {
+   "arm": "E",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Mon 12:10",
+    "tempo": "restless"
+   }
+  },
+  "H-021": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Tue 15:10",
+    "tempo": "restless"
+   }
+  },
+  "H-011": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Fri 04:40",
+    "tempo": "restless"
+   }
+  },
+  "H-056": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Fri 05:20",
+    "tempo": "restless"
+   }
+  },
+  "H-002": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Thu 11:40",
+    "tempo": "restless"
+   }
+  },
+  "H-088": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Thu 22:00",
+    "tempo": "restless"
+   }
+  },
+  "H-035": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:sweep",
+    "clock": "Tue 12:20",
+    "tempo": "restless"
+   }
+  },
+  "H-072": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Wed 20:00",
+    "tempo": "restless"
+   }
+  },
+  "H-064": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:sweep",
+    "clock": "Sat 08:00",
+    "tempo": "restless"
+   }
+  },
+  "H-022": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Mon 16:10",
+    "tempo": "restless"
+   }
+  },
+  "H-096": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Fri 00:20",
+    "tempo": "restless"
+   }
+  },
+  "H-020": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Thu 11:00",
+    "tempo": "restless"
+   }
+  },
+  "H-071": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:beating",
+    "clock": "Tue 16:20",
+    "tempo": "restless"
+   }
+  },
+  "H-060": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Wed 22:00",
+    "tempo": "restless"
+   }
+  },
+  "H-081": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Wed 13:40",
+    "tempo": "restless"
+   }
+  },
+  "H-003": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Fri 21:10",
+    "tempo": "restless"
+   }
+  },
+  "H-084": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Wed 08:10",
+    "tempo": "restless"
+   }
+  },
+  "H-007": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Fri 14:50",
+    "tempo": "restless"
+   }
+  },
+  "H-065": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Tue 10:50",
+    "tempo": "restless"
+   }
+  },
+  "H-048": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Tue 05:30",
+    "tempo": "restless"
+   }
+  },
+  "H-051": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Thu 05:20",
+    "tempo": "restless"
+   }
+  },
+  "H-042": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:theft",
+    "clock": "Thu 05:20",
+    "tempo": "restless"
+   }
+  },
+  "H-023": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:sweep",
+    "clock": "Mon 04:00",
+    "tempo": "restless"
+   }
+  },
+  "H-028": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-mid",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Wed 04:20",
+    "tempo": "restless"
+   }
+  },
+  "H-016": {
+   "arm": "A1",
+   "meta": {
+    "run": "w-early",
+    "template": "xf.m3.hooks:accident",
+    "clock": "Sat 03:50",
+    "tempo": "restless"
+   }
+  },
+  "H-082": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-1",
+    "template": "delivery"
+   }
+  },
+  "H-038": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-12",
+    "template": "delivery"
+   }
+  },
+  "H-086": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-12",
+    "template": "recovery"
+   }
+  },
+  "H-036": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-9",
+    "template": "debt"
+   }
+  },
+  "H-041": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-7",
+    "template": "repair"
+   }
+  },
+  "H-027": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-10",
+    "template": "removal"
+   }
+  },
+  "H-049": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-1",
+    "template": "debt"
+   }
+  },
+  "H-015": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-3",
+    "template": "escort"
+   }
+  },
+  "H-074": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-5",
+    "template": "delivery"
+   }
+  },
+  "H-024": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-8",
+    "template": "missing"
+   }
+  },
+  "H-017": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-8",
+    "template": "removal"
+   }
+  },
+  "H-044": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-4",
+    "template": "delivery"
+   }
+  },
+  "H-080": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-8",
+    "template": "tail"
+   }
+  },
+  "H-053": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-9",
+    "template": "debt"
+   }
+  },
+  "H-090": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-13",
+    "template": "delivery"
+   }
+  },
+  "H-091": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-10",
+    "template": "escort"
+   }
+  },
+  "H-059": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-11",
+    "template": "repair"
+   }
+  },
+  "H-061": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-2",
+    "template": "missing"
+   }
+  },
+  "H-046": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-6",
+    "template": "recovery"
+   }
+  },
+  "H-025": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-2",
+    "template": "repair"
+   }
+  },
+  "H-018": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-6",
+    "template": "removal"
+   }
+  },
+  "H-054": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-12",
+    "template": "recovery"
+   }
+  },
+  "H-073": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-4",
+    "template": "delivery"
+   }
+  },
+  "H-043": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-14",
+    "template": "debt"
+   }
+  },
+  "H-079": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-47",
+    "state": "S-late-wary"
+   }
+  },
+  "H-083": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-25",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-087": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-40",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-026": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-31",
+    "state": "S-late-wary"
+   }
+  },
+  "H-045": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-5",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-070": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-33",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-005": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-45",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-039": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-48",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-078": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-35",
+    "state": "S-late-wary"
+   }
+  },
+  "H-089": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-7",
+    "state": "S-late-wary"
+   }
+  },
+  "H-014": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-41",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-057": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-20",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-094": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-12",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-093": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-28",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-008": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-46",
+    "state": "S-mid-crackdown"
+   }
+  },
+  "H-009": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-0",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-040": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-16",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-004": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-36",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-034": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-39",
+    "state": "S-late-wary"
+   }
+  },
+  "H-095": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-30",
+    "state": "S-mid-crackdown"
+   }
+  },
+  "H-066": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-10",
+    "state": "S-mid-crackdown"
+   }
+  },
+  "H-033": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-22",
+    "state": "S-mid-crackdown"
+   }
+  },
+  "H-077": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-27",
+    "state": "S-late-wary"
+   }
+  },
+  "H-037": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-34",
+    "state": "S-mid-crackdown"
+   }
+  }
+ },
+ "pairKey": {
+  "P-001": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-002": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-003": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-004": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-005": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-006": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-007": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-008": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-009": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-010": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-011": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-012": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-013": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-014": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-015": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-016": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-017": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-018": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-019": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-020": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-021": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-022": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-023": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-024": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-025": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-026": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-027": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-028": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-029": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-030": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-031": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-032": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-033": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-034": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-035": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-036": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-037": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-038": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-039": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-040": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-041": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-042": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-043": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-044": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-045": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-046": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-047": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-048": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-049": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-050": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-051": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-052": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-053": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-054": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-055": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-056": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-057": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-058": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-059": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-060": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-061": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-062": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-063": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-064": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-065": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-066": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-067": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-068": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-069": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-070": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-071": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-072": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-073": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-074": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-075": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-076": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-077": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-078": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-079": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-080": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-081": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-082": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-083": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-084": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-085": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-086": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-087": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-088": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-089": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-090": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-091": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-092": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-093": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-094": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-095": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-096": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  }
+ },
+ "available": {
+  "E": 36,
+  "A1": 36,
+  "A3": 44,
+  "A4": 44
+ },
+ "n": 24
+}

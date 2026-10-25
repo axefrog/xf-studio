@@ -1,0 +1,12 @@
+# M3 run: fit-S-mid-crackdown
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "fit-S-mid-crackdown"
+story state: S-mid-crackdown (mid story, police pressing the district, V unknown to the stalls)
+facts set (the rest read 0): q000_done, q001_done, q003_done, q004_done, q005_done, q101_done, q104_done, q105_done
+street: regimes: a crackdown arrives daily; Tyger Claws books: cash 30000
+layer 3: absent (sowing off); V's policy: decline
+span: 26 windows of ten minutes (0.2 game days), 2600 play seconds
+
+Mon 00:10  [authored offer ask] Jordan Hale messages you: Maria Hale was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?  -> V: decline
+Mon 00:10  [authored beat stay-out] Jordan Hale nodded, as if they had expected nothing else, and went back to the counter.
+Mon 00:10  [authored closing] That Friday is over.
+Mon 01:00  [authored coda] The stalls opened and closed the way they always do, and the fee was paid or it was not.

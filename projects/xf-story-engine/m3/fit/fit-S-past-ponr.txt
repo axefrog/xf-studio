@@ -1,0 +1,9 @@
+# M3 run: fit-S-past-ponr
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "fit-S-past-ponr"
+story state: S-past-ponr (the point of no return has passed: the window is closed)
+facts set (the rest read 0): q000_done, q001_done, q005_done, q115_point_of_no_return
+street: regimes: none arrive
+layer 3: absent (sowing off); V's policy: decline
+span: 26 windows of ten minutes (0.2 game days), 2600 play seconds
+
+Mon 00:10  [authored coda] The stalls opened and closed the way they always do, and the fee was paid or it was not.

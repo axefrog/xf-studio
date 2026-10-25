@@ -1,0 +1,74 @@
+# M3 run: w-mid
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "w-mid"
+story state: S-mid-squeezed (mid story, the gang is short of money, V has a name for helping people in public)
+facts set (the rest read 0): q000_corpo_background, q000_done, q001_done, q003_done, q004_done, q005_done, q101_done, q103_done
+street: ledger.m0 = 0.25 (short runs stand for weeks of history); regimes: none arrive; Tyger Claws books: cash 200, burn 300
+setting: incident rates x8 (a busier Kabuki, to give the engine enough to tell)
+setting: arm E: layer 3 ranks and chooses
+V walks the district: a new block every game hour
+layer 3: attached, tempo restless; V's policy: decline
+span: 864 windows of ten minutes (6.0 game days), 86400 play seconds
+
+Mon 00:10  (a delivery was held (phase-settling).)
+Mon 00:10  (a delivery was held (hold-cleared).)
+Mon 00:10  (a delivery was held (lead-aim).)
+Mon 00:30  (slot 0: slot-gentle.)
+Mon 02:10  [authored offer ask] Yui Mori messages you: Yui Mori was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?  -> V: decline
+Mon 02:10  [authored beat stay-out] Yui Mori nodded, as if they had expected nothing else, and went back to the counter.
+Mon 02:10  [authored closing] That Friday is over.
+Mon 02:10  (a delivery was held (hold-cleared).)
+Mon 02:20  [authored coda] The stalls opened and closed the way they always do, and the fee was paid or it was not.
+Mon 13:10  [procedural beat tell] Kabuki: Jordan Hale was treated for injuries after an assault. Witnesses name Maria Hale. No arrest has been made.
+Mon 13:10  (slot 1: slot-run.)
+Mon 13:10  (layer 3 sowed "beating" from beating (a=Maria Hale, v=Jordan Hale); features F3=1 F5=0 F6=0 F11=0.63; composite 1 among 4 candidates; cause: 1 recorded event.)
+Mon 16:10  [procedural beat tell] Kabuki: Maria Novak was treated for injuries after an assault. Witnesses name Kenji Mori. No arrest has been made.
+Mon 16:10  (slot 2: slot-run.)
+Mon 16:10  (layer 3 sowed "beating" from beating (a=Kenji Mori, v=Maria Novak); features F3=1 F5=0 F6=0 F11=0.33; composite 0.5 among 4 candidates; cause: 1 recorded event.)
+Tue 05:30  [procedural beat tell] Jordan Hale was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Tue 05:30  (slot 3: slot-run.)
+Tue 05:30  (layer 3 sowed "accident" from accident (s=Jordan Hale); features F3=1 F5=0 F6=0 F11=0.35; composite 0.5 among 10 candidates; cause: 1 recorded event.)
+Tue 10:50  [procedural beat tell] Kabuki: a theft was reported by Haruto Tanaka. Kenji Mori is named as the person responsible. The goods have not been recovered.
+Tue 10:50  (slot 4: slot-run.)
+Tue 10:50  (layer 3 sowed "theft" from theft (a=Kenji Mori, v=Haruto Tanaka); features F3=1 F5=0 F6=0 F11=0.9; composite 0.75 among 12 candidates; cause: 1 recorded event.)
+Tue 16:20  [procedural beat tell] Word at the stalls is that Kenji Tanaka hit Dmitri Hale hard enough to need the clinic. The rest is guesswork.
+Tue 16:20  (slot 5: slot-run.)
+Tue 16:20  (layer 3 sowed "beating" from beating (a=Kenji Tanaka, v=Dmitri Hale); features F3=1 F5=0 F6=0 F11=0.24; composite 0.75 among 14 candidates; cause: 1 recorded event.)
+Wed 04:20  [procedural beat tell] Kabuki market: a Tyger Claws collector, Kenji Tanaka, was seen taking payment from Alex Hale, a stallholder, as on every Friday.
+Wed 04:20  (slot 6: slot-run.)
+Wed 04:20  (layer 3 sowed "demand" from demand (a=Kenji Tanaka, v=Alex Hale); features F3=1 F5=0 F6=0 F11=0.16; composite 0.75 among 17 candidates; cause: 1 recorded event.)
+Wed 08:10  [procedural beat tell] Kabuki: Alex Hale was taken for treatment after an accident. No one else was injured.
+Wed 08:10  (slot 7: slot-run.)
+Wed 08:10  (layer 3 sowed "accident" from accident (s=Alex Hale); features F3=1 F5=1 F6=0 F11=0.26; composite 0.75 among 17 candidates; cause: 1 recorded event.)
+Wed 18:50  [procedural beat tell] Maria Novak was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Wed 18:50  (slot 8: slot-run.)
+Wed 18:50  (layer 3 sowed "accident" from accident (s=Maria Novak); features F3=1 F5=0 F6=0 F11=0.21; composite 0.5 among 20 candidates; cause: 1 recorded event.)
+Wed 22:00  [procedural beat tell] Jordan Reyes robbed Haruto Sato in the Kabuki crowd. If you see either of them, you will know why.
+Wed 22:00  (slot 9: slot-run.)
+Wed 22:00  (layer 3 sowed "theft" from theft (a=Jordan Reyes, v=Haruto Sato); features F3=1 F5=0 F6=0 F11=0.19; composite 1 among 19 candidates; cause: 1 recorded event.)
+Thu 05:20  [procedural beat tell] Watch your pockets: Kenji Mori is working the crowd again, and Jordan Hale found out first.
+Thu 05:20  (slot 10: slot-run.)
+Thu 05:20  (layer 3 sowed "theft" from theft (a=Kenji Mori, v=Jordan Hale); features F3=1 F5=1 F6=0 F11=0.28; composite 1 among 22 candidates; cause: 1 recorded event.)
+Thu 11:00  [procedural beat tell] Kabuki: Alex Reyes was treated for injuries after an assault. Witnesses name Kenji Mori. No arrest has been made.
+Thu 11:00  (slot 11: slot-run.)
+Thu 11:00  (layer 3 sowed "beating" from beating (a=Kenji Mori, v=Alex Reyes); features F3=1 F5=0 F6=0 F11=0.35; composite 1 among 22 candidates; cause: 1 recorded event.)
+Fri 00:20  [procedural beat tell] An NCPD patrol pulled Haruto Tanaka off the street in Kabuki. Nobody stopped to watch.
+Fri 00:20  (slot 12: slot-run.)
+Fri 00:20  (layer 3 sowed "sweep" from sweep (s=Haruto Tanaka); features F3=1 F5=0 F6=0 F11=0.13; composite 0.75 among 20 candidates; cause: 1 recorded event.)
+Fri 04:40  [procedural beat tell] Word at the stalls is that Maria Reyes hit Kenji Mori hard enough to need the clinic. The rest is guesswork.
+Fri 04:40  (slot 13: slot-run.)
+Fri 04:40  (layer 3 sowed "beating" from beating (a=Maria Reyes, v=Kenji Mori); features F3=1 F5=1 F6=0 F11=0.46; composite 1 among 19 candidates; cause: 1 recorded event.)
+Fri 09:50  [procedural beat tell] Word at the stalls is that Haruto Tanaka hit Haruto Mori hard enough to need the clinic. The rest is guesswork.
+Fri 09:50  (slot 14: slot-run.)
+Fri 09:50  (layer 3 sowed "beating" from beating (a=Haruto Tanaka, v=Haruto Mori); features F3=1 F5=0 F6=0 F11=0.34; composite 1 among 18 candidates; cause: 1 recorded event.)
+Fri 19:10  [procedural beat tell] Watch your pockets: Haruto Tanaka is working the crowd again, and Kenji Sato found out first.
+Fri 19:10  (slot 15: slot-run.)
+Fri 19:10  (layer 3 sowed "theft" from theft (a=Haruto Tanaka, v=Kenji Sato); features F3=1 F5=0 F6=0 F11=0.87; composite 1 among 16 candidates; cause: 1 recorded event.)
+Sat 06:40  [procedural beat tell] Watch your pockets: Yui Tanaka is working the crowd again, and Yui Mori found out first.
+Sat 06:40  (slot 16: slot-run.)
+Sat 06:40  (layer 3 sowed "theft" from theft (a=Yui Tanaka, v=Yui Mori); features F3=1 F5=0 F6=0 F11=0.11; composite 0.25 among 21 candidates; cause: 1 recorded event.)
+Sat 09:30  [procedural beat tell] Kabuki: Kenji Sato was treated for injuries after an assault. Witnesses name Yui Mori. No arrest has been made.
+Sat 09:30  (slot 17: slot-run.)
+Sat 09:30  (layer 3 sowed "beating" from beating (a=Yui Mori, v=Kenji Sato); features F3=1 F5=0 F6=0 F11=0.83; composite 1 among 22 candidates; cause: 1 recorded event.)
+Sat 20:10  [procedural beat tell] Dmitri Novak put Jordan Hale on the pavement outside the market. Nobody saw why, and nobody is saying.
+Sat 20:10  (slot 18: slot-run.)
+Sat 20:10  (layer 3 sowed "beating" from beating (a=Dmitri Novak, v=Jordan Hale); features F3=1 F5=1 F6=0 F11=0.26; composite 1 among 21 candidates; cause: 1 recorded event.)
