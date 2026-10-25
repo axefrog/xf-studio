@@ -33,7 +33,11 @@ export function stepOne(sim: Sim, delay: number | null, seen: Map<Id, number>): 
   if (delay === null) return;
   for (const a of actsOf(sim)) if ((a.kind === 'warning' || a.kind === 'price') && !seen.has(a.id)) seen.set(a.id, a.w);
   const w = sim.windowNow();
-  for (const [id, mintedAt] of seen) if (mintedAt + delay === w) sim.k.pin({ node: id, slot: 'outcome', value: 'done', reason: 'observed', at: sim.k.now, cause: H(hs('layer2')), evidence: id });
+  for (const [id, mintedAt] of seen) if (mintedAt + delay === w) {
+    // an event a reload did not keep is minted again under its own Id from the ring (S1 11), as layer 2 would find it
+    if (!sim.k.persistence.restoreReferencedHeader(id)) sim.remint(id);
+    sim.k.pin({ node: id, slot: 'outcome', value: 'done', reason: 'observed', at: sim.k.now, cause: H(hs('layer2')), evidence: id });
+  }
 }
 
 export interface HuntOptions {
