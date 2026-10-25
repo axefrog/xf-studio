@@ -151,6 +151,18 @@ export interface PeopleData {
   archetypeRules: Record<string, Array<[string, number]>>;
   /** Fraction of bind attempts. */
   bindAttempts: number;
+  /**
+   * The wide name registry (src/sim/names.ts). Absent, residents are named from the kernel's own small pool, as every run before M3 run 2 was;
+   * present, a resident's name takes the registry's origins, weighted by affiliation class and district. The draw feeds no decision (S1-I-7).
+   */
+  names?: NameData;
+}
+
+/** Names by origin, and the weights that choose an origin: by the resident's affiliation class (an index), then by district key (multipliers). */
+export interface NameData {
+  origins: Record<string, { given: string[]; family: string[] }>;
+  byClass: Array<Record<string, number>>;
+  byDistrict: Record<string, Record<string, number>>;
 }
 
 export interface FocusDef {
