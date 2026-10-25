@@ -68,6 +68,40 @@
 
 - **Procedural gigs, quests and encounters over a level-of-detail world simulation:** now an active R&D vertical, the [Story Engine](../story-engine/README.md), raised and started on 22 October 2026. Its hub holds the [plan](../story-engine/plan.md), the [design seeds](../story-engine/design-seeds.md) and the [runtime requirements](../story-engine/runtime-requirements.md).
 
+### V's life: ventures, standing and consequences
+
+The aim is a world where there is always something to do, where everything seems to have a life of its own, and where the vanilla systems are a small part of what runs. These examples show the range; each one waits for the current product to be finished (the 1.0 rule), and is discussed before it is built.
+
+- **Businesses V runs:** an electronics repair shop (customers arrive with jobs, parts cost money, word of mouth grows the trade); a rental empire of apartments (tenants, rent, repairs, disputes), later with V's own gang and henchmen to collect and protect.
+- **Lasting conflict:** a war with a gang that V can win, lose or have to lie low from; territory, retaliation and truces that persist across days.
+- **Permanent wanted status:** the police keep after V until she changes her identity and appearance. The police come to V's apartment and ransack it for evidence, and what they take or break stays taken and broken.
+- **Places the designers never built:** a network of under-city tunnels V discovers and explores, leading to areas that aren't in the base game.
+- **V's own AI:** V writes an AI and lets it loose on her enemies. Its counterpart is the rogue AI that invades V, perhaps through a ripperdoc's dodgy implant: a character with its own voice and goals that hops between hosts (V, NPCs, cars, the drone).
+- **V's own surveillance:** cameras V installs around the neighbourhood, feeding a wall of monitors in her apartment that show what's going on nearby.
+
+More in the same vein, each grown from something already built or planned:
+
+- **Word gets around.** What V does travels through people instead of a global counter. A witnessed incident becomes a rumour carried by the people who saw it. It spreads along their networks (friends, workplaces, gangs, fixers) and fades with distance and time. A vendor two blocks away has heard about the shootout; a district that never saw it hasn't. Built on the bridge's witness reports (S7) and the Story Engine's people networks.
+- **The news reports V.** In-world screens, radio and the news feed carry stories generated from the record: what V did, slanted by each outlet's politics and by what was actually witnessed. A quiet week is reported as a quiet week. After a long absence (sleep, a time skip), a short catch-up of what the city did meanwhile.
+- **V's exploits as braindances.** The bridge's session recorder already captures everything V does with its context. In game, a recording becomes a braindance V can sell, trade or leak. It's also evidence the police can seize in a raid (above), and a fixer can demand one as proof a job was done.
+- **People V met come back changed.** A clerk V saved gets promoted and owes a favour. A ganger V humiliated returns with friends and a scar. Someone V ignored is a corpse in the news. The record keeps a thread for anyone who mattered, and the Story Engine picks them up again.
+- **Photos as currency.** Photo mode turns into a working tool: shots V takes can be sold to a news outlet, used for blackmail, filed as evidence or posted to a fixer as proof. It connects to the Photo Mode Tools project, since the bridge already knows what is in frame.
+- **A Trauma Team that actually comes.** V's subscription tier decides who turns up when she goes down: a platinum extraction under fire, a slow ambulance, or nobody. The bill, the debt and the stories (the team saw what V was doing) follow her.
+- **Districts with moods.** Each district carries a tension that responds to events: a gang war raises patrols and empties the streets, a festival fills them, a blackout brings looters. Crowds, prices, traffic and police behaviour follow the mood.
+
+**What they share.** Most of these rest on a handful of substrates, so each substrate built serves many of them:
+
+| Substrate | Serves | Where it is today |
+|---|---|---|
+| A persistent world record tied to the save (who owns what, who owes whom, what happened where) | businesses, rentals, gang war, wanted status, ransacked rooms | the Story Engine's record and XF Core's save ledger (planned) |
+| A simulated population with roles, factions, loyalty and routines | customers, tenants, henchmen, rival gangs, police | the Story Engine's level-of-detail simulation; the bridge's actors, crowd substitution and NPC direction |
+| Plans that anticipate outcomes, run at frame rate and report back | every staged moment: a raid, a collection, a customer visit, a henchman's job, an AI's attack | the bridge's plan module (agreement with the Story Engine, 26 October) |
+| Changing V's appearance and identity in game | permanent wanted status, laying low, disguise | the Studio's character editing (CC values) and live application through the bridge |
+| Persistent changes to places (props moved, taken or broken; decor added) | ransacked apartments, shop fit-outs, camera installs | "places that remember" (above); the bridge's props and doors |
+| New authored spaces streamed into the world | tunnels and hidden areas, V's shop | the Studio's world tools (phases W4–W5 in [world ideas](world-and-interactive-ideas.md)) |
+| Script-owned cameras rendered to in-world screens | the monitor wall; cockpit-style views | the bridge's camera control; community mods show script-owned cockpit cameras are possible |
+| An agent that can take control of actors and devices | V's AI, the rogue AI | the supervisor's actors and the bridge's handovers; a realtime controller later |
+
 ## Related
 
 [Pose editor](../animation/pose-editor-design.md) · [Pose library](../animation/pose-library-design.md) · [Expressions and idles brief](expressions-and-idles-brief.md) · [Hair physics plan](../animation/hair-physics-plan.md) · [World and interactive ideas](world-and-interactive-ideas.md)
