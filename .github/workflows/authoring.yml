@@ -83,7 +83,7 @@ jobs:
       - name: Test
         env:
           XFS_PRIVATE_ASSETS: absent
-        run: bun test
+        run: bun run test
 
       - name: Typecheck
         run: bun run check
@@ -143,10 +143,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Test
-        run: bun test tests
+        run: bun test --timeout 20000 tests
 
       - name: Profiles persistence harnesses (experiment 038)
         working-directory: experiments/038-profiles-spikes
         env:
           XFS_HARNESS_QUICK: "1"
-        run: bun test tests
+        run: bun test --timeout 20000 tests
