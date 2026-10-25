@@ -141,7 +141,10 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     opening: () => port.tabs?.snapshot().opening,
     openView: (panel, arrangement) => dock.openView(panel, arrangement),
     save: (tab, state) => {
-      if (!tab) return;
+      // View-panel reconciliation also saves on load/resize. A read-only window may arrange its
+      // local view, but must neither persist that automatic arrangement nor toast its refusal.
+      const lease = port.status.snapshot().lease;
+      if (!tab || (lease && !lease.writable)) return;
       const action = { kind: "tabs.arrange" as const, tab, layout: serializeDockState(state) }, allowed = port.authoring.capability(action);
       if (allowed.available) {
         const result = port.authoring.dispatch(action);

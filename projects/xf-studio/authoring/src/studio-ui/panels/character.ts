@@ -163,6 +163,10 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const conflictNotice = new ConflictNotice({ onResolve: keep => dispatch({ kind: "character.resolveConflict", keep }),
     capability: keep => port.authoring.capability({ kind: "character.resolveConflict", keep }) });
   const conflict = conflictNotice.element;
+  // The library note wraps independently of the fixed-height preparation/details row (t-conflict).
+  const elsewhere = note("");
+  elsewhere.setAttribute("role", "status");
+  elsewhere.setAttribute("aria-live", "polite");
   const messages = h("div", { class: "cc-messages", id: "cc-messages", hidden: true });
   let showMessages = false;
   // The library's search field (icon, clear button, Escape clears; the same as Poses): the panel filters on its pause, and each paint
@@ -230,7 +234,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     // The V's source with the panel's history beside it, then two rows of buttons: which V (a save or a default V), then character
     // presets. Reset all sits with the V's own makeup above the rows (the style guide's Creator options), so at 300 px the buttons take
     // three lines, not four (C-26).
-    section("Your V", conflict, h("div", { class: "cc-source-line" }, source, h("span", { class: "cc-history" }, undo, redo)),
+    section("Your V", conflict, elsewhere, h("div", { class: "cc-source-line" }, source, h("span", { class: "cc-history" }, undo, redo)),
       h("div", { class: "row wrap gap-s" }, loadSave, useDefault, useDefaultMale),
       h("div", { class: "row wrap gap-s" }, loadPreset, savePreset), status, messages, detailNote, detailsBlock),
     h("section", { class: "section cc-quick" }, ownMakeup.element, h("div", { class: "row wrap gap-s" }, resetAll)),
@@ -776,12 +780,13 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       }
       // A conflict on this V (t-conflict): the notice and its three ways out, while it waits.
       conflictNotice.update(context?.conflict ?? null);
-      // The one status line: what is on its way, what failed (with Try again), else the first of the Details lines, else that the V was
-      // just replaced by another window's version (its Undo starts there).
+      setText(elsewhere, context?.elsewhere ?? "");
+      elsewhere.hidden = !context?.elsewhere;
+      // The one status line: what is on its way, what failed (with Try again), else the first of the Details lines.
       const line = !context ? "" : context.phase === "preparing" ? context.message || "Reading your game's character-creator options…"
         : context.phase === "failed" ? context.message
           : details?.updating || context.viewing ? (details?.updating && context.firstTime ? FIRST_TIME : "Updating…")
-            : details?.updateError ?? (detailsNeed || (lines.length ? lines[0]! : context.elsewhere ?? ""));
+            : details?.updateError ?? (detailsNeed || (lines.length ? lines[0]! : ""));
       setText(statusText, line);
       statusText.title = line;
       // The status line keeps its height while there is a V whose state it can report (UI-68); before any V can load there is nothing

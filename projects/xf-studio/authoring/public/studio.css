@@ -157,11 +157,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .btn.small { height: var(--control-h-sm); padding: 0 var(--sp-4); font-size: var(--fs-sm); }
 .btn.icon-only { width: var(--control-h); padding: 0; }
 .btn.icon-only.small { width: var(--control-h-sm); }
-.btn:disabled, .icon-btn:disabled { opacity: .45; cursor: not-allowed; }
-/* A main action that is unavailable stays focusable and says why (UI-84; reason-tip.ts). */
-.btn[aria-disabled="true"], .chip-button[aria-disabled="true"], .cc-row button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
-/* An unavailable primary doesn't read as the region's commitment: it takes the default button's colours, faded like the rest (C-25). */
-.btn.primary[aria-disabled="true"], .btn.primary:disabled { background: var(--bg-raised); color: var(--text); border-color: var(--line-strong); font-weight: 550; }
 .reason-tip { position: fixed; z-index: 1100; max-width: min(320px, calc(100vw - 12px)); padding: var(--sp-3) var(--sp-4); pointer-events: none;
   background: var(--bg-overlay); color: var(--text); border: 1px solid var(--line-strong); border-left: 3px solid var(--warning);
   box-shadow: var(--shadow); font-size: var(--fs-sm); line-height: 1.35; overflow-wrap: anywhere; }
@@ -200,7 +195,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 @media (prefers-reduced-motion: reduce) { .expander-chevron { transition: none; } }
 .icon-btn { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 0; background: transparent; color: var(--text-muted); border-radius: var(--radius); padding: 0; }
 .icon-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); color: var(--text); }
-.icon-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 .icon-btn[aria-pressed="true"] { color: var(--signal); }
 /* A mode toggle (iconButton `mode`: mirror, snap) shows its on state as a tinted square too, so the mode reads at a glance. */
 .icon-btn.mode[aria-pressed="true"] { background: var(--signal-bg); }
@@ -274,17 +268,13 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .switch:indeterminate + .switch-track { background: var(--signal-bg); border-color: var(--signal-line); }
 .switch:indeterminate + .switch-track::after { top: 6px; left: 8px; width: 12px; height: 2px; translate: none; background: var(--signal); }
 .switch:focus-visible + .switch-track { outline: 2px solid var(--focus); outline-offset: 2px; }
-.switch:disabled + .switch-track, .switch:disabled ~ .toggle-label { opacity: .45; }
 .switch:disabled { cursor: not-allowed; }
 .toggle-label { font-size: var(--fs-md); }
 .toggle-stage { margin-inline-start: calc(var(--sp-2) - var(--sp-4)); }
-/* A switch that can't be used now dims its stage tag with its label: hierarchy follows usability. */
-.switch:disabled ~ .toggle-stage { opacity: .45; }
 .segmented { display: inline-flex; border: 1px solid var(--line-strong); background: var(--bg-sunken); padding: 1px; gap: 1px; border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm); max-width: 100%; }
 .segment { display: inline-flex; align-items: center; gap: var(--sp-2); height: calc(var(--control-h) - 4px); padding: 0 var(--sp-4); border: 0; background: transparent; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; }
 .segment:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
 .segment[aria-pressed="true"] { background: var(--bg-panel); color: var(--text); box-shadow: inset 0 -2px 0 var(--signal); font-weight: 600; }
-.segment:disabled { opacity: .45; cursor: not-allowed; }
 /* A strip hugs its choices: in a control's column it never stretches to the panel's width. */
 .control > .segmented { align-self: flex-start; }
 /* Icon-only segments (the easing curves): square-ish, the icon centred; the label is the accessible name and tooltip. */
@@ -322,9 +312,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .slider-with-value .control-label-text { font-size: var(--fs-sm); color: var(--text-muted); }
 .slider-with-value.set .control-label-text { color: var(--text); font-weight: 600; }
 .slider-with-value.set .control-label-text::after { content: ""; width: 5px; height: 5px; margin-left: var(--sp-2); background: var(--signal); }
-/* Any disabled control: its label, marker and readout read muted, as a disabled switch's label does. */
-.control.disabled .control-label, .control.disabled .control-label-text, .control.disabled .readout { color: var(--text-muted); }
-.control.disabled .control-label-text::after { background: var(--line-strong); }
 /* Readout field (components/readout-field.ts): the one readout, typed into in place. */
 .readout-field { display: inline-flex; align-items: center; justify-content: flex-end; flex: none; min-width: 5ch; height: 20px; }
 .readout-value { cursor: text; white-space: nowrap; border-bottom: 1px dotted transparent; padding: 0 1px; }
@@ -368,7 +355,7 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .direction-dial-face { width: var(--dial-size, 280px); max-width: 100%; aspect-ratio: 150 / 124; margin: 0 auto; cursor: grab; touch-action: none; }
 .direction-dial-face:active { cursor: grabbing; }
 .direction-dial-face:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.direction-dial-face.disabled { cursor: default; opacity: .55; }
+.direction-dial-face.disabled { cursor: not-allowed; color: var(--text-faint); }
 .direction-dial-art { display: block; width: 100%; height: 100%; overflow: visible; }
 .dial-edge { fill: var(--bg-sunken); stroke: var(--line-strong); stroke-width: .8; }
 .dial-horizon { fill: none; stroke: var(--line-strong); stroke-width: .6; stroke-dasharray: 2 2; }
@@ -456,7 +443,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .combobox-option small { color: var(--text-muted); font-size: var(--fs-xs); }
 .combobox-option.active { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--signal); }
 .combobox-option[aria-selected="true"] .combobox-option-label { font-weight: 600; }
-.combobox-option[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
 .combobox-empty { padding: var(--sp-4); color: var(--text-muted); font-size: var(--fs-sm); }
 /* Folder setting (components/folder-setting.ts): the folder in use, its actions, the typed box and the reserved refusal line. */
 .folder-using { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
@@ -467,7 +453,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
   border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-muted); font-size: var(--fs-sm); cursor: pointer; }
 .folder-choice:hover { background: var(--bg-hover); color: var(--text); }
 .folder-choice[aria-pressed="true"] { border-color: var(--signal); color: var(--text); background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
-.folder-choice[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 .folder-choice-path { overflow-wrap: break-word; }
 .folder-choice-source { font-size: var(--fs-xs); color: var(--text-muted); }
 /* Tree view (components/tree-view.ts): a frame the owner sizes, holding the scrolling tree (fixed-height items positioned in a
@@ -640,7 +625,7 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .section-title::before, .eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--accent-edge); flex: none; }
 .count { font: var(--fs-xs) var(--font-mono); color: var(--text); letter-spacing: 0; }
 .section { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
-.note { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); max-width: 72ch; }
+.note { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); max-width: 72ch; overflow-wrap: anywhere; }
 .note.warning { color: var(--warning); }
 .note.info { color: var(--signal); }
 .list-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-bottom: calc(var(--sp-4) * -1); }
@@ -751,7 +736,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
   border: 1px solid var(--line); background: var(--bg-raised); text-align: left; border-radius: 0 var(--bevel-sm) 0 0; height: 40px; min-width: 0; }
 .finish-option:hover:not(:disabled) { background: var(--bg-hover); }
 .finish-option[aria-pressed="true"] { border-color: var(--signal); background: var(--signal-bg); box-shadow: inset 0 -2px 0 var(--signal); }
-.finish-option:disabled { opacity: .45; cursor: not-allowed; }
 .finish-chip { width: 18px; height: 18px; border: 1px solid var(--line-strong); background: var(--text-faint); }
 .finish-option[data-finish="matte"] .finish-chip { background: color-mix(in oklab, var(--text-muted) 70%, var(--bg-panel)); }
 .finish-option[data-finish="regular"] .finish-chip { background: linear-gradient(160deg, color-mix(in oklab, var(--text-muted), white 30%), var(--text-faint)); }
@@ -946,7 +930,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
   border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-muted); font: inherit; font-size: var(--fs-sm); text-align: center; cursor: pointer; }
 .choice:hover { color: var(--text); border-color: var(--line-strong); }
 .choice[aria-selected="true"] { border-color: var(--signal); color: var(--text); background: var(--signal-bg); box-shadow: inset 0 -2px 0 var(--signal); }
-.choice[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 .choice[aria-disabled="true"]:hover { color: var(--text-muted); border-color: var(--line); }
 .choice:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .choice-content { display: inline-flex; align-items: center; gap: var(--sp-3); min-width: 0; }
@@ -1349,10 +1332,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .doc-conflict { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .doc-conflict[hidden] { display: none; }
 .doc-conflict-text { margin: 0; }
-/* A read-only window's controls are unavailable because of where the workspace is open, not because of what they show: they fade less
-   than an ordinary unavailable control (.7, not .45), so their names stay readable (body text 6.3:1 light, 8.0:1 dark; f-contrast). */
-.studio[data-workspace="read-only"] .dock-body [aria-disabled="true"]:is(button, [role="radio"], [role="option"], [role="switch"], [role="checkbox"]),
-.studio[data-workspace="read-only"] .dock-body :is(input, select, textarea, button):disabled { opacity: .7; cursor: not-allowed; }
 .status-message { border: 0; background: transparent; padding: 2px 4px; max-width: 55vw; text-align: left; color: var(--text-muted); }
 .status-message:hover { color: var(--text); background: var(--bg-hover); }
 .status-message[data-tone="error"] { color: var(--danger); } .status-message[data-tone="warning"] { color: var(--warning); } .status-message[data-tone="progress"] { color: var(--signal); }
@@ -1367,7 +1346,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .menu-item:focus, .menu-item:hover { outline: none; background: var(--bg-hover); }
 .menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 .menu-item[aria-disabled="true"] { cursor: not-allowed; }
-.menu-item[aria-disabled="true"] .menu-label, .menu-item[aria-disabled="true"] .menu-icon { opacity: .5; }
 .menu-item.danger .menu-label, .menu-item.danger .menu-icon { color: var(--danger); }
 .menu-icon { display: grid; place-items: center; width: 16px; flex: none; color: var(--text-muted); }
 .menu-item[aria-checked="true"] .menu-icon { color: var(--signal); }
@@ -1405,7 +1383,6 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .palette-group { padding: var(--sp-4) var(--sp-4) var(--sp-2); font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); }
 .palette-item { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); cursor: pointer; }
 .palette-item.active { background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
-.palette-item[aria-disabled="true"] .menu-label { opacity: .55; }
 .palette-empty { padding: var(--sp-6); color: var(--text-muted); }
 .palette-foot { padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-faint); }
 .sheet { width: min(640px, calc(100vw - 32px)); padding: var(--sp-6) var(--sp-7) var(--sp-7); border: 1px solid var(--line-strong); background: var(--bg-panel); box-shadow: var(--shadow); border-radius: 0 var(--bevel) 0 var(--bevel); }
@@ -1658,3 +1635,18 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .studio.workspace-upgrade-open { grid-template-rows: var(--header-h) auto 0 minmax(0, 1fr) var(--status-h); }
 .workspace-upgrade .empty-body { width: min(320px, 100%); max-width: 320px; text-wrap: pretty; }
 .workspace-upgrade .empty-actions:empty { display: none; }
+
+/* Unavailable library controls (t-disabled): one treatment in every workspace and theme.
+   Keep the reason tooltip and focus; suppress only the visual invitation to act. */
+:is(.btn.primary, .btn.quiet, .btn.ghost, .btn.danger, .icon-btn.mode, button, input, select, textarea, [aria-disabled="true"]):is(:disabled, [aria-disabled="true"]):where(:not(.switch)) {
+  opacity: 1; color: var(--text-faint); border-color: var(--line); background: transparent; cursor: not-allowed;
+  text-decoration: none; box-shadow: none;
+}
+.btn.primary:is(:disabled, [aria-disabled="true"]) { font-weight: 550; }
+:is(button, .menu-item, .palette-item, [role="option"])[aria-disabled="true"] :is(.icon, .menu-label, .menu-icon, .choice-label, .cc-row-current) { color: inherit; opacity: 1; }
+.control.disabled :is(.control-label, .control-label-text, .readout), .readout-field.disabled .readout-value { color: var(--text-faint); }
+.control.disabled .control-label-text::after { background: var(--line); }
+.switch:disabled + .switch-track { opacity: 1; background: var(--bg-sunken); border-color: var(--line); }
+.switch:disabled + .switch-track::after { background: var(--text-faint); }
+.switch:disabled ~ :is(.toggle-label, .toggle-stage) { opacity: 1; color: var(--text-faint); }
+.toggle:has(.switch:disabled) { cursor: not-allowed; }

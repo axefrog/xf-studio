@@ -34,8 +34,7 @@ export const CONTRAST_PAIRS: [string, string, number, string, number?][] = [
   ["--signal", "--bg-panel", 3, "Selection and drop targets"], ["--danger", "--bg-panel", 4.5, "Errors"],
   ["--warning", "--bg-panel", 4.5, "Warnings, preview study"], ["--success", "--bg-panel", 4.5, "Success, exportable"],
   ["--focus", "--bg-panel", 3, "Focus ring"], ["--accent-ink", "--accent", 4.5, "Text on the primary button"],
-  // A read-only window's unavailable controls (t-read-only-window): faded to .7, so what they show stays readable.
-  ["--text", "--bg-panel", 4.5, "Read-only window's controls (faded to .7)", .7],
+  ["--text-faint", "--bg-panel", 4.5, "Unavailable controls (all workspaces)"],
 ];
 /** `fg` drawn at `alpha` over `bg`, blended as the browser does (in sRGB), as one colour. */
 function over(fg: Oklch, bg: Oklch, alpha: number): number[] {

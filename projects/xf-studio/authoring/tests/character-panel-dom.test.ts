@@ -200,11 +200,16 @@ describe("the Character panel's DOM", () => {
     buttons[2]!.click();
     expect(resolved).toEqual(["both"]);
     expect(h.dispatched.at(-1) as object).toEqual({ kind: "character.resolveConflict", keep: "both" });
-    // The other window's version replaces this one's: the status line says Undo starts here, in its reserved place.
+    // The other window's version replaces this one's: a separate wrapping note says Undo starts here.
     h.context.replace({ origin: "default", bodyGender: "male", choices: [] }, undefined, "Changed in another window. Undo starts here.");
     h.paint(); await settle(); h.paint();
     expect(notice.hidden).toBe(true);
-    expect(h.root.querySelector(".cc-status-text")!.textContent).toBe("Changed in another window. Undo starts here.");
+    const note = h.root.querySelectorAll("p").find(p => p.getAttribute("role") === "status")!;
+    expect(note.textContent).toBe("Changed in another window. Undo starts here.");
+    expect(note.hidden).toBe(false);
+    expect(note.closest(".cc-status")).toBeNull();
+    expect(note.parentElement).toBe(notice.parentElement);
+    expect(h.root.querySelector(".cc-status-text")!.textContent).not.toContain("Undo starts here.");
     expect(h.context.snapshot().undo).toBeNull();
   });
 
