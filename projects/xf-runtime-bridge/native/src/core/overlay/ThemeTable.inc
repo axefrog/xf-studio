@@ -110,7 +110,7 @@ XF_THEME_METRIC(BarThin, "--sp-3", 6.0f)
 XF_THEME_METRIC(BarLabelled, "--sp-6", 16.0f)
 XF_THEME_METRIC(ScrollbarSize, "--sp-4", 8.0f)
 // XF_THEME_VALUE(name, source, value): numbers read from a Studio rule, then the spec's motion constants
-XF_THEME_VALUE(DisabledAlpha, ".btn:disabled opacity", 0.45f)
+XF_THEME_VALUE(DisabledAlpha, ":root --disabled-alpha", 0.45f)
 XF_THEME_VALUE(SweepSeconds, ".progress.indeterminate::after animation", 1.1f)
 XF_THEME_VALUE(PulsePeriodMs, "spec", 2400.0f)
 XF_THEME_VALUE(PulseDepth, "spec", 0.4f)
