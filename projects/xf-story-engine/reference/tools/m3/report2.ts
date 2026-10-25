@@ -19,23 +19,26 @@ const pct = (x: number): string => `${Math.round(x * 100)} %`;
 // ---- the hook runs ----
 const recs = readdirSync(runs).filter((f) => f.endsWith('.json')).sort().map((f) => ({ f: f.replace('.json', ''), r: JSON.parse(readFileSync(`${runs}/${f}`, 'utf8')) as RunRecord }));
 const isOffer = (d: RunRecord['deliveries'][number]): boolean => d.what === 'offer' && d.template.startsWith(OFFER_PACK);
-lines.push('## Hooks by run and proactivity setting', '', '| Run | Arm | Tempo | State | Game days | Hooks sown and shown | with an ask | texture | R2 offers |', '|---|---|---|---|---|---|---|---|---|');
+lines.push('## Hooks by run and proactivity setting', '', '| Run | Arm | Tempo | State | Game days | Hooks sown | with an ask | texture | R2 offers |', '|---|---|---|---|---|---|---|---|---|');
 const byArm: Record<string, { sown: number; offers: number; runs: number }> = {};
+// a hook is one decision of the sower; an offer that is shown has three deliveries (the ask, the outcome of V's answer, the closing)
 for (const { f, r } of recs) {
   const arm = f.startsWith('A1') ? 'A1' : 'E';
-  const sown = r.deliveries.filter((d) => d.layer !== 'authored');
-  const offers = sown.filter(isOffer).length;
+  const decisions = r.decisions.filter((d) => d.rule === 'sow');
+  const offers = decisions.filter((d) => String(d.data.kit).startsWith(OFFER_PACK)).length;
+  const shown = r.deliveries.filter(isOffer).length;
   const a = (byArm[arm] ??= { sown: 0, offers: 0, runs: 0 });
-  a.sown += sown.length; a.offers += offers; a.runs++;
-  lines.push(`| ${f} | ${arm} | ${r.tempo} | ${r.state} | ${(r.windows / 144).toFixed(1)} | ${sown.length} | ${offers} | ${sown.length - offers} | ${r.deliveries.filter((d) => d.layer === 'authored' && d.what === 'offer').length} |`);
+  a.sown += decisions.length; a.offers += offers; a.runs++;
+  lines.push(`| ${f} | ${arm} | ${r.tempo} | ${r.state} | ${(r.windows / 144).toFixed(1)} | ${decisions.length} | ${offers} (${shown} asks shown) | ${decisions.length - offers} | ${r.deliveries.filter((d) => d.layer === 'authored' && d.what === 'offer').length} |`);
 }
 lines.push('');
 
 // ---- what ranking chose: the features of the candidates each arm sowed ----
-lines.push('## What ranking chose (E against A1, over every hook the runs sowed)', '', '| Arm | Runs | Hooks sown | with an ask | share with an ask | mean F3 stakes | mean F5 personal link | mean F11 timeliness | offers by kit |', '|---|---|---|---|---|---|---|---|---|');
+lines.push('## What ranking chose (E against A1, over every hook the runs sowed)', '', 'The means are over every hook sown, and then over the offers alone. F3 is stakes (distinct harmful effects), F5 the personal link (V took part, 2, plus the people V was shown), F11 timeliness (1 is just now). A hook is one decision of the sower.', '', '| Arm | Runs | Hooks sown | with an ask | share with an ask | mean F3 | mean F5 | mean F11 | offers: mean F3 | offers: mean F5 | offers: mean F11 | offers by kit |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
 for (const arm of ['E', 'A1']) {
   const rs = recs.filter((x) => (x.f.startsWith('A1') ? 'A1' : 'E') === arm);
   const dec = rs.flatMap((x) => x.r.decisions.filter((d) => d.rule === 'sow'));
+  const isOfferKit = (d: (typeof dec)[number]): boolean => String(d.data.kit).startsWith(OFFER_PACK);
   const mean = (k: string, only?: (d: (typeof dec)[number]) => boolean): string => {
     const xs = dec.filter((d) => (only ? only(d) : true)).map((d) => d.data.features?.[k]).filter((v): v is number => typeof v === 'number');
     return xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : 'n/a';
@@ -43,7 +46,7 @@ for (const arm of ['E', 'A1']) {
   const kits: Record<string, number> = {};
   for (const d of dec) if (String(d.data.kit).startsWith(OFFER_PACK)) kits[String(d.data.kit).split(':')[1]!] = (kits[String(d.data.kit).split(':')[1]!] ?? 0) + 1;
   const a = byArm[arm] ?? { sown: 0, offers: 0, runs: 0 };
-  lines.push(`| ${arm} | ${a.runs} | ${a.sown} | ${a.offers} | ${a.sown ? pct(a.offers / a.sown) : 'n/a'} | ${mean('F3')} | ${mean('F5')} | ${mean('F11')} | ${Object.entries(kits).map(([k, v]) => `${k} ${v}`).join(', ')} |`);
+  lines.push(`| ${arm} | ${a.runs} | ${a.sown} | ${a.offers} | ${a.sown ? pct(a.offers / a.sown) : 'n/a'} | ${mean('F3')} | ${mean('F5')} | ${mean('F11')} | ${mean('F3', isOfferKit)} | ${mean('F5', isOfferKit)} | ${mean('F11', isOfferKit)} | ${Object.entries(kits).map(([k, v]) => `${k} ${v}`).join(', ')} |`);
 }
 lines.push('');
 

@@ -1,0 +1,77 @@
+{
+ "version": 1,
+ "seed": "m3b-blind-1",
+ "n": 24,
+ "raters": 3,
+ "a3Rule": "declared",
+ "names": "wide",
+ "tier": "offers",
+ "a4States": [
+  "S-early-quiet",
+  "S-mid-squeezed",
+  "S-mid-crackdown",
+  "S-late-wary"
+ ],
+ "runs": [
+  {
+   "file": "A1-w1.json",
+   "name": "m3b-w1",
+   "hash": "70dc9b487fbcf3c7ba141283e71ff46d"
+  },
+  {
+   "file": "A1-w2.json",
+   "name": "m3b-w2",
+   "hash": "22c30e54b676fa1611a22d6708733a6c"
+  },
+  {
+   "file": "A1-w3.json",
+   "name": "m3b-w3",
+   "hash": "aea889ad421f6c7ab88f80c97c0dbd4b"
+  },
+  {
+   "file": "A1-w4.json",
+   "name": "m3b-w4",
+   "hash": "71433b4e03a6743515c4918c60a4097f"
+  },
+  {
+   "file": "A1-w5.json",
+   "name": "m3b-w5",
+   "hash": "dea8145fa65f1833816c5a2e9fe34c13"
+  },
+  {
+   "file": "A1-w6.json",
+   "name": "m3b-w6",
+   "hash": "3e7214b420d77f0f6220c14f4e8c3ec2"
+  },
+  {
+   "file": "E-w1.json",
+   "name": "m3b-w1",
+   "hash": "a355b6d38541428b8ec59b3ec7278920"
+  },
+  {
+   "file": "E-w2.json",
+   "name": "m3b-w2",
+   "hash": "79d1bd885e0ff3bb38977a32be271367"
+  },
+  {
+   "file": "E-w3.json",
+   "name": "m3b-w3",
+   "hash": "7c291ae5f7a42b9f9dc8bba644aa9717"
+  },
+  {
+   "file": "E-w4.json",
+   "name": "m3b-w4",
+   "hash": "953ccf4cc891c8a57f678d8960fb6d29"
+  },
+  {
+   "file": "E-w5.json",
+   "name": "m3b-w5",
+   "hash": "232a3b0edde2861e32b6bf1bacea8f90"
+  },
+  {
+   "file": "E-w6.json",
+   "name": "m3b-w6",
+   "hash": "8af53542c9a444c45e549498614f7858"
+  }
+ ]
+}

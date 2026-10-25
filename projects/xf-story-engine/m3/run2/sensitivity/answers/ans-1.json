@@ -1,0 +1,1160 @@
+{
+ "rater": "codex-gpt-6.1-sol-a",
+ "cards": {
+  "H-038": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic threat and three remedies"
+  },
+  "H-040": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "full-name slots and fixed payout"
+  },
+  "H-081": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-069": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies and generic crews"
+  },
+  "H-017": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "remedy menu and reputation addendum"
+  },
+  "H-044": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic threat and three remedies"
+  },
+  "H-059": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "gang-member slot without motive"
+  },
+  "H-010": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-092": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified job with interchangeable duties"
+  },
+  "H-082": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation, endpoints, payout slots"
+  },
+  "H-022": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-007": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "third-person opening switches to first"
+  },
+  "H-088": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "delivery request sprouts unrelated shift option"
+  },
+  "H-096": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "gang-member slot without motive"
+  },
+  "H-090": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-039": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three objectives and generic flattery"
+  },
+  "H-051": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-076": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "full-name slots and fixed payout"
+  },
+  "H-050": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "outsider status mechanically justifies hiring"
+  },
+  "H-053": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "perspective switch and remedy menu"
+  },
+  "H-080": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation, endpoints, payout slots"
+  },
+  "H-025": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "remedy menu and reputation addendum"
+  },
+  "H-011": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-045": {
+   "caused": 4,
+   "legible": 4,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "asserted conspiracy and generic options"
+  },
+  "H-018": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified job with interchangeable duties"
+  },
+  "H-065": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 2,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "missing-person slots without relationship"
+  },
+  "H-024": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "delivery and bar shift conflated"
+  },
+  "H-034": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-013": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 2,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "missing-person slots without relationship"
+  },
+  "H-085": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three objectives and outsider addendum"
+  },
+  "H-047": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-030": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified job with interchangeable duties"
+  },
+  "H-004": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "delivery request sprouts unrelated shift option"
+  },
+  "H-008": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation, endpoints, payout slots"
+  },
+  "H-068": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "outsider status mechanically justifies hiring"
+  },
+  "H-006": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-084": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation, endpoints, payout slots"
+  },
+  "H-027": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three objectives and outsider addendum"
+  },
+  "H-021": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "remedy menu and reputation addendum"
+  },
+  "H-037": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-033": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-073": {
+   "caused": 7,
+   "legible": 6,
+   "setting": 6,
+   "pull": 7,
+   "made_by": "program",
+   "cue": "three-action menu and appended leverage"
+  },
+  "H-012": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "clinic payment appended as alternative objective"
+  },
+  "H-001": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "item-recovery slots and fixed reward"
+  },
+  "H-058": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies and reputation addendum"
+  },
+  "H-093": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-060": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation, endpoints, payout slots"
+  },
+  "H-063": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies and generic desperation"
+  },
+  "H-066": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-056": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "patrol condition loosely attached to options"
+  },
+  "H-054": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "escort endpoints and repeated full name"
+  },
+  "H-079": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "unfamiliar thief implies unsupported conspiracy"
+  },
+  "H-052": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three objectives and outsider addendum"
+  },
+  "H-091": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three objectives and outsider addendum"
+  },
+  "H-041": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "gang-member slot without motive"
+  },
+  "H-020": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-095": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies and generic desperation"
+  },
+  "H-094": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-070": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "item-recovery slots and fixed reward"
+  },
+  "H-005": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "perspective switch and remedy menu"
+  },
+  "H-061": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "perspective switch and unsupported conspiracy"
+  },
+  "H-029": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-048": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "escort endpoints and repeated full name"
+  },
+  "H-031": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified job with interchangeable duties"
+  },
+  "H-087": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies and patrol addendum"
+  },
+  "H-078": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "surveillance slots without client's motive"
+  },
+  "H-035": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-015": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies and generic stranger explanation"
+  },
+  "H-042": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "outsider status mechanically justifies hiring"
+  },
+  "H-075": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-043": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "awkward location slot: drinks near bar"
+  },
+  "H-086": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "perspective switch and unsupported conspiracy"
+  },
+  "H-083": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 2,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "missing-person slots without relationship"
+  },
+  "H-028": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 3,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "perspective switch and reputation addendum"
+  },
+  "H-064": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-019": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three objectives and generic flattery"
+  },
+  "H-077": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "gang-member slot without motive"
+  },
+  "H-072": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-032": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "delivery and bar shift conflated"
+  },
+  "H-026": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified job with interchangeable duties"
+  },
+  "H-057": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-089": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "surveillance slots without client's motive"
+  },
+  "H-046": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "outsider status mechanically justifies hiring"
+  },
+  "H-049": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "delivery request sprouts unrelated shift option"
+  },
+  "H-067": {
+   "caused": 3,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation, endpoints, payout slots"
+  },
+  "H-009": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 3,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "perspective switch and reputation addendum"
+  },
+  "H-071": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-014": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies and reputation addendum"
+  },
+  "H-062": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  },
+  "H-016": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "opposing sides but unexplained involvement"
+  },
+  "H-074": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unfamiliar thief implies unsupported conspiracy"
+  },
+  "H-003": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "item-recovery slots and fixed reward"
+  },
+  "H-023": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "opposing sides but unexplained involvement"
+  },
+  "H-036": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repair target, deadline, payout slots"
+  },
+  "H-002": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unfamiliar thief implies unsupported conspiracy"
+  },
+  "H-055": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "collector-name slot in stock appeal"
+  }
+ },
+ "pairs": {
+  "P-068": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-046": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-036": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-058": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-074": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-051": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-042": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-004": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-088": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-080": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-086": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-093": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-001": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-021": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-025": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-019": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-092": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-065": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-030": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-090": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-060": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-031": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-089": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-010": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-029": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-038": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-076": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-094": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-016": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-066": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-059": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-037": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-039": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-045": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-071": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-073": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-082": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-096": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-091": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-063": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-023": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-049": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-078": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-028": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-069": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-053": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-095": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-013": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-033": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-085": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-014": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-041": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-040": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-017": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-020": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-064": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-008": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-055": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-075": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-083": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-024": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-022": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-034": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-087": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-005": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-044": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-018": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-012": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-084": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-052": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-067": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-047": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-035": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-056": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-079": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-032": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-009": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-070": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-072": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-054": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-015": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-006": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-027": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-003": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-081": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-043": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-048": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-026": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-062": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-002": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-077": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-061": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-050": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-011": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-007": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-057": {
+   "follow": "right",
+   "caused": "left"
+  }
+ },
+ "critic": "All cards struck me as probably assembled, though that is a guess about the text, not knowledge of its source. The shortest expose name, occupation, location, and reward slots; the longer ones repeatedly combine an incident, three remedies, and a final explanation for contacting V. Third-person introductions sliding into first person, delivery requests branching into bar shifts, and unfamiliar thieves supposedly proving a conspiracy made those joins conspicuous. Exact duplicates and the many identical Friday-fee appeals reinforced the pattern after rating. Causality worked best when a pressure produced a specific consequence: injury prevents work, or a postponed Claws payment invites escalation. Ivo's deadline and collective stall resistance gave me the strongest pull; generic eviction requests supplied the least reason to care."
+}

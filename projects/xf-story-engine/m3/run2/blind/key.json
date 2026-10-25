@@ -1,0 +1,1171 @@
+{
+ "arms": {
+  "E": "engine (ranked sowing)",
+  "A1": "random within gates",
+  "A3": "Radiant-style baseline",
+  "A4": "authored seed R2"
+ },
+ "key": {
+  "H-088": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Wed 16:00",
+    "tempo": "restless"
+   }
+  },
+  "H-056": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w3",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Mon 18:20",
+    "tempo": "restless"
+   }
+  },
+  "H-021": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Tue 09:20",
+    "tempo": "restless"
+   }
+  },
+  "H-069": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Sat 06:40",
+    "tempo": "restless"
+   }
+  },
+  "H-007": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Fri 23:00",
+    "tempo": "restless"
+   }
+  },
+  "H-009": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w6",
+    "template": "xf.m3b.offers:assault-why",
+    "clock": "Sat 17:00",
+    "tempo": "restless"
+   }
+  },
+  "H-052": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:crowd-scuffle",
+    "clock": "Fri 06:10",
+    "tempo": "restless"
+   }
+  },
+  "H-085": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:crowd-scuffle",
+    "clock": "Wed 14:30",
+    "tempo": "restless"
+   }
+  },
+  "H-053": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w4",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Fri 09:10",
+    "tempo": "restless"
+   }
+  },
+  "H-015": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:assault-why",
+    "clock": "Thu 00:30",
+    "tempo": "restless"
+   }
+  },
+  "H-025": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Wed 16:50",
+    "tempo": "restless"
+   }
+  },
+  "H-016": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Fri 14:10",
+    "tempo": "restless"
+   }
+  },
+  "H-061": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w3",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Fri 21:50",
+    "tempo": "restless"
+   }
+  },
+  "H-024": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w6",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Sat 00:30",
+    "tempo": "restless"
+   }
+  },
+  "H-019": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:crowd-scuffle",
+    "clock": "Thu 20:20",
+    "tempo": "restless"
+   }
+  },
+  "H-073": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:fee-shortfall",
+    "clock": "Mon 21:30",
+    "tempo": "restless"
+   }
+  },
+  "H-058": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Sat 20:10",
+    "tempo": "restless"
+   }
+  },
+  "H-026": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Wed 22:10",
+    "tempo": "restless"
+   }
+  },
+  "H-095": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Thu 11:40",
+    "tempo": "restless"
+   }
+  },
+  "H-042": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Mon 14:00",
+    "tempo": "restless"
+   }
+  },
+  "H-002": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Thu 17:10",
+    "tempo": "restless"
+   }
+  },
+  "H-044": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w6",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Wed 17:30",
+    "tempo": "restless"
+   }
+  },
+  "H-004": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w6",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Mon 12:40",
+    "tempo": "restless"
+   }
+  },
+  "H-046": {
+   "arm": "E",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Mon 20:30",
+    "tempo": "restless"
+   }
+  },
+  "H-074": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Thu 17:10",
+    "tempo": "restless"
+   }
+  },
+  "H-038": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Sat 01:50",
+    "tempo": "restless"
+   }
+  },
+  "H-049": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Wed 19:50",
+    "tempo": "restless"
+   }
+  },
+  "H-030": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Tue 20:20",
+    "tempo": "restless"
+   }
+  },
+  "H-092": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Wed 10:20",
+    "tempo": "restless"
+   }
+  },
+  "H-032": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w6",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Sat 00:30",
+    "tempo": "restless"
+   }
+  },
+  "H-068": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Mon 14:00",
+    "tempo": "restless"
+   }
+  },
+  "H-014": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Sat 20:10",
+    "tempo": "restless"
+   }
+  },
+  "H-086": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w3",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Fri 21:50",
+    "tempo": "restless"
+   }
+  },
+  "H-063": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Thu 11:40",
+    "tempo": "restless"
+   }
+  },
+  "H-079": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Thu 03:50",
+    "tempo": "restless"
+   }
+  },
+  "H-005": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w4",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Tue 17:00",
+    "tempo": "restless"
+   }
+  },
+  "H-027": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:crowd-scuffle",
+    "clock": "Wed 14:30",
+    "tempo": "restless"
+   }
+  },
+  "H-091": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:crowd-scuffle",
+    "clock": "Fri 06:10",
+    "tempo": "restless"
+   }
+  },
+  "H-039": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:crowd-scuffle",
+    "clock": "Thu 20:20",
+    "tempo": "restless"
+   }
+  },
+  "H-028": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w6",
+    "template": "xf.m3b.offers:assault-why",
+    "clock": "Sat 17:00",
+    "tempo": "restless"
+   }
+  },
+  "H-012": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:assault-why",
+    "clock": "Thu 17:00",
+    "tempo": "restless"
+   }
+  },
+  "H-045": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w3",
+    "template": "xf.m3b.offers:crowd-scuffle",
+    "clock": "Sat 13:50",
+    "tempo": "restless"
+   }
+  },
+  "H-087": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w3",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Sat 05:30",
+    "tempo": "restless"
+   }
+  },
+  "H-018": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w5",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Wed 22:10",
+    "tempo": "restless"
+   }
+  },
+  "H-017": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Tue 09:20",
+    "tempo": "restless"
+   }
+  },
+  "H-050": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w1",
+    "template": "xf.m3b.offers:goods-back",
+    "clock": "Mon 20:30",
+    "tempo": "restless"
+   }
+  },
+  "H-023": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w4",
+    "template": "xf.m3b.offers:clash-aftermath",
+    "clock": "Thu 14:10",
+    "tempo": "restless"
+   }
+  },
+  "H-031": {
+   "arm": "A1",
+   "meta": {
+    "run": "m3b-w2",
+    "template": "xf.m3b.offers:accident-errand",
+    "clock": "Sat 06:40",
+    "tempo": "restless"
+   }
+  },
+  "H-082": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-1",
+    "template": "delivery"
+   }
+  },
+  "H-001": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-12",
+    "template": "recovery"
+   }
+  },
+  "H-084": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-11",
+    "template": "delivery"
+   }
+  },
+  "H-013": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-8",
+    "template": "missing"
+   }
+  },
+  "H-040": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-6",
+    "template": "debt"
+   }
+  },
+  "H-059": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-10",
+    "template": "removal"
+   }
+  },
+  "H-036": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-17",
+    "template": "repair"
+   }
+  },
+  "H-048": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-3",
+    "template": "escort"
+   }
+  },
+  "H-080": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-5",
+    "template": "delivery"
+   }
+  },
+  "H-041": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-8",
+    "template": "removal"
+   }
+  },
+  "H-078": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-8",
+    "template": "tail"
+   }
+  },
+  "H-008": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-4",
+    "template": "delivery"
+   }
+  },
+  "H-003": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-19",
+    "template": "recovery"
+   }
+  },
+  "H-060": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-21",
+    "template": "delivery"
+   }
+  },
+  "H-043": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-13",
+    "template": "debt"
+   }
+  },
+  "H-076": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-20",
+    "template": "debt"
+   }
+  },
+  "H-089": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-21",
+    "template": "tail"
+   }
+  },
+  "H-083": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-2",
+    "template": "missing"
+   }
+  },
+  "H-096": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-16",
+    "template": "removal"
+   }
+  },
+  "H-054": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-20",
+    "template": "escort"
+   }
+  },
+  "H-077": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-6",
+    "template": "removal"
+   }
+  },
+  "H-070": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-12",
+    "template": "recovery"
+   }
+  },
+  "H-067": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-4",
+    "template": "delivery"
+   }
+  },
+  "H-065": {
+   "arm": "A3",
+   "meta": {
+    "world": "a3-14",
+    "template": "missing"
+   }
+  },
+  "H-064": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-51",
+    "state": "S-late-wary"
+   }
+  },
+  "H-037": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-22",
+    "state": "S-mid-crackdown"
+   }
+  },
+  "H-071": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-36",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-011": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-67",
+    "state": "S-late-wary"
+   }
+  },
+  "H-010": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-4",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-066": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-29",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-033": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-41",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-057": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-44",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-090": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-59",
+    "state": "S-late-wary"
+   }
+  },
+  "H-022": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-56",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-034": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-37",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-055": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-17",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-051": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-61",
+    "state": "S-mid-squeezed"
+   }
+  },
+  "H-075": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-60",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-006": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-42",
+    "state": "S-mid-crackdown"
+   }
+  },
+  "H-081": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-0",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-093": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-64",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-047": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-32",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-062": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-35",
+    "state": "S-late-wary"
+   }
+  },
+  "H-072": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-26",
+    "state": "S-mid-crackdown"
+   }
+  },
+  "H-020": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-8",
+    "state": "S-early-quiet"
+   }
+  },
+  "H-029": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-19",
+    "state": "S-late-wary"
+   }
+  },
+  "H-035": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-23",
+    "state": "S-late-wary"
+   }
+  },
+  "H-094": {
+   "arm": "A4",
+   "meta": {
+    "world": "a4-46",
+    "state": "S-mid-crackdown"
+   }
+  }
+ },
+ "pairKey": {
+  "P-001": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-002": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-003": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-004": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-005": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-006": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-007": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-008": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-009": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-010": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-011": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-012": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-013": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-014": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-015": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-016": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-017": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-018": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-019": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-020": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-021": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-022": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-023": {
+   "leftArm": "A3",
+   "rightArm": "E"
+  },
+  "P-024": {
+   "leftArm": "E",
+   "rightArm": "A3"
+  },
+  "P-025": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-026": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-027": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-028": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-029": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-030": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-031": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-032": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-033": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-034": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-035": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-036": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-037": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-038": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-039": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-040": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-041": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-042": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-043": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-044": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-045": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-046": {
+   "leftArm": "E",
+   "rightArm": "A1"
+  },
+  "P-047": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-048": {
+   "leftArm": "A1",
+   "rightArm": "E"
+  },
+  "P-049": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-050": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-051": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-052": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-053": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-054": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-055": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-056": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-057": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-058": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-059": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-060": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-061": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-062": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-063": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-064": {
+   "leftArm": "A3",
+   "rightArm": "A1"
+  },
+  "P-065": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-066": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-067": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-068": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-069": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-070": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-071": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-072": {
+   "leftArm": "A1",
+   "rightArm": "A3"
+  },
+  "P-073": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-074": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-075": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-076": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-077": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-078": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-079": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-080": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-081": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-082": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-083": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-084": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-085": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-086": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-087": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-088": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-089": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-090": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-091": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-092": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-093": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-094": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-095": {
+   "leftArm": "A3",
+   "rightArm": "A4"
+  },
+  "P-096": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  }
+ },
+ "available": {
+  "E": 59,
+  "A1": 39,
+  "A3": 67,
+  "A4": 67
+ },
+ "n": 24
+}

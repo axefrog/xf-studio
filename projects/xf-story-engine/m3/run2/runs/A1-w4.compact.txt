@@ -1,0 +1,83 @@
+# M3 run: m3b-w4
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "m3b-w4"
+story state: S-late-wary (late in the story, the gang is squeezed and the stalls are wary of V)
+facts set (the rest read 0): q000_done, q001_done, q003_done, q004_done, q005_done, q101_done, q103_done, q104_done, q105_done, q108_done, q110_done
+street: ledger.m0 = 0.25 (short runs stand for weeks of history); regimes: none arrive; Tyger Claws books: cash 200, burn 300
+setting: incident rates x8 (a busier Kabuki, to give the engine enough to tell)
+setting: the wide name registry of S1's pack (origins weighted by affiliation class and district)
+setting: layer 3 data: feature weights F3 2, F5 2, F6 1, F11 1; lambda 3; diversity 1; a completed match is a candidate for one game day
+setting: V is told of the incidents that open where V stands (the report of what V saw, stood in for by the driver: RunExtra.witness)
+setting: arm A1: layer 3 chooses at random among what passes its gates
+V walks the district: a new block every game hour
+layer 3: attached, tempo restless; V's policy: decline
+span: 864 windows of ten minutes (6.0 game days), 86400 play seconds
+
+Mon 00:10  (a delivery was held (phase-settling).)
+Mon 00:10  (slot 0: slot-gentle.)
+Mon 00:10  (a delivery was held (hold-cleared).)
+Mon 00:10  (a delivery was held (lead-aim).)
+Mon 02:10  [authored offer ask] Keisha Bell messages you: Marites Tolentino was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?  -> V: decline
+Mon 02:10  [authored beat stay-out] Keisha Bell nodded, as if they had expected nothing else, and went back to the counter.
+Mon 02:10  [authored closing] That Friday is over.
+Mon 02:10  (a delivery was held (hold-cleared).)
+Mon 02:20  [authored coda] The stalls opened and closed the way they always do, and the fee was paid or it was not.
+Mon 13:10  [procedural beat tell] Kabuki: Tariq Khalil was treated for injuries after an assault. Witnesses name Haruto Kobayashi. No arrest has been made.
+Mon 13:10  (slot 1: slot-run.)
+Mon 13:10  (layer 3 sowed "beating" from beating (a=Haruto Kobayashi, v=Tariq Khalil); features F3=1 F5=0 F6=0 F11=0.37; composite 0.17 among 16 candidates; cause: 1 recorded event.)
+Mon 18:50  [procedural beat tell] Word at the stalls is that Daichi Mori hit Takeshi Fujita hard enough to need the clinic. The rest is guesswork.
+Mon 18:50  (slot 2: slot-run.)
+Mon 18:50  (layer 3 sowed "beating" from beating (a=Daichi Mori, v=Takeshi Fujita); features F3=1 F5=0 F6=0 F11=0.26; composite 0.33 among 21 candidates; cause: 1 recorded event.)
+Tue 05:10  [procedural beat tell] Heard it from three people already: Itsuki Hashimoto went for Meiling Yang in the street. Thought you should know before it gets bigger.
+Tue 05:10  (slot 3: slot-run.)
+Tue 05:10  (layer 3 sowed "beating" from beating (a=Itsuki Hashimoto, v=Meiling Yang); features F3=1 F5=0 F6=0 F11=0.37; composite 0.1 among 21 candidates; cause: 1 recorded event.)
+Tue 13:20  [procedural beat tell] Dolores Pineda was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Tue 13:20  (slot 4: slot-run.)
+Tue 13:20  (layer 3 sowed "accident" from accident (s=Dolores Pineda); features F3=1 F5=0 F6=0 F11=0.47; composite 0.2 among 19 candidates; cause: 1 recorded event.)
+Tue 17:00  [procedural offer ask] Itsuki Ogawa writes that the crews met on the street, Carlo Roxas went for them, and they have not slept since. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You will not know me, and I know it is a lot to ask a stranger.  -> V: decline
+Tue 17:00  (slot 5: slot-run.)
+Tue 17:00  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Carlo Roxas, v=Itsuki Ogawa, me=Yui Mori); features F3=1 F5=3 F6=0 F11=0.28; composite 0.5 among 19 candidates; cause: 2 recorded events.)
+Tue 17:10  [procedural beat x-decline] You did not answer. Itsuki Ogawa moved to a cousin's place across the district.
+Tue 17:10  [procedural closing] The street fight turned into a story, and the story into a rumour.
+Wed 01:30  [procedural beat tell] Eunji Jung says Emi Mori lifted a bag in the Kabuki crowd and was gone before anyone moved.
+Wed 01:30  (slot 6: slot-run.)
+Wed 01:30  (layer 3 sowed "theft" from theft (a=Emi Mori, v=Eunji Jung); features F3=1 F5=0 F6=0 F11=0.41; composite 0.67 among 15 candidates; cause: 1 recorded event.)
+Wed 09:00  [procedural beat tell] Kabuki: Lan Yang was taken for treatment after an accident. No one else was injured.
+Wed 09:00  (slot 7: slot-run.)
+Wed 09:00  (layer 3 sowed "accident" from accident (s=Lan Yang); features F3=1 F5=0 F6=0 F11=0.21; composite 0 among 11 candidates; cause: 1 recorded event.)
+Wed 18:50  [procedural beat tell] Kabuki: a theft was reported by Emi Ishikawa. Daichi Mori is named as the person responsible. The goods have not been recovered.
+Wed 18:50  (slot 8: slot-run.)
+Wed 18:50  (layer 3 sowed "theft" from theft (a=Daichi Mori, v=Emi Ishikawa); features F3=1 F5=1 F6=0 F11=0.23; composite 0.33 among 11 candidates; cause: 1 recorded event.)
+Wed 20:00  [procedural beat tell] Emi Ishikawa was at the stalls again, one hand out, and Minjun Jung was counting what was in the till.
+Wed 20:00  (slot 9: slot-run.)
+Wed 20:00  (layer 3 sowed "demand" from demand (a=Emi Ishikawa, v=Minjun Jung); features F3=1 F5=1 F6=0 F11=0.8; composite 0.67 among 9 candidates; cause: 1 recorded event.)
+Thu 03:20  [procedural beat tell] An NCPD patrol pulled Yui Matsuda off the street in Kabuki. Nobody stopped to watch.
+Thu 03:20  (slot 10: slot-run.)
+Thu 03:20  (layer 3 sowed "sweep" from sweep (s=Yui Matsuda); features F3=1 F5=0 F6=0 F11=0.23; composite 0.33 among 14 candidates; cause: 1 recorded event.)
+Thu 14:10  [procedural offer ask] Tyler Pierce messages you: Itsuki Sakamoto and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.  -> V: decline
+Thu 14:10  [procedural beat x-decline] Tyler Pierce said they understood. Their stall was shut for a week.
+Thu 14:10  [procedural closing] The street fight turned into a story, and the story into a rumour.
+Thu 14:10  (slot 11: slot-run.)
+Thu 14:10  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Itsuki Sakamoto, v=Tyler Pierce, me=Yui Mori); features F3=1 F5=3 F6=0 F11=0.31; composite 0.83 among 12 candidates; cause: 2 recorded events.)
+Thu 19:00  [procedural beat tell] An NCPD patrol pulled Emi Sakamoto off the street in Kabuki. Nobody stopped to watch.
+Thu 19:00  (slot 12: slot-run.)
+Thu 19:00  (layer 3 sowed "sweep" from sweep (s=Emi Sakamoto); features F3=1 F5=0 F6=0 F11=0.26; composite 0.83 among 9 candidates; cause: 1 recorded event.)
+Fri 03:30  [procedural beat tell] Kabuki: Nora Marsh was treated for injuries after an assault. Witnesses name Hui Ma. No arrest has been made.
+Fri 03:30  (slot 13: slot-run.)
+Fri 03:30  (layer 3 sowed "beating" from beating (a=Hui Ma, v=Nora Marsh); features F3=1 F5=0 F6=0 F11=0.31; composite 0.5 among 3 candidates; cause: 1 recorded event.)
+Fri 09:10  [procedural beat tell] Kabuki: police detained Daeho Choi during a street sweep. No charge has been announced.
+Fri 09:10  (slot 14: slot-run.)
+Fri 09:10  (layer 3 sowed "sweep" from sweep (s=Daeho Choi); features F3=1 F5=0 F6=0 F11=0.22; composite 0 among 3 candidates; cause: 1 recorded event.)
+Fri 17:40  [procedural offer ask] Emi Mori writes that the crews met on the street, Hui Zhang went for them, and they have not slept since. I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me. You owe me nothing and I cannot promise much, but I am asking because I have no one else.  -> V: decline
+Fri 17:40  [procedural beat x-decline] Emi Mori said they understood. Their stall was shut for a week.
+Fri 17:40  [procedural closing] The street fight turned into a story, and the story into a rumour.
+Fri 17:40  (slot 15: slot-run.)
+Fri 17:40  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Hui Zhang, v=Emi Mori, me=Yui Mori); features F3=1 F5=4 F6=0 F11=0.3; composite 0.83 among 5 candidates; cause: 2 recorded events.)
+Sat 01:00  [procedural beat tell] Heard it from three people already: Karim Taha went for Phuc Vu in the street. Thought you should know before it gets bigger.
+Sat 01:00  (slot 16: slot-run.)
+Sat 01:00  (layer 3 sowed "beating" from beating (a=Karim Taha, v=Phuc Vu); features F3=1 F5=0 F6=0 F11=0.47; composite 0 among 18 candidates; cause: 1 recorded event.)
+Sat 10:30  [procedural beat tell] You know Hui Zhang? Jamie Nolan beat them up in Kabuki yesterday. Somebody should check on them.
+Sat 10:30  (slot 17: slot-run.)
+Sat 10:30  (layer 3 sowed "beating" from beating (a=Jamie Nolan, v=Hui Zhang); features F3=1 F5=1 F6=0 F11=0.38; composite 0.5 among 35 candidates; cause: 1 recorded event.)
+Sat 22:10  [procedural beat tell] Kabuki: Daichi Shimizu was treated for injuries after an assault. Witnesses name Takeshi Shimizu. No arrest has been made.
+Sat 22:10  (slot 18: slot-run.)
+Sat 22:10  (layer 3 sowed "beating" from beating (a=Takeshi Shimizu, v=Daichi Shimizu); features F3=1 F5=0 F6=0 F11=0.21; composite 0 among 42 candidates; cause: 1 recorded event.)

@@ -1,0 +1,87 @@
+# M3 run: m3b-w3
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "m3b-w3"
+story state: S-mid-crackdown (mid story, police pressing the district, V unknown to the stalls)
+facts set (the rest read 0): q000_done, q001_done, q003_done, q004_done, q005_done, q101_done, q104_done, q105_done
+street: regimes: a crackdown arrives daily; Tyger Claws books: cash 30000
+setting: incident rates x8 (a busier Kabuki, to give the engine enough to tell)
+setting: the wide name registry of S1's pack (origins weighted by affiliation class and district)
+setting: layer 3 data: feature weights F3 2, F5 2, F6 1, F11 1; lambda 3; diversity 1; a completed match is a candidate for one game day
+setting: V is told of the incidents that open where V stands (the report of what V saw, stood in for by the driver: RunExtra.witness)
+setting: arm A1: layer 3 chooses at random among what passes its gates
+V walks the district: a new block every game hour
+layer 3: attached, tempo restless; V's policy: decline
+span: 864 windows of ten minutes (6.0 game days), 86400 play seconds
+
+Mon 00:10  (a delivery was held (phase-settling).)
+Mon 00:10  (a delivery was held (hold-cleared).)
+Mon 00:10  (a delivery was held (lead-aim).)
+Mon 02:10  [authored offer ask] Irina Zielinski messages you: Ren Maeda was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?  -> V: decline
+Mon 02:10  [authored beat stay-out] Irina Zielinski nodded, as if they had expected nothing else, and went back to the counter.
+Mon 02:10  [authored closing] That Friday is over.
+Mon 02:10  (a delivery was held (hold-cleared).)
+Mon 02:20  [authored coda] The stalls opened and closed the way they always do, and the fee was paid or it was not.
+Mon 05:00  (slot 0: slot-empty.)
+Mon 13:50  [procedural beat tell] Kabuki: police detained Alejandro Mendoza during a street sweep. No charge has been announced.
+Mon 13:50  (slot 1: slot-run.)
+Mon 13:50  (layer 3 sowed "sweep" from sweep (s=Alejandro Mendoza); features F3=1 F5=0 F6=0 F11=0.58; composite 0.33 among 7 candidates; cause: 1 recorded event.)
+Mon 18:20  [procedural beat tell] Kabuki: police detained Ryo Kondo during a street sweep. No charge has been announced.
+Mon 18:20  (slot 2: slot-run.)
+Mon 18:20  (layer 3 sowed "sweep" from sweep (s=Ryo Kondo); features F3=1 F5=0 F6=0 F11=0.45; composite 0.67 among 6 candidates; cause: 1 recorded event.)
+Tue 02:10  [procedural beat tell] Watch your pockets: Lucia Morales is working the crowd again, and Dolores Romero found out first.
+Tue 02:10  (slot 3: slot-run.)
+Tue 02:10  (layer 3 sowed "theft" from theft (a=Lucia Morales, v=Dolores Romero); features F3=1 F5=0 F6=0 F11=0.87; composite 0.67 among 11 candidates; cause: 1 recorded event.)
+Tue 06:10  [procedural offer ask] Message from Tatsuya Sato: I was caught in that accident in Kabuki and I cannot stand yet. I cannot make my run. Take the delivery for me, ask the client for more time, or take my shift at the bar. Checkpoints have been tightened, so whoever carries the parcel needs a clean story.  -> V: decline
+Tue 06:10  [procedural beat x-decline] Tatsuya Sato said they would find another way and lay back down.
+Tue 06:10  [procedural closing] The accident was forgotten by the end of the week.
+Tue 06:10  (slot 4: slot-run.)
+Tue 06:10  (layer 3 sowed "accident-errand" from accident-errand (s=Tatsuya Sato, me=Kenji Sato); features F3=1 F5=3 F6=0 F11=0.49; composite 0.83 among 12 candidates; cause: 2 recorded events.)
+Tue 21:00  [procedural beat tell] Word at the stalls is that Rui Lin hit Alejandro Vargas hard enough to need the clinic. The rest is guesswork.
+Tue 21:00  (slot 5: slot-run.)
+Tue 21:00  (layer 3 sowed "beating" from beating (a=Rui Lin, v=Alejandro Vargas); features F3=1 F5=0 F6=0 F11=0.2; composite 0 among 9 candidates; cause: 1 recorded event.)
+Tue 23:30  [procedural beat tell] Kabuki: a theft was reported by Mei Shimizu. Tatsuya Nakamura is named as the person responsible. The goods have not been recovered.
+Tue 23:30  (slot 6: slot-run.)
+Tue 23:30  (layer 3 sowed "theft" from theft (a=Tatsuya Nakamura, v=Mei Shimizu); features F3=1 F5=0 F6=0 F11=0.38; composite 0.33 among 8 candidates; cause: 1 recorded event.)
+Wed 08:10  [procedural beat tell] Kabuki: police detained Ryo Okada during a street sweep. No charge has been announced.
+Wed 08:10  (slot 7: slot-run.)
+Wed 08:10  (layer 3 sowed "sweep" from sweep (s=Ryo Okada); features F3=1 F5=0 F6=0 F11=0.81; composite 0.33 among 15 candidates; cause: 1 recorded event.)
+Wed 16:10  [procedural beat tell] Kabuki: a theft was reported by Jun Tang. Daichi Sakamoto is named as the person responsible. The goods have not been recovered.
+Wed 16:10  (slot 8: slot-run.)
+Wed 16:10  (layer 3 sowed "theft" from theft (a=Daichi Sakamoto, v=Jun Tang); features F3=1 F5=0 F6=0 F11=0.32; composite 0 among 16 candidates; cause: 1 recorded event.)
+Thu 01:50  [procedural beat tell] Kabuki: Joy Santos was taken for treatment after an accident. No one else was injured.
+Thu 01:50  (slot 9: slot-run.)
+Thu 01:50  (layer 3 sowed "accident" from accident (s=Joy Santos); features F3=1 F5=0 F6=0 F11=0.27; composite 0.1 among 16 candidates; cause: 1 recorded event.)
+Thu 07:40  [procedural offer ask] Message from Joy Santos: the accident in Kabuki broke my leg, and the job I should be doing is going undone. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. The police are checking couriers across the district, so you will have to move carefully.  -> V: decline
+Thu 07:40  [procedural beat x-decline] Joy Santos said they would find another way and lay back down.
+Thu 07:40  [procedural closing] The accident was forgotten by the end of the week.
+Thu 07:40  (slot 10: slot-run.)
+Thu 07:40  (layer 3 sowed "accident-errand" from accident-errand (s=Joy Santos, me=Kenji Sato); features F3=1 F5=4 F6=0 F11=0.22; composite 0.6 among 10 candidates; cause: 2 recorded events.)
+Thu 14:40  [procedural beat tell] An NCPD patrol pulled Mei Maeda off the street in Kabuki. Nobody stopped to watch.
+Thu 14:40  (slot 11: slot-run.)
+Thu 14:40  (layer 3 sowed "sweep" from sweep (s=Mei Maeda); features F3=1 F5=0 F6=0 F11=0.52; composite 0.67 among 8 candidates; cause: 1 recorded event.)
+Thu 18:30  [procedural beat tell] Kabuki: police detained Tatsuya Inoue during a street sweep. No charge has been announced.
+Thu 18:30  (slot 12: slot-run.)
+Thu 18:30  (layer 3 sowed "sweep" from sweep (s=Tatsuya Inoue); features F3=1 F5=0 F6=0 F11=0.21; composite 0.33 among 8 candidates; cause: 1 recorded event.)
+Fri 04:50  [procedural beat tell] You know Paloma Herrera? Tasha Coleman beat them up in Kabuki yesterday. Somebody should check on them.
+Fri 04:50  (slot 13: slot-run.)
+Fri 04:50  (layer 3 sowed "beating" from beating (a=Tasha Coleman, v=Paloma Herrera); features F3=1 F5=0 F6=0 F11=0.37; composite 0.6 among 20 candidates; cause: 1 recorded event.)
+Fri 15:00  [procedural beat tell] An NCPD patrol pulled Valeria Fuentes off the street in Kabuki. Nobody stopped to watch.
+Fri 15:00  (slot 14: slot-run.)
+Fri 15:00  (layer 3 sowed "sweep" from sweep (s=Valeria Fuentes); features F3=1 F5=0 F6=0 F11=0.61; composite 0.6 among 22 candidates; cause: 1 recorded event.)
+Fri 21:50  [procedural offer ask] Marcus Osei writes that Dolores Romero bumped into them by the stalls and left with a bag that was not theirs. Can you get it back for me? Track down whoever has it, make it worth the thief's while to say where it went, or pay what it was worth and wait for my thanks. Nobody on the row had seen the thief before, so somebody must have given the nod.  -> V: decline
+Fri 21:50  [procedural beat x-decline] Marcus Osei turned back to the stall. The bag was never mentioned in your hearing again.
+Fri 21:50  [procedural closing] The talk about the bag moved on.
+Fri 21:50  (slot 15: slot-run.)
+Fri 21:50  (layer 3 sowed "goods-back" from goods-back (a=Dolores Romero, v=Marcus Osei, me=Kenji Sato); features F3=1 F5=4 F6=0 F11=0.58; composite 1 among 25 candidates; cause: 2 recorded events.)
+Sat 05:30  [procedural offer ask] Yui Shimizu messages you: someone saw Jericho Magsaysay slip a hand into my bag at the market and walk off with it. I will take the goods or the value of them. Trace the bag, put pressure on the thief's crowd, or stand me the loss. The patrols are watching curfew, not pickpockets, so this is down to whoever will do it.  -> V: decline
+Sat 05:30  [procedural beat x-decline] Yui Shimizu turned back to the stall. The bag was never mentioned in your hearing again.
+Sat 05:30  [procedural closing] The talk about the bag moved on.
+Sat 05:30  (slot 16: slot-run.)
+Sat 05:30  (layer 3 sowed "goods-back" from goods-back (a=Jericho Magsaysay, v=Yui Shimizu, me=Kenji Sato); features F3=1 F5=3 F6=0 F11=0.9; composite 1 among 29 candidates; cause: 2 recorded events.)
+Sat 13:50  [procedural offer ask] Jiho Kang writes that the street went from busy to a brawl in a minute, and they still do not know who started it. Somebody wanted that crowd angry. Find out who, keep the corner calm, or see me through it. You do not know me, and that may be why somebody will talk to you.  -> V: decline
+Sat 13:50  [procedural beat x-decline] The message sat unanswered. The crowd by the market was thinner for a week.
+Sat 13:50  [procedural closing] The scuffle was forgotten by the end of the week.
+Sat 13:50  (slot 17: slot-run.)
+Sat 13:50  (layer 3 sowed "crowd-scuffle" from crowd-scuffle (p=Jiho Kang, me=Kenji Sato); features F3=0 F5=3 F6=0 F11=0.23; composite 0.4 among 32 candidates; cause: 2 recorded events.)
+Sat 16:10  [procedural beat tell] Marcus Osei says Dolores Romero lifted a bag in the Kabuki crowd and was gone before anyone moved.
+Sat 16:10  (slot 18: slot-run.)
+Sat 16:10  (layer 3 sowed "theft" from theft (a=Dolores Romero, v=Marcus Osei); features F3=1 F5=2 F6=0 F11=0.21; composite 0.4 among 29 candidates; cause: 1 recorded event.)

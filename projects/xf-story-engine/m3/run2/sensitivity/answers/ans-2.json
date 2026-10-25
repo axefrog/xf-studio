@@ -1,0 +1,1160 @@
+{
+ "rater": "claude-sonnet",
+ "cards": {
+  "H-055": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-002": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-036": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-023": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-003": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-074": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-016": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-062": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-014": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-071": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-009": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-067": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-049": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-046": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-089": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-057": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-026": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-032": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-072": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-077": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-019": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-064": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-028": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-083": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-086": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-043": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-075": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-042": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-015": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-035": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-078": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-087": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-031": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-048": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-029": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-061": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-005": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-070": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-094": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-095": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-020": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-041": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-091": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-052": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-079": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-054": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-056": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-066": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-063": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-060": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-093": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-058": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-001": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-012": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-073": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 7,
+   "pull": 6,
+   "made_by": "person",
+   "cue": "specific stakes, deadline, voice"
+  },
+  "H-033": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-037": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-021": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-027": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-084": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-006": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-068": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-008": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-004": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-030": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-047": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-085": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-013": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-034": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-024": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-065": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-018": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-045": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-011": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-025": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-080": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-053": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-050": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-076": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-051": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-039": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-090": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-096": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-088": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-007": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-022": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-082": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-092": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-010": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-059": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-044": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-017": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-069": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  },
+  "H-081": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "vague ask, swapped names in a fixed frame"
+  },
+  "H-040": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare task plus price"
+  },
+  "H-038": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option list, stock closing line"
+  }
+ },
+ "pairs": {
+  "P-068": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-046": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-036": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-058": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-074": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-051": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-042": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-004": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-088": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-080": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-086": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-093": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-001": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-021": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-025": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-019": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-092": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-065": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-030": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-090": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-060": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-031": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-089": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-010": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-029": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-038": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-076": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-094": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-016": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-066": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-059": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-037": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-039": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-045": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-071": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-073": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-082": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-096": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-091": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-063": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-023": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-049": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-078": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-028": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-069": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-053": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-095": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-013": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-033": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-085": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-014": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-041": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-040": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-017": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-020": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-064": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-008": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-055": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-075": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-083": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-024": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-022": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-034": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-087": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-005": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-044": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-018": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-012": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-084": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-052": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-067": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-047": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-035": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-056": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-079": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-032": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-009": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-070": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-072": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-054": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-015": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-006": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-027": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-003": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-081": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-043": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-048": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-026": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-062": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-002": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-077": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-061": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-050": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-011": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-007": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-057": {
+   "follow": "right",
+   "caused": "right"
+  }
+ },
+ "critic": "Three families of cards read as generated. The Claws-fee cards are one identical sentence with only names swapped, and they end on a vague 'Can you do something about it?' that leaves the player with no clear action. The short bounty cards (lost item, tail, missing person, escort, courier, convince a gang member) are a bare task plus a round price, with no reason attached. The long messages follow one skeleton: an incident clause, a first-person plea, a three-option list ('X, Y, or Z'), then a stock line about the player's reputation or being a stranger. The incident clauses and closing lines are interchangeable parts. Several long cards also contradict themselves: 'I had never seen them before' sits beside a named assailant, and 'nobody on the row had seen the thief' sits beside a named thief. The Ivo Popov card stands out as written for its situation. It has a specific deadline, a named collector, a consequence ('someone less patient'), and local texture (the stalls starting to say no among themselves)."
+}

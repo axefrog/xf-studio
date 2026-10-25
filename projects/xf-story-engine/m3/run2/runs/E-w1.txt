@@ -1,0 +1,884 @@
+# M3 run: m3b-w1
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "m3b-w1"
+story state: S-early-quiet (early in the story, a quiet street, a gang with money)
+facts set (the rest read 0): q000_done, q001_done, q003_done
+street: regimes: none arrive; Tyger Claws books: cash 30000
+setting: incident rates x8 (a busier Kabuki, to give the engine enough to tell)
+setting: the wide name registry of S1's pack (origins weighted by affiliation class and district)
+setting: layer 3 data: feature weights F3 2, F5 2, F6 1, F11 1; lambda 3; diversity 1; a completed match is a candidate for one game day
+setting: V is told of the incidents that open where V stands (the report of what V saw, stood in for by the driver: RunExtra.witness)
+setting: arm E: layer 3 ranks and chooses
+V walks the district: a new block every game hour
+layer 3: attached, tempo restless; V's policy: decline
+span: 864 windows of ten minutes (6.0 game days), 86400 play seconds
+
+Mon 00:00  1 accident incident at g4 in this ten minutes.
+Mon 00:00  1 theft incident at v7 in this ten minutes.
+Mon 00:02  police-action (size 3) at v7 against Joy Dizon, with no cause in the record.
+Mon 00:10  1 disorder incident at v2 in this ten minutes.
+Mon 00:10  (a delivery was held (phase-settling).)
+Mon 00:10  (a delivery was held (hold-cleared).)
+Mon 00:10  (a delivery was held (lead-aim).)
+Mon 00:33  accident (size 2) at g2 against Salma Barakat, with no cause in the record.
+Mon 00:40  1 assault incident at g6 in this ten minutes.
+Mon 00:40  1 theft incident at v2 in this ten minutes.
+Mon 00:50  1 assault incident at g4 in this ten minutes.
+Mon 00:50  1 theft incident at g3 in this ten minutes.
+Mon 01:00  1 assault incident at v7 in this ten minutes.
+Mon 01:20  1 police-action incident at g2 in this ten minutes.
+Mon 01:20  1 theft incident at g6 in this ten minutes.
+Mon 01:30  1 theft incident at v7 in this ten minutes.
+Mon 01:32  police-action (size 3) at g2 against Jordan Marsh, with no cause in the record.
+Mon 01:40  1 gang-clash incident at v7 in this ten minutes.
+Mon 01:50  1 theft incident at g2 in this ten minutes.
+Mon 02:00  1 gang-clash incident at g4 in this ten minutes.
+Mon 02:03  seen up close: gang-clash at g4 by Sakura Mori victim-group Scavengers.
+Mon 02:10  [authored offer ask] Meiling Zhao messages you: Kai Xie was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?  -> V: decline
+Mon 02:10  [authored beat stay-out] Meiling Zhao nodded, as if they had expected nothing else, and went back to the counter.
+Mon 02:10  [authored closing] That Friday is over.
+Mon 02:10  1 assault incident at g2 in this ten minutes.
+Mon 02:10  (a delivery was held (hold-cleared).)
+Mon 02:18  gang-clash (size 3) at g4 by Yui Maeda against Jiro Matsuda, with no cause in the record.
+Mon 02:20  [authored coda] The stalls opened and closed the way they always do, and the fee was paid or it was not.
+Mon 02:20  gang-clash (size 2) at g7 by Rahul Nair against Daeho Kang, with no cause in the record.
+Mon 03:00  1 theft incident at v7 in this ten minutes.
+Mon 03:30  gang-clash (size 2) at v7 aggressor-group TygerClaws victim-group Scavengers, with no cause in the record.
+Mon 04:00  1 theft incident at g2 in this ten minutes.
+Mon 04:10  1 accident incident at g2 in this ten minutes.
+Mon 04:10  2 theft incidents at g2 in this ten minutes.
+Mon 04:20  1 assault incident at g2 in this ten minutes.
+Mon 04:30  1 theft incident at g5 in this ten minutes.
+Mon 05:20  1 theft incident at g7 in this ten minutes.
+Mon 05:30  1 theft incident at g2 in this ten minutes.
+Mon 05:40  [procedural beat tell] An NCPD patrol pulled Jordan Marsh off the street in Kabuki. Nobody stopped to watch.
+Mon 05:40  1 theft incident at g3 in this ten minutes.
+Mon 05:40  (slot 0: slot-run.)
+Mon 05:40  (layer 3 sowed "sweep" from sweep (s=Jordan Marsh); features F3=1 F5=0 F6=0 F11=0.59; composite 1 among 3 candidates; cause: 1 recorded event.)
+Mon 05:48  seen up close: theft at g3 by Ryo Maeda against Javier Romero.
+Mon 05:50  1 theft incident at g2 in this ten minutes.
+Mon 06:20  1 theft incident at g10 in this ten minutes.
+Mon 06:20  2 accident incidents at g4 in this ten minutes.
+Mon 06:30  1 theft incident at g2 in this ten minutes.
+Mon 06:50  1 accident incident at g2 in this ten minutes.
+Mon 07:20  1 assault incident at v7 in this ten minutes.
+Mon 07:20  1 commerce incident at v6 in this ten minutes.
+Mon 07:20  1 shakedown incident at g9 in this ten minutes.
+Mon 07:40  1 commerce incident at g9 in this ten minutes.
+Mon 07:50  commerce (size 2) at g9 from Marcus Rhodes to Eunji Kim, with no cause in the record.
+Mon 07:50  1 commerce incident at g6 in this ten minutes.
+Mon 07:56  seen up close: commerce at g6 from Haruto Kondo to Samira Saleh.
+Mon 08:00  1 assault incident at g10 in this ten minutes.
+Mon 08:10  1 accident incident at g2 in this ten minutes.
+Mon 08:10  1 commerce incident at g2 in this ten minutes.
+Mon 08:29  commerce (size 2) at g2 from Salma Barakat to Haruto Nakamura, with no cause in the record.
+Mon 08:40  1 commerce incident at g2 in this ten minutes.
+Mon 09:00  1 theft incident at g2 in this ten minutes.
+Mon 09:50  1 theft incident at g9 in this ten minutes.
+Mon 10:10  1 accident incident at g4 in this ten minutes.
+Mon 10:20  1 accident incident at g2 in this ten minutes.
+Mon 10:28  seen up close: accident at g2 against Haneul Lim.
+Mon 10:40  1 accident incident at v7 in this ten minutes.
+Mon 10:40  1 outage incident at g3 in this ten minutes.
+Mon 11:00  [procedural offer ask] Haneul Lim messages you from a clinic bed: an accident in Kabuki put me here, and the day's work is going to waste. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. I have never seen you before, and still I would rather it was you than the people I know.  -> V: decline
+Mon 11:00  [procedural beat x-decline] Haneul Lim thanked you for reading it. The parcel stayed on the locker.
+Mon 11:00  [procedural closing] The accident was forgotten by the end of the week.
+Mon 11:00  (slot 1: slot-run.)
+Mon 11:00  (layer 3 sowed "accident-errand" from accident-errand (s=Haneul Lim, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.95; composite 1 among 7 candidates; cause: 2 recorded events.)
+Mon 11:20  1 accident incident at v7 in this ten minutes.
+Mon 11:20  1 disorder incident at g2 in this ten minutes.
+Mon 11:40  1 accident incident at g9 in this ten minutes.
+Mon 11:50  1 commerce incident at g2 in this ten minutes.
+Mon 11:56  accident (size 2) at g9 against Cedric Ford, with no cause in the record.
+Mon 12:14  theft (size 2) at v7 by Nam Dang against Nisha Khan, with no cause in the record.
+Mon 12:30  1 theft incident at g2 in this ten minutes.
+Mon 12:50  1 shakedown incident at v7 in this ten minutes.
+Mon 13:00  1 accident incident at g6 in this ten minutes.
+Mon 13:40  1 commerce incident at g4 in this ten minutes.
+Mon 13:43  gang-clash (size 2) at g4 by Hana Shimizu against Hana Kondo, with no cause in the record.
+Mon 13:50  1 assault incident at g2 in this ten minutes.
+Mon 14:00  1 assault incident at g1 in this ten minutes.
+Mon 14:40  1 commerce incident at g2 in this ten minutes.
+Mon 14:50  1 assault incident at g2 in this ten minutes.
+Mon 15:10  1 accident incident at v7 in this ten minutes.
+Mon 15:10  1 police-action incident at g2 in this ten minutes.
+Mon 15:33  psycho-break (size 2) at g2 by Daichi Yamaguchi against Sakura Sato, with no cause in the record.
+Mon 16:20  1 theft incident at g9 in this ten minutes.
+Mon 16:28  seen up close: theft at g9 by Imani Ford against Aiko Mori.
+Mon 16:30  1 assault incident at g9 in this ten minutes.
+Mon 16:30  1 theft incident at g2 in this ten minutes.
+Mon 16:32  seen up close: assault at g9 by Riley Spencer against Nayeon Song.
+Mon 16:40  1 assault incident at v5 in this ten minutes.
+Mon 16:54  assault (size 2) at v7 by Nam Dang against Nisha Khan, with no cause in the record.
+Mon 16:58  theft (size 2) at g9 by Priya Singh against Riley Spencer, with no cause in the record.
+Mon 17:00  psycho-break (size 2) at g2 by Lena Brooks against Arjun Nair, with no cause in the record.
+Mon 17:30  1 commerce incident at g2 in this ten minutes.
+Mon 17:50  1 commerce incident at g10 in this ten minutes.
+Mon 17:50  1 theft incident at g2 in this ten minutes.
+Mon 18:30  1 assault incident at v7 in this ten minutes.
+Mon 18:40  1 assault incident at g2 in this ten minutes.
+Mon 18:41  accident (size 2) at g2 against Haruto Maeda, with no cause in the record.
+Mon 18:46  assault (size 2) at g9 by Kaori Sakamoto against Jericho Abad, with no cause in the record.
+Mon 18:50  1 accident incident at g2 in this ten minutes.
+Mon 18:50  1 theft incident at g2 in this ten minutes.
+Mon 19:30  1 theft incident at g2 in this ten minutes.
+Mon 19:30  1 theft incident at v7 in this ten minutes.
+Mon 19:50  1 theft incident at v7 in this ten minutes.
+Mon 20:00  1 accident incident at g4 in this ten minutes.
+Mon 20:02  police-action (size 2) at g2 answered by Emi Hayashi against Tatsuya Sakamoto, with no cause in the record.
+Mon 20:07  seen up close: accident at g4 against Ling Zhang.
+Mon 20:10  1 police-action incident at v7 in this ten minutes.
+Mon 20:10  1 theft incident at g2 in this ten minutes.
+Mon 20:10  1 theft incident at v7 in this ten minutes.
+Mon 20:20  1 theft incident at g2 in this ten minutes.
+Mon 20:30  [procedural offer ask] Javier Romero on the line: Ryo Maeda robbed me in the crowd by the market, and I want what was in the bag more than I want an apology. Get the bag back to me, whatever shape it is in. Find who is holding it, lean on whoever put the thief up to it, or make good the loss yourself. The thief is no one from this row, which makes it a job for someone with no ties here.  -> V: decline
+Mon 20:30  (slot 2: slot-run.)
+Mon 20:30  (layer 3 sowed "goods-back" from goods-back (a=Ryo Maeda, v=Javier Romero, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.29; composite 0.67 among 20 candidates; cause: 2 recorded events.)
+Mon 20:40  [procedural beat x-decline] Javier Romero turned back to the stall. The bag was never mentioned in your hearing again.
+Mon 20:40  [procedural closing] The talk about the bag moved on.
+Mon 20:40  1 accident incident at g2 in this ten minutes.
+Mon 20:40  1 police-action incident at g2 in this ten minutes.
+Mon 20:44  assault (size 2) at g2 by Sasha Kuznetsov against Ren Sakamoto, with no cause in the record.
+Mon 21:10  1 accident incident at v7 in this ten minutes.
+Mon 21:20  1 accident incident at v7 in this ten minutes.
+Mon 21:30  1 assault incident at g7 in this ten minutes.
+Mon 21:30  1 assault incident at v7 in this ten minutes.
+Mon 21:51  gang-clash (size 2) at g4 by Tyler Marsh against Hana Tanaka, with no cause in the record.
+Mon 22:10  1 assault incident at v5 in this ten minutes.
+Mon 22:10  2 theft incidents at v7 in this ten minutes.
+Mon 22:20  1 assault incident at g4 in this ten minutes.
+Mon 22:20  2 theft incidents at g2 in this ten minutes.
+Mon 22:30  1 assault incident at v7 in this ten minutes.
+Mon 23:00  1 theft incident at g6 in this ten minutes.
+Mon 23:00  2 theft incidents at g2 in this ten minutes.
+Mon 23:10  1 theft incident at g2 in this ten minutes.
+Mon 23:10  2 theft incidents at v7 in this ten minutes.
+Mon 23:30  1 accident incident at g2 in this ten minutes.
+Mon 23:30  1 assault incident at g2 in this ten minutes.
+Mon 23:40  1 assault incident at g4 in this ten minutes.
+Tue 00:00  1 theft incident at g7 in this ten minutes.
+Tue 00:10  1 gang-clash incident at g4 in this ten minutes.
+Tue 00:10  1 theft incident at g2 in this ten minutes.
+Tue 00:40  1 assault incident at g2 in this ten minutes.
+Tue 00:40  1 assault incident at g9 in this ten minutes.
+Tue 00:40  1 disorder incident at g2 in this ten minutes.
+Tue 00:50  1 accident incident at v7 in this ten minutes.
+Tue 01:00  1 accident incident at g2 in this ten minutes.
+Tue 01:00  1 disorder incident at g2 in this ten minutes.
+Tue 01:10  1 assault incident at g2 in this ten minutes.
+Tue 01:10  1 theft incident at v7 in this ten minutes.
+Tue 01:20  1 accident incident at v7 in this ten minutes.
+Tue 01:20  2 assault incidents at v7 in this ten minutes.
+Tue 01:30  2 assault incidents at g2 in this ten minutes.
+Tue 01:40  1 accident incident at v7 in this ten minutes.
+Tue 01:40  1 theft incident at g2 in this ten minutes.
+Tue 01:50  1 commerce incident at g2 in this ten minutes.
+Tue 01:50  1 gang-clash incident at g2 in this ten minutes.
+Tue 01:50  1 police-action incident at g2 in this ten minutes.
+Tue 01:59  disorder (size 3) at g9 among Mai Trinh among Hyunwoo Baek, with no cause in the record.
+Tue 02:00  [procedural offer ask] Riley Spencer writes that Priya Singh bumped into them by the stalls and left with a bag that was not theirs. Can you get it back for me? Track down whoever has it, make it worth the thief's while to say where it went, or pay what it was worth and wait for my thanks. I know you owe me nothing, and I am asking anyway.  -> V: decline
+Tue 02:00  1 assault incident at g2 in this ten minutes.
+Tue 02:00  1 assault incident at v7 in this ten minutes.
+Tue 02:00  1 police-action incident at v7 in this ten minutes.
+Tue 02:00  (slot 3: slot-run.)
+Tue 02:00  (layer 3 sowed "goods-back" from goods-back (a=Priya Singh, v=Riley Spencer, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.4; composite 1 among 19 candidates; cause: 2 recorded events.)
+Tue 02:06  disorder (size 2) at g2 among Aiko Hayashi among Jordan Doyle, with no cause in the record.
+Tue 02:10  [procedural beat x-decline] Riley Spencer said they would manage and did not ask again.
+Tue 02:10  [procedural closing] The talk about the bag moved on.
+Tue 02:10  1 theft incident at g2 in this ten minutes.
+Tue 02:20  1 police-action incident at g3 in this ten minutes.
+Tue 02:30  1 assault incident at v7 in this ten minutes.
+Tue 02:40  1 gang-clash incident at g4 in this ten minutes.
+Tue 03:00  1 police-action incident at v5 in this ten minutes.
+Tue 03:10  1 gang-clash incident at g7 in this ten minutes.
+Tue 03:20  1 theft incident at g2 in this ten minutes.
+Tue 03:23  assault (size 2) at v7 by Joy Dizon against Valeria Mendoza, with no cause in the record.
+Tue 03:33  accident (size 3) at v7 against Kaori Sakamoto, with no cause in the record.
+Tue 03:40  1 assault incident at g2 in this ten minutes.
+Tue 03:50  1 assault incident at g2 in this ten minutes.
+Tue 03:50  1 theft incident at g2 in this ten minutes.
+Tue 04:00  1 accident incident at g2 in this ten minutes.
+Tue 04:00  1 assault incident at g2 in this ten minutes.
+Tue 04:00  1 assault incident at v7 in this ten minutes.
+Tue 04:20  1 theft incident at g10 in this ten minutes.
+Tue 04:20  1 theft incident at v7 in this ten minutes.
+Tue 04:40  1 theft incident at v7 in this ten minutes.
+Tue 04:44  accident (size 2) at v1 against Qing Wang, with no cause in the record.
+Tue 04:50  1 assault incident at g2 in this ten minutes.
+Tue 05:05  assault (size 2) at g2 by Kai Huang against Xiu Zhao, with no cause in the record.
+Tue 05:10  1 accident incident at g6 in this ten minutes.
+Tue 05:40  1 assault incident at v7 in this ten minutes.
+Tue 05:50  1 assault incident at g7 in this ten minutes.
+Tue 05:50  1 theft incident at v8 in this ten minutes.
+Tue 06:00  1 police-action incident at g2 in this ten minutes.
+Tue 06:10  1 theft incident at g7 in this ten minutes.
+Tue 06:20  1 accident incident at g2 in this ten minutes.
+Tue 06:20  1 theft incident at g2 in this ten minutes.
+Tue 06:40  1 assault incident at g2 in this ten minutes.
+Tue 07:30  1 assault incident at g2 in this ten minutes.
+Tue 07:39  seen up close: assault at g2 by Seungmin Cho against Hana Sakamoto.
+Tue 07:40  1 accident incident at g9 in this ten minutes.
+Tue 07:40  1 commerce incident at v1 in this ten minutes.
+Tue 07:50  1 assault incident at g1 in this ten minutes.
+Tue 08:30  1 accident incident at g2 in this ten minutes.
+Tue 08:45  accident (size 2) at g5 against Anh Dang, with no cause in the record.
+Tue 09:40  1 police-action incident at g4 in this ten minutes.
+Tue 09:50  1 accident incident at g2 in this ten minutes.
+Tue 10:00  1 accident incident at g2 in this ten minutes.
+Tue 10:40  1 commerce incident at g5 in this ten minutes.
+Tue 10:50  [procedural beat tell] Haruto Maeda was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Tue 10:50  (slot 4: slot-run.)
+Tue 10:50  (layer 3 sowed "accident" from accident (s=Haruto Maeda); features F3=1 F5=0 F6=0 F11=0.27; composite 0.7 among 24 candidates; cause: 1 recorded event.)
+Tue 11:20  1 police-action incident at v2 in this ten minutes.
+Tue 11:30  1 accident incident at v5 in this ten minutes.
+Tue 11:30  2 theft incidents at g2 in this ten minutes.
+Tue 12:10  1 theft incident at g2 in this ten minutes.
+Tue 12:20  1 theft incident at g2 in this ten minutes.
+Tue 12:40  1 assault incident at g2 in this ten minutes.
+Tue 12:40  1 theft incident at g2 in this ten minutes.
+Tue 13:00  1 theft incident at g2 in this ten minutes.
+Tue 13:10  1 shakedown incident at g5 in this ten minutes.
+Tue 13:17  theft (size 2) at g2 by Santiago Ibarra against Nam Cao, with no cause in the record.
+Tue 13:20  1 theft incident at g2 in this ten minutes.
+Tue 13:40  1 commerce incident at g2 in this ten minutes.
+Tue 13:50  1 assault incident at g2 in this ten minutes.
+Tue 14:00  [procedural beat tell] Heard it from three people already: Joy Dizon went for Valeria Mendoza in the street. Thought you should know before it gets bigger.
+Tue 14:00  (slot 5: slot-run.)
+Tue 14:00  (layer 3 sowed "beating" from beating (a=Joy Dizon, v=Valeria Mendoza); features F3=1 F5=0 F6=0 F11=0.36; composite 0.3 among 22 candidates; cause: 1 recorded event.)
+Tue 14:10  1 theft incident at g2 in this ten minutes.
+Tue 14:27  disorder (size 2) at v7 among Anton Marek among Ying Zhu among Kai Tang among Duc Ngo, with no cause in the record.
+Tue 14:50  1 theft incident at g2 in this ten minutes.
+Tue 15:00  1 theft incident at g2 in this ten minutes.
+Tue 15:30  1 commerce incident at g2 in this ten minutes.
+Tue 15:40  1 theft incident at g2 in this ten minutes.
+Tue 16:00  2 theft incidents at g2 in this ten minutes.
+Tue 16:29  accident (size 2) at g2 against Bea Tolentino, with no cause in the record.
+Tue 16:30  1 accident incident at v7 in this ten minutes.
+Tue 16:33  theft (size 2) at g5 by Ryo Kondo against Jiro Sakamoto, with no cause in the record.
+Tue 16:50  1 accident incident at g2 in this ten minutes.
+Tue 17:20  1 shakedown incident at g2 in this ten minutes.
+Tue 17:30  1 theft incident at v7 in this ten minutes.
+Tue 17:50  1 theft incident at g2 in this ten minutes.
+Tue 18:00  1 accident incident at v7 in this ten minutes.
+Tue 18:10  1 theft incident at g2 in this ten minutes.
+Tue 18:20  1 accident incident at g2 in this ten minutes.
+Tue 18:30  1 theft incident at g2 in this ten minutes.
+Tue 18:30  1 theft incident at g9 in this ten minutes.
+Tue 18:30  theft (size 2) at g9 by Irina Novak against Minh Tran, with no cause in the record.
+Tue 18:42  police-action (size 2) at g10 against Mei Watanabe, with no cause in the record.
+Tue 19:00  1 accident incident at v7 in this ten minutes.
+Tue 19:10  1 assault incident at v7 in this ten minutes.
+Tue 19:20  1 theft incident at g2 in this ten minutes.
+Tue 19:30  1 shakedown incident at v1 in this ten minutes.
+Tue 19:30  2 theft incidents at v7 in this ten minutes.
+Tue 19:40  1 police-action incident at g5 in this ten minutes.
+Tue 19:45  outage (size 3) at v7, with no cause in the record.
+Tue 19:50  1 accident incident at g2 in this ten minutes.
+Tue 20:00  1 theft incident at g11 in this ten minutes.
+Tue 20:00  1 theft incident at v7 in this ten minutes.
+Tue 20:10  1 assault incident at g2 in this ten minutes.
+Tue 20:10  1 police-action incident at v5 in this ten minutes.
+Tue 20:16  seen up close: assault at g2 by Sasha Kuznetsov against Nia Coleman.
+Tue 21:10  [procedural offer ask] Aiko Hayashi messages you: the crowd by the market went from calm to a brawl in seconds, and I still do not know why. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.  -> V: decline
+Tue 21:10  (slot 6: slot-run.)
+Tue 21:10  (layer 3 sowed "crowd-scuffle" from crowd-scuffle (p=Aiko Hayashi, me=Dmitri Novak); features F3=0 F5=3 F6=0 F11=0.24; composite 0.4 among 18 candidates; cause: 2 recorded events.)
+Tue 21:20  [procedural beat x-decline] Aiko Hayashi said they would keep away from that corner and meant it.
+Tue 21:20  [procedural closing] The scuffle was forgotten by the end of the week.
+Tue 21:20  1 assault incident at g4 in this ten minutes.
+Tue 21:30  1 assault incident at g2 in this ten minutes.
+Tue 21:48  accident (size 2) at g6 against Tuan Ly, with no cause in the record.
+Tue 21:50  1 assault incident at g2 in this ten minutes.
+Tue 22:00  1 theft incident at g2 in this ten minutes.
+Tue 22:10  1 assault incident at g2 in this ten minutes.
+Tue 22:40  1 theft incident at g2 in this ten minutes.
+Tue 22:50  1 gang-clash incident at g4 in this ten minutes.
+Tue 23:00  1 police-action incident at g10 in this ten minutes.
+Tue 23:00  1 theft incident at g2 in this ten minutes.
+Tue 23:09  police-action (size 2) at g2 answered by Hassan Taha answered by Emi Hayashi against Shun Kondo, with no cause in the record.
+Tue 23:10  1 theft incident at g2 in this ten minutes.
+Tue 23:17  accident (size 2) at v7 against Quynh Tran, with no cause in the record.
+Tue 23:20  1 theft incident at v7 in this ten minutes.
+Tue 23:30  1 theft incident at v7 in this ten minutes.
+Tue 23:40  1 assault incident at v5 in this ten minutes.
+Tue 23:40  1 theft incident at v7 in this ten minutes.
+Tue 23:50  1 shakedown incident at g4 in this ten minutes.
+Tue 23:50  1 theft incident at g6 in this ten minutes.
+Wed 00:10  1 assault incident at v7 in this ten minutes.
+Wed 00:10  1 commerce incident at v7 in this ten minutes.
+Wed 00:10  1 theft incident at v7 in this ten minutes.
+Wed 00:20  1 assault incident at g2 in this ten minutes.
+Wed 00:30  1 theft incident at g2 in this ten minutes.
+Wed 00:40  2 assault incidents at v7 in this ten minutes.
+Wed 01:10  1 assault incident at g2 in this ten minutes.
+Wed 01:10  1 theft incident at g2 in this ten minutes.
+Wed 01:20  1 assault incident at v7 in this ten minutes.
+Wed 01:40  1 assault incident at g4 in this ten minutes.
+Wed 01:40  1 gang-clash incident at v1 in this ten minutes.
+Wed 01:50  1 theft incident at g2 in this ten minutes.
+Wed 02:00  1 theft incident at g2 in this ten minutes.
+Wed 02:30  1 accident incident at g2 in this ten minutes.
+Wed 02:30  1 assault incident at v8 in this ten minutes.
+Wed 02:37  seen up close: accident at g2 against Nam Cao.
+Wed 02:50  1 assault incident at g11 in this ten minutes.
+Wed 02:50  1 theft incident at v7 in this ten minutes.
+Wed 03:00  1 theft incident at g2 in this ten minutes.
+Wed 03:04  seen up close: theft at g2 by Long Wang against Bo Zhao.
+Wed 03:20  1 theft incident at v7 in this ten minutes.
+Wed 03:30  1 disorder incident at g2 in this ten minutes.
+Wed 03:30  2 assault incidents at g2 in this ten minutes.
+Wed 04:20  1 theft incident at g2 in this ten minutes.
+Wed 04:30  1 assault incident at g2 in this ten minutes.
+Wed 04:30  1 theft incident at g2 in this ten minutes.
+Wed 04:50  1 theft incident at g5 in this ten minutes.
+Wed 05:10  1 assault incident at g2 in this ten minutes.
+Wed 05:10  1 gang-clash incident at g2 in this ten minutes.
+Wed 05:50  1 assault incident at g9 in this ten minutes.
+Wed 05:50  1 theft incident at g2 in this ten minutes.
+Wed 06:09  accident (size 2) at v7 against Duc Ngo, with no cause in the record.
+Wed 07:11  theft (size 2) at g9 by Kai Yang against Jericho Abad, with no cause in the record.
+Wed 07:17  accident (size 2) at g2 against Tamara Jankowski, with no cause in the record.
+Wed 07:50  1 theft incident at g2 in this ten minutes.
+Wed 08:00  1 theft incident at g2 in this ten minutes.
+Wed 08:18  accident (size 2) at v7 against Duc Ngo, with no cause in the record.
+Wed 08:25  commerce (size 2) at g4 from Shun Fujita to Aiko Ishikawa, with no cause in the record.
+Wed 08:40  1 commerce incident at g2 in this ten minutes.
+Wed 08:50  1 accident incident at g2 in this ten minutes.
+Wed 09:20  1 shakedown incident at g9 in this ten minutes.
+Wed 09:30  1 accident incident at g2 in this ten minutes.
+Wed 09:30  1 accident incident at g9 in this ten minutes.
+Wed 09:40  1 accident incident at g2 in this ten minutes.
+Wed 09:40  1 theft incident at g2 in this ten minutes.
+Wed 09:50  1 accident incident at g2 in this ten minutes.
+Wed 10:00  1 theft incident at v6 in this ten minutes.
+Wed 10:10  1 commerce incident at g6 in this ten minutes.
+Wed 10:29  disorder (size 3) at v7 among Nisha Khan among Zara Das among Andre Bell among Anton Petrov, with no cause in the record.
+Wed 10:30  1 accident incident at g2 in this ten minutes.
+Wed 11:00  [procedural beat tell] Quynh Tran was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Wed 11:00  (slot 7: slot-run.)
+Wed 11:00  (layer 3 sowed "accident" from accident (s=Quynh Tran); features F3=1 F5=0 F6=0 F11=0.34; composite 0.7 among 22 candidates; cause: 1 recorded event.)
+Wed 11:08  theft (size 2) at g2 by Tamara Jankowski against Jiro Fujita, with no cause in the record.
+Wed 11:50  1 theft incident at g2 in this ten minutes.
+Wed 13:00  1 police-action incident at g2 in this ten minutes.
+Wed 13:20  1 accident incident at g2 in this ten minutes.
+Wed 13:30  1 shakedown incident at g2 in this ten minutes.
+Wed 13:50  1 assault incident at g2 in this ten minutes.
+Wed 13:50  1 theft incident at g8 in this ten minutes.
+Wed 14:00  1 assault incident at g5 in this ten minutes.
+Wed 14:20  1 accident incident at v1 in this ten minutes.
+Wed 14:20  1 theft incident at g6 in this ten minutes.
+Wed 14:30  1 assault incident at g2 in this ten minutes.
+Wed 14:31  accident (size 2) at g2 against Huda Haddad, with no cause in the record.
+Wed 15:00  1 assault incident at g4 in this ten minutes.
+Wed 15:00  accident (size 2) at g2 against Marcus Boateng, with no cause in the record.
+Wed 15:10  1 assault incident at g9 in this ten minutes.
+Wed 15:18  seen up close: assault at g9 by Emi Mori against Tatsuya Okada.
+Wed 15:20  1 theft incident at v7 in this ten minutes.
+Wed 15:30  1 accident incident at g2 in this ten minutes.
+Wed 15:50  1 commerce incident at g2 in this ten minutes.
+Wed 16:00  [procedural offer ask] Bea Tolentino writes from the clinic that the accident in the street left them unable to walk, with a job waiting. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You will not know me from anyone, but there is nobody else I can send.  -> V: decline
+Wed 16:00  [procedural beat x-decline] Bea Tolentino said they would find another way and lay back down.
+Wed 16:00  [procedural closing] The accident was forgotten by the end of the week.
+Wed 16:00  1 theft incident at g2 in this ten minutes.
+Wed 16:00  (slot 8: slot-run.)
+Wed 16:00  (layer 3 sowed "accident-errand" from accident-errand (s=Bea Tolentino, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.2; composite 0.67 among 25 candidates; cause: 2 recorded events.)
+Wed 16:10  1 commerce incident at g9 in this ten minutes.
+Wed 16:10  1 shakedown incident at v7 in this ten minutes.
+Wed 16:20  1 assault incident at g6 in this ten minutes.
+Wed 16:30  1 commerce incident at g2 in this ten minutes.
+Wed 16:40  1 theft incident at g2 in this ten minutes.
+Wed 16:50  1 commerce incident at v6 in this ten minutes.
+Wed 17:02  psycho-break (size 4) at g2 by Shun Sato against Tatsuya Okada, with no cause in the record.
+Wed 17:08  theft (size 2) at g2 by Xiu Zhao against Tamara Jankowski, with no cause in the record.
+Wed 17:10  1 theft incident at g2 in this ten minutes.
+Wed 17:20  1 accident incident at g9 in this ten minutes.
+Wed 17:30  1 shakedown incident at v7 in this ten minutes.
+Wed 17:30  1 theft incident at v1 in this ten minutes.
+Wed 18:20  1 assault incident at g2 in this ten minutes.
+Wed 18:20  1 assault incident at v7 in this ten minutes.
+Wed 18:20  1 theft incident at g4 in this ten minutes.
+Wed 18:50  1 accident incident at v8 in this ten minutes.
+Wed 18:53  gang-clash (size 3) at g2 by Hana Aoki against Tyler Doyle, with no cause in the record.
+Wed 19:10  1 theft incident at g9 in this ten minutes.
+Wed 19:20  1 assault incident at v7 in this ten minutes.
+Wed 19:30  1 shakedown incident at v7 in this ten minutes.
+Wed 19:40  1 assault incident at v7 in this ten minutes.
+Wed 20:00  1 theft incident at v7 in this ten minutes.
+Wed 20:20  1 theft incident at g2 in this ten minutes.
+Wed 20:30  1 accident incident at v9 in this ten minutes.
+Wed 20:30  1 assault incident at g2 in this ten minutes.
+Wed 20:50  1 assault incident at v7 in this ten minutes.
+Wed 20:50  1 theft incident at g4 in this ten minutes.
+Wed 21:09  accident (size 3) at g2 against Ying Zhang, with no cause in the record.
+Wed 21:10  1 assault incident at g2 in this ten minutes.
+Wed 21:10  1 shakedown incident at g2 in this ten minutes.
+Wed 21:20  1 assault incident at v6 in this ten minutes.
+Wed 21:20  1 assault incident at v7 in this ten minutes.
+Wed 21:20  1 theft incident at v7 in this ten minutes.
+Wed 21:30  1 theft incident at v8 in this ten minutes.
+Wed 21:32  theft (size 2) at g2 by Hana Aoki against Jiro Fujita, with no cause in the record.
+Wed 21:40  1 theft incident at g2 in this ten minutes.
+Wed 22:00  1 theft incident at g2 in this ten minutes.
+Wed 22:30  1 police-action incident at g2 in this ten minutes.
+Wed 22:40  1 accident incident at g5 in this ten minutes.
+Wed 22:40  1 assault incident at v7 in this ten minutes.
+Wed 23:00  1 commerce incident at g2 in this ten minutes.
+Wed 23:00  1 shakedown incident at g2 in this ten minutes.
+Wed 23:10  1 assault incident at v7 in this ten minutes.
+Wed 23:20  1 accident incident at g4 in this ten minutes.
+Wed 23:30  1 accident incident at g2 in this ten minutes.
+Wed 23:40  1 police-action incident at g2 in this ten minutes.
+Wed 23:50  1 accident incident at v7 in this ten minutes.
+Thu 00:00  1 accident incident at v7 in this ten minutes.
+Thu 00:10  1 theft incident at g2 in this ten minutes.
+Thu 00:27  police-action (size 2) at v7 answered by Noor Hamdan against Diego Cruz, with no cause in the record.
+Thu 00:30  [procedural offer ask] Tatsuya Okada messages you from the clinic: Emi Mori put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.  -> V: decline
+Thu 00:30  [procedural beat x-decline] You did not answer. Tatsuya Okada lay back and looked at the ceiling.
+Thu 00:30  [procedural closing] The beating was talked about for a day, and then it was not.
+Thu 00:30  (slot 9: slot-run.)
+Thu 00:30  (layer 3 sowed "assault-why" from assault-why (a=Emi Mori, v=Tatsuya Okada, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.4; composite 1 among 19 candidates; cause: 2 recorded events.)
+Thu 00:40  1 gang-clash incident at g4 in this ten minutes.
+Thu 00:50  1 accident incident at g2 in this ten minutes.
+Thu 00:50  1 assault incident at g9 in this ten minutes.
+Thu 01:00  1 accident incident at g4 in this ten minutes.
+Thu 01:00  1 assault incident at g2 in this ten minutes.
+Thu 01:10  1 assault incident at v7 in this ten minutes.
+Thu 01:10  1 theft incident at g10 in this ten minutes.
+Thu 01:40  1 accident incident at g3 in this ten minutes.
+Thu 02:20  1 assault incident at g2 in this ten minutes.
+Thu 02:25  accident (size 2) at g2 against Haneul Lim, with no cause in the record.
+Thu 02:40  1 assault incident at g2 in this ten minutes.
+Thu 02:50  disorder (size 2) at g5 among Rania Aziz among Jun Tang among Layla Nasser, with no cause in the record.
+Thu 03:10  1 assault incident at v7 in this ten minutes.
+Thu 03:10  1 theft incident at g2 in this ten minutes.
+Thu 03:20  1 theft incident at v7 in this ten minutes.
+Thu 03:30  1 assault incident at v7 in this ten minutes.
+Thu 03:50  1 accident incident at v7 in this ten minutes.
+Thu 03:53  assault (size 2) at g4 by Yui Tanaka against Hanh Truong, with no cause in the record.
+Thu 03:59  police-action (size 2) at g3 against Minjun Baek, with no cause in the record.
+Thu 04:00  1 assault incident at g2 in this ten minutes.
+Thu 04:10  1 theft incident at g2 in this ten minutes.
+Thu 04:20  1 assault incident at g2 in this ten minutes.
+Thu 04:20  1 theft incident at g2 in this ten minutes.
+Thu 04:50  1 theft incident at g2 in this ten minutes.
+Thu 05:00  1 theft incident at v7 in this ten minutes.
+Thu 05:20  [procedural beat tell] Kabuki: Haneul Lim was taken for treatment after an accident. No one else was injured.
+Thu 05:20  1 theft incident at g2 in this ten minutes.
+Thu 05:20  (slot 10: slot-run.)
+Thu 05:20  (layer 3 sowed "accident" from accident (s=Haneul Lim); features F3=1 F5=0 F6=0 F11=0.67; composite 0.6 among 20 candidates; cause: 1 recorded event.)
+Thu 05:21  accident (size 2) at g2 against Haruto Nakamura, with no cause in the record.
+Thu 05:30  1 theft incident at g2 in this ten minutes.
+Thu 05:30  1 theft incident at g4 in this ten minutes.
+Thu 05:50  1 assault incident at v7 in this ten minutes.
+Thu 06:20  1 accident incident at g7 in this ten minutes.
+Thu 06:30  1 theft incident at g2 in this ten minutes.
+Thu 06:30  accident (size 2) at g6 against Kaya Osei, with no cause in the record.
+Thu 07:20  1 accident incident at g3 in this ten minutes.
+Thu 07:25  seen up close: accident at g3 against Yuna Jang.
+Thu 07:50  1 theft incident at g2 in this ten minutes.
+Thu 08:10  2 commerce incidents at g9 in this ten minutes.
+Thu 08:40  1 accident incident at g9 in this ten minutes.
+Thu 09:00  1 commerce incident at g2 in this ten minutes.
+Thu 09:10  1 commerce incident at g2 in this ten minutes.
+Thu 09:20  1 theft incident at g4 in this ten minutes.
+Thu 09:30  1 theft incident at g2 in this ten minutes.
+Thu 10:00  1 assault incident at g2 in this ten minutes.
+Thu 10:00  2 theft incidents at g3 in this ten minutes.
+Thu 10:30  1 assault incident at v7 in this ten minutes.
+Thu 10:40  1 accident incident at g0 in this ten minutes.
+Thu 10:40  1 assault incident at g6 in this ten minutes.
+Thu 10:40  1 theft incident at g2 in this ten minutes.
+Thu 11:10  1 accident incident at g2 in this ten minutes.
+Thu 11:20  1 assault incident at g7 in this ten minutes.
+Thu 11:30  1 assault incident at g4 in this ten minutes.
+Thu 11:30  1 theft incident at g2 in this ten minutes.
+Thu 11:36  seen up close: assault at g4 by Takeshi Ogawa against Tao Ma.
+Thu 11:40  1 accident incident at g2 in this ten minutes.
+Thu 11:50  1 assault incident at g6 in this ten minutes.
+Thu 12:10  1 shakedown incident at g9 in this ten minutes.
+Thu 12:19  accident (size 2) at g2 against Sora Nakamura, with no cause in the record.
+Thu 12:20  1 disorder incident at g9 in this ten minutes.
+Thu 12:50  1 shakedown incident at g9 in this ten minutes.
+Thu 13:20  1 accident incident at v7 in this ten minutes.
+Thu 13:20  1 assault incident at g7 in this ten minutes.
+Thu 13:20  1 commerce incident at g2 in this ten minutes.
+Thu 13:20  1 theft incident at g7 in this ten minutes.
+Thu 13:32  assault (size 2) at g2 by Xiu Zhao against Tatsuya Sakamoto, with no cause in the record.
+Thu 13:50  1 assault incident at g2 in this ten minutes.
+Thu 14:00  1 theft incident at v7 in this ten minutes.
+Thu 14:10  1 theft incident at g2 in this ten minutes.
+Thu 14:20  1 assault incident at g7 in this ten minutes.
+Thu 14:30  1 accident incident at g9 in this ten minutes.
+Thu 14:33  seen up close: accident at g9 against Kenji Maeda.
+Thu 14:50  1 police-action incident at g1 in this ten minutes.
+Thu 14:53  assault (size 2) at v7 by Diego Cruz against Kaori Nakamura, with no cause in the record.
+Thu 15:00  1 theft incident at g11 in this ten minutes.
+Thu 15:10  1 disorder incident at g4 in this ten minutes.
+Thu 15:10  1 police-action incident at g2 in this ten minutes.
+Thu 15:40  1 assault incident at v7 in this ten minutes.
+Thu 15:50  1 assault incident at g10 in this ten minutes.
+Thu 15:50  1 disorder incident at g2 in this ten minutes.
+Thu 16:20  1 police-action incident at g2 in this ten minutes.
+Thu 16:20  2 theft incidents at g2 in this ten minutes.
+Thu 16:30  1 disorder incident at g2 in this ten minutes.
+Thu 16:40  1 accident incident at g2 in this ten minutes.
+Thu 17:00  1 police-action incident at v7 in this ten minutes.
+Thu 17:10  [procedural offer ask] Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.  -> V: decline
+Thu 17:10  1 assault incident at g2 in this ten minutes.
+Thu 17:10  (slot 11: slot-run.)
+Thu 17:10  (layer 3 sowed "goods-back" from goods-back (a=Xiu Zhao, v=Tamara Jankowski, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.2; composite 0.8 among 21 candidates; cause: 2 recorded events.)
+Thu 17:20  [procedural beat x-decline] Tamara Jankowski turned back to the stall. The bag was never mentioned in your hearing again.
+Thu 17:20  [procedural closing] The talk about the bag moved on.
+Thu 17:20  1 police-action incident at v1 in this ten minutes.
+Thu 17:20  1 theft incident at g6 in this ten minutes.
+Thu 17:50  1 shakedown incident at g2 in this ten minutes.
+Thu 18:00  1 accident incident at g2 in this ten minutes.
+Thu 18:10  1 theft incident at g2 in this ten minutes.
+Thu 18:17  police-action (size 2) at v2 against Malik Adeyemi, with no cause in the record.
+Thu 18:20  1 assault incident at v2 in this ten minutes.
+Thu 18:20  1 theft incident at g2 in this ten minutes.
+Thu 18:20  1 theft incident at v7 in this ten minutes.
+Thu 18:30  1 accident incident at g2 in this ten minutes.
+Thu 18:40  1 assault incident at v5 in this ten minutes.
+Thu 18:40  2 accident incidents at g2 in this ten minutes.
+Thu 18:46  disorder (size 3) at g2 among Long Wang among Noriko Watanabe, with no cause in the record.
+Thu 18:50  1 theft incident at g2 in this ten minutes.
+Thu 18:51  gang-clash (size 2) at g5 by Duc Nguyen against Marcus Coleman, with no cause in the record.
+Thu 19:00  1 gang-clash incident at g2 in this ten minutes.
+Thu 19:00  1 theft incident at g5 in this ten minutes.
+Thu 19:20  1 assault incident at g5 in this ten minutes.
+Thu 19:20  2 assault incidents at g2 in this ten minutes.
+Thu 19:29  police-action (size 2) at g2 against Kai Xie, with no cause in the record.
+Thu 19:40  1 theft incident at g2 in this ten minutes.
+Thu 19:46  accident (size 2) at v7 against Zara Das, with no cause in the record.
+Thu 19:50  1 theft incident at g5 in this ten minutes.
+Thu 20:00  1 assault incident at v7 in this ten minutes.
+Thu 20:10  1 theft incident at v7 in this ten minutes.
+Thu 20:30  1 theft incident at g2 in this ten minutes.
+Thu 20:40  1 assault incident at g5 in this ten minutes.
+Thu 20:40  1 assault incident at g9 in this ten minutes.
+Thu 20:40  1 theft incident at v6 in this ten minutes.
+Thu 20:40  1 theft incident at v7 in this ten minutes.
+Thu 20:50  1 theft incident at v7 in this ten minutes.
+Thu 21:00  1 accident incident at v7 in this ten minutes.
+Thu 21:10  [procedural beat tell] An NCPD patrol pulled Kai Xie off the street in Kabuki. Nobody stopped to watch.
+Thu 21:10  1 accident incident at g5 in this ten minutes.
+Thu 21:10  (slot 12: slot-run.)
+Thu 21:10  (layer 3 sowed "sweep" from sweep (s=Kai Xie); features F3=1 F5=1 F6=0 F11=0.78; composite 0.6 among 23 candidates; cause: 1 recorded event.)
+Thu 21:20  1 commerce incident at v7 in this ten minutes.
+Thu 21:30  1 assault incident at g10 in this ten minutes.
+Thu 21:40  1 accident incident at g2 in this ten minutes.
+Thu 21:50  1 accident incident at v7 in this ten minutes.
+Thu 21:50  1 theft incident at g2 in this ten minutes.
+Thu 21:53  disorder (size 2) at g10 among Noor Saleh among Noriko Tanaka, with no cause in the record.
+Thu 22:02  accident (size 2) at g2 against Javier Romero, with no cause in the record.
+Thu 22:13  gang-clash (size 2) at g2 by Kai Xie against Tamara Jankowski, with no cause in the record.
+Thu 22:20  1 theft incident at v7 in this ten minutes.
+Thu 22:30  1 accident incident at g10 in this ten minutes.
+Thu 22:30  1 accident incident at g5 in this ten minutes.
+Thu 22:40  1 theft incident at g4 in this ten minutes.
+Thu 22:50  1 accident incident at v7 in this ten minutes.
+Thu 22:50  1 theft incident at g2 in this ten minutes.
+Thu 23:00  1 theft incident at g2 in this ten minutes.
+Thu 23:10  1 accident incident at v7 in this ten minutes.
+Thu 23:10  1 assault incident at g2 in this ten minutes.
+Thu 23:20  1 accident incident at v1 in this ten minutes.
+Thu 23:30  1 accident incident at g2 in this ten minutes.
+Thu 23:30  1 police-action incident at g9 in this ten minutes.
+Thu 23:40  1 theft incident at v7 in this ten minutes.
+Thu 23:50  1 accident incident at g2 in this ten minutes.
+Fri 00:02  gang-clash (size 2) at v7 by Shun Shimizu victim-group Scavengers, with no cause in the record.
+Fri 00:10  1 theft incident at v7 in this ten minutes.
+Fri 00:30  1 assault incident at v7 in this ten minutes.
+Fri 00:40  1 theft incident at g2 in this ten minutes.
+Fri 00:40  seen up close: theft at g2 by Long Wang against Bea Aquino.
+Fri 01:03  theft (size 2) at g2 by Sora Okada against Jiro Sato, with no cause in the record.
+Fri 01:10  1 gang-clash incident at g5 in this ten minutes.
+Fri 01:20  1 police-action incident at v5 in this ten minutes.
+Fri 01:20  1 theft incident at g2 in this ten minutes.
+Fri 01:23  commerce (size 2) at v7 from Jing Zhou to Joy Dizon, with no cause in the record.
+Fri 01:30  1 accident incident at g10 in this ten minutes.
+Fri 01:30  1 theft incident at g2 in this ten minutes.
+Fri 01:30  1 theft incident at g4 in this ten minutes.
+Fri 01:32  disorder (size 2) at g2 among Haruto Nakamura among Kaori Okada among Aileen Pascual among Tao Zhang, with no cause in the record.
+Fri 02:00  1 accident incident at g2 in this ten minutes.
+Fri 02:00  1 gang-clash incident at g4 in this ten minutes.
+Fri 02:10  1 accident incident at v7 in this ten minutes.
+Fri 02:10  1 assault incident at g2 in this ten minutes.
+Fri 02:10  1 gang-clash incident at g2 in this ten minutes.
+Fri 02:20  1 commerce incident at g4 in this ten minutes.
+Fri 02:20  1 theft incident at g2 in this ten minutes.
+Fri 02:20  1 theft incident at v7 in this ten minutes.
+Fri 02:50  1 assault incident at g5 in this ten minutes.
+Fri 03:20  1 assault incident at g2 in this ten minutes.
+Fri 03:20  1 theft incident at v7 in this ten minutes.
+Fri 03:40  1 assault incident at g9 in this ten minutes.
+Fri 03:50  1 assault incident at g2 in this ten minutes.
+Fri 03:53  gang-clash (size 3) at g2 by Ying Wu against Sora Okada, with no cause in the record.
+Fri 04:00  1 assault incident at g5 in this ten minutes.
+Fri 04:50  1 shakedown incident at v7 in this ten minutes.
+Fri 04:50  1 theft incident at g2 in this ten minutes.
+Fri 04:51  gang-clash (size 2) at g8 by Aiko Inoue against Huda Said, because of a gang-clash.
+Fri 05:30  1 assault incident at v7 in this ten minutes.
+Fri 05:40  1 accident incident at v6 in this ten minutes.
+Fri 05:40  1 assault incident at g2 in this ten minutes.
+Fri 05:40  1 theft incident at g2 in this ten minutes.
+Fri 05:50  1 assault incident at v7 in this ten minutes.
+Fri 05:50  1 gang-clash incident at g8 in this ten minutes.
+Fri 05:50  1 theft incident at g6 in this ten minutes.
+Fri 06:10  [procedural offer ask] Message from Haruto Nakamura: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.  -> V: decline
+Fri 06:10  [procedural beat x-decline] The message sat unanswered. The crowd by the market was thinner for a week.
+Fri 06:10  [procedural closing] The scuffle was forgotten by the end of the week.
+Fri 06:10  1 assault incident at v9 in this ten minutes.
+Fri 06:10  1 theft incident at g2 in this ten minutes.
+Fri 06:10  (slot 13: slot-run.)
+Fri 06:10  (layer 3 sowed "crowd-scuffle" from crowd-scuffle (p=Haruto Nakamura, me=Dmitri Novak); features F3=0 F5=3 F6=0 F11=0.58; composite 0.4 among 23 candidates; cause: 2 recorded events.)
+Fri 06:10  accident (size 2) at g2 against Jiro Matsuda, with no cause in the record.
+Fri 06:30  1 accident incident at g2 in this ten minutes.
+Fri 07:40  1 commerce incident at g2 in this ten minutes.
+Fri 08:30  shakedown (size 2) at g9 by Riley Spencer against Kenji Sato, with no cause in the record.
+Fri 09:10  1 accident incident at g10 in this ten minutes.
+Fri 09:28  theft (size 2) at g2 by Xiu Zhao against Aileen Dizon, with no cause in the record.
+Fri 09:30  1 accident incident at g2 in this ten minutes.
+Fri 09:30  1 accident incident at g4 in this ten minutes.
+Fri 09:40  1 commerce incident at g3 in this ten minutes.
+Fri 09:40  1 theft incident at g2 in this ten minutes.
+Fri 10:00  1 theft incident at g10 in this ten minutes.
+Fri 10:20  1 commerce incident at g0 in this ten minutes.
+Fri 10:40  1 commerce incident at g2 in this ten minutes.
+Fri 11:30  1 commerce incident at g2 in this ten minutes.
+Fri 11:36  seen up close: commerce at g2 from Simone Boateng to Aileen Pascual.
+Fri 12:00  1 accident incident at g2 in this ten minutes.
+Fri 12:08  seen up close: accident at g2 against Cedric Rhodes.
+Fri 12:10  1 accident incident at g2 in this ten minutes.
+Fri 12:20  1 shakedown incident at g11 in this ten minutes.
+Fri 12:37  disorder (size 2) at v4 among Deepa Sharma among Qing Zhao among Jamie Marsh, with no cause in the record.
+Fri 12:40  1 accident incident at g2 in this ten minutes.
+Fri 12:40  1 theft incident at g2 in this ten minutes.
+Fri 12:50  1 theft incident at g2 in this ten minutes.
+Fri 13:00  1 accident incident at v7 in this ten minutes.
+Fri 13:00  1 assault incident at g2 in this ten minutes.
+Fri 13:00  1 theft incident at g9 in this ten minutes.
+Fri 13:20  1 accident incident at g2 in this ten minutes.
+Fri 13:24  seen up close: accident at g2 against Haruto Nakamura.
+Fri 13:26  commerce (size 2) at g2 from Noriko Sakamoto to Santiago Ibarra, with no cause in the record.
+Fri 13:40  1 assault incident at g11 in this ten minutes.
+Fri 13:40  1 theft incident at g2 in this ten minutes.
+Fri 13:44  seen up close: theft at g2 by Ines Cruz against Bo Zhao.
+Fri 14:10  [procedural offer ask] Sora Okada messages you: Ying Wu and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.  -> V: decline
+Fri 14:10  1 theft incident at v3 in this ten minutes.
+Fri 14:10  1 theft incident at v7 in this ten minutes.
+Fri 14:10  (slot 14: slot-run.)
+Fri 14:10  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Ying Wu, v=Sora Okada, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.38; composite 0.9 among 23 candidates; cause: 2 recorded events.)
+Fri 14:10  disorder (size 3) at g2 among Phuc Lam among Imran Chopra, with no cause in the record.
+Fri 14:20  [procedural beat x-decline] You did not answer. Sora Okada moved to a cousin's place across the district.
+Fri 14:20  [procedural closing] The street fight turned into a story, and the story into a rumour.
+Fri 14:20  1 assault incident at g2 in this ten minutes.
+Fri 14:30  1 assault incident at g2 in this ten minutes.
+Fri 14:47  theft (size 2) at g9 by Thao Ly against Hyunwoo Baek, with no cause in the record.
+Fri 15:20  1 shakedown incident at g4 in this ten minutes.
+Fri 16:00  1 commerce incident at g2 in this ten minutes.
+Fri 16:31  police-action (size 2) at g9 against Irina Popov, with no cause in the record.
+Fri 16:34  theft (size 2) at g2 by Ines Cruz against Kenji Nakamura, with no cause in the record.
+Fri 17:30  1 accident incident at g2 in this ten minutes.
+Fri 17:39  assault (size 2) at g10 by Layla Farah against Huda Nasser, with no cause in the record.
+Fri 17:40  1 accident incident at v7 in this ten minutes.
+Fri 17:47  assault (size 2) at g2 by Shun Kondo against Imran Chopra, with no cause in the record.
+Fri 17:50  1 accident incident at g4 in this ten minutes.
+Fri 17:50  1 police-action incident at g9 in this ten minutes.
+Fri 17:50  seen up close: accident at g4 against Vera Zielinski.
+Fri 18:00  1 disorder incident at g7 in this ten minutes.
+Fri 18:20  1 accident incident at g2 in this ten minutes.
+Fri 18:20  1 theft incident at v7 in this ten minutes.
+Fri 18:30  1 accident incident at v7 in this ten minutes.
+Fri 18:44  psycho-break (size 2) at g2 by Huda Haddad against Emi Hayashi, with no cause in the record.
+Fri 19:00  1 assault incident at g2 in this ten minutes.
+Fri 19:10  1 accident incident at v7 in this ten minutes.
+Fri 19:20  [procedural beat tell] Kabuki: a theft was reported by Hyunwoo Baek. Thao Ly is named as the person responsible. The goods have not been recovered.
+Fri 19:20  1 assault incident at g2 in this ten minutes.
+Fri 19:20  (slot 15: slot-run.)
+Fri 19:20  (layer 3 sowed "theft" from theft (a=Thao Ly, v=Hyunwoo Baek); features F3=1 F5=0 F6=0 F11=0.57; composite 0.4 among 26 candidates; cause: 1 recorded event.)
+Fri 19:25  disorder (size 2) at v7 among Noor Hamdan among Kaori Yamaguchi, with no cause in the record.
+Fri 20:00  1 theft incident at g2 in this ten minutes.
+Fri 20:10  1 assault incident at v7 in this ten minutes.
+Fri 20:10  1 disorder incident at g4 in this ten minutes.
+Fri 20:10  1 theft incident at g2 in this ten minutes.
+Fri 20:20  1 accident incident at g9 in this ten minutes.
+Fri 20:20  1 accident incident at v7 in this ten minutes.
+Fri 20:30  1 assault incident at g9 in this ten minutes.
+Fri 20:40  1 accident incident at v7 in this ten minutes.
+Fri 20:40  1 theft incident at g2 in this ten minutes.
+Fri 20:50  1 gang-clash incident at g5 in this ten minutes.
+Fri 21:00  1 commerce incident at g2 in this ten minutes.
+Fri 21:10  1 accident incident at g6 in this ten minutes.
+Fri 21:10  1 commerce incident at g2 in this ten minutes.
+Fri 21:10  seen up close: commerce at g2 from Rafael Guerrero to Seungmin Choi.
+Fri 21:19  gang-clash (size 2) at g4 by Yuna Han against Long Li, with no cause in the record.
+Fri 21:20  1 accident incident at g2 in this ten minutes.
+Fri 21:25  seen up close: accident at g2 against Xiu Zhao.
+Fri 21:30  1 shakedown incident at g4 in this ten minutes.
+Fri 21:30  1 theft incident at g2 in this ten minutes.
+Fri 21:30  1 theft incident at v7 in this ten minutes.
+Fri 21:34  seen up close: theft at g2 by Shun Mori against Kenji Okada.
+Fri 21:50  1 police-action incident at g4 in this ten minutes.
+Fri 22:20  gang-clash (size 2) at g4 aggressor-group Scavengers against Haneul Park, with no cause in the record.
+Fri 22:40  1 assault incident at g2 in this ten minutes.
+Fri 22:47  assault (size 2) at g2 by Phuc Lam against Jiro Hayashi, with no cause in the record.
+Fri 22:58  assault (size 2) at g4 by Andre Mensah against Sora Watanabe, with no cause in the record.
+Fri 23:20  1 assault incident at v6 in this ten minutes.
+Fri 23:20  1 assault incident at v7 in this ten minutes.
+Fri 23:30  1 accident incident at g2 in this ten minutes.
+Fri 23:30  1 police-action incident at v7 in this ten minutes.
+Fri 23:40  1 theft incident at v7 in this ten minutes.
+Fri 23:50  1 assault incident at g2 in this ten minutes.
+Fri 23:50  1 police-action incident at g2 in this ten minutes.
+Fri 23:50  1 theft incident at v7 in this ten minutes.
+Sat 00:10  1 assault incident at v7 in this ten minutes.
+Sat 00:10  1 gang-clash incident at g4 in this ten minutes.
+Sat 00:20  1 assault incident at v7 in this ten minutes.
+Sat 01:00  1 theft incident at v7 in this ten minutes.
+Sat 01:00  2 theft incidents at g2 in this ten minutes.
+Sat 01:10  1 assault incident at g4 in this ten minutes.
+Sat 01:16  theft (size 2) at g2 by Sora Maeda against Nam Pham, with no cause in the record.
+Sat 01:20  [procedural offer ask] Jiro Hayashi writes that Phuc Lam beat them bloody near the market, and nobody will say what it was about. Someone should learn what this was about, and someone should look after me while I cannot work. Ask around, have a word with the one who did it, or cover the clinic. I had never seen them before today, and that is what frightens me.  -> V: decline
+Sat 01:20  (slot 16: slot-run.)
+Sat 01:20  (layer 3 sowed "assault-why" from assault-why (a=Phuc Lam, v=Jiro Hayashi, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.72; composite 0.8 among 28 candidates; cause: 2 recorded events.)
+Sat 01:30  [procedural beat x-decline] You did not answer. Jiro Hayashi lay back and looked at the ceiling.
+Sat 01:30  [procedural closing] The beating was talked about for a day, and then it was not.
+Sat 01:40  1 assault incident at g2 in this ten minutes.
+Sat 01:50  1 assault incident at g2 in this ten minutes.
+Sat 02:00  1 assault incident at g2 in this ten minutes.
+Sat 02:00  1 gang-clash incident at v7 in this ten minutes.
+Sat 02:00  1 theft incident at g3 in this ten minutes.
+Sat 02:20  1 assault incident at v7 in this ten minutes.
+Sat 02:30  1 outage incident at v2 in this ten minutes.
+Sat 02:50  1 assault incident at g9 in this ten minutes.
+Sat 03:00  1 assault incident at g11 in this ten minutes.
+Sat 03:00  1 assault incident at g2 in this ten minutes.
+Sat 03:00  1 police-action incident at v7 in this ten minutes.
+Sat 03:02  psycho-break (size 2) at g2 by Jiro Hayashi against Sora Maeda, with no cause in the record.
+Sat 03:20  1 accident incident at g9 in this ten minutes.
+Sat 03:30  1 assault incident at g2 in this ten minutes.
+Sat 03:39  disorder (size 2) at g9 among Kenji Mori among Riley Spencer among Eunji Kim, with no cause in the record.
+Sat 03:50  1 theft incident at g2 in this ten minutes.
+Sat 04:00  1 theft incident at g2 in this ten minutes.
+Sat 04:10  1 assault incident at v7 in this ten minutes.
+Sat 04:16  disorder (size 2) at v7 among Rui Zhao among Valeria Mendoza among Wade Spencer, with no cause in the record.
+Sat 04:20  1 theft incident at g2 in this ten minutes.
+Sat 04:20  1 theft incident at v7 in this ten minutes.
+Sat 04:30  1 police-action incident at g2 in this ten minutes.
+Sat 04:40  1 theft incident at g10 in this ten minutes.
+Sat 04:50  1 assault incident at g2 in this ten minutes.
+Sat 04:50  1 assault incident at g7 in this ten minutes.
+Sat 05:00  1 accident incident at v7 in this ten minutes.
+Sat 05:20  1 accident incident at g2 in this ten minutes.
+Sat 05:20  2 theft incidents at g2 in this ten minutes.
+Sat 05:30  1 assault incident at g2 in this ten minutes.
+Sat 05:40  1 assault incident at v7 in this ten minutes.
+Sat 05:48  theft (size 2) at v7 by Takeshi Tanaka against Tasha Tucker, with no cause in the record.
+Sat 06:10  1 disorder incident at g4 in this ten minutes.
+Sat 07:20  1 police-action incident at g10 in this ten minutes.
+Sat 07:30  1 theft incident at v7 in this ten minutes.
+Sat 07:40  1 shakedown incident at g4 in this ten minutes.
+Sat 07:50  1 assault incident at g2 in this ten minutes.
+Sat 08:30  1 accident incident at g2 in this ten minutes.
+Sat 09:00  1 theft incident at g2 in this ten minutes.
+Sat 09:10  1 theft incident at v1 in this ten minutes.
+Sat 09:30  1 theft incident at g2 in this ten minutes.
+Sat 09:40  1 theft incident at v4 in this ten minutes.
+Sat 09:50  1 police-action incident at g6 in this ten minutes.
+Sat 10:30  1 commerce incident at g2 in this ten minutes.
+Sat 10:50  1 assault incident at g2 in this ten minutes.
+Sat 10:53  accident (size 2) at v7 against Wade Spencer, with no cause in the record.
+Sat 11:00  1 accident incident at v7 in this ten minutes.
+Sat 11:00  disorder (size 2) at v4 among Hao Deng among Kenji Matsuda among Rosa Cruz among Tariq Habib, with no cause in the record.
+Sat 11:10  [procedural beat tell] Kabuki: Imran Chopra was treated for injuries after an assault. Witnesses name Shun Kondo. No arrest has been made.
+Sat 11:10  (slot 17: slot-run.)
+Sat 11:10  (layer 3 sowed "beating" from beating (a=Shun Kondo, v=Imran Chopra); features F3=1 F5=0 F6=0 F11=0.26; composite 0.3 among 24 candidates; cause: 1 recorded event.)
+Sat 11:40  1 theft incident at v7 in this ten minutes.
+Sat 12:20  1 disorder incident at g2 in this ten minutes.
+Sat 12:30  1 commerce incident at g2 in this ten minutes.
+Sat 12:30  1 theft incident at v7 in this ten minutes.
+Sat 13:00  1 accident incident at g2 in this ten minutes.
+Sat 13:10  1 accident incident at g2 in this ten minutes.
+Sat 13:30  1 theft incident at g2 in this ten minutes.
+Sat 13:30  1 theft incident at v7 in this ten minutes.
+Sat 13:50  1 theft incident at g2 in this ten minutes.
+Sat 14:00  1 theft incident at g2 in this ten minutes.
+Sat 14:10  1 shakedown incident at g2 in this ten minutes.
+Sat 14:20  1 theft incident at v3 in this ten minutes.
+Sat 14:40  1 disorder incident at g6 in this ten minutes.
+Sat 14:50  1 accident incident at v7 in this ten minutes.
+Sat 15:00  2 theft incidents at g2 in this ten minutes.
+Sat 15:10  [procedural beat tell] Kabuki: police detained Irina Popov during a street sweep. No charge has been announced.
+Sat 15:10  1 assault incident at g2 in this ten minutes.
+Sat 15:10  1 commerce incident at g2 in this ten minutes.
+Sat 15:10  1 commerce incident at v7 in this ten minutes.
+Sat 15:10  (slot 18: slot-run.)
+Sat 15:10  (layer 3 sowed "sweep" from sweep (s=Irina Popov); features F3=1 F5=0 F6=0 F11=0.21; composite 0.2 among 16 candidates; cause: 1 recorded event.)
+Sat 15:50  1 shakedown incident at g7 in this ten minutes.
+Sat 15:50  1 theft incident at g2 in this ten minutes.
+Sat 15:51  seen up close: shakedown at g7 by Woojin Song against Paolo Roxas.
+Sat 16:00  1 theft incident at g2 in this ten minutes.
+Sat 16:10  1 theft incident at g2 in this ten minutes.
+Sat 16:10  1 theft incident at v7 in this ten minutes.
+Sat 16:20  2 theft incidents at g2 in this ten minutes.
+Sat 16:24  accident (size 3) at g6 against Kaori Shimizu, with no cause in the record.
+Sat 16:30  1 assault incident at g9 in this ten minutes.
+Sat 16:40  1 assault incident at g4 in this ten minutes.
+Sat 17:00  1 assault incident at g2 in this ten minutes.
+Sat 17:10  1 assault incident at v7 in this ten minutes.
+Sat 17:20  1 commerce incident at g2 in this ten minutes.
+Sat 17:20  1 police-action incident at g10 in this ten minutes.
+Sat 17:38  theft (size 2) at g2 by Sora Maeda against Jiro Sato, with no cause in the record.
+Sat 18:00  1 disorder incident at g4 in this ten minutes.
+Sat 18:30  1 assault incident at g2 in this ten minutes.
+Sat 18:34  seen up close: assault at g2 by Xiu Zhao against Haruto Matsuda.
+Sat 18:40  1 assault incident at g2 in this ten minutes.
+Sat 18:44  seen up close: assault at g2 by Daichi Sato against Xiu Huang.
+Sat 18:50  1 assault incident at g2 in this ten minutes.
+Sat 18:50  1 theft incident at g2 in this ten minutes.
+Sat 18:53  seen up close: theft at g2 by Seungmin Choi against Bea Tolentino.
+Sat 18:57  seen up close: assault at g2 by Kenji Nakamura against Jiro Hayashi.
+Sat 19:00  1 accident incident at g10 in this ten minutes.
+Sat 19:00  1 assault incident at g2 in this ten minutes.
+Sat 19:00  1 disorder incident at g4 in this ten minutes.
+Sat 19:02  seen up close: assault at g2 by Woojin Kim against Paolo Roxas.
+Sat 19:10  1 disorder incident at g2 in this ten minutes.
+Sat 19:18  police-action (size 2) at v7 against Khoa Bui, with no cause in the record.
+Sat 19:40  1 theft incident at g2 in this ten minutes.
+Sat 20:10  1 accident incident at v7 in this ten minutes.
+Sat 20:10  1 theft incident at v7 in this ten minutes.
+Sat 20:10  2 theft incidents at g2 in this ten minutes.
+Sat 20:20  1 theft incident at g2 in this ten minutes.
+Sat 20:25  assault (size 2) at g2 by Xiu Zhao against Seungmin Choi, with no cause in the record.
+Sat 20:29  assault (size 2) at g2 by Kaori Yamaguchi against Hana Hayashi, with no cause in the record.
+Sat 20:30  1 assault incident at g2 in this ten minutes.
+Sat 20:30  1 theft incident at v7 in this ten minutes.
+Sat 20:40  1 shakedown incident at v5 in this ten minutes.
+Sat 20:40  1 theft incident at g5 in this ten minutes.
+Sat 20:40  1 theft incident at g6 in this ten minutes.
+Sat 20:40  1 theft incident at v2 in this ten minutes.
+Sat 20:50  1 gang-clash incident at g9 in this ten minutes.
+Sat 21:00  1 accident incident at v7 in this ten minutes.
+Sat 21:20  1 assault incident at g2 in this ten minutes.
+Sat 21:40  1 assault incident at g2 in this ten minutes.
+Sat 21:40  1 disorder incident at g6 in this ten minutes.
+Sat 21:48  seen up close: disorder at g6 among Nora Pierce among Marisol Castillo.
+Sat 21:50  1 accident incident at v7 in this ten minutes.
+Sat 22:00  1 theft incident at v7 in this ten minutes.
+Sat 22:10  1 assault incident at g2 in this ten minutes.
+Sat 22:20  1 assault incident at g7 in this ten minutes.
+Sat 22:30  1 accident incident at g2 in this ten minutes.
+Sat 22:30  1 assault incident at v2 in this ten minutes.
+Sat 22:30  1 theft incident at g2 in this ten minutes.
+Sat 22:50  1 accident incident at g6 in this ten minutes.
+Sat 22:50  1 shakedown incident at g9 in this ten minutes.
+Sat 23:00  1 assault incident at g2 in this ten minutes.
+Sat 23:10  1 accident incident at g2 in this ten minutes.
+Sat 23:14  theft (size 2) at v7 by Sasha Volkov against Noor Hamdan, with no cause in the record.
+Sat 23:20  1 theft incident at g2 in this ten minutes.
+Sat 23:28  theft (size 2) at g2 by Kenji Okada against Shun Aoki, with no cause in the record.
+Sat 23:30  1 gang-clash incident at g4 in this ten minutes.
+Sat 23:30  1 theft incident at g5 in this ten minutes.
+Sat 23:37  gang-clash (size 2) at g2 by Tamara Jankowski against Seungmin Choi, with no cause in the record.
+Sat 23:40  1 assault incident at g2 in this ten minutes.
+Sat 23:50  1 theft incident at v6 in this ten minutes.

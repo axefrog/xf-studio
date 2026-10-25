@@ -1,0 +1,101 @@
+# M3 run: m3b-w5
+world: Kabuki (stand-in slice xf.kabuki.index@1, hash 9f0089c48948); seed name "m3b-w5"
+story state: S-early-quiet (early in the story, a quiet street, a gang with money)
+facts set (the rest read 0): q000_done, q001_done, q003_done
+street: regimes: none arrive; Tyger Claws books: cash 30000
+setting: incident rates x8 (a busier Kabuki, to give the engine enough to tell)
+setting: the wide name registry of S1's pack (origins weighted by affiliation class and district)
+setting: layer 3 data: feature weights F3 2, F5 2, F6 1, F11 1; lambda 3; diversity 1; a completed match is a candidate for one game day
+setting: V is told of the incidents that open where V stands (the report of what V saw, stood in for by the driver: RunExtra.witness)
+setting: arm E: layer 3 ranks and chooses
+V walks the district: a new block every game hour
+layer 3: attached, tempo restless; V's policy: decline
+span: 864 windows of ten minutes (6.0 game days), 86400 play seconds
+
+Mon 00:10  (a delivery was held (phase-settling).)
+Mon 00:10  (a delivery was held (hold-cleared).)
+Mon 00:10  (a delivery was held (lead-aim).)
+Mon 00:40  (slot 0: slot-gentle.)
+Mon 02:10  [authored offer ask] Jiro Maeda messages you: Lan Wang was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?  -> V: decline
+Mon 02:10  [authored beat stay-out] Jiro Maeda nodded, as if they had expected nothing else, and went back to the counter.
+Mon 02:10  [authored closing] That Friday is over.
+Mon 02:10  (a delivery was held (hold-cleared).)
+Mon 02:20  [authored coda] The stalls opened and closed the way they always do, and the fee was paid or it was not.
+Mon 08:10  [procedural offer ask] Nadia Novak on the line: Kaya Washington robbed me in the crowd by the market, and I want what was in the bag more than I want an apology. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. I do not know you, only that you are not part of whatever crowd has been working the market.  -> V: decline
+Mon 08:10  [procedural beat x-decline] Nadia Novak turned back to the stall. The bag was never mentioned in your hearing again.
+Mon 08:10  [procedural closing] The talk about the bag moved on.
+Mon 08:10  (slot 1: slot-run.)
+Mon 08:10  (layer 3 sowed "goods-back" from goods-back (a=Kaya Washington, v=Nadia Novak, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.59; composite 0.83 among 13 candidates; cause: 2 recorded events.)
+Mon 21:30  [procedural offer ask] Ivo Popov on the line, short of breath: the Claws collector Haneul Song was at the till, and I told them to come back Friday. Someone has to square this before Friday or they send someone less patient. Pay it, bargain it down, or face the next collector yourself. The stalls have started to say no among themselves, and a push from outside might tip it.  -> V: decline
+Mon 21:30  [procedural beat x-decline] Ivo Popov nodded as if they had expected nothing else and went back to counting the till.
+Mon 21:30  [procedural closing] That Friday is over.
+Mon 21:30  (slot 2: slot-run.)
+Mon 21:30  (layer 3 sowed "fee-shortfall" from fee-shortfall (a=Haneul Song, v=Ivo Popov, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.43; composite 1 among 28 candidates; cause: 2 recorded events.)
+Tue 03:30  (slot 3: slot-run.)
+Tue 03:30  (layer 3 sowed "demand" from demand (a=Itsuki Watanabe, v=Jiro Ogawa); features F3=1 F5=0 F6=0 F11=0.43; composite 0.5 among 30 candidates; cause: 1 recorded event.)
+Tue 09:30  (layer 3 withdrew an unshown hook (pending).)
+Tue 09:40  [procedural offer ask] Lidia Lebedev messages you: Haruto Aoki and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You owe me nothing and I cannot promise much, but I am asking because I have no one else.  -> V: decline
+Tue 09:40  [procedural beat x-decline] Lidia Lebedev said they understood. Their stall was shut for a week.
+Tue 09:40  [procedural closing] The street fight turned into a story, and the story into a rumour.
+Tue 09:40  (slot 4: slot-run.)
+Tue 09:40  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Haruto Aoki, v=Lidia Lebedev, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.56; composite 1 among 24 candidates; cause: 2 recorded events.)
+Tue 16:40  [procedural offer ask] Emi Hashimoto messages you, mostly in fragments: Andre Washington hit me hard outside the market, and I have no idea what for. Will you ask around about why, face the one who did it, or see me home from the clinic? We have never met, and I would not ask if I had anyone else to turn to.  -> V: decline
+Tue 16:40  [procedural beat x-decline] You did not answer. Emi Hashimoto lay back and looked at the ceiling.
+Tue 16:40  [procedural closing] The beating was talked about for a day, and then it was not.
+Tue 16:40  (slot 5: slot-run.)
+Tue 16:40  (layer 3 sowed "assault-why" from assault-why (a=Andre Washington, v=Emi Hashimoto, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.25; composite 0.8 among 32 candidates; cause: 2 recorded events.)
+Tue 23:20  [procedural beat tell] Hui Luo was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.
+Tue 23:20  (slot 6: slot-run.)
+Tue 23:20  (layer 3 sowed "accident" from accident (s=Hui Luo); features F3=1 F5=0 F6=0 F11=0.36; composite 0.7 among 42 candidates; cause: 1 recorded event.)
+Wed 11:00  [procedural beat tell] Rania Khalil says Jiro Matsuda lifted a bag in the Kabuki crowd and was gone before anyone moved.
+Wed 11:00  (slot 7: slot-run.)
+Wed 11:00  (layer 3 sowed "theft" from theft (a=Jiro Matsuda, v=Rania Khalil); features F3=1 F5=0 F6=0 F11=0.42; composite 0.8 among 41 candidates; cause: 1 recorded event.)
+Wed 14:30  [procedural offer ask] Aiko Sato writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You are new enough here that nobody will think you are on a side.  -> V: decline
+Wed 14:30  (slot 8: slot-run.)
+Wed 14:30  (layer 3 sowed "crowd-scuffle" from crowd-scuffle (p=Aiko Sato, me=Dmitri Novak); features F3=0 F5=3 F6=0 F11=0.27; composite 0.5 among 40 candidates; cause: 2 recorded events.)
+Wed 14:40  [procedural beat x-decline] Aiko Sato said they would keep away from that corner and meant it.
+Wed 14:40  [procedural closing] The scuffle was forgotten by the end of the week.
+Wed 22:10  [procedural offer ask] Jiro Ishikawa messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You will not know me from anyone, but there is nobody else I can send.  -> V: decline
+Wed 22:10  [procedural beat x-decline] Jiro Ishikawa thanked you for reading it. The parcel stayed on the locker.
+Wed 22:10  [procedural closing] The accident was forgotten by the end of the week.
+Wed 22:10  (slot 9: slot-run.)
+Wed 22:10  (layer 3 sowed "accident-errand" from accident-errand (s=Jiro Ishikawa, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.21; composite 0.6 among 31 candidates; cause: 2 recorded events.)
+Thu 03:50  [procedural offer ask] Elena Reyes on the line: Daichi Ishikawa robbed me in the crowd by the market, and I want what was in the bag more than I want an apology. Can you get it back for me? Track down whoever has it, make it worth the thief's while to say where it went, or pay what it was worth and wait for my thanks. Nobody on the row had seen the thief before, so somebody must have given the nod.  -> V: decline
+Thu 03:50  [procedural beat x-decline] Elena Reyes said they would manage and did not ask again.
+Thu 03:50  [procedural closing] The talk about the bag moved on.
+Thu 03:50  (slot 10: slot-run.)
+Thu 03:50  (layer 3 sowed "goods-back" from goods-back (a=Daichi Ishikawa, v=Elena Reyes, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.54; composite 0.9 among 42 candidates; cause: 2 recorded events.)
+Thu 11:40  [procedural offer ask] Takeshi Hashimoto messages you: Alejandro Campos and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You owe me nothing and I cannot promise much, but I am asking because I have no one else.  -> V: decline
+Thu 11:40  [procedural beat x-decline] Takeshi Hashimoto said they understood. Their stall was shut for a week.
+Thu 11:40  [procedural closing] The street fight turned into a story, and the story into a rumour.
+Thu 11:40  (slot 11: slot-run.)
+Thu 11:40  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Alejandro Campos, v=Takeshi Hashimoto, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.22; composite 0.6 among 47 candidates; cause: 2 recorded events.)
+Thu 22:10  [procedural beat tell] Watch your pockets: Mei Ishikawa is working the crowd again, and Misaki Watanabe found out first.
+Thu 22:10  (slot 12: slot-run.)
+Thu 22:10  (layer 3 sowed "theft" from theft (a=Mei Ishikawa, v=Misaki Watanabe); features F3=1 F5=0 F6=0 F11=0.71; composite 0.8 among 54 candidates; cause: 1 recorded event.)
+Fri 05:20  [procedural beat tell] Kabuki: Tatsuya Inoue was taken for treatment after an accident. No one else was injured.
+Fri 05:20  (slot 13: slot-run.)
+Fri 05:20  (layer 3 sowed "accident" from accident (s=Tatsuya Inoue); features F3=1 F5=0 F6=0 F11=0.28; composite 0.3 among 38 candidates; cause: 1 recorded event.)
+Fri 12:30  [procedural beat tell] An NCPD patrol pulled Marcus Abara off the street in Kabuki. Nobody stopped to watch.
+Fri 12:30  (slot 14: slot-run.)
+Fri 12:30  (layer 3 sowed "sweep" from sweep (s=Marcus Abara); features F3=1 F5=0 F6=0 F11=0.8; composite 0.8 among 43 candidates; cause: 1 recorded event.)
+Fri 23:00  [procedural offer ask] Sakura Mori writes that the crews clashed on the street and Woojin Kim picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.  -> V: decline
+Fri 23:00  [procedural beat x-decline] You did not answer. Sakura Mori moved to a cousin's place across the district.
+Fri 23:00  [procedural closing] The street fight turned into a story, and the story into a rumour.
+Fri 23:00  (slot 15: slot-run.)
+Fri 23:00  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Woojin Kim, v=Sakura Mori, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.88; composite 1 among 53 candidates; cause: 2 recorded events.)
+Sat 01:50  [procedural offer ask] Wade Sullivan writes from a clinic cot that Alex Holt jumped them in the street, took nothing, and left. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. We have never met, and I would not ask if I had anyone else to turn to.  -> V: decline
+Sat 01:50  [procedural beat x-decline] Wade Sullivan said that was fair and did not ask again.
+Sat 01:50  [procedural closing] The beating was talked about for a day, and then it was not.
+Sat 01:50  (slot 16: slot-run.)
+Sat 01:50  (layer 3 sowed "assault-why" from assault-why (a=Alex Holt, v=Wade Sullivan, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.49; composite 1 among 55 candidates; cause: 2 recorded events.)
+Sat 10:10  [procedural offer ask] Message from Hao He: the accident in Kabuki broke my leg, and the job I should be doing is going undone. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You will not know me from anyone, but there is nobody else I can send.  -> V: decline
+Sat 10:10  (slot 17: slot-run.)
+Sat 10:10  (layer 3 sowed "accident-errand" from accident-errand (s=Hao He, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.29; composite 0.5 among 52 candidates; cause: 2 recorded events.)
+Sat 10:20  [procedural beat x-decline] Hao He thanked you for reading it. The parcel stayed on the locker.
+Sat 10:20  [procedural closing] The accident was forgotten by the end of the week.
+Sat 16:40  [procedural offer ask] Eunji Kang writes that Rui Wang bumped into them by the stalls and left with a bag that was not theirs. Get the bag back to me, whatever shape it is in. Find who is holding it, lean on whoever put the thief up to it, or make good the loss yourself. I do not know you, only that you are not part of whatever crowd has been working the market.  -> V: decline
+Sat 16:40  [procedural beat x-decline] Eunji Kang turned back to the stall. The bag was never mentioned in your hearing again.
+Sat 16:40  [procedural closing] The talk about the bag moved on.
+Sat 16:40  (slot 18: slot-run.)
+Sat 16:40  (layer 3 sowed "goods-back" from goods-back (a=Rui Wang, v=Eunji Kang, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.46; composite 1 among 47 candidates; cause: 2 recorded events.)
