@@ -228,7 +228,8 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
   const classIdx = (aff: 'A1' | 'A2' | 'A3'): number => ({ A1: 2, A2: 3, A3: 4 })[aff];
   const intentDef = (id: string): IntentDef => cfg.intents.find((i) => i.id === id)!;
   const WRONG_KINDS = [...sim.w.kinds.kinds.values()].filter((k) => k.fills.some((f) => f.fn === 'wrong')).map((k) => k.name);
-  const ownCreators = new Set<Id>(['city.events', 'city.mirror', 'order.norms', 'group.decide', 'scene.acts', 'people.goals'].map((p) => processCause(p)));
+  const settled = new Set<Id>();
+  const ownCreators = new Set<Id>([sim.w.s1, ...['city.events', 'city.mirror', 'order.norms', 'group.decide', 'scene.acts', 'people.goals'].map((p) => processCause(p))]);
 
   /** Who may hold a seat of a group at `t` (S1 7.8): a living adult member, aged 25 or more, of profile role gang, in no other seat, not barred. */
   const eligible = (g: G, group: Id, r: Id, t: GameTime, w: number, taken: ReadonlySet<Id>): boolean => {
@@ -321,18 +322,26 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
       const seen = new Set(st.seen);
       const queried: EventFact[] = [];
       if (WRONG_KINDS.length > 0) {
-        const q = c.pctx.query({
-          find: 'core:event', scope: { under: sim.w.city }, at: T, limit: 'all',
-          must: [{ path: 'kind', op: 'in', arg: WRONG_KINDS }, { path: 'time', op: 'range', arg: [sim.windowStart(Math.max(0, w - 6)), T - 1] }],
-        });
-        const found = (q.status === 'ok' ? q.items : [])
-          .map((it) => it.id)
-          .filter((id) => !seen.has(id))
-          .map((id) => ({ id, ev: sim.policies.viewEvent(id) }))
-          .filter((x) => x.ev !== undefined && x.ev.creator !== undefined && !ownCreators.has(x.ev.creator))
-          .sort((a, b) => a.ev!.time - b.ev!.time || cmp(a.id, b.id));
-        for (const { id, ev: e } of found) {
-          if (e!.outcome === 'prevented' || e!.outcome === 'failed') { /* still read: the fills decide */ }
+        // The events of other creators than S1's own are found by their headers, not by a query over every event: S1's own events are thousands,
+        // seeds' and the port's are few. `settled` holds only facts that never change (an event of S1's, of another kind, or too old to be taken),
+        // so it is a cache that a reload may lose without changing a result.
+        const lowest = sim.windowStart(Math.max(0, w - 6));
+        const found: Array<{ id: Id; time: GameTime }> = [];
+        for (const id of sim.k.persistence.discoveryIdsOfKind('core:event')) {
+          if (settled.has(id) || seen.has(id)) continue;
+          const h = sim.k.persistence.restoreReferencedHeader(id);
+          if (!h || h.origin.by !== 'minted' || ownCreators.has(h.origin.creator) || /^item:\d+$/.test(h.origin.name)) { settled.add(id); continue; }
+          const kind = sim.k.value(id, 'kind');
+          const time = sim.k.value(id, 'time');
+          if (typeof kind !== 'string' || typeof time !== 'number') continue;
+          if (!WRONG_KINDS.includes(kind) || time < lowest) { settled.add(id); continue; }
+          if (time <= T - 1) found.push({ id, time });
+        }
+        found.sort((a, b) => a.time - b.time || cmp(a.id, b.id));
+        const taken = found
+          .map((x) => ({ id: x.id, ev: sim.policies.viewEvent(x.id) }))
+          .filter((x) => x.ev !== undefined && x.ev.creator !== undefined && !ownCreators.has(x.ev.creator));
+        for (const { id, ev: e } of taken) {
           const cell = e!.place !== undefined ? sim.w.index.cells[e!.place] : undefined;
           if (!cell) continue;
           seen.add(id);
