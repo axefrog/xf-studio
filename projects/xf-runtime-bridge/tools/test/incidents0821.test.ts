@@ -141,6 +141,48 @@ describe("0.8.21 the plugin's wiring", () => {
   });
 });
 
+describe("0.8.21 review fixes in the plugin's wiring", () => {
+  const tick = plugin.slice(plugin.indexOf("void TickIncidents()"), plugin.indexOf("void ShutdownIncidents("));
+  test("fix 1: waiting reports are drained every tick on wall-clock time, without the taps, and settled on every terminal shutdown", () => {
+    expect(tick).toContain("Incidents().Drain(recording::Now())");
+    // the drain is not behind the taps' gate, nor behind having a declared incident open
+    expect(tick.slice(0, tick.indexOf("Incidents().Drain(")).includes("IncidentTapOn")).toBe(false);
+    expect(tick.slice(0, tick.indexOf("Incidents().Drain(")).includes("DeclaredOpen() == 0")).toBe(false);
+    // a kill settles them as kept gaps (the transport is down) and does not drain into a dead transport
+    expect(tick).toContain('ResolvePending(false, "kill")');
+    expect(tick.indexOf('ResolvePending(false, "kill")')).toBeLessThan(tick.indexOf("Incidents().Drain("));
+    // taps off: delivered at once (the transport is up); shutdown and unload: gaps
+    expect(plugin).toContain('ResolvePending(true, "tap_off")');
+    expect(plugin).toContain("Incidents().ResolvePending(false, aReason)");
+    const main = read("native", "src", "plugin", "Main.cpp");
+    expect(main).toContain('ShutdownIncidents("game_shutdown")');
+    expect(main).toContain('ShutdownIncidents("plugin_unload")');
+    // retained for the next incidents.list
+    expect(core).toContain('{"retained_gaps"');
+    expect(core).toContain('{"reason", "transport_down"}');
+    expect(findCommand("incidents.list")!.description).toContain("retained_gaps");
+  });
+  test("fix 2: the incident link rides on the pending spawn and swap and is undone on every failure path", () => {
+    const npcCore = read("native", "src", "core", "Npc.cpp"), sub = read("native", "src", "core", "NpcSubstitute.cpp");
+    expect(npcCore).toContain("npc.incidentId = incident.id;");
+    expect(sub).toContain("swap.incidentId = incident.id;");
+    expect(sub).toContain("npc.incidentId = aSwap.incidentId;");
+    // FailSwap (every swap failure and cancellation) and ReleaseOne (an actor that never appeared) take the role back out
+    expect(sub.slice(sub.indexOf("void Service::FailSwap("))).toContain("LeaveIncident(ask, aWho)");
+    expect(npcCore.slice(npcCore.indexOf("void Service::ReleaseOne("))).toContain("!npc.spawned && !npc.incidentId.empty()");
+    expect(npcCore).toContain("npc.sinceSpawn > 20.0 && !npc.announced");
+    // and the old promise that a swap which later fails keeps its role is gone
+    expect(sub).not.toContain("A swap that later fails leaves the role behind");
+  });
+  test("fix 3 and 4: the TTL has its own anchor; explicit declared roles choose before accumulated participants", () => {
+    expect(core).toContain("m_lastSim - incident.declared.anchorSim >= incident.declared.ttlS");
+    expect(core).not.toContain("m_lastSim - incident.startSim >= incident.declared.ttlS");
+    const rule = core.slice(core.indexOf("uint64_t explicitTarget = 0;"), core.indexOf("uint64_t target = 0;"));
+    expect(rule.indexOf("incident.declared.roles")).toBeLessThan(rule.indexOf("p.fact.id == f.id"));
+    expect(rule).toContain("if (incident.declared.on && explicitTarget)");
+  });
+});
+
 describe("0.8.21 catch-up", () => {
   const report = (id: string, extra: Record<string, unknown> = {}) => ({ event: "witness.report", incident: id, kind: "other", state: "closed", closed: "engine_close", v_involved: false,
     participants: [{ entity: "1" }, { entity: "2" }], place: { position: [1, 2, 3], district_v: "Watson_Kabuki" }, when: { start_sim_s: 1, end_sim_s: 5 }, confidence: 0.9, perceived: { modes: ["saw"] }, ...extra });

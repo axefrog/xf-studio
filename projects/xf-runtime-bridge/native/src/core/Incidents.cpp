@@ -806,6 +806,81 @@ void Service::DrainPending(std::vector<json>& aReports)
     }
 }
 
+void Service::RetainGap(const json& aGap)
+{
+    m_gaps.push_back(aGap);
+    while (m_gaps.size() > 64)
+    {
+        m_gaps.pop_front();
+    }
+}
+
+size_t Service::PendingCount() const
+{
+    std::scoped_lock lock(m_mutex);
+    return m_pending.size();
+}
+
+std::vector<json> Service::ResolvePending(bool aTransportUp, const std::string& aCause)
+{
+    std::vector<json> out;
+    std::scoped_lock lock(m_mutex);
+    while (!m_pending.empty())
+    {
+        auto entry = std::move(m_pending.front());
+        m_pending.pop_front();
+        Incident* kept = nullptr;
+        for (auto& closed : m_closed)
+        {
+            if (closed.number == entry.number)
+            {
+                kept = &closed;
+            }
+        }
+        if (aTransportUp)
+        {
+            entry.report["reported"] = true;
+            entry.report["report_pending"] = false;
+            entry.report["delayed"] = true;
+            entry.report["resolved_by"] = aCause;
+            if (kept)
+            {
+                kept->reported = true;
+                kept->reportPending = false;
+            }
+            ++m_stats.reports;
+            ++m_stats.reportsDelayed;
+            out.push_back(std::move(entry.report));
+            continue;
+        }
+        const auto& r = entry.report;
+        json gap = {{"event", "witness.gap"},
+                    {"schema", "xfb/witness-gap-1"},
+                    {"incident", r.value("incident", std::string())},
+                    {"kind", r.value("kind", std::string("other"))},
+                    {"world", r.value("world", uint64_t{0})},
+                    {"modes", r.contains("perceived") ? r["perceived"].value("modes", json::array()) : json::array()},
+                    {"v_involved", r.value("v_involved", false)},
+                    {"reason", "transport_down"},
+                    {"closed_by", aCause},
+                    {"note", "this incident was witnessed and its report was still waiting for the minute's allowance when " + aCause + " ended delivery; it is kept here"},
+                    {"passive", true}};
+        if (r.contains("declared"))
+        {
+            gap["declared"] = r["declared"];
+        }
+        if (kept)
+        {
+            kept->reportPending = false;
+            kept->reportGap = true;
+        }
+        ++m_stats.reportGaps;
+        RetainGap(gap);
+        out.push_back(std::move(gap));
+    }
+    return out;
+}
+
 std::vector<json> Service::Drain(double aWallS)
 {
     std::vector<json> reports;
@@ -932,6 +1007,7 @@ void Service::Close(Incident& aIncident, const std::string& aReason, std::vector
             {
                 gap["declared"] = DeclaredJson(aIncident);
             }
+            RetainGap(gap);
             aReports.push_back(std::move(gap));
         }
     }
@@ -995,7 +1071,8 @@ void Service::AdvanceClock(double aSimS, std::vector<json>& aReports)
 }
 
 // A declared incident's TTL runs in simulation seconds from the clock it was declared at (or, declared before any clock was known,
-// from the first clock that arrives), so a paused game ages nothing. The clock arrives with every tick, so an expiry is noticed
+// from the first clock that arrives), so a paused game ages nothing. It runs from its own anchor, never from startSim: a merge moves
+// startSim back to the older incident's start (the evidence timeline), and the TTL must not move with it. The clock arrives with every tick, so an expiry is noticed
 // within a second.
 void Service::CloseDeclaredExpired(std::vector<json>& aReports)
 {
@@ -1006,9 +1083,10 @@ void Service::CloseDeclaredExpired(std::vector<json>& aReports)
         if (incident.declared.on && !incident.declared.anchored)
         {
             incident.declared.anchored = true;
+            incident.declared.anchorSim = m_lastSim;
             incident.startSim = incident.lastSim = m_lastSim;
         }
-        if (incident.declared.on && m_lastSim - incident.startSim >= incident.declared.ttlS)
+        if (incident.declared.on && m_lastSim - incident.declared.anchorSim >= incident.declared.ttlS)
         {
             expired.push_back(std::move(incident));
             m_open.erase(m_open.begin() + static_cast<std::ptrdiff_t>(i));
@@ -1366,30 +1444,54 @@ Outcome Service::Observe(const Observation& aObservation, double aWallS)
         return out;
     }
 
-    // Rule 0 (0.8.21): a declared incident holds its actors by handle, and the observation joins it. Rule 1: open incidents already
-    // holding one of its people by entity id (V excluded). A declared incident is the keeper of any ordinary incident that shares
-    // people with the observation (the ordinary one merges into it, keeping its id and kind); two declared incidents are never merged,
-    // and the oldest takes the observation.
-    std::vector<uint64_t> shared;
+    // Rule 0 (0.8.21): a declared incident holds its actors by handle, and only those explicit roles choose it: the declared incident
+    // that holds the most of the observation's actors (the oldest on a tie). What an incident has merely accumulated (a past
+    // participant, an entity id it learned) never competes with another declaration's explicit actor, so after one observation naming
+    // a1 and a2 together a later a2-only observation still goes to the incident that declared a2.
+    // Rule 1: open incidents already holding one of its people by entity id (V excluded); declared ones only when no explicit role
+    // matched at all. A declared incident is the keeper of any ordinary incident that shares people with the observation (the
+    // ordinary one merges into it, keeping its id and kind); two declared incidents are never merged.
+    uint64_t explicitTarget = 0;
+    int explicitBest = 0;
     for (const auto& incident : m_open)
     {
-        bool hit = false;
+        if (!incident.declared.on)
+        {
+            continue;
+        }
+        int held = 0;
+        std::vector<std::string> counted;
         for (const auto& f : aObservation.who)
         {
-            if (f.isV)
+            if (f.isV || f.who.empty() || std::find(counted.begin(), counted.end(), f.who) != counted.end())
             {
                 continue;
             }
-            if (incident.declared.on && !f.who.empty())
+            if (std::any_of(incident.declared.roles.begin(), incident.declared.roles.end(), [&](const auto& r) { return r.first == f.who; }))
             {
-                hit = std::any_of(incident.declared.roles.begin(), incident.declared.roles.end(), [&](const auto& r) { return r.first == f.who; });
+                ++held;
+                counted.push_back(f.who);
             }
-            if (!hit && !f.id.empty())
+        }
+        if (held > explicitBest || (held == explicitBest && held > 0 && incident.number < explicitTarget))
+        {
+            explicitBest = held;
+            explicitTarget = incident.number;
+        }
+    }
+    std::vector<uint64_t> shared;
+    for (const auto& incident : m_open)
+    {
+        if (incident.declared.on && explicitTarget)
+        {
+            continue; // an explicit role has chosen; accumulated participants do not compete
+        }
+        bool hit = false;
+        for (const auto& f : aObservation.who)
+        {
+            if (!f.isV && !f.id.empty() && std::any_of(incident.parts.begin(), incident.parts.end(), [&](const Participant& p) { return p.fact.id == f.id; }))
             {
-                hit = std::any_of(incident.parts.begin(), incident.parts.end(), [&](const Participant& p) { return p.fact.id == f.id; });
-            }
-            if (hit)
-            {
+                hit = true;
                 break;
             }
         }
@@ -1409,7 +1511,21 @@ Outcome Service::Observe(const Observation& aObservation, double aWallS)
         return nullptr;
     };
     uint64_t target = 0;
-    if (!shared.empty())
+    if (explicitTarget)
+    {
+        target = explicitTarget;
+        for (const auto number : shared)
+        {
+            Incident* from = byNumber(number);
+            Incident* into = byNumber(target);
+            if (from && into && !from->declared.on)
+            {
+                MergeInto(*into, *from);
+                m_open.erase(m_open.begin() + (from - m_open.data()));
+            }
+        }
+    }
+    else if (!shared.empty())
     {
         std::sort(shared.begin(), shared.end());
         target = shared.front();
@@ -1586,6 +1702,7 @@ DeclareOutcome Service::Declare(const Declaration& aDeclaration, double aWallS)
     std::copy(aDeclaration.at, aDeclaration.at + 3, d.at);
     d.ttlS = aDeclaration.ttlS;
     d.anchored = m_haveSim;
+    d.anchorSim = m_haveSim ? m_lastSim : 0.0;
     std::copy(d.at, d.at + 3, fresh.firstPos);
     std::copy(d.at, d.at + 3, fresh.lastPos);
     std::copy(d.at, d.at + 3, fresh.sumPos);
@@ -1932,6 +2049,7 @@ json Service::List(const ListQuery& aQuery) const
             {"open", m_open.size()},
             {"kept_closed", m_closed.size()},
             {"pending_reports", m_pending.size()},
+            {"retained_gaps", json(std::vector<json>(m_gaps.begin(), m_gaps.end()))},
             {"world", m_world},
             {"sim_s", m_haveSim ? json(Round(m_lastSim)) : json(nullptr)},
             {"stats", {{"observed", s.observed}, {"accepted", s.accepted}, {"dropped_rate", s.droppedRate}, {"dropped_invalid", s.droppedInvalid},

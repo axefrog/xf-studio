@@ -1134,6 +1134,43 @@ void IncidentLinkTests()
     f.roles = inc::kSpeaker;
     o.who.push_back(f);
     Check("incident link: what the new actor does joins the declared incident", incidents.Observe(o, 2.0).incident == "inc-1");
+
+    // 0.8.21 review: the role is taken back out on every path where the actor never appears; an actor that appeared keeps it.
+    const auto declare = [&](const char* id) {
+        inc::Declaration dd;
+        dd.id = id;
+        dd.kind = "k";
+        dd.hasAt = true;
+        dd.at[1] = 5;
+        incidents.Declare(dd, 1.0);
+    };
+    const auto roles = [&](const char* id) { return incidents.List(inc::ParseListQuery(json{{"id", id}}))["incidents"][0]["declared"]["roles"]; };
+    declare("late-1");
+    const auto before = service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({0, 6, 0})}, {"incident", "late-1"}, {"incident_role", "gone"}}, ops);
+    const std::string unseen = before["who"];
+    Check("incident link: an actor that has not appeared yet holds its role", roles("late-1").contains(unseen));
+    service.Release(json{{"who", unseen}}, ops);
+    Check("incident link: released before it appeared, the role is taken back out", !roles("late-1").contains(unseen) && roles("late-1").empty());
+    const auto kept = service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({0, 6, 0})}, {"incident", "late-1"}, {"incident_role", "stays"}}, ops);
+    const std::string keptWho = kept["who"];
+    fake.npcs[keptWho]["exists"] = true;
+    fake.npcs[keptWho]["spawned"] = true;
+    Poll(service, fake, ops);
+    service.Release(json{{"who", keptWho}}, ops);
+    Check("incident link: an actor that appeared keeps its role after it is released", roles("late-1").contains(keptWho) && roles("late-1")[keptWho] == "stays");
+    const auto slow = service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({0, 6, 0})}, {"incident", "late-1"}, {"incident_role", "slow"}}, ops);
+    const std::string slowWho = slow["who"];
+    Check("incident link: a slow actor holds its role at first", roles("late-1").contains(slowWho));
+    for (int i = 0; i < 100; ++i) Poll(service, fake, ops); // 26 s: it never appears
+    Check("incident link: an actor still not there after 20 s is taken out of the incident", !roles("late-1").contains(slowWho) && roles("late-1").contains(keptWho));
+    fake.npcs[slowWho]["exists"] = true;
+    fake.npcs[slowWho]["spawned"] = true;
+    Poll(service, fake, ops);
+    Check("incident link: ...and stays out if it does appear after all", !roles("late-1").contains(slowWho));
+    declare("late-2");
+    service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({0, 6, 0})}, {"incident", "late-2"}}, ops);
+    service.Release(json{{"who", "all"}}, ops);
+    Check("incident link: release all takes back the role of an actor that never appeared", roles("late-2").empty());
 }
 } // namespace
 

@@ -1064,6 +1064,53 @@ void IncidentLinkTests()
         Check("incident link: a swap the game refuses leaves the incident", code == "spawn_refused" && seen.joined.size() == 1 && seen.left == std::vector<std::string>({"a1"}), code);
     }
     {
+        // 0.8.21 review: every failure and cancellation takes the role back out; a swap that happened keeps it
+        const auto left = [&](Rig& r, const json& params, double steps, const char* also = nullptr) {
+            r.service.SetIncidentLink(link);
+            seen = Joined{};
+            r.service.Substitute(params, r.ops);
+            if (also) r.service.Release(json{{"who", also}}, r.ops);
+            Step(r.service, r.ops, steps);
+            return seen.left;
+        };
+        const std::vector<std::string> a1{"a1"};
+        {
+            Rig r;
+            Check("incident link: a substitution cancelled while it waits takes the actor back out",
+                  left(r, json{{"id", "P-front"}, {"incident", "pocket-1"}}, 0.3, "a1") == a1 && Events(r.log, "npc.substitute_failed").size() == 1);
+        }
+        {
+            Rig r;
+            Check("incident link: a substitution whose original never leaves V's sight takes it back out (never_hidden)",
+                  left(r, json{{"id", "P-front"}, {"max_wait_s", 1}, {"incident", "pocket-1"}}, 3.0) == a1);
+        }
+        {
+            Rig r;
+            Check("incident link: an actor that never appears takes it back out (not_spawned)",
+                  left(r, json{{"id", "P-behind"}, {"incident", "pocket-1"}}, n::kSwapSpawnS + 3.0) == a1 && Events(r.log, "npc.substitute_failed").size() == 1);
+        }
+        {
+            Rig r;
+            r.fake.removeThrows = true;
+            r.service.SetIncidentLink(link);
+            seen = Joined{};
+            r.service.Substitute(json{{"id", "P-behind"}, {"incident", "pocket-1"}}, r.ops);
+            r.fake.Appear("a1", "citizen__corporat_wa_01");
+            Step(r.service, r.ops, 1.0);
+            Check("incident link: a swap that fails after the actor appeared takes it out too (the swap did not happen)", seen.left == a1 && Events(r.log, "npc.substitute_failed").size() == 1);
+        }
+        {
+            Rig r;
+            r.service.SetIncidentLink(link);
+            seen = Joined{};
+            r.service.Substitute(json{{"id", "P-behind"}, {"incident", "pocket-1"}}, r.ops);
+            r.fake.Appear("a1", "citizen__corporat_wa_01");
+            Step(r.service, r.ops, 1.0);
+            r.service.Release(json{{"who", "a1"}}, r.ops);
+            Check("incident link: a swap that happened keeps the role, whatever happens to the actor later", Events(r.log, "npc.substituted").size() == 1 && seen.left.empty());
+        }
+    }
+    {
         Rig r;
         Check("incident link: without a link the parameter is refused (test_hooks_off)", CodeOf([&] { r.service.Substitute(json{{"id", "P-behind"}, {"incident", "pocket-1"}}, r.ops); }) == "test_hooks_off");
         r.service.SetIncidentLink(link);

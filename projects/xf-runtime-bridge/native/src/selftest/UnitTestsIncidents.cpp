@@ -994,6 +994,122 @@ int IncidentUnitTests()
             Check(a["ok"] == false && a["error"]["code"] == "test_hooks_off", "method: refused without allow_test_hooks");
         }
     }
+    // ==== 0.8.21 review: four regressions =================================================================================
+    {
+        // 1. A terminal close leaves an outcome. The allowance is exhausted, so the second declared report waits; nothing but wall time or a
+        // terminal shutdown may settle it, whether or not later evidence arrives.
+        Config c;
+        c.maxReportsPerMinute = 1;
+        c.maxPendingReports = 4;
+        const auto waiting = [&](Service& s) {
+            stage(s, "r1");
+            stage(s, "r2");
+            s.Sight(sample(101, {actor("a1", 20)}), 2.0);
+            const auto first = s.CloseDeclared("r1", "engine_close", 3.0);
+            const auto second = s.CloseDeclared("r2", "kill", 3.1);
+            Check(first.outcome == "report" && second.outcome == "report_queued" && s.PendingCount() == 1, "pending: the second report waits for the allowance");
+        };
+        {
+            Service s(c);
+            waiting(s);
+            Check(s.Drain(20.0).empty() && s.PendingCount() == 1, "pending: with no later evidence and the allowance not recovered it still waits");
+            const auto later = s.Drain(70.0);
+            Check(later.size() == 1 && later[0]["declared"]["id"] == "r2" && later[0]["delayed"] == true && s.PendingCount() == 0, "pending: wall-clock housekeeping alone (no observation, no tap) delivers it as the allowance recovers");
+        }
+        {
+            Service s(c);
+            waiting(s);
+            const auto out = s.ResolvePending(true, "tap_off");
+            const auto listed = L(s, {{"id", "r2"}})["incidents"][0];
+            Check(out.size() == 1 && out[0]["event"] == "witness.report" && out[0]["delayed"] == true && out[0]["resolved_by"] == "tap_off" && out[0]["declared"]["id"] == "r2" && s.PendingCount() == 0 &&
+                  listed["reported"] == true && listed["report_pending"] == false, "pending: taps off with the transport up delivers every waiting report at once, marked");
+            Check(s.ResolvePending(true, "tap_off").empty() && s.GetStats().reports == 2, "pending: and a second settle finds nothing");
+        }
+        {
+            Service s(c);
+            waiting(s);
+            const auto out = s.ResolvePending(false, "kill");
+            const auto list = L(s, {{"id", "r2"}});
+            Check(out.size() == 1 && out[0]["event"] == "witness.gap" && out[0]["reason"] == "transport_down" && out[0]["closed_by"] == "kill" && out[0]["declared"]["id"] == "r2" && out[0]["incident"] == "inc-2" &&
+                  out[0]["modes"] == json::array({"saw"}) && s.PendingCount() == 0, "pending: a kill with the transport down turns each waiting report into a witness.gap with the reason");
+            Check(list["incidents"][0]["report_gap"] == true && list["incidents"][0]["report_pending"] == false && list["retained_gaps"].size() == 1 && list["retained_gaps"][0]["incident"] == "inc-2" &&
+                  list["stats"]["report_gaps"] == 1 && list["pending_reports"] == 0, "pending: the gap is kept for the next incidents.list, and the incident says so");
+            Check(s.ResolvePending(false, "kill").empty() && L(s)["retained_gaps"].size() == 1, "pending: settling twice makes one gap");
+        }
+        {
+            // a queue-full gap is retained too
+            Config tiny;
+            tiny.maxReportsPerMinute = 1;
+            tiny.maxPendingReports = 0;
+            Service s(tiny);
+            stage(s, "g1");
+            stage(s, "g2");
+            s.Sight(sample(101, {actor("a1", 20)}), 2.0);
+            s.CloseDeclared("g1", "engine_close", 3.0);
+            const auto gap = s.CloseDeclared("g2", "engine_close", 3.1);
+            Check(gap.outcome == "gap" && L(s)["retained_gaps"].size() == 1 && L(s)["retained_gaps"][0]["declared"]["id"] == "g2", "pending: a witness.gap from a full queue is kept as well");
+        }
+    }
+    {
+        // 3. A merge moves the evidence timeline back, never the TTL.
+        Service s;
+        s.Tick(100, 1.0);
+        s.Observe(Obs("melee", 95, 400, {Person("Q", kAggressor, 400, 20), Person("Y", kVictim, 400, 20)}), 1.0);
+        stage(s, "ttl", 100, 10);
+        const auto merged = s.Observe(Obs("melee", 101, 400, {actor("a1", 20), Person("Q", kAggressor, 400, 20)}), 1.1);
+        const auto listed = L(s, {{"id", "ttl"}})["incidents"][0];
+        Check(merged.incident == "inc-2" && listed["merged"].size() == 1 && listed["when"]["start_sim_s"] == 95.0, "ttl anchor: the merge moved the evidence timeline back to the older incident's start");
+        Check(s.Tick(105.5, 2.0).empty() && s.DeclaredOpen() == 1, "ttl anchor: ...but the TTL did not move with it (it would have run out at 105)");
+        const auto gone = s.Tick(110.0, 3.0);
+        Check(gone.size() == 1 && gone[0]["closed"] == "ttl" && gone[0]["declared"]["id"] == "ttl", "ttl anchor: it runs out ttl_s after the declaration");
+        // declared before any clock, merged, then anchored by the first clock
+        Service c;
+        Declaration d;
+        d.id = "early";
+        d.kind = "k";
+        d.roles = {{"a1", "r"}};
+        d.hasAt = true;
+        d.ttlS = 10;
+        c.Declare(d, 1.0);
+        c.Tick(500, 1.0); // the first clock: the TTL starts here
+        c.Observe(Obs("melee", 495, 400, {Person("Q", kAggressor, 400, 20), Person("Y", kVictim, 400, 20)}), 1.0);
+        c.Observe(Obs("melee", 501, 400, {actor("a1", 20), Person("Q", kAggressor, 400, 20)}), 1.1);
+        Check(c.Tick(509, 2.0).empty() && c.Tick(510, 3.0).size() == 1, "ttl anchor: anchored by the first clock, a merge does not move it either");
+    }
+    {
+        // 4. Explicit declared roles choose first; accumulated participants never pull another declaration's actor.
+        Service s;
+        s.Tick(100, 1.0);
+        const auto one = [&](const char* id, std::vector<std::pair<std::string, std::string>> roles) {
+            Declaration d;
+            d.id = id;
+            d.kind = "k";
+            d.roles = std::move(roles);
+            d.hasAt = true;
+            return s.Declare(d, 1.0);
+        };
+        one("A", {{"a1", "r"}});
+        one("B", {{"a2", "r"}});
+        const auto both = s.Observe(Obs("combat", 101, 0, {actor("a1", 20), actor("a2", 20)}), 1.0);
+        Check(both.incident == "inc-1", "explicit: an observation naming one actor of each goes to the oldest declaration");
+        const auto aList = L(s, {{"id", "A"}})["incidents"][0];
+        bool aHoldsA2 = false;
+        for (const auto& p : aList["participants"]) aHoldsA2 = aHoldsA2 || p["who"] == "a2";
+        Check(aHoldsA2, "explicit: A now holds a2 as an accumulated participant");
+        const auto later = s.Observe(Obs("gunshot", 102, 0, {actor("a2", 20)}, 50, 20), 1.1);
+        Check(later.incident == "inc-2", "explicit: a later a2-only observation goes to B, whose explicit role it is, not to A");
+        const auto laterSeen = s.Observe(Obs("gunshot", 103, 0, {actor("a1", 20)}, 50, 20), 1.2);
+        Check(laterSeen.incident == "inc-1" && L(s, {{"id", "B"}})["incidents"][0]["evidence"]["gunshot"] == 1, "explicit: and a1 stays with A");
+        one("C", {{"a1", "r"}, {"a2", "r"}});
+        const auto most = s.Observe(Obs("combat", 104, 0, {actor("a1", 20), actor("a2", 20)}), 1.3);
+        Check(most.incident == "inc-3", "explicit: the declaration holding the most of the observation's actors takes it, though younger");
+        // a stranger an incident accumulated still groups by entity id when no explicit role matched
+        s.Observe(Obs("melee", 105, 400, {Person("Q", kAggressor, 400, 20), Person("Y", kVictim, 400, 20)}), 1.4);
+        const auto strangerJoins = s.Observe(Obs("melee", 106, 900, {actor("a1", 20), Person("Q", kAggressor, 900, 20)}), 1.5);
+        Check(strangerJoins.incident == "inc-1", "explicit: an ordinary incident sharing a person with the chosen declaration merges into it");
+        const auto afterQ = s.Observe(Obs("melee", 107, 900, {Person("Q", kAggressor, 900, 20)}), 1.6);
+        Check(afterQ.incident == "inc-1", "explicit: with no explicit role in the observation, a participant still groups it (the stranger Q now belongs to A)");
+    }
     std::printf("INCIDENTS %d checks, %d failed\n", checks, failures);
     return failures;
 }

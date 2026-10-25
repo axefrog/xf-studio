@@ -1219,6 +1219,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     npc.immortal = immortal;
     npc.reactions = reactions;
     npc.engage = engage;
+    npc.incidentId = incident.id;
     npc.entity = step.value("entity", std::string());
     if (step.contains("position"))
     {
@@ -2115,6 +2116,14 @@ void Service::ReleaseOne(const std::string& aWho, const std::string& aHow, const
     }
     auto& npc = it->second;
     StopHeld(npc, aOps, false);
+    // 0.8.21: an actor that never appeared takes its declared role back out (one that appeared keeps it).
+    if (!npc.spawned && !npc.incidentId.empty())
+    {
+        IncidentAsk ask;
+        ask.id = npc.incidentId;
+        LeaveIncident(ask, aWho);
+        npc.incidentId.clear();
+    }
     try
     {
         aOps.release(aWho, npc.kind == "pick" ? "leave" : "despawn");
@@ -2954,6 +2963,15 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
                 {
                     npc.announced = true;
                     failed.emplace_back(who, "not_spawned");
+                    // 0.8.21: more than 20 s late is a spawn that did not happen as far as a declared incident is concerned: the role
+                    // is taken back out, and stays out if the actor does appear after all.
+                    if (!npc.incidentId.empty())
+                    {
+                        IncidentAsk ask;
+                        ask.id = npc.incidentId;
+                        LeaveIncident(ask, who);
+                        npc.incidentId.clear();
+                    }
                 }
                 continue;
             }

@@ -407,7 +407,9 @@ struct ActorView
     Vec3 position{};
 };
 // npc.spawn and npc.substitute take incident (a declared incident's id, incidents.declare) and incident_role (default "participant"):
-// the new actor joins that incident under that role before anything is sent to the game, and leaves it again if the game step fails.
+// the new actor joins that incident under that role before anything is sent to the game. It leaves it again on every path where the
+// actor never appears: the game step fails, the actor is released or cancelled before it appears, a substitution fails, or it is more than
+// 20 s late. An actor that has appeared keeps its role, whatever happens to it later.
 // The link is the plugin's (and the self-test host's) incident service; without one the parameter is refused (test_hooks_off).
 struct IncidentLink
 {
@@ -517,6 +519,9 @@ private:
         std::string entity;
         bool spawned = false;
         bool placed = false;      // 0.8.21: the game said where it will appear (position is set although it is not polled yet)
+        // 0.8.21: the declared incident this actor joined at its request. Undone (the role taken back out) if the actor never appears:
+        // released, cancelled, failed or more than 20 s late. Once it has appeared the role stays, whatever happens to it later.
+        std::string incidentId;
         bool announced = false;
         double sinceSpawn = 0.0;
         Vec3 position{};
@@ -564,6 +569,7 @@ private:
         std::string pickWho;  // a pick the swap started from: released when the swap is done
         OriginalLook look;
         std::string cast, appearance, reactions, label;
+        std::string incidentId; // 0.8.21: the declared incident the actor joined with the request; every failure and cancellation takes it back out
         bool restore = false;
         bool inViewAllowed = false;
         bool spawning = false;

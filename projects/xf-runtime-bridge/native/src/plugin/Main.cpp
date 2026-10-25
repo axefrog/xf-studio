@@ -412,6 +412,7 @@ bool OnShutdownEnter(RED4ext::CGameApplication*)
         auto& state = Get();
         state.queue.Close();
         StopSupervisor();
+        ShutdownIncidents("game_shutdown");
         StopDm(); // the watchers' micro-action worker ends before the dispatcher goes
         if (state.bridge)
         {
@@ -592,6 +593,7 @@ void Unload()
     StopLifecycle();
     StopSupervisor();
     StopInputChoices("plugin_unload");
+    ShutdownIncidents("plugin_unload");
     StopRecording("plugin_unload");
     // RB-107: the overlay's detours stay attached until RED4ext detaches them at exit; from here they only pass through.
     state.overlayHost.SetPassThrough(true);

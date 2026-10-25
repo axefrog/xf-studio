@@ -434,6 +434,7 @@ void Service::BeginSwap(Swap& aSwap, const json& aV, const Ops& aOps)
     const Vec3 spot = step.contains("position") ? ToVec(step["position"]) : aSwap.look.position;
     Npc npc;
     npc.who = aSwap.who;
+    npc.incidentId = aSwap.incidentId;
     npc.kind = "actor";
     npc.cast = cast->name;
     npc.record = record;
@@ -570,6 +571,20 @@ void Service::FailSwap(const std::string& aWho, const std::string& aReason, cons
         }
         swap = *it;
         m_swaps.erase(it);
+    }
+    // 0.8.21: whatever the reason (cancelled, never hidden, never appeared, refused), a swap that did not happen takes its actor back out
+    // of the declared incident it joined with the request; the actor itself, if it exists, leaves through ReleaseOne below.
+    if (!swap.incidentId.empty())
+    {
+        IncidentAsk ask;
+        ask.id = swap.incidentId;
+        LeaveIncident(ask, aWho);
+        std::scoped_lock _(m_mutex);
+        const auto held = m_npcs.find(aWho);
+        if (held != m_npcs.end())
+        {
+            held->second.incidentId.clear(); // already out: ReleaseOne below has nothing more to take back
+        }
     }
     // "Returned" is a positive answer from the game, nothing less; otherwise the cleanup stays owned and is retried (StepReturns).
     const bool held = swap.detached;
@@ -736,8 +751,10 @@ json Service::Substitute(const json& aParams, const Ops& aOps)
     swap.maxWait = maxWait;
     swap.report = match.report;
     out["who"] = swap.who;
-    // 0.8.21: the actor joins the declared incident now, by its reserved handle, so what it does while the swap waits already counts; it
-    // leaves again if the swap is refused. (A swap that later fails leaves the role behind; the incident only ever names handles.)
+    // 0.8.21: the actor joins the declared incident now, by its reserved handle, so what it does while the swap waits already counts. The
+    // swap carries the link: it is undone if the swap is refused, fails, is cancelled or the actor never appears (FailSwap, ReleaseOne);
+    // once the swap is done the role stays.
+    swap.incidentId = incident.id;
     ActorView planned;
     planned.exists = true;
     planned.hasPos = true;

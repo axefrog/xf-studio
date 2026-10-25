@@ -284,8 +284,14 @@ public:
     // per wall-clock second: maxBuiltPerSecond in all, maxWeakBuiltPerSecond of the weak kinds, maxPerKeyPerSecond of one key (the
     // evidence and the entity). Every refusal is counted by reason in the stats.
     bool Admit(const std::string& aEvidence, const std::string& aKey, double aWallS);
-    // Reports that waited for the minute's allowance and can go now (witness.report with delayed true).
+    // Reports that waited for the minute's allowance and can go now (witness.report with delayed true). The plugin calls this every
+    // tick, whether or not the taps are on, so a queued report never depends on later evidence arriving.
     std::vector<json> Drain(double aWallS);
+    // Terminal shutdown (kill, taps off, unload): every report still waiting is settled now. With the transport up each goes out at once
+    // (witness.report, delayed, ignoring the minute's allowance: at most maxPendingReports); with it down each becomes a witness.gap
+    // (reason transport_down, closed_by the cause) that is also kept for incidents.list's retained_gaps. Nothing stays pending.
+    std::vector<json> ResolvePending(bool aTransportUp, const std::string& aCause);
+    size_t PendingCount() const;
     // The one-second poll: closes the incidents that went quiet. Reports of the ones it closed.
     std::vector<json> Tick(double aSimS, double aWallS);
     std::vector<json> CloseAll(const std::string& aReason);
@@ -334,7 +340,8 @@ private:
         bool hasAt = false;
         double at[3] = {0, 0, 0};
         double ttlS = 60.0;
-        bool anchored = false; // the TTL runs from startSim; set at once when the clock is known, else by the first clock that arrives
+        bool anchored = false; // the TTL runs from anchorSim; set at once when the clock is known, else by the first clock that arrives
+        double anchorSim = 0;  // the fixed start of the TTL: never moved by a merge (startSim is the evidence timeline and is)
         int samples = 0, inRange = 0, inView = 0, blocked = 0, unchecked = 0, noView = 0, missing = 0;
     };
     struct Incident
@@ -365,6 +372,7 @@ private:
 
     void AdvanceClock(double aSimS, std::vector<json>& aReports);
     void CloseDeclaredExpired(std::vector<json>& aReports);
+    void RetainGap(const json& aGap);
     // Closes the least recently active ordinary incident; false when only declared ones are open.
     bool EvictOne(std::vector<json>& aReports);
     void AbsorbPeople(Incident& aIncident, const std::vector<Fact>& aWho);
@@ -404,6 +412,7 @@ private:
         json report;
     };
     std::deque<Pending> m_pending;    // witnessed incidents whose report waits for the allowance, oldest first
+    std::deque<json> m_gaps;          // witness.gap events, kept (64) for incidents.list's retained_gaps and the next catch-up
     int64_t m_sightSecond = -1;
     int m_sightCount = 0;
     int64_t m_admitSecond = -1;

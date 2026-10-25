@@ -23,6 +23,7 @@ void RegisterRecording(Dispatcher&);
 void RegisterIncidents(Dispatcher&);
 nlohmann::json CloseDeclaredIncidents(const std::string& aReason);
 void TickIncidents();
+void ShutdownIncidents(const std::string& aReason);
 void TickRecording(bool ready);
 void StopRecording(const std::string& reason);
 void RegisterMethods060(Dispatcher& aDispatcher);

@@ -231,23 +231,34 @@ json CloseDeclaredIncidents(const std::string& aReason)
     return json{{"closed", open}, {"reason", aReason}};
 }
 
-// Game thread, every tick: a declared incident does not outlive the kill switch or a handover, whichever way they were set.
+// Game thread, every tick. A declared incident does not outlive the kill switch or a handover, whichever way they were set; after a
+// kill every report still waiting for the minute's allowance becomes a witness.gap that is kept (the transport is down). Otherwise the
+// waiting reports go as the allowance recovers: housekeeping on wall-clock time that needs neither the taps nor later evidence.
 void TickIncidents()
 {
     auto& s = Get();
-    if (!s.bridge || Incidents().DeclaredOpen() == 0)
+    if (s.bridge && s.bridge->GetDispatcher().IsKilled())
     {
+        if (Incidents().DeclaredOpen() > 0)
+        {
+            CloseDeclaredIncidents("kill");
+        }
+        Deliver(Incidents().ResolvePending(false, "kill"));
         return;
     }
-    const auto& dispatcher = s.bridge->GetDispatcher();
-    if (dispatcher.IsKilled())
-    {
-        CloseDeclaredIncidents("kill");
-    }
-    else if (dispatcher.HandedOver())
+    Deliver(Incidents().Drain(recording::Now()));
+    if (s.bridge && s.bridge->GetDispatcher().HandedOver() && Incidents().DeclaredOpen() > 0)
     {
         CloseDeclaredIncidents("handover");
     }
+}
+
+// The plugin is going away (game shutdown, unload): everything open closes with the reason, and every report still waiting is settled
+// as a witness.gap kept in the service (the transport is going down). Idempotent.
+void ShutdownIncidents(const std::string& aReason)
+{
+    Deliver(Incidents().CloseAll(aReason));
+    Deliver(Incidents().ResolvePending(false, aReason));
 }
 
 void RegisterIncidents(Dispatcher& aDispatcher)
@@ -262,6 +273,8 @@ void RegisterIncidents(Dispatcher& aDispatcher)
         if (was && !aOn)
         {
             Deliver(Incidents().CloseAll("tap_off"));
+            // Reports still waiting for the minute's allowance are settled now rather than left to it: the transport is up.
+            Deliver(Incidents().ResolvePending(true, "tap_off"));
         }
     };
     hooks.sync = [] { SyncWorld(); };
