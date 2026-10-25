@@ -22,6 +22,8 @@ import type { ViewGraph } from "../platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
 import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
 import type { LayoutTabAction } from "./profiles/tab-defaults";
+import type { StarterAction } from "./starters/starter-actions";
+import type { ShapeStarters } from "./starters/shape-starters";
 import type { EmptyChoiceRequest, EmptyChoicesPort } from "./profiles/empty-choices";
 import type { LookRef } from "../library/collection-documents";
 import { isLookScope as lookScoped, lookScope } from "../platform/core/history-service";
@@ -68,6 +70,7 @@ export type StudioOwnerActions = {
   savedV: Naming<SavedAppearanceAction, { character: string }>;
   scenes: SceneAction;
   tabs: LayoutTabAction;
+  starters: StarterAction;
   characterContext: Naming<CharacterContextAction, { character: string }>;
   views: ViewAction;
 };
@@ -134,6 +137,13 @@ type Services = { document: AuthoringDocument;
    * operation one commit and one step; the defaults' commands through the outbox.
    */
   tabs?: { capability(action: LayoutTabAction): StudioCapability; dispatch(action: LayoutTabAction): undefined };
+  /**
+   * The live feature's starter shapes (`StarterActions` over `ShapeStarters`, profiles design §6): choosing the default, saving a layer's
+   * shape, renaming and deleting the person's own.
+   */
+  starters?: { capability(action: StarterAction): StudioCapability; dispatch(action: StarterAction): undefined };
+  /** Resolves a starter ID (absent: the default) into its shape, so `layer.edit` add and reset start from it. Without it they use the region's default. */
+  starterShapes?: Pick<ShapeStarters, "shapeOf">;
   /**
    * Whether the view, scene and `gen` an action names are still what they were resolved to (the target resolver's check, the same rule as
    * its captures', profiles design §3.3). Without it (a core no session holds) an action naming a scene's `gen` can't be checked, and is refused.
@@ -832,6 +842,18 @@ export class StudioApplication {
     return { ok: true, result };
   }
   /** Eye makeup's registered spec for one of its actions: the module's pure capability and apply. */
+  /**
+   * A layer added or reset from a starter carries the starter's shape into the pure apply (which has no starter list of its own): the
+   * one the command names, else the default. A starter that is gone refuses. Other actions pass as they are.
+   */
+  private withStarter<A extends { kind: string }>(input: A): { action: A; refused?: StudioCapability } {
+    const action = input as unknown as EyeMakeupAction;
+    if (action.kind !== "layer.edit" || (action.command.kind !== "add" && action.command.kind !== "reset") || action.command.shape !== undefined
+      || !this.services.starterShapes) return { action: input };
+    const shape = this.services.starterShapes.shapeOf(action.command.starter);
+    if (!shape) return { action: input, refused: missingTarget("That starter isn't available any more.") };
+    return { action: { ...action, command: { ...action.command, shape } } as unknown as A };
+  }
   private eyeMakeupSpec(action: EyeMakeupAction) {
     const route = this.routes.route(action.kind);
     if (!route.ok || route.owner.owner !== "feature") throw Error(`${action.kind} is not a feature action.`);
@@ -860,9 +882,10 @@ export class StudioApplication {
         },
       },
       "eye-makeup": {
-        capability: action => app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), action),
-        dispatch: action => {
-          const s = app.services, spec = app.eyeMakeupSpec(action);
+        capability: action => { const resolved = app.withStarter(action);
+          return resolved.refused ?? app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), resolved.action); },
+        dispatch: input => {
+          const action = app.withStarter(input).action, s = app.services, spec = app.eyeMakeupSpec(action);
           // The step is named by the registered spec (feature-module platform §3).
           s.document.withHistoryLabel(spec.label(action), () => s.eyeMakeup.apply(spec, action, recorded(action)));
           return undefined;
@@ -898,6 +921,10 @@ export class StudioApplication {
       tabs: {
         capability: action => app.services.tabs?.capability(action) ?? missing("The layout tabs are still loading."),
         dispatch: action => app.services.tabs!.dispatch(action),
+      },
+      starters: {
+        capability: action => app.services.starters?.capability(action) ?? missing("The starters are still loading."),
+        dispatch: action => app.services.starters!.dispatch(action),
       },
       savedV: {
         capability: action => app.shownCharacter(action.character) ?? app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),

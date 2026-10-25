@@ -19,6 +19,9 @@ const desc = (scope: EyeMakeupScope | readonly EyeMakeupScope[], effect: ActionD
   describe<EyeMakeupScope>(scope, effect, undo, payload, variants, variantUndo);
 const range = (key: keyof typeof MOTTLE_LIMITS, type: "number" | "integer" = "number") => input(type, MOTTLE_LIMITS[key].min, MOTTLE_LIMITS[key].max);
 
+const STARTER_FIELDS: PayloadSchema = { starter: { type: "string", required: false, from: "input", minLength: 1, maxLength: 80 },
+  shape: { type: "object", required: false, from: "input" } };
+
 export const EYE_MAKEUP_DESCRIPTORS = {
   "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
   "point.select": desc("point", "selection", "none", { layerId: target("string"), index: target("integer") }),
@@ -67,8 +70,9 @@ export const EYE_MAKEUP_DESCRIPTORS = {
   "field.setOrigin": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
   "field.setVector": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
   "layer.edit": desc(["layer", "collection"], "content", "part", { command: input("object") }, {
-    add: {}, duplicate: { id: target("string") }, remove: { id: target("string") },
-    reset: { id: target("string") }, rename: { id: target("string"), name: inputText(1, 80) },
+    // `add` and `reset` start the layer from a starter: the one `starter` names, else the default (`shape`: its resolved contour).
+    add: STARTER_FIELDS, duplicate: { id: target("string") }, remove: { id: target("string") },
+    reset: { id: target("string"), ...STARTER_FIELDS }, rename: { id: target("string"), name: inputText(1, 80) },
     move: { id: target("string"), to: input("integer", 0) } }),
   "layer.setEnabled": desc("layer", "content", "part", { id: target("string"), enabled: input("boolean") }),
   // Mottle (vector engine extensions §7): sliders are continuous edits; turning it on or off, where, streaks and a new seed are one step each.

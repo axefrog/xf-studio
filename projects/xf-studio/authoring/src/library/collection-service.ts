@@ -133,6 +133,8 @@ export type CollectionServiceDeps = {
   readonly join?: (collection: string) => void;
   readonly newId?: () => string;
   readonly clock?: Clock;
+  /** The live feature's part a new look starts from (its chosen default starter's); absent: the feature's own starter. */
+  readonly starterPart?: () => unknown;
 };
 
 type Parsed = { key: string; collection: LookCollection };
@@ -505,7 +507,7 @@ export class CollectionService {
     switch (command.kind) {
       case "add": {
         const removedNames = owner.restorable(id).map(item => ({ name: item.name }));
-        const look = starterLook(command.newId ?? this.newId(), newPresetName(owner.looksOf(id), removedNames), model);
+        const look = starterLook(command.newId ?? this.newId(), newPresetName(owner.looksOf(id), removedNames), model, this.deps.starterPart?.());
         const made = done(owner.dispatch({ kind: "collection.addLook", collection: id, base: view.revision,
           look: { id: look.id, name: look.name, ...this.storedLook(look) } }));
         this.show(made.look!);
@@ -893,7 +895,7 @@ export class CollectionService {
     }
     const candidate = owner.list().find(view => view.looks.length);
     if (candidate) { this.deps.scene.setLook({ collection: candidate.id, look: candidate.looks[0]! }); return; }
-    const look = starterLook(this.newId(), "Preset 1", this.deps.model);
+    const look = starterLook(this.newId(), "Preset 1", this.deps.model, this.deps.starterPart?.());
     const refs = this.create({ id: this.newId(), name: "My collection", looks: [{ id: look.id, name: look.name, ...this.storedLook(look) }] });
     this.deps.scene.setLook(refs[0]);
   }

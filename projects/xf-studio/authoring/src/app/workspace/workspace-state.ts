@@ -134,6 +134,8 @@ export type WorkspaceState = {
   uvView: UVView;
   fieldSelection: FieldSelection;
   glitterChoices: GlitterChoices;
+  /** The starter new layers and looks start from (eye makeup's feature memory); absent: the feature's fallback (starters.ts). */
+  defaultStarter?: string;
   savedV?: SavedV;
   preview: PreviewState;
   /**
@@ -177,7 +179,7 @@ export type WorkspaceState = {
  * look's memory is kept by feature beside it. View state (camera, UV view, preferences) is as in workspace-1.
  */
 export type StoredWorkspace = Omit<WorkspaceState, "schema" | "recipe" | "active" | "selected" | "history" | "historyTrimmed" |
-  "fieldSelection" | "glitterChoices" | "collections" | "otherFeatures" | "preview"> & {
+  "fieldSelection" | "glitterChoices" | "defaultStarter" | "collections" | "otherFeatures" | "preview"> & {
   schema: typeof WORKSPACE_2;
   /** The preview state; `studioLights` only when it differs from the original rig. */
   preview: Omit<PreviewState, "studioLights"> & { studioLights?: StudioLights };
@@ -349,7 +351,9 @@ function readEditorV2(v: StoredWorkspace, model: DocumentModel, newer: NewerPoli
   state.fieldSelection = live.fieldSelection ?? {};
   if (live.historyTrimmed) state.historyTrimmed = true;
   const features = registry.readFeatureWide(v.features);
-  state.glitterChoices = (features[LIVE] as { choices?: GlitterChoices } | undefined)?.choices ?? {};
+  const livefeature = features[LIVE] as { choices?: GlitterChoices; defaultStarter?: string } | undefined;
+  state.glitterChoices = livefeature?.choices ?? {};
+  if (livefeature?.defaultStarter !== undefined) state.defaultStarter = livefeature.defaultStarter;
   // The loose look's other registered features are live documents too (step 5); only unregistered ones are carried.
   const others = liveFeatureStates({ parts }, memory, model);
   if (others) {
@@ -374,9 +378,9 @@ export function serializeWorkspace(state: WorkspaceState, model: DocumentModel,
   /** `lookLevel`: Undo histories with steps in the look-level form (the storage budget's choice, CORE-39). */
   options: { lookLevel?: boolean } = {}): StoredWorkspace {
   const { parts: registry, live: LIVE } = model;
-  const { schema: _schema, recipe, active, selected, history, historyTrimmed, fieldSelection, glitterChoices, collections,
+  const { schema: _schema, recipe, active, selected, history, historyTrimmed, fieldSelection, glitterChoices, defaultStarter, collections,
     otherFeatures, liveFeatures, liveLocked: _locked, ...view } = state;
-  const features = registry.writeFeatureWide({ ...otherFeatures?.features, [LIVE]: { choices: glitterChoices } });
+  const features = registry.writeFeatureWide({ ...otherFeatures?.features, [LIVE]: { choices: glitterChoices, ...(defaultStarter === undefined ? {} : { defaultStarter }) } });
   // The loose look: the live document, the other live features (when registered) and unregistered entries carried as they came.
   const loose = collections ? undefined : withLiveFeatures({ id: "", name: "", revision: 1,
     parts: { ...otherFeatures?.parts, [LIVE]: registry.envelope(LIVE, recipe) } },

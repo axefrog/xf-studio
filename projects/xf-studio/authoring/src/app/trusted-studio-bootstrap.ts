@@ -60,6 +60,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   /** A panel's instance in the tab shown (the profile session's). */
   panelInstance?: (panel: string) => string;
   tabs?: import("./profiles/tab-presentation").LayoutTabsPort;
+  starters?: import("./starters/starter-actions").StartersPort;
   emptyChoices?: import("./profiles/empty-choices").EmptyChoicesPort;
   /** The input layer's target resolution and the session's focus (profiles design §3.3, §3.6): what the presentation's actions name. */
   targets?: import("./profiles/targets").TargetResolver;
@@ -123,6 +124,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     ...(options.targets ? { targets: options.targets } : {}), ...(options.focus ? { focus: options.focus } : {}),
     ...(options.scopeName ? { scopeName: options.scopeName } : {}),
     ...(options.characterName ? { characterName: options.characterName } : {}), ...(options.tabs ? { tabs: options.tabs } : {}),
+    ...(options.starters ? { starters: options.starters } : {}),
     ...(options.emptyChoices ? { emptyChoices: options.emptyChoices } : {}) });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */

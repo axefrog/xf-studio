@@ -70,9 +70,14 @@ export const eyeMakeupEditor: EditorCodec<EyeMakeupEditor, Recipe> = Object.free
  * settings, keyed `<preset>/<layer>` as workspace-1's `glitterChoices` was (verbatim, so
  * settings of a preset that is not loaded come back when its collection is opened again).
  */
-export type EyeMakeupMemory = { choices: GlitterChoices };
+export type EyeMakeupMemory = { choices: GlitterChoices;
+  /** The starter new layers and looks start from (`starters.ts` ID, or an own starter's): changed only by "Use for new layers". Absent: the fallback. */
+  defaultStarter?: string };
 export const eyeMakeupMemory: MemoryCodec<EyeMakeupMemory> = Object.freeze({
   empty: (): EyeMakeupMemory => ({ choices: {} }),
-  parse: (value: unknown): EyeMakeupMemory => ({ choices: parseGlitterChoices((value as { choices?: unknown } | null)?.choices) }),
-  serialize: (memory: EyeMakeupMemory) => ({ choices: structuredClone(memory.choices) }),
+  parse(value: unknown): EyeMakeupMemory {
+    const stored = value as { choices?: unknown; defaultStarter?: unknown } | null, starter = stored?.defaultStarter;
+    return { choices: parseGlitterChoices(stored?.choices), ...(typeof starter === "string" && starter.length > 0 && starter.length <= 80 ? { defaultStarter: starter } : {}) };
+  },
+  serialize: (memory: EyeMakeupMemory) => ({ choices: structuredClone(memory.choices), ...(memory.defaultStarter === undefined ? {} : { defaultStarter: memory.defaultStarter }) }),
 });

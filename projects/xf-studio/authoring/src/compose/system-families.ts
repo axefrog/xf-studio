@@ -17,6 +17,7 @@ import type { SavedAppearanceAction } from "../character/saved-appearance-action
 import type { ViewAction } from "../app/view-actions";
 import type { SceneAction } from "../app/profiles/scene-commands";
 import type { LayoutTabAction } from "../app/profiles/tab-defaults";
+import type { StarterAction } from "../app/starters/starter-actions";
 import type { PartPresetRequest } from "../library/part-presets";
 import type { EmptyChoiceRequest } from "../app/profiles/empty-choices";
 import { ACTION_DESCRIPTORS, EMPTY_CHOICE_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
@@ -33,6 +34,7 @@ const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
 const SCENES_ID = familyId("scenes");
 const TABS_ID = familyId("tabs");
+const STARTERS_ID = familyId("starters");
 const VIEWS_ID = familyId("views");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
@@ -128,6 +130,16 @@ export const TABS_FAMILY: SystemFamily<LayoutTabAction, ActionScope, typeof TABS
     "tabs.reopen": true, "tabs.duplicate": true, "tabs.arrange": true, "tabs.new": true, "tabs.reset": true, "tabs.saveAsDefault": true,
     "tabs.updateDefault": true, "defaults.rename": true, "defaults.delete": true, "defaults.restore": true },
     { "tabs.rename": { name: "characters" }, "tabs.move": { to: "index" }, "tabs.saveAsDefault": { name: "characters" }, "defaults.rename": { name: "characters" } }),
+});
+
+/**
+ * Starter shapes (app/starters/starter-actions.ts, profiles design §6): choose the default, save a layer's shape, and rename, delete and
+ * restore the person's own.
+ */
+export const STARTERS_FAMILY: SystemFamily<StarterAction, ActionScope, typeof STARTERS_ID> = Object.freeze({
+  owner: "system", id: STARTERS_ID, label: "Starters",
+  actions: actionTable<StarterAction, ActionScope>(ACTION_DESCRIPTORS, { "starters.setDefault": true, "starters.save": true, "starters.rename": true,
+    "starters.delete": true, "starters.restore": true }, { "starters.save": { name: "characters" }, "starters.rename": { name: "characters" } }),
 });
 
 /**

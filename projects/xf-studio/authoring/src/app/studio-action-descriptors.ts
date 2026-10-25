@@ -22,6 +22,7 @@ import { EASING_IDS } from "../platform/api/easing";
 import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS } from "../legacy/eye-makeup/eye-makeup-descriptors";
 import { TARGET_SCHEMA } from "./action-targets";
 import { TAB_NAME_LIMIT } from "./profiles/profile-sessions";
+import { STARTER_NAME_LIMIT } from "./starters/shape-starters";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
@@ -91,6 +92,13 @@ export const ACTION_DESCRIPTORS = {
   // Deleting an own default is a tombstone; restoring it is the Undo notice's action.
   "defaults.delete": desc("workspace", "library", "recovery", { default: target("string") }),
   "defaults.restore": desc("workspace", "library", "recovery", { default: target("string") }),
+  // Starter shapes (app/starters/starter-actions.ts): which starter new layers and looks use, and the person's own (library documents through the
+  // outbox). Deleting one is a tombstone; restoring it is the Undo notice's action. Adding a layer from a starter is `layer.edit`.
+  "starters.setDefault": desc("workspace", "workspace", "none", { starter: target("string") }),
+  "starters.save": desc("layer", "library", "none", { layerId: target("string"), name: inputText(1, STARTER_NAME_LIMIT) }),
+  "starters.rename": desc("workspace", "library", "none", { starter: target("string"), name: inputText(1, STARTER_NAME_LIMIT) }),
+  "starters.delete": desc("workspace", "library", "recovery", { starter: target("string") }),
+  "starters.restore": desc("workspace", "library", "recovery", { starter: target("string") }),
   "camera.front": inView("viewport", "workspace", "none"),
   "camera.body": inView("viewport", "workspace", "none"),
   "camera.setFov": inView("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),

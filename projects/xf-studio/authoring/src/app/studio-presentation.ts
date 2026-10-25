@@ -15,6 +15,7 @@ import type { StudioBoundContext, StudioContextHit } from "./studio-context-targ
 import { nameTargets, type NamedTargets, type Unnamed } from "./action-targets";
 import type { TargetResolver } from "./profiles/targets";
 import type { LayoutTabsPort } from "./profiles/tab-presentation";
+import type { StartersPort } from "./starters/starter-actions";
 import type { EmptyChoiceRequest, EmptyChoicesPort } from "./profiles/empty-choices";
 import type { FocusService } from "../platform/core/focus";
 import { lookScope } from "../platform/core/history-service";
@@ -293,6 +294,8 @@ export type StudioPresentationPort<Slot> = {
    * (`<panel>--<base36>`), which names its session in its module's service.
    */
   readonly tabs?: LayoutTabsPort;
+  /** The live feature's starter shapes (profiles design §6): what the Layers panel's starter menu lists. Changes go through the registered actions. */
+  readonly starters?: StartersPort;
   readonly emptyChoices?: EmptyChoicesPort;
   readonly panels: {
     instance(panel: string): string;
@@ -406,6 +409,7 @@ export function createStudioPresentation<Slot>(sources: {
   /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
   panelInstance?: (panel: string) => string;
   tabs?: LayoutTabsPort;
+  starters?: StartersPort;
   emptyChoices?: EmptyChoicesPort;
   /**
    * The input layer's target resolution (app/profiles/targets.ts) and the session's focus: what each action the presentation dispatches
@@ -657,7 +661,7 @@ export function createStudioPresentation<Slot>(sources: {
     installDetection: Object.freeze(leased(installDetection)), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
-    ...(sources.tabs ? { tabs: sources.tabs } : {}),
+    ...(sources.tabs ? { tabs: sources.tabs } : {}), ...(sources.starters ? { starters: sources.starters } : {}),
     ...(sources.emptyChoices ? { emptyChoices: Object.freeze({ ...sources.emptyChoices,
       capability: (request: EmptyChoiceRequest) => a.emptyChoiceCapability(request), execute: (request: EmptyChoiceRequest) => a.executeEmptyChoice(request) }) } : {}),
     panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local`,

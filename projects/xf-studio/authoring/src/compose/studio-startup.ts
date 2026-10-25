@@ -58,6 +58,10 @@ import { createTrustedAuthoringCore } from "../app/trusted-authoring-core";
 import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./studio-registry";
+import { EYE_MAKEUP_MODULE } from "../features/eye-makeup";
+import { ShapeStarters } from "../app/starters/shape-starters";
+import { StarterActions } from "../app/starters/starter-actions";
+import { readStarterShape } from "../engines/layered-makeup/starter-shape";
 import { STUDIO_VIEW_COMPOSITION } from "./view-panels";
 import { STUDIO_CATALOGUE } from "./views";
 import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./renderers";
@@ -200,6 +204,14 @@ async function start(host: StudioHost, root: HTMLElement) {
       writable: () => lease?.writable() ?? true, note: text => defaultNote(text) },
     catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
     report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
+  // The live feature's starter shapes (profiles design §6): its contributed ones and the person's own (library documents through the outbox),
+  // and which one new layers and looks start from, kept in the workspace's feature memory.
+  const region = STUDIO_COMPOSITION.region;
+  const starterShapes = new ShapeStarters({ documents: documents.documents, outbox: documents.outbox, feature: region.id, label: EYE_MAKEUP_MODULE.label,
+    contributed: region.starters, fallback: region.defaultStarter, read: shape => readStarterShape(shape, region.newLayer(), region.models),
+    choice: { get: () => workspace.defaultStarter, set: id => { if (id === undefined) delete workspace.defaultStarter; else workspace.defaultStarter = id; } },
+    writable: () => lease?.writable() ?? true, note: text => defaultNote(text),
+    report: error => diagnostics.failure("library", "starters_failed", "Part of your starters couldn't be read.", error, { level: "warn" }) });
   // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
   // session it makes, and the workspace's own fields stay as they were (migration input only). A migrated workspace costs nothing.
   if (PROFILES_MIGRATION_ENABLED && restored.writable && (!lease || lease.writable())) {
@@ -213,7 +225,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       model: STUDIO_COMPOSITION.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal, initial: STUDIO_INITIAL_LAYOUT,
       report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
   }
-  await services.load();
+  await Promise.all([services.load(), starterShapes.load()]);
   // The session this window opens on (its tabs, the views and scenes, and what each scene shows), with the window's focus: the history
   // service records the editing context into it (profiles design §3.3, §3.7). The session owns the view graph and its View and lighting
   // history: its operations and the graph's edits are one history (§4.1).
@@ -266,7 +278,6 @@ async function start(host: StudioHost, root: HTMLElement) {
   let drawnView: () => string | undefined = () => drawnViewOf(sessionState);
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
-  const region = STUDIO_COMPOSITION.region;
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const polishFixture = verification ? polish4Verification(() => statusSource.changed()) : undefined;
@@ -316,6 +327,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The layout tabs' actions: the session's operations, and those naming a default (the modules' and the person's own).
   const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: STUDIO_FRAGMENT_KNOWLEDGE });
   core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
+  const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: EYE_MAKEUP_MODULE.label,
+    layer: id => core.document.recipe.layers.find(layer => layer.id === id) });
+  core.app.attach({ starters: starterActions, starterShapes });
   const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
@@ -346,7 +360,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       transitions: () => transitions.stored(),
       profiles: profileMarks,
     },
-    sources: [preferences, sessionState, views], window, document,
+    sources: [preferences, sessionState, views, starterShapes], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
     canWrite: lease ? () => lease.draining() : undefined,
   });
@@ -486,6 +500,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     updates: createBrowserUpdateCheck(verification ? "/api/verification/update-check" : "/api/update-check"),
     collections: { owner: services.collections, scene: shownScene, transport: polish5?.transport ?? packageTransport,
       flushLook: () => lookEditor.commit(),
+      // A new look's first layer starts from the chosen starter (the default when none was chosen).
+      starterPart: () => region.starter(starterShapes.shapeOf()),
       membership: id => services.profiles.collectionMembership(sessionState.profile, id),
       join: id => {
         const profile = services.profiles.profile(sessionState.profile);
@@ -510,10 +526,10 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
     fileDevice: workspaceFiles, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
     panelInstance: panel => sessionState.instance(panel),
-    tabs: layoutTabsPort(sessionState, layoutTabs, services),
+    tabs: layoutTabsPort(sessionState, layoutTabs, services), starters: starterActions.port(),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
       createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),
-      starter: () => starterParts(core.documents), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
+      starter: () => starterParts(core.documents, region.starter(starterShapes.shapeOf())), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
     targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
     characterName: character => services.characters.character(character)?.label,

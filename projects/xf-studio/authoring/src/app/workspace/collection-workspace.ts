@@ -124,12 +124,12 @@ export function newLook(id: string, name: string, model: DocumentModel): Look {
  * A look for **Add preset**: the live feature's starter part (eye makeup: one layer, as the first preset starts), so a new look is
  * ready to shape instead of empty (release-readiness-audit.md item 12). Without a starter, the empty part.
  */
-export function starterLook(id: string, name: string, model: DocumentModel): Look {
-  return { id, name, revision: 1, parts: starterParts(model) };
+export function starterLook(id: string, name: string, model: DocumentModel, part?: unknown): Look {
+  return { id, name, revision: 1, parts: starterParts(model, part) };
 }
-/** The contributed starting content, shared by every route that creates a starter look. */
-export function starterParts(model: DocumentModel): Look["parts"] {
-  const starter = model.parts.feature(model.live)?.part.starter();
+/** The contributed starting content, shared by every route that creates a starter look: `part` (the person's chosen starter's), else the feature's own. */
+export function starterParts(model: DocumentModel, part?: unknown): Look["parts"] {
+  const starter = part ?? model.parts.feature(model.live)?.part.starter();
   return starter === undefined ? newLook("", "", model).parts
     : { [model.live]: model.parts.envelope(model.live, structuredClone(starter)) };
 }
