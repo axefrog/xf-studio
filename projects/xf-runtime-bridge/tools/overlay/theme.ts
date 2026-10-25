@@ -216,6 +216,16 @@ export function ruleDeclaration(css: string, selector: string, property: string)
   return value;
 }
 
+/**
+ * The hash of the resolved values. The `source` of a rule value (where the Studio keeps the number: `.btn:disabled opacity`
+ * today, `:root --disabled-alpha` when the Studio moves it) is a note for the reader and not part of the hash, so moving where a
+ * number lives never changes the tables' hash while the number itself is the same.
+ */
+export function themeHash(parts: Pick<Theme, "colors" | "metrics" | "values" | "types">): string {
+  const values = parts.values.map((v) => ({ name: v.name, value: v.value }));
+  return createHash("sha256").update(JSON.stringify({ colors: parts.colors, metrics: parts.metrics, values, types: parts.types })).digest("hex");
+}
+
 export function buildTheme(css: string): Theme {
   const tokens = parseRootTokens(css);
   const scoped = scopedRootTokens(css);
@@ -267,8 +277,7 @@ export function buildTheme(css: string): Theme {
     const size = px(entry.dark);
     return { role: t.role, face: t.face, weight: t.weight, token: t.token, size, scale: Math.round(Math.min(high, Math.max(low, size / body)) * 10000) / 10000, caps: t.caps };
   });
-  const tokens_sha256 = createHash("sha256").update(JSON.stringify({ colors, metrics, values, types })).digest("hex");
-  return { tokens_sha256, colors, metrics, values, types };
+  return { tokens_sha256: themeHash({ colors, metrics, values, types }), colors, metrics, values, types };
 }
 
 const f = (v: number) => (Number.isInteger(v) ? `${v}.0f` : `${v}f`);

@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { CET_SCALE_RANGE, IMGUI_COLOUR_SLOTS, IN_GAME_THEME, XF_COLOUR_SLOTS } from "../../../xf-studio/authoring/src/studio-ui/style-guide/in-game-theme";
-import { buildTheme, generated, LUA_OUT, MAPPING, NATIVE_OUT, ruleDeclaration, STUDIO_CSS } from "../overlay/theme.ts";
+import { buildTheme, generated, LUA_OUT, MAPPING, NATIVE_OUT, ruleDeclaration, STUDIO_CSS, themeHash } from "../overlay/theme.ts";
 import { FLASH_EASE_S, FLASH_HOLD_S, FLASH_TOTAL_S, flashFrame, restOpacity, simulate } from "../overlay/ink-flash.ts";
 import { projectDir, tempDir } from "./helpers.ts";
 
@@ -81,6 +81,14 @@ describe("0.8.22 the theme generator reads the Studio's in-game table", () => {
     expect(theme.types.find((t) => t.role === "body")!.scale).toBe(1);
     expect(theme.types.map((t) => [t.role, t.weight])).toEqual(IN_GAME_THEME.type.map((t) => [t.role, t.weight]));
     expect(ruleDeclaration(css, ".btn:disabled", "opacity")).toBe(".45");
+  });
+
+  test("a number the Studio moves to a custom property of :root (--disabled-alpha) reads the same, and moving it does not change the tables' hash", () => {
+    expect(ruleDeclaration([":root { --a: 1; }", ":root { --disabled-alpha: .45; }", ".btn:disabled { cursor: not-allowed; }"].join(String.fromCharCode(10)), ":root", "--disabled-alpha")).toBe(".45");
+    expect(ruleDeclaration([":root { --disabled-alpha: .45; }", "@media print { :root { --disabled-alpha: .9; } }"].join(String.fromCharCode(10)), ":root", "--disabled-alpha")).toBe(".45");
+    const moved = theme.values.map((v) => (v.name === "DisabledAlpha" ? { ...v, source: ":root --disabled-alpha" } : v));
+    expect(themeHash({ ...theme, values: moved })).toBe(theme.tokens_sha256);
+    expect(themeHash({ ...theme, values: moved.map((v) => (v.name === "DisabledAlpha" ? { ...v, value: 0.5 } : v)) })).not.toBe(theme.tokens_sha256);
   });
 
   test("the committed tables are what the generator writes, and --check fails on a stylesheet that would change them", () => {
