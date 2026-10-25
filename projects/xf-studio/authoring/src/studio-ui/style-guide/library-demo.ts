@@ -392,7 +392,7 @@ const MOUNTS: Record<string, Mount> = {
     };
     return stack({ gap: "loose" }, make(attention), make(allFine), make(allFine, 420, true), make({ ...attention, line: "Checking your frameworks…", tone: "checking", checking: true }),
       make({ line: "Checking your frameworks…", tone: "checking", rows: [], foldable: false, checking: true }),
-      make({ line: "Choose your Mod Organizer 2 folder and profile in Settings › Game.", tone: "info", rows: [], foldable: false, checking: false }), make(attention, 260));
+      make({ line: "Choose your Mod Organizer 2 folder and profile in Settings › Game.", tone: "info", rows: [], foldable: false, checking: false }), make(attention, 260), make(allFine, 260, true));
   },
   "lib-conflict-notice": () => {
     const preset = new ConflictNotice({ onResolve: () => {} }), collection = new ConflictNotice({ onResolve: () => {} });

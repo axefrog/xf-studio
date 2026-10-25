@@ -978,7 +978,11 @@ describe("Settings › Game › Mod frameworks: what the game will load, and the
     expect(fold.getAttribute("aria-expanded")).toBe("true");
     expect(h.group.querySelector(".framework-list")!.hidden).toBe(false);
     expect(h.rows().map(row => text(row.querySelector(".framework-name")!))).toEqual(["ArchiveXL", "RED4ext", "redscript", "TweakXL", "Codeware", "Cyber Engine Tweaks"]);
-    expect(h.rows().map(row => text(row.querySelector(".badge")!))).toEqual(["Up to date", "Up to date", "Up to date", "Not needed for what you build", "Not needed for what you build", "Not needed for what you build"]);
+    expect(h.group.querySelectorAll(".badge").map(item => text(item))).toEqual(["Up to date", "Up to date", "Up to date"]);
+    expect(text(h.group.querySelector(".framework-unused-title")!)).toBe("Not needed for your mod");
+    expect(h.group.querySelector(".framework-unused")!.hidden).toBe(false);
+    expect(h.group.querySelector(".framework-unused-list")!.querySelectorAll(".framework-row")).toHaveLength(3);
+    expect(h.group.querySelector(".framework-unused-list")!.querySelectorAll(".badge")).toHaveLength(0);
     expect(text(h.rows()[0]!.querySelector(".framework-meta")!)).toBe("1.27.5 · from the Mod Organizer 2 mod “ArchiveXL”");
     expect(h.group.querySelectorAll(".link-button")).toHaveLength(0);
     expect(buttonNamed(h.group, "Check again")).toBeTruthy();
@@ -1090,6 +1094,7 @@ describe("Settings › Game › Mod frameworks: what the game will load, and the
     expect(text(h.root)).not.toContain("Too old");
     const show = buttonNamed(h.root, "Show mod frameworks")!;
     expect(show.hidden).toBe(false);
+    expect(buttonNamed(h.root, "Open Settings")!.hidden).toBe(true);
     (show as unknown as HTMLElement).click();
     expect([h.opened, h.openedParts]).toEqual([["game"], ["frameworks"]]);
     h.panel.spec.element.remove();
@@ -1099,6 +1104,7 @@ describe("Settings › Game › Mod frameworks: what the game will load, and the
     await settle(); fine.paint();
     expect(fine.root.querySelectorAll(".note.warning").filter(item => !item.hidden && text(item).includes("framework"))).toHaveLength(0);
     expect(buttonNamed(fine.root, "Show mod frameworks")!.hidden).toBe(true);
+    expect(buttonNamed(fine.root, "Open Settings")!.hidden).toBe(false);
     fine.panel.spec.element.remove();
   });
 });

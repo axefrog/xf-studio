@@ -481,6 +481,12 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .framework-row:is([data-status="too-old"], [data-status="missing"], [data-status="unreadable"]) { box-shadow: inset 2px 0 0 var(--warning); }
 .framework-name-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
 .framework-name-line .badge { flex: none; }
+.framework-rows { display: flex; flex-direction: column; gap: var(--sp-6); }
+.framework-unused { display: flex; flex-direction: column; gap: var(--sp-4); color: var(--text-muted); }
+.framework-unused-title { margin: 0; font-size: var(--fs-sm); font-weight: 500; }
+.framework-unused-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+.framework-unused .framework-row { padding: 0; background: none; }
+.framework-unused .framework-name { font-weight: 400; }
 .framework-meta .record-fact { white-space: normal; }
 .framework-message { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .framework-links { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-6); }

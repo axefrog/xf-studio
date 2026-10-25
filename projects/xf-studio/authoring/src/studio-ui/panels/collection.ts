@@ -102,8 +102,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   frameworkLine.hidden = true;
   const showFrameworks = button({ label: "Show mod frameworks", icon: "settings", small: true, onClick: () => rt.settings.open("game", "frameworks") });
   showFrameworks.hidden = true;
+  const openSettings = button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup });
   const setup = section({ title: "Game", help: "Your game folder and mod manager are chosen in Settings › Game; your own WolvenKit, if you use one, in Settings › Tools. Settings › Game › Mod frameworks says whether the frameworks your mod needs are in place." },
-    setupLine, frameworkLine, h("div", { class: "row wrap gap-s" }, wolvenKitStep.element, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup }), showFrameworks));
+    setupLine, frameworkLine, h("div", { class: "row wrap gap-s" }, wolvenKitStep.element, openSettings, showFrameworks));
   const check = button({ label: "Check", icon: "check", title: "Check which presets and layers can become mod files (creates no files)", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   // While the latest Build is current, its result's Add is the one primary action: Build again is a secondary one.
@@ -220,7 +221,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
       wolvenKitStep.update(frame, wantsWolvenKitStep(frame));
       const pointer = frameworkNote(frame);
-      setText(frameworkLine, pointer ?? ""); frameworkLine.hidden = !pointer; showFrameworks.hidden = !pointer;
+      setText(frameworkLine, pointer ?? ""); frameworkLine.hidden = !pointer; showFrameworks.hidden = !pointer; openSettings.hidden = !!pointer;
       const working = library.busy && library.progress?.code === "package";
       const stopCapability = port.files.capability({ kind: "package.stop" });
       const buildRunning = files.activity.some(entry => entry.kind === "package.build");

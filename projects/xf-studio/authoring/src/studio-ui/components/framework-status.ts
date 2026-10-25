@@ -8,7 +8,7 @@ import { viewState } from "../view-state";
 import { linkButton } from "./link-button";
 
 /**
- * Framework status (style guide "Framework status"): which framework versions the game will load, one row each, with a status and,
+ * Framework status (style guide "Framework status"): which framework versions the game will load, needed frameworks first, with a status and,
  * where one needs attention, its one next step. Settings › Game's "Mod frameworks" group is its first user.
  *
  * - **Heading:** the group's name with its help tip, and **Check again** at the far end (a small quiet Button that reads "Checking…"
@@ -19,7 +19,8 @@ import { linkButton } from "./link-button";
  * - **Rows, all shown:** a row is the framework's name, its status badge, and a meta line of facts (the version the game will load, and
  *   where it comes from). A framework that needs attention also shows the sentence that says what to do and its official release pages
  *   as link buttons; the component only reports a press (`onOpenLink`), it opens nothing and changes nothing. Notes (a hidden second
- *   copy, a mod list that disagrees with the file) sit under the row in muted text.
+ *   copy, a mod list that disagrees with the file) sit under the row in muted text. Frameworks with `status: "not-needed"`
+ *   follow under “Not needed for your mod”: muted names and facts only, with no status badge or actions.
  * - **Folding:** while everything needed is fine (`state.foldable`) the rows fold under the line, which becomes the disclosure
  *   button ("All frameworks up to date"). The choice is remembered under `key` (view-state.ts). While anything needs attention the rows
  *   are always shown and the line is plain text.
@@ -69,8 +70,12 @@ export class FrameworkStatus {
   private readonly foldLabel = expanderLabel("");
   private readonly plain = h("p", { class: "framework-line-plain" }, this.mark, this.text);
   private readonly list: HTMLUListElement;
+  private readonly unusedList = h("ul", { class: "framework-unused-list" });
+  private readonly unused = h("section", { class: "framework-unused" },
+    h("h5", { class: "framework-unused-title", text: "Not needed for your mod" }), this.unusedList);
   private rowsKey = "";
   private rowCount = 0;
+  private unusedCount = 0;
   private links: HTMLElement[] = [];
   private linkCapability: Capability = { available: true };
   private foldable = false;
@@ -86,10 +91,10 @@ export class FrameworkStatus {
       viewState().setExpanded([options.key], open);
       this.paintList();
     });
-    this.list = h("ul", { class: "framework-list", id: listId, "aria-label": options.label });
+    this.list = h("ul", { class: "framework-list", "aria-label": options.label });
     this.element = h("div", { class: "framework-status", "data-tone": "info", hidden: true },
       h("div", { class: "framework-head" }, h("h4", { class: "framework-title" }, h("span", { text: options.label }), helpTip(options.label, options.help)), this.checkAgain),
-      h("div", { class: "framework-line", "aria-live": "polite" }, this.fold, this.plain), this.list);
+      h("div", { class: "framework-line", "aria-live": "polite" }, this.fold, this.plain), h("div", { id: listId, class: "framework-rows" }, this.list, this.unused));
   }
 
   /** Whether the rows are shown now: always, except while folded under an "all up to date" line. */
@@ -116,26 +121,33 @@ export class FrameworkStatus {
     this.paintList();
   }
 
-  private paintList() { this.list.hidden = !this.open || !this.rowCount; }
+  private paintList() {
+    this.list.hidden = !this.open || !this.rowCount;
+    this.unused.hidden = !this.open || !this.unusedCount;
+  }
 
   private paintRows(rows: readonly FrameworkStatusRow[]) {
     this.links = [];
-    this.rowCount = rows.length;
-    this.list.replaceChildren(...rows.map(row => {
+    const needed = rows.filter(row => row.status !== "not-needed"), unused = rows.filter(row => row.status === "not-needed");
+    this.rowCount = needed.length; this.unusedCount = unused.length;
+    const render = (row: FrameworkStatusRow) => {
+      const quiet = row.status === "not-needed";
       const meta = row.facts.flatMap((fact, index) => [index ? h("span", { class: "record-sep", "aria-hidden": "true", text: " · " }) : null,
         h("span", { class: "record-fact", text: fact })]).filter((node): node is HTMLSpanElement => !!node);
-      const links = row.links.map(link => {
+      const links = (quiet ? [] : row.links).map(link => {
         const control = linkButton({ label: link.label, onClick: () => this.options.onOpenLink(link.id) });
         setAttr(control, "aria-label", link.name);
         this.links.push(control);
         return control;
       });
       return h("li", { class: "framework-row", "data-status": row.status, "data-framework": row.id },
-        h("div", { class: "framework-name-line" }, h("strong", { class: "framework-name", text: row.name }), badge(row.badge.text, row.badge.tone)),
+        h("div", { class: "framework-name-line" }, h("strong", { class: "framework-name", text: row.name }), quiet ? null : badge(row.badge.text, row.badge.tone)),
         h("p", { class: "record-meta framework-meta" }, ...meta),
-        row.message ? h("p", { class: "framework-message", text: row.message }) : null,
+        !quiet && row.message ? h("p", { class: "framework-message", text: row.message }) : null,
         links.length ? h("div", { class: "framework-links" }, ...links) : null,
-        ...row.notes.map(text => h("p", { class: "note framework-note", text })));
-    }));
+        ...(quiet ? [] : row.notes).map(text => h("p", { class: "note framework-note", text })));
+    };
+    this.list.replaceChildren(...needed.map(render));
+    this.unusedList.replaceChildren(...unused.map(render));
   }
 }
