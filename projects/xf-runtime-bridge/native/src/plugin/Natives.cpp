@@ -878,6 +878,12 @@ void RecordEnabled(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool* out
     if (out) *out = false;
     Guarded("XFBridge_RecordEnabled", [&] { if (out) *out = RecordingWanted(ToStd(channel)); });
 }
+void RecordIdentity(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, RED4ext::CString* out, int64_t)
+{
+    RED4ext::CString channel; RED4ext::GetParameter(frame, &channel); frame->code++;
+    if (out) *out = RED4ext::CString("");
+    Guarded("XFBridge_RecordIdentity", [&] { if (out) *out = RED4ext::CString(RecordingIdentity(ToStd(channel)).c_str()); });
+}
 void RecordIngress(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool* out, int64_t)
 {
     RED4ext::CString channel, payload;
@@ -998,13 +1004,14 @@ void PostRegisterTypes()
         RegisterGlobalTyped(rtti, "XFBridge_LifecycleMenu", &LifecycleMenu, nullptr, {{"handle:inkWidget", "menu"}});
         RegisterGlobal(rtti, "XFBridge_RecordEnabled", &RecordEnabled, "Bool", {"channel"});
         RegisterGlobal(rtti, "XFBridge_Record", &RecordIngress, "Bool", {"channel", "payload"});
+        RegisterGlobal(rtti, "XFBridge_RecordIdentity", &RecordIdentity, "String", {"channel"});
 #endif
         RegisterGlobal(rtti, "XFBridge_Event", &ProbeEvent, "Bool", {"kind", "data"});
         RegisterGlobal(rtti, "XFBridge_ProbeFlags", &ProbeFlags, "Int32", {});
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
         #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-        log::Info("rtti.register_types", "phase=post_register natives=32");
+        log::Info("rtti.register_types", "phase=post_register natives=33");
 #else
         log::Info("rtti.register_types", "phase=post_register natives=27");
 #endif

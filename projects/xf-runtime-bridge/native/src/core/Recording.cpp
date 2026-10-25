@@ -151,6 +151,8 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     m_latest = m_ack = m_dropped = m_missed = m_samples = m_bytes = m_invalid = 0;
     m_start = m_next = now; m_until = now + static_cast<double>(duration); m_last = m_gap = m_end = 0;
     m_ingressDropped.store(0); m_nextHeartbeat = now; m_nextUiHeartbeat = 0; m_lastUi.clear();
+    // Identity first: a reader that sees the channel wanted must see this run's identity.
+    m_identityRun.store(m_run); m_identityWorld.store(m_world); m_identityConnection.store(m_connection);
     unsigned mask = 0; for (const auto& c : m_channels) mask |= EventBit(c); m_eventMask.store(mask);
     m_cap = cap; m_active = true; m_reason.clear(); m_startedGeneration.store(admitted);
     if (admitted != CancellationGeneration())
@@ -214,6 +216,12 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
     }
 }
 bool Service::Wants(const std::string& channel) const { return m_startedGeneration.load() == CancellationGeneration() && (m_eventMask.load() & EventBit(channel)) != 0; }
+std::string Service::Identity(const std::string& channel) const
+{
+    // Atomics only: the caller is a game or UI thread that must not wait for the writer.
+    if (!Wants(channel)) return {};
+    return "r" + std::to_string(m_identityRun.load()) + ".w" + std::to_string(m_identityWorld.load()) + ".c" + std::to_string(m_identityConnection.load());
+}
 bool Service::Append(const std::string& channel, const std::string& text, double at, double end, uint64_t tick, bool valid)
 {
     ++m_counts[channel][0]; if (valid) ++m_counts[channel][1];

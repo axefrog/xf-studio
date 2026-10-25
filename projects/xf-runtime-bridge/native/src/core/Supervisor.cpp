@@ -76,6 +76,7 @@ Entry ParseImpl(const json& p)
     for (const auto& v : e.invariants) if (!e.policy.count(v)) throw MethodError("bad_params", "Each invariant needs a policy");
     if (e.goal.kind == "hold_position" && !e.policy.count("goal")) throw MethodError("bad_params", "hold_position needs a goal policy");
     e.tickHz = Number(p, "tick_hz", 3, 1, 5); e.quietS = Number(p, "safe_after_s", 3, 1, 30); e.plain = p;
+    e.plain["actor"]["ref"] = e.actor.ref; // state shows the canonical reference, as the receipts do
     return e;
 }
 Entry Parse(const json& p)

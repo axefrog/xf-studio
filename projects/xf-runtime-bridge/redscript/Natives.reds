@@ -68,4 +68,7 @@ public static native func XFBridge_PinDrawn(pin: Int32, bits: Int32) -> Int32
 // Stripped by packaging for every normal DLL. Native names are plain globals.
 public static native func XFBridge_RecordEnabled(channel: String) -> Bool
 public static native func XFBridge_Record(channel: String, payload: String) -> Bool
+// Bridge 0.8.17: who is recording the channel ("r<run>.w<world>.c<connection>", or "" when nothing is); it changes on every
+// stop and restart, so the CET observer drops state that belonged to the old run.
+public static native func XFBridge_RecordIdentity(channel: String) -> String
 // END XFB_AUTONOMOUS_TEST_HOOKS

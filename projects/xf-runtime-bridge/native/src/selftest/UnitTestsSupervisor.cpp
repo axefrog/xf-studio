@@ -43,6 +43,11 @@ int SupervisorUnitTests()
     Service service([&](const std::string& event, const json& data) { auto copy = data; copy["event"] = event; receipts.push_back(copy); });
     service.Set(p, o, 0, 1, 7);
     Check(service.Tick(o, 0, 1, 7).empty() && service.State()["traffic_risk"] == "unknown", "unknown road notes only, no action");
+    {
+        Service lower; auto v = p; v["actor"]["ref"] = "v";
+        lower.Set(v, o, 0, 1, 7);
+        Check(lower.State()["entry"]["actor"]["ref"] == "V", "0.8.17: state shows the canonical V reference, as the receipts do");
+    }
     for (int i = 1; i <= 10; ++i) service.Tick(o, i * .4, 1, 7);
     Check(!service.State()["last_safe"].is_null() && service.State()["last_safe"]["no_contact_proof"] == false, "quiet dwell matures with explicit partial coverage");
     o.combat = true;

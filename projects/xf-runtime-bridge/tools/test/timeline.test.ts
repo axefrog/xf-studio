@@ -85,7 +85,7 @@ test("an armed capture matches future events, waits from source time and records
   const arms = new EventCaptures(api, { now: () => now, sleep: async ms => { now += ms; } });
   await arms.arm({ run: 1, event: "toast.created", match: { style: "message" }, capture: "screenshot", delay_ms: 50 }, fixture().api);
   await arms.poll();
-  expect(calls).toEqual(["game.catchup", "capture.screenshot"]);
+  expect(calls).toEqual(["game.catchup", "game.catchup", "capture.screenshot"]); // the second looks again, just before the capture
   expect(now).toBe(1050); expect(arms.status().armed).toBe(false);
   expect(arms.status().receipts[0].event_to_capture_ms).toEqual({ min: 50, max: 60 });
   arms.cancel();

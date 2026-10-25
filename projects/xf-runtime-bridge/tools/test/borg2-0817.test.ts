@@ -24,9 +24,9 @@ const runLua = (code: string): string => {
 test("1. the CET U adapter records a surface on change plus a low-rate heartbeat, not at the look rate", () => {
   const source = JSON.stringify(readFileSync(join(projectDir, "cet", "xf_runtime_bridge", "test-input.lua"), "utf8"));
   const result = runLua(`
-    local enabled, records = true, {}
+    local enabled, run, records = true, 'r1.w1.c1', {}
     json = { encode = function(body) records[#records + 1] = { reason = body.reason, surface = body.surface, drawn = body.drawn, text = body.texts and body.texts[1] }; return '{}' end }
-    Game = { XFBridge_RecordEnabled = function() return enabled end, XFBridge_Record = function() return true end }
+    Game = { XFBridge_RecordIdentity = function() return enabled and run or '' end, XFBridge_Record = function() return true end }
     ImGui = { GetWindowPos = function() return { x = 20, y = 30 } end, GetWindowSize = function() return 100, 80 end }
     local adapter = assert(load(${source}))()
     local function look(seconds)
@@ -52,6 +52,19 @@ test("1. the CET U adapter records a surface on change plus a low-rate heartbeat
     assert(#records == before + 1)
     enabled = true; adapter.advance(0.1); adapter.ui('cet_line', { drawn = true, texts = { 'new line' }, rect = adapter.windowRect() })
     assert(#records == before + 2 and records[#records].reason == 'change')
+    -- A stop and a fast restart between two looks (no look ever saw the recorder off) is a new run all the same.
+    local seen = #records
+    adapter.advance(0.1)
+    run = 'r2.w1.c1'
+    adapter.ui('cet_line', { drawn = true, texts = { 'new line' }, rect = adapter.windowRect() })
+    assert(#records == seen + 1 and records[#records].reason == 'change', 'a new run identity records the state at once')
+    adapter.advance(0.1)
+    adapter.ui('cet_line', { drawn = true, texts = { 'new line' }, rect = adapter.windowRect() })
+    assert(#records == seen + 1, 'and then goes quiet again')
+    run = 'r2.w2.c1' -- a new world generation under the same run number
+    adapter.advance(0.1)
+    adapter.ui('cet_line', { drawn = true, texts = { 'new line' }, rect = adapter.windowRect() })
+    assert(#records == seen + 2, 'a world change also starts a fresh baseline')
     return 'ok'
   `);
   expect(result).toBe("ok");

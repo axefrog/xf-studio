@@ -12,6 +12,8 @@ export type TimelineCursor = FileCursor & {
   supervisor_retired_through?: number;
   supervisor_reconciliation_lost?: boolean;
   source_counters?: SourceCounters;
+  /** The newest recorder V sample seen so far, so a page with no V row can still say how old the last one is. */
+  last_v_seq?: number; last_v_source_s?: number;
 };
 export type TimelineOptions = { run?: number; cursor?: TimelineCursor; detail?: boolean; signal?: AbortSignal; digest?: boolean; archive?: boolean };
 const seq = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
@@ -25,6 +27,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     (saved.supervisor_reconciliation_lost !== undefined && typeof saved.supervisor_reconciliation_lost !== "boolean"))) throw new Error("Invalid supervisor reconciliation cursor");
   const sc = saved?.source_counters as Json | undefined;
   if (sc !== undefined && !(sc && typeof sc === "object" && seq(sc.dropped) && seq(sc.invalid) && seq(sc.missed_deadlines) && typeof sc.file_error === "boolean")) throw new Error("Invalid source counter baseline");
+  if (saved && ((saved.last_v_seq !== undefined && !seq(saved.last_v_seq)) || (saved.last_v_source_s !== undefined && !Number.isFinite(saved.last_v_source_s)))) throw new Error("Invalid last V marker");
   const run = saved?.run ?? options.run;
   if (!seq(run) || !run) throw new Error("Supply the recorder run on the first catch-up read");
   const info = await read(api, "bridge.info", {}, options.signal);
@@ -41,8 +44,18 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     if (status.run !== run || status.session !== info.sid || !seq(status.world_generation) ||
         (cursor.world >= 0 && status.world_generation !== cursor.world)) throw new Error("Recorder identity changed; do not join worlds");
     cursor.world = status.world_generation;
+    // A cursor is the caller's data, so its counter baseline is untrusted. A baseline can only be a past reading: it
+    // never exceeds the recorder's totals now, and at the start of the run it is zero. Anything else is refused rather
+    // than clamped, because a baseline above the truth would turn real loss into apparent coverage.
+    if (pageNumber === 0 && saved?.source_counters) {
+      const b = saved.source_counters;
+      if (b.dropped > (status.dropped ?? 0) || b.invalid > (status.invalid ?? 0) || b.missed_deadlines > (status.missed_deadlines ?? 0) || (b.file_error && !status.file_error) ||
+          (saved.record === 0 && (b.dropped || b.invalid || b.missed_deadlines || b.file_error))) throw new Error("invalid_cursor: the source counter baseline is not a past reading of this recorder run; start a fresh cursor");
+    }
     if (!Array.isArray(status.records) || status.records.length > 5 || !seq(status.next) || !seq(status.latest) || !seq(status.lost) || status.next < cursor.record || status.next > status.latest) throw new Error("Invalid recorder page");
-    head ??= status.latest;
+    // The head is the latest the recorder has been seen to hold: a live recorder keeps writing while we page, and a cursor
+    // that reaches an older head is still behind.
+    head = Math.max(head ?? 0, status.latest);
     if (pageNumber === 0 && status.output && options.archive !== false) {
       const archived = replayRecording(status, cursor.record, head!, cursor);
       records.push(...archived.rows); cursor.record = archived.next;
@@ -193,7 +206,8 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   const coverageDelta = { dropped: Math.max(0, counters.dropped - baseline.dropped), invalid: Math.max(0, counters.invalid - baseline.invalid),
     missed_deadlines: Math.max(0, counters.missed_deadlines - baseline.missed_deadlines), file_error: counters.file_error && !baseline.file_error };
   if (coverageDelta.dropped || coverageDelta.invalid || coverageDelta.missed_deadlines || coverageDelta.file_error) gaps.push("source_coverage_incomplete");
-  // Only a fully read interval moves the baseline; while paging, the unread tail may hold the rest of the loss.
+  // Only an established boundary moves the baseline: the cursor has reached the latest the final read showed, so these
+  // counters describe exactly the history read. While paging, the unread tail may hold the rest of the loss.
   cursor.source_counters = recordMore ? baseline : counters;
   // Where the reader stands against real time.
   const behind = recordMore || eventMore;
@@ -201,8 +215,15 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   const backlog = { behind, records_behind: Math.max(0, (status.latest ?? 0) - cursor.record), events_behind: Math.max(0, eventLatest - cursor.event), seconds_behind: secondsBehind };
   const nowDigest = options.digest === false ? undefined : await read(api, "game.digest", { events: 0, sky: false }, options.signal);
   // v.current is the newest V there is; v.latest is the last V of the page just read, which is old while behind.
-  const current = nowDigest?.v !== undefined ? { source: "digest", sample: nowDigest.v }
-    : lastVRow ? { source: "recorder", seq: lastVRow.seq, source_s: lastVRow.source_s, stale: behind, sample: lastVRow.data } : null;
+  // Only the digest proves a sample is current. A recorder sample is always historical, with its own age: the recording
+  // may be stopped, or a long way behind.
+  if (lastVRow) { cursor.last_v_seq = lastVRow.seq; cursor.last_v_source_s = lastVRow.source_s; }
+  const markerSeq = lastVRow?.seq ?? saved?.last_v_seq, markerTime = lastVRow?.source_s ?? saved?.last_v_source_s;
+  const recorderV = lastVRow ? lastVRow.data : cursor.last_v;
+  const current = nowDigest?.v !== undefined ? { source: "digest", stale: false, sample: nowDigest.v }
+    : recorderV ? { source: "recorder", historical: true, stale: true, seq: markerSeq ?? null, source_s: markerTime ?? null,
+      age_s: Number.isFinite(status.source_now_s) && Number.isFinite(markerTime) ? Math.max(0, status.source_now_s - markerTime!) : null,
+      sample_form: lastVRow ? "recorder_row" : "cursor_baseline", note: "A recorder sample, not proven current: the digest says where V is now.", sample: recorderV } : null;
   const unitsBehind = secondsBehind === null ? "an unknown time" : secondsBehind >= 90 ? `about ${Math.round(secondsBehind / 60)} min` : `about ${Math.round(secondsBehind)} s`;
   const summary = behind
     ? `Behind real time by ${backlog.records_behind} records (${unitsBehind}): this page is old. v.current is the newest V; v.latest, v.path and the counts describe the page only. Call again with the returned cursor to catch up.`

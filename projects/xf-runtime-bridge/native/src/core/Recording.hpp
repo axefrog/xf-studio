@@ -35,6 +35,9 @@ public:
     json Read(const json& params, double now, bool acknowledge = true);
     void Tick(double now, uint64_t world, uint64_t connection, bool live, uint64_t tick, const Ops& ops);
     bool Wants(const std::string& channel) const; // atomic fast gate, no game access
+    // Who is recording: "r<run>.w<world>.c<connection>" while an active run wants the channel, else empty. A stop and a
+    // fast restart between two looks always change it, so an observer can drop state that belonged to the old run.
+    std::string Identity(const std::string& channel) const;
     bool Ingress(const std::string& channel, const std::string& payload, double now,
                  uint64_t world, uint64_t connection, uint64_t tick);
 private:
@@ -62,6 +65,7 @@ private:
     std::atomic<uint64_t> m_cancelGeneration{0}, m_startedGeneration{0};
     std::atomic<unsigned> m_eventMask{0};
     std::atomic<uint64_t> m_ingressDropped{0};
+    std::atomic<uint64_t> m_identityRun{0}, m_identityWorld{0}, m_identityConnection{0}; // set by Start; read without the lock
     double m_nextHeartbeat = 0, m_nextUiHeartbeat = 0;
     std::string m_lastUi; // the polled UI snapshot last recorded: unchanged snapshots wait for a heartbeat
     std::filesystem::path m_root, m_output;

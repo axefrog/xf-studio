@@ -32,6 +32,16 @@ bool RecordingWanted(const std::string& channel)
     return false;
 #endif
 }
+std::string RecordingIdentity(const std::string& channel)
+{
+    if (!RecordingWanted(channel)) return {};
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    const auto identity = Recorder().Identity(channel);
+    return identity.empty() ? std::string("supervisor") : identity; // wanted by the supervisor watch alone
+#else
+    return {};
+#endif
+}
 bool RecordingIngress(const std::string& channel, const std::string& payload)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS

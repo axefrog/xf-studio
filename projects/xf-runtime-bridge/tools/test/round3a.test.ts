@@ -53,7 +53,7 @@ test("CET U adapter uses drawn geometry, throttles per surface and reports unava
   const result = runLua(`
     local enabled, count, observed = false, 0, nil
     json = { encode = function(body) observed = body; return '{}' end }
-    Game = { XFBridge_RecordEnabled = function(channel) assert(channel == 'ui'); return enabled end,
+    Game = { XFBridge_RecordIdentity = function(channel) assert(channel == 'ui'); return enabled and 'r1.w1.c1' or '' end,
       XFBridge_Record = function(channel, body) count = count + 1; return true end }
     ImGui = { GetWindowPos = function() return { x = 20, y = 30 } end, GetWindowSize = function() return 100, 80 end }
     local adapter = assert(load(${source}))()

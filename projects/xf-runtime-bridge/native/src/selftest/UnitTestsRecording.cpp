@@ -163,6 +163,17 @@ int RecordingUnitTests()
         bool sawChange = false;
         for (const auto& r : tail["records"]) sawChange |= r["channel"] == "ui" && r["data"]["reason"] == "change" && r["data"]["hud"] == "changed";
         Check(sawChange, "ui: a changed snapshot is recorded at once");
+        // 0.8.17: a stop and a fast restart changes who is recording, so an observer can drop old-run state.
+        const auto firstIdentity = ui.Identity("ui");
+        Check(!firstIdentity.empty() && ui.Identity("v").empty(), "identity: only an active run's wanted channel has one");
+        ui.Stop("test", 1021); ui.Read({{"run", 1}, {"since", ui.Read({{"run", 1}}, 1021)["latest"].get<uint64_t>()}}, 1021);
+        Check(ui.Identity("ui").empty(), "identity: none while stopped");
+        ui.Start({{"channels", {"ui"}}}, 1022, 1, 1, "ui-test");
+        Check(!ui.Identity("ui").empty() && ui.Identity("ui") != firstIdentity, "identity: a restart in the same world is a different run");
+        ui.Stop("test", 1023);
+        ui.Read({{"run", 2}, {"since", ui.Read({{"run", 2}}, 1023)["latest"].get<uint64_t>()}}, 1023);
+        ui.Start({{"channels", {"ui"}}}, 1024, 2, 1, "ui-test");
+        Check(ui.Identity("ui").find(".w2.") != std::string::npos, "identity: carries the world generation");
     }
     // Event ingress uses the same run/ring/cap and source QPC, without resampling each line.
     Service taps;

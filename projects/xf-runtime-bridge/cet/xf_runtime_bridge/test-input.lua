@@ -29,7 +29,7 @@ end
 -- A record is written only when the surface's observed state changes (reason "change"), plus a low-rate
 -- heartbeat per surface (reason "heartbeat") that proves the observer is still looking. An unchanged surface is
 -- not re-recorded at the 10 Hz look rate: that flooded the recorder (about 20 records/s) and put catch-up behind.
-local elapsed, last, lastSignature, lastEmitted = 0, {}, {}, {}
+local elapsed, last, lastSignature, lastEmitted, lastRun = 0, {}, {}, {}, {}
 local HEARTBEAT_S = 2.0
 function adapter.advance(dt) elapsed = elapsed + math.max(0, dt or 0) end
 -- A canonical, order-independent signature of an observed body (sorted keys, rounded numbers).
@@ -49,12 +49,14 @@ end
 function adapter.ui(surface, body)
   if surface ~= "cet_line" and surface ~= "cet_window" then return end
   if last[surface] and elapsed - last[surface] < 0.1 then return end
-  local ok, enabled = pcall(function() return Game.XFBridge_RecordEnabled("ui") end)
-  if not ok or not enabled then
-    -- Recorder off: the next run starts from a fresh baseline instead of waiting for a heartbeat.
-    lastSignature[surface], lastEmitted[surface] = nil, nil
+  -- The native answers who is recording ("" when nothing is). A stop and a fast restart between two looks changes it,
+  -- so any change of run or world starts this surface from a fresh baseline instead of waiting for a heartbeat.
+  local ok, run = pcall(function() return Game.XFBridge_RecordIdentity("ui") end)
+  if not ok or type(run) ~= "string" or run == "" then
+    lastSignature[surface], lastEmitted[surface], lastRun[surface] = nil, nil, nil
     return
   end
+  if run ~= lastRun[surface] then lastSignature[surface], lastEmitted[surface], lastRun[surface] = nil, nil, run end
   last[surface] = elapsed
   local current = signature(body)
   local reason

@@ -94,6 +94,15 @@ export class EventCaptures {
         await this.clock.sleep(Math.max(0, Math.min(due - this.clock.now(), arm.until - this.clock.now())), arm.stop.signal);
         if (this.active !== arm || arm.stop.signal.aborted) return;
         if (this.clock.now() >= arm.until) { this.cancel("expired"); return; }
+        // The source-timed delay is time the recorder can stop, restart, change world or lose data in. Look again at the
+        // interval after this page, without consuming it, immediately before the capture.
+        const recheck = await this.api.run("game.catchup", { cursor: structuredClone(arm.cursor), detail: true, now: false, replay_files: false }, { signal: arm.stop.signal });
+        if (this.active !== arm || arm.stop.signal.aborted) return;
+        if (!recheck.ok) throw new Error(recheck.error.message);
+        const after = recheck.result as Json;
+        if (!after.source.active) { this.cancel("recorder_stopped"); return; }
+        const lost = this.lossSinceArm(arm, after);
+        if (lost.length) throw new Error(`Timeline coverage gap before the capture: ${lost.join(", ")}`);
         const began = this.clock.now();
         const args = { ...(arm.input.capture === "recrop" ? {} : { clear_overlay: false }), ...arm.input.args };
         // Serialised with every other command on the existing API/connection. No second bridge client.
