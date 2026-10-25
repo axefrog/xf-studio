@@ -1,0 +1,136 @@
+{
+  "schema": 2,
+  "bcnSha256": "1161507a1452baeb96634db961d6ee2a1d6dc526e911fbb0ef5bff1bf949ed08",
+  "fixtureSha256": "8591c115d59915a4747f2586e874696d2108c842759942b4a9c1c02f4bfe4089",
+  "gameExecutableSha256": "a7de82945c03e041fc7339fcf9066224d98db2f5d80fea50f7947bb350a60991",
+  "oodleSha256": "4f73be5d986b2b11e04fc29ebe478cd38c03d4d3e51da7de5f7d705ea0968eff",
+  "roundtripEqual": false,
+  "roundtripUnpackedEqual": false,
+  "sections": {
+    "buildManifests": {
+      "count": 1,
+      "jsonBytes": 5590,
+      "sha256": "5e285584cba92b3f80bb1e15999147e8e6c2fe79a76fdb61eb298de1c596342f"
+    },
+    "buildMembers": {
+      "count": 16,
+      "jsonBytes": 4230,
+      "sha256": "1a189c875d232578a539cf68fd5daf6f5b09ab8f72d21dd057a763cf00c7ef47"
+    },
+    "earlierEmptyCacheTrialSeconds": {
+      "count": 1,
+      "jsonBytes": 4,
+      "sha256": "a73eb0b28b640cc004418290253ec0a8d88aa7c923bdcd9f4a736e260b161612"
+    },
+    "environment": {
+      "count": 8,
+      "jsonBytes": 260,
+      "sha256": "2400b469cac25f8fa7278be589a1176e8df2271a59e7e01e7301f575aa91722f"
+    },
+    "failures": {
+      "count": 3,
+      "jsonBytes": 225,
+      "sha256": "7f3a9215cbd5b209e0e4d4d673cd1341ae18fa76bc1e716cfd41577494db8237"
+    },
+    "historicalPlateInputs": {
+      "count": 2,
+      "jsonBytes": 253,
+      "sha256": "e57bebd5d65127623d3463981eba9086b2357af965abfe2b79c2faf8f076aee3"
+    },
+    "nativeWriterFiles": {
+      "count": 16,
+      "jsonBytes": 2326,
+      "sha256": "c5b567c39577243f8474c03a5390df1f1a10d8a5fb6262a4cb76a9c94004dd9e"
+    },
+    "plateManifests": {
+      "count": 1,
+      "jsonBytes": 3494,
+      "sha256": "82a227f1996ed31efe0605d85abcfadf04d669dcc0c008f9ecebe6e5f28036e1"
+    },
+    "preparedFiles": {
+      "count": 17,
+      "jsonBytes": 2998,
+      "sha256": "9efde6bf6e6cb43189b8528ff79d7372ce286e2ed94d7006728a937787beebcf"
+    },
+    "preparedManifests": {
+      "count": 1,
+      "jsonBytes": 5330,
+      "sha256": "3d7a894cce19977b7c77782c9f7fa189269e123fc842b47453dfbe38847c1f77"
+    },
+    "provenance": {
+      "count": 4,
+      "jsonBytes": 67915,
+      "sha256": "8905f3a136c07759a02dea647574cc35a8dbdf02655264e3ca0f07d3e2b458c1"
+    },
+    "roundtripChanges": {
+      "count": 2,
+      "jsonBytes": 1037,
+      "sha256": "b4411e576443433e8afb373c38c043db3d2057aad0031bfa479db79ad725c7fc"
+    },
+    "roundtripJsonChanges": {
+      "count": 15,
+      "jsonBytes": 84005,
+      "sha256": "878b2a4c8ea034081a926bf4e4ea5a91c38924759ff7d6eead94f686aa776bb0"
+    },
+    "steps": {
+      "count": 20,
+      "jsonBytes": 848,
+      "sha256": "75a2d1e812154767003bccd3419a6dbe010c2660c7dc2b5175e94d3f49e87127"
+    },
+    "storedBinaryChanges": {
+      "count": 2,
+      "jsonBytes": 2626,
+      "sha256": "49f209616c7e28a14e416059a063943f24abf434230e74d0bb1b4a5f8505dd51"
+    },
+    "tools": {
+      "count": 2,
+      "jsonBytes": 1124,
+      "sha256": "354a81f5d411e1669fe505f0e93f7ae47d613216a4ae7b049ccc005fa1abdc82"
+    },
+    "validation": {
+      "count": 6,
+      "jsonBytes": 303,
+      "sha256": "b9f6df68848252138fccf176876d5cda8e6366ec7809c3bfbaaa4db064a09934"
+    },
+    "wk10Members": {
+      "count": 16,
+      "jsonBytes": 3582,
+      "sha256": "b8aab6b08126c180e534f78b7ab3b3e92940b453189e64917403184916bedd98"
+    },
+    "wk10Unpacked": {
+      "count": 16,
+      "jsonBytes": 3582,
+      "sha256": "b8aab6b08126c180e534f78b7ab3b3e92940b453189e64917403184916bedd98"
+    },
+    "wk9Members": {
+      "count": 16,
+      "jsonBytes": 3582,
+      "sha256": "918c94884e7f4146aadbfdd97bc6a107b9bab512762c44309dc4aa1f0334eac2"
+    },
+    "wk9Unpacked": {
+      "count": 16,
+      "jsonBytes": 3582,
+      "sha256": "918c94884e7f4146aadbfdd97bc6a107b9bab512762c44309dc4aa1f0334eac2"
+    },
+    "writerCompression": {
+      "count": 17,
+      "jsonBytes": 3436,
+      "sha256": "741b815150e32e355edc5d9b2f0e11c572d1683c818dab9fa8c0a51cdf38e54a"
+    },
+    "writerOracleInputs": {
+      "count": 32,
+      "jsonBytes": 6770,
+      "sha256": "c4c8d01726c0bd14f10db8231e5159e8bf67e6d4a3a4fabf543ca8f920ae7918"
+    },
+    "writerResources": {
+      "count": 16,
+      "jsonBytes": 5781,
+      "sha256": "250b3b66e0c23a9d2e2d2b441e195ca6603cdd75a4856ac261d2e1430c79a25e"
+    },
+    "writerSemanticComparison": {
+      "count": 16,
+      "jsonBytes": 2663,
+      "sha256": "3d85a5e171cd03193711cbcdaa9e76c6ca4bba3640609c9d0d204c2724b6874b"
+    }
+  }
+}

@@ -79,7 +79,7 @@ def handle(data): return {'HandleId':str(next(handles)),'Data':data}
 run('bake',[BUN,BAKE,args.collection.resolve(),OUT/'baked'])
 plan=load(OUT/'baked/plan.json');compiled=load(OUT/'baked/compiled.json')
 # The mod's selector label comes from the Studio's mod-branding module through the plan.
-if not isinstance(plan.get('selectorLabel'),str) or not plan['selectorLabel'].startswith('XF '):
+if not isinstance(plan.get('selectorLabel'),str) or not re.match(r'^XF(?:\s|$)',plan['selectorLabel']):
     raise ValueError('Export plan lacks an XF-branded selectorLabel; rebake with the current Studio.')
 depot=plan['depot'];archive=OUT/'archive';modeldir=archive/Path(plan['mesh']).parent
 appdir=archive/Path(plan['app']).parent;texturedir=archive/depot/'textures'

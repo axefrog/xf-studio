@@ -381,7 +381,7 @@ describe("T1: seeded random runs against an independent model", () => {
         invariants(s);
       }
     }
-  });
+  }, 20_000); // 40 seeded runs: about 3 s alone, past 5 s while the full suite shares the machine.
 });
 
 describe("the phase's gates", () => {
