@@ -227,6 +227,7 @@ struct Renderer
     xfb::overlay::Settle statusSettle;
     float statusRowHeight = 0.0f; // the status row's height last frame (the settle wash is drawn before the row)
     UINT fontHeight = 0;         // the back buffer height the fonts were baked for (RB-108: rebuilt after a resize)
+    uint32_t themeGeneration = 0; // 0.8.22: the host's theme generation the style was built for (overlay.set restyles)
     bool uploadsAllowed = false; // RB-99: a font texture upload is expected (the first frame, the frame after a rebuild)
     std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
@@ -499,6 +500,16 @@ void LoadStyle(float aScale)
     m.tracking = 0.1f;               // a tracked label's gap, in em
 }
 
+// 0.8.22: ImGui's style and the panel's colours for the host's theme now, at aScale; the fonts stay as baked. BuildFonts calls it,
+// and so does the frame after overlay.set changes the theme (the generation is read first, so a change while this runs restyles again).
+void Restyle(float aScale)
+{
+    gR.themeGeneration = gHost->ThemeGeneration();
+    ApplyTheme(gHost->Theme(), aScale);
+    LoadStyle(aScale);
+    ImGui::GetStyle().FontSizeBase = gR.fonts.body ? gR.fonts.body->LegacySize : 13.0f * aScale;
+}
+
 // RB-99, RB-108: the fonts at the current height's scale, every glyph baked now (the atlas is never grown while drawing, and
 // never per frame), and the theme at the same scale. 0.8.22: one font per type role, five in all (title and eyebrow in the
 // display face, body and label in the UI face, value in the mono face), sized by the Studio's scale. The next frame uploads the
@@ -525,9 +536,7 @@ void BuildFonts()
     gR.fonts.value = roleFont("value", "mono", 12.0f);
     io.FontDefault = gR.fonts.body;
     ImFontAtlasBuildMain(io.Fonts);
-    ApplyTheme(gHost->Theme(), scale);
-    LoadStyle(scale);
-    ImGui::GetStyle().FontSizeBase = gR.fonts.body ? gR.fonts.body->LegacySize : 13.0f * scale;
+    Restyle(scale);
     if (!weights.empty())
     {
         // 0.8.22: the Studio sets the title and eyebrow roles at weight 600 (Bahnschrift SemiBold). The display face on Windows is one
@@ -1224,6 +1233,10 @@ void DrawFrame()
     if (gR.height != gR.fontHeight)
     {
         BuildFonts(); // RB-108: the new size's fonts, between frames (the atlas is unlocked here)
+    }
+    else if (gR.themeGeneration != gHost->ThemeGeneration())
+    {
+        Restyle(static_cast<float>(gR.height) / 1080.0f * gHost->Scale()); // 0.8.22: overlay.set changed the theme
     }
     auto& io = ImGui::GetIO();
     io.DisplaySize = ImVec2(static_cast<float>(gR.width), static_cast<float>(gR.height));

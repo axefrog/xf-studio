@@ -511,6 +511,11 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                               out["simulated"] = true;
                               return out;
                           }});
+    aDispatcher.Register({"overlay.set", Access::Notify, RunOn::BridgeThread, "Sets the overlay's settings live (simulated renderer).", [](const MethodContext& aContext) {
+                              auto out = xfb::overlay::SetLive(state.overlay, aContext.params);
+                              out["simulated"] = true;
+                              return out;
+                          }});
     aDispatcher.Register({"overlay.hide", Access::Notify, RunOn::BridgeThread, "Hides the overlay for a capture (simulated).", [](const MethodContext& aContext) {
                               params::RequireOnly(aContext.params, {"hidden", "ms"});
                               const auto hidden = params::CheckBoolean(aContext.params, "hidden").value_or(true);

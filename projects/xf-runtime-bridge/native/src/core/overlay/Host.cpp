@@ -1,5 +1,7 @@
 #include "core/overlay/Host.hpp"
 #include "core/LayoutGuard.hpp"
+#include "core/Dispatcher.hpp"
+#include "core/Params.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -227,7 +229,7 @@ void OverlayHost::Configure(bool aEnabled, ThemeKind aTheme, uint32_t aScalePerc
 {
     std::scoped_lock _(m_mutex);
     m_enabled.store(aEnabled);
-    m_theme = aTheme;
+    SetTheme(aTheme);
     m_scalePercent = std::clamp<uint32_t>(aScalePercent, 50, 300);
     m_phase.store(aEnabled ? Phase::Unhooked : Phase::Disabled);
 }
@@ -327,7 +329,7 @@ bool OverlayHost::OffForFrameGeneration() const
 
 bool OverlayHost::ShouldDraw(std::chrono::steady_clock::time_point aNow) const
 {
-    return m_enabled.load() && !m_passThrough.load() && m_phase.load() == Phase::Drawing && !m_killed.load() && !m_cetOpen.load() &&
+    return EnabledNow() && !m_passThrough.load() && m_phase.load() == Phase::Drawing && !m_killed.load() && !m_cetOpen.load() &&
            !HiddenForCapture(aNow);
 }
 
@@ -346,11 +348,14 @@ json OverlayHost::Snapshot(std::chrono::steady_clock::time_point aNow) const
 {
     std::scoped_lock _(m_mutex);
     const auto phase = m_phase.load();
-    json out{{"enabled", m_enabled.load()},
+    json out{{"enabled", EnabledNow()},
+             {"enabled_at_load", m_enabled.load()},
+             {"switched_off", m_switchedOff.load()},
+             {"diagnostics", m_diagnostics.load()},
              {"phase", PhaseName(phase)},
              {"drawing_now", ShouldDraw(aNow)},
              {"hooks", {{"present", m_hookPresent}, {"resize", m_hookResize}, {"render_shutdown", m_hookShutdown}}},
-             {"theme", ThemeName(m_theme)},
+             {"theme", ThemeName(Theme())},
              {"scale_percent", m_scalePercent},
              {"frames", m_frames.load()},
              {"cpu_ms", std::round(m_cpuMicros.load()) / 1000.0},
@@ -393,6 +398,10 @@ json OverlayHost::Snapshot(std::chrono::steady_clock::time_point aNow) const
     {
         out["why"] = "[overlay] enabled = false in config.ini (the test packages turn it on)";
     }
+    else if (m_switchedOff.load())
+    {
+        out["why"] = "switched off live (overlay.set {enabled: false}); overlay.set {enabled: true} draws again";
+    }
     return out;
 }
 
@@ -423,5 +432,73 @@ bool DescriptorFreeList::Free(int32_t aSlot)
     m_used[static_cast<size_t>(aSlot)] = false;
     --m_inUse;
     return true;
+}
+
+json SetLive(OverlayHost& aHost, const json& aParams)
+{
+    params::RequireOnly(aParams, {"theme", "motion", "diagnostics", "enabled"});
+    const auto theme = params::CheckText(aParams, "theme", 8);
+    const auto motion = params::CheckText(aParams, "motion", 8);
+    const auto diagnostics = params::CheckBoolean(aParams, "diagnostics");
+    const auto enabled = params::CheckBoolean(aParams, "enabled");
+    if (!theme && !motion && !diagnostics && !enabled)
+    {
+        params::CheckFail("give at least one of theme, motion, diagnostics or enabled");
+    }
+    if (theme && *theme != "dark" && *theme != "light")
+    {
+        params::CheckFail("'theme' is dark or light");
+    }
+    MotionSetting motionSetting = MotionSetting::Auto;
+    if (motion && !MotionSettingFromName(*motion, motionSetting))
+    {
+        params::CheckFail("'motion' is auto, reduced or full");
+    }
+    if (enabled && *enabled && !aHost.Enabled())
+    {
+        // The host's rule since 0.7 (RB-107): its detours on GpuApi::Present, the back-buffer resize and the render shutdown attach
+        // at load only and never detach, so a profile with the overlay off never patches the render path. RED4ext's hooking could
+        // attach later (its transaction suspends the other threads), but patching Present live, beside CET's own hook on it, is
+        // untested; until a session tests it, switching on stays a restart.
+        throw MethodError("needs_restart", "the XF overlay was off at load ([overlay] enabled = false), and its hooks attach only at load: set enabled = true "
+                                           "in config.ini and restart the game; after that, overlay.set {enabled: false/true} switches it live");
+    }
+    const json previous{{"theme", ThemeName(aHost.Theme())},
+                        {"motion", MotionSettingName(aHost.MotionSettingNow())},
+                        {"diagnostics", aHost.Diagnostics()},
+                        {"enabled", aHost.EnabledNow()}};
+    json undo = json::object();
+    if (theme)
+    {
+        undo["theme"] = previous["theme"];
+        aHost.SetTheme(ThemeFromName(*theme));
+    }
+    if (motion)
+    {
+        undo["motion"] = previous["motion"];
+        aHost.SetMotion(motionSetting);
+    }
+    if (diagnostics)
+    {
+        undo["diagnostics"] = previous["diagnostics"];
+        aHost.SetDiagnostics(*diagnostics);
+    }
+    if (enabled)
+    {
+        undo["enabled"] = previous["enabled"];
+        if (aHost.Enabled()) aHost.SetSwitchedOff(!*enabled);
+    }
+    const auto effective = aHost.Motion();
+    return json{{"theme", ThemeName(aHost.Theme())},
+                {"motion", {{"setting", MotionSettingName(aHost.MotionSettingNow())}, {"effective", effective.effective}, {"reason", effective.reason}}},
+                {"diagnostics", aHost.Diagnostics()},
+                {"enabled", aHost.EnabledNow()},
+                {"enabled_at_load", aHost.Enabled()},
+                {"previous", previous},
+                {"in_memory", true},
+                {"config_ini", "unchanged: a restart goes back to config.ini's [overlay] values"},
+                {"repaint", "the XF box restyles before its next frame; the CET window and line take the theme with their next info refresh "
+                            "(about 2 s); the ink panel uses the game's own colours and is not themed"},
+                {"undo", {{"method", "overlay.set"}, {"params", undo}}}};
 }
 } // namespace xfb::overlay

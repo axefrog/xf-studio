@@ -146,10 +146,11 @@ nlohmann::json InfoJson()
         {"script_layer", state.scriptLayer.Describe()},
         {"rearm_pending", state.rearmRequested.load()},
         // 0.7: the overlay host's switches (the CET window takes its theme from here) and the answer keys.
-        {"overlay", {{"enabled", state.config.overlayEnabled}, {"theme", state.config.overlayTheme}, {"phase", xfb::overlay::PhaseName(state.overlayHost.CurrentPhase())},
+        // 0.8.22: the values in force (overlay.set changes them live; config.ini's are the ones at load).
+        {"overlay", {{"enabled", state.overlayHost.EnabledNow()}, {"theme", xfb::overlay::ThemeName(state.overlayHost.Theme())}, {"phase", xfb::overlay::PhaseName(state.overlayHost.CurrentPhase())},
                      // 0.8 (the UI review): the CET label says so when frame generation keeps the overlay off.
                      {"off_for_frame_generation", state.overlayHost.OffForFrameGeneration()},
-                     {"diagnostics", state.config.overlayDiagnostics},
+                     {"diagnostics", state.overlayHost.Diagnostics()},
                      // 0.8.22 (the Studio's in-game motion rule): the effective motion, "full" or "reduced" ([overlay] motion, Windows'
                      // animation-effects setting read now, and frame generation), with the setting and the reason.
                      {"motion", MotionNow(state).effective},

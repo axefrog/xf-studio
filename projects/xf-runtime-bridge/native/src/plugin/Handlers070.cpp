@@ -314,6 +314,16 @@ json OverlayState(const MethodContext& aContext)
     return Get().overlayHost.Snapshot();
 }
 
+// 0.8.22: the [overlay] theme, motion, diagnostics and drawing on or off, live and in memory (core/overlay/Host.hpp SetLive).
+json OverlaySet(const MethodContext& aContext)
+{
+    auto out = xfb::overlay::SetLive(Get().overlayHost, aContext.params);
+    log::Info("overlay.set", "theme=" + out.value("theme", std::string()) + " motion=" + out["motion"].value("setting", std::string()) +
+                                 " diagnostics=" + (out.value("diagnostics", false) ? "true" : "false") + " enabled=" + (out.value("enabled", false) ? "true" : "false"),
+              aContext.cid);
+    return out;
+}
+
 json OverlayHide(const MethodContext& aContext)
 {
     params::RequireOnly(aContext.params, {"hidden", "ms"});
@@ -340,5 +350,6 @@ void RegisterMethods070(Dispatcher& aDispatcher)
     aDispatcher.Register(MarkedWrite("photo.scene.set", Access::WritePhoto, RunOn::GameThread, "Photo mode's surrounding NPCs, weather and game speed rows.", &PhotoScene));
     aDispatcher.Register({"overlay.state", Access::Read, RunOn::BridgeThread, "The XF overlay host's state.", &OverlayState});
     aDispatcher.Register({"overlay.hide", Access::Notify, RunOn::BridgeThread, "Hides the XF overlay for a capture.", &OverlayHide});
+    aDispatcher.Register({"overlay.set", Access::Notify, RunOn::BridgeThread, "Sets the XF overlay's theme, motion, diagnostics and drawing live (in memory).", &OverlaySet});
 }
 } // namespace xfb::plugin

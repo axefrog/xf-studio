@@ -290,4 +290,19 @@ export const COMMANDS_070: CommandDef[] = [
     input: obj({}),
     bridge: { method: "overlay.state" },
   },
+  {
+    name: "overlay.set",
+    title: "Set the XF overlay's look live",
+    description:
+      "0.8.22: applies the bridge's [overlay] settings without a restart, in memory (config.ini is not rewritten; a restart goes back to it): theme (dark or light: the XF box restyles before its next frame, the CET window and line take it with their next info refresh, about 2 s; the ink panel uses the game's own colours), motion (auto, reduced or full), diagnostics (the XF box's diagnostics card) and enabled (drawing on or off). enabled works live only when the overlay was on at load; switching on one that was off at load is refused with needs_restart, because its hooks attach only at load. Give at least one. The answer has the values now (with the effective motion), the earlier ones and an undo that puts back exactly the keys given; overlay_state and bridge_info show the values in force.",
+    permission: "notify",
+    input: obj({
+      theme: oneOf("The theme.", ["dark", "light"]),
+      motion: oneOf("The motion setting.", ["auto", "reduced", "full"]),
+      diagnostics: bool("Show the XF box's diagnostics card."),
+      enabled: bool("Draw the XF box (live only if the overlay was on at load)."),
+    }),
+    undo: "The result's undo (overlay_set with the earlier values); a restart goes back to config.ini.",
+    bridge: { method: "overlay.set" },
+  },
 ];

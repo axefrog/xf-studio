@@ -3354,6 +3354,34 @@ void Bridge070Tests()
             off.SetCetOpen(false);
             Check("0.8.22 overlay: cet_open is null until reported, then follows CET with the host disabled",
                   unknown && open && off.Snapshot()["cet_open"] == false);
+            // overlay.set on a host off at load: theme, motion and diagnostics apply; switching on needs a restart.
+            const auto applied = o::SetLive(off, json{{"theme", "light"}, {"motion", "reduced"}, {"diagnostics", true}});
+            const auto restart = ParamsCode([&] { o::SetLive(off, json{{"enabled", true}}); });
+            Check("0.8.22 overlay.set: live in memory with an undo of exactly the keys given; enabled needs a restart when off at load",
+                  applied["theme"] == "light" && off.Theme() == o::ThemeKind::Light && off.Diagnostics() && applied["motion"]["setting"] == "reduced" &&
+                      applied["motion"]["effective"] == "reduced" && applied["in_memory"] == true &&
+                      applied["undo"]["params"] == json{{"theme", "dark"}, {"motion", "auto"}, {"diagnostics", false}} && restart == "needs_restart" &&
+                      off.Snapshot()["theme"] == "light" && off.Snapshot()["diagnostics"] == true,
+                  applied.dump());
+            const auto generation = off.ThemeGeneration();
+            o::SetLive(off, applied["undo"]["params"]);
+            o::SetLive(off, json{{"theme", "dark"}}); // the same theme again: no restyle
+            Check("0.8.22 overlay.set: the undo puts the values back and bumps the theme generation once; bad values are refused",
+                  off.Theme() == o::ThemeKind::Dark && !off.Diagnostics() && off.MotionSettingNow() == o::MotionSetting::Auto && off.ThemeGeneration() == generation + 1 &&
+                      ParamsCode([&] { o::SetLive(off, json{{"theme", "blue"}}); }) == "bad_params" && ParamsCode([&] { o::SetLive(off, json::object()); }) == "bad_params" &&
+                      ParamsCode([&] { o::SetLive(off, json{{"motion", "fast"}}); }) == "bad_params" && ParamsCode([&] { o::SetLive(off, json{{"scale", 2}}); }) == "bad_params");
+        }
+        {
+            // overlay.set on a host enabled at load: drawing switches off and back on live, the hooks staying.
+            o::OverlayHost on;
+            on.Configure(true, o::ThemeKind::Dark, 100);
+            on.NoteHooks(true, true, true, "");
+            on.NoteInit(facts, "");
+            const auto offNow = o::SetLive(on, json{{"enabled", false}});
+            const bool stopped = !on.ShouldDraw() && !on.CanShowPanel() && on.Snapshot()["enabled"] == false && on.Snapshot()["enabled_at_load"] == true && on.Enabled();
+            o::SetLive(on, offNow["undo"]["params"]);
+            Check("0.8.22 overlay.set: enabled false stops drawing with the hooks kept; its undo draws again", stopped && on.ShouldDraw() && on.Snapshot()["enabled"] == true,
+                  offNow.dump());
         }
         host.Configure(true, o::ThemeKind::Dark, 100);
         host.NoteHooks(true, true, true, "");

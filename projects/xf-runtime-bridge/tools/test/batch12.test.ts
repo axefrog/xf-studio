@@ -170,6 +170,17 @@ describe("0.7 against the self-test host", () => {
     expect((await ok(api, "overlay.state", {})).drawing_now).toBe(true);
   });
 
+  test("0.8.22 overlay.set: theme, motion, diagnostics and drawing live, in memory, with an undo; overlay.state shows the values in force", async () => {
+    const set = await ok(api, "overlay.set", { theme: "light", motion: "full", diagnostics: true, enabled: false });
+    expect(set).toMatchObject({ theme: "light", diagnostics: true, enabled: false, enabled_at_load: true, in_memory: true,
+      previous: { theme: "dark", enabled: true }, undo: { method: "overlay.set" } });
+    expect(set.motion.setting).toBe("full");
+    expect(await ok(api, "overlay.state", {})).toMatchObject({ theme: "light", diagnostics: true, enabled: false, switched_off: true, drawing_now: false });
+    expect((await api.callBridge("overlay.set", { theme: "blue" }, "t-bad")).ok).toBe(false);
+    await ok(api, set.undo.method, set.undo.params);
+    expect(await ok(api, "overlay.state", {})).toMatchObject({ theme: "dark", enabled: true, switched_off: false, drawing_now: true });
+  });
+
   test("photo.scene.set: NPCs off by label, the game speed, the undo; refused outside photo mode", async () => {
     await phase(api, "gameplay");
     expect(await refused(api, "photo.scene.set", { game_speed: 0.5 })).toBe("not_in_photo_mode");

@@ -10,6 +10,7 @@ export type PlainError = { code: string; message: string; detail?: string; cause
 
 /** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
+  needs_restart: "The XF overlay was off when the game started, and it can only be switched on at start. Set [overlay] enabled = true in the bridge's config.ini and restart the game; after that it switches on and off live.",
   permission_denied: "The caller did not allow every capability this policy needs. Grant the required classes explicitly or choose a narrower policy; nothing was started.",
   actor_unavailable: "This supervisor supports V and the bridge's own XF actors (a1, a2, ...). Picked passers-by and spawned objects need their own validated actor adapter.",
   supervisor_unavailable: "Supervision needs an observed, living actor (V, with an available input listener, or an XF actor that has appeared) in unpaused gameplay. Read the game state before arming again.",

@@ -338,7 +338,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             const auto status = inkui::Summarize(BridgeViewNow());
             panel.tone = status.tone;
             panel.bridgeStatus = status.text;
-            panel.diagnostics = state.config.overlayDiagnostics;
+            panel.diagnostics = state.overlayHost.Diagnostics();
             panel.show = surface == inkui::StatusSurface::XfBox;
             {
                 // 0.8.4 (the UI review's fix 4): the XF box stands where the ink panel does.
@@ -555,6 +555,7 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     live::ResolveAddresses(); // the live-pose commands' own engine addresses (refused for the session if missing)
     // 0.7: the XF overlay host (off unless [overlay] enabled; its hooks attach only then, and never detach at run time).
     state.overlayHost.Configure(state.config.overlayEnabled, xfb::overlay::ThemeFromName(state.config.overlayTheme), state.config.overlayScalePercent);
+    state.overlayHost.SetDiagnostics(state.config.overlayDiagnostics); // 0.8.22: overlay.set changes it (and the theme, motion) live
     {
         // 0.8.22: [overlay] motion, and Windows' own animation-effects setting now (it is read again with each info refresh).
         xfb::overlay::MotionSetting motion = xfb::overlay::MotionSetting::Auto;

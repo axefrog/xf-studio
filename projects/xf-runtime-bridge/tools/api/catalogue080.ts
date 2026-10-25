@@ -236,6 +236,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "game.saves": ["unavailable", "game_not_ready"],
   "photo.scene.set": ["not_in_photo_mode", "unavailable", "write_mismatch"],
   "overlay.state": [],
+  "overlay.set": ["needs_restart"],
   // NPC direction (0.8, part B): its own map, kept beside its commands (catalogue080npc.ts).
   ...NPC_REFUSALS,
   // The live-direction toolkit (0.8.12): its own map, kept beside its commands (catalogue080dm.ts).

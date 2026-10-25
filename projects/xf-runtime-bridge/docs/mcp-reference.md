@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 156 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 157 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -24,7 +24,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [NPC direction](#npc-direction) (17)
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
-- [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
+- [Overlay and in-game UI](#overlay-and-in-game-ui) (4)
 - [Other tools](#other-tools) (13)
 - [Refusal codes](#refusal-codes)
 
@@ -35,7 +35,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
 | `read` | Look | 57 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
-| `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
+| `notify` | Show messages in the game | 4 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-character` | Change V's appearance | 5 | Yes | Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile). | `allow_writes = true` and `character` in `allow_write_classes` (on by default once writes are allowed); opening, confirming and leaving the appearance screen also need `allow_creator_leave = true`. |
@@ -2881,6 +2881,23 @@ No parameters.
 
 No parameters.
 
+### `overlay_set`
+
+**Set the XF overlay's look live.** 0.8.22: applies the bridge's [overlay] settings without a restart, in memory (config.ini is not rewritten; a restart goes back to it): theme (dark or light: the XF box restyles before its next frame, the CET window and line take it with their next info refresh, about 2 s; the ink panel uses the game's own colours), motion (auto, reduced or full), diagnostics (the XF box's diagnostics card) and enabled (drawing on or off). enabled works live only when the overlay was on at load; switching on one that was off at load is refused with needs_restart, because its hooks attach only at load. Give at least one. The answer has the values now (with the effective motion), the earlier ones and an undo that puts back exactly the keys given; overlay_state and bridge_info show the values in force.
+
+- **Command:** `overlay.set`, the bridge method `overlay.set`
+- **Permission:** Show messages in the game (`notify`)
+- **Changes the game:** No: it shows or moves the bridge's own messages and panel
+- **Undo:** The result's undo (overlay_set with the earlier values); a restart goes back to config.ini.
+- **Refusals:** [`needs_restart`](#refusal-needs-restart)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `theme` | string | `dark`, `light` | The theme. |
+| `motion` | string | `auto`, `reduced`, `full` | The motion setting. |
+| `diagnostics` | boolean | `true`, `false` | Show the XF box's diagnostics card. |
+| `enabled` | boolean | `true`, `false` | Draw the XF box (live only if the overlay was on at load). |
+
 ## Other tools
 
 Tools not yet sorted into an area above.
@@ -3226,6 +3243,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-live-pose-disabled"></a>`live_pose_disabled` | Writing the live-pose carrier is switched off in this bridge's config.ini (allow_live_pose; only the XF test profile's -writes build allows it). Nothing was changed. |
 | <a id="refusal-live-pose-unavailable"></a>`live_pose_unavailable` | The live-pose commands can't run on this game version (an engine address they need is missing from RED4ext's address library), so nothing was read or changed. |
 | <a id="refusal-metadata-pending"></a>`metadata_pending` | The game hadn't sent that save's details yet, so nothing was loaded. Try again in a moment. |
+| <a id="refusal-needs-restart"></a>`needs_restart` | The XF overlay was off when the game started, and it can only be switched on at start. Set [overlay] enabled = true in the bridge's config.ini and restart the game; after that it switches on and off live. |
 | <a id="refusal-no-active-outfit"></a>`no_active_outfit` | V isn't wearing a wardrobe outfit, so what is equipped already shows. Nothing was changed. Use inventory_equip, or wardrobe_equip with set to put an outfit on first. |
 | <a id="refusal-no-bridge"></a>`no_bridge` | The game bridge isn't running. Start the game from the XF test profile (with XF Runtime Bridge enabled) and wait for the main menu; the bridge opens its connection when the game starts. When the connection disappears mid-session: The game bridge's connection is gone: the game has probably closed or crashed. Start it again from the XF test profile. |
 | <a id="refusal-no-district"></a>`no_district` | The game hasn't told its district system where V is yet. It does so when V crosses an area border, so a moment after a load, or once V moves, it will. |

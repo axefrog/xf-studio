@@ -124,8 +124,23 @@ class OverlayHost
 {
 public:
     void Configure(bool aEnabled, ThemeKind aTheme, uint32_t aScalePercent);
+    // Whether the host was enabled at load ([overlay] enabled): its hooks attach only then and never detach, so this never changes.
     bool Enabled() const { return m_enabled.load(); }
-    ThemeKind Theme() const { return m_theme; }
+    ThemeKind Theme() const { return static_cast<ThemeKind>(m_theme.load()); }
+    // 0.8.22 (overlay.set): the theme, the diagnostics lines and drawing on or off change live. A new theme bumps the generation,
+    // and the render thread restyles (ImGui's style and the panel's colours, not the fonts) before its next frame.
+    void SetTheme(ThemeKind aTheme)
+    {
+        if (m_theme.exchange(static_cast<int>(aTheme)) != static_cast<int>(aTheme)) m_themeGeneration.fetch_add(1);
+    }
+    uint32_t ThemeGeneration() const { return m_themeGeneration.load(); }
+    void SetDiagnostics(bool aOn) { m_diagnostics.store(aOn); }
+    bool Diagnostics() const { return m_diagnostics.load(); }
+    // Drawing switched off live (the hooks stay; the detour passes through as when the panel isn't the status surface). Only a
+    // host enabled at load can draw at all: switching on one that wasn't needs [overlay] enabled = true and a restart.
+    void SetSwitchedOff(bool aOff) { m_switchedOff.store(aOff); }
+    bool SwitchedOff() const { return m_switchedOff.load(); }
+    bool EnabledNow() const { return m_enabled.load() && !m_switchedOff.load(); }
     float Scale() const { return static_cast<float>(m_scalePercent) / 100.0f; }
 
     // Load time: which hooks attached and which addresses were missing. Drawing needs all three: present, resize and the
@@ -165,7 +180,7 @@ public:
     // 0.8.2: whether the panel can be the status surface: drawing (hooked, not refused or failed) and not stopped by the kill
     // switch. A capture's hide and yielding to CET's overlay don't count: they are moments, and the CET line must not
     // take over during a capture.
-    bool CanShowPanel() const { return m_enabled.load() && m_phase.load() == Phase::Drawing && !m_killed.load() && !m_passThrough.load(); }
+    bool CanShowPanel() const { return EnabledNow() && m_phase.load() == Phase::Drawing && !m_killed.load() && !m_passThrough.load(); }
     // Render thread, every present: draw now? (enabled, drawing, not hidden for a capture, not yielding to CET, not killed)
     bool ShouldDraw(std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now()) const;
     bool Active() const { return m_phase.load() == Phase::Waiting || m_phase.load() == Phase::Drawing; }
@@ -206,7 +221,10 @@ private:
     std::atomic<bool> m_frameGenerationLoaded{false};
     std::atomic<int64_t> m_frameGenerationProbedNs{0};
     std::atomic<bool> m_frameGenerationProbed{false};
-    ThemeKind m_theme = ThemeKind::Dark;
+    std::atomic<int> m_theme{static_cast<int>(ThemeKind::Dark)};
+    std::atomic<uint32_t> m_themeGeneration{0};
+    std::atomic<bool> m_diagnostics{false};
+    std::atomic<bool> m_switchedOff{false};
     uint32_t m_scalePercent = 100;
     mutable std::mutex m_mutex; // the fields below
     bool m_hookPresent = false, m_hookResize = false, m_hookShutdown = false;
@@ -269,4 +287,9 @@ private:
     std::vector<bool> m_used;
     uint32_t m_inUse = 0;
 };
+
+// 0.8.22, overlay.set {theme?, motion?, diagnostics?, enabled?}: the [overlay] settings applied live, in memory (config.ini is not
+// rewritten; a restart goes back to it). The answer has the values now, the earlier ones and an undo that puts back exactly the
+// keys given. enabled: true on a host that was not enabled at load throws needs_restart (its hooks attach only at load).
+json SetLive(OverlayHost& aHost, const json& aParams);
 } // namespace xfb::overlay
