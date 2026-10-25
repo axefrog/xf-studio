@@ -158,20 +158,22 @@ try {
     // Both eyes of the default plate, from the front (world metres, measured on the prepared plates: knowledge/face-makeup.md, landmarks).
     const eyes = { female: { y: 1.691 }, male: { y: 1.6957 } } as const;
     notes.headOpenOverView = {};
+    await page.viewport(2400, HEIGHT);
+    await page.wait(1500);
     await tidy(page);
     await page.waitFor(headReady, 240_000).catch(() => {});
     for (const body of ["female", "male"] as const) {
       await run(page, { kind: "character.useDefault", bodyGender: body });
       await page.waitFor(headReady, 240_000).catch(() => {});
       await settle(page);
-      // The next V's building chip (a status over the corner of the view) has gone before any shot.
-      await page.waitFor(`!/building the head/.test(document.body.innerText)`, 120_000).catch(() => unreached.push({ state: `head-${body}`, why: "the building-the-head chip stayed over the view" }));
+      // The next V's progress chip (a status over the corner of the view) has gone before any shot.
+      await page.waitFor(`!/building the head|Next V/.test(document.body.innerText)`, 180_000).catch(() => unreached.push({ state: `head-${body}`, why: "the next-V progress chip stayed over the view" }));
       // The hair off (a strand across a lid hides what the shot is for) and the brow on; no idle, no surface controls.
       for (const action of [{ kind: "motion.setIdle", enabled: false }, { kind: "preview.setSurfaceControls", enabled: false }, { kind: "preview.setHair", enabled: false }])
         await run(page, action).catch(() => {});
       (notes.headOpenOverView as Record<string, unknown>)[body] = await tidy(page, false);
-      // 28 degrees: both eyes with the wings' outer ends and the brows in a portrait 3D view, nothing cut at its edge.
-      const camera = { position: [0, eyes[body].y, -0.46], target: [0, eyes[body].y, -0.06], fov: 28 };
+      // The window is widened (below) so the 3D view is landscape: both eyes with the wings' outer ends and the brows, large, nothing cut at its edge.
+      const camera = { position: [0, eyes[body].y, -0.46], target: [0, eyes[body].y, -0.06], fov: 22 };
       await run(page, { kind: "camera.restore", camera }).catch(error => notes[`camera-${body}`] = String(error));
       for (const starter of EYE_STARTERS) {
         await page.evaluate(`${X}.only(${JSON.stringify(starter.id)})`);
