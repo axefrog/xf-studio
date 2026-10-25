@@ -16,7 +16,8 @@ const num = (x: unknown): string => (typeof x === 'number' ? (Math.round(x * 100
 export function logLine(run: Run, l: LogEntry): string | undefined {
   if (l.kind === 'sow' && l.rule === 'sow') {
     const d = l.data as { pattern: string; kit: string; features: Record<string, number>; composite: number; rivals: unknown[]; bindings: Record<string, string> };
-    const who = Object.entries(d.bindings).map(([k, v]) => `${k.slice(1)}=${run.nameOf(v) || '?'}`).join(', ');
+    // the people the match bound (an offer pattern also binds the occurrence its report names, `inc`, which is an event and has no name to print)
+    const who = Object.entries(d.bindings).filter(([, v]) => !run.w.l3?.kv.event(v)).map(([k, v]) => `${k.slice(1)}=${run.nameOf(v) || '?'}`).join(', ');
     const f = Object.entries(d.features).map(([k, v]) => `${k}=${num(v)}`).join(' ');
     return `layer 3 sowed "${d.kit.split(':')[1]}" from ${d.pattern.split(':')[1]} (${who}); features ${f}; composite ${num(d.composite)} among ${d.rivals.length} candidate${d.rivals.length === 1 ? '' : 's'}; cause: ${l.chain.length} recorded event${l.chain.length === 1 ? '' : 's'}.`;
   }

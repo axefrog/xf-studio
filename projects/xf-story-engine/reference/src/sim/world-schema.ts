@@ -88,6 +88,28 @@ const RESIDENT_SLOTS = (j: number): SlotDef[] => [
   slot('position', 'core:position', { mode: 'mirrored', tier: 3 }),
 ];
 
+/**
+ * The name dimensions of a pack that carries the wide name registry (src/sim/names.ts): the origins, and the given and family names under each.
+ * A pack without it takes the kernel's own two origins and seven names, and its schema is unchanged.
+ */
+function nameDims(data: S1Data): DimensionDef[] {
+  const n = data.people.names;
+  if (!n) return [];
+  const origins = Object.keys(n.origins).sort();
+  const list = (k: 'given' | 'family'): Record<string, string[]> => Object.fromEntries(origins.map((o) => [o, n.origins[o]![k].slice()]));
+  return [
+    dim('xf:name-origin', { t: 'enum', values: origins }),
+    dim('xf:given-name', { t: 'enum-by', by: 'origin', lists: list('given') }),
+    dim('xf:family-name', { t: 'enum-by', by: 'origin', lists: list('family') }),
+  ];
+}
+
+/** The slots of `xf:name`: the registry's own origin, given and family slots replace the core's (same keys, same order, so `display` still concatenates them). */
+function nameSlots(data: S1Data): SlotDef[] {
+  if (!data.people.names) return [];
+  return [slot('origin', 'xf:name-origin', { tier: 4 }), slot('given', 'xf:given-name', { tier: 4 }), slot('family', 'xf:family-name', { tier: 4 })];
+}
+
 /** The schema definitions of the pack, for the districts' norms and the event kinds of `data`. */
 export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
   const W = wSim;
@@ -128,6 +150,7 @@ export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
     dim('xf:lastcontact', { t: 'int', min: -1, max: 2 ** 40 }, { structure: 'order' }),
     dim('xf:evn', { t: 'int', min: 0, max: 65535 }, { structure: 'order' }),
     dim('xf:name-node', { t: 'node', kind: 'xf:name' }),
+    ...nameDims(data),
     dim('xf:cell-node', { t: 'node', kind: 'xf:cell' }),
     dim('xf:household-node', { t: 'node', kind: 'xf:household' }),
     dim('xf:service-node', { t: 'node', kind: 'xf:service' }),
@@ -167,9 +190,7 @@ export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
     },
     { id: 'xf:group', extends: ['core:group'], slots: [slot('standing-v', 'xf:standing-node', { tier: 1 }), slot('group-gap', 'xf:group-gap', { mode: 'assigned', temporal: { window: W }, tier: 1 })] },
     { id: 'xf:circle', extends: ['core:group'], slots: [slot('standing-v', 'xf:standing-node', { tier: 1 })] },
-    {
-      id: 'xf:name', extends: ['core:name'], slots: [],
-    },
+    { id: 'xf:name', extends: ['core:name'], slots: nameSlots(data) },
     {
       id: 'xf:household', extends: ['core:thing'],
       slots: [

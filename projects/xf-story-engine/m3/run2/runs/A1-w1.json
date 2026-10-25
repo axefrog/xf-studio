@@ -1,0 +1,1242 @@
+{
+ "version": 1,
+ "name": "m3b-w1",
+ "state": "S-early-quiet",
+ "windows": 864,
+ "play": 86400,
+ "layer3": true,
+ "tempo": "restless",
+ "policy": "decline",
+ "deliveries": [
+  {
+   "id": "31003dd8153f60a03496c551a2a5f411",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "ask",
+   "what": "offer",
+   "game": 7800,
+   "play": 1260,
+   "clock": "Mon 02:10",
+   "words": "Meiling Zhao messages you: Kai Xie was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?",
+   "channel": "message",
+   "names": {
+    "stallholder": "Meiling Zhao",
+    "collector": "Kai Xie"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "52e34f95cee79d16ef7ff6be75cc0331",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "stay-out",
+   "what": "beat",
+   "game": 7800,
+   "play": 1290,
+   "clock": "Mon 02:10",
+   "words": "Meiling Zhao nodded, as if they had expected nothing else, and went back to the counter.",
+   "channel": "message",
+   "names": {
+    "stallholder": "Meiling Zhao",
+    "collector": "Kai Xie"
+   }
+  },
+  {
+   "id": "971bc7051473de14e5032bb62c4f85dd",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "closing",
+   "what": "closing",
+   "game": 7800,
+   "play": 1291,
+   "clock": "Mon 02:10",
+   "words": "That Friday is over.",
+   "channel": "trace",
+   "names": {
+    "stallholder": "Meiling Zhao",
+    "collector": "Kai Xie"
+   }
+  },
+  {
+   "id": "07736728132e9b358c1c66385f822edf",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "coda",
+   "what": "coda",
+   "game": 8400,
+   "play": 1320,
+   "clock": "Mon 02:20",
+   "words": "The stalls opened and closed the way they always do, and the fee was paid or it was not.",
+   "channel": "message",
+   "names": {
+    "stallholder": "Meiling Zhao",
+    "collector": "Kai Xie"
+   }
+  },
+  {
+   "id": "f22e30f9c6aec84dabb7d794df67ef75",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 20400,
+   "play": 3398,
+   "clock": "Mon 05:40",
+   "words": "An NCPD patrol pulled Jordan Marsh off the street in Kabuki. Nobody stopped to watch.",
+   "channel": "trace",
+   "names": {
+    "subject": "Jordan Marsh"
+   }
+  },
+  {
+   "id": "944dfe645d3af8d30cc9493f36c93e83",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 39600,
+   "play": 6506,
+   "clock": "Mon 11:00",
+   "words": "Kabuki: a theft was reported by Javier Romero. Ryo Maeda is named as the person responsible. The goods have not been recovered.",
+   "channel": "trace",
+   "names": {
+    "subject": "Ryo Maeda",
+    "other": "Javier Romero"
+   }
+  },
+  {
+   "id": "c9b2ebe2eadada39165da197b54c6aec",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 73800,
+   "play": 12293,
+   "clock": "Mon 20:30",
+   "words": "Javier Romero on the line: Ryo Maeda robbed me in the crowd by the market, and I want what was in the bag more than I want an apology. Get the bag back to me, whatever shape it is in. Find who is holding it, lean on whoever put the thief up to it, or make good the loss yourself. The thief is no one from this row, which makes it a job for someone with no ties here.",
+   "channel": "message",
+   "names": {
+    "subject": "Ryo Maeda",
+    "other": "Javier Romero"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "6e4585faaa6c7a28ab18fd0817993287",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 74400,
+   "play": 12323,
+   "clock": "Mon 20:40",
+   "words": "Javier Romero turned back to the stall. The bag was never mentioned in your hearing again.",
+   "channel": "message",
+   "names": {
+    "subject": "Ryo Maeda",
+    "other": "Javier Romero"
+   }
+  },
+  {
+   "id": "04ba48e191a2df1aca2268047b0fa72c",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 74400,
+   "play": 12324,
+   "clock": "Mon 20:40",
+   "words": "The talk about the bag moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Ryo Maeda",
+    "other": "Javier Romero"
+   }
+  },
+  {
+   "id": "5ce4e73072c4b016a1a484245634691c",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 93600,
+   "play": 15585,
+   "clock": "Tue 02:00",
+   "words": "Riley Spencer writes that Priya Singh bumped into them by the stalls and left with a bag that was not theirs. Can you get it back for me? Track down whoever has it, make it worth the thief's while to say where it went, or pay what it was worth and wait for my thanks. I know you owe me nothing, and I am asking anyway.",
+   "channel": "message",
+   "names": {
+    "subject": "Priya Singh",
+    "other": "Riley Spencer"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "7121f230003460cf27c0a525f66b7524",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 94200,
+   "play": 15615,
+   "clock": "Tue 02:10",
+   "words": "Riley Spencer said they would manage and did not ask again.",
+   "channel": "message",
+   "names": {
+    "subject": "Priya Singh",
+    "other": "Riley Spencer"
+   }
+  },
+  {
+   "id": "77bf6a1ab696285e725f5619455bde16",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 94200,
+   "play": 15616,
+   "clock": "Tue 02:10",
+   "words": "The talk about the bag moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Priya Singh",
+    "other": "Riley Spencer"
+   }
+  },
+  {
+   "id": "d4f6c1cabc49bd350e882a6398118d5a",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 125400,
+   "play": 20858,
+   "clock": "Tue 10:50",
+   "words": "Haruto Maeda was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Haruto Maeda"
+   }
+  },
+  {
+   "id": "e274ede3af3f45dc069a629032e97bf5",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 136800,
+   "play": 22719,
+   "clock": "Tue 14:00",
+   "words": "Heard it from three people already: Joy Dizon went for Valeria Mendoza in the street. Thought you should know before it gets bigger.",
+   "channel": "trace",
+   "names": {
+    "subject": "Joy Dizon",
+    "other": "Valeria Mendoza"
+   }
+  },
+  {
+   "id": "30f84da701790e699cc43cb555704b21",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 162600,
+   "play": 27095,
+   "clock": "Tue 21:10",
+   "words": "Aiko Hayashi messages you: the crowd by the market went from calm to a brawl in seconds, and I still do not know why. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.",
+   "channel": "message",
+   "names": {
+    "other": "Aiko Hayashi"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "496a8b7574f0442421da9bed28c1b5e5",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 163200,
+   "play": 27125,
+   "clock": "Tue 21:20",
+   "words": "Aiko Hayashi said they would keep away from that corner and meant it.",
+   "channel": "message",
+   "names": {
+    "other": "Aiko Hayashi"
+   }
+  },
+  {
+   "id": "376dbf6c6ecc67aaf226e4cb85a7f76d",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 163200,
+   "play": 27126,
+   "clock": "Tue 21:20",
+   "words": "The scuffle was forgotten by the end of the week.",
+   "channel": "trace",
+   "names": {
+    "other": "Aiko Hayashi"
+   }
+  },
+  {
+   "id": "93d379250a5250d7eed5c058146faf56",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 212400,
+   "play": 35351,
+   "clock": "Wed 11:00",
+   "words": "Quynh Tran was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Quynh Tran"
+   }
+  },
+  {
+   "id": "0127f0667df7a5264780d3227e488fac",
+   "template": "xf.m3b.offers:accident-errand",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 230400,
+   "play": 38348,
+   "clock": "Wed 16:00",
+   "words": "Bea Tolentino writes from the clinic that the accident in the street left them unable to walk, with a job waiting. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You will not know me from anyone, but there is nobody else I can send.",
+   "channel": "message",
+   "names": {
+    "other": "Bea Tolentino"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "8c86ceebd2fec7059c4971545f575e57",
+   "template": "xf.m3b.offers:accident-errand",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 230400,
+   "play": 38378,
+   "clock": "Wed 16:00",
+   "words": "Bea Tolentino said they would find another way and lay back down.",
+   "channel": "message",
+   "names": {
+    "other": "Bea Tolentino"
+   }
+  },
+  {
+   "id": "daef1d8ecff49537b1e2a58703ff4a3a",
+   "template": "xf.m3b.offers:accident-errand",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 230400,
+   "play": 38379,
+   "clock": "Wed 16:00",
+   "words": "The accident was forgotten by the end of the week.",
+   "channel": "trace",
+   "names": {
+    "other": "Bea Tolentino"
+   }
+  },
+  {
+   "id": "8b6b5608d5ae15fc809deebb46e0795c",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 261000,
+   "play": 43465,
+   "clock": "Thu 00:30",
+   "words": "Xiu Zhao robbed Tamara Jankowski in the Kabuki crowd. If you see either of them, you will know why.",
+   "channel": "trace",
+   "names": {
+    "subject": "Xiu Zhao",
+    "other": "Tamara Jankowski"
+   }
+  },
+  {
+   "id": "6a914776ba576b5f430464ebc5519293",
+   "template": "xf.m3b.offers:assault-why",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 278400,
+   "play": 46326,
+   "clock": "Thu 05:20",
+   "words": "Tatsuya Okada messages you from the clinic: Emi Mori put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.",
+   "channel": "message",
+   "names": {
+    "subject": "Emi Mori",
+    "other": "Tatsuya Okada"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "501b27f6b8df6b897bec74b372eee20e",
+   "template": "xf.m3b.offers:assault-why",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 278400,
+   "play": 46356,
+   "clock": "Thu 05:20",
+   "words": "You did not answer. Tatsuya Okada lay back and looked at the ceiling.",
+   "channel": "message",
+   "names": {
+    "subject": "Emi Mori",
+    "other": "Tatsuya Okada"
+   }
+  },
+  {
+   "id": "4cb81825ad0342e09147ac7500fffc52",
+   "template": "xf.m3b.offers:assault-why",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 278400,
+   "play": 46357,
+   "clock": "Thu 05:20",
+   "words": "The beating was talked about for a day, and then it was not.",
+   "channel": "trace",
+   "names": {
+    "subject": "Emi Mori",
+    "other": "Tatsuya Okada"
+   }
+  },
+  {
+   "id": "49eb4ae9a6b8e171961fa366e82ad78b",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 321000,
+   "play": 53474,
+   "clock": "Thu 17:10",
+   "words": "Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.",
+   "channel": "message",
+   "names": {
+    "subject": "Xiu Zhao",
+    "other": "Tamara Jankowski"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "75f4e3164f9b18f98ced0f613c2ca50e",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 321600,
+   "play": 53504,
+   "clock": "Thu 17:20",
+   "words": "Tamara Jankowski turned back to the stall. The bag was never mentioned in your hearing again.",
+   "channel": "message",
+   "names": {
+    "subject": "Xiu Zhao",
+    "other": "Tamara Jankowski"
+   }
+  },
+  {
+   "id": "1f5316b59932c405ed4546959462b144",
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 321600,
+   "play": 53505,
+   "clock": "Thu 17:20",
+   "words": "The talk about the bag moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Xiu Zhao",
+    "other": "Tamara Jankowski"
+   }
+  },
+  {
+   "id": "cf905836001edffdcf7de60c4dc89339",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 335400,
+   "play": 55884,
+   "clock": "Thu 21:10",
+   "words": "Message from Rania Aziz: the crowd by the market turned ugly, and I was in the thick of it before I knew what was happening. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.",
+   "channel": "message",
+   "names": {
+    "other": "Rania Aziz"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "999072610e2f8c657cf58267fca1b74f",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 336000,
+   "play": 55914,
+   "clock": "Thu 21:20",
+   "words": "Rania Aziz said they would keep away from that corner and meant it.",
+   "channel": "message",
+   "names": {
+    "other": "Rania Aziz"
+   }
+  },
+  {
+   "id": "7e12c456b72133b80ac826089f6156e9",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 336000,
+   "play": 55915,
+   "clock": "Thu 21:20",
+   "words": "The scuffle was forgotten by the end of the week.",
+   "channel": "trace",
+   "names": {
+    "other": "Rania Aziz"
+   }
+  },
+  {
+   "id": "3a592206e00f4c95fde0648a4f674587",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 367800,
+   "play": 61222,
+   "clock": "Fri 06:10",
+   "words": "Message from Haruto Nakamura: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.",
+   "channel": "message",
+   "names": {
+    "other": "Haruto Nakamura"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "c924d72585487f4cec2a5c16a7fd2537",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 367800,
+   "play": 61252,
+   "clock": "Fri 06:10",
+   "words": "The message sat unanswered. The crowd by the market was thinner for a week.",
+   "channel": "message",
+   "names": {
+    "other": "Haruto Nakamura"
+   }
+  },
+  {
+   "id": "ffb06cd976673b9eff8183fc97e2c0ce",
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 367800,
+   "play": 61253,
+   "clock": "Fri 06:10",
+   "words": "The scuffle was forgotten by the end of the week.",
+   "channel": "trace",
+   "names": {
+    "other": "Haruto Nakamura"
+   }
+  },
+  {
+   "id": "0cefccc3101c884a9d394ca5606a98b8",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 396600,
+   "play": 66073,
+   "clock": "Fri 14:10",
+   "words": "Kenji Maeda was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Kenji Maeda"
+   }
+  },
+  {
+   "id": "84e662770f4118f1cc6a6068e3c2b1a8",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 415200,
+   "play": 69147,
+   "clock": "Fri 19:20",
+   "words": "Kabuki: police detained Irina Popov during a street sweep. No charge has been announced.",
+   "channel": "trace",
+   "names": {
+    "subject": "Irina Popov"
+   }
+  },
+  {
+   "id": "7254f5e8a6ba5c84c417a50ceabd358c",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 436800,
+   "play": 72792,
+   "clock": "Sat 01:20",
+   "words": "Kabuki: Jiro Matsuda was taken for treatment after an accident. No one else was injured.",
+   "channel": "trace",
+   "names": {
+    "subject": "Jiro Matsuda"
+   }
+  },
+  {
+   "id": "d13953cbad590e78c2828a03b91f6870",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 472200,
+   "play": 78637,
+   "clock": "Sat 11:10",
+   "words": "Kabuki: Imran Chopra was treated for injuries after an assault. Witnesses name Shun Kondo. No arrest has been made.",
+   "channel": "trace",
+   "names": {
+    "subject": "Shun Kondo",
+    "other": "Imran Chopra"
+   }
+  },
+  {
+   "id": "eb4634e8b52779f98e9290acf751cb99",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 486600,
+   "play": 81020,
+   "clock": "Sat 15:10",
+   "words": "You know Huda Nasser? Layla Farah beat them up in Kabuki yesterday. Somebody should check on them.",
+   "channel": "trace",
+   "names": {
+    "subject": "Layla Farah",
+    "other": "Huda Nasser"
+   }
+  }
+ ],
+ "instances": [
+  {
+   "template": "xf.m3b.offers:assault-why",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 11,
+   "roles": {
+    "subject": "Emi Mori",
+    "other": "Tatsuya Okada"
+   },
+   "draws": {
+    "cast:other": "60cb88bc582d3baef4b05f10a0aa1825",
+    "cast:subject": "391bd2d0e024467bc74bcb225d874073",
+    "alt:ask:0": "assault-why-ask-8",
+    "alt:x-decline:0": "assault-why-out-decline-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 18,
+   "roles": {
+    "subject": "Shun Kondo",
+    "other": "Imran Chopra"
+   },
+   "draws": {
+    "cast:other": "88c83dd0e0897e994f00f66e50063beb",
+    "cast:subject": "323ae3adc52b2f1406b2b385bd5d734c",
+    "alt:tell:0": "f-beating-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 16,
+   "roles": {
+    "subject": "Irina Popov"
+   },
+   "draws": {
+    "cast:subject": "7287b08dafd885d5c73cdd443ba9f598",
+    "alt:tell:0": "f-sweep-1"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 3,
+   "roles": {
+    "subject": "Ryo Maeda",
+    "other": "Javier Romero"
+   },
+   "draws": {
+    "cast:other": "a26e54787a30eac1160fa017fb583bb0",
+    "cast:subject": "19d8fa53eb80bab440f02545cf0bc05e",
+    "alt:ask:0": "goods-back-ask-169",
+    "alt:x-decline:0": "goods-back-out-decline-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 6,
+   "roles": {
+    "subject": "Joy Dizon",
+    "other": "Valeria Mendoza"
+   },
+   "draws": {
+    "cast:other": "104b25ad1b16dc763463d1c79abf7b54",
+    "cast:subject": "43b740701a3df0fd6fb6426a972ac91b",
+    "alt:tell:0": "f-beating-4"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 4,
+   "roles": {
+    "subject": "Priya Singh",
+    "other": "Riley Spencer"
+   },
+   "draws": {
+    "cast:other": "47b85706fe2805be2221f4e2499df10b",
+    "cast:subject": "f3dc0ae418e0a1a6d2e387adaf6ccb71",
+    "alt:ask:0": "goods-back-ask-260",
+    "alt:x-decline:0": "goods-back-out-decline-0"
+   }
+  },
+  {
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "state": "resolved",
+   "sowSeq": 0,
+   "roles": {
+    "market": "",
+    "stallholder": "Meiling Zhao",
+    "collector": "Kai Xie"
+   },
+   "draws": {
+    "cast:market": "0daa7c17a6977193ed0eb8bd8ad47778",
+    "cast:stallholder": "df54dd72216abe6e1fd2ce7962c373c2",
+    "cast:collector": "03ab6715fe235f3465539edadbf962ca"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 1,
+   "roles": {
+    "subject": "Jordan Marsh"
+   },
+   "draws": {
+    "cast:subject": "7d342f6b8f2c1bbc029dbf960378a373",
+    "alt:tell:0": "f-sweep-0"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 13,
+   "roles": {
+    "other": "Rania Aziz"
+   },
+   "draws": {
+    "cast:other": "4da9f9228f7c4b36bfedf1c5ee82443f",
+    "alt:ask:0": "crowd-scuffle-ask-70",
+    "alt:x-decline:0": "crowd-scuffle-out-decline-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 15,
+   "roles": {
+    "subject": "Kenji Maeda"
+   },
+   "draws": {
+    "cast:subject": "676a5de3d2b16b2d5d147afd8dd29314",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 19,
+   "roles": {
+    "subject": "Layla Farah",
+    "other": "Huda Nasser"
+   },
+   "draws": {
+    "cast:other": "da220910b4d87710e8850916f4fb4261",
+    "cast:subject": "dc1d4f658d693ebc8b1c95284e3ec0a7",
+    "alt:tell:0": "f-beating-2"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 10,
+   "roles": {
+    "subject": "Xiu Zhao",
+    "other": "Tamara Jankowski"
+   },
+   "draws": {
+    "cast:other": "7a8df2c344711057745563e8112e6784",
+    "cast:subject": "d38d0898fb368611f57ea94253863956",
+    "alt:tell:0": "f-theft-2"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 2,
+   "roles": {
+    "subject": "Ryo Maeda",
+    "other": "Javier Romero"
+   },
+   "draws": {
+    "cast:other": "a26e54787a30eac1160fa017fb583bb0",
+    "cast:subject": "19d8fa53eb80bab440f02545cf0bc05e",
+    "alt:tell:0": "f-theft-1"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 7,
+   "roles": {
+    "other": "Aiko Hayashi"
+   },
+   "draws": {
+    "cast:other": "b5683ec4e9a416990859a474b7305c21",
+    "alt:ask:0": "crowd-scuffle-ask-122",
+    "alt:x-decline:0": "crowd-scuffle-out-decline-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 17,
+   "roles": {
+    "subject": "Jiro Matsuda"
+   },
+   "draws": {
+    "cast:subject": "c6c57b40615eeb2cc3390d3dc4ccca28",
+    "alt:tell:0": "f-accident-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 5,
+   "roles": {
+    "subject": "Haruto Maeda"
+   },
+   "draws": {
+    "cast:subject": "5deff5cb5dc6f5d1f81b5a4bfc81590d",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:crowd-scuffle",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 14,
+   "roles": {
+    "other": "Haruto Nakamura"
+   },
+   "draws": {
+    "cast:other": "55b2ee465c9b56485ad4efe99f5c9b06",
+    "alt:ask:0": "crowd-scuffle-ask-187",
+    "alt:x-decline:0": "crowd-scuffle-out-decline-1"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:goods-back",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 12,
+   "roles": {
+    "subject": "Xiu Zhao",
+    "other": "Tamara Jankowski"
+   },
+   "draws": {
+    "cast:other": "7a8df2c344711057745563e8112e6784",
+    "cast:subject": "d38d0898fb368611f57ea94253863956",
+    "alt:ask:0": "goods-back-ask-212",
+    "alt:x-decline:0": "goods-back-out-decline-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 8,
+   "roles": {
+    "subject": "Quynh Tran"
+   },
+   "draws": {
+    "cast:subject": "dedc6ea79690f09db787df29a29b606f",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:accident-errand",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 9,
+   "roles": {
+    "other": "Bea Tolentino"
+   },
+   "draws": {
+    "cast:other": "0f64dfd29ee94a64900d5fa9fd644d98",
+    "alt:ask:0": "accident-errand-ask-96",
+    "alt:x-decline:0": "accident-errand-out-decline-0"
+   }
+  }
+ ],
+ "decisions": [
+  {
+   "at": 20400,
+   "kind": "sow",
+   "rule": "gate-6",
+   "data": {
+    "pattern": "xf.m3b:clash-aftermath",
+    "kit": "xf.m3b.offers:clash-aftermath"
+   }
+  },
+  {
+   "at": 20400,
+   "kind": "sow",
+   "rule": "gate-2",
+   "data": {
+    "pattern": "xf.m3b:clash-aftermath"
+   }
+  },
+  {
+   "at": 20400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.5924788106536467
+    },
+    "composite": 1
+   }
+  },
+  {
+   "at": 39600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.5363794387881798
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 73800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:goods-back",
+    "kit": "xf.m3b.offers:goods-back",
+    "features": {
+     "F3": 1,
+     "F5": 5,
+     "F6": 0,
+     "F11": 0.29268689277632487
+    },
+    "composite": 0.6666666666666666
+   }
+  },
+  {
+   "at": 93600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:goods-back",
+    "kit": "xf.m3b.offers:goods-back",
+    "features": {
+     "F3": 1,
+     "F5": 3,
+     "F6": 0,
+     "F11": 0.40450195696548624
+    },
+    "composite": 1
+   }
+  },
+  {
+   "at": 125400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.27104351754253875
+    },
+    "composite": 0.7
+   }
+  },
+  {
+   "at": 136800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.3613429914515616
+    },
+    "composite": 0.3
+   }
+  },
+  {
+   "at": 162600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:crowd-scuffle",
+    "kit": "xf.m3b.offers:crowd-scuffle",
+    "features": {
+     "F3": 0,
+     "F5": 3,
+     "F6": 0,
+     "F11": 0.24161344086622893
+    },
+    "composite": 0.4
+   }
+  },
+  {
+   "at": 212400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.3387438249823571
+    },
+    "composite": 0.7
+   }
+  },
+  {
+   "at": 230400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:accident-errand",
+    "kit": "xf.m3b.offers:accident-errand",
+    "features": {
+     "F3": 1,
+     "F5": 3,
+     "F6": 0,
+     "F11": 0.20454739154726845
+    },
+    "composite": 0.6666666666666666
+   }
+  },
+  {
+   "at": 261000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.44912047240820063
+    },
+    "composite": 0.3333333333333333
+   }
+  },
+  {
+   "at": 278400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:assault-why",
+    "kit": "xf.m3b.offers:assault-why",
+    "features": {
+     "F3": 1,
+     "F5": 3,
+     "F6": 0,
+     "F11": 0.30252524545161696
+    },
+    "composite": 0.9
+   }
+  },
+  {
+   "at": 321000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:goods-back",
+    "kit": "xf.m3b.offers:goods-back",
+    "features": {
+     "F3": 1,
+     "F5": 5,
+     "F6": 0,
+     "F11": 0.20111919105392043
+    },
+    "composite": 0.8
+   }
+  },
+  {
+   "at": 335400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:crowd-scuffle",
+    "kit": "xf.m3b.offers:crowd-scuffle",
+    "features": {
+     "F3": 0,
+     "F5": 3,
+     "F6": 0,
+     "F11": 0.2500028935520087
+    },
+    "composite": 0.4
+   }
+  },
+  {
+   "at": 367800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:crowd-scuffle",
+    "kit": "xf.m3b.offers:crowd-scuffle",
+    "features": {
+     "F3": 0,
+     "F5": 3,
+     "F6": 0,
+     "F11": 0.5806607704508185
+    },
+    "composite": 0.4
+   }
+  },
+  {
+   "at": 396600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.20263994821423545
+    },
+    "composite": 0.2
+   }
+  },
+  {
+   "at": 415200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.6812375816065853
+    },
+    "composite": 0.4
+   }
+  },
+  {
+   "at": 436800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.23842638585336778
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 472200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.2566082566082566
+    },
+    "composite": 0.3
+   }
+  },
+  {
+   "at": 486600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.2181157225083308
+    },
+    "composite": 0.2
+   }
+  }
+ ],
+ "hash": "70dc9b487fbcf3c7ba141283e71ff46d"
+}

@@ -1,0 +1,1161 @@
+{
+ "rater": "codex-gpt-6.1-sol-a",
+ "cards": {
+  "H-038": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic threat, three-option menu"
+  },
+  "H-040": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated full name, fixed reward"
+  },
+  "H-081": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-069": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three solutions, generic crew threat"
+  },
+  "H-017": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "options followed by reputation justification"
+  },
+  "H-044": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic threat, three-option menu"
+  },
+  "H-059": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "gang member label, unexplained eviction"
+  },
+  "H-010": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-092": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified job becomes three alternatives"
+  },
+  "H-082": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation slot, sealed case, fixed payment"
+  },
+  "H-022": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-007": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "third-person opening switches to first"
+  },
+  "H-088": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "delivery and shift treated as interchangeable"
+  },
+  "H-096": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "gang member label, unexplained eviction"
+  },
+  "H-090": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-039": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "investigation, calming, escort menu"
+  },
+  "H-051": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-076": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated full name, fixed reward"
+  },
+  "H-050": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "arbitrary compensation option, outsider rationale"
+  },
+  "H-053": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "perspective switch, three generic remedies"
+  },
+  "H-080": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation slot, sealed case, fixed payment"
+  },
+  "H-025": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three remedies include paying victim yourself"
+  },
+  "H-011": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-045": {
+   "caused": 3,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unsupported instigator claim, generic options"
+  },
+  "H-018": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified work becomes parcel or rota"
+  },
+  "H-065": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 2,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-day disappearance, no relationship detail"
+  },
+  "H-024": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 3,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "delivery and bar shift alternate"
+  },
+  "H-034": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-013": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 2,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-day disappearance, no relationship detail"
+  },
+  "H-085": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic options, appended outsider justification"
+  },
+  "H-047": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-030": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified work becomes parcel or rota"
+  },
+  "H-004": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "delivery and shift treated as interchangeable"
+  },
+  "H-008": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation slot, sealed case, fixed payment"
+  },
+  "H-068": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "compensation option, strained outsider rationale"
+  },
+  "H-006": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-084": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation slot, sealed case, fixed payment"
+  },
+  "H-027": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic options, appended outsider justification"
+  },
+  "H-021": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "options followed by reputation justification"
+  },
+  "H-037": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-033": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-073": {
+   "caused": 7,
+   "legible": 7,
+   "setting": 6,
+   "pull": 6,
+   "made_by": "person",
+   "cue": "collector escalation connects to collective resistance"
+  },
+  "H-012": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 3,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "perspective switch, clinic payment option"
+  },
+  "H-001": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated full name, stock recovery contract"
+  },
+  "H-058": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic retaliation, three-option response"
+  },
+  "H-093": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-060": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation slot, sealed case, fixed payment"
+  },
+  "H-063": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic retaliation, appended stranger appeal"
+  },
+  "H-066": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-056": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "patrol explanation loosely fits crew problem"
+  },
+  "H-054": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name, fixed escort route"
+  },
+  "H-079": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unseen thief implies unexplained conspiracy"
+  },
+  "H-052": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "vague shove becomes instigator investigation"
+  },
+  "H-091": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "vague shove becomes instigator investigation"
+  },
+  "H-041": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "gang member label, unexplained eviction"
+  },
+  "H-020": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-095": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic retaliation, appended stranger appeal"
+  },
+  "H-094": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-070": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated full name, stock recovery contract"
+  },
+  "H-005": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "perspective switch, generic retaliation menu"
+  },
+  "H-061": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "pay victim yourself, unsupported conspiracy"
+  },
+  "H-029": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-048": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name, fixed escort route"
+  },
+  "H-031": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified job becomes three alternatives"
+  },
+  "H-087": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies include covering loss yourself"
+  },
+  "H-078": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "surveillance request lacks motive or relationship"
+  },
+  "H-035": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-015": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 3,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three remedies, vague clinic assistance"
+  },
+  "H-042": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "compensation option, strained outsider rationale"
+  },
+  "H-075": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-043": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "repeated full name, awkward location phrase"
+  },
+  "H-086": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "pay victim yourself, unsupported conspiracy"
+  },
+  "H-083": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 2,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-day disappearance, no relationship detail"
+  },
+  "H-028": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 3,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "perspective switch, clinic payment option"
+  },
+  "H-064": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-019": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "investigation, calming, escort menu"
+  },
+  "H-077": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "gang member label, unexplained eviction"
+  },
+  "H-072": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-032": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 3,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "delivery and bar shift alternate"
+  },
+  "H-026": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unspecified work becomes parcel or rota"
+  },
+  "H-057": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-089": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "surveillance request lacks motive or relationship"
+  },
+  "H-046": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "arbitrary compensation option, outsider rationale"
+  },
+  "H-049": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "delivery and shift treated as interchangeable"
+  },
+  "H-067": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation slot, sealed case, fixed payment"
+  },
+  "H-009": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 3,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "perspective switch, clinic payment option"
+  },
+  "H-071": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-014": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic retaliation, three-option response"
+  },
+  "H-062": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  },
+  "H-016": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fight participation, unexplained persecution, options"
+  },
+  "H-074": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unseen thief implies unexplained conspiracy"
+  },
+  "H-003": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 2,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "generic stolen object, repeated full name"
+  },
+  "H-023": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fight participation, unexplained persecution, options"
+  },
+  "H-036": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "generic repair contract, awkward location phrase"
+  },
+  "H-002": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unseen thief implies unexplained conspiracy"
+  },
+  "H-055": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 6,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "bare names around stock extortion"
+  }
+ },
+ "pairs": {
+  "P-068": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-046": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-036": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-058": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-074": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-051": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-042": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-004": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-088": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-080": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-086": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-093": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-001": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-021": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-025": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-019": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-092": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-065": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-030": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-090": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-060": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-031": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-089": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-010": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-029": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-038": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-076": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-094": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-016": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-066": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-059": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-037": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-039": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-045": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-071": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-073": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-082": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-096": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-091": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-063": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-023": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-049": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-078": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-028": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-069": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-053": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-095": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-013": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-033": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-085": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-014": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-041": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-040": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-017": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-020": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-064": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-008": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-055": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-075": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-083": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-024": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-022": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-034": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-087": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-005": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-044": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-018": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-012": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-084": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-052": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-067": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-047": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-035": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-056": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-079": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-032": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-009": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-070": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-072": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-054": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-015": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-006": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-027": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-003": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-081": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-043": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-048": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-026": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-062": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-002": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-077": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-061": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-050": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-011": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-007": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-057": {
+   "follow": "right",
+   "caused": "left"
+  }
+ },
+ "critic": "Most cards suggest templates through interchangeable full names, fixed rewards, generic locations, and three-option menus. Several switch from third-person reporting into first-person speech. Paying a stranger's loss or clinic bill repeatedly appears beside investigation as though the actions were equivalent. Reputation and outsider explanations often feel appended. The Claws fees have a credible recurring cause, while Ivo's refusal, threatened escalation, and collective resistance connect particularly well. Injury causing missed work also feels natural, though the work itself often stays vague. Repeated wording and exact duplicates reinforced the impression of assembled parts. Night City specificity usually comes from Claws, ripperdocs, credsticks, and eddies rather than distinctive voices.",
+ "sheet": 1
+}

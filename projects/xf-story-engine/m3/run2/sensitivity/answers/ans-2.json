@@ -1,0 +1,1161 @@
+{
+ "rater": "claude-sonnet",
+ "cards": {
+  "H-055": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template, swapped names"
+  },
+  "H-002": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock three-option menu, reused phrase"
+  },
+  "H-036": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic job, fixed price"
+  },
+  "H-023": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options and closing line"
+  },
+  "H-003": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic item, fixed price"
+  },
+  "H-074": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-002"
+  },
+  "H-016": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, swapped names"
+  },
+  "H-062": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-014": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, stall flattery line"
+  },
+  "H-071": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-009": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, appended flattery"
+  },
+  "H-067": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "role-label plus fixed slots"
+  },
+  "H-049": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, trust line"
+  },
+  "H-046": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, reused ending"
+  },
+  "H-089": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fixed price, thin"
+  },
+  "H-057": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-026": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-032": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stock options, repeated trust line"
+  },
+  "H-072": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-077": {
+   "caused": 2,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "Convince them, no reason given"
+  },
+  "H-019": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, flattery ending"
+  },
+  "H-064": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-028": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-009"
+  },
+  "H-083": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fixed price, generic"
+  },
+  "H-086": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, reused ending"
+  },
+  "H-043": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fixed cut, slot location"
+  },
+  "H-075": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-042": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, reused ending"
+  },
+  "H-015": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-035": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-078": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fixed price, thin"
+  },
+  "H-087": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, patrol line"
+  },
+  "H-031": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-048": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fixed route and price"
+  },
+  "H-029": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-061": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-086"
+  },
+  "H-005": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-070": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic item, fixed price"
+  },
+  "H-094": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-095": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-020": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-041": {
+   "caused": 2,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "Convince them, no reason"
+  },
+  "H-091": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-052": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-091"
+  },
+  "H-079": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options, reused ending"
+  },
+  "H-054": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fixed route and price"
+  },
+  "H-056": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-066": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-063": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-095"
+  },
+  "H-060": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "role-label plus fixed slots"
+  },
+  "H-093": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-058": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-014"
+  },
+  "H-001": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic item, fixed price"
+  },
+  "H-012": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-073": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "still stock three-option menu"
+  },
+  "H-033": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-037": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-021": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-027": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-084": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "role-label plus fixed slots"
+  },
+  "H-006": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-068": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-042"
+  },
+  "H-008": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "role-label plus fixed slots"
+  },
+  "H-004": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-030": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-047": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-085": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-027"
+  },
+  "H-013": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fixed price, generic"
+  },
+  "H-034": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-024": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "duplicate of H-032"
+  },
+  "H-065": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fixed price, generic"
+  },
+  "H-018": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "duplicate of H-026"
+  },
+  "H-045": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-011": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-025": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-080": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "role-label plus fixed slots"
+  },
+  "H-053": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-050": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-046"
+  },
+  "H-076": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fixed cut, slot location"
+  },
+  "H-051": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-039": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-019"
+  },
+  "H-090": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-096": {
+   "caused": 2,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "Convince them, no reason"
+  },
+  "H-088": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-007": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-022": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-082": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "role-label plus fixed slots"
+  },
+  "H-092": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-010": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-059": {
+   "caused": 2,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "Convince them, no reason"
+  },
+  "H-044": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-017": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "duplicate of H-021"
+  },
+  "H-069": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  },
+  "H-081": {
+   "caused": 3,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bare template"
+  },
+  "H-040": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fixed cut, slot location"
+  },
+  "H-038": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock options"
+  }
+ },
+ "pairs": {
+  "P-068": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-046": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-036": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-058": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-074": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-051": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-042": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-004": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-088": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-080": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-086": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-093": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-001": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-021": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-025": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-019": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-092": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-065": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-030": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-090": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-060": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-031": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-089": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-010": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-029": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-038": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-076": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-094": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-016": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-066": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-059": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-037": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-039": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-045": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-071": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-073": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-082": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-096": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-091": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-063": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-023": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-049": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-078": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-028": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-069": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-053": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-095": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-013": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-033": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-085": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-014": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-041": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-040": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-017": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-020": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-064": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-008": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-055": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-075": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-083": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-024": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-022": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-034": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-087": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-005": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-044": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-018": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-012": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-084": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-052": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-067": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-047": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-035": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-056": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-079": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-032": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-009": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-070": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-072": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-054": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-015": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-006": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-027": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-003": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-081": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-043": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-048": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-026": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-062": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-002": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-077": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-061": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-050": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-011": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-007": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-057": {
+   "follow": "right",
+   "caused": "right"
+  }
+ },
+ "critic": "Nearly every card read as assembled from a small set of templates with swapped names and locations. Repeated patterns: (1) a bare Friday-fee message ('was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?') with no stakes or specifics; (2) short fixed-price jobs ('500 eddies', '250 eddies on delivery, no questions', 'Convince them. 1000 eddies') with generic placeholders like 'a bar off the market' or 'the ripperdoc'; (3) longer cards built from the same three-option menu ('X, Y, or Z') plus an appended flattery or trust line ('People trust you...', 'You do not know me, and that may be why...') that often does not fit the request; (4) exact duplicate texts across cards, and repeated 'nobody on the row had seen the thief before, so somebody must have given the nod' and 'I had never seen them before'. Longer cards were more legible, more caused and more pulling, but still read as parts glued together. The Claws-collector card from Ivo Popov was the most situated and specific.",
+ "sheet": 2
+}

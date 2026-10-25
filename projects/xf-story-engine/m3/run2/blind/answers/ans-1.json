@@ -1,0 +1,1161 @@
+{
+ "rater": "codex-gpt-6.1-sol-a",
+ "cards": {
+  "H-038": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three-option menu, unspecified grievance"
+  },
+  "H-040": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "target-location-reward formula"
+  },
+  "H-081": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-069": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "automatic retaliation, three-option menu"
+  },
+  "H-017": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "option menu, appended reputation justification"
+  },
+  "H-044": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "three-option menu, unspecified grievance"
+  },
+  "H-059": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unexplained removal, fixed reward"
+  },
+  "H-010": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-092": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "interchangeable parcel-client-rota options"
+  },
+  "H-082": {
+   "caused": 4,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation-route-reward formula"
+  },
+  "H-022": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-007": {
+   "caused": 3,
+   "legible": 4,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "pronoun shift, vague targeting"
+  },
+  "H-088": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "delivery abruptly becomes shift coverage"
+  },
+  "H-096": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unexplained removal, fixed reward"
+  },
+  "H-090": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-039": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unearned instigator premise, option menu"
+  },
+  "H-051": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-076": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "target-location-reward formula"
+  },
+  "H-050": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "outsider rationale does not follow"
+  },
+  "H-053": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option menu, generic desperation"
+  },
+  "H-080": {
+   "caused": 4,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation-route-reward formula"
+  },
+  "H-025": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "recovery-pressure-reimbursement menu"
+  },
+  "H-011": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-045": {
+   "caused": 3,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "asserted conspiracy without evidence"
+  },
+  "H-018": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "interchangeable parcel-client-rota options"
+  },
+  "H-065": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "bare disappearance-reward formula"
+  },
+  "H-024": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "delivery and bar-shift alternatives"
+  },
+  "H-034": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-013": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "bare disappearance-reward formula"
+  },
+  "H-085": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "instigator premise, three-option menu"
+  },
+  "H-047": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-030": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "interchangeable parcel-client-rota options"
+  },
+  "H-004": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "delivery abruptly becomes shift coverage"
+  },
+  "H-008": {
+   "caused": 4,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation-route-reward formula"
+  },
+  "H-068": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "outsider rationale does not follow"
+  },
+  "H-006": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-084": {
+   "caused": 4,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation-route-reward formula"
+  },
+  "H-027": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "instigator premise, three-option menu"
+  },
+  "H-021": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "option menu, appended reputation justification"
+  },
+  "H-037": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-033": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-073": {
+   "caused": 7,
+   "legible": 7,
+   "setting": 6,
+   "pull": 7,
+   "made_by": "person",
+   "cue": "deadline, retaliation, collective resistance connect"
+  },
+  "H-012": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "investigate-confront-pay menu"
+  },
+  "H-001": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name, fixed reward"
+  },
+  "H-058": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option menu, reputation suffix"
+  },
+  "H-093": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-060": {
+   "caused": 4,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation-route-reward formula"
+  },
+  "H-063": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option menu, generic desperation"
+  },
+  "H-066": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-056": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "patrol explanation feels appended"
+  },
+  "H-054": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "route-and-reward formula"
+  },
+  "H-079": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stranger implies conspiracy without evidence"
+  },
+  "H-052": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option menu, outsider justification"
+  },
+  "H-091": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option menu, outsider justification"
+  },
+  "H-041": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unexplained removal, fixed reward"
+  },
+  "H-020": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-095": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option menu, generic desperation"
+  },
+  "H-094": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-070": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "repeated full name, fixed reward"
+  },
+  "H-005": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option menu, stranger disclaimer"
+  },
+  "H-061": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stranger implies conspiracy without evidence"
+  },
+  "H-029": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-048": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "route-and-reward formula"
+  },
+  "H-031": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "interchangeable parcel-client-rota options"
+  },
+  "H-087": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "recovery-pressure-reimbursement menu"
+  },
+  "H-078": {
+   "caused": 2,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "surveillance request lacks motive"
+  },
+  "H-035": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-015": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "investigate-protect-clinic menu"
+  },
+  "H-042": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "outsider rationale does not follow"
+  },
+  "H-075": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-043": {
+   "caused": 5,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "target-location-reward formula"
+  },
+  "H-086": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stranger implies conspiracy without evidence"
+  },
+  "H-083": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "bare disappearance-reward formula"
+  },
+  "H-028": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "investigate-confront-pay menu"
+  },
+  "H-064": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-019": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "unearned instigator premise, option menu"
+  },
+  "H-077": {
+   "caused": 2,
+   "legible": 5,
+   "setting": 3,
+   "pull": 2,
+   "made_by": "program",
+   "cue": "unexplained removal, fixed reward"
+  },
+  "H-072": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-032": {
+   "caused": 6,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "delivery and bar-shift alternatives"
+  },
+  "H-026": {
+   "caused": 5,
+   "legible": 5,
+   "setting": 3,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "interchangeable parcel-client-rota options"
+  },
+  "H-057": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-089": {
+   "caused": 2,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "surveillance request lacks motive"
+  },
+  "H-046": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "outsider rationale does not follow"
+  },
+  "H-049": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "delivery abruptly becomes shift coverage"
+  },
+  "H-067": {
+   "caused": 4,
+   "legible": 7,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "occupation-route-reward formula"
+  },
+  "H-009": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 4,
+   "pull": 6,
+   "made_by": "program",
+   "cue": "investigate-confront-pay menu"
+  },
+  "H-071": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-014": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "three-option menu, reputation suffix"
+  },
+  "H-062": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  },
+  "H-016": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fight participation, then unexplained grievance"
+  },
+  "H-074": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stranger implies conspiracy without evidence"
+  },
+  "H-003": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 3,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "generic stolen-object reward formula"
+  },
+  "H-023": {
+   "caused": 4,
+   "legible": 5,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "fight participation, then unexplained grievance"
+  },
+  "H-036": {
+   "caused": 6,
+   "legible": 7,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "person",
+   "cue": "concrete trading deadline"
+  },
+  "H-002": {
+   "caused": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 4,
+   "made_by": "program",
+   "cue": "stranger implies conspiracy without evidence"
+  },
+  "H-055": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "generic collector-request formula"
+  }
+ },
+ "pairs": {
+  "P-068": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-046": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-036": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-058": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-074": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-051": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-042": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-004": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-088": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-080": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-086": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-093": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-001": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-021": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-025": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-019": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-092": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-065": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-030": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-090": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-060": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-031": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-089": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-010": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-029": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-038": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-076": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-094": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-016": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-066": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-059": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-037": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-039": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-045": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-071": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-073": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-082": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-096": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-091": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-063": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-023": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-049": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-078": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-028": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-069": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-053": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-095": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-013": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-033": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-085": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-014": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-041": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-040": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-017": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-020": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-064": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-008": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-055": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-075": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-083": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-024": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-022": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-034": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-087": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-005": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-044": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-018": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-012": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-084": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-052": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-067": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-047": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-035": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-056": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-079": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-032": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-009": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-070": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-072": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-054": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-015": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-006": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-027": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-003": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-081": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-043": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-048": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-026": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-062": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-002": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-077": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-061": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-050": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-011": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-007": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-057": {
+   "follow": "right",
+   "caused": "left"
+  }
+ },
+ "critic": "The strongest generated cues were interchangeable full names, fixed reward formulas, abrupt shifts from third-person summaries to first-person speech, and repeated menus of three solutions. Several explanations felt attached after the event: an unfamiliar thief supposedly proves sponsorship, or an outsider thief supposedly requires an outsider investigator. Injury preventing paid work and recurring protection fees supplied convincing causes even when the wording felt templated. Ivo's refusal, deadline, threatened escalation, and emerging stallholder resistance formed the clearest connected situation. The repeated clinic, stolen-bag, crew-fight, and Friday-fee structures often supplied actions more specifically than they supplied people or motives.",
+ "sheet": 1
+}

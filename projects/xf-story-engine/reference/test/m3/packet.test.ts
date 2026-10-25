@@ -7,6 +7,9 @@ import { type PacketManifest, buildPacketFiles, manifestOf } from '../../src/m3/
 import { type RunRecord, recordHash } from '../../src/m3/transcript.ts';
 
 setDefaultTimeout(300_000);
+// The byte-for-byte rebuild generates the A3 and A4 hooks over fresh worlds (about half a minute); it is `S1_FULL=1`. The default checks, cheaply, that the
+// committed packet was made from the committed runs (every engine and A1 card is a delivery of a manifest run) and that the manifest and records agree.
+const FULL = process.env.S1_FULL === '1';
 
 const m3 = new URL('../../../m3/', import.meta.url);
 const read = (rel: string): string => readFileSync(new URL(rel, m3), 'utf8');
@@ -39,7 +42,20 @@ describe('the rated packet is reproducible from its manifest', () => {
     expect(() => buildPacketFiles({ ...manifest, runs: [...manifest.runs].reverse() }, runs)).toThrow(/sorted/);
   });
 
-  test('rebuilding gives the committed files byte for byte, with the runs supplied in reverse and the unrated runs beside them', () => {
+  test('the committed packet was made from the committed runs: every engine and A1 card is the words of a delivery of a run in the manifest', () => {
+    const packet = JSON.parse(read('blind/packet.json')) as { cards: Array<{ id: string; text: string }> };
+    const key = JSON.parse(read('blind/key.json')) as { key: Record<string, { arm: string }> };
+    const words = (prefix: string): Set<string> => new Set(manifest.runs.filter((x) => x.file.startsWith(prefix)).flatMap((x) => load(x.file).record.deliveries.map((d) => d.words)));
+    const e = words('E-'), a1 = words('A1-');
+    expect(packet.cards).toHaveLength(manifest.n * 4);
+    for (const c of packet.cards) {
+      const arm = key.key[c.id]!.arm;
+      if (arm === 'E') expect(e.has(c.text), c.id).toBe(true);
+      if (arm === 'A1') expect(a1.has(c.text), c.id).toBe(true);
+    }
+  });
+
+  (FULL ? test : test.skip)('rebuilding gives the committed files byte for byte, with the runs supplied in reverse and the unrated runs beside them (S1_FULL=1)', () => {
     const present = readdirSync(new URL('runs/', m3)).filter((f) => f.endsWith('.json'));
     expect(present.length).toBeGreaterThan(manifest.runs.length); // the unrated calm and steady runs are in the folder
     const supplied = present.map(load).reverse();

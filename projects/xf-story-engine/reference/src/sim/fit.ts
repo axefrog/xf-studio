@@ -213,13 +213,31 @@ export function globalRules(data: S1Data): PackContribution[] {
   }
   out.push(sim({ target: archetype, mode: 'constrain', form: rule([{ path: 'role', op: 'in', arg: ROLES.filter((r) => !listed.includes(r)) }], { f: 'const', value: 'resident' }) }));
   // name origin by affiliation class (it feeds no policy)
-  const origin: Array<[number, number]> = [[1, 1], [2, 1], [1, 3], [3, 1], [1, 1], [1, 1]];
-  origin.forEach(([w, j], f) => {
-    out.push(sim({ target: { kind: 'xf:name', slot: 'origin' }, mode: 'weight', form: rule([{ path: '^/affc', op: 'eq', arg: f }], { f: 'table', weights: { western: w, japanese: j } }) }));
-  });
+  const names = data.people.names;
+  if (names) {
+    const origins = Object.keys(names.origins).sort();
+    names.byClass.forEach((byOrigin, f) => {
+      if (Object.keys(byOrigin).length === 0) return;
+      out.push(sim({ target: { kind: 'xf:name', slot: 'origin' }, mode: 'weight', form: rule([{ path: '^/affc', op: 'eq', arg: f }], { f: 'table', weights: Object.fromEntries(origins.map((o) => [o, byOrigin[o] ?? 1])) }) }));
+    });
+  } else {
+    const origin: Array<[number, number]> = [[1, 1], [2, 1], [1, 3], [3, 1], [1, 1], [1, 1]];
+    origin.forEach(([w, j], f) => {
+      out.push(sim({ target: { kind: 'xf:name', slot: 'origin' }, mode: 'weight', form: rule([{ path: '^/affc', op: 'eq', arg: f }], { f: 'table', weights: { western: w, japanese: j } }) }));
+    });
+  }
   void ARCHETYPES;
   void PROFILE_VALUES;
   return out;
+}
+
+/** The origin weights of a district's own names (the registry's `byDistrict`): the multipliers of the residents living under it. */
+export function nameRules(d: DistrictIndex, data: S1Data): PackContribution[] {
+  const names = data.people.names;
+  const mult = names?.byDistrict[d.key];
+  if (!names || !mult) return [];
+  const origins = Object.keys(names.origins).sort();
+  return [sim({ target: { kind: 'xf:name', slot: 'origin', scope: { under: d.id } }, mode: 'weight', form: { f: 'table', weights: Object.fromEntries(origins.map((o) => [o, mult[o] ?? 1])) } })];
 }
 
 /** The headcounts and counts of a district's cells, households and services: assigned values the index and the fit give. */
@@ -248,7 +266,7 @@ export function structurePack(ix: WorldIndex, data: S1Data, fits: Map<Id, Fit>):
 
 /** The whole pack: its version is the hash of what it holds, so a changed index or fit is a different pack (S1 1.4). */
 export function worldPack(ix: WorldIndex, data: S1Data, fits: Map<Id, Fit>): Pack {
-  const contributions = [...globalRules(data), ...simulatedDistricts(ix).flatMap((d) => rulesPack(d, data)), ...structurePack(ix, data, fits)];
+  const contributions = [...globalRules(data), ...simulatedDistricts(ix).flatMap((d) => [...rulesPack(d, data), ...nameRules(d, data)]), ...structurePack(ix, data, fits)];
   const version = H(hs('pack'), hrec({ data, ix: ix.hash, fits: [...fits.values()].map((f) => f.recipeHash) }));
   return { id: PACK_ID, version, contributions };
 }

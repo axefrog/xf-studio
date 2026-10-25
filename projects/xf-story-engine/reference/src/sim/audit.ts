@@ -86,7 +86,8 @@ export function auditSchema(defs: SchemaDefs, registry: Registry, config?: Confi
   // S1's own kinds read no heritage, gender or name origin; the kernel's name kind draws names by an origin, which is display and no decision
   const heritage = /heritage|gender|ethnic|nationality|name-origin|nameorigin|origin/i;
   for (const line of deriveReads(defs)) {
-    if (!line.startsWith('core:') && heritage.test(line)) out.push({ audit: 'source-lint', where: 'schema', detail: `a derive reads a forbidden attribute: ${line}` });
+    // the pack's own name kind (the wide registry's origin-keyed names) is display like the core's, and nothing reads it
+    if (!line.startsWith('core:') && !line.startsWith('xf:name.') && heritage.test(line)) out.push({ audit: 'source-lint', where: 'schema', detail: `a derive reads a forbidden attribute: ${line}` });
   }
   return out;
 }

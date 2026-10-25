@@ -1,0 +1,1161 @@
+{
+ "rater": "claude-sonnet",
+ "cards": {
+  "H-055": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template, vague ask"
+  },
+  "H-002": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock three-option ask"
+  },
+  "H-036": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "flat task-and-price format"
+  },
+  "H-023": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-003": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bounty template, no reason"
+  },
+  "H-074": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock three-option ask"
+  },
+  "H-016": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-062": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-014": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "reputation closer"
+  },
+  "H-071": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-009": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock reputation line"
+  },
+  "H-067": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "no questions delivery template"
+  },
+  "H-049": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock trust line"
+  },
+  "H-046": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "parts-assembled clauses"
+  },
+  "H-089": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bounty template"
+  },
+  "H-057": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-026": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-032": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock trust line"
+  },
+  "H-072": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-077": {
+   "caused": 2,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "Convince them, template"
+  },
+  "H-019": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-064": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-028": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock reputation line"
+  },
+  "H-083": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bounty template"
+  },
+  "H-086": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock clauses"
+  },
+  "H-043": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "debt template"
+  },
+  "H-075": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-042": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock clauses"
+  },
+  "H-015": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-035": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-078": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bounty template"
+  },
+  "H-087": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 6,
+   "made_by": "person",
+   "cue": "patrols watching curfew detail"
+  },
+  "H-031": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock trust line"
+  },
+  "H-048": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "escort template"
+  },
+  "H-029": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-061": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock clauses"
+  },
+  "H-005": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-070": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bounty template"
+  },
+  "H-094": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-095": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-020": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-041": {
+   "caused": 2,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "Convince them, template"
+  },
+  "H-091": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-052": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-079": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock clauses"
+  },
+  "H-054": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "escort template"
+  },
+  "H-056": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 6,
+   "pull": 6,
+   "made_by": "person",
+   "cue": "patrols and crews watching detail"
+  },
+  "H-066": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-063": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-060": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "delivery template"
+  },
+  "H-093": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-058": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "reputation closer"
+  },
+  "H-001": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bounty template"
+  },
+  "H-012": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-073": {
+   "caused": 6,
+   "legible": 6,
+   "setting": 7,
+   "pull": 6,
+   "made_by": "person",
+   "cue": "specific stakes, stalls saying no"
+  },
+  "H-033": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-037": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-021": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-027": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-084": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "delivery template"
+  },
+  "H-006": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-068": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock clauses"
+  },
+  "H-008": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "delivery template"
+  },
+  "H-004": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock reputation line"
+  },
+  "H-030": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock trust line"
+  },
+  "H-047": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-085": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-013": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bounty template"
+  },
+  "H-034": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-024": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock trust line"
+  },
+  "H-065": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "bounty template"
+  },
+  "H-018": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-045": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-011": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-025": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock reputation line"
+  },
+  "H-080": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "delivery template"
+  },
+  "H-053": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-050": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock clauses"
+  },
+  "H-076": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "debt template"
+  },
+  "H-051": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-039": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-090": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-096": {
+   "caused": 2,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "Convince them, template"
+  },
+  "H-088": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-007": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-022": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-082": {
+   "caused": 2,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "delivery template"
+  },
+  "H-092": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock reputation line"
+  },
+  "H-010": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-059": {
+   "caused": 2,
+   "legible": 4,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "Convince them, template"
+  },
+  "H-044": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-017": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-069": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  },
+  "H-081": {
+   "caused": 4,
+   "legible": 3,
+   "setting": 5,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "fill-in name template"
+  },
+  "H-040": {
+   "caused": 3,
+   "legible": 6,
+   "setting": 4,
+   "pull": 3,
+   "made_by": "program",
+   "cue": "debt template"
+  },
+  "H-038": {
+   "caused": 5,
+   "legible": 6,
+   "setting": 5,
+   "pull": 5,
+   "made_by": "program",
+   "cue": "stock closing line"
+  }
+ },
+ "pairs": {
+  "P-068": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-046": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-036": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-058": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-074": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-051": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-042": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-004": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-088": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-080": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-086": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-093": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-001": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-021": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-025": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-019": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-092": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-065": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-030": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-090": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-060": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-031": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-089": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-010": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-029": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-038": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-076": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-094": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-016": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-066": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-059": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-037": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-039": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-045": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-071": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-073": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-082": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-096": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-091": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-063": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-023": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-049": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-078": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-028": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-069": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-053": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-095": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-013": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-033": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-085": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-014": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-041": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-040": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-017": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-020": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-064": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-008": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-055": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-075": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-083": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-024": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-022": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-034": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-087": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-005": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-044": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-018": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-012": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-084": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-052": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-067": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-047": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-035": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-056": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-079": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-032": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-009": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-070": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-072": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-054": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-015": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-006": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-027": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-003": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-081": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-043": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-048": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-026": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-062": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-002": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-077": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-061": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-050": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-011": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-007": {
+   "follow": "left",
+   "caused": "left"
+  },
+  "P-057": {
+   "follow": "right",
+   "caused": "right"
+  }
+ },
+ "critic": "Three families of cards read as generated. (1) The short Friday-fee card ('X was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?') repeats word for word with only the names swapped, and its ask is vague. (2) The terse bounty cards (stolen jacket or credstick, follow someone, find someone missing, collect a debt, escort, sealed case, remove a gang member) all follow a fixed 'situation, task, price' format with no stated cause and no local detail. (3) The longer cards share stock parts: a 'three options' sentence ('X, Y, or Z'), a closing line about reputation or trust ('People trust you with their things around here', 'You will not know me from anyone'), and stock cause clauses ('the thief is no one from this row', 'I had never seen them before'). Several are exact duplicates, and the closing lines sometimes sit oddly against the situation. The cards that read as written by a person carry specific, local pressure: Ivo Popov's collector and stalls starting to say no, the patrols watching curfew and not pickpockets, and the crews watching each other and nobody else.",
+ "sheet": 2
+}

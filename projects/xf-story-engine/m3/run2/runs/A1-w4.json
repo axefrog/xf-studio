@@ -1,0 +1,1031 @@
+{
+ "version": 1,
+ "name": "m3b-w4",
+ "state": "S-late-wary",
+ "windows": 864,
+ "play": 86400,
+ "layer3": true,
+ "tempo": "restless",
+ "policy": "decline",
+ "deliveries": [
+  {
+   "id": "039708f3f52aa6f96475ccf45f9306c1",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "ask",
+   "what": "offer",
+   "game": 7800,
+   "play": 1260,
+   "clock": "Mon 02:10",
+   "words": "Keisha Bell messages you: Marites Tolentino was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?",
+   "channel": "message",
+   "names": {
+    "stallholder": "Keisha Bell",
+    "collector": "Marites Tolentino"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "07f73fd18bfc651fbbdf643b5a555012",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "stay-out",
+   "what": "beat",
+   "game": 7800,
+   "play": 1290,
+   "clock": "Mon 02:10",
+   "words": "Keisha Bell nodded, as if they had expected nothing else, and went back to the counter.",
+   "channel": "message",
+   "names": {
+    "stallholder": "Keisha Bell",
+    "collector": "Marites Tolentino"
+   }
+  },
+  {
+   "id": "a264c804be366ae492466726f8e5ee1f",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "closing",
+   "what": "closing",
+   "game": 7800,
+   "play": 1291,
+   "clock": "Mon 02:10",
+   "words": "That Friday is over.",
+   "channel": "trace",
+   "names": {
+    "stallholder": "Keisha Bell",
+    "collector": "Marites Tolentino"
+   }
+  },
+  {
+   "id": "303f8066bd117965d8836efa8092f76f",
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "beat": "coda",
+   "what": "coda",
+   "game": 8400,
+   "play": 1320,
+   "clock": "Mon 02:20",
+   "words": "The stalls opened and closed the way they always do, and the fee was paid or it was not.",
+   "channel": "message",
+   "names": {
+    "stallholder": "Keisha Bell",
+    "collector": "Marites Tolentino"
+   }
+  },
+  {
+   "id": "ad323bc3b446bfc53e362cb5526354fa",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 47400,
+   "play": 7856,
+   "clock": "Mon 13:10",
+   "words": "Kabuki: Tariq Khalil was treated for injuries after an assault. Witnesses name Haruto Kobayashi. No arrest has been made.",
+   "channel": "trace",
+   "names": {
+    "subject": "Haruto Kobayashi",
+    "other": "Tariq Khalil"
+   }
+  },
+  {
+   "id": "400876413bfd2798515852a2c4b9fac9",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 67800,
+   "play": 11250,
+   "clock": "Mon 18:50",
+   "words": "Word at the stalls is that Daichi Mori hit Takeshi Fujita hard enough to need the clinic. The rest is guesswork.",
+   "channel": "trace",
+   "names": {
+    "subject": "Daichi Mori",
+    "other": "Takeshi Fujita"
+   }
+  },
+  {
+   "id": "3313e35655edda70ae6cde540e21f721",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 105000,
+   "play": 17427,
+   "clock": "Tue 05:10",
+   "words": "Heard it from three people already: Itsuki Hashimoto went for Meiling Yang in the street. Thought you should know before it gets bigger.",
+   "channel": "trace",
+   "names": {
+    "subject": "Itsuki Hashimoto",
+    "other": "Meiling Yang"
+   }
+  },
+  {
+   "id": "fe5f2a8368dd463490792fa8b7d17fea",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 134400,
+   "play": 22381,
+   "clock": "Tue 13:20",
+   "words": "Dolores Pineda was hurt in an accident in Kabuki; the street crowded round for a minute and then moved on.",
+   "channel": "trace",
+   "names": {
+    "subject": "Dolores Pineda"
+   }
+  },
+  {
+   "id": "0d96fcc2c3046da7665c276be793f9fd",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 147600,
+   "play": 24595,
+   "clock": "Tue 17:00",
+   "words": "Itsuki Ogawa writes that the crews met on the street, Carlo Roxas went for them, and they have not slept since. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You will not know me, and I know it is a lot to ask a stranger.",
+   "channel": "message",
+   "names": {
+    "subject": "Carlo Roxas",
+    "other": "Itsuki Ogawa"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "ba663cc53d628f1d106b1832d5125b75",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 148200,
+   "play": 24625,
+   "clock": "Tue 17:10",
+   "words": "You did not answer. Itsuki Ogawa moved to a cousin's place across the district.",
+   "channel": "message",
+   "names": {
+    "subject": "Carlo Roxas",
+    "other": "Itsuki Ogawa"
+   }
+  },
+  {
+   "id": "c2fa7866addc5da0d1e69abdac1309ff",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 148200,
+   "play": 24626,
+   "clock": "Tue 17:10",
+   "words": "The street fight turned into a story, and the story into a rumour.",
+   "channel": "trace",
+   "names": {
+    "subject": "Carlo Roxas",
+    "other": "Itsuki Ogawa"
+   }
+  },
+  {
+   "id": "1af5f64bdfcda2f7b10282a92a8076e3",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 178200,
+   "play": 29639,
+   "clock": "Wed 01:30",
+   "words": "Eunji Jung says Emi Mori lifted a bag in the Kabuki crowd and was gone before anyone moved.",
+   "channel": "trace",
+   "names": {
+    "subject": "Emi Mori",
+    "other": "Eunji Jung"
+   }
+  },
+  {
+   "id": "82a0b4179b2c3d91e1dd907c133fdaad",
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 205200,
+   "play": 34153,
+   "clock": "Wed 09:00",
+   "words": "Kabuki: Lan Yang was taken for treatment after an accident. No one else was injured.",
+   "channel": "trace",
+   "names": {
+    "subject": "Lan Yang"
+   }
+  },
+  {
+   "id": "5601cc24f0707547c4062b700b12c9ca",
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 240600,
+   "play": 40033,
+   "clock": "Wed 18:50",
+   "words": "Kabuki: a theft was reported by Emi Ishikawa. Daichi Mori is named as the person responsible. The goods have not been recovered.",
+   "channel": "trace",
+   "names": {
+    "subject": "Daichi Mori",
+    "other": "Emi Ishikawa"
+   }
+  },
+  {
+   "id": "bbf30b37a5cdacf786e1a9400248c49d",
+   "template": "xf.m3.hooks:demand",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 244800,
+   "play": 40778,
+   "clock": "Wed 20:00",
+   "words": "Emi Ishikawa was at the stalls again, one hand out, and Minjun Jung was counting what was in the till.",
+   "channel": "trace",
+   "names": {
+    "subject": "Emi Ishikawa",
+    "other": "Minjun Jung"
+   }
+  },
+  {
+   "id": "0e2681aa57e7777c43a4a338ef81349e",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 271200,
+   "play": 45115,
+   "clock": "Thu 03:20",
+   "words": "An NCPD patrol pulled Yui Matsuda off the street in Kabuki. Nobody stopped to watch.",
+   "channel": "trace",
+   "names": {
+    "subject": "Yui Matsuda"
+   }
+  },
+  {
+   "id": "2e8c01846dce20b772b05cca725fc255",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 310200,
+   "play": 51602,
+   "clock": "Thu 14:10",
+   "words": "Tyler Pierce messages you: Itsuki Sakamoto and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.",
+   "channel": "message",
+   "names": {
+    "subject": "Itsuki Sakamoto",
+    "other": "Tyler Pierce"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "16293a9c4261787301ed1e2ec09e82fc",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 310200,
+   "play": 51632,
+   "clock": "Thu 14:10",
+   "words": "Tyler Pierce said they understood. Their stall was shut for a week.",
+   "channel": "message",
+   "names": {
+    "subject": "Itsuki Sakamoto",
+    "other": "Tyler Pierce"
+   }
+  },
+  {
+   "id": "d2c6f920e2382e93000c51bf937e5a79",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 310200,
+   "play": 51633,
+   "clock": "Thu 14:10",
+   "words": "The street fight turned into a story, and the story into a rumour.",
+   "channel": "trace",
+   "names": {
+    "subject": "Itsuki Sakamoto",
+    "other": "Tyler Pierce"
+   }
+  },
+  {
+   "id": "5411adfbc707fd667193984f739c21a9",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 327600,
+   "play": 54589,
+   "clock": "Thu 19:00",
+   "words": "An NCPD patrol pulled Emi Sakamoto off the street in Kabuki. Nobody stopped to watch.",
+   "channel": "trace",
+   "names": {
+    "subject": "Emi Sakamoto"
+   }
+  },
+  {
+   "id": "f3495599792eec00c2ac794edc1e12e2",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 358200,
+   "play": 59662,
+   "clock": "Fri 03:30",
+   "words": "Kabuki: Nora Marsh was treated for injuries after an assault. Witnesses name Hui Ma. No arrest has been made.",
+   "channel": "trace",
+   "names": {
+    "subject": "Hui Ma",
+    "other": "Nora Marsh"
+   }
+  },
+  {
+   "id": "1ea3ff77e3bc5164bbba20e6be429610",
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 378600,
+   "play": 63014,
+   "clock": "Fri 09:10",
+   "words": "Kabuki: police detained Daeho Choi during a street sweep. No charge has been announced.",
+   "channel": "trace",
+   "names": {
+    "subject": "Daeho Choi"
+   }
+  },
+  {
+   "id": "eecf348af56c49f858305be9f5d6ab22",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "ask",
+   "what": "offer",
+   "game": 409200,
+   "play": 68121,
+   "clock": "Fri 17:40",
+   "words": "Emi Mori writes that the crews met on the street, Hui Zhang went for them, and they have not slept since. I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me. You owe me nothing and I cannot promise much, but I am asking because I have no one else.",
+   "channel": "message",
+   "names": {
+    "subject": "Hui Zhang",
+    "other": "Emi Mori"
+   },
+   "answer": "decline"
+  },
+  {
+   "id": "ecd5b5cb871e3f5ed795354bbd91f3ca",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "x-decline",
+   "what": "beat",
+   "game": 409200,
+   "play": 68151,
+   "clock": "Fri 17:40",
+   "words": "Emi Mori said they understood. Their stall was shut for a week.",
+   "channel": "message",
+   "names": {
+    "subject": "Hui Zhang",
+    "other": "Emi Mori"
+   }
+  },
+  {
+   "id": "51f2ff55777e16520da4c6b9ac5b665a",
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "beat": "closing",
+   "what": "closing",
+   "game": 409200,
+   "play": 68152,
+   "clock": "Fri 17:40",
+   "words": "The street fight turned into a story, and the story into a rumour.",
+   "channel": "trace",
+   "names": {
+    "subject": "Hui Zhang",
+    "other": "Emi Mori"
+   }
+  },
+  {
+   "id": "6ce30a9e8ab6bd455701c38c6ef251ab",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 435600,
+   "play": 72570,
+   "clock": "Sat 01:00",
+   "words": "Heard it from three people already: Karim Taha went for Phuc Vu in the street. Thought you should know before it gets bigger.",
+   "channel": "trace",
+   "names": {
+    "subject": "Karim Taha",
+    "other": "Phuc Vu"
+   }
+  },
+  {
+   "id": "40c4e78889c12d9b4064d3634cdef776",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 469800,
+   "play": 78218,
+   "clock": "Sat 10:30",
+   "words": "You know Hui Zhang? Jamie Nolan beat them up in Kabuki yesterday. Somebody should check on them.",
+   "channel": "trace",
+   "names": {
+    "subject": "Jamie Nolan",
+    "other": "Hui Zhang"
+   }
+  },
+  {
+   "id": "5fc18577ee6647a27b8aab1efd63f922",
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "beat": "tell",
+   "what": "beat",
+   "game": 511800,
+   "play": 85240,
+   "clock": "Sat 22:10",
+   "words": "Kabuki: Daichi Shimizu was treated for injuries after an assault. Witnesses name Takeshi Shimizu. No arrest has been made.",
+   "channel": "trace",
+   "names": {
+    "subject": "Takeshi Shimizu",
+    "other": "Daichi Shimizu"
+   }
+  }
+ ],
+ "instances": [
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 2,
+   "roles": {
+    "subject": "Daichi Mori",
+    "other": "Takeshi Fujita"
+   },
+   "draws": {
+    "cast:other": "20c509cbc224dfe447e55b61ed5e5584",
+    "cast:subject": "458304c878ad8711acd81cadf6922e74",
+    "alt:tell:0": "f-beating-3"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 10,
+   "roles": {
+    "subject": "Yui Matsuda"
+   },
+   "draws": {
+    "cast:subject": "c437e7770ae9ba1779b6cb174298fc51",
+    "alt:tell:0": "f-sweep-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 3,
+   "roles": {
+    "subject": "Itsuki Hashimoto",
+    "other": "Meiling Yang"
+   },
+   "draws": {
+    "cast:other": "50bd0f90b4bc6dfaec252571b1de44d2",
+    "cast:subject": "fb368e86a95d7f0e7c896d4686e1bf60",
+    "alt:tell:0": "f-beating-4"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 4,
+   "roles": {
+    "subject": "Dolores Pineda"
+   },
+   "draws": {
+    "cast:subject": "096df0ff9e0fb41447c2a4f86e99432b",
+    "alt:tell:0": "f-accident-0"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 15,
+   "roles": {
+    "subject": "Hui Zhang",
+    "other": "Emi Mori"
+   },
+   "draws": {
+    "cast:other": "d1d838308503d7fb19d503ce56e1784f",
+    "cast:subject": "c070a62fa32e7b3cd43412818e870fb2",
+    "alt:ask:0": "clash-aftermath-ask-217",
+    "alt:x-decline:0": "clash-aftermath-out-decline-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:demand",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 9,
+   "roles": {
+    "subject": "Emi Ishikawa",
+    "other": "Minjun Jung"
+   },
+   "draws": {
+    "cast:other": "d774cc6c8d1b84c12c10e037d66b22a7",
+    "cast:subject": "75f8ef76c2f6b414bc3849a2154eaa1e",
+    "alt:tell:0": "f-demand-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 1,
+   "roles": {
+    "subject": "Haruto Kobayashi",
+    "other": "Tariq Khalil"
+   },
+   "draws": {
+    "cast:other": "a212ea271bfbfac9e538dedea1c7abfe",
+    "cast:subject": "8efb7dd6f79bdbb0589f8166d6194c1d",
+    "alt:tell:0": "f-beating-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 12,
+   "roles": {
+    "subject": "Emi Sakamoto"
+   },
+   "draws": {
+    "cast:subject": "a450fe274e28c581b80638e9bcb978c2",
+    "alt:tell:0": "f-sweep-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 18,
+   "roles": {
+    "subject": "Takeshi Shimizu",
+    "other": "Daichi Shimizu"
+   },
+   "draws": {
+    "cast:other": "202bf628acbd3978680c5adb7a93b874",
+    "cast:subject": "0eaa085077d69dd062c7303e9088fbd7",
+    "alt:tell:0": "f-beating-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 16,
+   "roles": {
+    "subject": "Karim Taha",
+    "other": "Phuc Vu"
+   },
+   "draws": {
+    "cast:other": "1e38cfe208be4571d046d6ce322e5ac2",
+    "cast:subject": "868592ceeba0d5ca248d7ec2967fce1b",
+    "alt:tell:0": "f-beating-4"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 11,
+   "roles": {
+    "subject": "Itsuki Sakamoto",
+    "other": "Tyler Pierce"
+   },
+   "draws": {
+    "cast:other": "96a572d409e1891434e1fdffe9c590cf",
+    "cast:subject": "b120cf0a1d9348191726188d18996529",
+    "alt:ask:0": "clash-aftermath-ask-42",
+    "alt:x-decline:0": "clash-aftermath-out-decline-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:accident",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 7,
+   "roles": {
+    "subject": "Lan Yang"
+   },
+   "draws": {
+    "cast:subject": "0434716f9e8ba06480dffe3fd1216c4c",
+    "alt:tell:0": "f-accident-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 8,
+   "roles": {
+    "subject": "Daichi Mori",
+    "other": "Emi Ishikawa"
+   },
+   "draws": {
+    "cast:other": "75f8ef76c2f6b414bc3849a2154eaa1e",
+    "cast:subject": "458304c878ad8711acd81cadf6922e74",
+    "alt:tell:0": "f-theft-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 13,
+   "roles": {
+    "subject": "Hui Ma",
+    "other": "Nora Marsh"
+   },
+   "draws": {
+    "cast:other": "fcc55c22a8b59ed196bb26f6b7e5df36",
+    "cast:subject": "a01c55b17ac4c1d8919d704845cedae4",
+    "alt:tell:0": "f-beating-1"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:theft",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 6,
+   "roles": {
+    "subject": "Emi Mori",
+    "other": "Eunji Jung"
+   },
+   "draws": {
+    "cast:other": "d30efb793a5be5ad33664df4275b9a5e",
+    "cast:subject": "d1d838308503d7fb19d503ce56e1784f",
+    "alt:tell:0": "f-theft-0"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:beating",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 17,
+   "roles": {
+    "subject": "Jamie Nolan",
+    "other": "Hui Zhang"
+   },
+   "draws": {
+    "cast:other": "c070a62fa32e7b3cd43412818e870fb2",
+    "cast:subject": "abeafce2acb35e7798c926c775a067e7",
+    "alt:tell:0": "f-beating-2"
+   }
+  },
+  {
+   "template": "xf.m3.hooks:sweep",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 14,
+   "roles": {
+    "subject": "Daeho Choi"
+   },
+   "draws": {
+    "cast:subject": "f82d34fbc42a5ff97d80b7ee5ed830bc",
+    "alt:tell:0": "f-sweep-1"
+   }
+  },
+  {
+   "template": "xf.m3:friday-fee",
+   "layer": "authored",
+   "state": "resolved",
+   "sowSeq": 0,
+   "roles": {
+    "market": "",
+    "stallholder": "Keisha Bell",
+    "collector": "Marites Tolentino"
+   },
+   "draws": {
+    "cast:market": "c4369efe0f2ab1fc3305a7596348481e",
+    "cast:stallholder": "ef7e339ca674547a4947e4bd5c59eedf",
+    "cast:collector": "b4383a9b716afff34aab18da73f49566"
+   }
+  },
+  {
+   "template": "xf.m3b.offers:clash-aftermath",
+   "layer": "procedural",
+   "state": "resolved",
+   "sowSeq": 5,
+   "roles": {
+    "subject": "Carlo Roxas",
+    "other": "Itsuki Ogawa"
+   },
+   "draws": {
+    "cast:other": "8f816d9469ddf190dcff082ab02869cb",
+    "cast:subject": "311ce3917f4eb7a19a3f49d5a70945bd",
+    "alt:ask:0": "clash-aftermath-ask-243",
+    "alt:x-decline:0": "clash-aftermath-out-decline-1"
+   }
+  }
+ ],
+ "decisions": [
+  {
+   "at": 47400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.3665490089600869
+    },
+    "composite": 0.16666666666666666
+   }
+  },
+  {
+   "at": 67800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.2612355473852257
+    },
+    "composite": 0.3333333333333333
+   }
+  },
+  {
+   "at": 105000,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.3666672325111613
+    },
+    "composite": 0.1
+   }
+  },
+  {
+   "at": 134400,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.47174962325550923
+    },
+    "composite": 0.2
+   }
+  },
+  {
+   "at": 147600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:clash-aftermath",
+    "kit": "xf.m3b.offers:clash-aftermath",
+    "features": {
+     "F3": 1,
+     "F5": 3,
+     "F6": 0,
+     "F11": 0.2790733730409954
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 178200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.41235538925585125
+    },
+    "composite": 0.6666666666666666
+   }
+  },
+  {
+   "at": 205200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:accident",
+    "kit": "xf.m3.hooks:accident",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.21339867021013842
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 240600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:theft",
+    "kit": "xf.m3.hooks:theft",
+    "features": {
+     "F3": 1,
+     "F5": 1,
+     "F6": 0,
+     "F11": 0.23354128599076646
+    },
+    "composite": 0.3333333333333333
+   }
+  },
+  {
+   "at": 244800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:demand",
+    "kit": "xf.m3.hooks:demand",
+    "features": {
+     "F3": 1,
+     "F5": 1,
+     "F6": 0,
+     "F11": 0.8023476096727462
+    },
+    "composite": 0.6666666666666666
+   }
+  },
+  {
+   "at": 271200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.23401189560469324
+    },
+    "composite": 0.3333333333333333
+   }
+  },
+  {
+   "at": 310200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:clash-aftermath",
+    "kit": "xf.m3b.offers:clash-aftermath",
+    "features": {
+     "F3": 1,
+     "F5": 3,
+     "F6": 0,
+     "F11": 0.3130480151886259
+    },
+    "composite": 0.8333333333333334
+   }
+  },
+  {
+   "at": 327600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.2641167983174782
+    },
+    "composite": 0.8333333333333334
+   }
+  },
+  {
+   "at": 358200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.3106617382674855
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 378600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:sweep",
+    "kit": "xf.m3.hooks:sweep",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.22134549367218323
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 409200,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3b:clash-aftermath",
+    "kit": "xf.m3b.offers:clash-aftermath",
+    "features": {
+     "F3": 1,
+     "F5": 4,
+     "F6": 0,
+     "F11": 0.30000416672453784
+    },
+    "composite": 0.8333333333333334
+   }
+  },
+  {
+   "at": 435600,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.47463139159287177
+    },
+    "composite": 0
+   }
+  },
+  {
+   "at": 469800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 1,
+     "F6": 0,
+     "F11": 0.375874430097797
+    },
+    "composite": 0.5
+   }
+  },
+  {
+   "at": 511800,
+   "kind": "sow",
+   "rule": "sow",
+   "data": {
+    "pattern": "xf.m3:beating",
+    "kit": "xf.m3.hooks:beating",
+    "features": {
+     "F3": 1,
+     "F5": 0,
+     "F6": 0,
+     "F11": 0.20880661220938662
+    },
+    "composite": 0
+   }
+  }
+ ],
+ "hash": "71433b4e03a6743515c4918c60a4097f"
+}
