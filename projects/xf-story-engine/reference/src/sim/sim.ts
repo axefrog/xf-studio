@@ -38,6 +38,7 @@ import { VFrames } from './vframes.ts';
 import { Divergence } from './divergence.ts';
 import { Protection } from './protection.ts';
 import { Reads } from './reads.ts';
+import { type StateRule, stateRules } from './fillers.ts';
 import { type OutcomeView, type PostRec, outcomeOf, partiesOf } from './outcomes.ts';
 import type { GateEnv } from './gate.ts';
 import type { GroupDigest } from './proc-groups.ts';
@@ -73,6 +74,8 @@ export class Sim {
   readonly divergence: Divergence;
   readonly reads: Reads;
   readonly protection: Protection;
+  /** The state rules S1 registers for the story patterns (S1 9.1a). */
+  readonly stateRules: StateRule[];
   /** The canon characters of the main story (S1 4.4), joined to mirrored nodes by game key. */
   readonly spine = new Set<Id>();
   readonly mirrorProc: Id = processCause('city.mirror');
@@ -98,6 +101,7 @@ export class Sim {
     this.divergence = new Divergence(this);
     this.reads = new Reads(this);
     this.protection = new Protection(this);
+    this.stateRules = stateRules(this);
     this.people.hooks = {
       closed: (v, t) => this.closedAt(v.role, v.cell, t),
       isSpine: (n) => this.spine.has(n),

@@ -60,6 +60,25 @@ export function startHunt(o: HuntOptions): Hunt {
   sim.k.settings.set({ tempo: o.tempo ?? 'restless' });
   const GA = gnode(sim, 'A1');
   sim.setState('group.decide', () => {});
+  // the head's seat is held (the draw at t = 0 can fail in a small world, and no intention starts while it is vacant, S1 7.8)
+  const g0 = sim.stateOf<GroupState>('group.decide')!.groups[GA]!;
+  if (g0.seats[0]!.holder === null) {
+    const head = adults(sim, 2, 'gang').find((r) => sim.people.view(r)!.aband >= 2 && !g0.seats.some((x) => x.holder === r))!;
+    sim.setState('group.decide', (st) => {
+      const seat = (st as GroupState).groups[GA]!.seats[0]!;
+      seat.holder = head;
+      seat.since = 0;
+      seat.succ = 0;
+      seat.lean = Object.keys(sim.data.groups.groups.find((x) => x.aff === 'A1')!.ethos)[0]!;
+      seat.edged = false;
+      seat.logged = true;
+      delete seat.retry;
+    });
+  }
+  // the leaders lean to retribution, so that a grievance weighs as much with the group as a hunt fixture needs (a leader's lean is a drawn trait, S1 7.8)
+  sim.setState('group.decide', (st) => {
+    for (const seat of (st as GroupState).groups[GA]!.seats) if (seat.holder !== null) seat.lean = 'retribution';
+  });
   const holders = new Set(sim.stateOf<GroupState>('group.decide')!.groups[GA]!.seats.map((s) => s.holder));
   const m = adults(sim, 2, 'gang').find((r) => !holders.has(r))!;
   const cell = sim.w.districts[0]!.cellIds.find((c) => sim.w.cell(c).public === 'public')!;
