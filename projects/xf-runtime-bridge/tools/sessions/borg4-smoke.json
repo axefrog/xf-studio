@@ -279,13 +279,11 @@
           }
         },
         {
-          "label": "B318-3-answered",
-          "do": "await",
+          "label": "B318-3-window",
+          "do": "events",
           "cursor": "$B318_3_cursor",
-          "kind": "dm.phone",
-          "timeout_s": 20,
-          "bind": "B318_3_answered",
-          "on_fail": "fail_row"
+          "duration_s": 25,
+          "bind": "B318_3_window"
         },
         {
           "label": "B318-3-state",
@@ -297,10 +295,75 @@
       ],
       "pass": [
         {
-          "label": "a dm.phone event came",
-          "ref": "$B318_3_answered.complete",
+          "label": "answered by the bridge, this call",
+          "ref": "$B318_3_window",
           "match": {
-            "equals": true
+            "path": "events",
+            "some": {
+              "all": [
+                {
+                  "path": "kind",
+                  "equals": "dm.phone"
+                },
+                {
+                  "path": "data.what",
+                  "equals": "auto_answer"
+                },
+                {
+                  "path": "data.call",
+                  "equals": "$B318_3_call.call"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "label": "ended by itself, this call",
+          "ref": "$B318_3_window",
+          "match": {
+            "all": [
+              {
+                "path": "events",
+                "some": {
+                  "all": [
+                    {
+                      "path": "kind",
+                      "equals": "dm.phone"
+                    },
+                    {
+                      "path": "data.what",
+                      "equals": "ended"
+                    },
+                    {
+                      "path": "data.call",
+                      "equals": "$B318_3_call.call"
+                    }
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "path": "events",
+                  "some": {
+                    "all": [
+                      {
+                        "path": "data.call",
+                        "equals": "$B318_3_call.call"
+                      },
+                      {
+                        "path": "data.what",
+                        "one_of": [
+                          "missed",
+                          "declined",
+                          "failed",
+                          "hung_up"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
           }
         }
       ],

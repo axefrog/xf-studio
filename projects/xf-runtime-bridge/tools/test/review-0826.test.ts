@@ -300,3 +300,28 @@ describe("H1: exceptions never bypass the cleanup", () => {
     expect(result.cleanupErrors.some((e) => e.includes("report"))).toBe(true);
   });
 });
+
+describe("M14: B318-3 needs the call answered and ended, for its own call", () => {
+  const smoke = () => JSON.parse(readFileSync(join(projectDir, "tools", "sessions", "borg4-smoke.json"), "utf8"));
+  const run = async (phases: string[]) => {
+    const clock = new FakeClock();
+    const api = fakeApi(clock, {});
+    const call = 7;
+    const handlers: Record<string, () => { ok: true; result: unknown }> = {
+      "phone.call": () => { for (const what of phases) api.push("dm.phone", { what, call, contact: "coach" }); api.push("dm.phone", { what: "ringing", call: 99, contact: "other" }); return { ok: true, result: { call, state: "ringing" } }; },
+    };
+    const wrapped = { ...api, run: (name: string, input: Record<string, unknown> = {}, opts = {}) => (handlers[name] ? Promise.resolve({ ok: true, command: name, cid: "c", result: handlers[name]().result }) : api.run(name, input as never, opts)) };
+    const dir = tempDir("xfb-review-");
+    const result = await go(smoke(), wrapped as never, fakeHost(), clock, dir, { rows: ["B318-3"], fixtures: { staged_mod: stagedMod(dir) } });
+    const row = result.rows.find((r) => r.id === "B318-3")!;
+    // The row ran: its verdict comes from the checks, not a skipped set-up.
+    expect(row.close?.status).toBe("done");
+    return row;
+  };
+  test("ringing alone is not a pass", async () => {
+    expect((await run(["ringing"])).verdict).toBe("FAIL");
+  });
+  test("answered by the bridge and ended by itself, for this call, passes", async () => {
+    expect((await run(["ringing", "auto_answer", "answered", "ended"])).verdict).toBe("PASS");
+  });
+});

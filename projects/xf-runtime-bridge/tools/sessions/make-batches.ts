@@ -354,9 +354,17 @@ function smokeScript(): Json {
     steps: [inPlay(row), { label: `${row}-cursor`, do: "cursor", bind: key(row, "cursor") },
       { label: `${row}-call`, do: "run", command: "phone.call", input: { contact: "coach", auto_answer: true, ring_s: 30, lines: [{ text: "Smoke check: this call answers itself." }], when: quiet }, bind: key(row, "call"),
         retry: { times: 3, backoff_ms: 5000, on: { code: "precondition_failed" } } },
-      { label: `${row}-answered`, do: "await", cursor: ref(row, "cursor"), kind: "dm.phone", timeout_s: 20, bind: key(row, "answered"), on_fail: "fail_row" },
+      // The call's whole life in the event feed: rung, answered by the bridge, ended by itself (its lines done), all for this call.
+      { label: `${row}-window`, do: "events", cursor: ref(row, "cursor"), duration_s: 25, bind: key(row, "window") },
       { label: `${row}-state`, do: "run", command: "phone.state", input: {}, bind: key(row, "state") }],
-    pass: [check("a dm.phone event came", row, "answered", "complete", { equals: true })],
+    pass: [
+      { label: "answered by the bridge, this call", ref: ref(row, "window"), match: { path: "events", some: { all: [{ path: "kind", equals: "dm.phone" }, { path: "data.what", equals: "auto_answer" }, { path: "data.call", equals: ref(row, "call", "call") }] } } },
+      // Ended by itself, and never missed, declined, failed or hung up on the way.
+      { label: "ended by itself, this call", ref: ref(row, "window"), match: { all: [
+        { path: "events", some: { all: [{ path: "kind", equals: "dm.phone" }, { path: "data.what", equals: "ended" }, { path: "data.call", equals: ref(row, "call", "call") }] } },
+        { not: { path: "events", some: { all: [{ path: "data.call", equals: ref(row, "call", "call") }, { path: "data.what", one_of: ["missed", "declined", "failed", "hung_up"] }] } } },
+      ] } },
+    ],
     cleanup: [{ label: `${row}-end`, do: "run", command: "phone.end", input: {} }] });
 
   row = "B318-4";

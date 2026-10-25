@@ -63,6 +63,8 @@ export type Match = {
   max?: number;
   /** A substring of a string, or an element of an array. */
   contains?: unknown;
+  /** Some element of the selected array matches this (its path is relative to the element): one event of a window. */
+  some?: Match;
   all?: Match[];
   any?: Match[];
   not?: Match;
@@ -219,7 +221,7 @@ export function matches(match: Match, outcome: Outcome, bindings: Record<string,
   if (match.not && matches(match.not, outcome, bindings)) return false;
   if (match.ok !== undefined && outcome.ok !== match.ok) return false;
   if (match.code !== undefined && !(Array.isArray(match.code) ? match.code : [match.code]).includes(outcome.code ?? "")) return false;
-  const tests = ["equals", "one_of", "exists", "min", "max", "contains"].some((key) => (match as Json)[key] !== undefined);
+  const tests = ["equals", "one_of", "exists", "min", "max", "contains", "some"].some((key) => (match as Json)[key] !== undefined);
   if (!tests) return true;
   const subject = match.ref !== undefined ? resolveRefs(match.ref, bindings) : selectPath(outcome.value, match.path);
   const value = match.ref !== undefined && subject === match.ref ? undefined : subject;
@@ -229,6 +231,7 @@ export function matches(match: Match, outcome: Outcome, bindings: Record<string,
   if (match.one_of !== undefined && !(expect(match.one_of) as unknown[]).some((v) => same(v, value))) return false;
   if (match.min !== undefined && !(typeof value === "number" && value >= (expect(match.min) as number))) return false;
   if (match.max !== undefined && !(typeof value === "number" && value <= (expect(match.max) as number))) return false;
+  if (match.some !== undefined && !(Array.isArray(value) && value.some((element) => matches(match.some!, { ok: true, value: element }, bindings)))) return false;
   if (match.contains !== undefined) {
     const needle = expect(match.contains);
     if (typeof value === "string") { if (!value.includes(String(needle))) return false; }
@@ -240,7 +243,7 @@ export function matches(match: Match, outcome: Outcome, bindings: Record<string,
 
 // ---- Checking -------------------------------------------------------------------------------------------
 
-const MATCH_KEYS = new Set(["ok", "code", "path", "ref", "equals", "one_of", "exists", "min", "max", "contains", "all", "any", "not"]);
+const MATCH_KEYS = new Set(["ok", "code", "path", "ref", "equals", "one_of", "exists", "min", "max", "contains", "some", "all", "any", "not"]);
 const isObject = (v: unknown): v is Json => !!v && typeof v === "object" && !Array.isArray(v);
 const inRange = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
 
@@ -253,6 +256,7 @@ export function checkMatch(match: unknown, where: string, problems: string[]) {
     else (match[key] as unknown[]).forEach((m, i) => checkMatch(m, `${where}.${key}[${i}]`, problems));
   }
   if (match.not !== undefined) checkMatch(match.not, `${where}.not`, problems);
+  if (match.some !== undefined) checkMatch(match.some, `${where}.some`, problems);
   if (match.one_of !== undefined && !Array.isArray(match.one_of) && !(typeof match.one_of === "string" && match.one_of.startsWith("$"))) problems.push(`${where}.one_of must be a list`);
   if (match.ref !== undefined && (typeof match.ref !== "string" || !REF.test(match.ref))) problems.push(`${where}.ref must be a $reference`);
   if (match.path !== undefined && (typeof match.path !== "string" || !/^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/.test(match.path))) problems.push(`${where}.path must be a plain property path`);
