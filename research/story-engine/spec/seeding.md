@@ -869,7 +869,7 @@ type GrowsFrom = { looseEnd: { seed: Id; entry: number } } | { promotion: Id } |
   - a loose end of an earlier seed (§6.4), by the record entry's stable number;
   - a promotion;
   - a parent;
-  - or (v1.11) a juncture of a pattern instance that layer 3 sowed the seed to realise.
+  - or (v1.11) a juncture of a pattern instance that layer 3 sowed the seed for: to realise it, or to show it.
 
   A procedural arc needs at least two found ancestors in its `growsFrom` chain (L-37). An authored arc needs none. **Ancestors through instances** (v1.11): a chain that reaches an instance continues through the instance's lineage, the instances whose story events it matched ([S3 §6.6](procedural.md#66-composition-story-events-chains-layers-and-shapes)). An ancestor counts as **found** when it reached the protagonist at `presented` or above and at least one of its junctures was filled from the record, not by a nudge or a constructed cause. The gate itself is still a later capability (§0.3).
 
@@ -990,7 +990,7 @@ S1 exposes these as pins and process state ([S1 §9](simulation.md)). **No atom 
   1. **an accepted stake:** a stake the protagonist accepted when an offer named it, faced as an obstacle with at least two affordances, one without combat (§2.8, L-27);
   2. **a group's own decision:** S1's intention against the protagonist, which a seed may carry and stage only as below.
 
-  Nothing else in a seed harms the protagonist or takes from them. A nudge never names the protagonist at all (§2.25).
+  Nothing else in a seed harms the protagonist or takes from them. A nudge never aims harm at the protagonist (§2.25).
 - **Why a group acts.** S1 starts the intention only from the group's belief that the protagonist acted against it, resting on an observed act of the protagonist's or a telling of one ([D-10](../decisions.md)). D-09 holds: the record holds what the group believes the protagonist did, never what the protagonist felt or meant.
 - **Layer 2 carries the warning.** S1 can't reach the protagonist; only the arbiter can. A pack template whose `sow` reads `social.intentAgainst` (§2.17) delivers the warning. It binds the intention's warning event to a role of kind `core:event`, so its delivery cites it (§10.2), and its warning beat is `mustReach` (§2.8), so it has a persistent route that can reach `confirmed`. S4's starter pack ships one such template. S1 reads layer 2's `exposure(warning)` (§10.1a) and produces no harmful act until the warning is `presented`. **The bound fails safe:** if no pack carries the warning, or the player never sees it, the group never harms the protagonist.
 - **Staging a group's harmful act.** A seed may stage one of the group's harmful acts (members finding the protagonist) as an encounter. It binds the act's event, or the intention's warning event, to a role of kind `core:event`. Its harmful beat is an obstacle with at least two affordances, one without combat (L-27). Preparing its release checks that the intention's warning reached `presented` (§8.4; a runtime gate, so the delivery waits until then). With these, L-15 accepts the beat without an accepted stake.
@@ -1483,7 +1483,7 @@ Without an `asker`, an offer's and a response's fills bind no asker, and the fil
 
 ### 2.25 Nudges: seeds that never reach the protagonist
 
-A **nudge** is a seed with `nudge: true`. Layer 3 sows it to give a cast person a reason or an opportunity for a juncture it is waiting on, off-screen ([S3 §7.6](procedural.md#76-instantiation-and-the-sowing-request); [the pattern language §8.2](../composite/pattern-language.md#82-what-the-director-may-nudge-and-what-it-must-wait-for)). A nudge never reaches the protagonist: it has no delivery, no offer and no closing trace, and nothing in it names the protagonist. Under [DS-05](../design-seeds.md) the director steers only through the unobserved, so a nudge writes only what the protagonist hasn't observed and couldn't base a choice on.
+A **nudge** is a seed with `nudge: true`. Layer 3 sows it to give a cast person a reason or an opportunity for a juncture it is waiting on, off-screen ([S3 §7.6](procedural.md#76-instantiation-and-the-sowing-request); [the pattern language §8.2](../composite/pattern-language.md#82-what-the-director-may-nudge-and-what-it-must-wait-for)). A nudge never reaches the protagonist: it has no delivery, no offer and no closing trace, and nothing in it makes the protagonist act, takes part with them, or aims harm at them. Under [DS-05](../design-seeds.md) the director steers only through the unobserved, so a nudge writes only what the protagonist hasn't observed and couldn't base a choice on.
 
 **What a nudge may hold:**
 - roles, cast as usual, under the source filters of §5.2 (no spine character, no excluded NPC);
@@ -1495,7 +1495,7 @@ A **nudge** is a seed with `nudge: true`. Layer 3 sows it to give a cast person 
 **What it may not hold** (L-140):
 - an offer, a beat whose fragment has a channel, stakes, costs, promises, clocks, projections, forms or `closing`;
 - role `authored` beliefs or edges. A belief travels only through a minted `tell`, so that a "why" answer can walk it, and a debt or a tie only through an event that records it;
-- **the protagonist, anywhere:** no `v` in `binds` or a role's identity, no `tie.to: 'v'`, no event participant or effect on `v`, no goal effect on `v`.
+- **the protagonist as an actor or a participant:** no `v` as a role's identity, no `tie.to: 'v'`, no event participant or effect on `v` (a nudge mints only off-screen events). A goal effect on `v` is allowed only of a kind that harms nothing (`help`, `give`, `protect`, `rescue`, `meet`): a nudge may give someone a reason to repay or help the protagonist, never to harm them.
 
 It needs no `unattended` plan.
 
@@ -1503,11 +1503,12 @@ It needs no `unattended` plan.
 
 **The lifecycle.** A nudge is sown, waits and casts like any seed. Its **silent start** takes the place of a first release. When T4's conditions hold, layer 2 prepares it as §8.4 prepares a first release (windows, casts, claims, a staged batch holding the commit, the fixed-part watch) and adds the legality check below. On confirm, nothing is handed to the game port: T8n moves the nudge to `running`, and its start beats run. It ends by T12, or withers or is withdrawn, like any seed. It **closes silently**: its `seed-outcome` event is minted, so that layer 3 can see it, its closure has `witnessed: false`, and no closing delivery, coda or news is queued.
 
-**The legality check.** It runs at every preparation of the silent start, as a runtime gate, never an error. The start waits (the batch is discarded and the nudge stays `cast`) unless every minted event and every goal passes all four rules:
+**The legality check.** It runs at every preparation of the silent start, as a runtime gate, never an error. The start waits (the batch is discarded and the nudge stays `cast`) unless every minted event and every goal passes all five rules:
 1. **Off-screen.** No minted event names the protagonist, has as its place the protagonist's current cell or a cell whose `depth` read is `open` (S1 §9.1, fine tier for some root), or would have the protagonist among its witnesses.
 2. **No contradiction.** No cast person of a minted event has an `observed` pin on their whereabouts whose time lies within `nudgeGap` game seconds **[tunable 3600]** of the event's time and that places them elsewhere.
 3. **Nothing an open offer rests on.** No cast node of the nudge is a cast of a seed with a displayed, unanswered offer (§8.5).
 4. **A wanting actor and a caused telling,** as above, at the time of the check.
+5. **Never the protagonist's harm, never word of their acts.** A goal effect `take` on an item the protagonist holds is allowed only if the item is a `subject` of a `promise` the protagonist made, a stake they accepted (§2.9). No minted `tell` has as its subject an event in which the protagonist took part, so no nudge carries word of the protagonist's acts to anyone, a group under D-30 included (§2.16a).
 
 A failed check writes a `nudge-held` record entry naming the rule. Layer 3 withdraws a nudge that hasn't started within its lifetime ([S3 §7.7](procedural.md#77-pending-lifetimes-nudges-and-closings)).
 
@@ -2558,7 +2559,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 | L-138 | A `realises` entry naming an unknown pattern or juncture, or a juncture of a shape; whose `binds` misses an argument of the juncture's function or names an undeclared role; or whose `by` beat leaves no `event`, and makes no `offer` or `response`, whose kind fills the juncture's function with the mapped arguments (§2.24) | error |
 | L-139 | An `event` effect whose kind isn't registered, or whose producers don't include `s2`; that names an undeclared role; or that names `v` outside the `writes` of an action or decline and the leaves of a beat whose every chain link reads a `response` atom (§2.5) | error |
-| L-140 | A nudge holding an offer, a beat whose fragment has a channel, stakes, costs, promises, clocks, projections, forms, `closing`, or a role's `authored` beliefs or edges; naming `v` anywhere; or minting a `tell` without a `teller`, a `listener` and a `subject` participant (§2.25). Whether the teller knows the subject is checked at run time (rule 4) | error |
+| L-140 | A nudge holding an offer, a beat whose fragment has a channel, stakes, costs, promises, clocks, projections, forms, `closing`, or a role's `authored` beliefs or edges; with `v` as a role's identity, a `tie.to: 'v'`, an event participant or effect on `v`, or a goal effect on `v` other than `help`, `give`, `protect`, `rescue` or `meet`; or minting a `tell` without a `teller`, a `listener` and a `subject` participant (§2.25). Whether the teller knows the subject is checked at run time (rule 4) | error |
 | L-141 | A consequential offer with no `asker` | warning |
 | L-142 | A text unit whose speaker is `v` that isn't an option's `say` line: the engine never speaks for V unprompted (§2.22) | error |
 | L-143 | An offer whose voiced options (recorded or spliced `say`) all share one stance while another stance's options are only unvoiced (§2.22) | warning |
@@ -2577,7 +2578,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-156 | An `escalation` entry that isn't a juncture of the pattern, or whose function has no acting argument | error |
 | L-157 | `show` naming an unknown juncture, or `show.edges` above the number of edges | error |
 | L-158 | A `once` variable that some entry juncture doesn't bind; or `within` above `maxWithin` (30 game days) | error |
-| L-159 | An `offer` realisation on a juncture that is neither `v: 'offer'` nor an `ask` whose `of` role allows the protagonist; or a `nudge` realisation on a juncture whose arguments include a role that allows the protagonist (DS-05, D-30) | error |
+| L-159 | An `offer` realisation on a juncture that is neither `v: 'offer'` nor an `ask` whose `of` role allows the protagonist; or a `nudge` realisation on a juncture whose acting argument (its first argument of kind `actor` or `person`) has a role that allows the protagonist: the engine never acts for the protagonist (D-09, DS-05) | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
 
@@ -2758,7 +2759,7 @@ A **removed pack** withdraws its live instances (T1), because their content refe
 | S2-I-14 | **Closed hook inputs.** Hooks receive only the inputs listed in §8.8 |
 | S2-I-15 | **Words don't steer.** Given identical timestamped external inputs, rendering never changes a semantic payload or blocks structural scheduling. Nothing structural reads rendered text, whether a model ran, or the model settings. Display durations come from authored duration slots, not from text length; a slow render falls back at once (§2.23) |
 | S2-I-16 | **Released words are immutable.** A released delivery's text is never replaced (§2.23) |
-| S2-I-17 | **Nudges stay off-screen** (v1.11). A nudge never hands anything to the game port, never names V, and starts only past its legality check (§2.25) |
+| S2-I-17 | **Nudges stay off-screen** (v1.11). A nudge never hands anything to the game port, never makes V act or take part, never aims harm at V or carries word of V's acts, and starts only past its legality check (§2.25) |
 | S2-I-18 | **Two sources of harm** (v1.11). No seed construct harms V or takes from V except as the consequence of an accepted action faced as an obstacle, or as a staged group act whose warning reached `presented` (§2.16a) |
 | S2-I-19 | **Only a chosen line is said** (v1.11). V's speech is only ever the `say` line of the option the player picked, shown in its own words (§2.22) |
 
@@ -2868,7 +2869,7 @@ The fixtures are examples. With the layer-2 implementation, the reference model 
 - **Intersections:** order independence.
 - **Profiles:** one acceptance story per profile.
 - **Reports:** deterministic fit reports and surveys.
-- **Nudges (v1.11):** over random world states and V positions, no nudge's minted event is ever placed where V is or at a fine-tier cell, names V, or is witnessed by V; a nudge never hands anything to the game port.
+- **Nudges (v1.11):** over random world states and V positions, no nudge's minted event is ever placed where V is or at a fine-tier cell, has V as a participant, or is witnessed by V, and no nudge's goal aims harm at V; a nudge never hands anything to the game port.
 - **Harm (v1.11):** over random runs, no harmful effect on V is ever written except by an accepted action's obstacle or a staged group act after its warning was `presented`.
 - **Realises (v1.11):** every `realises` entry of a lint-clean seed fills its function on some sample state of its fit report.
 
@@ -2924,7 +2925,7 @@ A spec pass, not a review. It takes the S2 and S4 proposals of [the pattern lang
 | S2-1 `realises` | Adopted, with one change | §2.24 and L-138. A beat realises a juncture through the world events it leaves (or its offer and response events); the end and the unattended settlement through the `seed-outcome` event and `realisedBy`. **Changed:** the juncture's declared changes are expectations the world bears out, listed in the fit report, not lint conditions. Most changes (a tie moving, a frame opening) are S1's response to the event, so a seed can't be held to writing them |
 | S2-2 implicit patterns | Adopted as a derived view | §2.24. Derived on demand and never matched: beats are layer-2 state, not world records, so matching an implicit pattern would need a second matcher. It names authored seeds in thread shapes and gives tokens to deliveries that cite no occurrence, which is what the skeleton measures need |
 | S2-3 `growsFrom` an instance | Adopted | §1.3, §2.13. The thread view is S3's (§5.7 there). Ancestry through instances is defined; its gate (L-37) stays a later capability |
-| S2-4 the nudge form | Adopted, with changes | §2.25, T8n, L-140. **Changed:** no role `authored` beliefs or edges, since a belief written directly has no event a "why" answer could walk; the pattern language's own rule (§8.2 there) is a caused telling, so beliefs travel by minted `tell`s. **Added:** a nudge never names the protagonist, so it can't steer a group's decision under D-30; and a four-rule legality check at preparation, the runtime form of DS-05 |
+| S2-4 the nudge form | Adopted, with changes | §2.25, T8n, L-140. **Changed:** no role `authored` beliefs or edges, since a belief written directly has no event a "why" answer could walk; the pattern language's own rule (§8.2 there) is a caused telling, so beliefs travel by minted `tell`s. **Added:** a nudge never makes the protagonist act or take part, never aims harm at them and never carries word of their acts, so it can't steer a group's decision under D-30; and a five-rule legality check at preparation, the runtime form of DS-05. A nudge may still aim a benefit at the protagonist (a repayment, help), which the library's `payoff` needs |
 | S2-5 `juncture` intersections | Partly adopted | §9. Adopted: a `pressure` is also a pattern entry, still never settled away. **Not adopted:** a `juncture` intersection kind. Layer 2 can't detect a shared filler without reading layer 3's pool, and it would have no settling rule; layering is recorded where it is found, in layer 3. Contests between seeds over a node are `claim` intersections already |
 | S2-6 promises | Adopted | §2.9, §7.4. Needs the new `asker`. The promise carries no `outcome`, so an acceptance alone moves no reputation in S1's ledger (open item 25) |
 | S2-7 loose ends name their juncture | Adopted | §6.4, through `growsFrom`. Growth from loose ends stays a later capability of S3 |

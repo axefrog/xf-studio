@@ -1,6 +1,6 @@
 # P5. The procedural engine
 
-**Status:** design v0.1, 23 October 2026. v0.1 aligns the draft with S2 v1.0: the player model ranks and defers formed offers only, fitting reads the world only, and the first implementation follows S2's core. This is second-level plan P5 of the [first-level plan](plan.md#5-second-level-plans), the design stage for layer 3. The normative specification, S3, follows from it. It builds on:
+**Status:** design v0.2, 25 October 2026. v0.2 records what [S3 v0.6](spec/procedural.md) changed in the design, after the composite's [pattern language](composite/pattern-language.md): patterns are graphs of junctures matched by one matcher, whose live instances are candidates (§6); the director realises a ready juncture by an offer or a world-only nudge behind an escalation gate (§3.3, §4.1); and a group may act against V under [D-30](decisions.md) (§4.6). Where this page's v0.1 sketches differ, S3 v0.6 wins. Design v0.1, 23 October 2026. v0.1 aligns the draft with S2 v1.0: the player model ranks and defers formed offers only, fitting reads the world only, and the first implementation follows S2's core. This is second-level plan P5 of the [first-level plan](plan.md#5-second-level-plans), the design stage for layer 3. The normative specification, S3, follows from it. It builds on:
 - the [foundation](foundation.md), especially [§5](foundation.md#5-context-and-relevance) and [§6](foundation.md#6-story-in-the-same-space);
 - the kernel specification [S0 v4.5](spec/kernel.md);
 - the seeding layer: [P4](p4-seeding-layer.md) and [S2 v1.0](spec/seeding.md), which calls S3 through named hooks;
@@ -165,7 +165,7 @@ The director has six verbs. Each maps onto a layer-2 mechanism, and each has a m
 |---|---|---|---|
 | `trace` | Sow a class-0 glance seed, or ask a seed for its next sign | 0 | The plant cap (about three live plants per attended thread, one foreground per scene); a salience budget per district |
 | `offer` | Score and release an authored offer; sow a seed whose first delivery is an offer | 1 | The arbiter's gates; the push budget; V can ignore it |
-| `nudge` | Sow a glance or encounter seed in which a cast NPC acts for its own reason, pointing at an area or a person | 2 | Needs an accepted goal and 30 to 60 s without progress. Never moves V |
+| `nudge` | Sow a world-only seed that gives a cast person a reason or an opportunity for a juncture an instance waits on: a goal frame the simulation acts on, an opportunity, or an act the person already wants. It never reaches V, never acts for V and never aims harm at V (v0.2; [S2 §2.25](spec/seeding.md#225-nudges-seeds-that-never-reach-the-protagonist), [S3 §7.5](spec/procedural.md#75-realisation-and-kit)) | 2 | Only unobserved state ([DS-05](design-seeds.md)); only after the world had its chance; a few live at once; every fill it causes is an adaptation. The earlier sense, an NPC pointing V at an area, is a staging pointer (P8) |
 | `hold` | The hold hook removes a delivery from this step | 3 | Only deliveries V hasn't been shown. Discretionary holds stop at 70 per cent of `maxWait` |
 | `withdraw` | Withdraw a seed the engine sowed, with its closing trace | 3 | Never a seed V pulled: that one is simmered ([§3.6](#36-threads)) |
 | `rest` | The phase state above | 3 | Begins at a natural break only |
@@ -343,7 +343,7 @@ Sowing is the proactive role. It turns what the world already holds into seeds, 
 
 | Source | What it supplies | What it can become |
 |---|---|---|
-| **Sifted matches** | Partial or complete matches of patterns; `Dilemma`s; belief-against-truth gaps; frame-status turns ([§6](#6-sifting)) | The pattern's declared tellings: recap, rumour, sighting, foreshadow, offer, aftermath |
+| **Pattern instances** (v0.2) | Live instances of story patterns, matched against the record ([§6](#6-sifting)): their outcomes, their matched junctures V hasn't seen, and their ready junctures | A telling of the whole at its outcome; a surface telling of one juncture, so a cause shows before the story goes on; or a ready juncture realised by an offer to V or a nudge, behind S3's gates and its escalation gate |
 | **Loose ends** | Closure entries of finished seeds: consequence facts nobody read, changed cast nodes, unpaid promises and plants, unread turns ([S2 §6.4](spec/seeding.md#64-closing-and-outcomes)) | Child seeds of the closed seed, naming the entry in `growsFrom`: a follow-up glance, an encounter, a gig, and an arc once two found ancestors exist |
 | **Promotion** | A subject whose gate on the ladder is met ([§4.5](#45-growth-and-promotion)) | Promotion kits: a regular, a moment of their own, a seed of their own |
 | **Fronts** | Season-level seeds, authored or grown from an engaged arc, and their projections onto the street ([§4.6](#46-fronts-and-the-street)) | Front kits; street forms |
@@ -442,7 +442,7 @@ A **front** is a season-level seed with a clock of 4, 6 or 8 segments, a landmar
 
 **Bounded dooms.** Severity follows the stake scale. Engine-sown fronts stop at `block`, and `district` needs found ancestors. A `city`-scale front is authored, with its portents and window counts declared in the pack's budget. The same cap that limits hostile threads at imminent or contact limits dooms. At most two district-or-larger fronts are live near V **[tunable]**.
 
-**Occurrence isn't the director's.** City events are S1's. The director chooses which pending or occurred events to realise, may delay realising them, and builds offers around them. It never removes an event that has happened ([S2 §2.16](spec/seeding.md#216-city-events-as-material)). A group's grudge against V is a belief that may raise an offer through layer 2. No process aims an act at V. Game-owned incidents (gigs, hustles, the game's combat) are fixed material, never sown. Fitting reads bands to site authored seeds near them.
+**Occurrence isn't the director's.** City events are S1's. The director chooses which pending or occurred events to realise, may delay realising them, and builds offers around them. It never removes an event that has happened ([S2 §2.16](spec/seeding.md#216-city-events-as-material)). A group's grudge against V is a belief that may raise an offer through layer 2. Under [D-30](decisions.md) a group may also decide, as an S1 process, to act against V, driven only by what it believes V did and warned before it harms; that is the world's move, which the director waits for, never nudges and never escalates, though it may make the cause legible ([S3 §7.10](spec/procedural.md#710-groups-acting-against-the-protagonist)). No other process aims an act at V. Game-owned incidents (gigs, hustles, the game's combat) are fixed material, never sown. Fitting reads bands to site authored seeds near them.
 
 ### 4.7 Plants, constructed causes and closure
 
@@ -610,6 +610,8 @@ The seed is [S2 Appendix A.3](spec/seeding.md#a3-reference-scenario-r1): the cha
 
 Sifting asks "what story is in the record?". It runs as a pipeline, not as a score: simulate, match patterns against events, keep the matches that survive, then choose ([dossier 6](craft/d06-sifting-tellability.md)). The sifter finds and keeps; the sower chooses.
 
+**Since v0.2, sifting and sowing are one matcher** ([S3 §6](spec/procedural.md#6-the-matcher), [DS-70](design-seeds.md)). A pattern is the pattern language's partial causal graph: junctures (events or states) over a small vocabulary of functions, joined by causal links the record must bear out. The world declares what fills each function, so a new event kind fills patterns without any pattern naming it. An instance's matched junctures are its past and its ready ones its future, so an instance is a candidate before it completes, and the director can wait for, offer or nudge its next juncture. Instances compose by chaining (one's outcome is another's cause), by layering on a shared filler, and by growing into larger shapes, which only recognise. The clause form, the `keep` stage and the `meta:story-end` event sketched below are v0.1's; S3 v0.6 replaces them, and keeps v0.1's stage form loadable as a chain.
+
 ### 6.1 What the sifter reads
 
 The sifter's input is the **live Change stream** plus whatever it chose to keep. It is not a log to scan later: resolution, regeneration and replay are silent ([S0 I-13](spec/kernel.md#15-invariants)), and non-canon events can be forgotten ([S0 §7.3](spec/kernel.md#73-retention-and-forgetting)). Two domains follow:
@@ -684,7 +686,7 @@ The pool holds partial matches as **copied descriptors**: ids, kinds, times, rol
 | Duplicates | Suppressed by `(pattern, bindings)` |
 | Tombstones | One per `once` binding, kept until the pattern's expiry has passed twice |
 
-A partial match advances when a Change satisfies its next clause. An `unless` clause that matches between the bound stages kills it. A completed match is minted as a `meta:story-end` event ([§6.5](#65-promotion-and-hand-over)). The pool is the sifter's join memory: a kernel interest tests one Change against one frame, and doesn't remember that `?host` bound to a particular node two Changes ago.
+A partial match advances when a Change satisfies its next clause. An `unless` clause that matches between the bound stages kills it. An instance that reaches an outcome or parks mints a `meta:story` event ([§6.5](#65-promotion-and-hand-over); S3 v0.6). The pool is the sifter's join memory: a kernel interest tests one Change against one frame, and doesn't remember that `?host` bound to a particular node two Changes ago.
 
 **The pool is persisted**, bounded as above, in the layer-3 record ([§7](#7-determinism-persistence-and-state)). It is a cache: a save without it loads with an empty pool, as a save without the model does. [§9](#9-where-the-dossiers-disagree) says why this differs from dossier 6.
 
@@ -719,7 +721,7 @@ The sifter computes the features of [dossier 6 §5.5](craft/d06-sifting-tellabil
 2. The match record moves to the layer-3 record with its events as **retention roots**, so they survive until the seed ends.
 3. The sower sows the telling's kit with the story event as a role. Fragments read the story through ordinary role predicates, and `trace` walks from the seed to every constituent event.
 
-**A completed match** is minted as a `meta:story-end` event, with the opening event and the final event as its causes. It reaches the sifter's own patterns, so that stories can compose, and the tools. S1's behavioural policies ignore `meta:` kinds.
+**A story event at the outcome** (v0.2). An instance that reaches an outcome or parks mints its `meta:story` event, whose causes are its fillers. Other patterns may match it, so stories compose, and so may the tools. There is no separate `meta:story-end` and no promotion step: an instance is a candidate from the moment it is live ([S3 §6.6](spec/procedural.md#66-composition-story-events-chains-layers-and-shapes)). S1's behavioural policies ignore `meta:` kinds.
 
 **What the hand-over carries:**
 
@@ -739,7 +741,7 @@ Promoted matches persist as seed state. If a pool match's events are gone before
 - `Dilemma` emissions (prospective: no event has happened);
 - belief against truth, through the events S1 mints for telling and lying, checked by query when a match is already running;
 - frame-status turns, such as a goal blocked and then met;
-- completed `meta:story-end` events, for composition;
+- `meta:story` events, for composition (v0.2);
 - **turns:** a witnessed "before", then a `turning` event, is a tellable chain, ranked by exposure and reader count. An unwitnessed turn goes to news or a sighting.
 
 **Planning and search.** Planning is a depth-bounded validator and bridge-builder for short chains, over NPC and group goals only. It never plans V's acts and isn't the generator. Casting uses the kernel's queries and contributions, with no external solver. Ordering and pacing policies are precomputed or bounded by the work allowance, with no online search over stories.
