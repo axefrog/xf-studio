@@ -4,7 +4,8 @@
 // It writes `<outdir>/<file>.txt` (the whole transcript), `<file>.compact.txt` (deliveries and the decision log) and `<file>.json` (the
 // machine-readable record). A run with the same arguments writes the same files. Name the file `E-...` or `A1-...` (the packet reads the prefix).
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Tempo } from '../../src/procedural/types.ts';
 import { policies, Run } from '../../src/m3/driver.ts';
 import { type Run2Arm, run2World } from '../../src/m3/run2.ts';
@@ -17,9 +18,10 @@ const { opts, notes } = run2World(name, arm, tempo);
 const run = new Run(opts, stateById(stateId), policies.decline!, { walk: true, witness: true, notes });
 const t0 = performance.now();
 run.runWindows(Number(days) * 144);
-mkdirSync(out, { recursive: true });
-writeFileSync(`${out}/${file}.txt`, transcript(run));
-writeFileSync(`${out}/${file}.compact.txt`, transcript(run, { week: false }));
-writeFileSync(`${out}/${file}.json`, JSON.stringify(recordOf(run), null, 1));
+const dir = resolve(out);
+if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+writeFileSync(`${dir}/${file}.txt`, transcript(run));
+writeFileSync(`${dir}/${file}.compact.txt`, transcript(run, { week: false }));
+writeFileSync(`${dir}/${file}.json`, JSON.stringify(recordOf(run), null, 1));
 const offers = run.deliveries.filter((d) => d.what === 'offer' && d.layer !== 'authored').length;
 console.log(`${file}: ${run.deliveries.length} deliveries, ${run.deliveries.filter((d) => d.layer !== 'authored').length} sown (${offers} with an ask), ${Math.round((performance.now() - t0) / 1000)} s`);
