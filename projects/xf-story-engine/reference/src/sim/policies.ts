@@ -83,6 +83,7 @@ export class Policies {
           // v0.6 (S1 8.9): a belief about V, which a group member's told grievance rests on, and (S1 8.10) the frames of people, which a seed's role goal is among
           { slot: '*', scope: { nodes: [v] }, where: [{ path: '@role', op: 'eq', arg: 'subject' }] },
           { kind: 'core:person', slot: '*', where: [{ path: '@role', op: 'eq', arg: 'actor' }] },
+          { kind: 'xf:resident', slot: '*', where: [{ path: '@role', op: 'eq', arg: 'actor' }] },
         ],
       },
     });

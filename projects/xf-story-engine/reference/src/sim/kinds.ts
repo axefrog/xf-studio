@@ -124,7 +124,7 @@ export function participantRoles(): string[] {
   for (const r of ['aggressor', 'victim', 'target', 'hostile', 'responder', 'enforcer', 'giver', 'taker', 'participant', 'teller', 'listener', 'subject', 'entry', 'actor',
     // v0.6 (S1 5.3, 5.4): the thing a theft moves, who prevented an act, what a telling is about, and the roles of the group and goal kinds
     'promiser', 'promisee', 'receiver', 'repairer', 'exposer', 'confessor', 'audience', 'protagonist', 'asker', 'replier', 'bidder',
-    'told', 'guard', 'ward', 'item', 'group', 'decider', 'object', 'successor', 'predecessor', 'late', 'creditor', 'debtor', 'warner', 'warned', 'searcher', 'asked', 'sought', 'confronter', 'confronted']) roles.add(r);
+    'told', 'guard', 'ward', 'other', 'item', 'group', 'decider', 'object', 'successor', 'predecessor', 'late', 'creditor', 'debtor', 'warner', 'warned', 'searcher', 'asked', 'sought', 'confronter', 'confronted']) roles.add(r);
   for (const r of [...roles]) roles.add(`${r}-group`);
   return [...roles].sort();
 }
