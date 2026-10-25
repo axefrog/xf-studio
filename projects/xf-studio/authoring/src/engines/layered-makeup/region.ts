@@ -10,6 +10,7 @@ import type { LayerModelRegistry } from "./layer-models";
 import type { Layer, Recipe } from "./recipe";
 import type { SkinScale } from "./mottle";
 import type { UvWindow } from "./plate-uv-window";
+import type { ContributedStarter, StarterShape } from "./starter-shape";
 export type { SkinScale } from "./mottle";
 
 /**
@@ -63,10 +64,18 @@ export interface LayeredMakeupRegion {
   readonly opticsWindow: UvWindow;
   readonly textures: RegionTextures;
   readonly wording: RegionWording;
-  /** First-run content: a new look's part. */
-  starter(): Recipe;
-  /** The contour a newly added or reset layer starts from (its ID and name are set by the edit). */
-  newLayer(): Layer;
+  /**
+   * The UV rectangle the layered surface covers (eye makeup: the plate's). A contributed starter's contour, with its feather, stays
+   * inside it, away from the surface's edge.
+   */
+  readonly area: UvWindow;
+  /** The starters the feature contributes (read-only, in menu order) and the one a new layer takes when nothing else is chosen. */
+  readonly starters: readonly ContributedStarter[];
+  readonly defaultStarter: string;
+  /** First-run content: a new look's part (its one layer takes `shape`, else the default starter's). */
+  starter(shape?: StarterShape): Recipe;
+  /** The contour a newly added or reset layer starts from (its ID and name are set by the edit): `shape`, else the default starter's. */
+  newLayer(shape?: StarterShape): Layer;
 }
 
 /** The plain-data part of a region a raster worker needs: it crosses a worker boundary with each request. */

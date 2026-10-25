@@ -7,6 +7,8 @@ import { convertToBezier } from "../../engines/layered-makeup/bezier-path";
 import { DEFAULT_STRENGTH_BLEND, type Layer, type Recipe } from "../../engines/layered-makeup/recipe";
 import type { LayeredMakeupRegion } from "../../engines/layered-makeup/region";
 import { EYE_MAKEUP_FEATURE, LAYER_MODELS } from "../../legacy/eye-makeup/recipe-schema";
+import { layerWithShape, type StarterShape } from "../../engines/layered-makeup/starter-shape";
+import { EYE_DEFAULT_STARTER, EYE_LANDMARKS, EYE_STARTERS } from "./starters";
 
 /**
  * The historical four-layer sample recipe: an example and test fixture (the first build's startup recipe).
@@ -49,28 +51,22 @@ export function initialRecipe(): Recipe {
     })),
   };
 }
-/** Starting contour for a newly added or reset layer: an upper-lid wash. */
-export function newLayerTemplate(): Layer {
-  const base = initialRecipe().layers[0];
-  return convertToBezier({
-    ...base,
-    feather: 0.006,
-    points: [
-      [0.311, 0.236], // inner lid tip
-      [0.335, 0.215], // inner upper edge
-      [0.402, 0.214], // outer upper edge
-      [0.434, 0.246], // outer lid tip
-    ].map(([u, v]) => ({ u, v, weight: 1 })),
-    fields: [],
-    pathMode: "catmull-rom",
-  });
+/**
+ * The contour a newly added or reset layer starts from: `shape`, else the default starter's (Lid wash; starters.ts). Everything
+ * but the contour (colour, optics, a layer's own ID and name) is the sample layer's, as it always was.
+ */
+export function newLayerTemplate(shape: StarterShape = defaultStarterShape()): Layer {
+  return layerWithShape({ ...initialRecipe().layers[0], fields: [] }, shape);
 }
-/** First-run authored content: one layer of the new-layer contour. */
-export function starterRecipe(): Recipe {
-  const layer = newLayerTemplate();
+/** First-run authored content: one layer of the starter's contour (`shape`, else the default's). */
+export function starterRecipe(shape?: StarterShape): Recipe {
+  const layer = newLayerTemplate(shape);
   return { uv: "gltf-uv0-top-left", layers: [
     { ...layer, id: "layer-1", name: "Eye makeup" },
   ] };
+}
+function defaultStarterShape(): StarterShape {
+  return EYE_STARTERS.find(item => item.id === EYE_DEFAULT_STARTER)!.shape;
 }
 
 /**
@@ -110,6 +106,10 @@ export const EYE_MAKEUP_REGION: LayeredMakeupRegion = Object.freeze({
   textures: Object.freeze({ window: Object.freeze({ width: 2048, height: 512 }), glitterWindow: Object.freeze({ width: 4096, height: 1024 }),
     accent: 2048, head: 1024 }),
   wording: Object.freeze({ area: "the eye UV area", surface: "the lid" }),
+  /** The plate's UV rectangle (starters.ts `EYE_LANDMARKS`). */
+  area: EYE_LANDMARKS.plate,
+  starters: EYE_STARTERS,
+  defaultStarter: EYE_DEFAULT_STARTER,
   starter: starterRecipe,
   newLayer: newLayerTemplate,
 });

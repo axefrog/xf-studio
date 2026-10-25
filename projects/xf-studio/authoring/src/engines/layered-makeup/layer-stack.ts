@@ -2,15 +2,19 @@ import { MAX_LAYERS, parseRecipe, type Recipe } from "./recipe";
 import type { LayeredMakeupRegion } from "./region";
 import { nameIssue, positionIssue, refuse } from "../../platform/api/validation-issues";
 import { refusal, type Capability } from "../../platform/api";
+import { readStarterShape, type StarterShape } from "./starter-shape";
 
 /**
- * `newId` is the ID of the layer `add` and `duplicate` create. A feature's registered apply
+ * `newId` is the ID of the layer `add` and `duplicate` create. `add` and `reset` start the layer from a starter shape: `shape` as
+ * given (the application resolves a starter of the person's own into one), else the region's contributed starter `starter` names,
+ * else the region's default. A feature's registered apply
  * requires it (its host supplies it, so replay is deterministic); these helpers still make one when absent.
  */
 export type LayerCommand =
-  | { kind: "add"; newId?: string }
+  | { kind: "add"; newId?: string; starter?: string; shape?: StarterShape }
   | { kind: "duplicate"; id: string; newId?: string }
-  | { kind: "remove" | "reset"; id: string }
+  | { kind: "remove"; id: string }
+  | { kind: "reset"; id: string; starter?: string; shape?: StarterShape }
   | { kind: "rename"; id: string; name: string }
   | { kind: "move"; id: string; to: number };
 
@@ -24,13 +28,20 @@ export type LayerAction =
  * layer's ID comes from the host (`newId`); this never invents one (CORE-33, CORE-44). A new or reset
  * layer takes the region's new-layer contour; the region's models validate the result.
  */
-export function editLayers(value: Recipe, activeId: string | undefined, command: LayerCommand, region: Pick<LayeredMakeupRegion, "models" | "newLayer">) {
+export type LayerRegion = Pick<LayeredMakeupRegion, "models" | "newLayer"> & Partial<Pick<LayeredMakeupRegion, "starters">>;
+
+/** The shape a command starts its layer from: its own, else the contributed starter it names (undefined: the region's default). */
+export function commandShape(command: LayerCommand, region: Pick<LayerRegion, "starters">): StarterShape | undefined {
+  if (command.kind !== "add" && command.kind !== "reset") return undefined;
+  return command.shape ?? (command.starter === undefined ? undefined : region.starters?.find(item => item.id === command.starter)?.shape);
+}
+export function editLayers(value: Recipe, activeId: string | undefined, command: LayerCommand, region: LayerRegion) {
   const recipe = parseRecipe(value, region.models), layers = recipe.layers;
   const index = "id" in command ? layers.findIndex(l => l.id === command.id) : -1;
   if ("id" in command && index < 0) throw Error("That layer no longer exists.");
   if (command.kind === "add" || command.kind === "duplicate") {
     if (layers.length >= MAX_LAYERS) throw Error(`A preset holds up to ${MAX_LAYERS} layers.`);
-    const layer = structuredClone(command.kind === "duplicate" ? layers[index] : region.newLayer());
+    const layer = structuredClone(command.kind === "duplicate" ? layers[index] : region.newLayer(commandShape(command, region)));
     if (!command.newId) throw Error("A new layer needs its ID from the host.");
     layer.id = command.newId;
     if (layers.some(existing => existing.id === layer.id)) throw Error("That layer ID is already in use.");
@@ -47,7 +58,7 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
   } else if (command.kind === "rename") {
     layers[index].name = command.name.trim();
   } else {
-    layers[index] = { ...region.newLayer(), id: layers[index].id, name: layers[index].name };
+    layers[index] = { ...region.newLayer(commandShape(command, region)), id: layers[index].id, name: layers[index].name };
   }
   return { recipe: parseRecipe(recipe, region.models), active: Math.max(0, layers.findIndex(l => l.id === activeId)) };
 }
@@ -63,11 +74,22 @@ export function newLayerName(layers: readonly { name: string }[]): string {
   return `Layer ${n}`;
 }
 
-export function layerCapability(recipe: Recipe, action: LayerAction): Capability {
+/** Why a command's starter can't be used (undefined: it can, or it names none). */
+function starterRefusal(command: LayerCommand, region: LayerRegion | undefined): Capability | undefined {
+  if (command.kind !== "add" && command.kind !== "reset") return undefined;
+  if (command.shape === undefined && command.starter !== undefined && !region?.starters?.some(item => item.id === command.starter))
+    return refusal("missing_target", "That starter isn't available any more.");
+  if (command.shape !== undefined && region && !readStarterShape(command.shape, region.newLayer(), region.models))
+    return refusal("invalid_value", "That starter shape can't be used.");
+  return undefined;
+}
+export function layerCapability(recipe: Recipe, action: LayerAction, region?: LayerRegion): Capability {
   const command = action.kind === "layer.edit" ? action.command : action;
   if ("id" in command && !recipe.layers.some(layer => layer.id === command.id))
     return refusal("missing_target", "That layer no longer exists.");
   if (action.kind === "layer.edit") {
+    const starter = starterRefusal(action.command, region);
+    if (starter) return starter;
     if ((command.kind === "add" || command.kind === "duplicate") && recipe.layers.length >= MAX_LAYERS)
       return refuse({ code: "range", message: `A preset holds up to ${MAX_LAYERS} layers.` });
     if ((command.kind === "add" || command.kind === "duplicate") && command.newId !== undefined &&
@@ -84,8 +106,8 @@ export function layerCapability(recipe: Recipe, action: LayerAction): Capability
 
 /** Apply one layer-stack action (after its capability); `structure` says whether the stack itself changed. */
 export function applyLayerAction(recipe: Recipe, activeId: string | undefined, action: LayerAction,
-  region: Pick<LayeredMakeupRegion, "models" | "newLayer">) {
-  const capability = layerCapability(recipe, action);
+  region: LayerRegion) {
+  const capability = layerCapability(recipe, action, region);
   if (!capability.available) throw Error(capability.reason);
   if (action.kind === "layer.edit") return { ...editLayers(recipe, activeId, action.command, region), structure: true as const };
   const next = parseRecipe({ ...recipe, layers: recipe.layers.map(layer => layer.id === action.id

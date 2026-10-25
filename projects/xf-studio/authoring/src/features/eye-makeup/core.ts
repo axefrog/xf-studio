@@ -24,7 +24,7 @@ const isLayerAction = (action: EyeMakeupAction): action is LayerAction =>
 const SCOPE = "look";
 
 export function eyeMakeupCapability(state: EyeMakeupState, action: EyeMakeupAction): Capability {
-  if (isLayerAction(action)) return layerCapability(state.part, action);
+  if (isLayerAction(action)) return layerCapability(state.part, action, EYE_MAKEUP_REGION);
   const { active, selected, fieldSelection } = state.editor;
   return recipeActionCapability({ recipe: state.part, active, selected, fieldSelection }, action);
 }
