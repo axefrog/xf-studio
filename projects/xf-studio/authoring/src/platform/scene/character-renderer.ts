@@ -340,7 +340,7 @@ export function createCharacterRenderer(input: {
    * Parts that left the scene (or whose change was superseded before it was shown), kept on this renderer's context for the next change
    * that brings them back (character-detail-loader.ts `DetailPartPool`).
    */
-  const pool = new DetailPartPool(undefined, detailLedgerOf(renderer));
+  let pool = new DetailPartPool(undefined, detailLedgerOf(renderer));
   /**
    * Maps waiting to be uploaded, a few per frame (`PREPARE_FRAME_MS`), from the moment their part is built (PREV-189): a V's maps stream to
    * the GPU while the rest of it loads, and each decoded bitmap is released as its map is uploaded.
@@ -605,7 +605,8 @@ export function createCharacterRenderer(input: {
    */
   function contextRestored() {
     // Kept parts' bakes died with the context; they are loaded again when a change brings them back.
-    pool.clear();
+    pool.dispose();
+    pool = new DetailPartPool(undefined, detailLedgerOf(renderer));
     layeredContextRestored(renderer);
     for (const item of characterDetails?.components ?? []) for (const { handle } of item.layered ?? []) handle.contextRestored();
     publishBakeLimits([...skinLimits(), ...bakeLayered()]);
@@ -630,7 +631,7 @@ export function createCharacterRenderer(input: {
     prepareDetails,
     /** Release the V and every kept part (the scene is going away). */
     // The core head's depth material is this renderer's (made above); the head itself goes with its core.
-    dispose() { setCharacterDetails(null); pool.clear(); releaseFullSkinDepth(head); disposed = true; uploads.length = 0; gate?.dispose(); },
+    dispose() { setCharacterDetails(null); pool.dispose(); releaseFullSkinDepth(head); disposed = true; uploads.length = 0; gate?.dispose(); },
     /** How many parts are kept for later (developer evidence). */
     keptParts: () => pool.size,
     /** Release the parts kept for later (another V is being shown). */

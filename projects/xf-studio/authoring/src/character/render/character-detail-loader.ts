@@ -202,11 +202,14 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
 }
 
 /** A record's file from the host, checked against its content hash. */
-export async function fetchDetailFile(fetcher: CharacterDetailFetch, resource: Pick<RenderResource, "file" | "sha256">): Promise<ArrayBuffer> {
-  const response = await fetcher(`${CHARACTER_DETAIL_ASSETS}${resource.file}`);
+export async function fetchDetailFile(fetcher: CharacterDetailFetch, resource: Pick<RenderResource, "file" | "sha256">, signal?: AbortSignal): Promise<ArrayBuffer> {
+  signal?.throwIfAborted();
+  const response = await fetcher(`${CHARACTER_DETAIL_ASSETS}${resource.file}`, { signal });
   if (!response.ok) throw Error(`${resource.file} is unavailable.`);
   const bytes = await response.arrayBuffer();
+  signal?.throwIfAborted();
   if (await sha256Hex(bytes) !== resource.sha256) throw Error(`${resource.file} does not match its record.`);
+  signal?.throwIfAborted();
   return bytes;
 }
 
@@ -237,6 +240,11 @@ export async function decodeDetailTexture(bytes: ArrayBuffer, cpuSize: { width: 
     if (reduced) setReducedImage(image, reduced);
     if ((cpuRead && !reduced) || !decoded) await decodeElement(image);
     return { image, bitmap: decoded, reduced };
+  } catch (error) {
+    // The element can fail before the parallel bitmap decodes finish.
+    const [decoded, reduced] = await Promise.all([bitmap, small]);
+    decoded?.close(); reduced?.close();
+    throw error;
   } finally { URL.revokeObjectURL(url); }
 }
 /** PNG chunks that ask a browser to convert the decoded colours (gamma, colour profile, primaries, the sRGB intent, coding points). */
@@ -476,8 +484,8 @@ export const hasUploadSource = (texture: THREE.Texture) => uploadSources.has(tex
 /** What one loaded component owns on the GPU, released with it. */
 type PartResources = { materials: THREE.Material[]; owned: THREE.Texture[]; textureKeys: string[] };
 /**
- * Textures shared between loads (PREV-68): a load that reuses the shown details' components also takes over their ledger, so a map
- * several parts (or two records) use is uploaded once and disposed when its last user is released.
+ * One owner of shared map reads, decodes, images and textures. Pending image leases keep a file alive until materials have been built;
+ * texture references then keep it alive until the last part releases it. No image survives without either kind of owner.
  */
 export class DetailLedger {
   readonly textures = new Map<string, { texture: THREE.Texture; refs: number; file: string }>();
@@ -485,6 +493,69 @@ export class DetailLedger {
   /** Each image's decoded bitmap while the textures made from it are being made (`uploadTexture`); dropped once they are. */
   readonly bitmaps = new Map<string, ImageBitmap>();
   readonly parts = new WeakMap<LoadedCharacterComponent, PartResources>();
+  private readonly imageUsers = new Map<string, { users: number; controller: AbortController;
+    pending: Promise<DecodedTexture & { bytes: number }>; reduced?: ImageBitmap | null; cpuReady?: Promise<unknown> }>();
+  constructor(readonly generation?: AbortSignal) {}
+  /** One lease per requesting load and file, held until its materials have been built (or it is cancelled). */
+  requestImage(file: string, decode: (signal: AbortSignal) => Promise<DecodedTexture & { bytes: number }>, signal?: AbortSignal, cpuRead = false) {
+    if (this.generation) signal = signal ? AbortSignal.any([signal, this.generation]) : this.generation;
+    let entry = this.imageUsers.get(file);
+    if (!entry) {
+      const controller = new AbortController();
+      entry = { users: 0, controller, pending: undefined! };
+      this.imageUsers.set(file, entry);
+      const own = entry;
+      own.pending = Promise.resolve().then(() => { controller.signal.throwIfAborted(); return decode(controller.signal); }).then(decoded => {
+        // Image decoding and warmed files need not support abort. A late answer has no owner and cannot repopulate the ledger.
+        if (controller.signal.aborted || this.imageUsers.get(file) !== own) {
+          decoded.bitmap?.close(); decoded.reduced?.close();
+          throw new DOMException("Loading the map was cancelled.", "AbortError");
+        }
+        this.images.set(file, decoded.image);
+        if (decoded.bitmap) this.bitmaps.set(file, decoded.bitmap);
+        own.reduced = decoded.reduced;
+        return decoded;
+      });
+    }
+    const own = entry;
+    own.users++;
+    let active = true, rejectRequest: (reason: unknown) => void = () => {};
+    const release = () => {
+      if (!active) return;
+      active = false;
+      signal?.removeEventListener("abort", release);
+      own.users--;
+      this.collectImage(file);
+      rejectRequest(new DOMException("Loading the map was cancelled.", "AbortError"));
+    };
+    const pending = new Promise<DecodedTexture & { bytes: number }>((resolve, reject) => {
+      rejectRequest = reject;
+      own.pending.then(decoded => {
+        if (!active) return;
+        // The first requester may have needed GPU use only. CPU readers share this fallback too. Without a bitmap the
+        // decoder already decoded the element; a reduced image likewise needs no element decode.
+        if (cpuRead && decoded.bitmap && !hasReducedImage(decoded.image)) {
+          own.cpuReady ??= Promise.resolve(decodeElement(decoded.image));
+          own.cpuReady.then(() => { if (active) resolve(decoded); }, reject);
+        } else resolve(decoded);
+      }, reject);
+    });
+    signal?.addEventListener("abort", release, { once: true });
+    if (signal?.aborted) release();
+    return { pending, release };
+  }
+  private collectImage(file: string) {
+    const entry = this.imageUsers.get(file);
+    if (entry?.users) return;
+    const bitmap = this.bitmaps.get(file);
+    this.bitmaps.delete(file);
+    if (bitmap && !uploadWaiting.has(bitmap) && bitmap.width > 0) bitmap.close();
+    if ([...this.textures.values()].some(texture => texture.file === file)) return;
+    this.images.delete(file);
+    entry?.reduced?.close();
+    this.imageUsers.delete(file);
+    entry?.controller.abort();
+  }
   release(part: PartResources | undefined) {
     if (!part) return;
     for (const material of part.materials) material.dispose();
@@ -494,7 +565,7 @@ export class DetailLedger {
       if (!entry || --entry.refs > 0) continue;
       entry.texture.dispose();
       this.textures.delete(key);
-      if (![...this.textures.values()].some(other => other.file === entry.file)) this.images.delete(entry.file);
+      this.collectImage(entry.file);
     }
     part.materials.length = 0; part.owned.length = 0; part.textureKeys.length = 0;
   }
@@ -502,15 +573,16 @@ export class DetailLedger {
 const ledgers = new WeakMap<LoadedCharacterDetails, DetailLedger>();
 const rendererLedgers = new WeakMap<object, DetailLedger>();
 /**
- * The ledger of the maps (and their decoded images) every scene runtime on one renderer shares: a map is decoded once and uploaded once
- * per renderer, whichever runtime's V draws it, and is disposed when the last part of any runtime that uses it lets go (its `refs`).
+ * The ledger every scene runtime on one renderer and context generation shares. Concurrent requests share a fetch/hash/decode;
+ * retained maps share their texture by file/use/wrap/gamma. Once the last part and image requester let go, a later load reads anew.
  * Without it each runtime decoded and uploaded the same files again: a third scene of one V took 7 s of paced uploads and about
- * 0.9 GB of the GPU's memory more (experiment 044 §16). Textures belong to the renderer (one context), so sharing them is safe;
+ * 0.9 GB of the GPU's memory more (experiment 044 §16). A restore starts a new ledger, so new loads never acquire dead-generation maps;
  * materials, meshes, bakes and each pool's kept parts stay the runtime's own.
  */
 export function detailLedgerOf(renderer: object): DetailLedger {
   let ledger = rendererLedgers.get(renderer);
-  if (!ledger) rendererLedgers.set(renderer, ledger = new DetailLedger());
+  const generation = contextGeneration(renderer);
+  if (!ledger || ledger.generation !== generation) rendererLedgers.set(renderer, ledger = new DetailLedger(generation));
   return ledger;
 }
 
@@ -529,6 +601,8 @@ export class DetailPartPool {
   private readonly kept = new Map<string, LoadedCharacterComponent>();
   /** Loaded details not yet disposed (on screen or being loaded): their geometry and textures are in use. */
   readonly live = new Set<LoadedCharacterDetails>();
+  private readonly lifetime = new AbortController();
+  get signal() { return this.lifetime.signal; }
   /** `ledger`: the maps this pool's parts share with other pools' (`detailLedgerOf`); default: its own. */
   constructor(readonly limits: { parts: number; texels: number } = PART_POOL_LIMITS, ledger: DetailLedger = new DetailLedger()) { this.ledger = ledger; }
   get size() { return this.kept.size; }
@@ -543,6 +617,7 @@ export class DetailPartPool {
   /** Keep a part that left the scene (or was never shown), most recently used last; release what no longer fits. */
   keep(key: string, item: LoadedCharacterComponent) {
     item.root.removeFromParent();
+    if (this.signal.aborted) { this.release([item]); return; }
     const previous = this.kept.get(key);
     this.kept.delete(key);
     this.kept.set(key, item);
@@ -551,6 +626,8 @@ export class DetailPartPool {
   }
   /** Release every kept part (another V is shown, the context was lost, or the scene is going away). */
   clear() { this.release([...this.kept.values()]); this.kept.clear(); }
+  /** Terminal: in-flight loads stop, and a part returned afterwards is released instead of retained. */
+  dispose() { this.lifetime.abort(); this.clear(); }
   /** Release the kept parts `leave` names (the parts of a slot the V no longer draws at all). */
   releaseWhere(leave: (item: LoadedCharacterComponent) => boolean) {
     const leaving = [...this.kept].filter(([, item]) => leave(item));
@@ -638,10 +715,14 @@ export function partKeyFor(record: CharacterDetail): (component: RenderComponent
  * (`adopt`); until then disposing the new details (a superseded load) leaves them with `reuse`.
  */
 export async function loadCharacterDetails(record: CharacterDetail, options: CharacterDetailLoadOptions): Promise<LoadedCharacterDetails> {
-  const fetcher = options.fetcher ?? fetch, signal = options.signal;
-  const previous = options.reuse && !options.reuse.disposed ? options.reuse : null;
+  const fetcher = options.fetcher ?? fetch;
   const pool = options.pool ?? null;
+  let previous = options.reuse && !options.reuse.disposed ? options.reuse : null;
   const ledger = pool?.ledger ?? (previous && ledgers.get(previous)) ?? new DetailLedger();
+  // Shown parts may survive a restore through Three's image upload, but new loads use this generation's ledger only.
+  if (previous && ledgers.get(previous) !== ledger) previous = null;
+  const signals = [options.signal, pool?.signal, ledger.generation].filter((value): value is AbortSignal => !!value);
+  const signal = signals.length ? AbortSignal.any(signals) : undefined;
   let bytesUsed = 0, verticesUsed = 0, texelsUsed = 0;
   const components: LoadedCharacterComponent[] = [];
   /** Components taken over from `reuse`: not this load's to release until the scene adopts it. */
@@ -666,14 +747,14 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     bytesUsed += bytes;
     if (bytesUsed > MAX_BYTES) throw Error("The prepared details are larger than the preview allows.");
   };
-  /** A warmed texture or geometry, its bytes counted as this load's own (PREV-199). */
+  /** A warmed geometry, its bytes counted as this load's own (PREV-199). */
   const takeWarmed = <T extends { bytes?: number }>(pending: Promise<T> | undefined) => pending?.then(item => { spend(item.bytes ?? 0); return item; });
   const bytesOf = new Map<string, Promise<ArrayBuffer>>();
   const fetchBytes = (resource: Pick<RenderResource, "file" | "sha256">) => {
     let pending = bytesOf.get(resource.file);
     if (!pending) {
-      // Not cancelled once asked for: a part whose files are on their way is finished and kept (`pool`), so a superseded change's
-      // work is there for the next one (research/backlog/performance.md, scheduling rule). The files are local and content-addressed.
+      // Geometry/rig reads are local and content-addressed. Their adapters may finish after cancellation;
+      // the load checks its signal before building a late geometry. Map reads are owned by the ledger below.
       pending = (warmed?.bytes(resource.file) ?? fetchDetailFile(fetcher, resource)).then(bytes => { spend(bytes.byteLength); return bytes; });
       bytesOf.set(resource.file, pending);
     }
@@ -683,44 +764,35 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   // elements are decoded ahead as before; every other map's first upload comes from its bitmap, so its element is never decoded
   // unless a restored context uploads it again (PREV-189: two decoded copies of every map took the page past its memory budget).
   const cpuRead = cpuReadFiles(record);
-  const decoding = new Map<string, Promise<HTMLImageElement>>();
-  /**
-   * The bitmaps this load decoded: once its parts are made, the ledger keeps only the image elements (a texture made later decodes its
-   * upload from its element), and a bitmap no texture was offered is closed.
-   */
-  const decodedHere = new Set<string>();
-  let bitmapsDropped = false;
-  const dropBitmaps = () => {
-    bitmapsDropped = true;
-    for (const file of decodedHere) {
-      const bitmap = ledger.bitmaps.get(file);
-      ledger.bitmaps.delete(file);
-      if (bitmap && !uploadWaiting.has(bitmap)) bitmap.close();
-    }
-    decodedHere.clear();
+  // Request handles belong to this load; all shared work, images and ownership live in the ledger.
+  const imageRequests = new Map<string, { pending: Promise<HTMLImageElement>; release(): void }>();
+  const releaseImages = () => {
+    for (const request of imageRequests.values()) request.release();
+    imageRequests.clear();
   };
   const imageOf = (texture: RenderTexture): Promise<HTMLImageElement> => {
-    const known = ledger.images.get(texture.file);
-    if (known) return cpuRead.has(texture.file) && !hasReducedImage(known) ? Promise.resolve(decodeElement(known)).then(() => known) : Promise.resolve(known);
-    let pending = decoding.get(texture.file);
-    if (!pending) {
-      // A map decoded before the load asked (a warm start, which fetched it within the same byte budget) is taken as it is.
-      const decoded = takeWarmed(warmed?.texture(texture.file)) ?? fetchBytes(texture).then(async bytes => {
-        const again = ledger.images.get(texture.file);
-        return again ? { image: again, bitmap: null, reduced: null } : decodeDetailTexture(bytes, cpuRead.has(texture.file) ? cpuReadSize(texture) : null, cpuRead.has(texture.file));
-      });
-      pending = decoded.then(({ image, bitmap }) => {
-        const again = ledger.images.get(texture.file);
-        if (again && again !== image) { bitmap?.close(); return again; }
-        ledger.images.set(texture.file, image);
-        // A bitmap decoded after this load made its parts (a part that failed first) has no texture to go to.
-        if (bitmap && bitmapsDropped) bitmap.close();
-        else if (bitmap) { ledger.bitmaps.set(texture.file, bitmap); decodedHere.add(texture.file); }
+    let request = imageRequests.get(texture.file);
+    if (!request) {
+      const known = ledger.images.has(texture.file);
+      const lease = ledger.requestImage(texture.file, async sharedSignal => {
+        // The first requester supplies the read/decode, under the ledger's signal rather than its own.
+        const warmedTexture = warmed?.texture(texture.file);
+        if (warmedTexture) {
+          const decoded = await warmedTexture;
+          return { ...decoded, bytes: decoded.bytes ?? 0 };
+        }
+        const bytes = await (warmed?.bytes(texture.file) ?? fetchDetailFile(fetcher, texture, sharedSignal));
+        sharedSignal.throwIfAborted();
+        return { ...await decodeDetailTexture(bytes, cpuRead.has(texture.file) ? cpuReadSize(texture) : null, false), bytes: bytes.byteLength };
+      }, signal, cpuRead.has(texture.file));
+      const pending = lease.pending.then(({ image, bytes }) => {
+        if (!known) spend(bytes);
         return image;
       });
-      decoding.set(texture.file, pending);
+      request = { pending, release: lease.release };
+      imageRequests.set(texture.file, request);
     }
-    return pending;
+    return request.pending;
   };
   // One parse per geometry file (PREV-53): components that draw the same file (face cyberware on the freckle mesh) each get
   // their own objects and skeleton, cloned from one parsed scene that shares the geometry; a file one component uses is
@@ -748,6 +820,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
   // Every part this load will build is fetched and decoded at once (PREV-189: one after another, a hairstyle's files took 350 ms), the
   // parts it takes as they are (shown or kept) excepted. The texture budget below is followed, so nothing it skips is fetched.
+  aborted();
   for (const { component, textures } of plannedReads(record)) {
     const key = keyOf(component);
     if (lendable.has(key) || pool?.has(key)) continue;
@@ -825,11 +898,12 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         const wanted = [...new Map(component.materials.flatMap(material => chunkTextureFiles(material)).map(texture => [texture.file, texture])).values()];
         const images = await Promise.all(wanted.map(texture => imageOf(texture)));
         wanted.forEach((texture, i) => loadedImages.set(texture.file, images[i]!));
-        // A part whose files arrived is built even if the load was superseded meanwhile: it is kept for the next change (`pool`).
+        // Geometry parsing need not support cancellation; do not build a late answer for a cancelled load.
         const source = await parseOf(component.geometry);
         const shared = (uses.get(component.geometry.file) ?? 0) > 1;
         const root = shared ? cloneSkinned(source.scene) as THREE.Group : source.scene;
         componentRoot = root;
+        aborted();
         root.name = `detail_${component.slot}_${component.component}`;
         const meshes: THREE.SkinnedMesh[] = [], unwanted: THREE.Object3D[] = [], bones: THREE.Bone[] = [];
         let skin: LoadedCharacterComponent["skin"];
@@ -871,7 +945,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
               texture.name = source.depotPath;
               texture.needsUpdate = true;
               const bitmap = ledger.bitmaps.get(source.file);
-              if (bitmap) offerUploadSource(texture, bitmap);
+              if (bitmap && bitmap.width > 0 && bitmap.height > 0) offerUploadSource(texture, bitmap);
               entry = { texture, refs: 0, file: source.file };
               ledger.textures.set(key, entry);
             }
@@ -939,54 +1013,56 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         if (componentRoot) releaseDetailObject(componentRoot, geometriesOf(components.map(item => item.root)));
       }
     }
-  } catch (error) { dropBitmaps(); releaseAll(); throw error; }
-  dropBitmaps();
-  // Fail closed (PIPE-97): a cover that didn't load (a failed part, or one over the texture budget) takes the parts it covers with it, and
-  // with them the body, which is reported unavailable; what this load made of it is released now.
-  const { kept, withdrawn } = withdrawUncoveredBody(components, item => item.component, record.components.filter(item => item.censor === "cover").length);
-  if (withdrawn) {
-    const leaving = components.filter(item => !kept.includes(item));
-    const staying = geometriesOf(kept.map(item => item.root));
-    for (const item of leaving) {
-      // A part taken over from the shown details stays theirs to release; the rest is this load's.
-      if (!borrowed.has(item)) {
-        const key = partKeys.get(item);
-        if (pool && key !== undefined) pool.keep(key, item);
-        else { releaseDetailObject(item.root, staying); ledger.release(ledger.parts.get(item)); }
+    aborted();
+    // Fail closed (PIPE-97): a cover that didn't load (a failed part, or one over the texture budget) takes the parts it covers with it, and
+    // with them the body, which is reported unavailable; what this load made of it is released now.
+    const { kept, withdrawn } = withdrawUncoveredBody(components, item => item.component, record.components.filter(item => item.censor === "cover").length);
+    if (withdrawn) {
+      const leaving = components.filter(item => !kept.includes(item));
+      const staying = geometriesOf(kept.map(item => item.root));
+      for (const item of leaving) {
+        // A part taken over from the shown details stays theirs to release; the rest is this load's.
+        if (!borrowed.has(item)) {
+          const key = partKeys.get(item);
+          if (pool && key !== undefined) pool.keep(key, item);
+          else { releaseDetailObject(item.root, staying); ledger.release(ledger.parts.get(item)); }
+        }
+        borrowed.delete(item);
       }
-      borrowed.delete(item);
+      components.splice(0, components.length, ...kept);
+      for (let i = limits.length - 1; i >= 0; i--) if (limits[i]!.slot === "body") limits.splice(i, 1);
+      for (let i = problems.length - 1; i >= 0; i--) if (problems[i]!.slot === "body") problems.splice(i, 1);
+      problems.push({ slot: "body", message: UNCOVERED_BODY });
+      notes.push("body: its underwear couldn't be loaded, so the body is not shown.");
     }
-    components.splice(0, components.length, ...kept);
-    for (let i = limits.length - 1; i >= 0; i--) if (limits[i]!.slot === "body") limits.splice(i, 1);
-    for (let i = problems.length - 1; i >= 0; i--) if (problems[i]!.slot === "body") problems.splice(i, 1);
-    problems.push({ slot: "body", message: UNCOVERED_BODY });
-    notes.push("body: its underwear couldn't be loaded, so the body is not shown.");
-  }
-  // The deformation rigs, with a body only; one that can't be read leaves a note, and the helper joints follow their limbs.
-  const rigs: DeformationProgram[] = [];
-  if (components.some(item => item.component.slot === "body")) for (const rig of record.rigs ?? []) {
-    try { rigs.push(parseDeformationProgram(JSON.parse(new TextDecoder().decode(await fetchBytes(rig))))); }
-    catch (error) {
-      aborted();
-      notes.push(`body: its ${rig.component} rig couldn't be loaded (${(error as Error).message}), so the joints it solves follow the limbs they sit on.`);
+    // The deformation rigs, with a body only; one that can't be read leaves a note, and the helper joints follow their limbs.
+    const rigs: DeformationProgram[] = [];
+    if (components.some(item => item.component.slot === "body")) for (const rig of record.rigs ?? []) {
+      try { rigs.push(parseDeformationProgram(JSON.parse(new TextDecoder().decode(await fetchBytes(rig))))); }
+      catch (error) {
+        aborted();
+        notes.push(`body: its ${rig.component} rig couldn't be loaded (${(error as Error).message}), so the joints it solves follow the limbs they sit on.`);
+      }
     }
-  }
-  // A slot with at least one loaded component is shown; report a problem only when nothing of it loaded.
-  const shown = new Set(components.map(item => item.component.slot));
-  const loaded: LoadedCharacterDetails = { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
-    problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes, rigs,
-    reused: borrowed.size,
-    get disposed() { return disposed; },
-    // The scene shows these details now: the parts taken over from the shown details are this load's to release from here on
-    // (their resources are already in the shared ledger).
-    adopt() { borrowed.clear(); },
-    dispose(keep) {
-      if (disposed) return;
-      disposed = true;
-      pool?.live.delete(loaded);
-      releaseAll(keep);
-    } };
-  ledgers.set(loaded, ledger);
-  pool?.live.add(loaded);
-  return loaded;
+    // A slot with at least one loaded component is shown; report a problem only when nothing of it loaded.
+    const shown = new Set(components.map(item => item.component.slot));
+    const loaded: LoadedCharacterDetails = { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
+      problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes, rigs,
+      reused: borrowed.size,
+      get disposed() { return disposed; },
+      // The scene shows these details now: the parts taken over from the shown details are this load's to release from here on
+      // (their resources are already in the shared ledger).
+      adopt() { borrowed.clear(); },
+      dispose(keep) {
+        if (disposed) return;
+        disposed = true;
+        pool?.live.delete(loaded);
+        releaseAll(keep);
+      } };
+    ledgers.set(loaded, ledger);
+    pool?.live.add(loaded);
+    aborted();
+    return loaded;
+  } catch (error) { releaseAll(); throw error; }
+  finally { releaseImages(); }
 }
