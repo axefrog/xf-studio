@@ -1,6 +1,6 @@
 # Experiment 044: profile tabs and contributed defaults (profiles phase 2)
 
-**Status:** P2-i through P2-vi are built, reviewed and accepted on `claude/profiles-p2` (§8–§14); §14 is committed in the accepted P2-vi checkpoint. P2-vii adds the G4 harness and phase records (§15), uncommitted for coordinator review. Full real-data G4 is pending the coordinator's warm/fresh runs. Historical capture/review follow-ups remain documented in their chunk sections; this checkpoint adds no UI. The coordinator's M1–M3 decisions are in §6. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 ([phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)), following phase 1 (`35e3c5b6`) and [phase 4a](../043-scene-runtimes/README.md) (`5b315f9b`).
+**Status:** P2-i through P2-vi are built, reviewed and accepted on `claude/profiles-p2` (§8–§14); §14 is committed in the accepted P2-vi checkpoint. P2-vii adds the G4 harness and phase records (§15); §16 closes G4's cold third tab (T-e) from 9.5 s to 0.8–0.9 s on `claude/cold-tab`. G4 passes on real data, warm and fresh (§15); T-h's OS-memory check is flaky on both builds (§16.4). Historical capture/review follow-ups remain documented in their chunk sections; the cold-tab work adds no UI. The coordinator's M1–M3 decisions are in §6. This is the working record for [profiles design](../../research/authoring/profiles-views-layouts-design.md) phase 2 ([phases](../../research/authoring/profiles-views-layouts-design.md#92-phases)), following phase 1 (`35e3c5b6`) and [phase 4a](../043-scene-runtimes/README.md) (`5b315f9b`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `076a7a65`. Tests are in `projects/xf-studio/authoring/tests/`. Effort is in the design's units (agent-days).
 
@@ -701,12 +701,104 @@ The initial single T-g no-game smoke stalled before returning a CDP page and end
 
 **G4 results (24 October 2026, `aed74de9`).** The full harness ran on real game-derived head data with a primed cache, then a fresh Chrome profile. Evidence: `generated/g4/2026-10-24T15-37-21-687Z` and `2026-10-24T15-52-23-142Z`. **All eight rows pass in both runs:**
 - **Warm switches:** T-a, T-b, T-c and T-d take 29–51 ms, with 0 links, 0 programs and 0 rasters.
-- **T-e:** progress shows in 23–31 ms, with no blank pane, and the cold takeover finishes after 9.1–10.3 s. The duration isn't gated, and it is recorded as the next biggest cost in the performance track.
+- **T-e:** progress shows in 23–31 ms, with no blank pane, and the cold takeover finished after 9.1–10.3 s. The duration isn't gated; it was the next biggest cost, and §16 closes it to 0.8–0.9 s.
 - **T-f:** only A is presented, at 310–317 ms.
 - **T-g:** 40–58 ms, with no task of 50 ms or more.
 - **T-h:** the runtime is gone, and GL counts and memory are back at baseline.
 
 The first run failed three rows. T-d was a product bug: readiness didn't refresh on a shown frame. T-f and T-h were harness faults: the editing guides remount by design, and the baseline had been taken before the lazy allocations. "G4 findings" above has the details.
+## 16. The cold third tab (T-e): 9.5 s to under 1 s
+
+**Built on `claude/cold-tab`, 26 October 2026.** Offline browser evidence only: the RTX 4070, headless Chrome 155, an isolated host with a copy of the local settings, the game not running. No UI changes. The standing target was G4's T-e (a third tab, cold, beyond the warm budget), which passed its gates but took **9.1–10.3 s** to draw its scene ([performance track](../../research/backlog/performance.md#profiles-phase-2-tab-switch-budgets-g4)).
+
+### 16.1 Where the 9.5 s went
+
+`measure-tabs.ts` now returns the page's own User Timing marks with each trial (`xfs:character:*`, the new `xfs:phase:*` of `character/character-timing.ts`, and the GL probe's uploads), and T-e runs three trials (A, then B, are shown again before each, so C is past the warm budget, disposed and cold). [`cold-breakdown.ts`](cold-breakdown.ts) turns a run's marks into the table below. Before: one warm trial on `main` with only the marks added. After: three warm trials of the built change.
+
+| Stage of the cold takeover | Before | After (3 trials) |
+|---|---|---|
+| The runtime built: click to the host being asked (core head file, parse, maps, rig) | 196 ms | 150, 152, 205 |
+| The host's answer for the V | 58 | 56, 54, 83 |
+| The record read | 2 | 6, 18, 2 |
+| The V's parts loaded (files fetched and decoded, parts built) | 544 | 177, 162, 148 |
+| **The V's maps uploaded, programs compiled** | **7,057** | 25, 27, 27 |
+| The wait for the GPU before the programs' first use | 305 | 5, 5, 4 |
+| The V placed | 1 | 2, 1, 1 |
+| The runtime's programs | 32 | 25, 22, 27 |
+| Morph textures (the head and seven parts) | 983 | 171, 155, 178 |
+| The editor's parts | 67 | 63, 53, 58 |
+| The hidden warm-up draws | 218 | 99, 155, 138 |
+| To the first presented frame | 34 | 42, 36, 36 |
+| **Click to presented** | **9,496** | **821, 841, 907** |
+
+- **Not the cost:** programs (0 links and 0 programs made: Three's key is renderer-global, so the first runtime's programs serve every other), rasters (0: the look's resources are kept by layer), the host (58 ms) and the page's thread (no task of 50 ms or more).
+- **The cost, as measured:** 74 % was uploading maps the renderer already held. Each runtime decoded and uploaded the V's 16 maps of 4096², 16 of 2048² and the smaller ones again, in bands of 512 rows with a fence between bands (32 ms a band, 0.29 s a 4096² map, about 260 MB/s), while the same files sat on the GPU for the other two tabs. Another 10 % was morph textures and 6 % reloading the same files; the rest was one fence wait and small steps.
+- **Inside the first row:** the core head's 12 MB file took 0.09–0.5 s between trials (each runtime fetched and hashed it again).
+
+### 16.2 The lever, and why
+
+| Lever | What the numbers say | Verdict |
+|---|---|---|
+| **The warm budget** (D2), by count or bytes | A third warm runtime would turn T-e into a warm switch only by moving the line: a fourth tab is cold again, and each warm runtime held about 0.9 GB of the GPU process's memory in copies of maps the others hold. | Cheaper once a runtime stops copying the maps; revisit by bytes after this (§16.6). |
+| **Prepare the likely next tab while idle** | The same 9.5 s of paced uploads, in the background, competing with the shown runtime's frames for the GPU process, plus another runtime's memory, and a prediction to get right. | No: the most complex lever, and it pays for the same copies. |
+| **M2 (share the scene)** | Already the default: T-a is 54–66 ms. A cold scene is what is left after M2: "New scene", or another V or look. | In force already; T-e is the path it leaves. |
+| **Reuse what other runtimes hold** (chosen) | 74 % of the wait is maps another runtime already uploaded, 6 % the same files decoded again. | **Chosen:** it removes 7.6 s, moves the owner of the data from the scene to its renderer (one structure widened, no second cache), and lowers the memory of every extra runtime. |
+
+The residency owner stays as it was: the shown runtime plus one warm (D2), the newest want wins, every build and preparation runs under an `AbortSignal` and the context-generation rule. Nothing waits on the person: progress shows in 23–27 ms and no trial had a task of 50 ms or more.
+
+### 16.3 What changed
+
+1. **One ledger of maps per renderer** (`detailLedgerOf`, `character/render/character-detail-loader.ts`). A scene's part pool took its own `DetailLedger`; every pool on a renderer now takes the renderer's. A map is decoded once and uploaded once per renderer, found by file, use, wrap and gamma flag, and disposed when the last part of any runtime that uses it lets go. Meshes, materials, bakes and each pool's kept parts stay per runtime. `tests/renderer-ledger.test.ts`.
+2. **The core head file is fetched and hashed once per renderer and body** (`sharedGeometryBytes`, `core-detail-loader.ts`), keyed by the record's file and hash.
+3. **Morph textures in rounds** (`prepareRuntime`; `uploading()` in `morph-textures.ts`). All geometries take each round together: fills run whenever the frame's 8 ms allow, uploads only once the GPU has caught up with the last round's, and one fence marks the round. Tests in `tests/runtime-preparation.test.ts` (the first fails with the old loop: 19 frames, under 10 expected) and `tests/morph-textures.test.ts`.
+4. **No wait for the GPU after sending it little** (`prepareDetails`, `character-renderer.ts`): the wait before the programs' first use happens only after 4 MB of texels (or a bake) were sent.
+5. **Harness:** marks, uploads and program waits in each trial; three trials for T-e; `cold-breakdown.ts`; `XFS_G4_T_E_V=male` for the diagnostic of §16.6.
+
+Tried and removed: a nudge on every poll of the GPU gate (a 1-texel upload, then a clear of a scratch target) to shorten the fence on a quiet context. It left the wait at 0.23–0.3 s ([knowledge §8](../../knowledge/webgl-program-linking.md#8-a-second-runtime-of-one-v-what-it-costs-and-what-it-shares)).
+
+### 16.4 G4 before and after, every row
+
+Today's runs on this machine: `main` at `4200cd31`, then the change; `--cache both` (a primed cache, then a fresh Chrome profile), the server and each browser under a 5 GB guard. The 24 October values are in the performance track. Times are click to first presented frame, the range of the trials.
+
+| Row | Before (warm / fresh) | After (warm / fresh) | Gate |
+|---|---|---|---|
+| T-a | 55–64 ms / 55–66 | 56–66 / 54–65 | ≤ 100 ms |
+| T-b | 46–53 / 42–49 | 47–50 / 42–48 | ≤ 100 ms, 0 links and programs |
+| T-c | 43–48 / 40–47 | 44–51 / 41–82 | ≤ 100 ms, 0 links |
+| T-d | 53–77 / 48–56 | 43–53 / 48–56 | ≤ 100 ms, no raster, 0 links |
+| **T-e** (3 trials) | **9.69–10.28 s / 9.64–10.39 s** (one fresh trial had a 55 ms task: fail) | **0.82–0.91 s / 0.84–0.93 s**; progress in 23–27 ms; no task of 50 ms or more | progress ≤ 150 ms, no task ≥ 50 ms, no blank pane |
+| T-f | 337 / 332 | 349 / 342 (three more fresh: 322, 330, 335) | only A presented, nothing late |
+| T-g | 55–73 / 58–68 | 54–64 / 56–61 | no task ≥ 50 ms |
+| T-h | fail / fail (the OS-memory tolerance) | pass / fail (the same check) | runtime gone, GL counts at baseline, memory within tolerance |
+
+First-frame links, programs and rasters are 0 in every row, before and after. **T-h:** the closed runtime is gone and every GL count is back at its baseline in all runs, before and after. Only the OS-memory check flakes. The GPU process's dedicated bytes sit in two modes about 275 MB apart (near 830–850 MB and near 1,100 MB), before and after a close, and a fixed 5 s wait samples one mode or the other. It flaked on `main` (the full run: fail, fail; three fresh reruns: pass, fail, fail) as it did after the change (the full run: pass, fail; fresh reruns: pass, fail). This change doesn't cause it, and the tolerance is unchanged.
+
+### 16.5 What remains of T-e, and why
+
+T-e now takes **0.82–0.93 s** (the goal was under 1 s). The remaining 0.8–0.9 s is a floor of small steps, none above about 0.2 s: the runtime's own core head and rig (0.15–0.2 s: its record, parse, maps), the host's answer for the V (55–80 ms, the host checking the mod setup each time), the V's parts loaded (0.15–0.18 s), the morph textures (0.16–0.18 s, about 15 frames: bounded by the 8 ms of a frame the preparation may take, and by one fence per round), the editor's parts (0.05–0.06 s, a frame each), the warm-up draws (0.1–0.15 s) and the presentation (0.04 s). The next real cut is one more thing to share per renderer, the core head's geometry with its morph textures (a runtime would take the head of its body as the ledger takes a map, an estimated 0.3 s), and it needs the same reference counting for geometry that the ledger gives maps.
+
+### 16.6 A different V is still a multi-second wait, and the risks
+
+**A cold takeover of a different V.** `XFS_G4_T_E_V=male` makes T-e's cold tab the masculine default V, as T-c has it, so no map is shared (three warm trials of the built change):
+
+| Stage | 1 | 2 | 3 |
+|---|---|---|---|
+| Built, host's answer, record, parts loaded (ms) | 128 + 55 + 4 + 283 | 143 + 59 + 7 + 324 | 135 + 58 + 8 + 280 |
+| **The V's maps uploaded, programs compiled** | **3,291** | **3,221** | **3,278** |
+| The wait for the GPU after them | 409 | 420 | 408 |
+| Programs, morph textures, editor, warm-up, presentation | 20 + 99 + 211 + 59 + 164 + 36 | 21 + 94 + 213 + 55 + 208 + 38 | 24 + 102 + 197 + 54 + 112 + 37 |
+| **Click to presented** | **4,758** | **4,802** | **4,693** |
+
+So the wait that remains in the product is a cold scene of a **V no other runtime holds**: 4.7–4.8 s, 3.3 s of it the paced upload of its own 20 large maps (one band of 512 rows per two frames, about 260 MB/s), 0.4 s the fence wait after them (sent more than 4 MB, so it waits, and a quiet fence signals late). Progress still shows at once and nothing blocks. M2's default (share the scene) avoids it for a tab on a V and look another tab shows; a new scene of another V pays it. What would cut it: moving less (GPU-compressed preview maps, already a candidate in the performance track), or sending two bands behind each fence (at best about 1.9×, since a band costs 5–10 ms of the frame's 8 ms).
+
+**Risks.**
+- *Shared map lifetime.* A map now outlives the runtime that uploaded it while another runtime's part uses it. The ledger counts references across runtimes (`tests/renderer-ledger.test.ts`), and T-h's closed runtime leaves every GL count at its baseline on real data (81 textures, 153–154 buffers, 28 framebuffers, 4 renderbuffers). A context loss drops the warm runtimes first and re-uploads shown maps from their image elements, as before; this was not exercised again on real data (the T2 gate, `tests/webgl-scene-runtimes.test.ts`, passes: 28 tests; its first run in this work had one cold frame gap over 100 ms and passed on the two reruns, so that gate is timing-sensitive).
+- *Resident bytes.* Memory now follows the distinct maps on the renderer, not the runtimes, but a warm runtime's parts keep their maps. The budget by count (D2) is unchanged; the cost of a second runtime of one V (about 0.9 GB before) was not re-measured, only the browser's peak over T-e (4.3–4.4 GB before, 3.7–3.9 GB after).
+- *The shared core head file* (12 MB per body, held while the page lives) is the one new cache of bytes; a core prepared again is a new entry, and the older is dropped.
+- *T-h's OS-memory check* flakes on both builds (§16.4). It needs a settle-and-poll sampling, a harness decision not taken here.
+
+**Knowledge used:** [WebGL program linking](../../knowledge/webgl-program-linking.md) (renderer-global program keys, gated uploads, morph textures, the context-generation rule; updated with §8) and [head CC rendering](../../knowledge/head-cc-rendering.md) (the real-data record and detail loader the maps come from; nothing in it was wrong or needed a change).
+
 ## Related pages
 
 - [Profiles, views and layout tabs: design](../../research/authoring/profiles-views-layouts-design.md)

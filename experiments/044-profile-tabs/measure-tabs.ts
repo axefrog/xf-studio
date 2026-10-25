@@ -174,13 +174,15 @@ async function measure(page: Session, row: Row, noGame: boolean, quick: boolean,
   }
   const baseline = row === "T-h" ? { page: await page.evaluate(`${G}.memory()`) as Memory, os: await chromeMemory(profile) } : undefined;
   const shared = row === "T-a" || row === "T-g";
-  const b = await makeTab(page, row === "T-c" ? { kind: "character", id: seeded.subjects[0]! } : subject,
+  // Diagnostic (README §16.6): in T-e the cold tab is B, the masculine default V as T-c has it, whose maps no other runtime holds.
+  const otherV = row === "T-e" && !noGame && process.env.XFS_G4_T_E_V === "male";
+  const b = await makeTab(page, row === "T-c" || otherV ? { kind: "character", id: seeded.subjects[0]! } : subject,
     row === "T-d" ? { collection: seeded.collection, look: seeded.looks[1]! } : lookA, shared ? a.scene : null, noGame);
   await settle(page, b, noGame);
   if (!noGame) {
     await act(page, { kind: "preview.setBody", enabled: false });
     await act(page, { kind: "motion.setIdle", enabled: false });
-    if (row === "T-c") { await act(page, { kind: "character.useDefault", bodyGender: "male" }); await settle(page, b, false);
+    if (row === "T-c" || otherV) { await act(page, { kind: "character.useDefault", bodyGender: "male" }); await settle(page, b, false);
       await page.waitFor(`${G}.sample().key?.endsWith('|male')`, 900_000); }
     if (row === "T-d") { await act(page, { kind: "layer.edit", command: { kind: "add" } }); await settle(page, b, false); }
   }
@@ -190,11 +192,13 @@ async function measure(page: Session, row: Row, noGame: boolean, quick: boolean,
   if (row === "T-e" || row === "T-f") {
     c = await makeTab(page, subject, lookA, null, noGame);
     if (row === "T-e") {
-      await settle(page, c, noGame); await show(page, a, noGame); await show(page, b, noGame);
-      target = c; steps = [[0, c.tab]];
+      await settle(page, c, noGame); await show(page, a, noGame);
+      if (!otherV) await show(page, b, noGame);
+      const cold = otherV ? b : c;
+      target = cold; steps = [[0, cold.tab]];
       if (!noGame) {
         const residents = await page.evaluate(`${G}.sample().residents`) as Resident[];
-        if (residents.some(r => r.scene === c!.scene)) throw Error("T-e setup failed: C is still resident, so this is not a cold switch");
+        if (residents.some(r => r.scene === cold.scene)) throw Error("T-e setup failed: the cold tab is still resident, so this is not a cold switch");
       }
     } else {
       await show(page, a, noGame);
@@ -221,8 +225,8 @@ async function measure(page: Session, row: Row, noGame: boolean, quick: boolean,
   const runs: { result: ReturnType<typeof analyse>; raw: Run }[] = [];
   for (let i = 0; i < repetitions; i++) {
     if (i) await show(page, a, noGame);
-    // T-e again from cold: A, then B shown leaves C past the warm budget, so the runtime is disposed and the next click builds it afresh.
-    if (i && row === "T-e") await show(page, b, noGame);
+    // T-e again from cold: A, then another tab shown leaves the target past the warm budget, so its runtime is disposed and the next click builds it afresh.
+    if (i && row === "T-e") await show(page, otherV ? c! : b, noGame);
     const raw = await page.evaluate(`${G}.run(${JSON.stringify(steps)},${JSON.stringify(target)},${noGame},${tail},${noGame ? 15_000 : 900_000},${row === "T-f"})`) as Run;
     let closure: Closure | undefined;
     if (baseline) {
