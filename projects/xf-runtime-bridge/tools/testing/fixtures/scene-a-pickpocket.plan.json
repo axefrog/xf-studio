@@ -1,0 +1,61 @@
+{
+  "schema": "xfb/plan-1",
+  "id": "scene-a-market-pickpocket",
+  "cast": ["thief", "mark"],
+  "exhaustive": true,
+  "deadline_ms": 120000,
+  "steps": [
+    { "label": "declare", "do": "incident.declare", "kind": "theft", "roles": ["thief", "mark"], "thief": "$cast.thief", "mark": "$cast.mark", "bind": "incident",
+      "outcomes": [{ "name": "declared", "match": { "ok": true } }] },
+    { "label": "approach", "roles": ["thief"], "do": "primitive.approach", "who": "$cast.thief", "to": "$cast.mark", "stop_m": 0.8,
+      "when": { "match": { "all": [{ "ref": "$board.v.distance_m", "max": 25 }, { "ref": "$board.v.line_of_sight", "equals": true }] }, "otherwise": "fail" },
+      "deadline_ms": 30000,
+      "retry": { "times": 1, "backoff_ms": 1000, "on": { "code": "path_failed" } },
+      "outcomes": [
+        { "name": "arrived", "match": { "ok": true, "path": "arrived", "equals": true } },
+        { "name": "blocked", "match": { "code": "blocked_by_v" }, "run": [
+          { "do": "primitive.tell", "who": "$cast.thief", "tell": "stop" },
+          { "do": "primitive.approach", "who": "$cast.thief", "to": "$cast.mark", "stop_m": 0.8, "route": "other", "deadline_ms": 30000 }
+        ] },
+        { "name": "mark_streamed_out", "match": { "code": "target_streamed_out" }, "goto": "mark-gone" }
+      ],
+      "fallback": [{ "end": "fail", "reason": "the thief was blocked twice" }] },
+    { "label": "lift", "roles": ["thief", "mark"], "do": "primitive.lift", "who": "$cast.thief", "from": "$cast.mark", "deadline_ms": 8000,
+      "outcomes": [
+        { "name": "lifted", "match": { "ok": true, "path": "lifted", "equals": true } },
+        { "name": "fumbled", "match": { "path": "lifted", "equals": false }, "result": "fail" }
+      ],
+      "fallback": [{ "end": "fail", "reason": "the lift never played" }] },
+    { "label": "walk-off-and-notice", "together": [
+      { "roles": ["thief"], "do": "primitive.walk_off", "who": "$cast.thief", "pace": "normal", "deadline_ms": 20000,
+        "outcomes": [
+          { "name": "followed", "match": { "ref": "$board.v.following", "equals": true }, "run": [
+            { "do": "primitive.walk_off", "who": "$cast.thief", "pace": "brisk", "route": "other", "deadline_ms": 20000 }
+          ] },
+          { "name": "clear", "match": { "ok": true } }
+        ] },
+      { "roles": ["mark"], "do": "primitive.notice", "who": "$cast.mark", "after_s": [3, 6], "then": ["pat_pockets", "look_around", "shout"], "deadline_ms": 15000,
+        "outcomes": [{ "name": "noticed", "match": { "ok": true } }] }
+    ],
+      "outcomes": [
+        { "name": "v_attacked", "match": { "ref": "$board.v.attacking", "equals": true }, "goto": "v-attacked" },
+        { "name": "done", "match": { "ok": true } }
+      ] },
+    { "label": "close", "do": "incident.close", "id": "$incident.id", "bind": "closed", "outcomes": [{ "name": "closed", "match": { "ok": true } }] },
+    { "label": "performed", "end": "ok" },
+    { "label": "mark-gone", "end": "fail", "reason": "the mark streamed out" },
+    { "label": "v-attacked", "end": "fail", "reason": "V attacked: the scene is released" }
+  ],
+  "on_abandon": {
+    "ask": { "question": "The scene can't be performed as staged. Drop a rung?", "choices": ["residue", "report", "dissolve", "release"], "default": "dissolve", "deadline_ms": 1000 },
+    "dissolve": [
+      { "do": "primitive.dissolve", "who": "$cast.thief", "deadline_ms": 15000, "on_fail": "continue" },
+      { "do": "primitive.dissolve", "who": "$cast.mark", "deadline_ms": 15000, "on_fail": "continue" }
+    ]
+  },
+  "finally": [
+    { "do": "incident.close", "id": "$incident.id", "when": { "match": { "all": [{ "ref": "$incident", "exists": true }, { "ref": "$closed", "exists": false }] } } },
+    { "do": "primitive.release", "who": "$cast.thief" },
+    { "do": "primitive.release", "who": "$cast.mark" }
+  ]
+}
